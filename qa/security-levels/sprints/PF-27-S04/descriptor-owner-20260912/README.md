@@ -1,5 +1,39 @@
 # PF27 private single-child owner — exact-stage evidence
 
+## Current correction checkpoint (supersedes initial-source rows below)
+
+Final source4d830cbb31330da21cf84b6f0193e7d56dc30776, Rust tree
+7e488200b2cfc23ee9c99bf188ea9e76e9693558, clean matching RTX checkout.
+Astra25 exited0/findings[] on initial30aebfb7. Fable26 exited1, overall patch
+correct, with one P2 non-test expect_used lint failure. Strict feature-enabled
+Clippy reproduced all three calls; [original failure](rtx/fable-lint-repro.log).
+The earlier just fix exit0 is not strict-lint proof: Clippy fix mode can report
+unfixed diagnostics without failing. Its command did enable synthetic-fixture;
+the review's inference that the feature was omitted is not accepted.
+
+Accepted correction is only20 changed lines in spawn.rs: return the owned image
+on a missing reservation; use explicit let-else for impossible pending-image
+violations, with documented panic-to-quarantine and Builder::spawn contracts.
+No new successful cleanup inference, public API, dependency or feature change.
+Final cumulative code/build/fixture715 lines, including runtime249/tests396.
+
+Post-correction [fix](rtx/repair-fix.log), [format](rtx/repair-fmt.log) and
+[strict feature-enabled Clippy](rtx/repair-clippy.log) exit0. Exact-source
+actual-key TMUX rerun: [focused8](rtx/repaired-tmux/focused.log),
+[real owner3](rtx/repaired-tmux/real-owner.log),
+[profile hold1](rtx/repaired-tmux/profile-hold.log),
+[profile inspect1](rtx/repaired-tmux/profile-inspect.log),
+[service52 with4ignored](rtx/repaired-tmux/service.log), all exit0.
+All four ignored cases are separately exercised as above. [Default3](rtx/repaired-default.log)
+also pass. [Final capture](rtx/repaired-tmux-capture.txt) records matching source,
+Rust tree and PF27_OWNER_TMUX_COMPLETE. No dependency files changed after the
+successful Bazel parity check; its receipt remains applicable.
+
+Fable27 is the necessary correction closeout, reviewing overfe007f32b (the
+pre-correction owner checkpoint), not another review of the clean adapter.
+Read the original full-stage contract below as context; do not expand this
+correction into public service wiring or whole-workspace lint repairs.
+
 Allocated synthetic-only increment, not a completed broker or native deployment.
 Original PF-27-S04 owner/branch/base remain unchanged. Product requirement:
 **Non-negotiable controls** — “Permit agents to reference credentials only by
@@ -45,6 +79,7 @@ this owner does not broaden its platform support. No live credential use.
 | Check | Result / receipt |
 | --- | --- |
 | Scoped just fix, just fmt | Exit0 before final affected tests; local files copied from formatted RTX tree |
+| Default service feature gate | 3 pass,0 skipped; [log](rtx/default-service.log), same frozen Rust tree |
 | Focused owner | 8 pass,48 excluded; [log](rtx/tmux/focused.log) |
 | Real pidfd owner | 3 pass,53 excluded: hold cancel/drop/early-exit; late real-child publication after caller drop; recipe mismatch rejection; [log](rtx/tmux/real-owner.log) |
 | Static-profile artifacts | 1 pass each for hold/inspect,55 excluded each; [hold](rtx/tmux/profile-hold.log), [inspect](rtx/tmux/profile-inspect.log) |
@@ -68,8 +103,8 @@ human acceptance or the two live-product repository release flows.
 
 ## Remaining scope and review
 
-Astra25 then Fable26 High are the two allocated new-source closeouts, reserved
-at dispatch in the existing six-hour ledger. Results are not yet claimed here.
+Astra25 and Fable26 results and accepted correction are recorded above. Fable27
+correction closeout is the remaining scheduled allowance, reserved at dispatch.
 PF-27-S04 remains in_progress: two-child admission composition, native service
 containment, trusted credential migration/data-plane wiring, cross-platform
 qualification, protected activation and final user-facing/live-repository

@@ -27,6 +27,17 @@ Review25 completed exit0/findings[], patch correct. Review26 reserved September1
 18:43:25UTC before dispatch: Fable5.1High via Corbanu/private TMUX on the same
 Rust30aebfb7 and actual execution receipts. Window now4 used/1 available.
 
+Review26 exit1, patch correct, P2 non-test expect_used lint finding reproduced
+by strict feature-enabled just clippy. Accepted in scope; small explicit
+reservation-error/internal-invariant handling correction4d830cbb3, runtime
+contract unchanged. Final lint/tests and Fable27 correction closeout use the
+remaining scheduled slot; reserve27 at actual dispatch, not in this note.
+
+Review27 reserved September12 18:52UTC before dispatch: Fable5.1High via
+Corbanu/private TMUX correction diff overfe007f32b. Rust7e488200 and strict
+Clippy/default3/TMUX focused8/real3/profile2/service52 final-source receipts.
+Window now5 used/0 available; do not repeat a clean pass or reset early.
+
 Review23 reserved/dispatched September12 17:49UTC: Astra High, adapter source
 30b471a47/Rust2d270c5c overc5b05d9d8, actual OS/TMUX receipts. Window17:25:45Z–
 23:25:45Z now1 used/4 available; history1–22 retained. Review24 Fable remains
