@@ -21,6 +21,25 @@ pub struct SyntheticSealedImage {
     _recipe: SyntheticLaunchRecipe,
 }
 
+/// Sealed bytes whose narrow ELF profile was inspected, not safe-to-run approval.
+/// Keeps the same private image and recipe; no Clone, descriptor export or exec.
+pub struct SyntheticProfileInspectedImage {
+    _sealed: SyntheticSealedImage,
+}
+
+impl SyntheticSealedImage {
+    pub fn inspect_static_profile(mut self) -> io::Result<SyntheticProfileInspectedImage> {
+        let seals = fcntl_get_seals(&self._image)
+            .map_err(|_| denied("image seals unavailable"))?;
+        if !seals.contains(required_seals()) {
+            return Err(denied("image seals incomplete"));
+        }
+        let size = self._image.metadata().map_err(|_| denied("image metadata failed"))?.len();
+        super::elf::inspect(&mut self._image, size)?;
+        Ok(SyntheticProfileInspectedImage { _sealed: self })
+    }
+}
+
 impl SyntheticManifestInspection {
     /// Consume this inspection into bounded, kernel-sealed image storage.
     /// Never executes the image or changes installation or host policy.
