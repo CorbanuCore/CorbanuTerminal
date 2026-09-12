@@ -6,6 +6,9 @@ mod sealed;
 // Construction-stage private entry points, exercised by non-root OS tests.
 #[cfg(target_env = "gnu")]
 #[allow(dead_code)]
+mod pair;
+#[cfg(target_env = "gnu")]
+#[allow(dead_code)]
 mod spawn;
 pub use sealed::SyntheticSealedImage;
 

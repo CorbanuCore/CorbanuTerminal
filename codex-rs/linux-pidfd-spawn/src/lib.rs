@@ -7,6 +7,7 @@
 #![cfg(all(target_os = "linux", target_env = "gnu", feature = "synthetic-fixture"))]
 
 mod ffi;
+mod peer;
 mod spawn;
 
 pub use spawn::OwnedChild;
