@@ -1,0 +1,147 @@
+cargo clippy --fix --tests --allow-dirty {args}
+    Checking codex-utils-absolute-path v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/absolute-path)
+    Checking codex-security-policy v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/security-policy)
+    Checking codex-utils-rustls-provider v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/rustls-provider)
+    Checking codex-utils-cache v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/cache)
+    Checking codex-utils-string v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/string)
+    Checking codex-async-utils v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/async-utils)
+    Checking codex-keyring-store v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/keyring-store)
+    Checking codex-utils-cargo-bin v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/cargo-bin)
+    Checking codex-http-client v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/http-client)
+    Checking codex-utils-home-dir v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/home-dir)
+    Checking codex-extension-items v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/ext/items)
+    Checking codex-execpolicy v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/execpolicy)
+    Checking codex-utils-path-uri v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/path-uri)
+    Checking codex-utils-image v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/image)
+    Checking codex-network-proxy v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/network-proxy)
+    Checking codex-security-audit v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/security-audit)
+    Checking codex-secret-broker v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/secret-broker)
+    Checking codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/protocol)
+    Checking codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/file-system)
+    Checking codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/git-utils)
+    Checking codex-secrets v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/secrets)
+    Checking codex-vault v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/vault)
+    Checking codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/secret-broker-service)
+warning: used `unwrap()` on a `Result` value
+  --> secret-broker-service/tests/support/subprocess.rs:26:36
+   |
+26 |         let (mut client, server) = UnixStream::pair().unwrap();
+   |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#unwrap_used
+   = note: requested on the command line with `-D clippy::unwrap-used`
+
+warning: used `unwrap()` on a `Result` value
+  --> secret-broker-service/tests/support/subprocess.rs:27:20
+   |
+27 |         let peer = observed_peer(&client).unwrap();
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> secret-broker-service/tests/support/subprocess.rs:30:25
+   |
+30 |           let mut child = Command::new(
+   |  _________________________^
+31 | |             codex_utils_cargo_bin::cargo_bin("codex-secret-broker-service-fixture").unwrap(),
+32 | |         )
+33 | |         .arg("--synthetic-inherited-socket")
+...  |
+38 | |         .spawn()
+39 | |         .unwrap();
+   | |_________________^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> secret-broker-service/tests/support/subprocess.rs:31:13
+   |
+31 |             codex_utils_cargo_bin::cargo_bin("codex-secret-broker-service-fixture").unwrap(),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> secret-broker-service/tests/support/subprocess.rs:40:9
+   |
+40 |         client.write_all(&[key; 32]).unwrap();
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#unwrap_used
+
+warning: used `unwrap()` on an `Option` value
+  --> secret-broker-service/tests/support/subprocess.rs:41:41
+   |
+41 |         let mut output = BufReader::new(child.stdout.take().unwrap());
+   |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is `None`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> secret-broker-service/tests/support/subprocess.rs:43:9
+   |
+43 |         output.read_line(&mut ready).unwrap();
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> secret-broker-service/tests/support/subprocess.rs:45:20
+   |
+45 |         let wire = client.try_clone().unwrap();
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> secret-broker-service/tests/support/subprocess.rs:48:22
+   |
+48 |             channel: LinuxBrokerChannel::new(client, &peer).unwrap(),
+   |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> secret-broker-service/tests/support/subprocess.rs:63:5
+   |
+63 | /     BrokerChannelMac::from_secret([key; 32])
+64 | |         .sign(
+65 | |             BrokerBinding {
+66 | |                 controller_instance: "controller".into(),
+...  |
+79 | |         .unwrap()
+   | |_________________^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> secret-broker-service/tests/support/subprocess.rs:75:29
+   |
+75 |                 credential: CredentialReference::from_sha256_hex("a".repeat(64)).unwrap(),
+   |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+  --> secret-broker-service/tests/support/subprocess.rs:76:26
+   |
+76 |                 request: OpenAiResponsesOperation::new("/v1/responses").unwrap(),
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#unwrap_used
+
+warning: `codex-secret-broker-service` (test "lifecycle") generated 12 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.08s

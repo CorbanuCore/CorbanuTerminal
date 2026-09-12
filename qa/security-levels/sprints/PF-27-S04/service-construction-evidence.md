@@ -1,5 +1,9 @@
 # Broker service construction checkpoint
 
+Historical September 4 checkpoint. The [September 11 resume](resume-20260911/README.md)
+supersedes current source/test coordinates and records the newly approved sixth
+Fable review. Original evidence and the then-exhausted budget below are preserved.
+
 Status: scoped construction, remote tests and Astra High review passed; fresh
 Fable service-stage review awaits budget authorization. PF-27-S04 stays `in_progress`. Allocation `db141e9cb`;
 formatted source checkpoint `6bdc84195` is pushed on `feat/security-round5-broker`

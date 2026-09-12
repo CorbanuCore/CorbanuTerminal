@@ -31,7 +31,7 @@ run bazel-lock just bazel-lock-update
 bazel shutdown > "$evidence/bazel-shutdown.log" 2>&1 || true
 run service-default just test -p codex-secret-broker-service --retries 0 --test-threads 4
 run service-synthetic just test -p codex-secret-broker-service --features synthetic-fixture --retries 0 --test-threads 4
-run broker-vault-proxy just test -p codex-secret-broker -p codex-vault -p codex-network-proxy --lib --retries 0 --test-threads 4
+run broker-vault-proxy just test -p codex-secret-broker -p codex-vault -p codex-network-proxy --retries 0 --test-threads 4
 run core just test -p codex-core --lib -E 'test(broker_client) | test(network_proxy_credential)' --retries 0 --test-threads 4
 run service-build bash -c 'cd codex-rs && cargo build --locked -p codex-secret-broker-service --features synthetic-fixture'
 mkdir -p "$evidence/candidate"

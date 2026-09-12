@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "production_exit": 78,
+  "synthetic_subprocess_tests": 6,
+  "candidate": "/home/travis/security-round5/evidence/pf27-resume-20260911/candidate/codex-secret-broker-service",
+  "user_facing_tui": false,
+  "native_isolation_proven": false,
+  "privileged_installation": false
+}

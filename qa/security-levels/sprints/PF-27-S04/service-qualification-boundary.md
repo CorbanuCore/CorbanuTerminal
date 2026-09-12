@@ -1,5 +1,9 @@
 # Linux service construction and qualification boundary
 
+Historical September 4 boundary. PF20's controller has since landed, but this
+service still has no production bootstrap wiring. See the [resumed record](resume-20260911/README.md);
+the original gap analysis below is preserved, not a claim that PF20 is still absent.
+
 This record separates executable construction from protected deployment. The
 new composition crate links the broker, typed Vault backend and PF-41 journal
 without a dependency cycle. `TrustedSession` consumes an owned socket, expected

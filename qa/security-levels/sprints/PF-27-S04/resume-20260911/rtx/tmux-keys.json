@@ -1,0 +1,10 @@
+[
+  {
+    "text": "/home/travis/security-round5/evidence/pf27-resume-20260911/candidate/codex-secret-broker-service --synthetic-inherited-socket; printf \"\\nproduction-exit=%s\\n\" \"$?\"",
+    "submit": "Enter separately"
+  },
+  {
+    "text": "export PATH=/home/travis/security-round5/tools:/home/travis/.cargo/bin:$PATH; export CARGO_TARGET_DIR=/home/travis/repos/CorbanuTerminal-harness/codex-rs/target; export CARGO_BUILD_JOBS=8 RUST_MIN_STACK=8388608 CORBANU_TEST_NO_NATIVE_KEYRING=1; export TMPDIR=/home/travis/.pf27t-htuu76yh; flock /home/travis/security-round5/locks/build.lock just test -p codex-secret-broker-service --features synthetic-fixture --retries 0 --test-threads 4; printf \"\\nsynthetic-exit=%s\\n\" \"$?\"",
+    "submit": "Enter separately"
+  }
+]

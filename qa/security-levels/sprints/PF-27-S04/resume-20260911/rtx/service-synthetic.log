@@ -1,0 +1,14 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/secret-broker-service)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.11s
+────────────
+ Nextest run ID 9ec2de3f-1623-40a4-b8f5-c198e6ed9c3e with nextest profile: local
+    Starting 6 tests across 4 binaries
+        PASS [   0.002s] (1/6) codex-secret-broker-service::lifecycle pf_27_s01_production_service_requires_qualified_bootstrap
+        PASS [   0.092s] (2/6) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_peer_mismatch_denies_before_audit
+        PASS [   0.097s] (3/6) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_dispatch_uses_vault_and_settles_journal
+        PASS [   0.269s] (4/6) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_death_and_restart_refuse_old_channel_and_key
+        PASS [   0.187s] (5/6) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_replay_denies_without_second_audit_or_secret
+        PASS [   5.495s] (6/6) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_signal_during_partial_read_preserves_absolute_deadline
+────────────
+     Summary [   5.495s] 6 tests run: 6 passed, 0 skipped
