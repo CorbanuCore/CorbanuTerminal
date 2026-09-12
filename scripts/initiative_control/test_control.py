@@ -86,6 +86,7 @@ class ControlTests(unittest.TestCase):
         for name, endpoint in (("ComfyUI", "http://100.99.88.49:8188/"),
                                ("YuE2 (YuE)", "http://100.99.88.49:7861/"),
                                ("ACE-Step", "http://100.99.88.49:7862/"),
+                               ("MiniMax Music 3", "http://100.99.88.49:7863/"),
                                ("RVC", "http://100.81.145.102:7865/"),
                                ("ACE-Step fallback", "http://100.81.145.102:7866/")):
             self.assertIn(name, body)
@@ -93,10 +94,14 @@ class ControlTests(unittest.TestCase):
         for repository in ("comfyanonymous/ComfyUI", "multimodal-art-projection/YuE",
                            "ace-step/ACE-Step-1.5", "RVC-Project/Retrieval-based-Voice-Conversion-WebUI"):
             self.assertIn(f'href="https://github.com/{repository}"', body)
-        self.assertEqual(body.count('<article class="test">'), 5)
+        self.assertIn('href="https://huggingface.co/MiniMaxAI/MiniMax-Music3"', body)
+        self.assertEqual(body.count('<article class="test facility-card"'), 6)
+        self.assertEqual(body.count('data-facility-action="start"'), 6)
+        self.assertEqual(body.count('data-facility-action="stop"'), 6)
+        self.assertIn('data-control-endpoint="http://127.0.0.1:8770"', body)
+        self.assertIn("Live service status", body)
         self.assertIn("At a glance", body)
-        self.assertIn("Service availability is not checked", body)
-        self.assertNotIn("Verified during this publication", body)
+        self.assertIn("An unavailable machine remains unavailable", body)
 
     def test_top_navigation_links_facilities(self):
         for title in ("Initiative map", "Facilities", "Sprint document"):
@@ -111,6 +116,8 @@ class ControlTests(unittest.TestCase):
                 current = (root / "current").resolve()
                 body = (root / "current/facilities.html").read_text()
                 self.assertIn("Facilities", body)
+                for asset in ("style.css", "facilities.css", "status.js", "facilities.js"):
+                    self.assertTrue((root / "current" / asset).is_file())
                 self.assertIn(f'data-generation="{current.name}"', body)
                 with patch.object(control, "facilities", side_effect=ValueError("fixture failure")):
                     with self.assertRaises(ValueError):
@@ -358,6 +365,7 @@ class RefreshTests(unittest.TestCase):
                     try:
                         with urllib.request.urlopen(base, timeout=1) as response:
                             self.assertEqual(response.headers["X-Corbanu-Control"], "1")
+                            self.assertIn("connect-src 'self' http://127.0.0.1:8770", response.headers["Content-Security-Policy"])
                             self.assertIn("frame-ancestors 'none'", response.headers["Content-Security-Policy"])
                             self.assertIn("Synthetic fixture", response.read().decode())
                             break
