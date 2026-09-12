@@ -1,7 +1,8 @@
 # PF27 Stage A: descriptor identity and private pair lifecycle
 
-Status: final-source tests and scoped lint/parity pass; allocated independent
-reviews 28/29 pending. This is not service activation or product readiness.
+Status: final-source tests, scoped lint/parity and both allocated independent
+reviews pass. Ready for manager receiving integration, not service activation
+or product readiness.
 
 ## Frozen scope for review
 
@@ -147,3 +148,10 @@ Reviews28 AstraHigh and29 Fable5.1High via Corbanu/private TMUX use this frozen
 scope and the existing ledger. Prior review failures/usage are retained; this
 two-pass manager extension is not a reset. No new review of the old accepted
 single-child stage or removed Stage B code is requested.
+
+Both helpers completed exit0 with `findings: []`, patch correct; original
+[Astra28](astra28.json) and [Fable29](fable29.json), text and exit receipts are
+preserved here. Reserved20:18UTC, dispatched20:18:32–35UTC on September12.
+They inspected code and supplied evidence; no tests were run by the reviewers.
+No findings accepted/rejected, no review-triggered changes or extra pass.
+Final Rust tree remainsf64820d0; evidence/ledger closeout is documentation-only.

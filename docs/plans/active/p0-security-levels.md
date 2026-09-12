@@ -991,6 +991,14 @@ same sole owner/worktree/branch/original base, narrowing launchdb971e9b8.
 Only PairImages and launch_pair(images,deadline) returning existing LaunchHandle;
 no admission/UID/generation/socket surface, shared lock, PF20 or native activation.
 Reviews28AstraHigh/29Fable5.1High now cover A, retaining all historical usage.
+StageA sourcee0eb9eac4/Rustf64820d0 is qualified at614 changed lines: adapter4
+normal/8 supported-OS, default3, pair5/real pair1, owner8/real owner3, profiles1+1,
+full service57 pass; five service ignored cases executed separately. Strict
+scoped two-crate Clippy, read-only Cargo/Bazel parity and actual-key RTX TMUX
+pass; both reviews28/29 exit0/findings[], no repairs. [Original evidence](../../../qa/security-levels/sprints/PF-27-S04/descriptor-pair-20260912/README.md).
+Manager receiving integration remains required. Accepted policy1.7's independent
+isolated execution gate has reasoned N/A only for this private increment, not
+later protected-user flows/PF26 or the whole sprint. No product readiness claim.
 StageB admission/connector/missing cases remain deferred until accepted A and
 a fresh literal manager allocation. No omitted test is waived or called Done.
 

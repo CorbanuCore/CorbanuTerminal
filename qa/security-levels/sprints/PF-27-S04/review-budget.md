@@ -18,6 +18,12 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Reviews28/29 completed exit0/findings[], patch correct. No accepted/actionable
+findings, no code repair and no additional review. Originals under
+descriptor-pair-20260912/{astra28,fable29}.{json,txt,exit}; reviewed source
+e0eb9eac4/Rustf64820d0 unchanged. Extension2 used/0 available; scheduled5 used
+and all previous outcomes preserved. StageB needs its separate allocation.
+
 Stage A review28 reserved September12 20:18UTC before dispatch: Astra High
 over62956038e, frozen sourcee0eb9eac4/Rustf64820d0ca0312efbb612f208fb20636b6f547cf,
 614 changed code/test/fixture lines and final RTX/TMUX/lint/parity receipts.
