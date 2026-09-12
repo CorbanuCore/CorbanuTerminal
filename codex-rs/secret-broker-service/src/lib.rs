@@ -12,3 +12,10 @@ mod linux;
 pub use linux::BrokerService;
 #[cfg(target_os = "linux")]
 pub use linux::TrustedSession;
+
+#[cfg(target_os = "linux")]
+mod children;
+#[cfg(target_os = "linux")]
+pub use children::ChildRole;
+#[cfg(target_os = "linux")]
+pub use children::TrustedChildRun;

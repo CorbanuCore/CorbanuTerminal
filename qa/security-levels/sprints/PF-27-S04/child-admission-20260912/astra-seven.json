@@ -1,0 +1,29 @@
+{
+  "findings": [
+    {
+      "title": "Bind admission to the socket's process identity, not only its numeric PID",
+      "body": "A retained connection from an exited, reaped process can pass this comparison after its PID is reused by a newly captured child with the same UID. SO_PEERCRED preserves the original peer's numeric PID, while retaining a pidfd does not prevent numeric PID reuse after reaping. Consequently, control.check() verifies the replacement child, and the stale socket consumes its admission slot and reaches its handler. The old-generation test does not exercise PID reuse. Verify the socket-associated process identity and liveness before consuming the slot, for example using SO_PEERPIDFD with fail-closed handling when unavailable. This can be fixed within this admission seam. See the kernel's [peer credential handling](https://raw.githubusercontent.com/torvalds/linux/master/net/core/sock.c) and [PID allocation lifecycle](https://raw.githubusercontent.com/torvalds/linux/master/kernel/pid.c).",
+      "priority": "P1",
+      "confidence": 0.97,
+      "category": "security",
+      "code_location": {
+        "file_path": "codex-rs/secret-broker-service/src/children.rs",
+        "line": 169
+      }
+    },
+    {
+      "title": "Preserve cleanup ownership when the reaper thread cannot spawn",
+      "body": "Early drop with unreaped children unconditionally creates another thread. Under thread-resource exhaustion\u2014including the condition already handled by admit's spawn-error branch\u2014this can panic after the Child objects have been removed from their slots. The failed spawn drops those objects without reaping them; during an existing unwind, the destructor panic aborts the process. Thus a recoverable admission failure can become a supervisor crash or abandoned cleanup. Use fallible thread creation with an ownership-preserving cleanup fallback; merely ignoring a Builder::spawn error would still lose the children. Rust explicitly documents that [thread::spawn panics on OS creation failure](https://doc.rust-lang.org/std/thread/fn.spawn.html).",
+      "priority": "P2",
+      "confidence": 0.98,
+      "category": "bug",
+      "code_location": {
+        "file_path": "codex-rs/secret-broker-service/src/children.rs",
+        "line": 269
+      }
+    }
+  ],
+  "overall_correctness": "patch is incorrect",
+  "overall_explanation": "The admission check can accept a stale socket after PID reuse, and early-drop cleanup can panic and lose child ownership when thread creation fails. These defects are within the stated admission/lifetime seam. Review used read-only inspection; no tests were run.",
+  "overall_confidence": 0.96
+}

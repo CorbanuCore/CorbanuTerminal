@@ -8,7 +8,7 @@ execution_order: 28
 owner: "/root"
 parallel_lane: "isolated-broker"
 write_scope: "codex-rs/secret-broker-service/, codex-rs/secret-broker/, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/, codex-rs/network-proxy/src/credential_broker_tests.rs, codex-rs/core/src/security/broker_client.rs, codex-rs/core/src/security/broker_client_tests.rs, codex-rs/core/src/config/network_proxy_credential.rs, codex-rs/core/src/config/network_proxy_credential_tests.rs, codex-rs/vault/src/capability.rs, codex-rs/vault/src/capability_tests.rs, qa/security-levels/sprints/PF-27-S04/, docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md, codex-rs/Cargo.toml, codex-rs/Cargo.lock, MODULE.bazel.lock, docs/plans/active/p0-security-levels.md, docs/sprints/current/p0-security-levels/index.md, qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/, securityProgress.html"
-integration_gate: "Codex /root serializes shared registration, audits scope and reruns broker/service/Vault/proxy/Core plus governance on RTX and synthetic lifecycle through TMUX. Five reviews spent; Travis approved exactly one sixth Fable 5.1 High Corbanu/TMUX review. Production/native/all-OS gates remain open; no privileged installation or protected activation. Coordinate main writes with other integration owners."
+integration_gate: "Codex /root serializes shared registration, audits scope and runs affected final-tree qualification on RTX plus synthetic lifecycle through TMUX. Six historical reviews spent; Travis granted five additional review slots replenishing every six hours, tracked in PF27 review-budget.md. Use Astra High and Fable 5.1 High Corbanu/TMUX without duplicate reviews. Production/native/all-OS gates remain open; no privileged installation or protected activation. Coordinate main writes with other integration owners."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-broker-resume-20260911"
 branch: "feat/security-broker-resume-20260911"
 base_commit: "d870c92dab2bf3fbb602dc3b8447fe9f3534aecb"
@@ -22,8 +22,7 @@ updated: 2026-09-11
 September 11 resumption: fresh main-based allocation after human acceptance.
 The earlier missing-checkout report was stale: `security-round5-broker` is clean
 at pushed `cd7457da7`. Reconcile its existing service stage; do not redo it.
-The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/RESUME-20260911.md)
-records exact coordinates, review-six approval and unchanged native setup limits.
+The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/RESUME-20260911.md) records exact coordinates, review history and unchanged native setup limits.
 
 ## Execution mandate
 
@@ -68,6 +67,8 @@ records exact coordinates, review-six approval and unchanged native setup limits
   see `qa/security-levels/sprints/PF-27-S04/round5-evidence.md`.
 
 - [x] Reconciled and qualified the service construction stage on main/0.1.42: default 1, synthetic 6, full affected 338, Core 6 and supporting TMUX pass. Fable review 6 found no runtime/security issue; one test-only lint finding was reproduced and fixed, strict Clippy and affected proof rerun successfully. Six reviews spent, no seventh; see `qa/security-levels/sprints/PF-27-S04/resume-20260911/README.md`. No native deployment or activation claimed.
+
+- [x] Qualified trusted-child admission/lifetime in source `bd70f0e6b`: socket-associated pidfd checks, fixed child/role ownership, fencing and preallocated cleanup; default 3, synthetic 13, affected 338, strict Clippy/parity and TMUX13+exit78 pass. Astra7 and Fable8 findings repaired; Fable9 clean. [Evidence](../../../../qa/security-levels/sprints/PF-27-S04/child-admission-20260912/README.md). Three new review slots used under the six-hour budget. Native installation, actual root wiring and protected activation remain unimplemented.
 
 ## Remaining
 

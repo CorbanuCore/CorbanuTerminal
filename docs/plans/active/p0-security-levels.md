@@ -644,6 +644,29 @@ retain the original nonzero review result. PF-27-S04 remains in progress; the
 next implementation consumes PF20's trusted-child/native-root contract, with
 new independent review and actual privileged setup requiring their respective
 explicit allowances. No production bootstrap or platform completion is inferred.
+
+Subsequent September 11 budget amendment: Travis grants five additional PF27
+review slots, replenishing to five every six hours, with history retained in the
+[review ledger](../../../qa/security-levels/sprints/PF-27-S04/review-budget.md).
+Proceed within the same allocation with the bounded
+[trusted-child admission/lifetime stage](../../../qa/security-levels/sprints/PF-27-S04/bootstrap-next-20260911.md):
+service-owned child handles, role/generation routing, bounded admission and
+failure/shutdown fencing, with unprivileged subprocess/TMUX evidence. Literal
+runtime scope is `codex-rs/secret-broker-service/`; existing shared build scope
+remains serialized. No PF20 API widening, Core policy factory, Vault hookup,
+identity dropping or native installation is included. Default exit78 remains.
+This supersedes the earlier service-only execution instruction and budget hold,
+not any deployment, containment, data-plane or sprint-completion gate.
+
+This bounded child-admission/lifetime source stage is now qualified at
+`bd70f0e6b`: final default3/synthetic13/affected338, strict lint/parity and
+TMUX13+exit78 pass. Astra7/Fable8 findings were repaired; Fable9 is clean.
+[Closeout evidence](../../../qa/security-levels/sprints/PF-27-S04/child-admission-20260912/README.md)
+retains failed/retried runs and review dispositions. Three new slots used;
+the six-hour ledger governs later work. PF27-S04 remains in progress, with
+actual PF20 root wiring, native setup/containment and provider data-plane still
+open. No new principal, service or protected activation was installed.
+
 ## Round-five execution amendment — 2026-09-04
 
 The user authorized these three parallel agents and assigned integration to

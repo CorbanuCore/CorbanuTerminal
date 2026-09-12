@@ -1,0 +1,11 @@
+autoreview findings: 2
+[P1] Bind admission to the socket's process identity, not only its numeric PID
+codex-rs/secret-broker-service/src/children.rs:169
+A retained connection from an exited, reaped process can pass this comparison after its PID is reused by a newly captured child with the same UID. SO_PEERCRED preserves the original peer's numeric PID, while retaining a pidfd does not prevent numeric PID reuse after reaping. Consequently, control.check() verifies the replacement child, and the stale socket consumes its admission slot and reaches its handler. The old-generation test does not exercise PID reuse. Verify the socket-associated process identity and liveness before consuming the slot, for example using SO_PEERPIDFD with fail-closed handling when unavailable. This can be fixed within this admission seam. See the kernel's [peer credential handling](https://raw.githubusercontent.com/torvalds/linux/master/net/core/sock.c) and [PID allocation lifecycle](https://raw.githubusercontent.com/torvalds/linux/master/kernel/pid.c).
+
+[P2] Preserve cleanup ownership when the reaper thread cannot spawn
+codex-rs/secret-broker-service/src/children.rs:269
+Early drop with unreaped children unconditionally creates another thread. Under thread-resource exhaustion—including the condition already handled by admit's spawn-error branch—this can panic after the Child objects have been removed from their slots. The failed spawn drops those objects without reaping them; during an existing unwind, the destructor panic aborts the process. Thus a recoverable admission failure can become a supervisor crash or abandoned cleanup. Use fallible thread creation with an ownership-preserving cleanup fallback; merely ignoring a Builder::spawn error would still lose the children. Rust explicitly documents that [thread::spawn panics on OS creation failure](https://doc.rust-lang.org/std/thread/fn.spawn.html).
+
+overall: patch is incorrect (0.96)
+The admission check can accept a stale socket after PID reuse, and early-drop cleanup can panic and lose child ownership when thread creation fails. These defects are within the stated admission/lifetime seam. Review used read-only inspection; no tests were run.
