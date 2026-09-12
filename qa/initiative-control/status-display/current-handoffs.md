@@ -1,5 +1,16 @@
 # Current workstream handoffs — September 12
 
+## Current handoff — Slack installation completed
+
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): Travis approved access and separately approved the installation agreement. Reinstall is complete, the bot is in the private channel, and Socket Mode/private reply events are enabled. [Exact setup evidence and remaining credential handoff](slack-access-decision.md). Both required token environment inputs are absent in this runner; no token was extracted. Manager owns actual connection, bounded no-op alert/reply/native-ACK and independent qualification once privately provisioned. Alerts remain non-operational. The resolved access question must not reappear as a hold.
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): corrected ten-file candidate933/279 has100 focused/575 shared tests, normal check, Clippy and clean material review. Manager has read the exact evidence and source; receiving and combined verification are next. S03 stays dependent, collection OFF.
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): final740-line candidate has actual28 command exits+suite0 and clean reviews35/36. Manager has read the evidence and source; scoped receiving and exact combined proof are next. No native activation or sprint-completion claim.
+
+Isolated engineering646/650 passed12 actual RTX tests and correction review02;
+accepted as engineering only, not a complete independent executor. Standing
+manager instructions now require proactively initiating authorized blocking
+tests or dispatching eligible execution; manager-owned must not mean unstarted.
+
 ## Current handoff — 23:16 UTC
 
 - [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): actual browser preflight found missing bot posting/private-history permissions and reply events, despite Socket Mode being ON. [Access question and context](slack-access-decision.md) was asked directly; live setup waits for Travis's confirmation, not a repeat of prior product approvals. Supervisor code remains integrated with261 passing tests. Five-file isolated engineering returned588 lines/11 actual RTX tests; first independent boundary review is running, not accepted execution. Manager owns remaining confined executor/transport qualification.

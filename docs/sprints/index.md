@@ -81,6 +81,17 @@ evidence, and revise exact worker allocations within already-approved active
 features. This is not permission to change a product contract or a hard gate.
 Do not ask the human to do routine allocation, branch preparation or bookkeeping.
 
+Travis's September 12 proactive-testing instruction: if an authorized test or
+qualification step holds up another task, start it now or dispatch a concrete
+bounded execution to an eligible subagent. Manager ownership is an assignment,
+not a reason to wait. Inspect actual tools and signed-in sessions and attempt
+safe preflight checks before requesting human execution. Preserve independent,
+code-blind acceptance requirements by assigning the right executor; an operator
+smoke test is not that acceptance. Record the attempt and evidence, or the exact
+missing prerequisite, owner and smallest actionable question. Continue other
+approved work while waiting. Do not leave executable tests in a holding pattern,
+repeat unchanged clean tests or infer broader external-action authority.
+
 Before a worker finishes, prepare the next bounded assignment and human test
 plan. On return, inspect its literal diff and independent review, integrate
 reviewed changes on the recorded local receiving branch, and run the combined

@@ -1,5 +1,26 @@
 # Workstream continuation — September 11
 
+## Current handoff — September12 Slack approval and proactive testing
+
+Travis approved the exact Slack access request and instructed the manager to
+initiate tests that block other work, directly or through eligible subagents.
+That instruction is saved in the sprint process, global user instructions and
+existing10-minute manager automation; Luna xhigh sync/cadence unchanged.
+Actual UI: message.groups saved, chat:write/groups:history configured alongside
+existing incoming-webhook; reinstall selects only private the-corbanu-project.
+Travis separately approved the final installation agreement; Allow was clicked
+and reinstall verified. The app is now in the private channel (bot user
+U0C1EBT4UJV, not the still-unverified bot B-ID); Socket Mode and events are ON.
+Original access decision resolved in feed17, history retained. Do not reask.
+Actual launcher/SDK exists; both token environment inputs absent in this runner,
+not proof credentials do not exist elsewhere. Supported private provisioning and
+final identity/membership/connection checks precede the real no-op roundtrip.
+See [current setup evidence](../../qa/initiative-control/status-display/slack-access-decision.md).
+Installation is complete; do not claim live alerts sent or independent qualification.
+Accounting933 candidate review clean and PF13 final740/28proof/reviews35/36 have
+been read; receiving/combined gates remain manager work. Isolated engineering646
+passed12RTX tests and correction review02, not a complete isolated executor.
+
 ## Current handoff — September12 23:16UTC
 
 [Latest three-lane observation](../../qa/initiative-control/status-display/current-handoffs.md)

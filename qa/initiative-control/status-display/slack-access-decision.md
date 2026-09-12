@@ -2,17 +2,25 @@
 
 ## Summary
 
-Live Slack qualification needs approval to expand the existing Corbanu Decision
-Alerts app from webhook-only permission to posting and reading private-channel
-replies. This question was asked directly in the manager task after actual
-browser inspection around23:00UTC, September12. No answer recorded yet.
+Travis explicitly approved the requested Corbanu Decision Alerts access in the
+manager task on September12: "Yes, you may grant Corbanu decision alerts, etc.
+Please proceed." The original access question is resolved, not still waiting.
+The manager immediately saved message.groups and configured chat:write plus
+groups:history, preserving incoming-webhook and no user-token scopes.
+Reinstallation is complete: Travis separately answered "Yes, accept and finish
+installation", the manager clicked Allow, and Slack returned to the installed
+OAuth page without the pending-scope-change warning.
 
 Affected sprint: [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md).
-Owner: Travis Good for access approval; integration manager for configuration
-and execution. Only the live Slack path is held; offline engineering/review,
-accounting and PF13 continue. Slack cannot deliver its own permission question.
+Owner: integration manager for configuration and test execution. The completed
+reinstall selected AmbientCrypto and private the-corbanu-project only. The app
+is now listed in that channel's Agents & apps panel (bot user U0C1EBT4UJV).
+That U-ID is not the transport's still-unverified bot B-ID. Socket Mode remains
+ON and its settings now show Event Subscriptions enabled. Bot scopes are exactly
+chat:write, groups:history and incoming-webhook; user-token scopes remain empty.
+Offline engineering, accounting and PF13 can continue.
 
-## What was actually observed
+## Historical preflight, before the approved installation
 
 The signed-in AmbientCrypto session can open the private the-corbanu-project
 channel. Corbanu Decision Alerts exists in that workspace. Socket Mode is ON,
@@ -25,6 +33,8 @@ in this record. No messages, scope changes, invitations or credential copies
 were made during the preflight.
 
 ## Question
+
+The following original question was approved. Preserve it as decision history.
 
 May the manager grant Corbanu Decision Alerts permission to post messages and
 read messages in private channels it joins, enable private-channel reply events,
@@ -50,7 +60,26 @@ New credential entry, if required, must follow the supported user handoff; no
 browser/session or Keychain extraction. Remote authenticated dashboard/phone
 and independently isolated functional acceptance remain separate gates.
 
-The previous status that only testing remained was incomplete: this is an
-observed app-configuration prerequisite. Notification status: asked in the
-manager conversation; dashboard projection pending normal synchronization;
-Slack not delivered. Existing resolved PF27 approval remains resolved.
+## Actual remaining setup and proactive testing
+
+The supported control.py decision-slack launcher and SDK runtime exist. A
+read-only check found CORBANU_SLACK_BOT_TOKEN and CORBANU_SLACK_APP_TOKEN absent
+from this runner's environment; no values, browser credentials or Keychain were
+read. That does not prove the user lacks credentials elsewhere. The existing
+interface accepts environment injection; no inspected automatic loader exists.
+Channel membership is now verified. App-level connections:write token metadata
+could not be verified: both the Socket Mode App Level Token link and Basic
+Information navigation lead to the legacy page without an App-Level Tokens
+section. No credential was revealed, copied, created or regenerated. The user
+must supply the existing bot token and app-level token through private credential
+provisioning, never chat or committed files. Their actual API identity and
+connection, including bot B-ID, still require verification. No live alert/reply
+roundtrip has run.
+
+The final Allow agreement was separately approved and installation verified;
+do not resurrect either already-approved question. Next is private credential
+provisioning into CORBANU_SLACK_BOT_TOKEN and CORBANU_SLACK_APP_TOKEN, then
+the bounded no-op alert/reply/native-ACK test. The manager must initiate available
+tests or assign eligible execution, as now recorded in the sprint process and
+saved manager automation. Independent isolated execution, phone and overnight
+acceptance remain distinct from operator smoke testing. PF27 stays resolved.
