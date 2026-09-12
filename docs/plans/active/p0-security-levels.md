@@ -982,6 +982,17 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
+Private descriptor-pair root dispatch now qualified at source
+c7d48e4822293ec0899311be63fbd08848516ba0/Rustbd56b597e348d2924da21706c594c20a868bace4.
+[Literal evidence](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-dispatch-20260912/README.md):
+28 command exits+suite0 on exact non-root RTX/TMUX (104s), six actual two-child
+PF20 protocol/lifecycle cases, preserved prior suites, strict scoped lint and
+source/lock invariance. Astra35/Fable36 exit0/findings[]; original failures kept.
+Fixed production factories/public Child composition/default builds unchanged;
+this private increment does not enable the live service. Manager receiving
+combined-tree proof is next; policy1.7 N/A only here, later protected-user/PF26
+isolated functional execution, native/live-repository/human gates remain open.
+
 22:45UTC: manager accepted exact combined compatibility37f23b991/Rust99265431b6,
 all25 command exits+suite0 and actual RTX/TMUX/locks proof. Next sole-owner
 [fifteen-path private root dispatch](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-dispatch-allocation-20260912.md)

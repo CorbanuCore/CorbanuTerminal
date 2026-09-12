@@ -1,6 +1,6 @@
 # PF27 private descriptor-pair root dispatch
 
-Final exact-source RTX proof passes; allocated independent reviews pending.
+Qualified private increment for manager receiving; no native/product readiness.
 Allocation23d8e54a1 imported at launch00b07dad10b215e756696f8c5477055f1e1722d5;
 timestamp correction imported1cfdce29d. Source/size base12e0bc2d8 unchanged.
 Fifteen exact allocated paths, target740/hard800 including receipt/tests/runner.
@@ -77,8 +77,19 @@ comparison and wrapper guard stopped before tests; original failed preflight
 capture retained. Formatting-only c7 copied back, checkpointed and matched the
 entire remote staged tree before switching clean. No failed attempt overwritten.
 The committed runner retains all25 predecessor commands and adds relay build/
-profile plus six dispatch cases. Reviews35 Astra High/36 Fable5.1 High reserved
-under allocation23d8e54a1; preserve1–34. No source changes while reviews run.
+profile plus six dispatch cases. Reviews35 Astra High/36 Fable5.1 High dispatched
+23:15:26UTC under allocation23d8e54a1, both exit0/findings[], patch correct
+(confidence0.90/0.82). Original JSON/text/exit/start receipts are beside this file.
+Established autoreview helper, branch mode/base12e0bc2d8, High, this README as
+context, private TMUX `pf27rootdispatchreview20260912:reviews`; Fable uses the
+Corbanu wrapper. Source stayed frozen; no repairs or additional opinions.
+Preserve1–34 and all failed attempts. Reviews did not execute the test suite.
+Fable's prose describes bounded socket shutdown; do not infer a wall-time bound
+for a stuck filesystem operation. Drop waits for jobs, while caller polling
+remains bounded and unfinished jobs never yield a false completion receipt.
+Final plan/sprint checks pass3 active/115 current/125 archived; whitespace passes
+for authored files. Raw logs retain verbatim formatting. Final scope740lines
+across13 changed of15 allocated paths (both lockfiles unchanged), below800.
 No negative fixture or ignored case may be relabeled passing without execution.
 Manager-accepted policy1.7 internal-only N/A applies only to this increment;
 later protected-user/PF26 isolated functional/native/live-repository qualification,
