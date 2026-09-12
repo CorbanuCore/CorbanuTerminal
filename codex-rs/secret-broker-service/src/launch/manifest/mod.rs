@@ -4,7 +4,6 @@ mod files;
 mod schema;
 mod sealed;
 pub use sealed::SyntheticSealedImage;
-pub use sealed::SyntheticProfileInspectedImage;
 
 use std::fs::File;
 use std::io;
