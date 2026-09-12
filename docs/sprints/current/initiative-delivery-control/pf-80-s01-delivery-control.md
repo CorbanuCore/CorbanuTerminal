@@ -19,7 +19,7 @@ updated: 2026-09-12
 
 # PF-80-S01 — Native Task Node delivery-control integration
 
-Current mandate: [supervisor integration accepted](../../../../qa/initiative-control/status-display/slack-supervisor-integration-20260912.md); review08 clean, combined261pass. Manager owns isolated/actual-service qualification; James verifies machine feasibility. Older port/recovery text is history, not repeated implementation.
+Current mandate: supervisor integration accepted, review08 clean, combined261pass. James is now dispatched on [five-file private isolation engineering](../../../../qa/initiative-control/status-display/isolated-boundary-engineering-20260912.md), after actual RTX feasibility. Front-matter product source scope is frozen accepted history; no new product source writes. Manager owns isolated executor/actual-service qualification. Older port/recovery text is history, not repeated implementation.
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
 [Native validity allocation](../../../research/tasknode-integration/native-validity-allocation.md)
 and [recovery handoff](../../../research/tasknode-integration/recovery-decision-handoff.md).

@@ -17,6 +17,9 @@ product_spec:
   heading: "Product measurement"
   requirement_excerpt: "No commercial performance numbers have been supplied."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-core-policy-20260912"
+    branch: "workstream/accounting-core-policy-20260912"
+    base_commit: "37f23b991d6d79ba782aadc50dc5652674c91d20"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
     base_commit: "c8358dd9b4329036c8f8fb525015bbd795433513"
@@ -29,6 +32,14 @@ implementation_worktrees:
 ---
 
 # 2. Accounting — unified agent cost and usage
+
+22:44 manager continuation: eight-file policy repair reviewed clean and received
+at37f23b991; parent575/575 zero skips and normal six-library check pass. Core's
+eight existing-policy errors remain. [Current ten-file Core correction](../../research/agent-cost-accounting/core-policy-repair-allocation.md)
+is allocated to Mendel in the fresh Core-policy checkout above, target950/300,
+STOP1100/375, one new material review plus necessary correction. Preserve all
+prior failures and default-OFF boundaries. Manager owns receiving proof; no user
+question. Earlier correction assignments below are history, not concurrent work.
 
 21:48 manager continuation: first policy repair193/101 passes575full/105focused
 and normal check. Eight newly exposed lint errors in the external normal-library

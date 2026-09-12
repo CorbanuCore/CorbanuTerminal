@@ -36,6 +36,13 @@ implementation_worktrees:
 
 # 3. Task Node integration and delivery control
 
+22:44UTC: [rootless isolation engineering](../../../qa/initiative-control/status-display/isolated-boundary-engineering-20260912.md)
+is allocated to James: exactly five private runner files,525target/650hard,
+actual RTX seccomp/cgroup/cleanup/PTY probes, one boundary review plus necessary
+correction. Feasibility inspection is complete; engineering is now dispatched.
+No VM-equivalence, actual confined reasoning executor, live Slack or phone/ACK
+acceptance is claimed. Those next gates are manager-owned, not user questions.
+
 22:03UTC: supervisor review08 clean; exact5-file c7a1b9690 received92d6eb261.
 All261 combined tests pass187.549s; Facilities/governance pass, original failures
 retained. [Integration and next owner](../../../qa/initiative-control/status-display/slack-supervisor-integration-20260912.md).

@@ -5,13 +5,13 @@ status: in_progress
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 2
-owner: "Codex accounting policy-repair lane"
-parallel_lane: "accounting-policy-repair"
-write_scope: "codex-rs/state/src/runtime/accounting_store.rs, codex-rs/state/src/runtime/accounting_store_tests.rs, codex-rs/state/src/runtime/accounting_retention_atomic_test_support.rs, codex-rs/state/src/runtime/accounting_native_tests.rs, codex-rs/state/src/sqlite.rs, codex-rs/codex-api/src/telemetry.rs, codex-rs/state/tests/accounting_store.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/policy-lint-repair.md"
-integration_gate: "First correction193/101 passes575full/105focused/normalcheck; Clippy101 exposes external test lints. Manager adds eighth path under policy-lint-repair-allocation.md, same300/150target450/225STOP and unspent review+correction. Preserve tests/failures, no new public API or S02/S03/live acceptance. Manager owns combined proof."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-policy-repair-20260912"
-branch: "workstream/accounting-policy-repair-20260912"
-base_commit: "a89a48548f644a64cbb8cd9da090b5b75578c922"
+owner: "Codex accounting Core-policy lane"
+parallel_lane: "accounting-core-policy"
+write_scope: "codex-rs/core/src/accounting.rs, codex-rs/core/src/client.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/exec_env.rs, codex-rs/core/src/accounting_policy_tests.rs, codex-rs/core/src/accounting_tests.rs, codex-rs/core/src/exec_env_tests.rs, codex-rs/core/tests/suite/accounting_anthropic.rs, codex-rs/core/tests/suite/accounting_anthropic_support.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/core-policy-repair.md"
+integration_gate: "Eight-file correction clean-reviewed/received37f23b991; parent575/575 and six-library check pass. Core's eight lint errors remain. Current ten-path core-policy-repair-allocation.md targets950/300 STOP1100/375; new material review+necessary correction, history retained. Manager owns combined native/shared/check/Clippy proof; no S02/S03/live acceptance."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-core-policy-20260912"
+branch: "workstream/accounting-core-policy-20260912"
+base_commit: "37f23b991d6d79ba782aadc50dc5652674c91d20"
 depends_on: "PF-60-S01"
 created: 2026-09-09
 updated: 2026-09-12
@@ -19,7 +19,7 @@ updated: 2026-09-12
 
 # PF-60-S02 — Idempotent usage persistence and replay
 
-Current mandate: [repair receiving policy lint](../../../research/agent-cost-accounting/policy-lint-repair-allocation.md), amended exact eight-file scope/same checkout. First575full/105focused pass; external-test Clippy101 is allocated corrective work. Original failures retained; late compact import prepared, not executable.
+Current mandate: [ten-file Core policy correction](../../../research/agent-cost-accounting/core-policy-repair-allocation.md), fresh sequential checkout above. Prior eight-file correction received37f23b991, parent575/575 and normal check pass; Core lint errors remain. Earlier native/repair mandates below are historical, not concurrent authorization.
 17:22UTC: parent accepted review01's dropped role retry/timeout overrides P2 as
 in-scope; first correction queued after the matched baseline run. Same20 paths
 and existing allowance; native child override/mismatched-route proof required.
@@ -28,7 +28,7 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 
 ## Execution mandate
 
-- Next: implement [actual native Anthropic sampling](../../../research/agent-cost-accounting/anthropic-dispatch-allocation.md), with per-send admission, raw SSE presence, trusted original prices and real native retry/reopen proof. Default OFF; other providers and90..365-day import remain unqualified.
+- Next: [Core policy repair](../../../research/agent-cost-accounting/core-policy-repair-allocation.md): operation gate, short data locks, fail-closed poison/cancellation and exact profile JSON; preserve native caller and OFF behavior.
 - Excludes: Changing prices, rebilling historical customers, collecting prompts, restoring legacy Plan allowances, or silently converting allowance to cash.
 - Approved target1900total/950conservative non-test including moves/receipt, estimate1515/795; one coherent versioned-installation, normal-library/native lifecycle and atomic price-binding failure/concurrency unit justifies above800, not inherited exceptions. Report measured overage to integrator before expanding; do not compress proof. One NEW code review plus necessary correction and one allocation review if needed; prior usage unchanged.
 
@@ -41,7 +41,7 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 ## Code boundaries
 
 - Existing, read before work: `codex-rs/state/migrations/0041_provider_request_cache_usage.sql`; `codex-rs/app-server/src/request_processors/token_usage_replay.rs`; `codex-rs/tui/src/chatwidget/usage.rs`; `codex-rs/tui/src/token_usage.rs`.
-- Output: exact20 worker paths in front matter; three manifest/lock paths manager-only. No ownership overlap with PF27 or Slack. Accepted store is read-only, no new schema or engine. Root size exception and exact dependency lease are in the native allocation.
+- Output: exact ten Core/test/receipt paths in front matter; no manifest/lock writes. No ownership overlap with PF27 or Slack. Accepted store is read-only; current size/review disposition is in the Core correction allocation.
 - Tests/evidence: preserve A/B/C1/C2/native assertions, failures and receipts. Public delete signatures/counts/missing-row semantics and normal no-schema behavior stay unchanged, no blanket activation/failure checks. Normal-library facade gates fixture constructors cfg(test); default installs/collects nothing, installed-store deletion remains atomic even disabled. Separate logs/memory/goals stores remain outside main-state atomicity. No dependencies or real collectors.
 
 ## Preconditions
@@ -80,7 +80,7 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 
 ## Remaining
 
-- [ ] Implement the accepted20-path native Anthropic caller after manager dispatch; prove actual per-send admission, present/null/zero wire usage, immutable bundled-price estimates and native root/children/retry/reopen. Manager supplies serialized dependency commit; no new human blocker.
+- [ ] Implement and verify the current ten-file Core correction after manager dispatch; preserve admitted identity, cancellation/poison failure, native retry/HTTP independence and exact env routing. Return frozen diff for independent review and combined receiving gates.
 - [ ] Preserve accepted normal-library store tests and all original failed evidence as the unchanged dependency regression gate; do not re-author its installation/rollback matrix.
 - [ ] Actual dispatch/presence/trusted original-price provenance, permanent deletion-fence qualification and complete native S02 goldens remain outside this store.90..365-day compact-only late import is explicitly unqualified, current guard unchanged, not waived; no new prerequisite chain or product decision for approved defaults. S03 stays draft.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
