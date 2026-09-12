@@ -1,0 +1,6 @@
+{
+  "findings": [],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "No actionable defects found in the staged change. The implementation bounds copying, checks source metadata, verifies kernel seals, validates the sealed destination against the inspected digest, and preserves private descriptor ownership without adding execution authority. Review used read-only inspection; tests were not run.",
+  "overall_confidence": 0.94
+}

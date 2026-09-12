@@ -1,6 +1,7 @@
 //! Synthetic launch configuration, NOT validated executable or OS authority.
 mod manifest;
 pub use manifest::SyntheticManifestInspection;
+pub use manifest::SyntheticSealedImage;
 use std::io;
 use std::path::PathBuf;
 use std::process::Command;

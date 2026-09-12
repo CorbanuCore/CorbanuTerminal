@@ -1,0 +1,13 @@
+.facility-card .lane-top{align-items:flex-start;gap:1rem}
+.facility-status{display:inline-block;border:1px solid var(--line);padding:.1rem .45rem;border-radius:4px;font-size:.8rem;line-height:1.6}
+.facility-status.status-running{color:var(--green);border-color:#37645c;background:#143841}
+.facility-status.status-stopped{color:var(--muted);background:#1b2c40}
+.facility-status.status-degraded,.facility-status.status-initializing{color:var(--amber);border-color:#805e2a;background:#3a2d1d}
+.facility-status.status-unreachable,.facility-status.status-unknown{color:var(--red);border-color:#825261;background:#3b212d}
+.facility-status.status-checking{color:var(--muted)}
+.facility-controls{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin:1rem 0}
+.facility-action,.facility-open{font:inherit;font-size:.85rem;border:1px solid #48647f;border-radius:4px;padding:.35rem .65rem;background:#1b2c40;color:var(--blue);cursor:pointer;text-decoration:none}
+.facility-action:hover,.facility-action:focus-visible,.facility-open:hover,.facility-open:focus-visible{color:white;border-color:var(--blue)}
+.facility-action:disabled{opacity:.45;cursor:not-allowed}
+.facility-action[data-facility-action="stop"]{color:var(--amber)}
+.facility-message{margin:.5rem 0 1rem}

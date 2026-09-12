@@ -35,3 +35,5 @@ pub use launch::SyntheticChildRole;
 pub use launch::SyntheticLaunchRecipe;
 #[cfg(all(target_os = "linux", feature = "synthetic-fixture"))]
 pub use launch::SyntheticManifestInspection;
+#[cfg(all(target_os = "linux", feature = "synthetic-fixture"))]
+pub use launch::SyntheticSealedImage;

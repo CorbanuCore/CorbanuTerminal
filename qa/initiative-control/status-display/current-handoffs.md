@@ -1,5 +1,39 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 10:37 UTC, September12
+
+Publication approval is resolved; there is nothing to click. A separate source
+pointer drift was reconciled while preserving Facilities. Final correction review
+is clean;118 Python tests and the Node UI regression pass. Native Luna publication
+postflight is next, not yet claimed. See [reconciliation details](facilities-reconciliation.md).
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): C1 returned255passing state tests. Manager explicitly authorized review of1121total/396non-test lines to preserve its detailed proof; Aristotle is reviewing. C2 remains next after acceptance, S03 dependent. No user size decision.
+- [TaskNode PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): all26 original browser cases executed at72854ec77. Helmholtz independently checks evidence; an additional static relative-age display defect is retained. Slack sender/replies and live mapping qualification remain pending; posting OFF.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): reviewed sealed-image checkpoint140e094ad landed on main and is reconciled; main window released. Sole owner is authorized for build-only static-probe feasibility under the accepted next proposal. No artifact invocation, protected execution, loader trust or installation claim.
+
+These observations supersede earlier assignments below. No new user question.
+
+## Publication recovery — 10:19 UTC, September12
+
+The obsolete publication task was archived through Codex's supported task tool.
+Codex now confirms its pending run is interrupted and the task is not loaded;
+the cancellation message confirms no further publication action. History is
+retained. There is no outstanding approval for Travis to find or click.
+The stale-task overlap hold is cleared. One fresh native Luna Extra High sync
+will publish the declared receiving source; success must be verified separately.
+Earlier approval-waiting observations below are history, not current blockers.
+
+## Current observation — 10:10 UTC, September12
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Boole is implementing C1 fixture activation/admission/retained reads at clean launch4642785db. Explicit setup state preserves all A/B assertions; C2 atomic cleanup/deletion is the fixed next increment, S03 still dependent.
+- [TaskNode PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): corrected immutable feed72854ec77 is reviewed clean and integrated at9a31f3aac;111combinedPython tests pass25.362s. McClintock is executing actual desktop/phone/keyboard cases on synthetic local pages. Independent evidence and Slack sender/reply implementation remain pending, not live.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): manifest2c7c4e6c0 landed and is reconciled. Sole owner has accepted sealed-image preparation next, with two new scoped reviews. No protected exec, loader-trust or installation claim.
+
+No new product question. Routine mapped TaskNode progress is authorized after
+technical qualification, still OFF. The old declined publisher is unchanged
+at app approval-waiting as of this observation; no overlapping sync or live claim.
+Earlier observations below are retained history.
+
 ## Current observation — 10:02 UTC, September12
 
 - [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): reduction B is independently reviewed and integrated at7514be8ec. All330 combined state/TaskNode tests pass. Manager prepares the coupled retention/read/delete/admission allocation, resolving fixture setup explicitly; no new user decision or S03 activation.

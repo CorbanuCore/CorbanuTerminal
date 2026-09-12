@@ -30,7 +30,7 @@ implementation_worktrees:
 
 # 3. Task Node integration and delivery control
 
-Current September12: corrected offline decisions4ff73485c reviewed clean and integrated ataa3f9e2c;100combinedPython tests pass. [Feed transport/wiring](../../research/tasknode-integration/decision-feed-next.md) now owns exact8file scope. Prior design/code and additional correction consumed, evidence still pending; integrator adds one feed-code pass without reset. VoltaDEC001..026 preserved. No live feed, posting or Slack connection enabled.
+Current September12: corrected immutable [feed transport](../../research/tasknode-integration/decision-feed-next.md)72854ec77 is reviewed clean and integrated at9a31f3aac;111combinedPython tests pass25.362s, including actual HTTP-server regression. Seven paths590changed/281non-test. Feedcode and added necessary correction passes consumed; future independent evidence pass retained. Browser execution of frozen VoltaDEC001..026 is assigned; Slack delivery/reply allocation follows. No live feed, posting or Slack connection enabled.
 
 ## Activation record
 

@@ -730,6 +730,16 @@ failures](../../../qa/security-levels/sprints/PF-27-S04/manifest-20260912/README
 Two new review passes used, prior contingency retained. Main window still
 required; no root-positive, exec-binding, loader-trust or native-eligibility claim.
 
+Manifest checkpoint subsequently landed on main at `2c7c4e6c0`; window released.
+The accepted [sealed-image preparation](../../../qa/security-levels/sprints/PF-27-S04/sealed-image-next-20260912.md)
+is construction-qualified in source `ee1ac023c`: bounded Linux memfd copy, verified
+seals and destination hash, with no public descriptor or execution surface.
+RTX default3/synthetic39/affected356 (2 existing skips), scoped lint/parity/build
+and actual-key TMUX passed; Astra18/Fable19 exit0/no findings. See
+[exact evidence](../../../qa/security-levels/sprints/PF-27-S04/sealed-20260912/README.md).
+Dynamic loader trust, exec binding, spawn supervision and installation authority
+remain separate gates. Preserve the unused contingency; no main window yet.
+
 ## Round-five execution amendment — 2026-09-04
 
 The user authorized these three parallel agents and assigned integration to

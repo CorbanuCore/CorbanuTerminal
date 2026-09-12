@@ -11,7 +11,8 @@ import sys
 import time
 import uuid
 
-from control import atomic_json, checked_run, locked, read_file, read_json, report
+from control import atomic_json, checked_run, locked, now, read_file, read_json, report
+import decision_feed
 
 
 def activate(root, incoming, units):
@@ -21,6 +22,7 @@ def activate(root, incoming, units):
     if not re.fullmatch(r"upload-[a-f0-9]{32}", incoming.name):
         raise ValueError("invalid generation name")
     manifest = read_json(incoming / "state/source.json", incoming)
+    decision_feed.read_snapshot(incoming / "source", manifest, now())
     for path, expected in manifest["files"].items():
         actual = hashlib.sha256(read_file(incoming / "source" / path, incoming / "source").encode()).hexdigest()
         if actual != expected:

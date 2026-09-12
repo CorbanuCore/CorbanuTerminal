@@ -19,7 +19,7 @@ updated: 2026-09-11
 
 # PF-80-S01 — Native Task Node delivery-control integration
 
-September12: corrected offline4ff73485c reviewed clean, integrated ataa3f9e2c;100combinedPython tests pass. [Feed transport/wiring](../../../research/tasknode-integration/decision-feed-next.md) supersedes the first offline mandate below. TwoP2s reproduced/corrected; no live feed/Slack or human-readiness claim.
+September12: corrected [feed transport](../../../research/tasknode-integration/decision-feed-next.md)72854ec77 reviewed clean and integrated at9a31f3aac;111combinedPython tests pass25.362s. Frozen source awaits actual browser/keyboard/phone and independent evidence, then Slack allocation. No live feed/Slack or human-readiness claim.
 
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
 The previous literal write scope is frozen, not an active worker assignment.
@@ -54,7 +54,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact owner, worker worktree/base and disjoint scope allocated; dispatch waits for the verified main merge and worker fast-forward.
 
 ## Done
-
+- [x] Feed72854ec77 accepted590lines/281non-test after reproduced destination-less export failure, compatibility correction and clean additional review;111combined tests pass including actual server. [Receipt](../../../../qa/initiative-control/pf-80-s01/decision-projection/feed-receipt.md). Prior reviews preserved; independent evidence remains pending.
 - [x] Offline revision-bound decisions4ff73485c accepted after clean correction review;777lines,100combinedPython tests pass. Original VoltaDEC001..026 preserved; full UI/feed proof remains. [Receipt](../../../../qa/initiative-control/pf-80-s01/decision-projection/receipt.md).
 
 - [x] Canonical receiving reconciled at 87e31f521672e627e6230d48fc16a4cfaa7ff44c; native validity remains private/no caller. Independent intent-only [design DEC-001..026](../../../../qa/initiative-control/pf-80-s01/decision-projection/design-proposal.md) frozen before implementation. Integrator authorizes +3 design/code/evidence reviews, preserving earlier usage.
@@ -76,7 +76,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 
 ## Remaining
 
-- [ ] Implement the [contextual-decision allocation](../../../research/tasknode-integration/decision-projection-next.md) in the five declared paths, with strict records, atomic fixture persistence, pure renderer and applicable DEC cases. Preserve remaining browser/full-feed cases for sequential wiring; Slack remains unconnected.
+- [ ] Execute frozen DEC001..026 against accepted feed at desktop1440x900/phone390x844 with actual keys, inspect evidence independently, then allocate Slack alert/reply loop. Code remains frozen; fixture/browser artifacts private until manager acceptance. Slack remains unconnected.
 - [ ] Manager scopes accessible recovery/input/retention and restart/cross-process fences before the later CLI allocation; this is manager work, not unanswered product approval.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.
 - [ ] Give manager exact credential-scope/destination, enrollment, task-lifecycle and first-payload decisions; remain OFF if missing authority. Never inspect real credential stores as a worker.
