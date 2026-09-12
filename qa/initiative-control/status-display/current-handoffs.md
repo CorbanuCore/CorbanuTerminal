@@ -1,5 +1,21 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 13:05 UTC, September 12
+
+Two implementation workers are dispatched, not merely a running dashboard timer.
+No new answer is required from Travis for these assignments.
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Mendel implements the [native ownership/deletion bridge](../../../docs/research/agent-cost-accounting/native-ownership-allocation.md), clean launch165da0ef3. Three allocation documents reviewed clean and integrated; exact six-path scope, real native/thread/accounting transaction proof, production OFF. Full S02 and S03 readiness are not claimed.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): James implements [offline Slack sender/reply recovery](../../../docs/research/tasknode-integration/slack-recovery-allocation.md), clean launch8dd9274b4. Allocation reviewed clean; five new files, durable attempts/uncertainty, revision-bound resolution and restart-safe handoff. Actual Slack transport, scopes/credentials and first real delivery remain next, not connected yet.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): launch implementation remains held at owner1b4ac697 for a real safe process backend. Manager now asks the sole owner to qualify one concrete GNU pidfd_spawn lead, not repeat broad dependency searches. No build/invocation/main window or new user question.
+
+F01 age and legal-ID history closure are independently supported by actual browser
+evidence. [Evidence disposition](age-evidence-20260912.md) retains DEC021's
+mixed-feed useful-content failure and baseline-provenance limit; this does not
+block the independent offline Slack assignment or create unqualified human readiness.
+Last verified publication: d19e34b16 at12:37:35Z. This source awaits this run's
+normal native Luna sync; earlier observations below remain historical.
+
 ## PF-27-S04 follow-up — 12:42 UTC
 
 [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md)

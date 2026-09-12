@@ -77,7 +77,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 
 ## Remaining
 - [ ] Implement [Slack recovery](../../../research/tasknode-integration/slack-recovery-allocation.md) after dispatch: durable parent/thread intent, verified-envelope intake, exact revision-bound manager CAS and restart-safe handoff with injected transports; complete failure/concurrency proof and concrete live-I/O successor. Target1200/650, no compressed proof or silent overage.
-- [ ] Complete independent check of returned F01 browser/history/redaction packet; preserve DEC001..026 and DEC021partial/DEC025advisory. No human-readiness claim or blocking independent Slack implementation.
+- [ ] Resolve retained DEC021 mixed-feed useful-content failure and baseline-provenance limit without rewriting cases; [completed independent check](../../../../qa/initiative-control/status-display/age-evidence-20260912.md) supports F01 age/collision only. No human-readiness claim or blocking independent Slack implementation; DEC025 remains advisory.
 - [ ] Manager scopes accessible recovery/input/retention and restart/cross-process fences before the later CLI allocation; this is manager work, not unanswered product approval.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.
 - [ ] Give manager exact credential-scope/destination, enrollment, task-lifecycle and first-payload decisions; remain OFF if missing authority. Never inspect real credential stores as a worker.
