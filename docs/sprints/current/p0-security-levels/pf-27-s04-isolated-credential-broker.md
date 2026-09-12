@@ -1,17 +1,17 @@
 ---
 sprint_id: "PF-27-S04"
 title: "Isolated credential broker process"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 28
-owner: "/root/broker"
+owner: "/root"
 parallel_lane: "isolated-broker"
-write_scope: "codex-rs/secret-broker-service/, codex-rs/secret-broker/, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/, codex-rs/network-proxy/src/credential_broker_tests.rs, codex-rs/core/src/security/broker_client.rs, codex-rs/core/src/security/broker_client_tests.rs, codex-rs/core/src/config/network_proxy_credential.rs, codex-rs/core/src/config/network_proxy_credential_tests.rs, codex-rs/vault/src/capability.rs, codex-rs/vault/src/capability_tests.rs, qa/security-levels/sprints/PF-27-S04/, docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md"
-integration_gate: "Codex /root serializes shared Core/Vault/network-proxy and Cargo/Bazel/lock registration, audits scope, reruns broker/network-proxy/Vault/Core and governance suites on RTX plus TMUX, Astra High and Fable 5.1 High reviews (maximum five per lane). Native service, provider data-plane and all-OS qualification remain mandatory for completion; intermediate leaves cannot enable protected activation."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-broker"
-branch: "feat/security-round5-broker"
-base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
+write_scope: "codex-rs/secret-broker-service/, codex-rs/secret-broker/, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/, codex-rs/network-proxy/src/credential_broker_tests.rs, codex-rs/core/src/security/broker_client.rs, codex-rs/core/src/security/broker_client_tests.rs, codex-rs/core/src/config/network_proxy_credential.rs, codex-rs/core/src/config/network_proxy_credential_tests.rs, codex-rs/vault/src/capability.rs, codex-rs/vault/src/capability_tests.rs, qa/security-levels/sprints/PF-27-S04/, docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md, codex-rs/Cargo.toml, codex-rs/Cargo.lock, MODULE.bazel.lock, docs/plans/active/p0-security-levels.md, docs/sprints/current/p0-security-levels/index.md, qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/, securityProgress.html"
+integration_gate: "Codex /root serializes shared registration, audits scope and reruns broker/service/Vault/proxy/Core plus governance on RTX and synthetic lifecycle through TMUX. Five reviews spent; Travis approved exactly one sixth Fable 5.1 High Corbanu/TMUX review. Production/native/all-OS gates remain open; no privileged installation or protected activation. Coordinate main writes with other integration owners."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-broker-resume-20260911"
+branch: "feat/security-broker-resume-20260911"
+base_commit: "d870c92dab2bf3fbb602dc3b8447fe9f3534aecb"
 depends_on: "PF-27-S01, PF-13-S04, PF-27-S03, PF-41-S03"
 created: 2026-08-28
 updated: 2026-09-11
@@ -19,11 +19,11 @@ updated: 2026-09-11
 
 # PF-27-S04 — Isolated credential broker process
 
-September 11 handoff: returned to draft under Travis's three-stream selection.
-The recorded live checkout is not a Git repository and its original branch ref
-is invalid; clean recovery commit `cdb82128988a63ad30cef97494a3b048505b5ddf`
-is preserved. No process or files were stopped/deleted. Historical coordinates
-below are not a current allocation; [reconcile before resuming](../../../plans/main-workstreams-2026-09-11.md).
+September 11 resumption: fresh main-based allocation after human acceptance.
+The earlier missing-checkout report was stale: `security-round5-broker` is clean
+at pushed `cd7457da7`. Reconcile its existing service stage; do not redo it.
+The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/RESUME-20260911.md)
+records exact coordinates, review-six approval and unchanged native setup limits.
 
 ## Execution mandate
 

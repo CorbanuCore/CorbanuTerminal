@@ -1,5 +1,12 @@
 # Security pipeline — account-switch checkpoint and resume
 
+## Current resume — September 11, 2026
+
+PF13 human acceptance and main landing are complete at `d870c92da`.
+Use [the current resume handoff](RESUME-20260911.md): fresh PF27-S04 allocation,
+one explicitly approved sixth Fable review, unchanged native-installation limits.
+The pause and approval statements below are historical, not current instructions.
+
 ## Human-test checkpoint — 2026-09-05
 
 Final fixture lane523c4c095 is integrated atf65f348f9. Full codex-rs tree matches

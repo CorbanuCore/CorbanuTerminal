@@ -17,6 +17,9 @@ product_spec:
   heading: "P0 /security levels"
   requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-broker-resume-20260911"
+    branch: "feat/security-broker-resume-20260911"
+    base_commit: "d870c92dab2bf3fbb602dc3b8447fe9f3534aecb"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-local-anchor"
     branch: "feat/security-local-anchor"
     base_commit: "601602fa7e53fcb5b41753a0b3607addd45d4415"
@@ -607,6 +610,32 @@ PF-26 final true-TUI, live-repository and human acceptance remain separate.
 
 ## Useful code references
 
+## Current security allocation — 2026-09-11
+
+Travis completed PF13 human testing and authorized its main merge and resumption.
+Verified main `d870c92dab2bf3fbb602dc3b8447fe9f3534aecb` includes both the accepted
+provider/security work and the actual 0.1.42 release branch. This amendment
+supersedes historical multi-lane reservations below: **one** security sprint,
+PF-27-S04, is in progress under `/root`, in the new exact worktree above.
+Accounting and Task Node retain the other two plan slots; PF35 remains external
+and draft, with no engineering slot or bypassed downstream dependency.
+
+Resume only the existing broker service substage from pushed `cd7457da7`:
+reconcile construction/EINTR and its synthetic subprocess tests onto main,
+preserve default-denial, and verify the combined stage on RTX. Root serializes
+the declared Cargo/Bazel/lock, broker, plan and evidence surfaces and coordinates
+any overlapping requests with the other integration owners. No new TUI surface
+is added, so no new blind UX design is applicable; retain existing UI proof and
+exercise synthetic service lifecycle via TMUX.
+
+Five broker reviews were already spent. Travis explicitly approved **one sixth
+Fable 5.1 High review through Corbanu/TMUX**, not an additional PF58 review or
+privileged setup. Freeze this reconciled stage, inspect any finding, and retain
+the existing review ledger. Service installation, principals, ACL/ownership
+changes and real Vault migration remain unapproved. Native containment,
+production data-plane/streaming and all-OS gates still prevent sprint completion
+or protected activation. See the [resume handoff](../../../qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/RESUME-20260911.md).
+
 ## Round-five execution amendment — 2026-09-04
 
 The user authorized these three parallel agents and assigned integration to
@@ -728,15 +757,15 @@ requesting the coordinator's next numbered review.
 
 ## Sprint execution map
 
-This map currently covers **50 current and 28 completed archived sprints**.
+This map currently covers **52 current and 32 completed archived sprints**.
 The [ordered execution index](../../sprints/current/p0-security-levels/index.md)
 is dependency-correct; feature IDs are not execution order. Archive orders 1–9
 stay unchanged and current orders start at 10. Existing allocation coordinates
 follow upstream; the five preparation/foundation drafts and five new follow-ups
 remain `UNALLOCATED` until assigned. PF-27-S03 and PF-34-S04 are completed and
 archived; PF-19-S02, PF-20-S02, PF-21-S02, PF-13-S06, and PF-41-S03 are also
-completed and archived. PF-35-S01 remains `in_progress` pending external
-qualification evidence; other current records are `draft`, with completed
+completed and archived. PF-35-S01 remains external and `draft`; PF-27-S04 is
+the sole security `in_progress` allocation. Other current records are `draft`, with completed
 prerequisites and checked allocation required before execution. Archived links
 document original scope, not new passes.
 
