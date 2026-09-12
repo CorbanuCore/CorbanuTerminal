@@ -1,5 +1,26 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 08:48 UTC, September 12
+
+This supersedes historical candidate notes below. Canonical receiving is
+reconciled at b8da69d744aa65ea68e5b71c199d401922f84602. Two implementation workers
+were dispatched, not merely an active scheduler:
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Ohm is implementing read-only retention planning. Latest quote is reviewed/integrated; S03 awaits full S02 qualification.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): Curie is implementing offline decision records and contextual notices. Native validity is reviewed/integrated. Slack sender/replies remain unconnected.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): sole owner completed Astra12/Fable13 under an integrator extension. P3 fixture portability is a follow-up, not a runtime defect; RTX qualification and owner-controlled main landing remain distinct.
+
+Travis delegated additional review authorization to the integrator. No new
+review-spend question is needed; substantive functional/security/human/dependency
+gates remain. Routine redacted progress to existing mapped Task Node targets is
+authorized once delivery is qualified; posting remains OFF until then. Slack
+completion is prioritized within the active sprint. No task acceptance, rewards,
+financial action, public beta posting or new recipient is authorized.
+
+The old publisher was declined; app termination is being verified before fresh
+native Luna sync. This local record does not prove the new source is live.
+No repeat product approval or wallet seed is requested.
+
 These are manager observations, not automatic acceptance. Supersedes the
 September 11 recovery-source cards. Canonical sprints remain authoritative.
 

@@ -76,7 +76,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [ ] Manager scopes accessible recovery/input/retention and restart/cross-process fences before the later CLI allocation; this is manager work, not unanswered product approval.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.
 - [ ] Give manager exact credential-scope/destination, enrollment, task-lifecycle and first-payload decisions; remain OFF if missing authority. Never inspect real credential stores as a worker.
-- [ ] After separate approval, qualify one live goal event and recovery; do not treat fixtures as delivery proof.
+- [ ] Under Travis's September12 progress-writeback authorization, verify technical/identity/mapping/redaction/recovery gates, then qualify one bounded live progress event and recovery before ongoing enablement. No task acceptance/rewards/public beta; fixtures are not delivery proof.
 - [ ] Manager receives reviewed commit/evidence and controls source-sync cutover; existing remote service stays untouched by worker.
 
 ## Verification

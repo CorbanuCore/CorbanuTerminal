@@ -34,6 +34,16 @@ Current September12 continuation: native validity is now in canonical receiving 
 
 ## Activation record
 
+September12 overnight authority: Travis authorizes routine redacted progress to
+existing mapped Task Node tasks once technology is ready, and prioritizes Slack.
+No per-progress approval is needed after actual validity/enrollment/target,
+redaction, idempotency and recovery qualification. Keep posting OFF until then;
+the integrator owns bounded enablement and first-delivery verification. No task
+acceptance, rewards, financial/signing action, public beta or new recipient is
+authorized. Supported credential setup/channel verification remain necessary;
+never scrape session tokens or distribute wallet seeds. This supersedes older
+requests for another approval for ordinary mapped progress only.
+
 Slot 3/3. Reuse native `/tasknode` and Campaign Tracker, not another auth system
 or scheduler. The [main handoff](../main-workstreams-2026-09-11.md) owns source
 and ID migration. Existing Linux dashboard operation is preserved separately.
