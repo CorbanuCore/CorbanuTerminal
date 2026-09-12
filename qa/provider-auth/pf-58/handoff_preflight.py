@@ -21,11 +21,18 @@ def inspect(candidate, runtime_path, configs):
     def record(name, ok, detail):
         checks.append({"check": name, "passed": bool(ok), "detail": detail})
 
-    # The current codex entrypoint still resolves the legacy wallet daemon name.
+    # Match the released package-local canonical/legacy daemon lookup.
+    canonical_wallet = candidate.with_name("corbanu-walletd")
+    legacy_wallet = candidate.with_name("pfterminal-walletd")
+    wallet = (
+        canonical_wallet
+        if canonical_wallet.is_file() or not legacy_wallet.is_file()
+        else legacy_wallet
+    )
     for binary in [
         candidate,
         candidate.with_name("codex-code-mode-host"),
-        candidate.with_name("pfterminal-walletd"),
+        wallet,
     ]:
         ok = binary.is_file() and os.access(binary, os.X_OK)
         record(

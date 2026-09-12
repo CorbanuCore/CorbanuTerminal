@@ -1,13 +1,13 @@
 ---
-sprint_id: "PF-76-S01"
+sprint_id: "PF-82-S01"
 title: "Expose existing Team Context in Corbanu"
 status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
-plan_feature: "PF-76"
+plan_feature: "PF-82"
 execution_order: 100
 owner: "Codex Team Context integration"
 parallel_lane: "tasknode-team-context"
-write_scope: "codex-rs/skills/src/assets/samples/tasknode-usage/, codex-rs/cli/src/tasknode_cmd.rs, codex-rs/tui/src/chatwidget/tasknode_menu.rs, codex-rs/tui/src/chatwidget/tasknode_menu/, codex-rs/tui/src/chatwidget/slash_dispatch.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app_event.rs, docs/features/tasknode.md, qa/reliability/team-context-2026-09-11/, docs/sprints/current/p0-security-levels/pf-76-s01-team-context.md"
+write_scope: "codex-rs/skills/src/assets/samples/tasknode-usage/, codex-rs/cli/src/tasknode_cmd.rs, codex-rs/tui/src/chatwidget/tasknode_menu.rs, codex-rs/tui/src/chatwidget/tasknode_menu/, codex-rs/tui/src/chatwidget/slash_dispatch.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app_event.rs, docs/features/tasknode.md, qa/reliability/team-context-2026-09-11/, docs/sprints/current/p0-security-levels/pf-82-s01-team-context.md"
 integration_gate: "Codex audits the read-only bridge and existing grant enforcement, runs combined CLI/TUI and backend checks, then rebuilds and verifies the installed debug launcher."
 worktree: "/mnt/HC_Volume_101713660/pfrpc/scratch/corbanu-wallet-launch-hotfix"
 branch: "fix/tasknode-team-context"
@@ -17,7 +17,11 @@ created: 2026-09-11
 updated: 2026-09-11
 ---
 
-# PF-76-S01 — Team Context terminal parity
+# PF-82-S01 — Team Context terminal parity
+
+Identity reconciliation, September 11: released as PF-76-S01 at `5f3a0ad7d`.
+Renamed mechanically to PF-82-S01 to avoid main's pre-existing PF-76 profile
+persistence record. Original implementation and qualification are unchanged.
 
 ## Execution mandate
 
@@ -25,7 +29,7 @@ Expose the existing authorized Team Context report through a read-only terminal 
 
 ## Plan linkage
 
-[Active plan PF-76](../../../plans/active/p0-security-levels.md#pf-76--team-context-terminal-parity).
+[Active plan PF-82](../../../plans/active/p0-security-levels.md#pf-82--team-context-terminal-parity).
 
 ## Code boundaries
 

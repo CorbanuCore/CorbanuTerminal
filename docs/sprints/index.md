@@ -90,7 +90,7 @@ owner must compare actual diffs to scope and record final combined-tree evidence
 
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
-| [PF-13 / security — workstream 1](../plans/active/p0-security-levels.md) | Active | [52 current sprints](current/p0-security-levels/index.md), 31 completed archives | PF-35 remains external; PF-27-S04 draft pending fresh integration allocation |
+| [PF-13 / security — workstream 1](../plans/active/p0-security-levels.md) | Active | [52 current sprints](current/p0-security-levels/index.md), 32 completed archives | PF-35 remains external; PF-27-S04 draft pending fresh integration allocation |
 | [Accounting — workstream 2](../plans/active/portfolio-agent-cost-accounting.md) | Active | 4 sequential PF-60 sprints | S01 contract/fixtures selected for independent Astra High allocation after main merge |
 | [Task Node — workstream 3](../plans/active/initiative-delivery-control.md) | Active | PF-80-S01 then two PF-79 beta drafts | Scoped main port and progress qualification first; beta not launched |
 | [Unified provider onboarding and management](../plans/proposed/unified-provider-auth.md) | Deferred | [1 current sprint](current/unified-provider-auth/index.md) | PF-58 human accepted for integration; residual automated/native qualification retained separately |

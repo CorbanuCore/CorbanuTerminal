@@ -1,7 +1,7 @@
 # P0 security-level execution sprints
 
 The active [P0 security plan](../../../plans/active/p0-security-levels.md) owns
-**52 current sprints** and **31 completed archives**.
+**52 current sprints** and **32 completed archives**.
 The integrated Sprint 13 branch completes PF-13-S02–S04 and the early PF-26-S01
 harness; PF-13-S05 is also completed and archived after its integrated Core and
 platform qualification. PF-13-S06 and PF-41-S03 are now also completed and

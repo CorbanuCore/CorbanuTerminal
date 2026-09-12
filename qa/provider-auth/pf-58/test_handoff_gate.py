@@ -84,8 +84,27 @@ class HandoffGateTests(unittest.TestCase):
                 (root / name).chmod(0o700)
             report = inspect(root / "codex", os.defpath, [])
             self.assertFalse(report["passed"])
-            self.assertEqual(report["checks"][2]["check"], "pfterminal-walletd")
+            self.assertEqual(report["checks"][2]["check"], "corbanu-walletd")
             self.assertFalse(report["checks"][2]["passed"])
+
+    def test_canonical_and_legacy_wallet_packages_match_runtime_lookup(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for name in ("codex", "codex-code-mode-host", "pfterminal-walletd"):
+                (root / name).write_text("#!/bin/sh\necho synthetic\n")
+                (root / name).chmod(0o700)
+            report = inspect(root / "codex", os.defpath, [])
+            self.assertTrue(report["passed"])
+            self.assertEqual(report["checks"][2]["check"], "pfterminal-walletd")
+            canonical = root / "corbanu-walletd"
+            canonical.write_text("#!/bin/sh\necho synthetic\n")
+            canonical.chmod(0o700)
+            for remove_legacy in (False, True):
+                if remove_legacy:
+                    (root / "pfterminal-walletd").unlink()
+                report = inspect(root / "codex", os.defpath, [])
+                self.assertTrue(report["passed"])
+                self.assertEqual(report["checks"][2]["check"], "corbanu-walletd")
 
     def test_missing_cwd_and_malformed_config_fail_closed(self):
         with tempfile.TemporaryDirectory() as folder:

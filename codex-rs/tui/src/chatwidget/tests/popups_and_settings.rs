@@ -5098,10 +5098,12 @@ async fn reasoning_popup_escape_returns_to_model_popup() {
 async fn model_picker_runtime_refresh_keeps_claude_out_of_openai_tab() {
     use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
     let (mut chat, _, _) = make_chatwidget_manual(Some(CLAUDE_FABLE_5_PLAN_MODEL)).await;
+    chat.config.model_provider_id = CLAUDE_PLAN_PROVIDER_ID.to_string();
     chat.thread_id = Some(ThreadId::new());
     chat.model_catalog.sync_runtime_models(
         ["openai", CLAUDE_PLAN_PROVIDER_ID],
         Some(CLAUDE_FABLE_5_PLAN_MODEL),
+        CLAUDE_PLAN_PROVIDER_ID,
     );
     let presets = chat.model_catalog.try_list_models().unwrap();
     chat.open_all_models_popup(presets);

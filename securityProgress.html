@@ -115,7 +115,7 @@
       height: 110px;
       place-items: center;
       border-radius: 50%;
-      background: conic-gradient(var(--complete) 0 36%, var(--line) 36% 100%);
+      background: conic-gradient(var(--complete) 0 38%, var(--line) 38% 100%);
     }
     .donut::after {
       display: grid;
@@ -125,7 +125,7 @@
       border-radius: 50%;
       background: var(--surface);
       color: var(--text);
-      content: "36%";
+      content: "38%";
       font-size: 1.45rem;
       font-weight: 750;
     }
@@ -308,18 +308,18 @@
       <h1>Security sprint progress</h1>
       <p class="lede">A shareable view of what is finished, what remains under measured qualification, and which dependencies the latest work unlocks.</p>
       <div class="snapshot">
-        <span><strong>Snapshot:</strong> 5 September 2026 · round five human-test checkpoint</span>
-        <span><strong>Candidate:</strong> <code>integration/security-round5-20260904</code> · not yet main</span>
-        <span><strong>Scope:</strong> 78 checked P0 sprint records, including memory dispatch and the local controller root</span>
+        <span><strong>Snapshot:</strong> 11 September 2026 · human acceptance and main/release reconciliation</span>
+        <span><strong>Integration:</strong> <code>integrate/pf13-main-release-20260911</code> · main push pending final tests</span>
+        <span><strong>Scope:</strong> 84 P0-plan sprint records, including inherited profile/Task Node records; 52 remain current</span>
         <span><strong>Deadline:</strong> 8 October 2026</span>
       </div>
     </header>
 
     <section class="hero-grid" aria-label="Program summary">
       <div class="metric primary">
-        <div class="donut" role="img" aria-label="36 percent of planned security sprints are completed"></div>
+        <div class="donut" role="img" aria-label="38 percent of P0-plan sprint records are completed"></div>
         <div>
-          <span class="metric-number">28 of 78</span>
+          <span class="metric-number">32 of 84</span>
           <span class="metric-label">sprints completed and archived</span>
         </div>
       </div>
@@ -329,7 +329,7 @@
       </div>
       <div class="metric">
         <span class="metric-number blue">1</span>
-        <span class="metric-label">open implementation reservation: broker; controller and memory are archived</span>
+        <span class="metric-label">next security continuation: broker service; new allocation follows main integration</span>
       </div>
       <div class="metric">
         <span class="metric-number amber">1</span>
@@ -341,7 +341,7 @@
       <div class="section-head">
         <div>
           <p class="eyebrow">Round-five implementation and qualification</p>
-          <h2 id="next-title">Rolling workstreams and the latest completion</h2>
+          <h2 id="next-title">Round-five evidence and the next continuation</h2>
         </div>
         <div class="legend" aria-label="Status legend">
           <span><i class="swatch complete"></i>Complete</span>

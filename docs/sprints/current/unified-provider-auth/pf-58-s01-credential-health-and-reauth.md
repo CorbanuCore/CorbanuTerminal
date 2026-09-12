@@ -19,11 +19,8 @@ updated: 2026-09-10
 
 # PF-58-S01 — Credential-scoped runtime health and keyboard reauthentication
 
-September 11: Travis reports PF13 human testing complete and authorizes main
-integration. Prior live messages/provider switching produced no Keychain prompts.
-Residual frozen-case/native evidence remains below; no blanket automated pass is
-inferred. Main's three-workstream allocation defers this plan; this record returns
-to draft without deleting implementation, evidence, or its spent nine-review ledger.
+September 11: Travis human-accepted PF13 and authorized main integration. Main defers this plan;
+remaining qualification returns to draft, preserving implementation and the spent nine-review ledger.
 
 ## Execution mandate
 
@@ -56,8 +53,7 @@ to draft without deleting implementation, evidence, or its spent nine-review led
   Eight focused tests, two native Keychain tests and Ctrl+C TMUX pass. That historical
   package fails Escape; superseded by the repair below. See `qa/provider-auth/pf-58/macos-keychain-20260910.md`.
 
-- [x] User amendment and serial allocation recorded before source changes.
-- [x] Working human-test candidate left unchanged and security monitor left paused.
+- [x] User amendment/serial allocation recorded; working candidate unchanged and security monitor paused during that implementation.
 - [x] Trace refresh failure and exact credential/service identity through transport and status projection.
 - [x] Implement source-scoped auth health without treating network/429/generic403 as expired credentials or disabling unrelated providers.
 - [x] Reuse existing account/API-key/source recovery from an advertised keyboard action; preserve cancel/current model and reject stale recovery.
@@ -82,15 +78,13 @@ to draft without deleting implementation, evidence, or its spent nine-review led
   distinguishes earlier auth-only passes from helper packaging/MCP dependency qualification.
 
 ## Verification
-
+- [ ] Close residual frozen automated/native evidence gaps; human acceptance does not relabel prior blocked results.
 - [x] Final Mac prompt-budget unit/native checks and explicitly Ctrl+C-based
   staged TMUX smoke recorded; Escape failures retained rather than waived.
 - [x] Travis confirmed live messages and provider switching without Keychain prompts; PF13 human acceptance reaffirmed September 11. Historical failed native runs remain recorded.
 
-- [x] Expanded final staged-candidate TMUX 45/45 and actual runtime dependency
-  checks pass, including live Fable request/shell execution and installed MCP
-  inventory. See `qa/provider-auth/pf-58/evidence/repairs-20260908/`. Full human
-  handoff remains blocked by the separately enumerated platform/live gaps.
+- [x] Earlier staged TMUX 45/45, Fable request/shell and installed MCP inventory passed;
+  `qa/provider-auth/pf-58/evidence/repairs-20260908/` preserves platform/live gaps.
 
 - [x] Final scoped fix/fmt then affected provider-auth/login/MCP/TUI tests on RTX.
 - [x] True-TMUX: account failure/recovery/cancel and API-key replacement; unit/snapshot coverage for unaffected providers, stale failures and narrow rendering. Final focused TMUX run: 6/6.
@@ -102,5 +96,5 @@ to draft without deleting implementation, evidence, or its spent nine-review led
 - [x] Exact changed-source manifest/candidate hashes and final test/review reports linked under qa/provider-auth/pf-58.
 - [x] Human guide updated without marking user checks accepted.
 - [x] Both final packages pass 12 expanded journeys and trusted Apps recovery; 227 units, integration follow-up and eight Mac live replies recorded in `qa/provider-auth/pf-58/finish-20260910/`; shortcut retargeted.
-- [x] Source commit `2545eedee` pushed to `origin/feat/provider-reauth-health`; not merged to main. Handoff bookkeeping follows separately.
+- [x] Source `2545eedee` pushed to provider branch; subsequent integration recorded separately.
 - [ ] Ledgers accurate and completed sprint archived only after required evidence.

@@ -243,7 +243,7 @@ class PackageLayoutTest(unittest.TestCase):
                 alias_path = package_dir / "bin" / alias
                 self.assertTrue(alias_path.is_symlink(), alias)
                 self.assertFalse(os.path.isabs(os.readlink(alias_path)), alias)
-                self.assertEqual(alias_path.resolve(), package_dir / "bin" / target)
+                self.assertEqual(alias_path.resolve(), (package_dir / "bin" / target).resolve())
             for canonical in ("corbanu", "corbanu-acp", "corbanu-walletd"):
                 self.assertFalse((package_dir / "bin" / canonical).is_symlink())
             for legacy in (
@@ -269,7 +269,7 @@ class PackageLayoutTest(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
 
-    @unittest.skipUnless(shutil.which("cc"), "C compiler is required")
+    @unittest.skipUnless(os.name == "posix" and shutil.which("cc"), "Unix C compiler is required")
     def test_unix_native_binaries_are_stripped_with_external_sidecars(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -277,9 +277,16 @@ class PackageLayoutTest(unittest.TestCase):
             source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
             entrypoint = root / "codex-app-server"
             code_mode_host = root / "codex-code-mode-host"
+            # dsymutil needs the original object to collect Mach-O debug data.
+            # A single compile-and-link cc invocation deletes that object.
+            object_file = root / "main.o"
+            subprocess.run(
+                ["cc", "-g", "-O0", "-c", source, "-o", object_file],
+                check=True,
+            )
             for output in (entrypoint, code_mode_host):
                 subprocess.run(
-                    ["cc", "-g", "-O0", source, "-o", output],
+                    ["cc", "-g", object_file, "-o", output],
                     check=True,
                 )
             unstripped_size = entrypoint.stat().st_size
@@ -312,8 +319,13 @@ class PackageLayoutTest(unittest.TestCase):
                 (package_dir / "bin" / "codex-app-server").stat().st_size,
                 unstripped_size,
             )
-            self.assertTrue((symbols_dir / "codex-app-server.debug").is_file())
-            self.assertTrue((symbols_dir / "codex-code-mode-host.debug").is_file())
+            for name in ("codex-app-server", "codex-code-mode-host"):
+                sidecar = (
+                    symbols_dir / f"{name}.dSYM" / "Contents" / "Resources" / "DWARF" / name
+                    if sys.platform == "darwin"
+                    else symbols_dir / f"{name}.debug"
+                )
+                self.assertTrue(sidecar.is_file(), sidecar)
             self.assertFalse(
                 (package_dir / "codex-resources" / "debug-symbols").exists()
             )
