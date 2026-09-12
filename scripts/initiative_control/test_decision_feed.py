@@ -1,4 +1,5 @@
 import json
+import copy
 from html.parser import HTMLParser
 import os
 from pathlib import Path
@@ -23,6 +24,108 @@ SPRINT = "docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-co
 
 
 class FeedTests(unittest.TestCase):
+    def test_slack_off_projection_cli_and_registered_off_without_sdk(self):
+        self.save(self.value)
+        original = (self.state / "decisions.fixture.json").read_bytes()
+        env = dict(os.environ, PYTHONPATH=str(control.HERE) + os.pathsep + os.environ.get("PYTHONPATH", ""))
+        missing = self.root / "must-not-be-created"
+        command = [sys.executable, "-B", "-c", "import sys; sys.modules['slack_sdk']=None; import control; sys.argv=['control.py']+sys.argv[1:]; control.main()"]
+        status = subprocess.run(command + ["decision-slack", "status", "--store", str(missing)], env=env, capture_output=True, text=True)
+        self.assertEqual(status.returncode, 0, status.stderr)
+        self.assertEqual(json.loads(status.stdout)["state"], "off")
+        projected = subprocess.run(command + ["decision-slack", "--publish-state", str(self.state), "project-status", "--store", str(missing)], env=env, capture_output=True, text=True)
+        self.assertEqual(projected.returncode, 0, projected.stderr)
+        value = json.loads(projected.stdout)
+        self.assertEqual(value["status"]["state"], "off")
+        self.assertEqual(value["feed_digest"], d.digest(self.value))
+        self.assertEqual((self.state / "decisions.fixture.json").read_bytes(), original)
+        self.assertFalse(missing.exists())
+        self.assertEqual((self.state / transport.SLACK_FILE).stat().st_mode & 0o077, 0)
+        denied = subprocess.run(command + ["decision-slack", "--publish-state", str(self.state), "send", "--store", str(missing)], env=env, capture_output=True, text=True)
+        self.assertNotEqual(denied.returncode, 0)
+
+    def test_slack_v2_roundtrip_fresh_stale_rollback_and_input_drift(self):
+        self.save(self.value)
+        cache = transport.project_slack(self.state, None, NOW)
+        original = (self.state / "decisions.fixture.json").read_bytes()
+        target, pin = self.bundle()
+        self.assertEqual(pin["decision_feed"]["schema"], 2)
+        self.activate(target)
+        _, page, health = self.publish()
+        self.assertIn("Slack observation: off", page)
+        self.assertIn("question revision 1", page)
+        self.assertEqual(health["decision_feed"]["slack"]["state"], "off")
+        self.assertNotIn(transport.SLACK_FILE, pin["files"])
+        before = (target / "source" / transport.ARTIFACT).read_bytes()
+        _, later, old_health = self.publish(LATER)
+        self.assertIn("Slack observation: stale", later)
+        self.assertEqual(old_health["decision_feed"]["slack"]["state"], "stale")
+        self.assertEqual((target / "source" / transport.ARTIFACT).read_bytes(), before)
+        changed = copy.deepcopy(cache)
+        changed["assessed_at"] = LATER
+        control.atomic_json(self.state / transport.SLACK_FILE, changed)
+        with self.assertRaisesRegex(ValueError, "Decision input changed"):
+            transport.verify_input(self.state, pin, LATER)
+        self.assertEqual((self.state / "decisions.fixture.json").read_bytes(), original)
+        newer, _ = self.bundle(LATER)
+        self.activate(newer, LATER)
+        self.publish(LATER)
+        self.activate(target, LATER)
+        _, _, rolled = self.publish(LATER)
+        self.assertEqual(rolled["decision_feed"]["slack"]["assessed_at"], NOW)
+
+    def test_bad_slack_input_never_discards_valid_decision_context(self):
+        self.save(self.value)
+        original = transport.project_slack(self.state, None, NOW)
+        path = self.state / transport.SLACK_FILE
+        bad = []
+        for field, value in (("feed_digest", "0" * 64), ("schema", True), ("assessed_at", "2099-01-01T00:00:00Z"), ("extra", "SYNTHETIC_SECRET no-export")):
+            bad.append({**original, field: value})
+        altered = copy.deepcopy(original)
+        altered["decisions"][0]["id"] = "different-question"
+        bad += [altered, {**original, "decisions": original["decisions"] * 2}]
+        for value in bad:
+            control.atomic_json(path, value)
+            raw, pin = transport.capture(self.state, NOW)
+            snapshot = json.loads(raw)
+            self.assertEqual(snapshot["feed"], self.value)
+            self.assertEqual(snapshot["slack_status"], "invalid")
+            page = transport.render(snapshot, NOW, [], {})
+            self.assertIn(self.value["decisions"][0]["revisions"][0]["question"], page)
+            self.assertIn("Slack status unavailable", page)
+            self.assertNotIn("no-export", raw.decode() + json.dumps(pin) + page)
+        for raw in (b'{"schema":1,"schema":1}', b"x" * (transport.SLACK_LIMIT + 1)):
+            path.write_bytes(raw)
+            self.assertEqual(json.loads(transport.capture(self.state, NOW)[0])["slack_status"], "invalid")
+        path.unlink()
+        path.symlink_to(self.root / "missing")
+        self.assertEqual(json.loads(transport.capture(self.state, NOW)[0])["slack_status"], "invalid")
+        path.unlink()
+        os.mkfifo(path)
+        self.assertEqual(json.loads(transport.capture(self.state, NOW)[0])["slack_status"], "invalid")
+        path.unlink()
+        self.assertEqual(json.loads(transport.capture(self.state, NOW)[0])["schema"], 1)
+
+    def test_status_context_tamper_in_pinned_transfer_is_rejected(self):
+        self.save(self.value)
+        transport.project_slack(self.state, None, NOW)
+        target, pin = self.bundle()
+        path = target / "source" / transport.ARTIFACT
+        value = json.loads(path.read_bytes())
+        value["slack"]["decisions"][0]["context_digest"] = "0" * 64
+        path.write_bytes(d.canonical(value))
+        altered = copy.deepcopy(pin)
+        altered["decision_feed"]["digest"] = transport.sha(path.read_bytes())
+        with self.assertRaisesRegex(ValueError, "Decision feed transfer"):
+            transport.read_snapshot(target / "source", altered, NOW)
+
+    def test_registered_slack_help_needs_no_transport_initialization(self):
+        result = subprocess.run([sys.executable, "-B", str(control.HERE / "control.py"),
+                                 "decision-slack", "--help"], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("decision-slack", result.stdout)
+        self.assertNotIn("Traceback", result.stderr)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve())
         self.addCleanup(self.tmp.cleanup)
@@ -431,3 +534,66 @@ for (const mode of ["healthy", "failed", "offline", "http", "pending"]) {
                                 input=json.dumps(fragments), capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((target / "source" / transport.ARTIFACT).read_bytes(), frozen)
+
+
+from test_slack_transport import LiveFixture
+
+
+class SlackProjectionTests(LiveFixture):
+    def test_projection_observes_live_owner_and_lease_without_mutating_journals(self):
+        import slack_transport as slack
+        self.sending()
+        journals = {name: (self.root / name).read_bytes() for name in
+                    ("alerts.json", "replies.json", "transport.json", ".ingress.fence")}
+        with patch("slack_sdk.WebClient", side_effect=AssertionError("no network")):
+            self.assertEqual(transport.project_slack(self.feed_root, self.root, NOW, True)["status"]["state"], "last-verified")
+            expired = slack.time.monotonic_ns() + slack.LEASE_NS
+            with patch.object(slack.time, "monotonic_ns", return_value=expired):
+                self.assertEqual(transport.project_slack(self.feed_root, self.root, NOW, True)["status"]["state"], "held")
+            self.owner.release()  # Leave durable connected metadata intact: ownership is gone.
+            self.assertEqual(transport.project_slack(self.feed_root, self.root, NOW, True)["status"]["state"], "held")
+        self.assertEqual(journals, {name: (self.root / name).read_bytes() for name in journals})
+
+    def test_actual_ingress_two_questions_revision_mapping_and_no_network_projection(self):
+        import decision_alerts as alerts
+        import slack_transport as slack
+        from test_decision_alerts import PIN, OWNER, REMOTE
+        old = copy.deepcopy(self.feed)
+        second = copy.deepcopy(self.feed["decisions"][0])
+        second["id"] = "choice-2"
+        self.feed["decisions"].append(second)
+        self.feed["revision"] += 1
+        d.save_fixture(self.feed_root, self.feed, d.digest(old), NOW)
+        alerts.enqueue(self.store, self.feed, "choice-2", REMOTE, PIN, OWNER, NOW)
+        self.sending()
+        self.callback()
+        with patch("slack_sdk.WebClient", side_effect=AssertionError("projection must not connect")):
+            pending = transport.project_slack(self.feed_root, self.root, NOW, True)
+        rows = {row["id"]: row for row in pending["decisions"]}
+        self.assertEqual((rows["choice-1"]["delivery"], rows["choice-1"]["pending"]), ("sent", 1))
+        self.assertEqual((rows["choice-2"]["delivery"], rows["choice-2"]["pending"]), ("pending", 0))
+        self.assertEqual(slack.drain(self.store), 1)
+        journals = {name: (self.root / name).read_bytes() for name in ("alerts.json", "replies.json", "transport.json", ".ingress.fence")}
+        calls = len(self.calls)
+        value = transport.project_slack(self.feed_root, self.root, NOW, True)
+        rows = {row["id"]: row for row in value["decisions"]}
+        self.assertEqual(rows["choice-1"]["replies"]["received"], 1)
+        self.assertFalse(any(rows["choice-2"]["replies"].values()))
+        self.assertEqual(rows["choice-1"]["pending"], 0)
+        self.assertNotIn("Five testers", d.canonical(value).decode())
+        self.assertNotIn("fixture-bot", d.canonical(value).decode())
+        self.assertEqual(calls, len(self.calls))
+        self.assertEqual(journals, {name: (self.root / name).read_bytes() for name in journals})
+        changed = revision(self.feed, "resolved")
+        d.save_fixture(self.feed_root, changed, d.digest(self.feed), NOW)
+        raw, _ = transport.capture(self.feed_root, NOW)
+        self.assertEqual(json.loads(raw)["slack_status"], "invalid")
+        latest = transport.project_slack(self.feed_root, self.root, NOW, True)
+        rows = {(row["id"], row["revision"]): row for row in latest["decisions"]}
+        self.assertEqual(rows[("choice-1", 1)]["replies"]["received"], 1)
+        self.assertFalse(any(rows[("choice-1", 2)]["replies"].values()))
+        page = transport.render(dict(feed=changed, slack=latest, slack_status="valid"), NOW, [], {})
+        self.assertIn("Slack — question revision 1", page)
+        self.assertIn("received: 1", page)
+        slack.hold(self.store, "outage-gap")
+        self.assertEqual(transport.project_slack(self.feed_root, self.root, NOW, True)["status"]["state"], "held")

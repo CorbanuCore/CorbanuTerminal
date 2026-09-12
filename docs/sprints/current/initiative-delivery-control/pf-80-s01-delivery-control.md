@@ -18,7 +18,6 @@ updated: 2026-09-11
 ---
 
 # PF-80-S01 — Native Task Node delivery-control integration
-September12: offline Slack recovery reviewed/integrated,169 receiving tests pass. [Real Slack allocation](../../../research/tasknode-integration/slack-live-allocation.md) owns real SDK/manager bridge continuation; DEC021partial/DEC025advisory and live gates remain.
 
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
 Setup/validity decisions approved; manager review/checks precede new dispatch.
@@ -52,12 +51,13 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact owner, worker worktree/base and disjoint scope allocated; dispatch waits for the verified main merge and worker fast-forward.
 
 ## Done
+
+- [x] Gated real-SDK transport/shared status3561ebcc2 reviewed clean (combined06);244 staging tests pass, receiving243 plus exact source-guard rerun1 pass. [Integration limits/evidence](../../../../qa/initiative-control/status-display/slack-integration-20260912.md). Missing-fence and actual live/phone/ACK qualification remain; no S01 completion.
 - [x] Offline recovery730577f1d integrated9877c058d after clean review04;169 receiving Python/Facilities/governance pass. Manager accepts1506/638; original1151/1274/1412 and three failed reviews remain. [Review ledger](../../../../qa/initiative-control/status-display/integration-20260912-1356.md).
 - [x] Corrected F01 age1a6d9c8df reviewed/integrated at60c5671b9;122Python/Facilities Node pass. Initial review P2 ID collision corrected, one added corrective review clean; prior usage retained. [Receiving proof](../../../../qa/initiative-control/status-display/integration-20260912-1232.md). Actual browser/evidence qualification remains separate.
 - [x] All26 original browser cases executed at72854ec77; independent check verified714filehashes,24supported/DEC021partial/DEC025advisory. F01 and Facilities phone-table observation retained; original evidence not relabeled as acceptance of newer code.
 - [x] Feed72854ec77 accepted590lines/281non-test after reproduced destination-less export failure, compatibility correction and clean additional review;111combined tests pass including actual server. [Receipt](../../../../qa/initiative-control/pf-80-s01/decision-projection/feed-receipt.md). Prior reviews preserved; independent evidence remains pending.
 - [x] Offline revision-bound decisions4ff73485c accepted after clean correction review;777lines,100combinedPython tests pass. Original VoltaDEC001..026 preserved; full UI/feed proof remains. [Receipt](../../../../qa/initiative-control/pf-80-s01/decision-projection/receipt.md).
-
 - [x] Canonical receiving reconciled at 87e31f521672e627e6230d48fc16a4cfaa7ff44c; native validity remains private/no caller. Independent intent-only [design DEC-001..026](../../../../qa/initiative-control/pf-80-s01/decision-projection/design-proposal.md) frozen before implementation. Integrator authorizes +3 design/code/evidence reviews, preserving earlier usage.
 
 - [x] Private native validitybda5b35b4 reviewed clean; combined staging04ba6b8b7 passes80TaskNode/242state tests. [Evidence](../../../../qa/initiative-control/native-staging-2026-09-12.md). No enabled caller; canonical receiving transfer/publication pending.

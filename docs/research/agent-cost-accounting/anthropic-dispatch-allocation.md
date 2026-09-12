@@ -4,6 +4,41 @@ Manager-approved same-S02 allocation, September12 16:08UTC. Original private pro
 
 ## Authoritative manager acceptance and ownership adjustment
 
+18:44 exact reallocation for review02: manager inspected private login builder
+selection and the HTTP builder's terminal bare-client fallback; a Core-local
+copy would duplicate or lose existing routing/CA policy. Accept the four
+additional existing files: codex-rs/login/src/auth/default_client.rs,
+codex-rs/login/src/auth/default_client_tests.rs,
+codex-rs/http-client/src/client_builder.rs and
+codex-rs/http-client/src/client_builder_tests.rs. No other reserved lane declares
+these paths. Worker now owns24 files, manager retains three serialized dependency
+paths. Bound combined27-path candidate at3900total/1450non-test, a150-line total
+extension over prior3750STOP, preserving all earlier counts/review history.
+Only additive no-redirect route construction and policy-preserving fallible CA
+fallback plus focused regressions are allowed. ON construction must error rather
+than silently restore redirects on terminal fallback; existing OFF constructors,
+proxy/sandbox selection, default headers/UA/cookies and ordinary CA behavior
+remain unchanged. No dependency/env/config/protocol change or general client
+refactor. Existing review03 covers the repaired material diff, including these
+four paths; preserve the two-cycle convergence rule and full-Core limitations.
+
+18:35 correction02 disposition: role correction now passes28 accounting and42
+role/stage-one tests after recoverable exact32-fingerprint rebuild and five
+test-fixture repairs. Full Core3405pass/133fail/19skip/2leaky; all133 failure
+names match launch baseline, not a clean gate or identical-cause proof.
+Review02 found a real endpoint-binding bypass via automatic307/308 redirects.
+Manager read actual transport/build/factory paths and accepted this as an
+existing-contract same-owner blocker. Mendel is allocated the second narrow
+correction: prohibit following redirects for accounted requests before any
+redirected send, preserve OFF and all existing headers/proxy/CA/stage-one policy,
+and test two real endpoints with zero redirected requests/attributed usage.
+Same20 files and3750/1450STOP. A required shared API/file change must return for
+exact manager reallocation first. One existing corrective review03 remains;
+after two patch cycles reclassify any remaining defect rather than broadening.
+Initial review02 bundle refusal matched the synthetic-child fixture string;
+manager verified it synthetic and staged only that test file using the helper's
+documented path. No credential or source content changed; actual review02 failed.
+
 Store6b2dbcab5 is independently reviewed clean (helper85655), integrated at9518184ac;
 combined367 state/TaskNode tests pass,1leaky,0skipped16.922s. Receiving allocation
 base is c8358dd9b4329036c8f8fb525015bbd795433513, not a running old review.

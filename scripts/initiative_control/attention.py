@@ -90,12 +90,21 @@ def notices(data):
                   data["sprints"]["sprints"], data.get("documents", {}))
 
 
-def render_decisions(raw, now, sprints, documents):
+def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=None):
     """Pure, unconnected fixture fragment; documents is the approved safe corpus."""
     from decisions import FRESH_SECONDS, project, stamp
 
     view = project(raw, now)
     body = '<section id="decisions"><h2>Needs your decision</h2><p>Offline manager assessment. Slack not connected. Answer in the manager task. No operational approval or agent activity is established here.</p>'
+    if slack is not None:
+        health = slack_health or {}
+        notice = ('Slack observation: ' + str(health.get("state", "unknown")) +
+                  '; assessed ' + str(health.get("assessed_at") or "unknown") +
+                  '; last verified ' + str(health.get("last_verified") or "never") +
+                  '. This is a saved observation, not a live connection or work authorization. If held or stale, answer in the manager task.')
+        body = '<section id="decisions"><h2>Needs your decision</h2><p>' + html.escape(notice) + '</p>'
+    elif slack_health and slack_health.get("state") == "unknown":
+        body += '<p>Slack status unavailable. Valid decision context remains available below.</p>'
     if view["state"] == "unknown":
         return body + '<p>Unknown: decision input unavailable; open count unknown.</p></section>'
     feed = view["feed"]
@@ -122,7 +131,7 @@ def render_decisions(raw, now, sprints, documents):
             unavailable[key] = label
         return f'<a href="{href}">{esc(label)}</a>'
 
-    def content(record, summary_only=False):
+    def content(record, summary_only=False, decision_id=None):
         refs = {}
         for ref in record["sprints"]:
             sid, path = ref["sprint_id"], ref["path"]
@@ -156,6 +165,15 @@ def render_decisions(raw, now, sprints, documents):
             result += f'<p>Recorded {esc(record["status"])} against question revision {answer["answered_revision"]}; {esc(answer["recorded_at"])}.</p>'
             for field in ("actor", "answer", "scope"):
                 result += f'<p><strong>{field.title()}</strong> {linked(answer[field])}</p>'
+        if slack is not None:
+            question_revision = (record.get("resolution") or {}).get("answered_revision", record["revision"])
+            rows = [row for row in slack["decisions"] if row["id"] == decision_id and row["revision"] == question_revision]
+            if len(rows) == 1:
+                row = rows[0]
+                counts = ', '.join(name.replace('_', ' ') + ': ' + str(count) for name, count in row["replies"].items())
+                result += '<p><strong>Slack — question revision ' + str(question_revision) + '</strong> Alert: ' + esc(row["delivery"]) + '; awaiting processing: ' + str(row["pending"]) + '. Current reply-state counts: ' + esc(counts) + '. Saved observation only.</p>'
+            else:
+                result += '<p>Slack status for this question revision: unknown.</p>'
         return result
 
     for title, records in (("Open questions", opened), ("Decision history", [d for d in feed["decisions"] if d["id"] not in view["open"]])):
@@ -164,9 +182,9 @@ def render_decisions(raw, now, sprints, documents):
             record = decision["revisions"][-1]
             anchor = 'decision-' + decision["id"]
             body += f'<details id="{anchor}"><summary>{content(record, True)} — {esc(record["owner"] or "Unknown owner")} — {esc(record["status"])}</summary><a href="#{anchor}">Permanent decision link</a>'
-            body += content(record)
+            body += content(record, decision_id=decision["id"])
             for earlier in decision["revisions"][:-1]:
-                body += f'<details><summary>Retained revision {earlier["revision"]} (historical)</summary>' + content(earlier) + '</details>'
+                body += f'<details><summary>Retained revision {earlier["revision"]} (historical)</summary>' + content(earlier, decision_id=decision["id"]) + '</details>'
             body += '</details>'
         body += '</div>'
     for key, label in unavailable.items():

@@ -59,6 +59,17 @@ Code-blind design/evidence remain required before human-ready handoff, not waive
 
 ## Implementation contract
 
+18:34 combined closeout: returned worker manifest
+6550f885e4f94883577ee7e2d1add3370f2f4914919f76cc61fb8dc0d96f2564
+(237tests2675/1024) imported into manager slack-registration staging, not this
+published source. Parent added shared owner/lease observer and a19th feed test;
+19 pass33.265s. One combined review06 now covers changed worker and parent
+registration, consuming both already-authorized closeout purposes without a
+duplicate worker-only pass. Full combined tests run alongside review. Current
+worker2700/1140,parent650/500,combined3350/1640 bounds/history remain. James may
+prepare only a private minimal missing-fence recovery proposal while source is
+frozen; no new implementation/contract/credentials/live connection is inferred.
+
 18:14 manager review05 disposition: candidate2558/990 passed234 tests; Astra
 returned one accepted P2 in qualify(): a failed initial auth attempt leaves
 hold=qualifying but no binding/session, so retry demands a session listen cannot

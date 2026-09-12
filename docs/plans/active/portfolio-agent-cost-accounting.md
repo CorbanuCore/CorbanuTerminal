@@ -27,6 +27,14 @@ implementation_worktrees:
 
 # 2. Accounting — unified agent cost and usage
 
+18:44 manager reallocation: review02 confirmed automatic redirects bypassing
+the approved accounting endpoint. Preserving existing client policy needs four
+exact login/HTTP-builder files, added to the existing24-file worker allocation;
+combined27-path3900total/1450non-test ceiling and remaining review03 are recorded
+in the [allocation](../../research/agent-cost-accounting/anthropic-dispatch-allocation.md).
+No new product contract or live authority; OFF behavior and all historical
+tests/reviews remain. Full-Core133 baseline-matched failures are not a pass.
+
 17:22UTC: first native-caller review found one P2: accounting's provider copy on
 role reload discards explicit child retry/timeout overrides. Parent verified the
 literal merge path and authorized the first same20-path correction after the

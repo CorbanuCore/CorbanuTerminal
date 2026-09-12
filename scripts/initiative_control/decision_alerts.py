@@ -7,6 +7,7 @@ import json
 import os
 import re
 import tempfile
+import time
 from urllib.parse import urlsplit
 
 import decisions as d
@@ -47,8 +48,9 @@ class Store:
     state on reopen is held, never recreated. Atomic replace + directory fsync
     provides restart durability, not immunity to disk loss or a hostile owner.
     """
-    def __init__(self, root):
+    def __init__(self, root, lock_timeout=None):
         self.root = d.fixture_root(root)
+        self.lock_timeout = lock_timeout
 
     def initialize(self):
         d.require(not list(self.root.iterdir()))
@@ -65,7 +67,14 @@ class Store:
             fd = os.open(self.root / ".slack.lock", os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK)
             with os.fdopen(fd, "r+") as lock:
                 d.owner_only(os.fstat(lock.fileno()))
-                fcntl.flock(lock, fcntl.LOCK_EX)
+                deadline = None if self.lock_timeout is None else time.monotonic() + self.lock_timeout
+                while True:
+                    try:
+                        fcntl.flock(lock, fcntl.LOCK_EX | (fcntl.LOCK_NB if deadline is not None else 0))
+                        break
+                    except BlockingIOError:
+                        d.require(time.monotonic() < deadline)
+                        time.sleep(min(0.01, max(0, deadline - time.monotonic())))
                 if not initial:
                     self.read("alerts")
                     self.read("replies")
@@ -74,7 +83,7 @@ class Store:
             raise d.Invalid() from None
 
     def read(self, name):
-        d.require(name in ("alerts", "replies"))
+        d.require(name in ("alerts", "replies", "transport"))
         fd = os.open(self.root / (name + ".json"), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         with os.fdopen(fd, "rb") as stream:
             d.owner_only(os.fstat(stream.fileno()))
@@ -91,7 +100,7 @@ class Store:
         return value["body"]
 
     def write(self, name, body):
-        d.require(name in ("alerts", "replies"))
+        d.require(name in ("alerts", "replies", "transport"))
         raw = d.canonical(dict(schema=2, body=body, digest=d.digest(body)))
         d.require(len(raw) <= d.MAX_BYTES and not d.SECRET.search(raw.decode("utf-8")))
         destination = self.root / (name + ".json")
@@ -254,12 +263,44 @@ def send(store, key, current_identity, exchange, cancelled=False):
 
 def reconcile(store, key, phase, evidence):
     """Only authenticated exact retained receipt evidence can resolve uncertainty."""
-    d.require(phase in ("parent", "details"))
     with store.lock():
         rows = store.read("alerts")
-        state = alert(rows, key)[phase]
+        row = alert(rows, key)
+        d.require(phase in ("parent", "details") or phase in row.get("notices", {}))
+        state = row[phase] if phase in ("parent", "details") else row["notices"][phase]
         d.require(state["state"] in ("sending", "uncertain", "sent"))
         receipt = check_receipt(state["request"], evidence)
         d.require(state["receipt"] in (None, receipt))
         state.update(state="sent", receipt=receipt)
         store.write("alerts", rows)
+
+
+def notice(store, key, kind, basis, current_identity, exchange):
+    """One fixed-text same-thread notice per audited transition; never echo answers."""
+    texts = {"clarification": "Reply logged. Manager clarification is required; no work unlocked.",
+             "acknowledged": "Answer recorded and acknowledged by the assigned agent. Execution remains manager-controlled."}
+    d.require(kind in texts and re.fullmatch(r"[a-f0-9]{64}", basis))
+    with store.lock():
+        rows = store.read("alerts")
+        row = alert(rows, key)
+        d.require(not row["cancelled"] and identity(current_identity) == row["intent"]["identity"])
+        d.require(row["parent"]["state"] == row["details"]["state"] == "sent")
+        slot = d.digest([key, kind, basis])
+        notices = row.setdefault("notices", {})
+        state = notices.setdefault(slot, dict(state="pending", request=None, receipt=None))
+        if state["state"] == "sending":
+            state["state"] = "uncertain"
+        if state["state"] == "pending":
+            thread = row["parent"]["receipt"]["ts"]
+            payload = dict(text=texts[kind], thread_ts=thread, mrkdwn=False, unfurl_links=False, unfurl_media=False)
+            state.update(state="sending", request=dict(attempt=slot, identity=current_identity, payload=payload,
+                                                       payload_digest=d.digest(payload), thread_ts=thread))
+            store.write("alerts", rows)
+            try:
+                state.update(receipt=check_receipt(state["request"], exchange(copy.deepcopy(state["request"]))), state="sent")
+            except Rejected:
+                state["state"] = "failed"
+            except Exception:
+                state["state"] = "uncertain"
+        store.write("alerts", rows)
+        return copy.deepcopy(state)

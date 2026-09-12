@@ -33,6 +33,13 @@ implementation_worktrees:
 
 # 3. Task Node integration and delivery control
 
+18:41: combined review06 clean,244 staging tests and Facilities/governance pass
+on3561ebcc2. Manager imported13 exact code/receipt/guidance files into receiving,
+preserving current allocation records. Receiving final suite is in progress;
+missing-fence recovery and actual Slack/phone/ACK qualification still prevent
+live enablement. No seventh opinion on unchanged clean code; proceed to actual
+remaining evidence and supported recovery. Earlier statuses remain history.
+
 18:14 review05 found a same-owner initial-qualification retry deadlock after
 transient auth failure. Manager authorizes its narrow correction and recovery
 regressions under the [allocation](../../research/tasknode-integration/slack-live-allocation.md):

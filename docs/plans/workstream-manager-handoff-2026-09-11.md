@@ -1,6 +1,52 @@
 # Workstream continuation — September 11
 
-## Current status source — September 12, 18:09 UTC
+## Current status source — September 12, 18:39 UTC
+
+18:47 final integration observation: Slack review06 clean and244 staging tests
+pass. Receiving run had243pass/one source-drift error while manager docs changed;
+the exact failed guarded-export test passed1/1 with source frozen. No runtime
+change or waived guard. [Integration evidence](../../qa/initiative-control/status-display/slack-integration-20260912.md)
+retains both runs. The gated transport/shared status is locally integrated,
+not a live Slack connection. Accounting24-file redirect correction is allocated
+within3900/1450; security owner confirms active closeout, no pause, Astra25
+running on source60068b967 after final RTX/TMUX proof. No new human decision.
+
+18:41 follow-up: combined Slack review06 returned clean, no findings, and all
+244 staging Python tests passed133.965s; Facilities/governance pass. Frozen
+staging3561ebcc2 contains16paths3131total/1314non-test. Manager imported the13
+code/receipt/user-guidance paths byte-for-byte into receiving, preserving newer
+canonical allocations. Final receiving244-test rerun is underway; do not infer
+that result or live qualification from the staging pass. Missing-fence recovery
+and actual connection/phone/ACK proof remain. No duplicate clean-code review.
+
+No new human decision. Accounting's corrected native run passed28 accounting
+and42 role tests; full Core remains3405pass/133fail/19skip/2leaky, all failure
+names present on launch baseline. Review02 found automatic redirects bypassing
+the approved endpoint. Mendel is dispatched on the second narrow correction
+and actual two-endpoint proof; a new shared API requires manager reallocation.
+
+Slack returned237 passing tests. Manager imported the exact seven-file candidate
+into shared-registration staging, added the existing lifecycle observer to its
+locked status snapshot, and passed19 feed tests. One combined review06 and full
+combined tests are running; actual diff16paths3131total/1314non-test. James only
+prepares the minimal missing-fence recovery proposal, with source frozen. This
+is not a live connection or human-ready handoff.
+
+Security owner single-child stage has focused8/real3/service52 passing tests,
+four explicit artifact skips; final artifact/TMUX/parity/reviews remain. Owner
+task was idle when checked; the manager requested the already-allocated
+remaining proof, subject to any newer user pause. No duplicate security agent.
+Local owner checkpoint78185b756 is not receiving integration or main.
+
+Last verified dashboard publication18:15:20UTC, source971db3c8d, generation
+build-akhq3xe5; source identity, private HTTP and resolved feed10 verified.
+The corrected publisher receipt withdrew unsupported initial timestamp/check
+claims. Facilities has seven links; six targets responded200 but Drone ACE-Step
+fallback7866 refused connection at18:19:52. No facility restart was attempted.
+Current source update awaits this heartbeat's one Luna sync. Main406aa3c5 is
+unchanged; native pending owner checkpoints remain explicit. Live posting OFF.
+
+## Historical observation — September 12, 18:09 UTC
 
 18:14 follow-up: Slack review05 returned one accepted initial-qualification
 retry deadlock. James is dispatched on the narrow same-owner correction and

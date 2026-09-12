@@ -1,5 +1,37 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 18:39 UTC
+
+18:47 final observation: [Slack integration evidence](slack-integration-20260912.md)
+records clean review06,244 staging passes, receiving243pass/one enforced
+source-drift guard, then exact1/1 rerun with stable source. No runtime repair or
+waived error; gated code is locally integrated, not live. Accounting now has
+24 disjoint source/test/receipt files and3900/1450 ceiling for the scoped
+redirect-policy correction. Security confirmed active/no pause: source60068b967,
+final RTX/TMUX proof complete, Astra25 running and Fable26 next. No user blocker.
+
+18:41 update: combined Slack review06 is clean;244 staging tests passed133.965s,
+Facilities/governance pass. Manager accepted staging3561ebcc2 for local receiving
+integration and imported13 identical code/receipt/guidance files, preserving
+newer plan/sprint records. Receiving full tests are running. This supersedes the
+running review below, not the still-open missing-fence/live qualification gates.
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): recovered test profile now executes28 accounting and42 role tests, all pass. Full Core3405pass/133fail/19skip/2leaky is non-clean; all133 failure names also occur on the launch baseline. Review02 found redirects bypassing approved-endpoint accounting attribution. Mendel is dispatched to disable accounted redirects while preserving existing OFF/proxy/CA/guard behavior, with real two-endpoint zero-follow proof. Existing20-file scope; shared API changes require manager disposition, not a human blocker.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): worker237 tests pass; imported into manager staging with owner-lease-aware status and19 passing feed tests. One combined review06 and full combined suite are running on16paths3131total/1314non-test. James prepares a private minimal missing-fence recovery proposal only; no live credentials or code changes during review. Full Slack/phone/ACK gates remain.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): next single-child owner focused8/real3/service52 pass, four artifact skips explicit. Existing task was idle; manager requested already-allocated artifact/TMUX/parity/review closeout subject to any newer explicit user pause. Owner checkpoint78185b756 and adapterfb7523f4b are not yet native receiving integration. Isolated-adapter approval stays resolved.
+
+No new decision is required. Accounting correction is dispatched, Slack source
+is frozen for manager combined proof/review, and security closeout is requested
+from its sole owner. Last verified publication18:15:20UTC/build-akhq3xe5 matches
+971db3c8d and feed10 with zero open decisions. This semantic update awaits one
+Luna sync; source collection and rendering are not implementation completion.
+
+Facilities observation18:19:52UTC: six interface targets returned200; the
+[Drone ACE-Step fallback](http://100.81.145.102:7866/) refused connection.
+The primary RTX ACE-Step remains reachable. This is an interface availability
+issue, not a dashboard server failure or a blocker on the three workstreams.
+No service repair or restart is authorized by this observation.
+
 ## Current observation — 18:09 UTC: continuation, not human holds
 
 18:14 follow-up: Slack review05 returned one confirmed initial-qualification
