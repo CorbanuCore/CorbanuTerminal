@@ -324,6 +324,7 @@ pub struct ModelClient {
 /// the previous turn's sticky-routing token into the next turn, which violates the client/server
 /// contract and can cause routing bugs.
 pub struct ModelClientSession {
+    pub(crate) accounting: crate::accounting::Slot,
     client: ModelClient,
     websocket_session: WebsocketSession,
     /// Turn state for sticky routing.
@@ -956,6 +957,7 @@ impl ModelClient {
     /// when the first stream request is issued.
     pub fn new_session(&self) -> ModelClientSession {
         ModelClientSession {
+            accounting: Default::default(),
             client: self.clone(),
             websocket_session: self.take_cached_websocket_session(),
             turn_state: Arc::new(OnceLock::new()),
@@ -2502,9 +2504,30 @@ impl ModelClientSession {
                 "anthropic_http_after_client_setup",
                 provider_request_started_at,
             );
-            let transport = self
-                .client
-                .build_api_transport(&client_setup.api_provider, ANTHROPIC_MESSAGES_ENDPOINT)?;
+            let evidence = self
+                .accounting
+                .lock()
+                .expect("accounting slot")
+                .clone()
+                .map(crate::accounting::transport::ResponseEvidence::new);
+            let transport = if evidence.is_some() {
+                let client =
+                    codex_login::default_client::create_client_for_route_without_redirects(
+                        &self.client.http_client_factory,
+                        &client_setup
+                            .api_provider
+                            .url_for_path(ANTHROPIC_MESSAGES_ENDPOINT),
+                        ClientRouteClass::Api,
+                    )
+                    .map_err(std::io::Error::from)?;
+                crate::memory_stage_one::StageOneGuardedTransport::new(
+                    ReqwestTransport::from_http_client(client),
+                    self.client.stage_one_memory_binding.clone(),
+                )
+            } else {
+                self.client
+                    .build_api_transport(&client_setup.api_provider, ANTHROPIC_MESSAGES_ENDPOINT)?
+            };
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),
                 client_setup.api_auth.as_ref(),
@@ -2557,12 +2580,22 @@ impl ModelClientSession {
             inference_trace_attempt.add_request_headers(&mut options.extra_headers);
             inference_trace_attempt.record_started(&request);
             maybe_dump_anthropic_messages_request(&request);
+            let transport = transport.map_inner(|inner| {
+                crate::accounting::transport::AccountingTransport::new(
+                    inner,
+                    evidence.clone(),
+                    request.model.clone(),
+                )
+            });
             let client = ApiAnthropicMessagesClient::new(
                 transport,
                 client_setup.api_provider,
                 client_setup.api_auth,
             )
-            .with_telemetry(Some(request_telemetry), Some(sse_telemetry));
+            .with_telemetry(Some(request_telemetry), Some(sse_telemetry))
+            .with_usage_observer(
+                evidence.map(|value| value as Arc<dyn codex_api::AnthropicUsageObserver>),
+            );
             trace_stream_timing(
                 "anthropic_http_before_stream_request",
                 provider_request_started_at,

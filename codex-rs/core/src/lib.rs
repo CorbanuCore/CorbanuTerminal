@@ -33,6 +33,7 @@ pub use codex_thread::ThreadConfigSnapshot;
 pub use codex_thread::TryStartTurnIfIdleError;
 pub use codex_thread::TryStartTurnIfIdleRejectionReason;
 pub use session::turn_context::TurnContext;
+mod accounting;
 mod agent;
 mod agent_communication;
 mod attestation;

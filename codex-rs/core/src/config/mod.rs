@@ -636,9 +636,22 @@ pub enum ThreadStoreConfig {
     InMemory { id: String },
 }
 
+/// Internal native embedding opt-in. Never loaded from TOML, environment or CLI.
+/// The binding is local estimate provenance, not provider authorization.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum AccountingMode {
+    #[default]
+    Disabled,
+    DirectAnthropic {
+        scope: uuid::Uuid,
+        approved_endpoint: String,
+    },
+}
+
 /// Application configuration loaded from disk and merged with overrides.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
+    pub accounting: AccountingMode,
     /// Provenance for how this [`Config`] was derived (merged layers + enforced
     /// requirements).
     pub config_layer_stack: ConfigLayerStack,
@@ -4467,6 +4480,7 @@ impl Config {
         .map_err(std::io::Error::from)?;
         let otel = otel::resolve_config(cfg.otel.unwrap_or_default(), &mut startup_warnings);
         let config = Self {
+            accounting: AccountingMode::Disabled,
             model,
             service_tier,
             review_model,

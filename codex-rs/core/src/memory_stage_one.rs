@@ -4,6 +4,10 @@
 #[path = "memory_stage_one_tests.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "accounting_tests.rs"]
+mod accounting_tests;
+
 use crate::client::ModelClient;
 use crate::client_common::Prompt;
 use crate::client_common::ResponseEvent;
@@ -258,17 +262,21 @@ impl StageOneMemoryClient {
 
 /// Checks below endpoint retries, after async auth and before transport dispatch.
 #[derive(Clone, Debug)]
-pub(crate) struct StageOneGuardedTransport {
-    inner: ReqwestTransport,
+pub(crate) struct StageOneGuardedTransport<T = ReqwestTransport> {
+    inner: T,
     binding: Option<Arc<StageOneMemoryBinding>>,
 }
 
-impl StageOneGuardedTransport {
-    pub(crate) fn new(
-        inner: ReqwestTransport,
-        binding: Option<Arc<StageOneMemoryBinding>>,
-    ) -> Self {
+impl<T> StageOneGuardedTransport<T> {
+    pub(crate) fn new(inner: T, binding: Option<Arc<StageOneMemoryBinding>>) -> Self {
         Self { inner, binding }
+    }
+
+    pub(crate) fn map_inner<U>(self, map: impl FnOnce(T) -> U) -> StageOneGuardedTransport<U> {
+        StageOneGuardedTransport {
+            inner: map(self.inner),
+            binding: self.binding,
+        }
     }
 
     async fn check(&self) -> Result<(), TransportError> {
@@ -282,7 +290,7 @@ impl StageOneGuardedTransport {
     }
 }
 
-impl HttpTransport for StageOneGuardedTransport {
+impl<T: HttpTransport> HttpTransport for StageOneGuardedTransport<T> {
     async fn execute(&self, request: Request) -> Result<Response, TransportError> {
         self.check().await?;
         self.inner.execute(request).await

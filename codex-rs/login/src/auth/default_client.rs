@@ -259,6 +259,45 @@ pub fn create_client_for_route(
     )
 }
 
+/// Builds a no-redirect client with the default headers, cookies and route/CA policy.
+///
+/// Unlike the legacy constructor, a failed system-root fallback is returned as an error.
+pub fn create_client_for_route_without_redirects(
+    http_client_factory: &HttpClientFactory,
+    request_url: &str,
+    route_class: ClientRouteClass,
+) -> Result<HttpClient, BuildRouteAwareHttpClientError> {
+    no_redirect_client_for_environment(
+        http_client_factory,
+        request_url,
+        route_class,
+        is_sandboxed(),
+    )
+}
+
+fn no_redirect_client_for_environment(
+    http_client_factory: &HttpClientFactory,
+    request_url: &str,
+    route_class: ClientRouteClass,
+    sandboxed: bool,
+) -> Result<HttpClient, BuildRouteAwareHttpClientError> {
+    let builder = default_http_client_builder().without_redirects();
+    if sandboxed {
+        return builder
+            .try_build_direct_with_custom_ca_fallback()
+            .map_err(Into::into);
+    }
+    if matches!(
+        http_client_factory.outbound_proxy_policy(),
+        OutboundProxyPolicy::ReqwestDefault
+    ) {
+        return builder
+            .try_build_with_transport_default_proxy_and_custom_ca_fallback()
+            .map_err(Into::into);
+    }
+    builder.build_respecting_outbound_proxy_policy(http_client_factory, request_url, route_class)
+}
+
 /// Builds the default Codex HTTP client for a concrete outbound route without blocking the
 /// async runtime worker that initiated the request.
 pub async fn create_client_for_route_async(

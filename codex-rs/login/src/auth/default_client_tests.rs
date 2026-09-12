@@ -8,6 +8,52 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use tracing_subscriber::layer::SubscriberExt;
 
+#[tokio::test]
+async fn no_redirect_route_preserves_headers_proxy_and_sandbox_selection() {
+    use wiremock::matchers::method;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+    let destination = MockServer::start().await;
+    let proxy = MockServer::start().await;
+    for server in [&destination, &proxy] {
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(307).insert_header("location", "/must-not-follow"))
+            .mount(server)
+            .await;
+    }
+    let url = format!("{}/request", destination.uri());
+    codex_http_client::cache_system_proxy_route_for_test(&url, proxy.uri());
+    let factory = HttpClientFactory::new(OutboundProxyPolicy::RespectSystemProxy);
+    for sandboxed in [false, true] {
+        let client =
+            no_redirect_client_for_environment(&factory, &url, ClientRouteClass::Api, sandboxed)
+                .unwrap();
+        let response = client
+            .post(&url)
+            .body("synthetic body")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status().as_u16(), 307);
+    }
+    for server in [&destination, &proxy] {
+        let requests = server.received_requests().await.unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].body, b"synthetic body");
+        for (name, value) in default_headers() {
+            assert_eq!(requests[0].headers.get(name.unwrap()), Some(&value));
+        }
+    }
+    let legacy = HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault);
+    let client =
+        create_client_for_route_without_redirects(&legacy, &url, ClientRouteClass::Api).unwrap();
+    assert_eq!(
+        client.post(&url).send().await.unwrap().status().as_u16(),
+        307
+    );
+    assert_eq!(destination.received_requests().await.unwrap().len(), 2);
+    assert_eq!(proxy.received_requests().await.unwrap().len(), 1);
+}
+
 #[derive(Clone)]
 struct TestLogWriter {
     buffer: Arc<Mutex<Vec<u8>>>,

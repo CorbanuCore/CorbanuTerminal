@@ -1635,6 +1635,37 @@ async fn run_sampling_request(
     let turn_context = Arc::clone(&step_context.turn);
     let router = Arc::clone(&step_context.tool_router);
 
+    let accounting = if !matches!(
+        turn_context.config.accounting,
+        crate::config::AccountingMode::Disabled
+    ) && turn_context.config.model_provider_id == "anthropic"
+        && turn_context.provider.info().wire_api == codex_model_provider_info::WireApi::Anthropic
+    {
+        sess.try_ensure_rollout_materialized()
+            .await
+            .map_err(|_| CodexErr::Fatal(crate::accounting::FAILURE.into()))?;
+        let runtime = sess
+            .state_db()
+            .ok_or_else(|| CodexErr::Fatal(crate::accounting::FAILURE.into()))?;
+        Some(
+            crate::accounting::Sampling::start(
+                runtime,
+                sess.thread_id,
+                turn_context.sub_id.clone(),
+                &turn_context.config.accounting,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    // Clear even when the entire sampling future is cancelled. The client
+    // session can subsequently be reused for non-accounted native operations.
+    let _accounting_scope = crate::accounting::SamplingScope::attach(
+        Arc::clone(&client_session.accounting),
+        accounting.clone(),
+    );
+
     let base_instructions = sess.get_base_instructions().await;
     trace_turn_timing("after_get_base_instructions", sampling_started_at);
 
@@ -1695,6 +1726,9 @@ async fn run_sampling_request(
         )
         .await;
         let attempt_elapsed = attempt_started_at.elapsed();
+        if let Some(accounting) = &accounting {
+            accounting.check()?;
+        }
         let err = match attempt_result {
             Ok(output) => {
                 return Ok((output, original_input.unwrap_or(prompt.input)));
