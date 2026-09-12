@@ -982,6 +982,16 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
+September12 17:29UTC: Travis explicitly approved the isolated Linux launch
+adapter; manager relayed execution authority. The [accepted adapter-only
+allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-launch-next-20260912.md)
+adds `codex-rs/linux-pidfd-spawn/`, workspace Cargo/Bazel registration and
+non-root synthetic RTX/second-Linux proof to the existing sole PF27 lane.
+Service forbid(unsafe_code) remains intact; no service wiring or privileged
+installation/credential execution/main push/release is included. Stage one
+precedes separately bounded asynchronous ownership integration. Replenished
+review allowance covers two necessary independent security/evidence closeouts.
+
 September12 receiving owner accepted [sealed-byte ELF profile inspection](../../../qa/security-levels/sprints/PF-27-S04/runtime-elf-next-20260912.md)
 on clean8d1a4f49/incremental97d, original d870 allocation unchanged. Literal service
 `src/launch/manifest/{elf.rs,elf_tests.rs,mod.rs,sealed.rs,sealed_tests.rs}` only,

@@ -1,6 +1,8 @@
 # PF27 proposal — one owned child launched from the inspected sealed image
 
-**Proposal only; implementation and invocation not yet allocated.** Parser
+**Approved adapter-only allocation September 12, 17:29 UTC; implementation and
+non-root synthetic invocation now allocated as specified below.** Historical
+proposal/qualification decisions below remain preserved, not current blockers. Parser
 checkpoint `406aa3c5f58af0f3422558545dc821a64f777e6b` is verified on main;
 its window is released. Manager accepted Fable22's corrected evidence gap,
 preserving the original exit1/P3. Runtime tree after test repair:
@@ -15,6 +17,37 @@ credentials only by label; resolve them solely inside the trusted execution
 boundary.” Existing PF27 initiative, no new product authority or release claim.
 
 ## Next useful construction increment
+
+### Accepted isolated adapter / OS-proof stage
+
+Travis explicitly approved `pf27-linux-launch-adapter`: “Ok. So it seems like I
+need to approve PF-27-S04? We have multiple linux boxes we can test with. I approve
+the isolated adapter”. Integration manager task
+`01a08522-76a1-7ad1-afe6-ad690d55c0d7` relayed this decision and directed resumption.
+It permits the narrow separately reviewed FFI dependency and qualified immutable
+procfs binding, not unsafe code inside the service or direct-execveat claims.
+
+Stage one literal allocation: `codex-rs/linux-pidfd-spawn/` (Cargo.toml,
+BUILD.bazel and private lib/ffi/spawn/test modules), workspace Cargo.toml,
+Cargo.lock, MODULE.bazel.lock, this proposal, PF27 plan/sprint/review ledgers and
+`qa/security-levels/sprints/PF-27-S04/descriptor-launch-20260912/` including the
+already described hold fixture. Original owner/worktree/branch/base above remain;
+incremental starting HEAD is `021f82e6c10b2f58e3b67ad5bfdcc1562a4bde0f`.
+Preserve the integration owner's separately accepted SQLx lock delta87a9a81.
+No service dependency/wiring, PF20 API or dashboard changes in stage one.
+
+Build/test on `travis@100.99.88.49`; qualify platform/access on already authorized
+`pfrpc@178.156.143.199` and record its actual supported/unsupported outcome.
+Record OS/kernel/libc/architecture/artifact provenance. Synthetic non-root
+execution is approved; no real profile, credential execution, privileged install,
+protected activation, main push or release. Two necessary independent closeouts
+(Astra High and Fable5.1High through TMUX) use the replenished review allowance.
+
+Implement the real creation/exec/pidfd primitive and OS tests first. Full
+asynchronous deadline/cancel/quarantine owner integration is the separate second
+stage: stage one must not claim that integration or completed PF27. This internal
+dependency has no new user-facing UI; blind UX design is not applicable. Actual
+TMUX invocation and lifecycle receipts remain required supporting OS proof.
 
 Connect one profile-inspected image to an owned child-launch result, without
 exposing arbitrary commands or activating a service. The previous increments
