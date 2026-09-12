@@ -8,7 +8,7 @@ execution_order: 28
 owner: "/root"
 parallel_lane: "isolated-broker"
 write_scope: "codex-rs/secret-broker-service/, codex-rs/secret-broker/, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/, codex-rs/network-proxy/src/credential_broker_tests.rs, codex-rs/core/src/security/broker_client.rs, codex-rs/core/src/security/broker_client_tests.rs, codex-rs/core/src/config/network_proxy_credential.rs, codex-rs/core/src/config/network_proxy_credential_tests.rs, codex-rs/vault/src/capability.rs, codex-rs/vault/src/capability_tests.rs, qa/security-levels/sprints/PF-27-S04/, docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md, codex-rs/Cargo.toml, codex-rs/Cargo.lock, MODULE.bazel.lock, docs/plans/active/p0-security-levels.md, docs/sprints/current/p0-security-levels/index.md, qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/, securityProgress.html"
-integration_gate: "Codex /root serializes shared registration, audits scope and reruns broker/service/Vault/proxy/Core plus governance on RTX and synthetic lifecycle through TMUX. Five reviews spent; Travis approved exactly one sixth Fable 5.1 High Corbanu/TMUX review. Production/native/all-OS gates remain open; no privileged installation or protected activation. Coordinate main writes with other integration owners."
+integration_gate: "Codex /root serializes shared registration, audits scope and runs affected final-tree qualification on RTX plus synthetic lifecycle through TMUX. Six historical reviews spent; Travis granted five additional review slots replenishing every six hours, tracked in PF27 review-budget.md. Use Astra High and Fable 5.1 High Corbanu/TMUX without duplicate reviews. Production/native/all-OS gates remain open; no privileged installation or protected activation. Coordinate main writes with other integration owners."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-broker-resume-20260911"
 branch: "feat/security-broker-resume-20260911"
 base_commit: "d870c92dab2bf3fbb602dc3b8447fe9f3534aecb"
@@ -71,6 +71,7 @@ records exact coordinates, review-six approval and unchanged native setup limits
 
 ## Remaining
 
+- [ ] Implement and qualify the bounded [trusted-child admission/lifetime stage](../../../../qa/security-levels/sprints/PF-27-S04/bootstrap-next-20260911.md) within the service crate; preserve default denial. Use the [new six-hour budget](../../../../qa/security-levels/sprints/PF-27-S04/review-budget.md); no privileged setup is approved.
 - [ ] Implement the completed PF-27-S03 OS identity/IPC/handle design and PF-41-S03 durable-event contract; verify controller/broker state cannot be read or rewritten by the real agent process.
 - [ ] Include fresh connections after same-run re-registration with cached TLS handlers and admitted hosts, not only reuse of an old channel. Revocation fences queued dispatch, streams and uploads; new generations cannot inherit old credentials.
 

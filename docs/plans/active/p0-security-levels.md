@@ -645,6 +645,19 @@ next implementation consumes PF20's trusted-child/native-root contract, with
 new independent review and actual privileged setup requiring their respective
 explicit allowances. No production bootstrap or platform completion is inferred.
 
+Subsequent September 11 budget amendment: Travis grants five additional PF27
+review slots, replenishing to five every six hours, with history retained in the
+[review ledger](../../../qa/security-levels/sprints/PF-27-S04/review-budget.md).
+Proceed within the same allocation with the bounded
+[trusted-child admission/lifetime stage](../../../qa/security-levels/sprints/PF-27-S04/bootstrap-next-20260911.md):
+service-owned child handles, role/generation routing, bounded admission and
+failure/shutdown fencing, with unprivileged subprocess/TMUX evidence. Literal
+runtime scope is `codex-rs/secret-broker-service/`; existing shared build scope
+remains serialized. No PF20 API widening, Core policy factory, Vault hookup,
+identity dropping or native installation is included. Default exit78 remains.
+This supersedes the earlier service-only execution instruction and budget hold,
+not any deployment, containment, data-plane or sprint-completion gate.
+
 ## Round-five execution amendment — 2026-09-04
 
 The user authorized these three parallel agents and assigned integration to

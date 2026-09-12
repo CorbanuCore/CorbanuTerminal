@@ -87,12 +87,12 @@ No human-ready package, benchmark improvement or all-platform result is claimed.
 
 ## Review and deployment gates
 
-Six of six broker reviews are spent. Proposed allowance for this stage: **two
-additional passes**, numbered 7 (Astra High code review) and 8 (Fable 5.1 High
-final external evidence/code review through Corbanu/TMUX). Request submitted to
-Travis with this checkpoint; approval is pending. No reviewer has been started.
-Do not reset any ledger or generate repeated approval requests on heartbeats.
-After approval, update the active plan/sprint execution wording before coding.
+The six historical broker reviews remain spent. Travis granted **five additional
+slots, replenishing to five every six hours**; see [the budget ledger](review-budget.md)
+for the exact anchor and accounting rule. The pending two-pass request is resolved.
+Plan review 7 (Astra High code review) and review 8 (Fable 5.1 High final external
+evidence/code review through Corbanu/TMUX); do not consume the other slots without
+need. No new reviewer has started. Preserve lifetime review history at resets.
 
 No privileged installation is requested now. A later native stage must present
 an exact manifest with frozen source/binary hashes, executable argv/FD schema,
