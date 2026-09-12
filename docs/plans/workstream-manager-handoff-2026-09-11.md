@@ -1,5 +1,28 @@
 # Workstream continuation — September 11
 
+## Current status source — September 12, 19:11 heartbeat
+
+Accounting redirect correction returned frozen3868total/1195non-test across27
+combined paths; manager verified all24 worker hashes and exact diff. Review03
+is clean, no findings (actual helper38557 exit0). Focused71pass with2flaky/1leaky;
+shared471pass/2fail then2serialpass; Core3392pass/147fail,133baseline-common plus
+14candidate-only, all14serialpass. Preserve failed aggregate gates; no blanket
+environment attribution or S02 acceptance. Manager receiving integration next.
+
+Slack recovery proposal returned. Manager allocated five-file local loss-record
+recovery to James in fresh tasknode-slack-recovery-20260912 atb9e671e60;
+old seven-file worktree is preserved. See [exact allocation](../research/tasknode-integration/slack-fence-recovery-allocation.md).
+Actual supervisor/phone/connection/ACK remain unqualified; default OFF.
+
+Security single-child62956038e final review/test evidence accepted, native
+receiving integration pending. Existing owner task is active preparing the
+bounded two-child interface; approval remains resolved. No new human decision.
+Latest verified dashboard18:48:22/build-p4f8ktvl/sourceb9e671e60. Current local
+main isf505bd211 (Facilities import); it is NOT integrated blindly: it includes
+an unqualified service-control bridge and older dashboard source. Receiving
+retains its newer reviewed static Facilities and Slack/decision code. No main
+write, service activation, credential use or full sprint advancement.
+
 ## Current status source — September 12, 18:39 UTC
 
 18:47 final integration observation: Slack review06 clean and244 staging tests

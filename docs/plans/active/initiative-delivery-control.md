@@ -20,9 +20,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
     base_commit: "0368ed402a9dac4276b427313b9d7335670ee91c"
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
-    branch: "workstream/tasknode-pf80-s01-20260911"
-    base_commit: "0368ed402a9dac4276b427313b9d7335670ee91c"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-slack-recovery-20260912"
+    branch: "workstream/tasknode-slack-recovery-20260912"
+    base_commit: "b9e671e60416b952cc20d7b7260d3678080aebd0"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
     branch: "feat/provider-reauth-health"
     base_commit: "eb7af932bc8cc859122b5b2dbef223fbd45ea25c"
@@ -32,6 +32,13 @@ implementation_worktrees:
 ---
 
 # 3. Task Node integration and delivery control
+
+September12 next: gated transport/shared registration accepted atb9e671e60.
+The [local fence-loss recovery allocation](../../research/tasknode-integration/slack-fence-recovery-allocation.md)
+owns five paths in the fresh second worktree above, one sequential James worker.
+Old worker checkout is frozen, not concurrently active. Manager approved
+loss-record retention and historical alert-revision refusal, not new authority.
+Actual supervisor/quiescence wiring and live/phone/ACK remain unqualified.
 
 18:41: combined review06 clean,244 staging tests and Facilities/governance pass
 on3561ebcc2. Manager imported13 exact code/receipt/guidance files into receiving,

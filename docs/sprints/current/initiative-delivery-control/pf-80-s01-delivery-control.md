@@ -7,11 +7,11 @@ plan_feature: "PF-80"
 execution_order: 1
 owner: "Codex Task Node Slack-transport lane"
 parallel_lane: "tasknode-slack-transport"
-write_scope: "scripts/initiative_control/slack_transport.py, scripts/initiative_control/decision_manager.py, scripts/initiative_control/decision_alerts.py, scripts/initiative_control/test_slack_transport.py, scripts/initiative_control/test_decision_manager.py, scripts/initiative_control/test_decision_alerts.py, qa/initiative-control/pf-80-s01/decision-projection/slack-live-receipt.md"
-integration_gate: "Real-Slack7worker/10manager scope. Review05 P2 initial-qualification deadlock accepted for narrow never-qualified retry under slack-live-allocation.md; worker2700/1140, parent650/500, combined3350/1640; one changed-candidate review06. Preserve234tests and all prior failures/limits. No reset/quarantine/recovery-send/migration engine; missing-fence recovery remains manager pre-live work. Shared registration unaccepted staging. Combined Python/Node/governance and actual identity/HTTPS/phone/restart/CAS/native ACK required; live OFF."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
-branch: "workstream/tasknode-pf80-s01-20260911"
-base_commit: "0368ed402a9dac4276b427313b9d7335670ee91c"
+write_scope: "scripts/initiative_control/slack_transport.py, scripts/initiative_control/decision_manager.py, scripts/initiative_control/test_slack_transport.py, scripts/initiative_control/test_decision_manager.py, qa/initiative-control/pf-80-s01/decision-projection/slack-fence-recovery-receipt.md"
+integration_gate: "Accepted gated transport b9e671e60; next five-file local loss recovery under slack-fence-recovery-allocation.md. Target450/205 STOP600/260 incremental; review07 plus scoped08 preserves01–06. Manager owns real quiescence/supervisor wiring and receiving combined tests. No historical reply replay, counter reset, canonical cancellation or live authority. Python/Node/governance plus actual connection/phone/restart/CAS/native ACK remain required; live OFF."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-slack-recovery-20260912"
+branch: "workstream/tasknode-slack-recovery-20260912"
+base_commit: "b9e671e60416b952cc20d7b7260d3678080aebd0"
 depends_on: "none"
 created: 2026-09-10
 updated: 2026-09-11
@@ -76,7 +76,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact-goal reconciliation177ec93fc reviewed clean and integrated at3898eaa65;73 native tests pass there. In-memory exact-ID GET, strict injected observation and preserved404uncertainty; no send/retry/live claim. [Receipt](../../../../qa/initiative-control/pf-80-s01/native-reconciliation/receipt.md).
 
 ## Remaining
-- [ ] Implement [real Slack transport/bridge](../../../research/tasknode-integration/slack-live-allocation.md) after clean launch; manager owns shared registration and actual setup. Preserve predecessor regressions; qualify phone reply/restart/CAS/actual-agent ACK before ongoing enablement.
+- [ ] Implement [local loss recovery](../../../research/tasknode-integration/slack-fence-recovery-allocation.md); accepted transport remains OFF. Manager owns actual quiescence/connection/phone/restart/CAS/native ACK qualification, not fixture acceptance.
 - [ ] Resolve retained DEC021 mixed-feed useful-content failure and baseline-provenance limit without rewriting cases; [completed independent check](../../../../qa/initiative-control/status-display/age-evidence-20260912.md) supports F01 age/collision only. No human-readiness claim or blocking independent Slack implementation; DEC025 remains advisory.
 - [ ] Manager scopes accessible recovery/input/retention and restart/cross-process fences before the later CLI allocation; this is manager work, not unanswered product approval.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.
