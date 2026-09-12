@@ -34,6 +34,15 @@ pub struct OwnedChild {
 }
 
 impl OwnedChild {
+    /// Compare stable kernel identities without transferring either descriptor.
+    /// This is not liveness/readiness proof; callers must check the generation.
+    pub fn is_same_process(&self, peer: std::os::fd::BorrowedFd<'_>) -> io::Result<bool> {
+        if self.status.is_some() {
+            return Ok(false);
+        }
+        super::peer::same_process(self.pidfd.as_fd(), peer)
+    }
+
     /// Observe/reap only this child; absence of an exit does not prove readiness.
     pub fn try_wait(&mut self) -> io::Result<Option<WaitIdStatus>> {
         if self.status.is_none() {

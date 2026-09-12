@@ -56,7 +56,7 @@ struct Fake {
 impl Backend for Fake {
     type Image = Image;
     type Child = FakeChild;
-    fn spawn(self, image: Image) -> io::Result<FakeChild> {
+    fn spawn(self, image: Image, _control: &Arc<Shared>) -> io::Result<FakeChild> {
         self.probe.calls.fetch_add(1, Ordering::SeqCst);
         if let Some((entered, release)) = self.gate {
             entered.send(()).unwrap();
@@ -70,7 +70,7 @@ impl Backend for Fake {
         }
     }
 }
-fn eventually(mut condition: impl FnMut() -> bool) {
+pub(in crate::launch::manifest) fn eventually(mut condition: impl FnMut() -> bool) {
     let deadline = Instant::now() + Duration::from_secs(3);
     while !condition() {
         assert!(
@@ -277,7 +277,10 @@ fn pf_27_s01_owner_panic_is_not_cleanup_receipt_or_relaunch_permission() {
     assert!(Reservation::acquire_from(permit).is_err());
 }
 
-fn static_image(key: &str, anchor: u32) -> SyntheticProfileInspectedImage {
+pub(in crate::launch::manifest) fn static_image(
+    key: &str,
+    anchor: u32,
+) -> SyntheticProfileInspectedImage {
     use super::super::IMAGE_LIMIT;
     use super::super::SyntheticLaunchRecipe;
     use super::super::SyntheticManifestInspection;
@@ -362,7 +365,7 @@ fn pf_27_s01_owner_real_child_returned_late_after_caller_drop_is_reaped() {
     impl Backend for DelayedKernel {
         type Image = SyntheticProfileInspectedImage;
         type Child = OwnedChild;
-        fn spawn(self, image: Self::Image) -> io::Result<OwnedChild> {
+        fn spawn(self, image: Self::Image, _control: &Arc<Shared>) -> io::Result<OwnedChild> {
             let child = image.launch_owned(SyntheticChildRole::Journal)?;
             self.0.send(()).unwrap();
             self.1.recv().unwrap();

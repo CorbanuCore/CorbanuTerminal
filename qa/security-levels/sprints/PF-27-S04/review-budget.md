@@ -18,6 +18,31 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Reviews28/29 completed exit0/findings[], patch correct. No accepted/actionable
+findings, no code repair and no additional review. Originals under
+descriptor-pair-20260912/{astra28,fable29}.{json,txt,exit}; reviewed source
+e0eb9eac4/Rustf64820d0 unchanged. Extension2 used/0 available; scheduled5 used
+and all previous outcomes preserved. StageB needs its separate allocation.
+
+Stage A review28 reserved September12 20:18UTC before dispatch: Astra High
+over62956038e, frozen sourcee0eb9eac4/Rustf64820d0ca0312efbb612f208fb20636b6f547cf,
+614 changed code/test/fixture lines and final RTX/TMUX/lint/parity receipts.
+Review29 reserved at the same time: Fable5.1High via Corbanu/private TMUX on
+the same scoped candidate. New manager extension2 reserved/0 unreserved;
+scheduled window prior5 used retained, no reset. Both outcomes pending.
+
+Manager staged disposition now assigns the still-undispatched28/29 extension
+to descriptor-pair-a-allocation-20260912.md (identity and lifecycle only).
+No review consumed to choose the split. StageB needs a later explicit allowance;
+do not borrow/reset A's slots or review the unqualified combined WIPdb971e9b8.
+
+September12 manager accepted descriptor-pair-next-20260912.md and grants +2
+necessary scoped new-stage reviews:28 Astra High and29 Fable5.1High through
+Corbanu/private TMUX. Both are planned, not dispatched. Preserve scheduled
+window17:25:45–23:25:45Z five used and all previous extensions/results. Reserve
+each at actual dispatch; no clean-code repeat or early reset. Receiving proof
+needed no new review. Required corrective extension goes to integration owner.
+
 Owner increment review25 reserved September12 18:42UTC before dispatch:
 Astra High overfb7523f4b, frozen Rust30aebfb77785fe5108276a651a4005fca3c5bae3
 and final RTX/TMUX receipts. Window17:25:45–23:25:45Z now3 used/2 available.

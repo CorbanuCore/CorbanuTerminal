@@ -982,6 +982,26 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
+September12 manager accepted combined receiving c5e606fa2/Rust18cf961a proof.
+The initial pair/admission draft reached758 lines before complete test coverage;
+unqualified WIPdb971e9b8 is preserved with hashes locally and onRTX, not accepted.
+Manager narrowed execution to [StageA stable identity and two-child lifecycle](../../../qa/security-levels/sprints/PF-27-S04/descriptor-pair-a-allocation-20260912.md):
+ten exact source/test/fixture paths, hard800 changed lines against62956038e;
+same sole owner/worktree/branch/original base, narrowing launchdb971e9b8.
+Only PairImages and launch_pair(images,deadline) returning existing LaunchHandle;
+no admission/UID/generation/socket surface, shared lock, PF20 or native activation.
+Reviews28AstraHigh/29Fable5.1High now cover A, retaining all historical usage.
+StageA sourcee0eb9eac4/Rustf64820d0 is qualified at614 changed lines: adapter4
+normal/8 supported-OS, default3, pair5/real pair1, owner8/real owner3, profiles1+1,
+full service57 pass; five service ignored cases executed separately. Strict
+scoped two-crate Clippy, read-only Cargo/Bazel parity and actual-key RTX TMUX
+pass; both reviews28/29 exit0/findings[], no repairs. [Original evidence](../../../qa/security-levels/sprints/PF-27-S04/descriptor-pair-20260912/README.md).
+Manager receiving integration remains required. Accepted policy1.7's independent
+isolated execution gate has reasoned N/A only for this private increment, not
+later protected-user flows/PF26 or the whole sprint. No product readiness claim.
+StageB admission/connector/missing cases remain deferred until accepted A and
+a fresh literal manager allocation. No omitted test is waived or called Done.
+
 September12 receiving owner accepted adapterfb7523f4b for branch continuation
 and allocated the [single-child asynchronous owner](../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-next-20260912.md).
 Exact private reservation/launch/status API and QA lifecycle script were frozen

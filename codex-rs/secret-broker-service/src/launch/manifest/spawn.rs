@@ -29,17 +29,20 @@ pub(super) enum Status {
     Quarantined,
 }
 
-struct Shared {
+pub(super) struct Shared {
     cancel: AtomicBool,
     deadline: Instant,
     phase: Mutex<Status>,
 }
 impl Shared {
-    fn cancelled(&self) -> bool {
+    pub(super) fn cancelled(&self) -> bool {
         if Instant::now() >= self.deadline {
             self.cancel.store(true, Ordering::Release);
         }
         self.cancel.load(Ordering::Acquire)
+    }
+    pub(super) fn cancel(&self) {
+        self.cancel.store(true, Ordering::Release);
     }
     fn set(&self, status: Status) {
         *self
@@ -58,7 +61,7 @@ impl Reservation {
     pub(super) fn acquire() -> io::Result<Self> {
         Self::acquire_from(Arc::clone(&PERMIT))
     }
-    fn acquire_from(permit: Arc<AtomicBool>) -> io::Result<Self> {
+    pub(super) fn acquire_from(permit: Arc<AtomicBool>) -> io::Result<Self> {
         permit
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .map_err(|_| {
@@ -79,7 +82,7 @@ impl Reservation {
     ) -> Result<LaunchHandle, (io::Error, SyntheticProfileInspectedImage)> {
         self.launch_with(image, Kernel(role), deadline, start_worker)
     }
-    fn launch_with<B: Backend>(
+    pub(super) fn launch_with<B: Backend>(
         mut self,
         image: B::Image,
         backend: B,
@@ -177,7 +180,7 @@ impl Drop for LaunchHandle {
 }
 
 /// Private fault seam: actual kernel child or deterministic owned test token.
-trait Child: Send + 'static {
+pub(super) trait Child: Send + 'static {
     fn stop(&self) -> io::Result<()>;
     fn exited(&mut self) -> io::Result<bool>;
 }
@@ -190,33 +193,33 @@ impl Child for OwnedChild {
     }
 }
 /// Private launch seam, never supplied by an agent or public service caller.
-trait Backend: Send + 'static {
+pub(super) trait Backend: Send + 'static {
     type Image: Send + 'static;
     type Child: Child;
-    fn spawn(self, image: Self::Image) -> io::Result<Self::Child>;
+    fn spawn(self, image: Self::Image, control: &Arc<Shared>) -> io::Result<Self::Child>;
 }
 struct Kernel(SyntheticChildRole);
 impl Backend for Kernel {
     type Image = SyntheticProfileInspectedImage;
     type Child = OwnedChild;
-    fn spawn(self, image: Self::Image) -> io::Result<Self::Child> {
+    fn spawn(self, image: Self::Image, _control: &Arc<Shared>) -> io::Result<Self::Child> {
         image.launch_owned(self.0)
     }
 }
 
-fn start_worker(job: Job) -> io::Result<()> {
+pub(super) fn start_worker(job: Job) -> io::Result<()> {
     std::thread::Builder::new()
         .name("corbanu-image-owner".into())
         .spawn(job)
         .map(|_| ())
 }
 
-fn supervise<B: Backend>(image: B::Image, backend: B, shared: &Shared) -> Completion {
+fn supervise<B: Backend>(image: B::Image, backend: B, shared: &Arc<Shared>) -> Completion {
     if shared.cancelled() {
         drop(image);
         return Completion::NotLaunched;
     }
-    let mut child = match backend.spawn(image) {
+    let mut child = match backend.spawn(image, shared) {
         Ok(child) => child,
         Err(_) => return Completion::Rejected,
     };
@@ -246,4 +249,4 @@ fn supervise<B: Backend>(image: B::Image, backend: B, shared: &Shared) -> Comple
 
 #[cfg(test)]
 #[path = "spawn_tests.rs"]
-mod tests;
+pub(super) mod tests;

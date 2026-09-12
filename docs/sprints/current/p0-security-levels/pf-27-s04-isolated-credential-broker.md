@@ -16,7 +16,6 @@ depends_on: "PF-27-S01, PF-13-S04, PF-27-S03, PF-41-S03"
 created: 2026-08-28
 updated: 2026-09-12
 ---
-
 # PF-27-S04 — Isolated credential broker process
 
 September 11 resumption: fresh main-based allocation after human acceptance.
@@ -52,6 +51,7 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - [x] Accepted the PF-27-S03 Linux service, macOS launchd/XPC and Windows service/AppContainer candidates for construction; protected eligibility and sprint completion remain blocked until measured all-OS qualification passes.
 
 ## Done
+- [x] StageA identity/private pair lifecycle sourcee0eb9eac4/Rustf64820d0:614 changed lines, ten allocated paths; adapter4+8/default3/pair5+real1/owner8+real3/profiles2/service57 pass, ignored cases separately exercised; strict scoped Clippy/parity/actual-key RTX TMUX pass; Astra28/Fable29 clean. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-pair-20260912/README.md). WIP758-line archive retained; policy1.7 N/A only for this private increment, no product readiness. Manager receiving pending.
 - [x] Private single-child owner source4d830cbb3/Rust7e488200: default3/focused8/real3/profile2/service52 pass, four service exclusions exercised separately; actual-key RTX TMUX, strict Clippy and Cargo/Bazel parity pass. Astra25 clean; Fable26 lint finding repaired; Fable27 clean. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-20260912/README.md). No two-child/native/product activation claim.
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 - [x] Manager accepted/integrated sealed-byte profile proof at main406aa3c5f; source635655c34 and original Astra21/Fable22 outcomes preserved. Travis approved isolated-adapter implementation/non-root proof September12; exact allocation recorded before code, existing branch/base retained.
@@ -65,7 +65,6 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
   verified; final Fable review has no blocking findings and one deferred P3
   signal-interruption follow-up (helper exit 1). Four of five reviews used.
   Production service, data-plane and all-OS qualification remain open; see `qa/security-levels/sprints/PF-27-S04/round5-evidence.md`.
-
 - [x] Reconciled and qualified the service construction stage on main/0.1.42: default 1, synthetic 6, full affected 338, Core 6 and supporting TMUX pass. Fable review 6 found no runtime/security issue; one test-only lint finding was reproduced and fixed, strict Clippy and affected proof rerun successfully. Six reviews spent, no seventh; see `qa/security-levels/sprints/PF-27-S04/resume-20260911/README.md`. No native deployment or activation claimed.
 - [x] Qualified admission/lifetime `bd70f0e6b` ([proof](../../../../qa/security-levels/sprints/PF-27-S04/child-admission-20260912/README.md)) and existing-root adapter `794080a4f` ([proof](../../../../qa/security-levels/sprints/PF-27-S04/root-composition-20260912/README.md)): default3/fixture17/affected356 (2 helper skips), scoped Clippy/parity/TMUX17+exit78 pass. Astra10 clean, Fable11 runtime correct with publication finding resolved; inherited transitive telemetry lint debt retained. Five new slots used. No native installation, executable launcher or protected activation.
 - [x] Launch recipe/identity preparation `f0b1209e0`: default3/synthetic29/affected356 (2 existing skips), scoped lint/parity/build/TMUX pass; Astra14 and Fable15 exit0/no findings. P3 Python-path fixture follow-up fixed. No actual root-positive or native-eligibility claim; [evidence](../../../../qa/security-levels/sprints/PF-27-S04/launcher-20260912/README.md).
@@ -73,6 +72,7 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - [x] Sealed image `ee1ac023c`: default3/synthetic39/affected356 (2 existing skips), scoped lint/parity/build/TMUX pass; Astra18/Fable19 clean. Kernel write/truncate/seal denials and failure cleanup proven; no invocation or loader trust. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/sealed-20260912/README.md).
 - [x] Static probe build/linkage feasibility passes on unchanged Rust0aa65bd: staticPIE f6ca8e3368dc/no interpreter or external libs and GNU control, actual-key TMUX. Fable20 patch correct/P3 receipt gap repaired; original exit1 and failed attempts retained. No artifact invocation/native qualification. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/static-probe-20260912/CURRENT.md).
 ## Remaining
+- [ ] Receive qualified StageA through manager combined-tree proof; StageB admission/connector and all missing socket cases require accepted A and fresh exact allocation. Later affected user flows/PF26 require policy1.7 independent isolated execution, not an owner-only test; no PF20/native/product activation.
 - [ ] Include fresh connections after same-run re-registration with cached TLS handlers and admitted hosts, not only reuse of an old channel. Revocation fences queued dispatch, streams and uploads; new generations cannot inherit old credentials.
 
 - [ ] Keep sentinel keys/raw registries outside agent-accessible processes; test open-channel revocation, upload cancellation, same-run-ID replacement and broker restart with old handles. The proxy's retained RegisteredRun concern requires a native regression, not just a copied new-connection test.
