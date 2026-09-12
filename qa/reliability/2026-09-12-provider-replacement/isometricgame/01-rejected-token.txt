@@ -1,0 +1,44 @@
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                         │
+│                                                       │
+│ model:       claude-fable-5-1-plan   /model to change │
+│ directory:   /mnt/…/corbanu-0.1.42-qa/isometricgame   │
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────╯
+
+
+› Reply briefly without tools.
+
+
+■ unexpected status 401 Unauthorized: Invalid bearer token,
+url: http://127.0.0.1:44271/v1/messages
+
+
+› Use /skills to list available skills
+
+  Claude Fable 5.1 Plan default · /mnt/HC_Volume_101713660…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

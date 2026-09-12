@@ -14485,7 +14485,7 @@ fn provider_manager_claude_intent_uses_typed_status_and_recovery_source() {
             &status(ProviderConfigurationState::Configured),
             Source::ManagedToken,
         ),
-        None,
+        Some(ClaudeAccountIntent::Replace),
     );
 }
 

@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/provider_manager.rs
+expression: "crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 90)"
+---
+  OpenAI
+  Inactive
+
+› 1. Reactivate                   Make this configured provider eligible for use again.
+  2. Replace with OpenAI account  OpenAI account
+  3. Replace with API key         API key
+
+  Press enter to confirm or esc to go back

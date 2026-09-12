@@ -434,6 +434,7 @@ pub(super) fn claude_intent_for_status(
 
     match status.configuration {
         ProviderConfigurationState::NotConfigured => Some(ClaudeAccountIntent::Add),
+        ProviderConfigurationState::Configured => Some(ClaudeAccountIntent::Replace),
         ProviderConfigurationState::RecoveryRequired
             if source != ClaudeUnauthorizedRecoverySource::Unknown =>
         {
