@@ -19,10 +19,10 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "56295f66825e87dc924705d86fcbcebf258ba7f9"
+    base_commit: "3898eaa658924361b94cdbfc6751f930550ddee4"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
     branch: "workstream/accounting-pf60-s01-20260911"
-    base_commit: "56295f66825e87dc924705d86fcbcebf258ba7f9"
+    base_commit: "3898eaa658924361b94cdbfc6751f930550ddee4"
 ---
 
 # 2. Accounting — unified agent cost and usage
@@ -46,8 +46,9 @@ at `c33d47f6c`; all 202 state tests passed there. The manager owns the next
 same-sprint allocation; this is not full S02 or user-interface readiness.
 Quotation e8ffdad4e is also reviewed/integrated at 486d2fb94, with all214 state
 tests passing. Immutable storage d898fbac0 is now reviewed/integrated at56295f668;
-all220 state tests pass on that combined tree. Retention/deletion is the next
-same-sprint allocation; production promotion remains separate and OFF.
+all220 state tests pass on that combined tree. Contributions/deletion b08fff66d
+are reviewed and integrated at3898eaa65; all226 state tests pass there. Exact compact
+values are the next bounded retention foundation; production remains separate/OFF.
 
 ## Activation record
 
@@ -89,12 +90,12 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Astra High accounting contributions/deletion | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `56295f66825e87dc924705d86fcbcebf258ba7f9` | PF-60-S02 five-file retained contributions/recorded-attempt deletion |
+| Astra High accounting compact values | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `3898eaa658924361b94cdbfc6751f930550ddee4` | PF-60-S02 four-file exact compact-value foundation |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
-S02 is allocated to one Astra High subagent. The next literal five-file scope is
-in the sprint and [contribution/deletion allocation](../../research/agent-cost-accounting/contribution-deletion-allocation.md);
-the manager serially delegates the connection reader and installed-fixture tombstone guard.
+S02 is allocated to one Astra High subagent. The next literal four-file scope is
+in the sprint and [compact-value allocation](../../research/agent-cost-accounting/compact-values-allocation.md);
+the manager serially delegates only private child registration.
 No production migrations, API/Core wiring, manifests or other state writers are
 allocated. The idle worker fast-forwards to
 the reviewed receiving allocation before dispatch; its historical branch name
@@ -126,7 +127,7 @@ All records belong to the single feature **PF-60**. Dependencies are hard prereq
 | Sprint | Record / outcome | Depends on | Planned output | Evidence |
 | --- | --- | --- | --- | --- |
 | PF-60-S01 | [Accounting contract and golden fixtures](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md) | none | docs/research/agent-cost-accounting/contract.md | Accepted local contract/fixtures and reviewed handoff; archived |
-| PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Native storage then retained contributions/recorded deletion, test-only | Storage reviewed/integrated;220 state tests pass; next lifecycle stage allocated, full S02 pending |
+| PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Exact compact values after retained contributions/deletion, test-only | Contributions/deletion reviewed/integrated;226 state tests pass; B1 allocated, full S02 pending |
 | PF-60-S03 | [Inspectable run and campaign totals](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md) | PF-60-S02 | codex-rs/tui/src/chatwidget/usage.rs | pending |
 | PF-60-S04 | [Cost-accounting acceptance and handoff](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md) | PF-60-S03 | qa/portfolio/agent-cost-accounting/qualification.md | pending |
 

@@ -31,7 +31,19 @@ promise to integrate later. New allocation/policy changes receive their own revi
 
 ## Current queue and owners
 
-Latest received increments, September 12 01:47 UTC:
+Latest receiving checkpoint, September 12 02:20 UTC:
+`3898eaa658924361b94cdbfc6751f930550ddee4` combines reviewed accounting
+contributions/deletion `b08fff66d` and Task Node reconciliation `177ec93fc`.
+Each exact candidate passed its first independent Astra High review with zero
+findings; parent inspected full diffs and verified hashes before integration.
+Final combined run `294acbeb-f968-4f0b-9cca-50d84363d7b7`:299 passed,0 skipped,
+7.587s (226 state/73 Task Node), no LEAK markers in retained full log. The accounting
+worker's two named warnings remain in its receipt, not retroactively resolved.
+Both normal libraries passed offline locked check in1.86s;129 Python/governance
+tests passed (54/48/5/22). No native edits after reviewed/formatted worker bytes.
+This accepts bounded private increments, not production, whole sprints or humans.
+
+Earlier received increments, September 12 01:47 UTC:
 `56295f66825e87dc924705d86fcbcebf258ba7f9` combines accounting storage
 `d898fbac0` and Task Node native adapter `d7bf73a52`. Each exact candidate passed
 its first independent Astra High review with no findings. Final combined run
@@ -80,8 +92,8 @@ production collection, UI, live repository, benchmark or human acceptance.
 | Workstream | Completed | Next action | Who owns the gate? |
 | --- | --- | --- | --- |
 | PF13 | No new completion inferred | Preserve owner task and paused security allowance | Existing PF13 owner / Travis; do not reactivate here |
-| Accounting PF-60-S02 | S01 archived; journal/quotation/storage reviewed and integrated | Retained contributions/recorded-attempt deletion allocated | Manager dispatches; approved defaults unchanged |
-| Task Node PF-80-S01 | Native adapter reviewed and integrated | Exact-goal observation reconciliation allocated | Offline work continues while operator design answers are pending |
+| Accounting PF-60-S02 | S01 archived; contributions/deletion also reviewed/integrated | Four-file compact-value foundation allocated | Manager dispatches; approved defaults unchanged |
+| Task Node PF-80-S01 | Reconciliation reviewed/integrated; worker closed | Blocked on already delivered setup/validity decisions; then manager runtime design | Travis answers existing questions; manager owns design/qualification packet |
 
 Missing preparation, allocation or receiving evidence is manager work. It is
 not a request for Travis to coordinate workers. The scheduled parent must keep
@@ -171,29 +183,31 @@ No upstream upgrade qualification is claimed.
 ## Current next assignments
 
 Both active plans and sprints now record receiving base
-`56295f66825e87dc924705d86fcbcebf258ba7f9`. After this allocation's independent
-review, parent fast-forwards idle clean workers to its committed HEAD and records
-actual agent IDs/launch HEAD in the private continuation receipt. One Astra High
-worker per lane; no additional reserved sprint. Earlier literal allocations above
-and in old handoffs are historical, not permission to edit those files now.
+`3898eaa658924361b94cdbfc6751f930550ddee4`. After this allocation's independent
+review, parent fast-forwards the idle clean accounting checkout and records actual
+agent ID/launch HEAD in the private continuation receipt. Task Node is blocked,
+not running; no native write assignment. Earlier literal allocations above and
+in old handoffs are historical, not permission to edit those files now.
 
-Accounting: [five-file contributions/deletion](../research/agent-cost-accounting/contribution-deletion-allocation.md),
-retained-detail one-version contribution reduction and atomic recorded-attempt
-deletion/tombstones. Private storage child, exact connection-reader/journal guard
-seams only. Compaction/cutoff/native ownership and production promotion follow.
-No repeated policy question, live price fetch or billing. S03 remains gated.
+Accounting: [four-file compact values](../research/agent-cost-accounting/compact-values-allocation.md),
+exact stored-amount decoder and checked seven-metric composition. No database
+mutation. Whole compaction is too large for one bounded patch; B1 is a coherent
+foundation. Manager must resolve daily aggregate versus rolling expiry coverage,
+unquoted/stale source, late imports and checkpoint/read semantics before allocating
+mutation. No early-loss/over-retention default silently chosen. S03 remains gated.
 
-Task Node: [five-file exact-goal reconciliation](../research/tasknode-integration/native-reconciliation-allocation.md),
-build real exact-ID activity GET in memory and consume pinned injected response.
-No Client/recovery changes, sender or retry.404 remains uncertain, never proof of
-absence or permission to resend. Unknown native null expiry stays held.
-No queue, automatic retry, production sender or live qualification is implied.
+Task Node: [runtime recovery handoff](../research/tasknode-integration/recovery-decision-handoff.md)
+now records the concrete next design/operator boundary and human test plan. Current
+offline chain is accepted; no distinct new native increment is justified without
+the delivered decisions and manager-owned production contract/allocation. Preserve
+404 uncertainty and ExpiryUnknown; no fixture-only busywork or implicit sender.
 
 Parent delivered two grouped questions to Travis on September12: approve local
 manual publisher/setup direction with existing account/Proposed PF-80 target,
 and a separately reviewed native validity design for server-issued null expiry.
 Record answers when received, without treating design approval as credential,
-enrollment or exact-post authority. No answer is needed for current offline work.
+enrollment or exact-post authority. The offline chain is now integrated; those
+answers gate Task Node's next runtime design, not independent accounting work.
 These are delivered questions, not just a private blocker note; do not re-ask
 historical account/task creation or approved accounting defaults.
 Human packet must preserve an observed native trap: paused tracker recording

@@ -19,10 +19,10 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "56295f66825e87dc924705d86fcbcebf258ba7f9"
+    base_commit: "3898eaa658924361b94cdbfc6751f930550ddee4"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
     branch: "workstream/tasknode-pf80-s01-20260911"
-    base_commit: "56295f66825e87dc924705d86fcbcebf258ba7f9"
+    base_commit: "3898eaa658924361b94cdbfc6751f930550ddee4"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
     branch: "feat/provider-reauth-health"
     base_commit: "eb7af932bc8cc859122b5b2dbef223fbd45ea25c"
@@ -71,6 +71,11 @@ The bound engine 7e25982b5 is now reviewed/integrated at 486d2fb94, with all55
 Task Node tests passing. Native adapter d7bf73a52 is now reviewed/integrated
 at56295f668; all63 crate tests pass there. It builds actual Client requests
 in memory and consumes pinned response fixtures; no sending or live authority.
+Exact-goal reconciliation177ec93fc is also reviewed/integrated at3898eaa65;
+all73 native tests pass there. PF-80-S01 is now blocked on the two already
+delivered setup/validity decisions. The worker is closed; no new fixture lane.
+The [runtime recovery handoff](../../research/tasknode-integration/recovery-decision-handoff.md)
+records manager design work, recommendations and the gated human test plan.
 
 PF-80 replaces only the recovery operations source's conflicting PF-76 identity.
 Main's provider-persistence PF-76 and security PF-77/PF-78 remain untouched.
@@ -112,18 +117,18 @@ Campaign Tracker contracts read-only initially. Port `scripts/initiative_control
 from the inspected recovery source under an audited manifest; tests must run on
 the receiving main tree. Keep `docs/plans/check.py` and `docs/sprints/check.py`
 manager-owned. The original kickoff was Python-only. The current PF-80-S01
-allocation permits a test-only exact-goal observation reconciliation child.
-Manager serially delegates only its child registration; existing Client build/
-decode accessors are read-only. No production entry, network caller, auth decision,
-queue, dependency or upstream protocol changes.
-See the [exact next allocation](../../research/tasknode-integration/native-reconciliation-allocation.md).
+allocation's test-only reconciliation child is accepted and frozen; no current
+worker writes are authorized. Existing Client/build/decode controls remain unchanged.
+No production entry, network caller, auth decision, queue or dependency changes.
+See the [accepted allocation](../../research/tasknode-integration/native-reconciliation-allocation.md)
+and runtime recovery handoff above before a new allocation.
 [Feature delivery contract](../feature-delivery.md).
 
 ## Sprint execution map
 
 | Feature | Sprint | State and acceptance |
 | --- | --- | --- |
-| PF-80 | [S01 native delivery-control integration](../../sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md) | Native adapter reviewed/integrated; exact-goal observation reconciliation allocated, live acceptance separate |
+| PF-80 | [S01 native delivery-control integration](../../sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md) | Reconciliation reviewed/integrated; blocked on delivered setup/validity decisions; live acceptance separate |
 | PF-79 | [S01 Desktop beta channel/test contract](../../sprints/current/initiative-delivery-control/pf-79-s01-beta-channel-and-test-contract.md) | Draft; depends on PF-80-S01; Desktop source/permissions unresolved |
 | PF-79 | [S02 public beta pilot](../../sprints/current/initiative-delivery-control/pf-79-s02-public-beta-pilot.md) | Draft; depends on S01; no public launch |
 | PF-81 | [S01 bounded screenshot/inference QA harness](../../sprints/current/initiative-delivery-control/pf-81-s01-visual-test-harness.md) | Draft; depends on PF-80-S01; existing PF13 task owns later implementation, no new worker |
