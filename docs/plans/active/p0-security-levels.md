@@ -982,7 +982,7 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
-22:49UTC: manager accepted exact combined compatibility37f23b991/Rust99265431b6,
+22:45UTC: manager accepted exact combined compatibility37f23b991/Rust99265431b6,
 all25 command exits+suite0 and actual RTX/TMUX/locks proof. Next sole-owner
 [fifteen-path private root dispatch](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-dispatch-allocation-20260912.md)
 is allocated from clean12e0bc2d8,740target/800hard. Fresh synthetic root/client

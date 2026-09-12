@@ -1,6 +1,6 @@
 # PF-27-S04 — private descriptor-pair root dispatch
 
-Manager allocation, September12 22:49UTC. Same active PF-27, product heading
+Manager allocation, September12 22:45UTC. Same active PF-27, product heading
 **Non-negotiable controls**, “Permit agents to reference credentials only by
 label; resolve them solely inside the trusted execution boundary.”
 
