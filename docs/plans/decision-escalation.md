@@ -1,6 +1,7 @@
 # Decision visibility and alerts — PF-80 planning amendment
 
-Status: implementation planned; Slack channel/app created, sender not wired or
+Status: operational notice rendering implemented separately as a bounded fix;
+canonical decision feed and Slack sender/receiver remain planned, not wired or
 delivery-tested. Product: **Internal delivery control
 — TO BUILD**, “Show blockers, rendered sprints, human test plans, machines, run
 logs and freshness.” Travis requested contextual dashboard decisions and Slack
@@ -34,7 +35,7 @@ projection with its own provenance; qualify export, ingest, render and health
 together before any source/publication change. Preserve the last good snapshot
 and visibly flag stale input on failure. This document is not that implementation.
 
-## Slack v1
+## Historical outbound-only setup
 
 Use one channel-scoped incoming webhook/app connection for outbound alerts only.
 Verify the workspace, exact private channel ID, audience and credentials through
@@ -58,10 +59,70 @@ Reminders/digests are a later preference, not ten-minute notification spam.
 Each alert contains a redacted short question, recommendation, stopped scope,
 owner and stable authenticated dashboard decision link. Never send localhost
 links to remote readers. Acknowledgements or arbitrary Slack replies do not run
-agents or grant permissions; v1 answers are recorded by the manager from this
-authorized task. Two-way Slack approvals need a separately reviewed identity,
-revision and authorization contract. Test a real alert with Travis before calling
+agents or grant permissions. Travis now requests logged replies routed to the
+responsible agent; the two-way contract below supersedes that outbound-only
+target, not its current unconnected implementation state. Test a real alert with Travis before calling
 the notification path operational; device push/DND settings also affect receipt.
+
+## Requested summary, details and reply loop — September 12
+
+The dashboard uses one short linked summary, expandable context, then a specific
+question only when a human decision is needed. Every sprint reference must link
+to its exact published context. Historical ID collisions link to the historical
+explanation, not the unrelated modern sprint. Unknown references open an honest
+unavailable-context explanation. Manager cleanup explicitly says no human
+decision is needed; do not manufacture questions just to fill a card.
+
+Use the same decision ID/revision, linked sprint, summary, owner, background,
+impact, recommendation/options and question in Slack. Proposed Slack presentation:
+summary in the parent message; details and question in its thread, with a direct
+decision link. This preserves the information hierarchy without claiming HTML
+accordion support in Slack. Questions must be answerable directly in that thread.
+An outbound-only webhook cannot receive those replies.
+
+Proposed connection: existing app in AmbientCrypto, bot membership restricted to
+the private Corbanu channel, `chat:write`, `groups:history`, subscription to
+`message.groups`, and Socket Mode with an app token limited to `connections:write`.
+Socket Mode avoids opening an inbound public endpoint on the dashboard server.
+Slack scopes can expose other private channels the bot joins: the channel/team
+allowlist is enforced in code as well, and this bot must not join other channels.
+Verify reinstall/consent, bot identity, exact team/channel and Travis's immutable
+Slack user ID in the supported UI; keep bot/app tokens in owner-only service
+credentials, never source exports, logs, task prompts or browser session copies.
+
+Reply processing contract, still awaiting allocated implementation/review:
+
+1. Accept only a verified Slack event from the configured team/channel, a mapped
+   decision thread and an allowlisted human decision owner; ignore bots, unrelated
+   messages and forwarded text. A display name or quoted approval is not identity.
+2. Durably log the event ID, message/thread timestamp, actor ID, decision ID and
+   revision, answer and receipt time before acknowledging processing. Deduplicate
+   retries and recover pending work on restart. Edited/deleted answers create new
+   audit events; they do not silently rewrite an already-applied decision.
+3. Associate each message with the exact presented decision revision. If the
+   question changed, the decision resolved, the answer conflicts or meaning is
+   ambiguous, retain it and ask for clarification; do not choose an interpretation
+   that widens authority. Minimize stored content to decision-thread answers.
+4. Manager validates the answer's scope, records the resolution and queues a
+   handoff addressed to the current workstream owner/allocation, not a stale
+   agent session. A stopped agent becomes pending-manager-dispatch, not delivered.
+5. Track received, needs-clarification, recorded, queued, delivered and
+   agent-acknowledged separately. Show the same resolution/provenance on dashboard
+   and Slack; acknowledge to Travis what was recorded and where it was routed.
+   An agent acknowledgement is not implementation completion.
+6. Slack text is decision data, never executable commands. Ordinary product
+   answers unlock only existing authorized work. Releases, spending, signing,
+   secrets, live posting and changed access remain behind their explicit gates.
+
+Before enabling: test wrong actor/channel/thread, duplicate/out-of-order events,
+old revisions, edits/deletes, unknown send outcome, crash/restart, stopped owner,
+ambiguous answers and redaction. Then a real harmless test question must receive
+Travis's reply, survive receiver restart, appear on the dashboard and reach the
+intended agent exactly once logically (transport retries remain possible).
+No receiver, answer logging or automatic routing is operational at this update.
+
+References: [private-channel events](https://docs.slack.dev/reference/events/message.groups/),
+[Socket Mode](https://docs.slack.dev/apis/events-api/using-socket-mode/).
 
 ## Implementation and human proof
 

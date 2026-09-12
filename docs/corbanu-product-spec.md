@@ -491,6 +491,12 @@ dashboard and alerts are projections. Slack connection, exact destination and
 delivery require verification; a question card or dashboard refresh is not proof
 the human was alerted. No arbitrary Slack reply grants operational authority.
 
+Travis's September 12 notice-format follow-up requests linked sprint summaries,
+expandable issue context and an answerable question only when a decision is
+needed. The matching Slack thread should log his answer and route it to the
+appropriate agent through a verified identity/revision-aware manager handoff;
+this two-way integration remains TO BUILD and requires qualified app access.
+
 Travis additionally requested an ongoing public manual-testing beta program
 under Task Node integration: a separate Corbanu Desktop beta branch/channel,
 candidate-pinned public assignments, independent evidence review and bounded

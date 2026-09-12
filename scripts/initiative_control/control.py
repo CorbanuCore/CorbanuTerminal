@@ -21,6 +21,7 @@ import uuid
 
 from markdown_it import MarkdownIt
 from activity import latest_reports, presentation
+from attention import notices
 
 HERE = Path(__file__).resolve().parent
 MAX_FILE = 1024 * 1024
@@ -303,8 +304,7 @@ def overview(data):
     body = '<section class="heading"><div><p class="eyebrow">DELIVERY / OPERATIONS</p><h1>Initiative map</h1></div>'
     body += f'<div class="counters"><strong>{len(active)} / {plans["active_limit"]}<small>active initiatives</small></strong><strong>{len(reserved)} / 3<small>reserved sprints</small></strong><strong>1<small>sprint per initiative</small></strong></div></section>'
     body += f'<aside class="notice"><strong>Source boundary</strong> {e(source["label"])} · {e(source["branch"])} · {e(source["commit"][:12])}. {e(source.get("note", ""))}<small>Checkout: {e(source.get("checkout", "not recorded"))} · content {e(source.get("tree_digest", "unknown")[:12])}</small><a href="manifest.json">Exact publication manifest</a></aside>'
-    if data["problems"]:
-        body += '<aside class="notice danger"><strong>Manager attention required</strong><ul>' + ''.join(f'<li>{e(p)}</li>' for p in list(dict.fromkeys(data["problems"]))[:20]) + '</ul></aside>'
+    body += notices(data)
     body += '<p class="muted">Current activity describes worker reports. Sprint lifecycle tracks overall completion; an open sprint does not mean an agent is running.</p>'
     body += '<section id="initiatives" aria-label="Active workstreams" class="lanes">'
     status_details = []
