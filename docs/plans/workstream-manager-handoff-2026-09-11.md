@@ -1,5 +1,29 @@
 # Workstream continuation — September 11
 
+## Current handoff — September12 23:16UTC
+
+[Latest three-lane observation](../../qa/initiative-control/status-display/current-handoffs.md)
+and [Slack access decision](../../qa/initiative-control/status-display/slack-access-decision.md)
+supersede prior no-question statements. Actual user-requested browser preflight:
+SocketMode ON, bot scopes incoming-webhook only, events OFF. Consent to posting/
+private-history/message.groups/install/channel invitation requested in this task;
+not yet answered, no live messages or credential copies. Keep this live-only
+hold distinct from manager-owned independent executor/phone/nativeACK gates.
+
+Mendel returned835/249 with100/575/check pass; original Core8 resolved, new24
+test diagnostics at16sites. Manager read exact sites, allocated same2testpaths+
+receipt under original10scope/ceiling, canonical6c94ac012 worker524674860;
+dispatched correction before first material review. Initial101-line sprint checker
+failure retained, corrected100 then3/115/126pass. No runtime expansion or waiver.
+PF13 owner confirmed actualfinalc7 same28command+suite0 run; preparing35/36,
+new candidate not yet received. Five-file isolation588lines/11pass9.230s candidate
+fully read with literal actual policy/cgroup proof; identical private review copy
+at isolated-boundary-review.2o1bkT, first Astra High helper review running.
+Existing proxy/exec-server route proposal fully read: no existing inspected route
+is complete as-is. Proposed proxy hardening is not allocated; actual approved
+inference route/attachment/package must be established before product execution.
+No source/credential/live expansion is inferred from infrastructure preparation.
+
 ## Current handoff — September12 22:45UTC
 
 [Current three-lane assignments](../../qa/initiative-control/status-display/current-handoffs.md)

@@ -36,6 +36,13 @@ implementation_worktrees:
 
 # 3. Task Node integration and delivery control
 
+23:16UTC: [actual Slack access question](../../../qa/initiative-control/status-display/slack-access-decision.md)
+is awaiting Travis's action-time confirmation; SocketMode ON but webhook-only
+bot scopes/events OFF. Only live setup held, not ongoing offline work. Isolated
+engineering returned588lines/11actualRTXpasses and first independent boundary
+review is running. Real confined executor/phone/nativeACK still unqualified;
+the earlier testing-only status understated the actual app-configuration gap.
+
 22:44UTC: [rootless isolation engineering](../../../qa/initiative-control/status-display/isolated-boundary-engineering-20260912.md)
 is allocated to James: exactly five private runner files,525target/650hard,
 actual RTX seccomp/cgroup/cleanup/PTY probes, one boundary review plus necessary

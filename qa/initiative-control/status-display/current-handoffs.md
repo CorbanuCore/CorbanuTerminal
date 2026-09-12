@@ -1,5 +1,16 @@
 # Current workstream handoffs — September 12
 
+## Current handoff — 23:16 UTC
+
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): actual browser preflight found missing bot posting/private-history permissions and reply events, despite Socket Mode being ON. [Access question and context](slack-access-decision.md) was asked directly; live setup waits for Travis's confirmation, not a repeat of prior product approvals. Supervisor code remains integrated with261 passing tests. Five-file isolated engineering returned588 lines/11 actual RTX tests; first independent boundary review is running, not accepted execution. Manager owns remaining confined executor/transport qualification.
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): first ten-file correction returned835/249 with100focused/575shared and normal check passing. Original eight Core errors cleared;24 emitted errors at16 existing native-test sites remain. Manager inspected/allocated only those assertions and dispatched Mendel at524674860; same ten files/ceiling, runtime frozen. [Exact continuation](../../../docs/research/agent-cost-accounting/core-policy-repair-allocation.md). First material review follows correction; S03 stays dependent, collection OFF.
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): sole owner confirmed same final-c7 RTX run completed23:03:38, all28 command exits+suite0. Sourcec7d48e482/Rustbd56b597, original source-guard failure preserved; no test ran on the mismatched source. Owner is preparing literal receipt and already-allocated reviews35/36; manager has not yet accepted that new increment. No duplicate test run, main or protected activation.
+
+The only human hold is the already-asked Slack access expansion. Accounting
+correction, PF13 review closeout and independent infrastructure review continue.
+No sprint is complete. Last verified dashboard publication22:49:26/source527238dfd;
+this updated observation awaits one Luna synchronization.
+
 ## Current handoff — 22:45 UTC
 
 - [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): exact combined37f23b991 compatibility proof accepted:25 command exits+suite0, real RTX/TMUX, unchanged source/locks. Existing sole owner dispatched on [private root dispatch](../../security-levels/sprints/PF-27-S04/descriptor-root-dispatch-allocation-20260912.md), fifteen paths/740target800hard, reviews35/36. Synthetic fresh-root/client bridge explicitly allocated; production factories unchanged. Owner acknowledged clean launch00b07dad10 and began implementation; no new user approval.
