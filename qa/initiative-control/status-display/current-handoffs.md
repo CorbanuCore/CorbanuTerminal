@@ -1,5 +1,17 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 19:18 UTC
+
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): review03 clean; exact24-file accounting candidate locally integrated. Mendel dispatched on combined receiving verification, not another source correction. Prior full Core/shared failures remain visible; serial targeted passes do not erase them.
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): reviewed adapter/single-child62956038e merged locally with accounting atc5e606fa2. Existing owner active on two-child proposal and then exact receiving RTX proof. Approval resolved; broader native/product gates remain.
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): James dispatched on the five-file local fence-loss recovery in fresh worktree tasknode-slack-recovery-20260912 at cleanefb0f95f8. Gated predecessor is integrated; real supervisor/connection/phone/ACK still unqualified, live OFF.
+
+[Combined integration evidence and exact limitations](combined-native-20260912-1911.md).
+One source implementation worker, one receiving-verification worker and the
+existing security owner task are assigned. No open human decisions. Mainf505bd211
+is an older Facilities/service-control import, not the declared receiving source.
+Last verified publication18:48:22/build-p4f8ktvl; new source awaits one Luna sync.
+
 ## Current observation — 18:39 UTC
 
 18:47 final observation: [Slack integration evidence](slack-integration-20260912.md)

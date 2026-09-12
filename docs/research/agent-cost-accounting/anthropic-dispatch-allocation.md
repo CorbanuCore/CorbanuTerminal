@@ -4,6 +4,13 @@ Manager-approved same-S02 allocation, September12 16:08UTC. Original private pro
 
 ## Authoritative manager acceptance and ownership adjustment
 
+19:18: corrected3868/1195 candidate reviewed clean03/helper38557, all24 hashes
+verified. Local worker commitbc9b8b0d8 receivede9d1345ee; accepted security owner
+merged into combinedc5e606fa2. Mendel now performs read-only combined-tree tests,
+not new source edits. [Exact evidence/failed gates](../../../qa/initiative-control/status-display/combined-native-20260912-1911.md).
+Preserve every earlier review and failed full-Core/shared outcome; no live or
+whole-sprint acceptance. Next source allocation waits on actual receiving proof.
+
 18:44 exact reallocation for review02: manager inspected private login builder
 selection and the HTTP builder's terminal bare-client fallback; a Core-local
 copy would duplicate or lose existing routing/CA policy. Accept the four

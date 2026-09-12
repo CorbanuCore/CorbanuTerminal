@@ -2,6 +2,13 @@
 
 ## Current status source — September 12, 19:11 heartbeat
 
+19:18 follow-up: accounting clean-reviewedbc9b8b0d8 receivede9d1345ee; security
+owner62956038e merged locally into combinedc5e606fa2. Native files frozen for
+Mendel's exact receiving verification and existing owner's RTX proof. James
+dispatched on new local-recovery scope at cleanefb0f95f8. No new human question;
+[combined evidence](../../qa/initiative-control/status-display/combined-native-20260912-1911.md)
+distinguishes local integration from still-pending combined tests and enablement.
+
 Accounting redirect correction returned frozen3868total/1195non-test across27
 combined paths; manager verified all24 worker hashes and exact diff. Review03
 is clean, no findings (actual helper38557 exit0). Focused71pass with2flaky/1leaky;
