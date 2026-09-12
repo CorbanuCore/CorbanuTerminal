@@ -270,3 +270,6 @@ mod tests;
 
 #[path = "accounting_compact_values.rs"]
 mod compact_values;
+
+#[path = "accounting_retention_plan.rs"]
+mod retention_plan;
