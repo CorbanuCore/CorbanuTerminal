@@ -18,6 +18,14 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+StageB reviews30 AstraHigh and31 Fable5.1High Corbanu/privateTMUX reserved
+September12 21:11UTC before dispatch, exact sourceb59999635298069831165f0fab08cd6be862f419,
+Rust194ff9575e4016d2c3b45ddd639945fbbbc836ab over accepted6d770938c.
+Measured863 across7paths within manager3e76ee4ec hard900 test/runner exception;
+all18 final TMUX/command exits0, strict lint/parity/unchangedsource/locks pass.
+Two explicit extension slots reserved, none remaining unreserved; old1–29 and
+their scheduled-window accounting preserved. Results pending; no source push.
+
 StageB allocation manager67273f7e grants two necessary new-source reviews:
 30 AstraHigh and31 Fable5.1High Corbanu/privateTMUX, after final B proof.
 0 dispatched/2 available in this explicit extension; preserve1–29 and the
