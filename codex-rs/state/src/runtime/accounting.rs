@@ -1,9 +1,12 @@
-//! PF-60-S02 draft journal. The parent module registers this only under cfg(test).
+//! Accounting journal behind the explicitly installed normal-library facade.
 use super::StateRuntime;
 use anyhow::Context;
 use anyhow::ensure;
 use sqlx::SqliteConnection;
 use uuid::Uuid;
+#[path = "accounting_store.rs"]
+pub mod store;
+
 #[path = "accounting_pricing.rs"]
 mod pricing;
 
@@ -26,6 +29,7 @@ struct Journal<'a> {
 
 impl<'a> Journal<'a> {
     /// Explicit fixture setup only; never called by StateRuntime initialization.
+    #[cfg(test)]
     async fn create_for_tests(runtime: &'a StateRuntime) -> anyhow::Result<Self> {
         sqlx::raw_sql(
             "CREATE TABLE draft_accounting_attempts (

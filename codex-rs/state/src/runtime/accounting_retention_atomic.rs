@@ -1,7 +1,16 @@
-//! Atomic retention and deletion inside the private, test-only accounting fixture.
+//! Complete atomic retention and deletion shared by fixtures and installed stores.
 use super::*;
 
 impl Journal<'_> {
+    pub(in crate::runtime::accounting) async fn retained_day_on_connection(
+        conn: &mut SqliteConnection,
+        thread: ThreadId,
+        day: i64,
+        as_of_ms: i64,
+    ) -> anyhow::Result<RetainedDay> {
+        read_retained_on_connection(conn, thread, day, as_of_ms).await
+    }
+
     pub(in crate::runtime::accounting) async fn maintain_native_on_connection(
         conn: &mut SqliteConnection,
         as_of_ms: i64,
@@ -19,15 +28,15 @@ impl Journal<'_> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(in crate::runtime::accounting::pricing::storage::lifecycle) struct RetentionCoverage {
-    completed_as_of_ms: i64,
-    detail_expired_through_ms: Option<i64>,
-    aggregate_day_floor: i64,
-    oldest_recorded_day: Option<i64>,
+pub struct RetentionCoverage {
+    pub completed_as_of_ms: i64,
+    pub detail_expired_through_ms: Option<i64>,
+    pub aggregate_day_floor: i64,
+    pub oldest_recorded_day: Option<i64>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(in crate::runtime::accounting::pricing::storage::lifecycle) enum RetainedDay {
+pub enum RetainedDay {
     NeedsActivation,
     NeedsMaintenance {
         completed_as_of_ms: i64,

@@ -1,5 +1,6 @@
-//! Immutable synthetic estimates over retained journal evidence; no production DDL.
+//! Immutable estimates over retained journal evidence.
 use super::super::Journal;
+#[cfg(test)]
 use super::super::StateRuntime;
 use super::super::read_attempt;
 use super::super::read_patches;
@@ -27,6 +28,7 @@ struct EstimateStore<'a> {
 }
 
 impl<'a> EstimateStore<'a> {
+    #[cfg(test)]
     async fn create_for_tests(runtime: &'a StateRuntime) -> anyhow::Result<Self> {
         let journal = Journal::create_for_tests(runtime).await?;
         sqlx::raw_sql(
@@ -56,38 +58,7 @@ impl<'a> EstimateStore<'a> {
             .pool
             .begin_with("BEGIN IMMEDIATE")
             .await?;
-        let result = async {
-            let (attempt, observations) = authority(&mut tx, id).await?;
-            // Validate every candidate without calculating unused historical prices.
-            quote_observations(&attempt, &[], candidates)?;
-            for candidate in candidates {
-                if let Some(stored) = read_snapshot(&mut tx, &candidate.id.to_string()).await? {
-                    ensure!(stored == *candidate, "immutable snapshot conflict");
-                }
-            }
-            let binding = binding(&mut tx, id).await?;
-            let quote = match binding {
-                Some(binding) => bound_quote(&mut tx, &attempt, &observations, binding).await?,
-                None => quote_observations(&attempt, &observations, candidates)?,
-            };
-            if let Some(snapshot) = &quote.snapshot {
-                sqlx::query("INSERT INTO draft_accounting_price_snapshots VALUES (?, ?) ON CONFLICT(snapshot_id) DO NOTHING")
-                    .bind(snapshot.id.to_string()).bind(serde_json::to_string(snapshot)?)
-                    .execute(&mut *tx).await?;
-            }
-            sqlx::query("INSERT INTO draft_accounting_price_bindings VALUES (?, ?) ON CONFLICT(attempt_id) DO NOTHING")
-                .bind(id.to_string()).bind(quote.snapshot.as_ref().map(|s| s.id.to_string()))
-                .execute(&mut *tx).await?;
-            let evidence = serde_json::to_string(&observations)?;
-            let payload = serde_json::to_string(&quote)?;
-            sqlx::query("INSERT INTO draft_accounting_estimates VALUES (?, ?, ?) ON CONFLICT(attempt_id, evidence) DO NOTHING")
-                .bind(id.to_string()).bind(&evidence).bind(&payload)
-                .execute(&mut *tx).await?;
-            let stored: String = sqlx::query_scalar("SELECT payload FROM draft_accounting_estimates WHERE attempt_id = ? AND evidence = ?")
-                .bind(id.to_string()).bind(evidence).fetch_one(&mut *tx).await?;
-            ensure!(stored == payload, "immutable estimate conflict");
-            anyhow::Ok(quote)
-        }.await;
+        let result = Journal::persist_price_on_connection(&mut tx, id, candidates).await;
         match result {
             Ok(quote) => {
                 tx.commit().await?;
@@ -275,3 +246,52 @@ mod latest_tests;
 
 #[path = "accounting_lifecycle.rs"]
 mod lifecycle;
+pub use lifecycle::Current;
+pub use lifecycle::DayTotals;
+pub use lifecycle::Metric;
+pub use lifecycle::RetainedDay;
+pub use lifecycle::RetentionCoverage;
+
+impl Journal<'_> {
+    pub(in crate::runtime::accounting) async fn persist_price_on_connection(
+        conn: &mut SqliteConnection,
+        id: Uuid,
+        candidates: &[Snapshot],
+    ) -> anyhow::Result<ObservationQuote> {
+        let (attempt, observations) = authority(conn, id).await?;
+        // Validate every candidate without calculating unused historical prices.
+        quote_observations(&attempt, &[], candidates)?;
+        for candidate in candidates {
+            if let Some(stored) = read_snapshot(conn, &candidate.id.to_string()).await? {
+                ensure!(stored == *candidate, "immutable snapshot conflict");
+            }
+        }
+        let binding = binding(conn, id).await?;
+        let quote = match binding {
+            Some(binding) => bound_quote(conn, &attempt, &observations, binding).await?,
+            None => quote_observations(&attempt, &observations, candidates)?,
+        };
+        if let Some(snapshot) = &quote.snapshot {
+            sqlx::query("INSERT INTO draft_accounting_price_snapshots VALUES (?, ?) ON CONFLICT(snapshot_id) DO NOTHING")
+                .bind(snapshot.id.to_string()).bind(serde_json::to_string(snapshot)?)
+                .execute(&mut *conn).await?;
+        }
+        sqlx::query("INSERT INTO draft_accounting_price_bindings VALUES (?, ?) ON CONFLICT(attempt_id) DO NOTHING")
+            .bind(id.to_string()).bind(quote.snapshot.as_ref().map(|s| s.id.to_string()))
+            .execute(&mut *conn).await?;
+        let evidence = serde_json::to_string(&observations)?;
+        let payload = serde_json::to_string(&quote)?;
+        sqlx::query("INSERT INTO draft_accounting_estimates VALUES (?, ?, ?) ON CONFLICT(attempt_id, evidence) DO NOTHING")
+            .bind(id.to_string()).bind(&evidence).bind(&payload)
+            .execute(&mut *conn).await?;
+        let stored: String = sqlx::query_scalar(
+            "SELECT payload FROM draft_accounting_estimates WHERE attempt_id = ? AND evidence = ?",
+        )
+        .bind(id.to_string())
+        .bind(evidence)
+        .fetch_one(&mut *conn)
+        .await?;
+        ensure!(stored == payload, "immutable estimate conflict");
+        anyhow::Ok(quote)
+    }
+}

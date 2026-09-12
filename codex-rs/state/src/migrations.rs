@@ -4,6 +4,19 @@ use sqlx::SqlitePool;
 use sqlx::migrate::Migrator;
 
 pub(crate) static STATE_MIGRATOR: Migrator = sqlx::migrate!("./migrations");
+static ACCOUNTING_MIGRATOR: Migrator = sqlx::migrate!("./accounting_migrations");
+
+/// Optional accounting history is never adopted by ordinary state migration.
+pub(crate) fn accounting_migrator() -> Migrator {
+    Migrator {
+        migrations: Cow::Borrowed(ACCOUNTING_MIGRATOR.migrations.as_ref()),
+        ignore_missing: false,
+        locking: true,
+        no_tx: false,
+        table_name: Cow::Borrowed("_accounting_migrations"),
+        create_schemas: Cow::Borrowed(&[]),
+    }
+}
 pub(crate) static LOGS_MIGRATOR: Migrator = sqlx::migrate!("./logs_migrations");
 pub(crate) static GOALS_MIGRATOR: Migrator = sqlx::migrate!("./goals_migrations");
 pub(crate) static MEMORIES_MIGRATOR: Migrator = sqlx::migrate!("./memory_migrations");
