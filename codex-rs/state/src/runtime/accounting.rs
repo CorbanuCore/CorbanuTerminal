@@ -7,6 +7,9 @@ use uuid::Uuid;
 #[path = "accounting_pricing.rs"]
 mod pricing;
 
+#[path = "accounting_native.rs"]
+pub(super) mod native;
+
 #[path = "accounting_types.rs"]
 mod types;
 use types::Attempt;
