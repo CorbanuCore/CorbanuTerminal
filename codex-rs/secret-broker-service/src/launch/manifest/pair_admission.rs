@@ -1,7 +1,10 @@
 //! Bounded synthetic admission on the existing pair's sole worker.
 use super::super::spawn::Status;
 use super::*;
+use codex_linux_pidfd_spawn::ChildIdentity;
 use codex_linux_pidfd_spawn::OwnedChild;
+use codex_protected_state::ControllerRoot;
+use codex_protected_state::RootError;
 use nix::poll::PollFd;
 use nix::poll::PollFlags;
 use nix::poll::PollTimeout;
@@ -21,10 +24,16 @@ use std::sync::mpsc;
 /// Identity from the retained kernel owner; test doubles cannot enter production.
 pub(in super::super) trait Process: Child {
     fn matches(&self, peer: BorrowedFd<'_>) -> io::Result<bool>;
+    fn retain(&self) -> io::Result<Option<ChildIdentity>> {
+        Err(io::ErrorKind::Unsupported.into())
+    }
 }
 impl Process for OwnedChild {
     fn matches(&self, peer: BorrowedFd<'_>) -> io::Result<bool> {
         self.is_same_process(peer)
+    }
+    fn retain(&self) -> io::Result<Option<ChildIdentity>> {
+        self.retain_identity().map(Some)
     }
 }
 pub(in super::super) struct AdmissionSpec {
@@ -48,8 +57,21 @@ pub(in super::super) struct AdmittedPeer {
     generation: NonZeroU64,
     stream: UnixStream,
     control: Arc<Shared>,
+    identity: Option<ChildIdentity>,
 }
 impl AdmittedPeer {
+    pub(in super::super) fn serve(&mut self, root: &ControllerRoot) -> Result<(), RootError> {
+        if self.control.cancelled() {
+            return Err(RootError::Unavailable);
+        }
+        // None is consumed authority (or an internal test double), never PF20 permission.
+        let identity = self.identity.take().ok_or(RootError::Invalid)?;
+        let stream = self
+            .stream
+            .try_clone()
+            .map_err(|_| RootError::Unavailable)?;
+        root.serve_owned_child(stream, identity)
+    }
     pub(in super::super) fn role(&self) -> SyntheticChildRole {
         self.role
     }
@@ -91,6 +113,9 @@ impl Drop for AdmissionTicket {
     }
 }
 impl PairHandle {
+    pub(in super::super) fn owns(&self, peer: &AdmittedPeer) -> bool {
+        Arc::ptr_eq(&self.owner.control(), &peer.control) && !peer.control.cancelled()
+    }
     pub(in super::super) fn status(&self) -> Status {
         self.owner.status()
     }
@@ -203,12 +228,18 @@ impl Admission {
         let guard = stream.try_clone()?;
         live(children, control)?;
         live_peer(peer.as_fd())?;
+        let identity = children[index]
+            .as_ref()
+            .ok_or(io::ErrorKind::ConnectionAborted)?
+            .retain()?;
+        live(children, control)?;
         self.channels[index] = Some(guard);
         Ok(AdmittedPeer {
             role: [SyntheticChildRole::Journal, SyntheticChildRole::Policy][index],
             generation: self.spec.generation,
             stream,
             control: Arc::clone(control),
+            identity,
         })
     }
     pub(in super::super) fn close(&self) {

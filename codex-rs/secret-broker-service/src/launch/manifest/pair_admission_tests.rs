@@ -82,6 +82,10 @@ impl Process for Probe {
     fn matches(&self, _: BorrowedFd<'_>) -> io::Result<bool> {
         (self.0)()
     }
+    fn retain(&self) -> io::Result<Option<ChildIdentity>> {
+        // Fault-seam receipts cannot enter PF20; no kernel identity is fabricated.
+        Ok(None)
+    }
 }
 fn admission() -> (mpsc::SyncSender<Request>, Admission) {
     let (tx, rx) = mpsc::sync_channel(2);
@@ -157,6 +161,7 @@ fn pf_27_s01_admission_late_success_and_lost_receiver_close_channels() {
         let (stream, mut peer) = UnixStream::pair().unwrap();
         let guard = stream.try_clone().unwrap();
         let result = AdmittedPeer {
+            identity: None,
             role: SyntheticChildRole::Journal,
             generation: spec().generation,
             stream,
