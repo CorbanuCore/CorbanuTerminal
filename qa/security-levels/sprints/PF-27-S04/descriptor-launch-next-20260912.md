@@ -343,3 +343,121 @@ Return to manager with this exact capability gap. A maintained safe library
 extension or separately qualified launch service could supply it, but neither
 currently has a verified version/API/source allocation. No unsafe shim, C helper,
 nightly feature or numeric-PID fallback is being silently introduced to close it.
+
+## Focused GNU pidfd_spawn qualification — September 12, 2026
+
+**Conditional GO for a separately approved narrow FFI adapter; NO-GO for direct
+use inside the service's `forbid(unsafe_code)` crate or for claiming runtime
+qualification today.** This concrete libc primitive closes the creation-to-pidfd
+gap at source level. It uses held-procfs-path `execve`, not direct `execveat`.
+If a direct syscall is itself mandatory, this backend does not satisfy that
+additional constraint. If immutable image binding/no fallback is the requirement,
+the retained-FD/trusted-procfs construction is a viable qualification target.
+
+### Exact deployed version and matching source, now located
+
+RTX package queries identify Ubuntu 26.04.1, `libc6` and `libc6-dev`
+`2.43-2ubuntu2.4`. Its `/lib/x86_64-linux-gnu/libc.so.6` SHA-256 is
+`85e64f97e348786a8fb4d9f3d52fec289e2fb86bba20f0731dfe61990525e0f7`,
+ELF build ID `066527e430a32768d82741e00b81eebb1a872294`.
+Read-only `objdump -T` confirms both symbols at version GLIBC_2.39. Disassembly
+of `pidfd_spawn` at 0x122970 shows xflags 4 passed to its shared implementation;
+`pidfd_spawnp` passes 5. No call to either function was made.
+
+The installed declaration is in `bits/spawn_ext.h`, not `sys/pidfd.h`:
+`int pidfd_spawn(int *pidfd, const char *path, const posix_spawn_file_actions_t *,
+const posix_spawnattr_t *, char *const argv[], char *const envp[])`.
+Header SHA-256 `6bac139066f0c69b8ac9f228fd982db2078033067a6eb5a22dec98e2493a2424`
+matches the header in the retrieved upstream source archive.
+
+The failed GitHub tag fetch was not treated as source evidence. Instead the
+[Ubuntu security publication](https://api.launchpad.net/1.0/ubuntu/+archive/primary/+sourcepub/18721986)
+returned the exact version's source URLs. Retrieved, not installed or built:
+
+| Source artifact | SHA-256 |
+| --- | --- |
+| `glibc_2.43.orig.tar.xz` | `d9c86c6b5dbddb43a3e08270c5844fc5177d19442cf5b8df4be7c07cd5fa3831` |
+| `glibc_2.43-2ubuntu2.4.debian.tar.xz` | `28103a7cf808c29901c6053d89a4e8299880abfbb850c0d97a09c8df8533e306` |
+| `glibc_2.43-2ubuntu2.4.dsc` | `da10d551ca51076bf7bf663de38369d04e267386b8211c283c2814e68e482ed3` |
+
+Both archives match SHA-256 values in that `.dsc`. Download base:
+`https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/glibc/2.43-2ubuntu2.4/`.
+Local preserved downloads (about 21 MB, all on the external drive):
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/pf27-glibc-source-Ev2rON/`.
+The Debian patch series and patch payloads were inspected for these Linux spawn
+files; no patch changes the examined pidfd_spawn/spawni/clone implementation.
+Only an unrelated Hurd spawni patch matched the broader search. This establishes
+matching package-version source with checksum consistency, not a reproducible
+build match or an independently verified `.dsc` signing chain. `deb-src` is not
+configured on RTX; no apt sources were modified.
+
+### Concrete source/error ownership findings
+
+References below are to the downloaded glibc-2.43 archive, not `master`:
+
+- `sysdeps/unix/sysv/linux/pidfd_spawn.c:23–30` calls `__spawni` with only
+  `SPAWN_XFLAGS_RET_PIDFD` (4). Source SHA-256:
+  `0e0cea67b591e672f7693e019f3a73c4cac708ab2fac1d9d610c5716163e41a4`.
+- `posix/spawn_int.h` defines USE_PATH=1, TRY_SHELL=2, RET_PIDFD=4.
+  `sysdeps/unix/sysv/linux/spawni.c:78–98` permits shell compatibility only
+  with TRY_SHELL, absent here; lines 488–496 select `__execve`, not execvp.
+  This is a direct API selection, not an unenforceable std fast-path preference.
+- `spawni.c:323–332,398–427` checks kernel pidfd/wait support before creation,
+  supplies CLONE_PIDFD to clone3 or its clone fallback, and obtains the pidfd
+  atomically into `args.pidfd`. No post-spawn pidfd_open or PID lookup is needed.
+  Kernel clone fallback retains CLONE_PIDFD; it is not executable-path fallback.
+- `spawni.c:443–480` waits with P_PIDFD and closes the pidfd on reported setup/
+  exec failure. Success writes the owned pidfd through the mandatory non-null
+  out-pointer. Premature child death can still return success: the caller must
+  inspect/reap the returned handle, not infer a running/ready child from rc=0.
+  The known historical exec-failure FD leak fix is present in this source.
+  [Upstream fix and regression](https://sourceware.org/pipermail/glibc-cvs/2024q2/085497.html).
+- `spawni.c` SHA-256:
+  `c03cf7328a31d21af4a98b1ed840a414b4d916831fb55ce542b19d9bd8f696de`.
+  Its internal waitid return is not checked; do not claim verified cleanup
+  under arbitrary seccomp-denied waitid or hostile process-wide reaping state.
+  Those are explicit platform/owner preconditions and failure-test obligations.
+- The call disables pthread cancellation internally and restores it before
+  return. The owning worker must never be externally pthread-cancelled; use
+  cooperative cancellation only. The call remains potentially blocking.
+  The manager-selected CleanupPending/quarantined-permit contract still applies.
+
+### Exact trust-boundary proposal for manager decision
+
+There is no safe wrapper in the inspected nix/rustix APIs. Cached pinned
+`libc 0.2.186` also has no pidfd_spawn declaration. A narrow separate crate,
+proposed `codex-linux-pidfd-spawn`, would therefore introduce a **new first-party
+unsafe/FFI trust boundary**, not remove the service crate's forbid attribute.
+Its only unsafe responsibilities would be the exact C ABI declaration/call,
+spawn-action/attribute initialization and destruction, and immediate unique
+conversion of the returned raw FD to OwnedFd. No Rust callback after clone,
+pre_exec, custom fork/clone implementation or shell is necessary.
+
+The safe interface should consume the held `OwnedFd` plus a bounded fixed recipe
+and return one opaque pidfd-owned process token. Before the call, validate FD>=3,
+seals/profile, procfs and all fixed strings/actions; keep image and pointer arrays
+alive throughout. On rc=0 adopt the raw pidfd before any allocation/logging or
+fallible operation, then hand it only to the existing cleanup owner. On nonzero
+rc propagate the returned errno (not ambient errno) under qualified libc cleanup
+semantics. Never convert through a PID or construct a fictitious std Child.
+The wrapper must not accept arbitrary raw FDs, C pointers, callbacks, paths,
+environment variables or uncontrolled file actions from service callers.
+
+Required explicit allocation: new crate `Cargo.toml`, `BUILD.bazel`,
+`src/{lib.rs,ffi.rs,spawn.rs,spawn_tests.rs}`; workspace/service Cargo dependency,
+Cargo.lock and Bazel lock/registration; plus the previously scoped private
+service owner and integration/hold tests. No such files have been created.
+Estimate adapter 150–250 runtime plus 200–300 tests; service owner/wiring
+200–300 runtime plus 300–450 tests: 850–1300 total nonmechanical. Prefer two
+coherent reviewable stages (real adapter with non-root OS proof, then owner
+integration), neither described as a completed broker service on its own.
+
+Approval must explicitly permit unsafe only in the new reviewed dependency
+boundary, retain `forbid(unsafe_code)` in the service, and accept qualified
+procfs binding rather than require direct execveat. Proof must cover ENOEXEC
+without shell, path replacement with held image, exec/setup failures without
+FD/zombie leaks, pidfd support/resource failure, child early death, wait/signal
+failure handling, stdio/env/cwd, and delayed completion/cancel/drop quarantine.
+Use the accepted non-root fixtures only after source/build/hash allocation.
+Source inspection is now sufficient to recommend this **specific** backend
+boundary for consideration; it is not runtime or release qualification.
