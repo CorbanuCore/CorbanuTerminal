@@ -658,6 +658,15 @@ identity dropping or native installation is included. Default exit78 remains.
 This supersedes the earlier service-only execution instruction and budget hold,
 not any deployment, containment, data-plane or sprint-completion gate.
 
+This bounded child-admission/lifetime source stage is now qualified at
+`bd70f0e6b`: final default3/synthetic13/affected338, strict lint/parity and
+TMUX13+exit78 pass. Astra7/Fable8 findings were repaired; Fable9 is clean.
+[Closeout evidence](../../../qa/security-levels/sprints/PF-27-S04/child-admission-20260912/README.md)
+retains failed/retried runs and review dispositions. Three new slots used;
+the six-hour ledger governs later work. PF27-S04 remains in progress, with
+actual PF20 root wiring, native setup/containment and provider data-plane still
+open. No new principal, service or protected activation was installed.
+
 ## Round-five execution amendment — 2026-09-04
 
 The user authorized these three parallel agents and assigned integration to

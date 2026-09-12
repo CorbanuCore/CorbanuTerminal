@@ -3,6 +3,10 @@
 Planning checkpoint, September 11, 2026 (Phoenix). No new runtime implementation,
 build, independent review or privileged setup is claimed by this document.
 
+Subsequent status: this bounded source stage is qualified at `bd70f0e6b`;
+see [final evidence](child-admission-20260912/README.md). Preserve this original
+scope/test matrix as planning provenance. Native installation remains unapproved.
+
 ## Scope and authority
 
 Existing product initiative, active `p0-security-levels`, sole security sprint

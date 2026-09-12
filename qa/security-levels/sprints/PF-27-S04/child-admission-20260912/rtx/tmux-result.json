@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "tests": 11,
+  "production_exit": 78,
+  "candidate": "/home/travis/security-round5/evidence/pf27-child-admission-20260912/candidate/codex-secret-broker-service",
+  "native_isolation_proven": false,
+  "privileged_installation": false,
+  "user_facing_tui": false
+}

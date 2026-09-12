@@ -22,11 +22,13 @@ Reviews 1–6 are spent; preserve their existing records. Review 6 is documented
 in [resumed service evidence](resume-20260911/README.md).
 
 Window **2026-09-12 05:25:45Z ≤ dispatch < 2026-09-12 11:25:45Z**:
-**0 used / 5 available** at this checkpoint; no new review has started.
+**3 used / 2 available**: review 9 reserved at 06:02 UTC before dispatch.
 
-Planned, not dispatched: review 7 Astra High for the new trusted-child stage;
-review 8 Fable 5.1 High final review through Corbanu/TMUX. Record subsequent
-dispatches below, retaining older windows rather than overwriting them.
+Record subsequent dispatches below, retaining older windows rather than
+overwriting them. These are reviews of the new stage, not repeated service-stage reviews.
 
 | Review | Dispatch UTC | Model / scope | Outcome / evidence |
 | --- | --- | --- | --- |
+| 7 | 2026-09-12 05:44Z | Astra High; child-admission local diff over f2e6d77e4 | Exit 1: P1 stale socket/PID reuse, P2 reaper-spawn failure; both accepted in scope. See child-admission-20260912/astra-seven.json. |
+| 8 | 2026-09-12 05:54Z | Fable 5.1 High through Corbanu/TMUX; repaired child stage and final evidence | Exit 1; runtime correct, one P2 kernel-specific test assertion accepted. See child-admission-20260912/fable-eight.json. |
+| 9 | 2026-09-12 06:03Z (reserved 06:02Z) | Fable 5.1 High through Corbanu/TMUX; test-portability repair and final evidence | Exit 0, no findings; child-admission-20260912/fable-nine.json. Stage review closed; no further pass needed. |

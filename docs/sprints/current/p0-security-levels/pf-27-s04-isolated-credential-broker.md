@@ -22,8 +22,7 @@ updated: 2026-09-11
 September 11 resumption: fresh main-based allocation after human acceptance.
 The earlier missing-checkout report was stale: `security-round5-broker` is clean
 at pushed `cd7457da7`. Reconcile its existing service stage; do not redo it.
-The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/RESUME-20260911.md)
-records exact coordinates, review-six approval and unchanged native setup limits.
+The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/RESUME-20260911.md) records exact coordinates, review history and unchanged native setup limits.
 
 ## Execution mandate
 
@@ -69,9 +68,10 @@ records exact coordinates, review-six approval and unchanged native setup limits
 
 - [x] Reconciled and qualified the service construction stage on main/0.1.42: default 1, synthetic 6, full affected 338, Core 6 and supporting TMUX pass. Fable review 6 found no runtime/security issue; one test-only lint finding was reproduced and fixed, strict Clippy and affected proof rerun successfully. Six reviews spent, no seventh; see `qa/security-levels/sprints/PF-27-S04/resume-20260911/README.md`. No native deployment or activation claimed.
 
+- [x] Qualified trusted-child admission/lifetime in source `bd70f0e6b`: socket-associated pidfd checks, fixed child/role ownership, fencing and preallocated cleanup; default 3, synthetic 13, affected 338, strict Clippy/parity and TMUX13+exit78 pass. Astra7 and Fable8 findings repaired; Fable9 clean. [Evidence](../../../../qa/security-levels/sprints/PF-27-S04/child-admission-20260912/README.md). Three new review slots used under the six-hour budget. Native installation, actual root wiring and protected activation remain unimplemented.
+
 ## Remaining
 
-- [ ] Implement and qualify the bounded [trusted-child admission/lifetime stage](../../../../qa/security-levels/sprints/PF-27-S04/bootstrap-next-20260911.md) within the service crate; preserve default denial. Use the [new six-hour budget](../../../../qa/security-levels/sprints/PF-27-S04/review-budget.md); no privileged setup is approved.
 - [ ] Implement the completed PF-27-S03 OS identity/IPC/handle design and PF-41-S03 durable-event contract; verify controller/broker state cannot be read or rewritten by the real agent process.
 - [ ] Include fresh connections after same-run re-registration with cached TLS handlers and admitted hosts, not only reuse of an old channel. Revocation fences queued dispatch, streams and uploads; new generations cannot inherit old credentials.
 
