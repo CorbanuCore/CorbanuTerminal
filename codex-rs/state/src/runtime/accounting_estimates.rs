@@ -100,6 +100,31 @@ impl<'a> EstimateStore<'a> {
         }
     }
 
+    /// Requires a caller-owned transaction spanning all reads and any later transfer.
+    async fn latest_quote_on_connection(
+        conn: &mut SqliteConnection,
+        id: Uuid,
+    ) -> anyhow::Result<ObservationQuote> {
+        let (attempt, observations) = authority(conn, id).await?;
+        let binding = binding(conn, id).await?;
+        let versions: Vec<String> = sqlx::query_scalar(
+            "SELECT evidence FROM draft_accounting_estimates WHERE attempt_id = ? ORDER BY evidence",
+        )
+        .bind(id.to_string())
+        .fetch_all(&mut *conn)
+        .await?;
+        // A stale or absent latest estimate must not conceal corrupt older evidence.
+        for evidence in versions {
+            Self::read_on_connection(conn, id, &evidence)
+                .await?
+                .context("missing retained estimate")?;
+        }
+        match binding {
+            Some(binding) => bound_quote(conn, &attempt, &observations, binding).await,
+            None => quote_observations(&attempt, &observations, &[]),
+        }
+    }
+
     async fn read_estimate(
         &self,
         id: Uuid,
@@ -243,6 +268,10 @@ async fn authority(
 #[cfg(test)]
 #[path = "accounting_estimates_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "accounting_latest_quote_tests.rs"]
+mod latest_tests;
 
 #[path = "accounting_lifecycle.rs"]
 mod lifecycle;
