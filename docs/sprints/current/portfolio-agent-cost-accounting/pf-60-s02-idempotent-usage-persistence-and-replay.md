@@ -5,13 +5,13 @@ status: in_progress
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 2
-owner: "Codex accounting production-store lane"
-parallel_lane: "accounting-production-store"
-write_scope: "codex-rs/state/src/runtime.rs, codex-rs/state/src/lib.rs, codex-rs/state/src/runtime/accounting.rs, codex-rs/state/src/runtime/accounting_types.rs, codex-rs/state/src/runtime/accounting_pricing.rs, codex-rs/state/src/runtime/accounting_estimates.rs, codex-rs/state/src/runtime/accounting_lifecycle.rs, codex-rs/state/src/runtime/accounting_retention_atomic.rs, codex-rs/state/src/runtime/accounting_native.rs, codex-rs/state/src/runtime/threads.rs, codex-rs/state/src/runtime/accounting_store.rs, codex-rs/state/src/migrations.rs, codex-rs/state/accounting_migrations/0001_usage.sql, codex-rs/state/BUILD.bazel, codex-rs/state/tests/accounting_store.rs, codex-rs/state/src/runtime/accounting_store_tests.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/production-store-increment.md"
-integration_gate: "Exact17-path opt-in normal-library store dispatchedef13; sole accounting owner. Original1900/950 target and1703/1879 candidates retained; manager September12 15:19 grants2150total/1000non-test ONLY for second corrective deletion-timestamp race and proof. One further corrective code pass; if still finding perform mandatory two-cycle classification. Default no-install/collection OFF; separate _accounting_migrations sequence0001, ordinary migrator cannot adopt it. Preserve prior A/B/C1/C2/native, failed reviews81230/13225 and public deletion/explicit test clocks. No schema repair/fake Active; cross-database/90..365late-import/caller/real-price gaps retained. No live actions or worker commits/pushes."
+owner: "Codex accounting native-Anthropic lane"
+parallel_lane: "accounting-native-anthropic"
+write_scope: "codex-rs/core/src/lib.rs, codex-rs/core/src/config/mod.rs, codex-rs/core/src/agent/role.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/client.rs, codex-rs/core/src/memory_stage_one.rs, codex-rs/core/src/accounting.rs, codex-rs/core/src/accounting_prices.rs, codex-rs/core/src/accounting_transport.rs, codex-rs/core/src/accounting_tests.rs, codex-rs/core/src/accounting_prices_tests.rs, codex-rs/core/tests/suite/mod.rs, codex-rs/core/tests/suite/accounting_anthropic.rs, codex-rs/core/tests/suite/accounting_anthropic_recovery.rs, codex-rs/core/tests/suite/accounting_anthropic_support.rs, codex-rs/codex-api/src/lib.rs, codex-rs/codex-api/src/endpoint/anthropic_messages.rs, codex-rs/codex-api/src/endpoint/anthropic_accounting.rs, codex-rs/codex-api/src/endpoint/anthropic_accounting_tests.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/anthropic-dispatch-increment.md"
+integration_gate: "Manager accepts20 worker paths under anthropic-dispatch-allocation.md. Core/Cargo.toml and Cargo/Bazel locks are manager-only serialized dependency step under security-owner lease, not worker scope. Target3500total1350non-test; combined23-path STOP3750/1450. One new code pass plus up to2 scoped corrections, history preserved. DefaultOFF native direct-Anthropic only; actual admission/retry/presence/pricing/reopen proof, no live provider or human readiness. No builds that write locks before manager dependency handoff."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
 branch: "workstream/accounting-pf60-s01-20260911"
-base_commit: "8725e1ff755a5fa974058f465f3553b3f9b884eb"
+base_commit: "c8358dd9b4329036c8f8fb525015bbd795433513"
 depends_on: "PF-60-S01"
 created: 2026-09-09
 updated: 2026-09-12
@@ -23,7 +23,7 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 
 ## Execution mandate
 
-- Next: same-S02 opt-in versioned normal-library store, typed facade and atomic original-price admission/observations; default no-install/collection OFF. Full S02 still owes actual dispatch/presence/trusted-price caller wiring,90..365-day late imports and complete native goldens; S03 stays draft.
+- Next: implement [actual native Anthropic sampling](../../../research/agent-cost-accounting/anthropic-dispatch-allocation.md), with per-send admission, raw SSE presence, trusted original prices and real native retry/reopen proof. Default OFF; other providers and90..365-day import remain unqualified.
 - Excludes: Changing prices, rebilling historical customers, collecting prompts, restoring legacy Plan allowances, or silently converting allowance to cash.
 - Approved target1900total/950conservative non-test including moves/receipt, estimate1515/795; one coherent versioned-installation, normal-library/native lifecycle and atomic price-binding failure/concurrency unit justifies above800, not inherited exceptions. Report measured overage to integrator before expanding; do not compress proof. One NEW code review plus necessary correction and one allocation review if needed; prior usage unchanged.
 
@@ -36,7 +36,7 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 ## Code boundaries
 
 - Existing, read before work: `codex-rs/state/migrations/0041_provider_request_cache_usage.sql`; `codex-rs/app-server/src/request_processors/token_usage_replay.rs`; `codex-rs/tui/src/chatwidget/usage.rs`; `codex-rs/tui/src/token_usage.rs`.
-- Output: front-matter paths are exactly17 future store files, not source permission in this documents-only pass. Manager checks disjoint shared state ownership including threads.rs. Separate _accounting_migrations sequence0001 only; verify receiving collisions, no ordinary migration adoption. No new auth principal/registry/partial transfer API; capture one time.
+- Output: exact20 worker paths in front matter; three manifest/lock paths manager-only. No ownership overlap with PF27 or Slack. Accepted store is read-only, no new schema or engine. Root size exception and exact dependency lease are in the native allocation.
 - Tests/evidence: preserve A/B/C1/C2/native assertions, failures and receipts. Public delete signatures/counts/missing-row semantics and normal no-schema behavior stay unchanged, no blanket activation/failure checks. Normal-library facade gates fixture constructors cfg(test); default installs/collects nothing, installed-store deletion remains atomic even disabled. Separate logs/memory/goals stores remain outside main-state atomicity. No dependencies or real collectors.
 
 ## Preconditions
@@ -75,8 +75,8 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 
 ## Remaining
 
-- [ ] Manager accepts exact actual provider/runtime caller allocation from Mendel, then dispatches same-S02 work with recorded disjoint paths. Preparation is underway; do not repeat the accepted store or treat this as waiting on Travis. Actual request admission/presence/original-price provenance and remaining import/native evidence still required.
-- [ ] New store proof: external normal-library consumers; ordinary migration isolation; failed/partial/checksum/newer schemas fail closed; real install/activation interruption recoverable without fake Active. Full ten-accounting/three-native-table SQL/commit rollback markers, two reopens/retry; priced/NULL/unknown/zero/reordered cases; price-bound admission/delete contention both orders and held snapshots; disabled installed-store deletion. Preserve old proof, no repeated C2 matrix.
+- [ ] Implement the accepted20-path native Anthropic caller after manager dispatch; prove actual per-send admission, present/null/zero wire usage, immutable bundled-price estimates and native root/children/retry/reopen. Manager supplies serialized dependency commit; no new human blocker.
+- [ ] Preserve accepted normal-library store tests and all original failed evidence as the unchanged dependency regression gate; do not re-author its installation/rollback matrix.
 - [ ] Actual dispatch/presence/trusted original-price provenance, permanent deletion-fence qualification and complete native S02 goldens remain outside this store.90..365-day compact-only late import is explicitly unqualified, current guard unchanged, not waived; no new prerequisite chain or product decision for approved defaults. S03 stays draft.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 

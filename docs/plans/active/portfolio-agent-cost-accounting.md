@@ -19,13 +19,15 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "8725e1ff755a5fa974058f465f3553b3f9b884eb"
+    base_commit: "c8358dd9b4329036c8f8fb525015bbd795433513"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
     branch: "workstream/accounting-pf60-s01-20260911"
-    base_commit: "8725e1ff755a5fa974058f465f3553b3f9b884eb"
+    base_commit: "c8358dd9b4329036c8f8fb525015bbd795433513"
 ---
 
 # 2. Accounting — unified agent cost and usage
+
+Latest16:08UTC: manager accepts [native Anthropic sampling allocation](../../research/agent-cost-accounting/anthropic-dispatch-allocation.md),20 worker files plus3 serialized manager dependency files. Direct-first explicit native opt-in, defaultOFF; actual per-send admission/retry identity/raw usage/original bundled-price/reopen proof. Target3500/1350, STOP3750/1450; one new code review plus up to2 scoped corrections, earlier review history retained. Security owner granted a narrow30-minute lockfile lease; no PF27 implementation or unsafe approval. Exact worker dispatch/launch is recorded separately, not inferred from this allocation. S02 continues; S03 remains draft.
 
 Latest15:45UTC: normal-library store accepted at6b2dbcab5 and integrated into
 receiving9518184ac after clean independent review03. All367 combined state/TaskNode
@@ -111,7 +113,7 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Codex accounting production-store lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `8725e1ff755a5fa974058f465f3553b3f9b884eb` | PF-60-S02 exact17-path opt-in normal-library store; production-store-allocation.md, source dispatch pending parent document acceptance/integration |
+| Codex accounting native-Anthropic lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `c8358dd9b4329036c8f8fb525015bbd795433513` | PF-60-S02 exact20-path native caller; anthropic-dispatch-allocation.md; three dependency files serialized by manager |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
 S02 retains its reservation; Travis approved conservative daily expiry in this
