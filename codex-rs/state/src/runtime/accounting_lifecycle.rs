@@ -267,3 +267,6 @@ async fn owned_attempts(
 
 #[path = "accounting_lifecycle_tests.rs"]
 mod tests;
+
+#[path = "accounting_compact_values.rs"]
+mod compact_values;
