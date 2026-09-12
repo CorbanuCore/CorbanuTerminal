@@ -486,8 +486,27 @@ def main():
     server = commands.add_parser("serve")
     server.add_argument("--output", type=Path, required=True)
     server.add_argument("--port", type=int, default=8768)
+    slack_cmd = commands.add_parser("decision-slack", help="Explicit manager-only Slack operations; never started by publication")
+    slack_cmd.add_argument("--publish-state", type=Path, help="Write a redacted local projection; only with project-status")
+    slack_cmd.add_argument("args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    if args.command == "publish":
+    if args.command == "decision-slack":
+        # Lazy registration keeps normal publish/serve independent of Slack setup.
+        try:
+            if args.publish_state is not None:
+                projection = argparse.ArgumentParser(description="Local redacted Slack projection; no network")
+                projection.add_argument("operation", choices=["project-status"])
+                projection.add_argument("--store", type=Path, required=True)
+                projection.add_argument("--live", action="store_true", help="Read existing private journals; does not connect")
+                options = projection.parse_args(args.args)
+                value = decision_feed.project_slack(args.publish_state, options.store, now(), options.live)
+                print(json.dumps(value))
+            else:
+                import decision_manager
+                decision_manager.main(args.args)
+        except Exception:
+            raise SystemExit("Slack operation held; inspect redacted status and retained evidence.") from None
+    elif args.command == "publish":
         data = publish(args.repo.resolve(), args.state.resolve(), args.output.resolve())
         print(f"Published {len(data['documents'])} documents; {len(data['runs'])} reported runs; {len(data['problems'])} warnings")
     elif args.command == "report":

@@ -61,6 +61,40 @@ class SlackFixture(unittest.TestCase):
 
 
 class AlertTests(SlackFixture):
+    def test_same_thread_notice_restart_and_uncertainty_reconciliation(self):
+        self.send()
+        calls = []
+        def uncertain(request):
+            calls.append(request)
+            raise TimeoutError()
+        basis = d.digest(["audited-reply"])
+        result = a.notice(self.store, self.key, "clarification", basis, PIN, uncertain)
+        self.assertEqual(result["state"], "uncertain")
+        self.assertEqual(result["request"]["thread_ts"], "100.000001")
+        for _ in range(2):
+            reopened = a.notice(a.Store(self.root), self.key, "clarification", basis, PIN, uncertain)
+            self.assertEqual(reopened["request"], result["request"])
+        self.assertEqual(len(calls), 1)
+        a.reconcile(self.store, self.key, result["request"]["attempt"], receipt(result["request"]))
+        self.assertEqual(a.notice(self.store, self.key, "clarification", basis, PIN, uncertain)["state"], "sent")
+        with self.assertRaises(d.Invalid):
+            a.notice(self.store, self.key, "clarification", basis, dict(PIN, generation="rotated"), uncertain)
+        self.assertEqual(len(calls), 1)
+
+    def test_store_lock_bound_and_notice_requires_sent_parent(self):
+        with self.store.lock():
+            with self.assertRaises(d.Invalid), a.Store(self.root, lock_timeout=0).lock():
+                self.fail("acquired held lock")
+        with self.assertRaises(d.Invalid):
+            a.notice(self.store, self.key, "acknowledged", d.digest(["ack"]), PIN, lambda _: self.fail("premature notice"))
+        self.send()
+        calls = []
+        for _ in range(2):
+            result = a.notice(a.Store(self.root), self.key, "acknowledged", d.digest(["ack"]), PIN,
+                              lambda request: (calls.append(request), receipt(request))[1])
+            self.assertEqual(result["state"], "sent")
+        self.assertEqual(len(calls), 1)
+
     def test_feed_updates_reuse_sent_notification_across_restart(self):
         self._feed_update_restart(False)
 

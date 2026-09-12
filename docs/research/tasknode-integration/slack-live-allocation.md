@@ -22,6 +22,14 @@ after accepting this allocation; one worker, no overlap with accounting/security
 
 ## Exact ownership and size
 
+The manager's ten rows execute in the parent-only integration worktree
+`/Volumes/CorbanuDrive/Corbanu/worktrees/slack-registration-20260912`, branch
+`integrate/slack-registration-20260912`, base4b9904d306dd8a3c35b9f6d43291ebaed905cccf.
+Worker seven paths/checkout are unchanged. This staging keeps partial code out
+of the canonical publishable receiving branch; no publisher-source switch.
+No extra worker, initiative or sprint reservation. Parent imports only frozen
+worker paths and reviews/tests the exact combined candidate before receiving.
+
 Paths are repository-relative to the owner's checkout. No other paths allocated.
 
 | Owner | Path | Estimated changed lines |
@@ -52,6 +60,31 @@ One new independent code pass plus scoped correction; prior review usage retaine
 Code-blind design/evidence remain required before human-ready handoff, not waived.
 
 ## Implementation contract
+
+18:34 combined candidate: imported exact seven-file worker manifest
+6550f885e4f94883577ee7e2d1add3370f2f4914919f76cc61fb8dc0d96f2564,
+237 tests2675total/1024non-test. Canonical17:22 lifecycle/18:14 setup-retry
+dispositions supersede older scope below: worker2700/1140, parent650/500,
+combined3350/1640, no reset/migration/recovery-send architecture. Review01–05
+and the two-cycle classification remain preserved in the imported receipt.
+Manager snapshot now uses observe_session_locked under the already-owned
+transport lock. All19 feed tests pass33.265s, including real owner loss/lease
+expiry with unchanged journals and no network. This is not actual Slack proof.
+Use one independent combined review06 to cover both the returned correction
+and parent shared registration; do not also repeat worker-only review06.
+It consumes the authorized changed-candidate and combined closeout purposes
+in one pass. Full combined Python/Facilities/governance still required.
+Missing-fence supported recovery remains separate manager work before live.
+
+Parent registration candidate: explicit lazy control.py CLI; local owner-only
+decision-slack-status.json with strict feed/question-revision/context pins and
+redacted per-question delivery/reply counts; version2 transfer with version1
+absence compatibility; invalid cache cannot suppress valid question context.
+No automatic SDK/socket/send during normal publication, no canonical decision
+revision mutation for transport status. Full18 feed tests passed33.013s on
+staging with the frozen second-correction transport; later worker corrections
+and combined review still need integration. Tests include real local ingress,
+two questions and resolved answered-revision display, not live Slack proof.
 
 September12 16:13: first correction returned1688total/768non-test,208 Python
 tests passed. Review02/helper82261 failed with three in-scope P1s: ACK notice

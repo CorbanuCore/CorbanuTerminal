@@ -11,6 +11,35 @@ logs and freshness.” Travis requested contextual dashboard decisions and Slack
 alerts, selecting AmbientCrypto / private “The Corbanu Project” in this task.
 This belongs to PF-80-S01, not a fourth initiative or separate scheduler.
 
+## Shared registration candidate — not deployed or live-qualified
+
+The manager staging checkout implements explicit `control.py decision-slack`
+delegation. Ordinary publish/serve never starts a listener or sends a message.
+`decision-slack status --store PATH` is OFF unless explicitly opted in and needs
+neither an existing transport store, the Slack SDK, credentials nor network.
+
+Before a normal source export, the manager can explicitly produce a local cache:
+`decision-slack --publish-state STATE project-status --store STORE [--live]`.
+Here `--live` only reads the existing private journals; it does not connect.
+Omitting it records OFF without reading STORE. The strict owner-only cache binds
+the exact decision-feed digest and each question's ID/revision/context digest.
+It contains redacted delivery phases and current reply-state counts, not raw
+answers, external message IDs, credential data or a work authorization.
+
+Publication captures cache and feed together in a pinned version2 envelope;
+absence retains version1 compatibility. Malformed or stale-context cache means
+unknown Slack status without discarding a valid decision feed. Resolved cards
+show the original answered question revision, not unrelated historical totals.
+Saved assessment and last-verification timestamps are explicit; after15minutes
+the backend treats the observation as stale. A saved status is not a continuously
+verified connection, and no canonical decision is revised by cache publication.
+
+Eighteen feed tests pass on this uncommitted staging tree, including actual local
+SDK ingress, two-question separation, answered-revision mapping, OFF silence,
+strict malformed-input handling, transfer pins, rollback and freshness. Synthetic
+publisher stdout is not deployment. Combined transport review, source integration,
+normal publication and all actual Slack/phone/agent-ACK cases remain mandatory.
+
 ## Single manager-owned record
 
 One stable decision ID and revision owns: initiative/sprint, owner, raised time,

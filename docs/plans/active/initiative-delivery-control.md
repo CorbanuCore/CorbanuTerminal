@@ -26,9 +26,25 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
     branch: "feat/provider-reauth-health"
     base_commit: "eb7af932bc8cc859122b5b2dbef223fbd45ea25c"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/slack-registration-20260912"
+    branch: "integrate/slack-registration-20260912"
+    base_commit: "4b9904d306dd8a3c35b9f6d43291ebaed905cccf"
 ---
 
 # 3. Task Node integration and delivery control
+
+18:34 combined staging now contains worker237-test/2675-line setup-recovery
+candidate and shared owner/lease-aware status projection;19feed tests pass.
+Canonical current allowance worker2700/1140+parent650/500=3350/1640 applies,
+preserving all review history. One combined review06 covers changed worker and
+parent registration. No live connection or whole-sprint acceptance; older
+observations below are history, not current allocations.
+
+Parent registration staging: the manager implements only its ten already allocated
+shared paths in slack-registration-20260912. James retains his seven worker paths.
+Canonical receiving/export stays management-workstreams-20260911; unreviewed
+staging does not change publication or create another initiative/reserved sprint.
+Only a frozen inspected worker return may be imported for combined tests/review.
 
 Latest16:13UTC: real SDK first correction returned1688total/768non-test with208
 passing Python tests. Review02 found three remaining integration defects: stale
