@@ -1,6 +1,8 @@
 //! Fixed-path synthetic inspection only; no executable launch authority.
 mod files;
 mod schema;
+mod sealed;
+pub use sealed::SyntheticSealedImage;
 
 use std::fs::File;
 use std::io;
@@ -23,6 +25,7 @@ pub struct SyntheticManifestInspection {
     _image: File,
     _stamp: files::Stamp,
     _recipe: SyntheticLaunchRecipe,
+    _digest: String,
 }
 
 impl SyntheticManifestInspection {
@@ -104,6 +107,7 @@ fn inspect_at(root: &File, owner: (u32, u32)) -> io::Result<SyntheticManifestIns
         _image: image,
         _stamp: before,
         _recipe: recipe,
+        _digest: digest,
     })
 }
 

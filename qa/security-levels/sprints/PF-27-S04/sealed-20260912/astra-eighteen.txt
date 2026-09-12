@@ -1,0 +1,3 @@
+autoreview clean: no accepted/actionable findings reported
+overall: patch is correct (0.94)
+No actionable defects found in the staged change. The implementation bounds copying, checks source metadata, verifies kernel seals, validates the sealed destination against the inspected digest, and preserves private descriptor ownership without adding execution authority. Review used read-only inspection; tests were not run.
