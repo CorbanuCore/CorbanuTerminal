@@ -18,6 +18,11 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Manager staged disposition now assigns the still-undispatched28/29 extension
+to descriptor-pair-a-allocation-20260912.md (identity and lifecycle only).
+No review consumed to choose the split. StageB needs a later explicit allowance;
+do not borrow/reset A's slots or review the unqualified combined WIPdb971e9b8.
+
 September12 manager accepted descriptor-pair-next-20260912.md and grants +2
 necessary scoped new-stage reviews:28 Astra High and29 Fable5.1High through
 Corbanu/private TMUX. Both are planned, not dispatched. Preserve scheduled

@@ -42,3 +42,37 @@ fn pf_27_s01_pidfs_identity_matches_process_not_descriptor_number() {
     // Retaining a dead peer still cannot alias an unrelated live process.
     assert_eq!(same_process(me.as_fd(), child_fd.as_fd()).unwrap(), false);
 }
+
+#[test]
+#[ignore = "requires coordinator-hashed static hold on qualified GNU2.43"]
+fn pf_27_s01_pidfs_reaped_owner_rejects_without_reinterpreting_a_peer() {
+    use rustix::fs::MemfdFlags;
+    use rustix::fs::SealFlags;
+    use rustix::fs::fcntl_add_seals;
+    use rustix::fs::memfd_create;
+    use std::io::Write;
+    use std::time::Duration;
+    use std::time::Instant;
+    let mut file = std::fs::File::from(
+        memfd_create("pf27-peer", MemfdFlags::CLOEXEC | MemfdFlags::ALLOW_SEALING).unwrap(),
+    );
+    file.write_all(&std::fs::read(std::env::var_os("PF27_SYNTHETIC_HOLD").unwrap()).unwrap())
+        .unwrap();
+    fcntl_add_seals(
+        &file,
+        SealFlags::WRITE | SealFlags::SHRINK | SealFlags::GROW | SealFlags::SEAL,
+    )
+    .unwrap();
+    let mut child =
+        crate::spawn_synthetic_probe(file.into(), crate::SyntheticRole::Journal).unwrap();
+    let parent = pidfd_open(getpid(), PidfdFlags::empty()).unwrap();
+    assert_eq!(child.is_same_process(parent.as_fd()).unwrap(), false);
+    child.terminate().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while child.try_wait().unwrap().is_none() {
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    let ordinary = std::fs::File::open("/dev/null").unwrap();
+    assert_eq!(child.is_same_process(ordinary.as_fd()).unwrap(), false);
+}

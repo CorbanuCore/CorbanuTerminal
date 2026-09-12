@@ -61,7 +61,7 @@ impl Reservation {
     pub(super) fn acquire() -> io::Result<Self> {
         Self::acquire_from(Arc::clone(&PERMIT))
     }
-    fn acquire_from(permit: Arc<AtomicBool>) -> io::Result<Self> {
+    pub(super) fn acquire_from(permit: Arc<AtomicBool>) -> io::Result<Self> {
         permit
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .map_err(|_| {
@@ -157,9 +157,6 @@ pub(super) struct LaunchHandle {
     shared: Arc<Shared>,
 }
 impl LaunchHandle {
-    pub(super) fn control(&self) -> Arc<Shared> {
-        Arc::clone(&self.shared)
-    }
     pub(super) fn cancel(&self) {
         self.shared.cancel.store(true, Ordering::Release);
     }

@@ -982,16 +982,17 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
-September12 manager accepted the combined receiving security proof on
-c5e606fa2/Rust18cf961a and allocated the [private synthetic pair-owner/admission
-stage](../../../qa/security-levels/sprints/PF-27-S04/descriptor-pair-next-20260912.md).
-Same sole owner/worktree/branch/original base; incremental launch62956038e.
-Exactly eleven source/test/fixture paths, estimate766/hard800 changed lines;
-no shared lock, children.rs/root.rs/PF20/Core/Vault/native activation changes.
-Freeze one-permit/two-child ownership, kernel pidfs+UID admission, bounded queue,
-generation/role receipts and whole-pair fencing. Manager granted two necessary
-new-stage reviews28AstraHigh/29Fable5.1High, preserving all previous usage.
-Implementation and final pair evidence remain pending; no ready/product claim.
+September12 manager accepted combined receiving c5e606fa2/Rust18cf961a proof.
+The initial pair/admission draft reached758 lines before complete test coverage;
+unqualified WIPdb971e9b8 is preserved with hashes locally and onRTX, not accepted.
+Manager narrowed execution to [StageA stable identity and two-child lifecycle](../../../qa/security-levels/sprints/PF-27-S04/descriptor-pair-a-allocation-20260912.md):
+ten exact source/test/fixture paths, hard800 changed lines against62956038e;
+same sole owner/worktree/branch/original base, narrowing launchdb971e9b8.
+Only PairImages and launch_pair(images,deadline) returning existing LaunchHandle;
+no admission/UID/generation/socket surface, shared lock, PF20 or native activation.
+Reviews28AstraHigh/29Fable5.1High now cover A, retaining all historical usage.
+StageB admission/connector/missing cases remain deferred until accepted A and
+a fresh literal manager allocation. No omitted test is waived or called Done.
 
 September12 receiving owner accepted adapterfb7523f4b for branch continuation
 and allocated the [single-child asynchronous owner](../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-next-20260912.md).
