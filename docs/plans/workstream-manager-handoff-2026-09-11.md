@@ -1,13 +1,15 @@
 # Workstream continuation — September 11
 
-## Current status source — September 12, 15:45 UTC
+## Current status source — September 12, 16:13 UTC
 
 Use [current workstream handoffs](../../qa/initiative-control/status-display/current-handoffs.md)
 for current assignments, reviews and publication. Approval recovery is resolved:
 no click required. Accounting store is reviewed/integrated at9518184ac, with367
-combined native tests passing (one leaky). Mendel prepares actual runtime caller
-allocation. James corrects four independently found Slack ingress/recovery issues
-and restores the agreed scope/listener behavior; live Slack and collection stay OFF.
+combined native tests passing (one leaky). Mendel now implements the actual
+native Anthropic caller from87a9a81ad in20 disjoint files; dependency lease was
+completed and released, no new human blocker. James is assigned the second
+Slack correction after208 tests and three remaining review02 findings. Shared
+registration remains manager work; live Slack and collection stay OFF.
 Manager owns shared registration and qualified connection/HTTPS/phone reply/ACK,
 not another generic contract stage. PF27's isolated-adapter question stays open.
 Older checkpoint and

@@ -30,6 +30,15 @@ implementation_worktrees:
 
 # 3. Task Node integration and delivery control
 
+Latest16:13UTC: real SDK first correction returned1688total/768non-test with208
+passing Python tests. Review02 found three remaining integration defects: stale
+permit after an ACK notice, silent SDK disconnect, and pending events before
+resolution. Manager inspected the code and pinned SDK, then dispatched one
+coherent second correction to James. Prior reviews and198-test failures remain.
+Manager owns shared CLI/status registration and actual Slack/phone/native-ACK
+qualification; these are executable manager tasks, not missing human approval.
+Live Slack and Task Node posting remain OFF; S01/beta readiness not claimed.
+
 Latest14:50UTC: offline recovery730577f1d integrated9877c058d after clean
 corrective review04 and169 receiving Python tests plus Facilities/governance.
 Manager accepts1506total/638non-test; original targets and all three failed

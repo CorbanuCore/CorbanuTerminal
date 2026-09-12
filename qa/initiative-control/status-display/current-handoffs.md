@@ -1,5 +1,15 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 16:13 UTC
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Mendel is dispatched on actual native Anthropic sampling from87a9a81ad: per-send durable admission, retry identity, raw usage presence, trusted original prices and native recovery tests.20 disjoint source/test/receipt files, default OFF. Manager completed the existing SQLx test dependency under the security owner's narrow lease and released it. This is implementation, not a finished sprint or live collector.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): first Slack correction passed208 tests. Independent review found three more real integration defects; James is assigned their second coherent correction. Manager owns shared registration and actual private Slack/phone/ACK proof. No new user decision required; live OFF.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): owner021f82e6 freshly checked clean; the [existing isolated-adapter approval](pf27-launch-adapter-decision.md) remains open. Dependency-file coordination did not grant that approval or resume security implementation.
+
+Last verified publication15:49:41UTC fromc8358dd9b/build-qxq_400c, both private
+endpoints and seven Facilities links passed. Current semantic update awaits
+this cycle's one Luna sync; historical observations follow.
+
 ## Current observation — 15:45 UTC
 
 - [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): normal-library store reviewed clean and integrated at9518184ac;367 combined state/TaskNode tests pass, one leaky. Mendel prepares the exact actual provider/runtime caller assignment. Collection remains OFF; S02 is not complete and S03 remains dependent. No new human blocker.

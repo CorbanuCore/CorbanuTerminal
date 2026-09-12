@@ -53,6 +53,17 @@ Code-blind design/evidence remain required before human-ready handoff, not waive
 
 ## Implementation contract
 
+September12 16:13: first correction returned1688total/768non-test,208 Python
+tests passed. Review02/helper82261 failed with three in-scope P1s: ACK notice
+after permit reservation, SDK silent disconnect, and undrained events before
+interpretation/resolution. Parent read literal paths/pinned SDK and dispatched
+second correction in the same seven paths. Worker1900/900 and combined2500/1350
+remain; report overage before edits. Integrator adds one final changed-candidate
+corrective review; retain all prior passes. If still actionable after this
+second cycle, pause and classify remaining findings under the convergence rule.
+The missing-ingress-fence recovery route is additionally flagged for explicit
+disposition, not permission for a silent state reset or new authority.
+
 September12 15:45 correction allocation: first frozen seven-path candidate was
 1381total/688non-test with198 passing Python tests, not live qualification.
 Independent review46183 found four in-scope blockers: lost ingress hold under

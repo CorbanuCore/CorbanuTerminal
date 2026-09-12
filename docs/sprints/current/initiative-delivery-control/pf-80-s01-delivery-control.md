@@ -8,7 +8,7 @@ execution_order: 1
 owner: "Codex Task Node Slack-transport lane"
 parallel_lane: "tasknode-slack-transport"
 write_scope: "scripts/initiative_control/slack_transport.py, scripts/initiative_control/decision_manager.py, scripts/initiative_control/decision_alerts.py, scripts/initiative_control/test_slack_transport.py, scripts/initiative_control/test_decision_manager.py, scripts/initiative_control/test_decision_alerts.py, qa/initiative-control/pf-80-s01/decision-projection/slack-live-receipt.md"
-integration_gate: "Manager accepts exact real-Slack allocation and clean launch before dispatch;7worker/10manager paths,1800total/1000non-test target, stop before1900/1050. One new independent code pass plus scoped correction, prior usage retained. Real SDK/SocketMode/stdio bridge and combined Python/Node/governance; OFF until identity, HTTPS, phone reply/restart/CAS and actual native-agent ACK qualified. Shared registration remains manager-owned; no worker live/credential/task calls."
+integration_gate: "Real-Slack7worker/10manager allocation active; amended worker1900/900 and combined2500/1350 preserve original1800/1000target1900/1050STOP. First correction1688/768 with208tests; review02 has3P1s, same-scope second correction dispatched. One additional changed-candidate corrective review, then mandatory convergence classification if findings remain. Real SDK/SocketMode/stdio and combined Python/Node/governance required. OFF until identity/HTTPS/phone/restart/CAS/actual native ACK qualified. Shared registration manager-owned; no worker live/credentials/tasks."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
 branch: "workstream/tasknode-pf80-s01-20260911"
 base_commit: "0368ed402a9dac4276b427313b9d7335670ee91c"
