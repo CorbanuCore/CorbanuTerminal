@@ -1,4 +1,24 @@
-# Accepted C1 allocation — September12
+# Accepted C2 allocation — September12
+
+This section supersedes historical C1-only dispatch text below, which remains
+preserved. C1 is accepted and integrated into exact base
+afe535c062282f1f1ae50e7feb7e6d8f4d179906; combined335 native tests passed,
+2leaky/0skipped, with unchanged Rust tree after reconciliation. Existing worker
+and branch remain as W below. Parent records actual clean launch descendant.
+
+C2's five literal paths in the C2 table are now the executable allocation.
+Implement the complete maintenance/delete transaction and every stated coupled
+proof; no C3 prerequisite, partial transfer, reduced fault matrix or production
+activation. C1 supplies192 lines of exercised support, but its725 proof lines
+exceeded estimates: C2's766 total/281non-test estimate is not a capacity claim.
+Target800 total/500non-test including receipt; report measured overage to the
+integrator without deleting proof or silently broadening scope. C1's explicit
+one-candidate size exception does not automatically apply to C2. One new C2
+code review plus one necessary correction is authorized; preserve A/B/C1
+review history and unused allowances. Workers do not run model reviews,
+children, commits/pushes, shared-ledger edits or live operations.
+
+## Historical accepted C1 allocation
 
 Integrator accepts the explicit fixture activation bit and fixed C1→C2 boundaries below. C1 only is executable now; C2 is the immediate prepared successor after C1 review and combined-tree proof, not callable partial mutation. Actual base fcd6aad8b9d5f5a571f22a3238f4eb47833fa968; worker/branch unchanged. Parent records clean launch descendant at dispatch. C1 exact ten-path set below supersedes B. Add one C1 code-review pass; A/B passes consumed, prior unused correction retained without reset. Target739 is an estimate, hard800 total/500non-test including receipt; preserve every proof and report measured overage before expanding. No further product question needed. No production activation, schema migration, live collection, worker commits/pushes/reviews/children. The source analysis and proposed C2 proof below are preserved verbatim as rationale, not a second authorization layer.
 
@@ -240,4 +260,3 @@ Future verification only, after the explicit implementation allocation: cached p
 C1 new selector: `retention_plan::reduction::atomic::consumer_tests`; C2: `retention_plan::reduction::atomic::tests`. Register each with its explicit sibling test path, verify nonzero counts, and rerun the existing accounting suite including unchanged A/B on final formatted bytes. Record full added+deleted counts including new files/receipts, exact source/diff digests, commands/exits, errors/LEAK markers, and normal-init/no-draft-table evidence. Parent performs its existing required independent review/combined-tree gate later; none was performed or newly scheduled here.
 
 Human-style intent retained for later qualification: age one of two same-day requests; observe one exact total and honest detail cutoff; reopen twice; retry a suppressed request; inject cleanup failure then retry; delete an old compact-only owner while another retains its price; cross day365 and the extra1ms replay boundary; attempt a100-day late import and see its explicit unsupported qualification. These are source-informed planning cases, not independent code-blind acceptance. This private fixture has no user controls; code-blind/TUI/live-repository work is not applicable to C1/C2's internal-only handoff, and native human/runtime acceptance, crash/power-loss, physical erasure, full late import, benchmarks and release qualification remain pending. Nothing here completes S02 or starts S03.
-

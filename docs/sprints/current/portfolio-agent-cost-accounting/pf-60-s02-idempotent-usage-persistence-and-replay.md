@@ -7,11 +7,11 @@ plan_feature: "PF-60"
 execution_order: 2
 owner: "Codex accounting retention-plan lane"
 parallel_lane: "accounting-retention-plan"
-write_scope: "codex-rs/state/src/runtime/accounting.rs, codex-rs/state/src/runtime/accounting_lifecycle.rs, codex-rs/state/src/runtime/accounting_retention_plan.rs, codex-rs/state/src/runtime/accounting_retention_reduction.rs, codex-rs/state/src/runtime/accounting_retention_atomic.rs, codex-rs/state/src/runtime/accounting_retention_test_support.rs, codex-rs/state/src/runtime/accounting_retention_plan_tests.rs, codex-rs/state/src/runtime/accounting_retention_atomic_test_support.rs, codex-rs/state/src/runtime/accounting_retention_consumers_tests.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/retention-consumers-increment.md"
-integration_gate: "Manager audits exact C1 ten-path fixture setup/admission/retained-read scope and unchanged A/B assertions, one code review plus necessary corrections, combined state/governance proof. No compactor, activation writer, production migration, live collection or worker commits/pushes."
+write_scope: "codex-rs/state/src/runtime/accounting_retention_atomic.rs, codex-rs/state/src/runtime/accounting_lifecycle.rs, codex-rs/state/src/runtime/accounting_retention_atomic_test_support.rs, codex-rs/state/src/runtime/accounting_retention_atomic_tests.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/atomic-retention-increment.md"
+integration_gate: "Manager audits exact C2 five-path complete fixture mutation/delete scope, all14 SQL fault sites plus target-delete/commit failure/reopen/contention/read snapshots; one new-code review plus necessary correction, combined state/governance proof. No callable partial transfer, production migration, live collection or worker commits/pushes."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
 branch: "workstream/accounting-pf60-s01-20260911"
-base_commit: "fcd6aad8b9d5f5a571f22a3238f4eb47833fa968"
+base_commit: "afe535c062282f1f1ae50e7feb7e6d8f4d179906"
 depends_on: "PF-60-S01"
 created: 2026-09-09
 updated: 2026-09-11
@@ -23,7 +23,7 @@ S01 is archived; journal/quotation/storage/contributions/deletion are integrated
 Exact compact values are reviewed/integrated; the worker is closed and previous
 literal scope frozen. Latest reader is now in canonical receiving; the retention preparation allocation below supersedes its frozen scope. The
 [retention handoff](../../../research/agent-cost-accounting/retention-design-handoff.md)
-records approved daily expiry; [latest-quote allocation](../../../research/agent-cost-accounting/latest-quote-allocation.md) is historical; [C1 allocation](../../../research/agent-cost-accounting/retention-coupled-next.md) owns the current mandate.
+records approved daily expiry; [latest-quote allocation](../../../research/agent-cost-accounting/latest-quote-allocation.md) is historical; [C2 allocation](../../../research/agent-cost-accounting/retention-coupled-next.md) owns the current mandate.
 
 ## Execution mandate
 
@@ -40,18 +40,20 @@ records approved daily expiry; [latest-quote allocation](../../../research/agent
 ## Code boundaries
 
 - Existing, read before work: `codex-rs/state/migrations/0041_provider_request_cache_usage.sql`; `codex-rs/app-server/src/request_processors/token_usage_replay.rs`; `codex-rs/tui/src/chatwidget/usage.rs`; `codex-rs/tui/src/token_usage.rs`.
-- Output: front-matter paths are the ten-file C1 consumer allocation; accepted A/B logic/assertions remain frozen except explicit registration/setup adaptations. C2 mutation requires separate dispatch.
+- Output: front-matter paths are the five-file C2 atomic allocation. Accepted A/B/C1 assertions remain frozen; no partial compactor or additional prerequisite stage.
 - Tests/evidence: accepted compact-values receipt; preserve it. Native ABI, dependencies, production migrations and collectors remain excluded.
 
 ## Preconditions
 
 - [x] Plan active under Travis's standing continuation authority; reservation transferred from completed S01, no fourth lane.
 - [x] S01 accepted/archived after defaults approval, combined-tree fixture proof and independently reviewed technical handoff.
-- [x] Exact worker/branch/base and ten-file C1 scope match plan; parent must clean-fast-forward and record launch HEAD at dispatch.
+- [x] Exact worker/branch/base and five-file C2 scope match plan; parent must record clean launch HEAD at dispatch.
 - [x] Travis approved the default policy; synthetic/local tests only, no billing/live collection. Bound this allocation to one worker, at most 500 non-test lines, one independent review plus scoped corrections; no exhausted allowance reset.
 - [x] Parent inspected DayTotals/Decimal visibility and amount/rate parsing distinction; B1 is now reviewed and tested, receipt below.
 
 ## Done
+
+- [x] C1 consumers accepted with recorded1121-line candidate exception, one clean Astra review and combined335passed/2leaky/0skipped9.285s at8cdb6dcf; integrated5406e3506 then reconciledafe535c06 with identical Rust tree. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/retention-consumers-increment.md). No repeated review or new product decision required.
 
 - [x] Pure reduction B ac5a22d67 reviewed clean and integrated at7514be8ec; combined330 state/TaskNode tests pass9.928s, nextest178ce26c-71f5-4405-95b2-817ebdaa1a4b. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/retention-reduction-increment.md). Four paths507lines/131non-test; B code allowance used, unused correction retained. No mutation/runtime claim.
 - [x] Read-only input A8eca814f8 reviewed clean and integrated atfd46c5897; combined325 state/TaskNode tests pass9.100s. No reduction/mutation claim. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/retention-plan-increment.md). Original904-line draft preserved; accepted A775lines.
@@ -72,7 +74,7 @@ records approved daily expiry; [latest-quote allocation](../../../research/agent
 
 ## Remaining
 
-- [ ] Implement [C1 fixture activation/admission/retained reads](../../../research/agent-cost-accounting/retention-coupled-next.md), exact ten-path boundary. C2 is the fixed successor with full coupled mutation/delete/fault/contention proof; no callable partial compactor in C1. Preserve A/B assertions and NULL semantics. Add one C1 code pass; history/unused correction retained. S03 stays draft.
+- [ ] Implement [C2 full atomic fixture retention/deletion](../../../research/agent-cost-accounting/retention-coupled-next.md), exact five-path boundary and complete14-site fault, target-delete, commit-failure, two-reopen, contention and read-snapshot proof. Preserve A/B/C1 assertions and NULL semantics. Add one new C2 code pass plus one necessary correction, preserving history. S03 stays draft.
 - [ ] After reviewing the first increment, manager allocates production migration/dispatch/presence/price/retention wiring and complete S02 golden tests separately; do not broaden this worker's scope.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 

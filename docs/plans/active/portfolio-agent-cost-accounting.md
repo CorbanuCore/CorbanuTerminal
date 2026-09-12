@@ -19,15 +19,15 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "fcd6aad8b9d5f5a571f22a3238f4eb47833fa968"
+    base_commit: "afe535c062282f1f1ae50e7feb7e6d8f4d179906"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
     branch: "workstream/accounting-pf60-s01-20260911"
-    base_commit: "fcd6aad8b9d5f5a571f22a3238f4eb47833fa968"
+    base_commit: "afe535c062282f1f1ae50e7feb7e6d8f4d179906"
 ---
 
 # 2. Accounting — unified agent cost and usage
 
-Current September12: A and [pure reduction B](../../research/agent-cost-accounting/retention-reduction-next.md) are reviewed clean and integrated at7514be8ec; combined330 state/TaskNode tests pass9.928s. B candidateac5a22d67 changes507lines/131non-test. [C1 consumers](../../research/agent-cost-accounting/retention-coupled-next.md) now owns the exact ten-path scope, with explicit fixture activation compatibility and C2 fixed next. Integrator adds one C1 code pass; prior A/B usage and unused correction retained. No retention mutation/runtime or S03 activation.
+Current September12: C1 is reviewed clean and integrated at5406e3506, reconciled into afe535c06; combined335 state/TaskNode tests passed (2leaky,0skipped). [C2 allocation](../../research/agent-cost-accounting/retention-coupled-next.md) now owns five literal paths for complete atomic fixture retention/deletion and coupled fault/contention proof. C1's measured1121-line candidate exception remains recorded, not reset. Integrator adds one review of new C2 code plus one necessary correction pass; no repeat C1 review. Production stays OFF and S03 remains dependent.
 
 Policy: repository-root `AGENTS.md`. Lifecycle: [plans](../index.md).
 Portfolio: [source coverage, sequencing and human capacity](../portfolio-2026-09-09.md).
@@ -97,7 +97,7 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Codex accounting retention-plan lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `fcd6aad8b9d5f5a571f22a3238f4eb47833fa968` | PF-60-S02 ten-path C1 fixture consumers; exact mandate in retention-coupled-next.md |
+| Codex accounting retention-plan lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `afe535c062282f1f1ae50e7feb7e6d8f4d179906` | PF-60-S02 five-path C2 atomic fixture retention/deletion; exact mandate in retention-coupled-next.md |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
 S02 retains its reservation; Travis approved conservative daily expiry in this
