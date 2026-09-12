@@ -1051,6 +1051,19 @@ ON CONFLICT(id) DO UPDATE SET
     /// Spawn edges and thread rows are deleted last so a failed delete can be retried with enough
     /// state left to rediscover the same spawned subtree.
     pub async fn delete_threads_strict(&self, thread_ids: &[ThreadId]) -> anyhow::Result<u64> {
+        self.delete_threads_at(
+            thread_ids,
+            #[cfg(test)]
+            Utc::now().timestamp_millis(),
+        )
+        .await
+    }
+
+    pub(super) async fn delete_threads_at(
+        &self,
+        thread_ids: &[ThreadId],
+        #[cfg(test)] as_of_ms: i64,
+    ) -> anyhow::Result<u64> {
         if thread_ids.is_empty() {
             return Ok(0);
         }
@@ -1068,11 +1081,45 @@ ON CONFLICT(id) DO UPDATE SET
             self.thread_goals.delete_thread_goal(*thread_id).await?;
         }
 
+        #[cfg(not(test))]
         let mut tx = self.pool.begin().await?;
+        #[cfg(test)]
+        let mut tx = super::accounting::native::begin_delete(&self.pool).await?;
+        let result = Self::delete_threads_on_connection(
+            &mut tx,
+            thread_ids,
+            #[cfg(test)]
+            as_of_ms,
+        )
+        .await;
+        match result {
+            Ok(rows) => {
+                tx.commit().await?;
+                Ok(rows)
+            }
+            Err(error) => {
+                tx.rollback().await?;
+                Err(error)
+            }
+        }
+    }
+
+    /// Main-state cleanup only; earlier logs, memories and goals have separate commits.
+    pub(super) async fn delete_threads_on_connection(
+        conn: &mut sqlx::SqliteConnection,
+        thread_ids: &[ThreadId],
+        #[cfg(test)] as_of_ms: i64,
+    ) -> anyhow::Result<u64> {
+        #[cfg(test)]
+        super::accounting::native::delete_on_connection(conn, thread_ids, as_of_ms).await?;
+        let thread_id_strings = thread_ids
+            .iter()
+            .map(ThreadId::to_string)
+            .collect::<Vec<_>>();
         for thread_id_string in &thread_id_strings {
             sqlx::query("DELETE FROM thread_dynamic_tools WHERE thread_id = ?")
                 .bind(thread_id_string)
-                .execute(&mut *tx)
+                .execute(&mut *conn)
                 .await?;
         }
         for thread_id_string in &thread_id_strings {
@@ -1081,19 +1128,17 @@ ON CONFLICT(id) DO UPDATE SET
             )
             .bind(thread_id_string)
             .bind(thread_id_string)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await?;
         }
         let mut rows_affected = 0;
         for thread_id_string in &thread_id_strings {
             rows_affected += sqlx::query("DELETE FROM threads WHERE id = ?")
                 .bind(thread_id_string)
-                .execute(&mut *tx)
+                .execute(&mut *conn)
                 .await?
                 .rows_affected();
         }
-        tx.commit().await?;
-
         Ok(rows_affected)
     }
 }

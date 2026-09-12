@@ -1,6 +1,23 @@
 //! Atomic retention and deletion inside the private, test-only accounting fixture.
 use super::*;
 
+impl Journal<'_> {
+    pub(in crate::runtime::accounting) async fn maintain_native_on_connection(
+        conn: &mut SqliteConnection,
+        as_of_ms: i64,
+    ) -> anyhow::Result<()> {
+        maintain_on_connection(conn, as_of_ms).await
+    }
+
+    pub(in crate::runtime::accounting) async fn delete_native_on_connection(
+        conn: &mut SqliteConnection,
+        owner: ThreadId,
+        as_of_ms: i64,
+    ) -> anyhow::Result<()> {
+        delete_on_connection(conn, owner, as_of_ms).await
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub(in crate::runtime::accounting::pricing::storage::lifecycle) struct RetentionCoverage {
     completed_as_of_ms: i64,
@@ -236,3 +253,7 @@ mod consumer_tests;
 #[cfg(test)]
 #[path = "accounting_retention_atomic_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "accounting_native_tests.rs"]
+mod native_tests;
