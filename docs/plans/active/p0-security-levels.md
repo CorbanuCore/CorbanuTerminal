@@ -982,6 +982,17 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
+Manager accepted receiving Stage B e1cc38a70/Rust2588dfe0: all17 commands+suite0,
+actual RTX/TMUX/provenance and unchanged locks verified. Next sole-owner
+[descriptor identity compatibility allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-allocation-20260912.md)
+starts at clean6b393f134 with ten exact paths/hard800, including narrow PF20
+dependency surfaces now serialized to this owner. Reviews33/34 authorized without
+resetting1–32. No native/default activation or whole-sprint acceptance.
+
+Combined Stage A63cbce998/Rust205e89cd remains accepted; all15 scoped exits0.
+The receiving receipt is retained by the integration manager; owned
+[Stage A proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-pair-20260912/README.md) remains unchanged.
+
 StageB private descriptor admission is qualified for manager receiving at
 source7839f9f653a3471bb9bbed19ebc7bed43308bbe3/Rust5a4ee88b5fe4c9b946842a4709f9b88f85c54c79,
 892changed lines/same7paths within amended900. [Literal proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-admission-20260912/README.md):
@@ -991,7 +1002,7 @@ read-onlyparity/source/locks and actual-key RTX TMUX pass. Astra30 P2 bufferedEO
 reproduced/repaired; Fable31 missingreceipt fixed; Fable32 patchcorrect/exit1
 soleP3 tablecount fixed without runtime change or extra review. Originals
 preserved, no sourcepush/native/protected/product acceptance. Manager owns
-receiving/combinedproof and next allocation; policy1.7 N/A only this increment.
+receiving/combinedproof and next allocation, now accepted above; policy1.7 N/A only this increment.
 
 StageB now allocated by manager67273f7e19f3d515086147c7f8408245e986369d after
 accepted combinedA63cbce998 proof. [Literal admission allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-admission-allocation-20260912.md):
