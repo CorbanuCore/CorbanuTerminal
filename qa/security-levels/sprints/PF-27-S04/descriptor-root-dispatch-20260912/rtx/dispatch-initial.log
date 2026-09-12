@@ -1,0 +1,42 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s
+────────────
+ Nextest run ID 0befa18c-bb4d-45d7-a9d4-f544ceebd247 with nextest profile: local
+    Starting 6 tests across 7 binaries (70 tests skipped)
+        FAIL [   0.029s] (1/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_protocol_rejections
+  stdout ───
+
+    running 1 test
+    test launch::manifest::root_dispatch::tests::pf27_root_dispatch_protocol_rejections ... FAILED
+
+    failures:
+
+    failures:
+        launch::manifest::root_dispatch::tests::pf27_root_dispatch_protocol_rejections
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 54 filtered out; finished in 0.03s
+
+  stderr ───
+
+    thread 'launch::manifest::root_dispatch::tests::pf27_root_dispatch_protocol_rejections' (1121146) panicked at secret-broker-service/src/launch/manifest/root_dispatch_tests.rs:143:18:
+    assertion failed: `(left == right)`
+
+    Diff < left / right > :
+     Err(
+    <    Unavailable,
+    >    Invalid,
+     )
+
+
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.041s] (2/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_lost_reply
+        PASS [   0.051s] (3/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_wrong_and_stale_receipts
+        PASS [   0.065s] (4/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_actual_namespaces_and_duplicate
+        PASS [   0.090s] (5/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_construction_failures
+        PASS [   0.798s] (6/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_lifecycle
+────────────
+     Summary [   0.798s] 6 tests run: 5 passed, 1 failed, 70 skipped
+        FAIL [   0.029s] (1/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_protocol_rejections
+error: test run failed
+error: recipe `test` failed on line 82 with exit code 100

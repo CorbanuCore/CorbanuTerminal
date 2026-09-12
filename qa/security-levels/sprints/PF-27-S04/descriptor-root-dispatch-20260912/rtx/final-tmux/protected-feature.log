@@ -1,0 +1,37 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-execpolicy v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/execpolicy)
+   Compiling codex-utils-path v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/utils/path-utils)
+   Compiling codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/linux-pidfd-spawn)
+   Compiling codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/protocol)
+   Compiling codex-api v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/codex-api)
+   Compiling codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/file-system)
+   Compiling codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/git-utils)
+   Compiling codex-otel v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/otel)
+   Compiling codex-model-provider-info v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/model-provider-info)
+   Compiling codex-features v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/features)
+   Compiling codex-config v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/config)
+   Compiling codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-root-dispatch-20260912/codex-rs/protected-state)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 19.39s
+────────────
+ Nextest run ID 24559ca4-4be1-4799-a457-ea9d9bceebd3 with nextest profile: local
+    Starting 18 tests across 1 binary (6 tests skipped)
+        PASS [   0.003s] ( 1/18) codex-protected-state native::tests::pf20_s03_native_replay_cross_generation_and_oversized_frames_deny
+        PASS [   0.005s] ( 2/18) codex-protected-state native::tests::pf20_s03_lost_reply_consumes_capability_without_retry
+        PASS [   0.005s] ( 3/18) codex-protected-state native::tests::pf20_s03_authenticated_definite_conflict_is_not_ambiguous
+        PASS [   0.017s] ( 4/18) codex-protected-state native::tests::pf20_s03_post_exec_child_native_cas_recovery
+        PASS [   0.017s] ( 5/18) codex-protected-state store::tests::pf20_s03_data_rollback_rejected_by_real_pf41_journal
+        PASS [   0.020s] ( 6/18) codex-protected-state native::tests::pf20_s03_saturated_native_backlog_fails_without_waiting
+        PASS [   0.020s] ( 7/18) codex-protected-state store::tests::pf20_s03_open_directory_permission_drift_latches_unavailable
+        PASS [   0.020s] ( 8/18) codex-protected-state store::tests::pf20_s03_successor_overflow_and_generation_regression_deny
+        PASS [   0.028s] ( 9/18) codex-protected-state store::tests::pf20_s03_non_regular_root_record_never_blocks_before_rejection
+        PASS [   0.010s] (10/18) codex-protected-state store::tests::pf20_s03_torn_pending_and_symlink_replacements_latch_unavailable
+        PASS [   0.029s] (11/18) codex-protected-state store::tests::pf20_s03_real_second_process_cannot_acquire_controller_lock
+        PASS [   0.013s] (12/18) codex-protected-state store::tests::pf20_s03_foreign_binding_generation_and_sequence_never_commit
+        PASS [   0.030s] (13/18) codex-protected-state native::tests::pf20_s03_partial_frame_obeys_one_total_deadline
+        PASS [   0.032s] (14/18) codex-protected-state store::tests::pf20_s03_enrollment_cas_restart_and_wrong_namespace
+        PASS [   0.037s] (15/18) codex-protected-state store::tests::pf20_s03_policy_anchor_retains_exact_existing_payload
+        PASS [   0.047s] (16/18) codex-protected-state store::tests::pf20_s03_every_failed_durability_boundary_withholds_and_latches
+        PASS [   0.066s] (17/18) codex-protected-state store::tests::pf20_s03_lost_corrupt_key_registry_head_and_partial_enrollment_deny
+        PASS [   2.014s] (18/18) codex-protected-state native::tests::pf20_s03_inherited_socketpair_does_not_prove_child_identity
+────────────
+     Summary [   2.015s] 18 tests run: 18 passed, 6 skipped
