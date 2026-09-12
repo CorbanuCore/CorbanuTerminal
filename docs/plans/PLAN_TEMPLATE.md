@@ -117,6 +117,14 @@ initiative remains unfinished until every acceptance and release gate passes.
 
 ## Automated evidence
 
+Code-blind functional gate: `<frozen design, independent executor/run identities,
+isolation receipts, exact-package results and independent review; or accepted N/A>`.
+Follow repository-root `AGENTS.md` and `qa/code-blind-functional/README.md`.
+Reserve one design pass and one evidence check within the track's existing
+review allowance; allocate independent isolated execution separately. Do not
+expose source or prior findings to designer/executor; name the manager responsible
+for packet provisioning, isolation validation and failure replay.
+
 Run fix and formatting tools before the final affected tests.
 
 | Check | Final-tree command | Result | Artifact |
@@ -173,6 +181,7 @@ separate key actions. Corbanu `exec` is not acceptable proof.
 - [ ] Product linkage, scope, invariants, and worktrees are current.
 - [ ] Every implementation unit is represented by a valid single-feature sprint.
 - [ ] Required final-tree automated evidence passes.
+- [ ] Code-blind cases independently executed under enforced isolation; schema-2 handoff check and independent evidence review pass (or accepted non-user-facing N/A); review ledger linked.
 - [ ] Required true-TUI and live-repository evidence passes.
 - [ ] Human acceptance passes.
 - [ ] Finished documentation matches the candidate.

@@ -65,6 +65,7 @@ worker has started. Manager receipt records native agent ID and actual HEAD.
 - [ ] Manager receives reviewed commit/evidence and controls source-sync cutover; existing remote service stays untouched by worker.
 
 ## Verification
+\n+- [ ] Apply [independent isolated execution](../../../../qa/code-blind-functional/isolated-execution.md) to affected functional handoff; record schema-2 proof or integrator-accepted internal-only N/A and later gate. Historical tests are not upgraded.
 
 - [ ] Focused: `python3 -m unittest discover -s scripts/initiative_control -p 'test_*.py'`; install only pinned requirements in a disposable venv.
 - [ ] Governance: `python3 docs/plans/check.py`, `python3 docs/sprints/check.py`, `git diff --check`.

@@ -79,6 +79,8 @@ owner must compare actual diffs to scope and record final combined-tree evidence
 4. Execute only `Remaining` items; move verified work to `Done` with `[x]`.
 5. Run formatting before final affected tests and true-TUI QA.
 6. Complete every verification and exit-evidence checkbox.
+   Apply the root policy's independent isolated functional execution gate at
+   applicable handoffs; link schema-2 receipts and a separate evidence review.
 7. Set status to `completed`, move the file to `archive/<plan-slug>/`, and remove
    it from current MkDocs navigation.
 8. Replace the plan's current-sprint link with release or completion evidence.
