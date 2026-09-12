@@ -5,10 +5,10 @@ status: in_progress
 plan_file: "docs/plans/active/initiative-delivery-control.md"
 plan_feature: "PF-80"
 execution_order: 1
-owner: "Codex Task Node Slack-recovery lane"
-parallel_lane: "tasknode-slack-recovery"
-write_scope: "scripts/initiative_control/decision_alerts.py, scripts/initiative_control/decision_replies.py, scripts/initiative_control/test_decision_alerts.py, scripts/initiative_control/test_decision_replies.py, qa/initiative-control/pf-80-s01/decision-projection/slack-contract-receipt.md"
-integration_gate: "Manager accepts exact offline Slack recovery allocation before dispatch; five new files, target1200total/650non-test explicit coherent-unit exception, one new-code review plus necessary correction preserving prior usage. Verify durable intent/uncertainty/reply CAS/handoff restart and synthetic identity/redaction failures; final combined Python/Node/governance. No live transport, registration, credentials, shared state, TaskNode or agent tool calls."
+owner: "Codex Task Node Slack-transport lane"
+parallel_lane: "tasknode-slack-transport"
+write_scope: "scripts/initiative_control/slack_transport.py, scripts/initiative_control/decision_manager.py, scripts/initiative_control/decision_alerts.py, scripts/initiative_control/test_slack_transport.py, scripts/initiative_control/test_decision_manager.py, scripts/initiative_control/test_decision_alerts.py, qa/initiative-control/pf-80-s01/decision-projection/slack-live-receipt.md"
+integration_gate: "Manager accepts exact real-Slack allocation and clean launch before dispatch;7worker/10manager paths,1800total/1000non-test target, stop before1900/1050. One new independent code pass plus scoped correction, prior usage retained. Real SDK/SocketMode/stdio bridge and combined Python/Node/governance; OFF until identity, HTTPS, phone reply/restart/CAS and actual native-agent ACK qualified. Shared registration remains manager-owned; no worker live/credential/task calls."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
 branch: "workstream/tasknode-pf80-s01-20260911"
 base_commit: "0368ed402a9dac4276b427313b9d7335670ee91c"
@@ -18,7 +18,7 @@ updated: 2026-09-11
 ---
 
 # PF-80-S01 — Native Task Node delivery-control integration
-September12: F01 corrected/reviewed; actual browser packet returned, independent evidence check running. DEC021partial/DEC025advisory remain. [Slack recovery allocation](../../../research/tasknode-integration/slack-recovery-allocation.md) owns the next five new files; manager review/integration precedes dispatch. No live Slack or unqualified human-readiness claim.
+September12: offline Slack recovery reviewed/integrated,169 receiving tests pass. [Real Slack allocation](../../../research/tasknode-integration/slack-live-allocation.md) owns real SDK/manager bridge continuation; DEC021partial/DEC025advisory and live gates remain.
 
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
 Setup/validity decisions approved; manager review/checks precede new dispatch.
@@ -43,7 +43,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - Port: `scripts/initiative_control/` from the recovery source; audit every file, no state/auth/credential directories.
 - Planned contract and tests: `docs/research/tasknode-integration/`, `qa/initiative-control/pf-80-s01/`, focused tests beside the ported scripts.
 - Manager alone owns plan/sprint allocation, CI registration and live dashboard state; submit a handoff for any needed shared changes.
-- Previous native/projection/age scopes are frozen. Front matter allocates offline Slack sender/reply recovery; reuse decisions.py CAS unchanged. No live authority inferred.
+- Previous native/projection/reply scopes are frozen. Front matter allocates real Slack transport/manager callable; linked allocation owns exact shared manager registration. No live authority inferred.
 
 ## Preconditions
 
@@ -52,7 +52,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact owner, worker worktree/base and disjoint scope allocated; dispatch waits for the verified main merge and worker fast-forward.
 
 ## Done
-- [x] First Slack recovery review's two duplicate-delivery P2s reproduced and corrected;161 Python/Facilities tests pass. Manager accepts1274total/590non-test narrow candidate disposition, original1200target/history retained. Corrective review02 has an open edited-reply recovery finding; same-path cycle2 is running, not accepted code. [Review and integration ledger](../../../../qa/initiative-control/status-display/integration-20260912-1356.md).
+- [x] Offline recovery730577f1d integrated9877c058d after clean review04;169 receiving Python/Facilities/governance pass. Manager accepts1506/638; original1151/1274/1412 and three failed reviews remain. [Review ledger](../../../../qa/initiative-control/status-display/integration-20260912-1356.md).
 - [x] Corrected F01 age1a6d9c8df reviewed/integrated at60c5671b9;122Python/Facilities Node pass. Initial review P2 ID collision corrected, one added corrective review clean; prior usage retained. [Receiving proof](../../../../qa/initiative-control/status-display/integration-20260912-1232.md). Actual browser/evidence qualification remains separate.
 - [x] All26 original browser cases executed at72854ec77; independent check verified714filehashes,24supported/DEC021partial/DEC025advisory. F01 and Facilities phone-table observation retained; original evidence not relabeled as acceptance of newer code.
 - [x] Feed72854ec77 accepted590lines/281non-test after reproduced destination-less export failure, compatibility correction and clean additional review;111combined tests pass including actual server. [Receipt](../../../../qa/initiative-control/pf-80-s01/decision-projection/feed-receipt.md). Prior reviews preserved; independent evidence remains pending.
@@ -76,7 +76,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact-goal reconciliation177ec93fc reviewed clean and integrated at3898eaa65;73 native tests pass there. In-memory exact-ID GET, strict injected observation and preserved404uncertainty; no send/retry/live claim. [Receipt](../../../../qa/initiative-control/pf-80-s01/native-reconciliation/receipt.md).
 
 ## Remaining
-- [ ] Implement [Slack recovery](../../../research/tasknode-integration/slack-recovery-allocation.md) after dispatch: durable parent/thread intent, verified-envelope intake, exact revision-bound manager CAS and restart-safe handoff with injected transports; complete failure/concurrency proof and concrete live-I/O successor. Target1200/650, no compressed proof or silent overage.
+- [ ] Implement [real Slack transport/bridge](../../../research/tasknode-integration/slack-live-allocation.md) after clean launch; manager owns shared registration and actual setup. Preserve predecessor regressions; qualify phone reply/restart/CAS/actual-agent ACK before ongoing enablement.
 - [ ] Resolve retained DEC021 mixed-feed useful-content failure and baseline-provenance limit without rewriting cases; [completed independent check](../../../../qa/initiative-control/status-display/age-evidence-20260912.md) supports F01 age/collision only. No human-readiness claim or blocking independent Slack implementation; DEC025 remains advisory.
 - [ ] Manager scopes accessible recovery/input/retention and restart/cross-process fences before the later CLI allocation; this is manager work, not unanswered product approval.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.

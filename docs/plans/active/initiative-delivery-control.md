@@ -30,14 +30,14 @@ implementation_worktrees:
 
 # 3. Task Node integration and delivery control
 
-Latest14:18UTC: [manager evidence](../../../qa/initiative-control/status-display/integration-20260912-1356.md)
-records actual Slack recovery reviews. Earlier duplicate-delivery and edited-reply
-issues were corrected with167 Python tests. Review03 found a final-dispatch
-context race; parent performed the two-cycle scope pause and authorized one narrow
-same-owner correction plus review. James implements it in the same five paths.
-Manager accepts1412total/624non-test for correction2; original1151/1274 candidates
-and failed reviews remain history. No new contract, recipient or live authority;
-different-owner findings must be escalated. Live Slack remains OFF.
+Latest14:50UTC: offline recovery730577f1d integrated9877c058d after clean
+corrective review04 and169 receiving Python tests plus Facilities/governance.
+Manager accepts1506total/638non-test; original targets and all three failed
+reviews remain in the receipt. [Real Slack allocation](../../research/tasknode-integration/slack-live-allocation.md)
+owns the sequential seven-file worker plus ten manager-owned paths,1800/1000
+target and1900/1050 reallocation boundary. Native-subagent bridge, real SDK,
+registration and qualified connection/HTTPS/phone/ACK evidence are next.
+No new recipient decision, live activation or full sprint acceptance is inferred.
 
 Current September12: F01 age1a6d9c8df reviewed/integrated;122Python/Facilities Node pass. Laplace returned exact-package browser proof: age and legal-ID history regression pass;152 no-exposure trials, DEC021mixed-feed useful-content expectation still partial. Darwin independently checks the packet; no new human-readiness claim. Earlier code/design/evidence usage and corrected P2 remain recorded. [Slack recovery allocation](../../research/tasknode-integration/slack-recovery-allocation.md) now owns five new files, target1200total/650non-test with explicit coherent-unit exception, one new-code review plus necessary correction. Manager reviews/integrates allocation before Astra High dispatch; real Slack/Task Node stay OFF. UI evidence does not block this independent offline successor.
 
