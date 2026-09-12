@@ -1,0 +1,71 @@
+# PF27 next proposal — qualify a self-contained synthetic probe artifact
+
+**Proposal only; receiving-owner acceptance required before implementation.**
+Sealed-image checkpoint `140e094adc71da6e74e9017fce5d9b85b92ce956` is on main;
+its main window is released. Source `ee1ac023c` / Rust
+`0aa65bd04f5e30f3a21e1309aac7aa6b83336859` is unchanged.
+
+PF-27-S04 remains the sole security allocation: owner `/root`, branch
+`feat/security-broker-resume-20260911`, worktree
+`/Volumes/CorbanuDrive/Corbanu/worktrees/security-broker-resume-20260911`, original
+allocation base `d870c92dab2bf3fbb602dc3b8447fe9f3534aecb` unchanged. Product
+heading **Non-negotiable controls**: “Permit agents to reference credentials
+only by label; resolve them solely inside the trusted execution boundary.”
+
+## Decision requested
+
+Recommend qualifying a statically linked version of the existing synthetic probe
+before designing a dynamic-loader deployment closure. This is an explicit change
+to the proposed artifact strategy, not a claim that the current probe is static.
+The alternative is retaining GNU dynamic linking and separately pinning and
+constraining the interpreter, transitive libraries, search paths and filesystem
+view before root invocation; sealing only the main file does not solve that.
+
+Read-only RTX inspection on September12 confirms the current candidate is ET_DYN,
+has PT_INTERP `/lib64/ld-linux-x86-64.so.2` and PT_DYNAMIC. Only the
+`x86_64-unknown-linux-gnu` Rust target is currently installed; no `/usr/bin/*musl*`
+tool was found. The first login-shell rustup command missed PATH; the explicit
+`/home/travis/.cargo/bin/rustup` check succeeded. No toolchain was installed,
+binary rebuilt or image invoked for this proposal.
+
+## Smallest coherent allocation
+
+After acceptance, attempt a build-only qualification of the **existing**
+`codex-protected-root-probe` for `x86_64-unknown-linux-musl` on RTX, using the
+recorded source tree and serialized build lock. Toolchain prerequisites must
+stay in the user's remote workspace; no root package installation or global
+toolchain change. Pin and record toolchain/compiler/artifact versions and hashes.
+Do not change ordinary Corbanu release targets, launchers or installed packages.
+
+Scope is a reproducible script and evidence under
+`qa/security-levels/sprints/PF-27-S04/static-probe-20260912/`, plus this proposal
+and existing plan/sprint ledgers. No Rust, dependency, Cargo/Bazel/lock or service
+configuration changes are included in this initial allocation. If the dependency
+graph cannot produce that artifact without changes, stop with exact build errors
+and propose a bounded correction; do not silently split/rewrite the probe crate.
+
+Acceptance evidence: a successful build from the frozen source, bounded artifact
+size, ELF64 little-endian x86-64 identity, program/dynamic table inspection proving
+no PT_INTERP and no external DT_NEEDED entries, and exact digest/provenance. Static
+PIE may still have PT_DYNAMIC for self-relocation; do not equate that header alone
+with external dependencies. Preserve negative comparison against the current
+dynamic probe. Use readelf or equivalent read-only inspection, not ldd or executing
+the artifact. Reproduce the command/checks through actual-key private TMUX.
+
+These checks prove build/linkage properties, not absence of runtime file access,
+dlopen behavior, secret exposure, syscall containment or safe root execution.
+No executable is invoked in this allocation, including a non-root smoke run.
+No new UX; blind UX design and live-repository benchmarks are not applicable.
+
+## Subsequent gates and accounting
+
+Only after artifact feasibility is proven, propose the corresponding runtime
+ELF-profile validator, descriptor-bound exec and retained-child supervision as
+separate bounded implementation. A static artifact must not be relabeled as a
+native-qualified package. Exact privileged installation/execution approval,
+identity/group/FD mapping, launch deadlines, runtime restrictions and all-OS
+qualification remain open. No main window or additional review is assumed here.
+Reviews1–19 and old unused contingency remain preserved. No review has been
+dispatched for this proposal; an accepted build-only evidence check, if needed,
+must be reserved from the existing allowance rather than adding a redundant
+unchanged-Rust code review.
