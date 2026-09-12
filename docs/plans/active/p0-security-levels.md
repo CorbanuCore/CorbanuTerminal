@@ -992,6 +992,13 @@ installation/credential execution/main push/release is included. Stage one
 precedes separately bounded asynchronous ownership integration. Replenished
 review allowance covers two necessary independent security/evidence closeouts.
 
+Adapter implementation now qualified at source30b471a47/Rust2d270c5c:
+focused3/OS7/service44/static-profile2/TMUX7 pass, second-host GNU2.39 explicit
+unsupported1 pass; service's one artifact exclusion remains disclosed.
+Cargo/Bazel parity passes; Astra23/Fable24 exit0/findings[]. Receiving-owner
+integration disposition and [next single-child owner allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-next-20260912.md)
+remain separate from [this internal proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-launch-20260912/README.md).
+
 September12 receiving owner accepted [sealed-byte ELF profile inspection](../../../qa/security-levels/sprints/PF-27-S04/runtime-elf-next-20260912.md)
 on clean8d1a4f49/incremental97d, original d870 allocation unchanged. Literal service
 `src/launch/manifest/{elf.rs,elf_tests.rs,mod.rs,sealed.rs,sealed_tests.rs}` only,

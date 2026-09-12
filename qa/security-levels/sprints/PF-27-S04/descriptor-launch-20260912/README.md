@@ -81,7 +81,11 @@ normally, releasing the lock. No Rust process or unrelated service was killed.
 
 ## Remaining boundaries
 
-Independent Astra/Fable closeout pending at this checkpoint. No main push.
+Independent closeout complete: Astra23 and Fable24 both exit0, findings[],
+patch correct. Fable ran through the existing Corbanu Fable5.1High wrapper in
+private TMUX socket `pf27adapterreview20260912`, session `fable24`.
+Original structured results and helper exits are retained beside this record;
+no findings required code changes or disposition overrides. No main push.
 Production owner integration must prove late spawn, cancellation/drop quarantine,
 no relaunch until observed cleanup, persistent wait/signal denial, and supervisor
 failure/recovery. Kernel pidfd-unavailability on a different kernel and privileged
