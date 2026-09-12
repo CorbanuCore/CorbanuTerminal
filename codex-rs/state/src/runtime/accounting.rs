@@ -52,6 +52,13 @@ impl<'a> Journal<'a> {
         ensure!(batch.len() <= 256, "observation batch too large");
         let mut tx = self.runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
         let result = async {
+            let installed: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'draft_accounting_tombstones')")
+                .fetch_one(&mut *tx).await?;
+            if installed {
+                let deleted: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM draft_accounting_tombstones WHERE attempt_id = ?)")
+                    .bind(attempt.attempt_id.to_string()).fetch_one(&mut *tx).await?;
+                ensure!(!deleted, "deleted attempt");
+            }
             let existing = sqlx::query_scalar::<_, String>(
                 "SELECT payload FROM draft_accounting_attempts WHERE request_id = ?",
             )
