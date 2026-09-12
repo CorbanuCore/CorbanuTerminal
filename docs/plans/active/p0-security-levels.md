@@ -982,16 +982,22 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
-Receiving observation18:09UTC: owner adapter evidence fb7523f4b is qualified
-on its branch (source30b471a47, Rust2d270c5c), Astra23/Fable24 clean. RTX proof
-passes; second GNU2.39 host is unsupported rejection only. The integrator has
-allocated the next private synthetic single-child asynchronous cleanup owner
-under the same worktree/branch/base, with two necessary new-source closeouts.
-Exact API/fixture paths must be frozen by that owner before code; no public
-protocol, children.rs/PF20/Core/Vault, privileged installation or protected
-activation. Source/evidence are pending receiving combined-tree integration,
-not a new user blocker. [Current manager handoff](../../../qa/initiative-control/status-display/current-handoffs.md)
-records the distinction; sprint stays in_progress.
+September12 receiving owner accepted adapterfb7523f4b for branch continuation
+and allocated the [single-child asynchronous owner](../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-next-20260912.md).
+Exact private reservation/launch/status API and QA lifecycle script were frozen
+there before implementation; same owner/worktree/branch/base. Literal service
+manifest spawn/sealed/mod seams and synthetic dependency/lock parity only.
+No adapter semantic, children.rs/PF20/Core/Vault/native/dashboard/main changes.
+Permit-before-image, worker-before-spawn, sticky cancellation, no-block caller
+Drop, late-child cleanup and unrecoverable-quarantine proof now pass at
+source4d830cbb3/Rust7e488200: default3/focused8/real3/profile2/service52;
+four standard ignored cases separately covered; actual-key RTX TMUX and strict
+Clippy/Cargo-Bazel parity pass. Astra25 clean, Fable26 lint finding reproduced
+and repaired, Fable27 clean; historical results preserved, five current-window
+slots spent. [Frozen proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-20260912/README.md).
+PF27 remains in_progress. Two-child/native admission, trusted credential wiring,
+all-OS containment and product/release acceptance remain separate unfinished
+scope; no privileged, main or protected-activation action claimed.
 
 September12 17:29UTC: Travis explicitly approved the isolated Linux launch
 adapter; manager relayed execution authority. The [accepted adapter-only
@@ -1003,6 +1009,12 @@ installation/credential execution/main push/release is included. Stage one
 precedes separately bounded asynchronous ownership integration. Replenished
 review allowance covers two necessary independent security/evidence closeouts.
 
+Adapter implementation now qualified at source30b471a47/Rust2d270c5c:
+focused3/OS7/service44/static-profile2/TMUX7 pass, second-host GNU2.39 explicit
+unsupported1 pass; service's one artifact exclusion remains disclosed.
+Cargo/Bazel parity passes; Astra23/Fable24 exit0/findings[]. Receiving-owner
+integration disposition and [next single-child owner allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-next-20260912.md)
+remain separate from [this internal proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-launch-20260912/README.md).
 September12 receiving owner accepted [sealed-byte ELF profile inspection](../../../qa/security-levels/sprints/PF-27-S04/runtime-elf-next-20260912.md)
 on clean8d1a4f49/incremental97d, original d870 allocation unchanged. Literal service
 `src/launch/manifest/{elf.rs,elf_tests.rs,mod.rs,sealed.rs,sealed_tests.rs}` only,

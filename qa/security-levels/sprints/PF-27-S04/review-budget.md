@@ -18,6 +18,47 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Owner increment review25 reserved September12 18:42UTC before dispatch:
+Astra High overfb7523f4b, frozen Rust30aebfb77785fe5108276a651a4005fca3c5bae3
+and final RTX/TMUX receipts. Window17:25:45–23:25:45Z now3 used/2 available.
+Review26 Fable5.1High remains allocated but not yet dispatched. No adapter rerun.
+
+Review25 completed exit0/findings[], patch correct. Review26 reserved September12
+18:43:25UTC before dispatch: Fable5.1High via Corbanu/private TMUX on the same
+Rust30aebfb7 and actual execution receipts. Window now4 used/1 available.
+
+Review26 exit1, patch correct, P2 non-test expect_used lint finding reproduced
+by strict feature-enabled just clippy. Accepted in scope; small explicit
+reservation-error/internal-invariant handling correction4d830cbb3, runtime
+contract unchanged. Final lint/tests and Fable27 correction closeout use the
+remaining scheduled slot; reserve27 at actual dispatch, not in this note.
+
+Review27 reserved September12 18:52UTC before dispatch: Fable5.1High via
+Corbanu/private TMUX correction diff overfe007f32b. Rust7e488200 and strict
+Clippy/default3/TMUX focused8/real3/profile2/service52 final-source receipts.
+Window now5 used/0 available; do not repeat a clean pass or reset early.
+
+Review27 completed exit0/findings[], patch correct. Accepted Fable26 lint finding
+is repaired; the feature-enabled strict lint and final-source tests pass.
+No further pass required. Original25/26/27 JSON/text/exit receipts are under
+descriptor-owner-20260912/. All historical budgets/outcomes remain preserved.
+
+Review23 reserved/dispatched September12 17:49UTC: Astra High, adapter source
+30b471a47/Rust2d270c5c overc5b05d9d8, actual OS/TMUX receipts. Window17:25:45Z–
+23:25:45Z now1 used/4 available; history1–22 retained. Review24 Fable remains
+planned, not yet dispatched.
+
+Review23 completed exit0/findings[]; adapter source/evidence judged correct under
+its explicit preconditions. Review24 reserved/dispatched September12 17:51:33UTC:
+Fable5.1High through established Corbanu wrapper in private TMUX, unchanged
+Rust2d270c5c plus final OS receipts. Current window2 used/3 available; no further
+pass planned absent an actionable finding.
+
+Review24 completed exit0/findings[] (patch correct). No accepted/rejected
+findings or runtime repairs were needed for either review23 or24. Close this
+adapter stage at2 used/3 available in the active six-hour window; do not spend
+another review merely to restate clean results. Originals:
+`descriptor-launch-20260912/{astra23,fable24}.{json,txt,exit}`.
 Adapter stage allocation September12 17:29UTC: current scheduled window is
 17:25:45Z through23:25:45Z, five available and zero dispatched. Plan two necessary
 passes (next numbers23 Astra High,24 Fable5.1High through Corbanu/TMUX), reserving

@@ -52,8 +52,10 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - [x] Accepted the PF-27-S03 Linux service, macOS launchd/XPC and Windows service/AppContainer candidates for construction; protected eligibility and sprint completion remain blocked until measured all-OS qualification passes.
 
 ## Done
+- [x] Private single-child owner source4d830cbb3/Rust7e488200: default3/focused8/real3/profile2/service52 pass, four service exclusions exercised separately; actual-key RTX TMUX, strict Clippy and Cargo/Bazel parity pass. Astra25 clean; Fable26 lint finding repaired; Fable27 clean. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-20260912/README.md). No two-child/native/product activation claim.
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 - [x] Manager accepted/integrated sealed-byte profile proof at main406aa3c5f; source635655c34 and original Astra21/Fable22 outcomes preserved. Travis approved isolated-adapter implementation/non-root proof September12; exact allocation recorded before code, existing branch/base retained.
+- [x] Isolated adapter source30b471a47/Rust2d270c5c: focused3/OS7/service44/static-profile2/TMUX7 pass; second GNU2.39 host explicitly rejects unsupported libc (1 pass). Cargo/Bazel parity passes; Astra23/Fable24 clean. [Exact proof](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-launch-20260912/README.md). No service wiring/privileged setup/completion claim.
 - [x] Recovered reviewed broker leaves from `cdb821289` in provenance commit `90ae3a0cf`, without overwriting the current allocation or shared registrations.
 - [x] Implemented digest-bound PF-41 journal integration and bounded native Linux
   peer/framing/channel teardown primitives, including concurrent disconnect
@@ -71,8 +73,6 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - [x] Sealed image `ee1ac023c`: default3/synthetic39/affected356 (2 existing skips), scoped lint/parity/build/TMUX pass; Astra18/Fable19 clean. Kernel write/truncate/seal denials and failure cleanup proven; no invocation or loader trust. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/sealed-20260912/README.md).
 - [x] Static probe build/linkage feasibility passes on unchanged Rust0aa65bd: staticPIE f6ca8e3368dc/no interpreter or external libs and GNU control, actual-key TMUX. Fable20 patch correct/P3 receipt gap repaired; original exit1 and failed attempts retained. No artifact invocation/native qualification. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/static-probe-20260912/CURRENT.md).
 ## Remaining
-
-- [ ] Integrate owner-qualified adapter source30b471a47/evidence fb7523f4b with receiving combined-tree proof, then qualify the newly allocated synthetic single-child asynchronous owner. Astra23/Fable24 clean and RTX/second-host results are recorded in the [current handoff](../../../../qa/initiative-control/status-display/current-handoffs.md); second host is unsupported rejection only. Existing owner freezes exact private APIs before coding; no children.rs/PF20/Core/Vault, privileged installation, live activation or full-sprint claim.
 - [ ] Include fresh connections after same-run re-registration with cached TLS handlers and admitted hosts, not only reuse of an old channel. Revocation fences queued dispatch, streams and uploads; new generations cannot inherit old credentials.
 
 - [ ] Keep sentinel keys/raw registries outside agent-accessible processes; test open-channel revocation, upload cancellation, same-run-ID replacement and broker restart with old handles. The proxy's retained RegisteredRun concern requires a native regression, not just a copied new-connection test.

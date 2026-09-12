@@ -22,7 +22,7 @@ path = "src/probe/main.rs"
 required-features = ["synthetic-fixture"]
 
 [features]
-synthetic-fixture = ["dep:tempfile", "dep:codex-keyring-store", "dep:codex-utils-absolute-path", "dep:signal-hook", "dep:serde", "dep:serde_json", "dep:sha2"]
+synthetic-fixture = ["dep:codex-linux-pidfd-spawn", "dep:tempfile", "dep:codex-keyring-store", "dep:codex-utils-absolute-path", "dep:signal-hook", "dep:serde", "dep:serde_json", "dep:sha2"]
 
 [lints]
 workspace = true
@@ -44,6 +44,9 @@ serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 signal-hook = { version = "0.3.18", optional = true }
+
+[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
+codex-linux-pidfd-spawn = { workspace = true, optional = true, features = ["synthetic-fixture"] }
 
 [dev-dependencies]
 codex-utils-cargo-bin = { workspace = true }

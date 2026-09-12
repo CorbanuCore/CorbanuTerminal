@@ -73,6 +73,7 @@ members = [
     "file-search",
     "file-watcher",
     "linux-sandbox",
+    "linux-pidfd-spawn",
     "lmstudio",
     "login",
     "codex-mcp",
@@ -257,6 +258,7 @@ codex-security-audit = { path = "security-audit" }
 codex-security-policy = { path = "security-policy" }
 codex-secret-broker = { path = "secret-broker" }
 codex-secret-broker-service = { path = "secret-broker-service" }
+codex-linux-pidfd-spawn = { path = "linux-pidfd-spawn" }
 codex-secrets = { path = "secrets" }
 codex-shell-command = { path = "shell-command" }
 codex-shell-escalation = { path = "shell-escalation" }
