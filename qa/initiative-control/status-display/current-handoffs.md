@@ -1,5 +1,15 @@
 # Current workstream handoffs — September 12
 
+## Publication recovery — 10:19 UTC, September12
+
+The obsolete publication task was archived through Codex's supported task tool.
+Codex now confirms its pending run is interrupted and the task is not loaded;
+the cancellation message confirms no further publication action. History is
+retained. There is no outstanding approval for Travis to find or click.
+The stale-task overlap hold is cleared. One fresh native Luna Extra High sync
+will publish the declared receiving source; success must be verified separately.
+Earlier approval-waiting observations below are history, not current blockers.
+
 ## Current observation — 10:10 UTC, September12
 
 - [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Boole is implementing C1 fixture activation/admission/retained reads at clean launch4642785db. Explicit setup state preserves all A/B assertions; C2 atomic cleanup/deletion is the fixed next increment, S03 still dependent.
