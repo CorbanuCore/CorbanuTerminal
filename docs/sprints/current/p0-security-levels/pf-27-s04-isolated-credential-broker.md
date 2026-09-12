@@ -72,7 +72,7 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 
 ## Remaining
 
-- [ ] Review the now-tested synthetic post-exec probe after the allowance resets ([checkpoint](../../../../qa/security-levels/sprints/PF-27-S04/probe-20260912/CURRENT.md)); final RTX default3/fixture23/affected356, scoped lint/parity/TMUX pass but main landing is pending. Native modes stay exit78; separately allocate actual launcher and obtain exact installation approval before OS identity/IPC/handle qualification.
+- [ ] Synthetic probe is construction-accepted ([checkpoint](../../../../qa/security-levels/sprints/PF-27-S04/probe-20260912/CURRENT.md)): RTX default3/fixture23/affected356, scoped lint/parity/TMUX pass; Astra12 clean, Fable13 exit1 with manager-deferred P3 fixture portability. Separately allocate actual launcher and obtain exact installation approval before OS identity/IPC/handle qualification. Native modes stay exit78; no full PF27 completion.
 - [ ] Include fresh connections after same-run re-registration with cached TLS handlers and admitted hosts, not only reuse of an old channel. Revocation fences queued dispatch, streams and uploads; new generations cannot inherit old credentials.
 
 - [ ] Keep sentinel keys/raw registries outside agent-accessible processes; test open-channel revocation, upload cancellation, same-run-ID replacement and broker restart with old handles. The proxy's retained RegisteredRun concern requires a native regression, not just a copied new-connection test.

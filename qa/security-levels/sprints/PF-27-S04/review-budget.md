@@ -47,8 +47,9 @@ Avoid further opinions once no substantive findings remain; proceed to integrati
 
 | Review | Reservation UTC | Model / scope | Outcome / evidence |
 | --- | --- | --- | --- |
-| 12 | 2026-09-12 08:43Z | Astra High; frozen probe branch diff over a666c6cd9 | Reserved before dispatch; probe-20260912/astra-twelve.json. |
-| 13 | 2026-09-12 08:43Z | Fable 5.1 High via Corbanu/private TMUX; same probe | Reserved before dispatch; probe-20260912/fable-thirteen.json. |
+| 12 | 2026-09-12 08:43Z; dispatched 08:44Z | Astra High; frozen probe branch diff over a666c6cd9 | Exit0, findings[]; probe-20260912/astra-twelve.json. |
+| 13 | 2026-09-12 08:43Z; dispatched 08:44Z | Fable 5.1 High via Corbanu/private TMUX; same probe | Exit1, patch correct, sole P3 fixture Python-path portability; probe-20260912/fable-thirteen.json. No runtime/security finding. |
 
-Extension accounting: **2 reserved / 0 unreserved**. Record actual dispatch and
-outcome below; do not silently retry failed requests as unused passes.
+Extension accounting: **2 used / 0 available**. Both processes finished.
+Do not silently retry or erase the nonzero Fable result. The portability
+disposition and integration checkpoint are in probe-20260912/README.md.

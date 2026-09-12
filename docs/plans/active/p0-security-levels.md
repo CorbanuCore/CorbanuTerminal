@@ -698,8 +698,11 @@ budget. Later actual launcher/group/FD contract remains separately bounded.
 Post-exec probe source now passes final RTX default3/fixture23/affected356
 (two inherited helper skips), scoped lint/parity/build and private TMUX proof.
 [Checkpoint](../../../qa/security-levels/sprints/PF-27-S04/probe-20260912/CURRENT.md)
-is branch-only and **review pending** until the next allowed window; it is not
-qualified for main or native use. Keep the tested tree frozen until review.
+is construction-accepted after Astra12 exit0 and Fable13 exit1 (patch correct,
+sole P3 fixture Python-path portability explicitly deferred by integration owner).
+Manager granted +2 scoped reviews without resetting history and cleared a main
+window. Source remains unchanged; qualification is RTX-only, not all-Linux/Bazel
+or native eligibility. No additional unchanged-source review is required.
 
 ## Round-five execution amendment — 2026-09-04
 

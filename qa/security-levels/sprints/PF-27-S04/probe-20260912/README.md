@@ -1,12 +1,12 @@
-# PF27 post-exec probe — tested, review pending
+# PF27 post-exec probe — tested and independently reviewed
 
 Product initiative PF-27-S04, existing `/root` allocation.
 Product heading **Non-negotiable controls**: “Permit agents to reference
 credentials only by label; resolve them solely inside the trusted execution boundary.”
 Frozen scope/cases: [probe allocation](../probe-next-20260912.md).
 Review baseline **`a666c6cd9cd0dc0821d49cafc4ed8fd63d1c0603`**, not an empty
-local diff after committing this checkpoint. No review has been dispatched for
-this stage; prior stage reviews do not qualify it. No main landing yet.
+local diff after committing this checkpoint. Astra12 and Fable13 reviewed this
+stage directly; prior stage reviews are not substituted for them.
 
 ## Scope for review
 
@@ -51,7 +51,7 @@ Preserve [the initial failed run](initial/fixture.log); final proof is separate.
 ## Final-source test evidence
 
 Local/RTX Rust tree **`0934e62ae687f680746476c9374d35092a68ab83`**.
-Source checkpoint **`deb7ed06e`**, tested but independent review pending.
+Source checkpoint **`deb7ed06e`**, unchanged by independent review.
 Fresh remote worktree `/home/travis/worktrees/security-broker-probe-20260912`
 based on `a666c6cd9`; previous stage worktrees untouched. Commands in
 `qualify-rtx.sh` use the shared build lock, eight jobs and on-disk TMPDIR.
@@ -81,19 +81,33 @@ under that RTX evidence directory's `candidate/`. Other binary hashes are in
 
 ## Review / native gates
 
-September12 08:43Z amendment: manager relayed Travis's integrator discretion and
-granted +2 scoped reviews (Astra12, required Fable13) now, without waiting for
-the scheduled reset. See ../review-budget.md; historical usage is preserved.
-This supersedes only the review wait in the original checkpoint below.
+September12 08:43Z: manager relayed Travis's integrator-discretion amendment and
+granted +2 scoped passes without resetting the five spent scheduled-window slots.
+Reviews12/13 dispatched at08:44Z against this frozen source and completed:
 
-Five slots were already spent in the window ending2026-09-12T11:25:45Z.
-Do not dispatch another review early or repeat finished reviews6–11. At the
-actual reset, compute the current allowance, reserve review12, then use Astra
-High against this committed branch diff. Use required Fable5.1High via
-Corbanu/privateTMUX for the external closeout within the same allowance.
-Inspect actual findings; preserve failures and any scope/repair dispositions.
+- [Astra12](astra-twelve.json): helper exit0, findings[], patch correct.
+- [Fable13](fable-thirteen.json), Fable5.1High through Corbanu/privateTMUX:
+  helper exit1, patch correct; sole P3 is two test fixtures' hard-coded
+  `/usr/bin/python3` path. No runtime or security defect reported.
 
-This checkpoint is **not independently reviewed or qualified for main yet**.
+Verified the two fixture launches at `tests/probe_lifecycle.rs:22,81` and the
+analogous portability note in `exec-server/tests/exec_process.rs:708–710`.
+This is a real test portability limitation, not an observed RTX failure: the
+specified interpreter is available on the qualified host and all tests passed.
+Proposed nonblocking follow-up: use a declared portable interpreter lookup with
+clear missing-prerequisite diagnostics before claiming broader Linux/Bazel proof.
+No source repair or unchanged-source test rerun was made. Preserve Fable's
+exit1 rather than relabeling it clean. Manager independently verified the finding
+and explicitly accepted deferral plus a serialized main window on September12.
+Qualification is limited to the recorded RTX host; no repeat opinion is needed.
+
+Exact launch scripts are in the private runtime directory
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/pf27-probe-review-20260912/`;
+both use the global structured helper's branch mode/base above, explicit High
+effort, and this README as the prompt file. Fable uses the existing Corbanu
+wrapper, not an unrelated reviewer CLI. Original JSON/text/exit are committed;
+raw provider trace remains private, not published as test evidence.
+
 No human-test-ready build, benchmark or native containment claim. Actual pinned
 launcher, group/FD contract, root manifest/listener, separate-principal probes,
 enrollment, positive root CAS, real Vault migration and protected activation
