@@ -6,6 +6,8 @@
 - [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): eight-file correction reviewed clean and received37f23b991; parent575/575 zero skipped plus normal six-library check pass. Eight Core policy errors remain. Mendel dispatched at clean93dc55215 in a fresh sequential checkout on [ten-file Core correction](../../../docs/research/agent-cost-accounting/core-policy-repair-allocation.md), including cancellation/poison and native regression proof. Historical failures retained, S03 dependent and collection OFF.
 - [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): supervisor remains clean-reviewed and integrated with261 receiving tests passing. Actual RTX feasibility is complete; James is implementing [five-file isolation engineering](isolated-boundary-engineering-20260912.md), with effective seccomp/cgroup/cleanup and positive PTY controls. A confined fresh reasoning executor, independent functional execution, real Slack connection/phone/native ACK are still manager-owned prerequisites. Alerts are not operational.
 
+Owner acknowledgment22:47: PF13 imported the allocation at clean00b07dad10b215e756696f8c5477055f1e1722d5, source unchanged from12e0bc2d8; owner checkers3/115/125 pass. Root-dispatch implementation begins; earlier acknowledgment-pending wording above is superseded.
+
 No decision is awaiting Travis. Local receiving integration is not a main merge,
 sprint completion, native qualification or release. One Luna publication verifies
 this observation separately. Earlier observations are retained history.
