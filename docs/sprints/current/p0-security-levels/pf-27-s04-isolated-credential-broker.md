@@ -16,8 +16,8 @@ depends_on: "PF-27-S01, PF-13-S04, PF-27-S03, PF-41-S03"
 created: 2026-08-28
 updated: 2026-09-12
 ---
-
 # PF-27-S04 — Isolated credential broker process
+
 September 11 resumption: fresh main-based allocation after human acceptance.
 The earlier missing-checkout report was stale: `security-round5-broker` is clean
 at pushed `cd7457da7`. Reconcile its existing service stage; do not redo it.
@@ -29,6 +29,7 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - Excludes: adjacent feature implementation, Permissive policy changes, and unlisted integrations.
 
 ## Plan linkage
+
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md#pf-27).
 - Feature: `PF-27`.
 - Product citation: **Non-negotiable controls** — “Permit agents to reference credentials only by label; resolve them solely inside the trusted execution boundary.”
@@ -64,7 +65,6 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
   verified; final Fable review has no blocking findings and one deferred P3
   signal-interruption follow-up (helper exit 1). Four of five reviews used.
   Production service, data-plane and all-OS qualification remain open; see `qa/security-levels/sprints/PF-27-S04/round5-evidence.md`.
-
 - [x] Reconciled and qualified the service construction stage on main/0.1.42: default 1, synthetic 6, full affected 338, Core 6 and supporting TMUX pass. Fable review 6 found no runtime/security issue; one test-only lint finding was reproduced and fixed, strict Clippy and affected proof rerun successfully. Six reviews spent, no seventh; see `qa/security-levels/sprints/PF-27-S04/resume-20260911/README.md`. No native deployment or activation claimed.
 - [x] Qualified admission/lifetime `bd70f0e6b` ([proof](../../../../qa/security-levels/sprints/PF-27-S04/child-admission-20260912/README.md)) and existing-root adapter `794080a4f` ([proof](../../../../qa/security-levels/sprints/PF-27-S04/root-composition-20260912/README.md)): default3/fixture17/affected356 (2 helper skips), scoped Clippy/parity/TMUX17+exit78 pass. Astra10 clean, Fable11 runtime correct with publication finding resolved; inherited transitive telemetry lint debt retained. Five new slots used. No native installation, executable launcher or protected activation.
 - [x] Launch recipe/identity preparation `f0b1209e0`: default3/synthetic29/affected356 (2 existing skips), scoped lint/parity/build/TMUX pass; Astra14 and Fable15 exit0/no findings. P3 Python-path fixture follow-up fixed. No actual root-positive or native-eligibility claim; [evidence](../../../../qa/security-levels/sprints/PF-27-S04/launcher-20260912/README.md).
