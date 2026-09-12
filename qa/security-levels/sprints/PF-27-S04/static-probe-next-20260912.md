@@ -61,6 +61,16 @@ No new UX; blind UX design and live-repository benchmarks are not applicable.
 
 ## Subsequent gates and accounting
 
+September12 prerequisite amendment: the first Cargo build failed101 in
+openssl-sys0.9.111 because no musl-target OpenSSL installation was available.
+The receiving owner accepted ONE retry with a pinned, authenticated upstream
+OpenSSL static build entirely under the remote evidence root. Use target-scoped
+OPENSSL_DIR/STATIC only; preserve initial evidence byte-for-byte and use a
+separate retry directory. No graph/source/feature changes or target invocation.
+Select OpenSSL3.5.8, the supported3.5 LTS release listed by the official downloads
+page when checked; record source signature/checksum and exact compiler/flags.
+Any further contract/graph expansion returns for a fresh decision.
+
 Only after artifact feasibility is proven, propose the corresponding runtime
 ELF-profile validator, descriptor-bound exec and retained-child supervision as
 separate bounded implementation. A static artifact must not be relabeled as a

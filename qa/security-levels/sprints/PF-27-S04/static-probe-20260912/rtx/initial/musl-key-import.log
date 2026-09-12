@@ -1,0 +1,5 @@
+gpg: keybox '/home/travis/security-round5/evidence/pf27-static-probe-20260912/gnupg/pubring.kbx' created
+gpg: /home/travis/security-round5/evidence/pf27-static-probe-20260912/gnupg/trustdb.gpg: trustdb created
+gpg: key 56BCDB593020450F: public key "musl libc <musl@libc.org>" imported
+gpg: Total number processed: 1
+gpg:               imported: 1

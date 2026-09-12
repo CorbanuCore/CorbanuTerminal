@@ -742,7 +742,9 @@ remain separate gates. Sealed checkpoint `140e094ad` landed and its window was
 released. The receiving owner accepted [static-probe build-only feasibility](../../../qa/security-levels/sprints/PF-27-S04/static-probe-next-20260912.md),
 not a release strategy change: isolated RTX prerequisites and QA only, no source,
 dependency or service changes, no artifact invocation. One existing contingency
-is allocated to its evidence check; history1–19 remains intact. No main window.
+is allocated to its evidence check; history1–19 remains intact. Initial build101
+is retained; owner accepted one unchanged-graph retry with private pinned static
+OpenSSL3.5.8, target-scoped settings and no artifact invocation. No main window.
 
 ## Round-five execution amendment — 2026-09-04
 
