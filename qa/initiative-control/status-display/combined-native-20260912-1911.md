@@ -2,6 +2,15 @@
 
 ## Security receiving gate — subsequently verified
 
+Later pair-stage allocation correction: owner stopped at758/800 changed lines
+with required fixture/race/admission tests still missing. Unqualified WIP is
+preserved atdb971e9b8 and MUST NOT be integrated as accepted work. Manager split
+the increment: A delivers tested two-child lifecycle/identity only; B adds peer
+admission after accepted A. Each retains hard800, with no missing case waived.
+Existing reviews28/29 apply A; no review was spent on the incomplete WIP.
+The owner has the exact ten-file A allocation and must update/check its records
+before continuing. This is resolved manager allocation, not a human blocker.
+
 Owner returned the complete private receiving receipt; manager read it and
 verified all eight required zero exit receipts and test-log summaries. Exact
 c5e606fa2/Rust18cf961a remains the current receiving native tree. Non-root RTX
