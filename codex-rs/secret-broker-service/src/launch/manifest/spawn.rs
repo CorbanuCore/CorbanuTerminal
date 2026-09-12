@@ -157,6 +157,9 @@ pub(super) struct LaunchHandle {
     shared: Arc<Shared>,
 }
 impl LaunchHandle {
+    pub(super) fn control(&self) -> Arc<Shared> {
+        Arc::clone(&self.shared)
+    }
     pub(super) fn cancel(&self) {
         self.shared.cancel.store(true, Ordering::Release);
     }
