@@ -18,7 +18,6 @@ updated: 2026-09-11
 ---
 
 # PF-80-S01 — Native Task Node delivery-control integration
-
 September12: original feed/browser evidence checked independently:24supported/DEC021partial/DEC025advisory, additional F01 relative-age defect confirmed. [Age follow-up](../../../research/tasknode-integration/decision-age-followup.md) allocates the five-file correction and exact Slack successor preparation. No live Slack or unqualified human-readiness claim.
 
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
