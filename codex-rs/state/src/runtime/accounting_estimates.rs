@@ -106,15 +106,25 @@ impl<'a> EstimateStore<'a> {
         evidence: &str,
     ) -> anyhow::Result<Option<ObservationQuote>> {
         let mut tx = self.journal.runtime.pool.begin().await?;
+        let result = Self::read_on_connection(&mut tx, id, evidence).await?;
+        tx.commit().await?;
+        Ok(result)
+    }
+
+    async fn read_on_connection(
+        conn: &mut SqliteConnection,
+        id: Uuid,
+        evidence: &str,
+    ) -> anyhow::Result<Option<ObservationQuote>> {
         let payload: Option<String> = sqlx::query_scalar(
             "SELECT payload FROM draft_accounting_estimates WHERE attempt_id = ? AND evidence = ?",
         )
         .bind(id.to_string())
         .bind(evidence)
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&mut *conn)
         .await?;
         let result = if let Some(payload) = payload {
-            let (attempt, retained) = authority(&mut tx, id).await?;
+            let (attempt, retained) = authority(conn, id).await?;
             let observations: Vec<Observation> = serde_json::from_str(evidence)?;
             ensure!(
                 serde_json::to_string(&observations)? == evidence,
@@ -131,8 +141,8 @@ impl<'a> EstimateStore<'a> {
                     "changed retained observation"
                 );
             }
-            let binding = binding(&mut tx, id).await?.context("missing binding")?;
-            let quote = bound_quote(&mut tx, &attempt, &observations, binding).await?;
+            let binding = binding(conn, id).await?.context("missing binding")?;
+            let quote = bound_quote(conn, &attempt, &observations, binding).await?;
             // Do not deserialize quote decimals through the stricter rate parser.
             ensure!(
                 serde_json::to_string(&quote)? == payload,
@@ -142,7 +152,6 @@ impl<'a> EstimateStore<'a> {
         } else {
             None
         };
-        tx.commit().await?;
         Ok(result)
     }
 }
@@ -234,3 +243,6 @@ async fn authority(
 #[cfg(test)]
 #[path = "accounting_estimates_tests.rs"]
 mod tests;
+
+#[path = "accounting_lifecycle.rs"]
+mod lifecycle;
