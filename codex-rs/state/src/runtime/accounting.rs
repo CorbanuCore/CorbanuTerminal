@@ -3,6 +3,8 @@ use super::StateRuntime;
 use anyhow::ensure;
 use sqlx::SqliteConnection;
 use uuid::Uuid;
+#[path = "accounting_pricing.rs"]
+mod pricing;
 
 #[path = "accounting_types.rs"]
 mod types;
