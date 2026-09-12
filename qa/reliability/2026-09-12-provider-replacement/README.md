@@ -26,7 +26,7 @@ Validation:
 
 - `just fmt` passed; `git diff --check` passed.
 - Focused `just test -p codex-tui -p codex-provider-auth --lib` expression in
-  `tests.log`: 30 passed. Six reviewed snapshots cover Claude, Anthropic, and
+  `tests.txt`: 30 passed. Six reviewed snapshots cover Claude, Anthropic, and
   OpenAI replacement while active/inactive; keys dispatch the correct provider
   and method. The Claude intent test now expects Replace for Configured.
 - An exploratory wider filter also hit an unrelated pre-existing status snapshot
@@ -51,3 +51,20 @@ release. No public release or benchmark completion is claimed. Named-human
 acceptance is not recorded. Existing 0.1.42 bundle is retained for rollback.
 Claude still requires a fresh valid subscription token or browser reauthorization;
 the API-key credit error is a separate account balance issue.
+
+Host installation: local candidate `94b042de5b` was installed by atomically
+switching `~/.corbanu/packages/standalone/current` to the complete copied bundle
+at `/mnt/HC_Volume_101713660/pfrpc/build-cache/corbanu/candidates/0.1.42-provider-replacement-94b042de5b`.
+Its application binary was built from the tested source and stripped of debug
+symbols; supporting binaries/resources are retained from the original release.
+The original release directory is unchanged. The resumed `goodalexander` process
+was verified to execute this candidate, with Claude Plan selected and the new
+Replace with Claude account action visible. Conversation
+`01a092f2-eceb-7061-bc3a-c33191735d70` is preserved.
+
+Production account diagnostics: Anthropic API returned insufficient credits;
+Claude Account returned invalid bearer token. Claude Code's access and refresh
+tokens were empty. A temporary Corbanu DeepSeek check returned 429; a temporary
+GLM Flash check returned CORBANU_CONNECTION_OK with tools prohibited. Claude
+Plan was restored afterward. Real Claude success is not claimed: completing
+its fresh private credential/sign-in step requires the account holder.
