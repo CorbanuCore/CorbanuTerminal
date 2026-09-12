@@ -18,6 +18,13 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+September12 manager accepted descriptor-pair-next-20260912.md and grants +2
+necessary scoped new-stage reviews:28 Astra High and29 Fable5.1High through
+Corbanu/private TMUX. Both are planned, not dispatched. Preserve scheduled
+window17:25:45–23:25:45Z five used and all previous extensions/results. Reserve
+each at actual dispatch; no clean-code repeat or early reset. Receiving proof
+needed no new review. Required corrective extension goes to integration owner.
+
 Owner increment review25 reserved September12 18:42UTC before dispatch:
 Astra High overfb7523f4b, frozen Rust30aebfb77785fe5108276a651a4005fca3c5bae3
 and final RTX/TMUX receipts. Window17:25:45–23:25:45Z now3 used/2 available.
