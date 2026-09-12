@@ -27,7 +27,7 @@ Build tooling may execute; neither probe artifact is invoked and ldd is not used
 
 ## Actual first attempt
 
-The 159 handwritten lines across build-only.sh, inspect-linkage.py and
+The original 159 handwritten lines across build-only.sh, inspect-linkage.py and
 tmux-build.py launch build/inspection tooling with separate literal keys and Enter.
 The first attempt installed private prerequisites and reached Cargo compilation.
 `build.exit`, `run.exit` and TMUX all record **101**, not a pass. No candidate
@@ -42,16 +42,37 @@ See [full inverse dependency tree](rtx/initial/openssl-dependency.txt) and
 [original build log](rtx/initial/build.log). This is a target-native prerequisite
 failure, not proof that a Rust graph change is necessary.
 
-All original logs/captures are retained under rtx/; raw copies remain on RTX.
-Whitespace normalization for Git, if applied, is mechanical only. No failed
+All original logs/captures are retained byte-for-byte under rtx/; raw copies
+remain on RTX. Initial-integrity hashes are recorded; two trailing-whitespace
+diagnostics in raw gcc/TMUX artifacts are retained deliberately. No failed
 attempt is replaced by a later pass. There is no user-facing TUI or blind UX
 design applicability in this internal artifact experiment.
 
+## Approved prerequisite retry — also blocked
+
+The receiving owner approved one private static OpenSSL prerequisite and an
+unchanged-graph retry. OpenSSL3.5.8 is listed in the supported3.5 LTS series on the
+[official downloads page](https://openssl-library.org/source/). Download SHA256
+`a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2` matched the
+official checksum; signature status matched the published primary trust anchor
+`B146647E45A7B33947AB226B2A2C87D161692D40`. Official HTML remains private on RTX
+with its hash recorded; release keys/archive provenance and verification logs
+are retained. Exact compiler and Configure flags are in openssl-retry.sh and
+rtx/openssl-retry/configuration.txt; no host OpenSSL setting was changed.
+
+This attempt stopped with **exit2** while compiling OpenSSL, before Cargo was
+invoked. `crypto/mem_sec.c:60` includes `linux/mman.h` when SYS_mlock2 exists;
+the private musl sysroot lacks that Linux UAPI header. See
+[original native build log](rtx/openssl-retry/openssl-build.log). There is no
+second Cargo exit code, installed OpenSSL package, static probe, linkage pass or
+probe invocation to report. Fresh source status remains clean and its lock hash
+still matches the original. The two attempts are in separate directories.
+
 ## Next decision and evidence review
 
-The receiving owner has been asked whether to permit one pinned user-local
-static OpenSSL prerequisite with per-command target-specific OPENSSL_DIR/STATIC,
-then retry the unchanged graph. No native prerequisite expansion or graph/source
-change has been made while awaiting that decision. One build/linkage evidence
-review is allocated from the old contingency but has not yet been dispatched;
-reviews1–19 remain intact. No new main window is granted.
+The receiving owner has the exact error and a proposed bounded private Linux UAPI
+header prerequisite. No headers were copied, secure-memory behavior disabled or
+broad host include directory added. No graph/source change is justified yet.
+One build/linkage evidence review is allocated from the old contingency but has
+not yet been dispatched, pending that decision; reviews1–19 remain intact.
+No new main window is granted.

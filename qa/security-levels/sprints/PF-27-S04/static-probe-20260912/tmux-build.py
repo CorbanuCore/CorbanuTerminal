@@ -9,13 +9,14 @@ import tempfile
 import time
 
 root = Path('/home/travis/security-round5/evidence/pf27-static-probe-20260912')
-retry = sys.argv[1:] == ['--openssl-retry']
-if sys.argv[1:] and not retry:
-    raise SystemExit('Only --openssl-retry is supported')
-record = root / 'retry-control' if retry else root
-if retry:
+choices = {(): ('build-only.sh', ''), ('--openssl-retry',): ('openssl-retry.sh', 'retry-control'),
+           ('--uapi-retry',): ('uapi-retry.sh', 'uapi-control')}
+if tuple(sys.argv[1:]) not in choices:
+    raise SystemExit('Only --openssl-retry or --uapi-retry is supported')
+script, record_name = choices[tuple(sys.argv[1:])]
+record = root / record_name
+if record_name:
     record.mkdir()
-script = 'openssl-retry.sh' if retry else 'build-only.sh'
 with tempfile.TemporaryDirectory(prefix='.pf27static-', dir='/home/travis') as temp:
     socket = str(Path(temp) / 't')
     def tmux(*args, check=True):

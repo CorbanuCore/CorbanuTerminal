@@ -1,0 +1,11 @@
+gpg: keybox '/home/travis/security-round5/evidence/pf27-static-probe-20260912/gnupg-openssl/pubring.kbx' created
+gpg: key 2A2C87D161692D40: 1 signature not checked due to a missing key
+gpg: /home/travis/security-round5/evidence/pf27-static-probe-20260912/gnupg-openssl/trustdb.gpg: trustdb created
+gpg: key 2A2C87D161692D40: public key "OpenSSL <openssl@openssl.org>" imported
+gpg: key 216094DFD0CB81EF: 2 signatures not checked due to missing keys
+gpg: key 216094DFD0CB81EF: public key "OpenSSL <openssl@openssl.org>" imported
+gpg: key D894E2CE8B3D79F5: 13 signatures not checked due to missing keys
+gpg: key D894E2CE8B3D79F5: public key "OpenSSL OMC <openssl-omc@openssl.org>" imported
+gpg: Total number processed: 3
+gpg:               imported: 3
+gpg: no ultimately trusted keys found

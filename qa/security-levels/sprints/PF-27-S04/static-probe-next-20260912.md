@@ -71,6 +71,16 @@ Select OpenSSL3.5.8, the supported3.5 LTS release listed by the official downloa
 page when checked; record source signature/checksum and exact compiler/flags.
 Any further contract/graph expansion returns for a fresh decision.
 
+Second explicit prerequisite amendment: OpenSSL compilation stopped2 on missing
+linux/mman.h before Cargo. The owner accepted one coherent private x86-64 Linux
+userspace UAPI set and retry of the same OpenSSL/unchanged Cargo graph. Pin Ubuntu
+linux-libc-dev7.0.0-31.31 amd64 through signed cached repository metadata and
+package SHA256, extract only linux/asm-generic/target asm, and record inventory
+and compiler include resolution. No raw internal kernel headers, glibc leakage,
+musl header overwrite, security-feature suppression or root/global install.
+Preserve both failures and use separate retry paths. Further source/graph or
+security-behavior changes still require a new decision.
+
 Only after artifact feasibility is proven, propose the corresponding runtime
 ELF-profile validator, descriptor-bound exec and retained-child supervision as
 separate bounded implementation. A static artifact must not be relabeled as a
