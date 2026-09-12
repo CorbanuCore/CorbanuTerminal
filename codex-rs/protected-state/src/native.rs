@@ -30,6 +30,9 @@ use std::time::Instant;
 use zeroize::Zeroizing;
 
 const SOCKET: &str = "/run/corbanu-protected-state.sock";
+#[cfg(all(target_env = "gnu", feature = "synthetic-fixture"))]
+#[path = "synthetic_fixture.rs"]
+pub(crate) mod synthetic_fixture;
 
 fn connect_without_waiting(path: &Path) -> Result<UnixStream, RootError> {
     let bytes = path.as_os_str().as_bytes();

@@ -11,10 +11,11 @@ doctest = false
 workspace = true
 
 [features]
-synthetic-fixture = ["dep:codex-linux-pidfd-spawn", "codex-linux-pidfd-spawn/synthetic-fixture"]
+synthetic-fixture = ["dep:tempfile", "dep:codex-linux-pidfd-spawn", "codex-linux-pidfd-spawn/synthetic-fixture"]
 
 [target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
 codex-linux-pidfd-spawn = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
 
 [dependencies]
 codex-config = { workspace = true }

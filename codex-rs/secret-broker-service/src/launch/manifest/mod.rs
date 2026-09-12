@@ -9,6 +9,9 @@ mod sealed;
 mod pair;
 #[cfg(target_env = "gnu")]
 #[allow(dead_code)]
+mod root_dispatch;
+#[cfg(target_env = "gnu")]
+#[allow(dead_code)]
 mod spawn;
 pub use sealed::SyntheticSealedImage;
 

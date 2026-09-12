@@ -22,7 +22,7 @@ path = "src/probe/main.rs"
 required-features = ["synthetic-fixture"]
 
 [features]
-synthetic-fixture = ["dep:codex-linux-pidfd-spawn", "dep:tempfile", "dep:codex-keyring-store", "dep:codex-utils-absolute-path", "dep:signal-hook", "dep:serde", "dep:serde_json", "dep:sha2"]
+synthetic-fixture = ["codex-protected-state/synthetic-fixture", "dep:codex-linux-pidfd-spawn", "dep:tempfile", "dep:codex-keyring-store", "dep:codex-utils-absolute-path", "dep:signal-hook", "dep:serde", "dep:serde_json", "dep:sha2"]
 
 [lints]
 workspace = true
