@@ -71,8 +71,10 @@ change invalidates old candidate-bound passes, not the original expectations.
 Use one design pass and one short evidence pass normally, counted alongside
 code/external reviews in the same per-track budget. Keep the complete review
 ledger, including prior passes. Respect the user's model choices; do not add a
-model-specific requirement here. An exhausted budget requires an explicit
-decision, not a fresh counter, endless review loop or fabricated acceptance.
+model-specific requirement here. Root AGENTS.md's September 12 delegation lets
+the named integrator authorize and record additional allowance without asking
+the human each time. Preserve prior usage, independence and actual evidence;
+never replace them with a fresh counter, endless reviews or fabricated acceptance.
 
 Run from the repository root:
 

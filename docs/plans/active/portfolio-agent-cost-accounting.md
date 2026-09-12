@@ -19,13 +19,15 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "99001e9b79676f78b6bd941125c2a8fcfca6d90e"
+    base_commit: "87e31f521672e627e6230d48fc16a4cfaa7ff44c"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
     branch: "workstream/accounting-pf60-s01-20260911"
-    base_commit: "99001e9b79676f78b6bd941125c2a8fcfca6d90e"
+    base_commit: "87e31f521672e627e6230d48fc16a4cfaa7ff44c"
 ---
 
 # 2. Accounting — unified agent cost and usage
+
+Current September 12 continuation: canonical receiving is reconciled at `87e31f521672e627e6230d48fc16a4cfaa7ff44c`. PF-60-S02 remains in progress, now allocating the five-file retention planner. S03 is not executable until S02 retention, admission/runtime wiring and acceptance are complete. The integrator authorizes one scoped code review plus one correction review if a substantive issue requires it; previous review history is retained under root AGENTS.md's new delegation.
 
 Policy: repository-root `AGENTS.md`. Lifecycle: [plans](../index.md).
 Portfolio: [source coverage, sequencing and human capacity](../portfolio-2026-09-09.md).
@@ -95,7 +97,7 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Codex accounting latest-quote lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `99001e9b79676f78b6bd941125c2a8fcfca6d90e` | PF-60-S02 three-file latest-quote reader; dispatch after reviewed allocation |
+| Codex accounting retention-plan lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `87e31f521672e627e6230d48fc16a4cfaa7ff44c` | PF-60-S02 five-file read-only retention planner; exact mandate in retention-plan-next.md |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
 S02 retains its reservation; Travis approved conservative daily expiry in this
@@ -104,7 +106,7 @@ is accepted and frozen, not a new worker assignment. The
 [retention design handoff](../../research/agent-cost-accounting/retention-design-handoff.md)
 records the approved policy. The [latest-quote allocation](../../research/agent-cost-accounting/latest-quote-allocation.md)
 owns the reviewed three-file prerequisite, now frozen after return. Parent is
-preparing the next atomic-retention allocation; no new implementation dispatched.
+allocating the read-only retention planner now that the reviewed prerequisite is in canonical receiving. Actual dispatch is recorded in the manager receipt.
 The [prepared next allocation](../../research/agent-cost-accounting/retention-plan-next.md)
 names the read-only prerequisite, coupled mutation follow-up and launch gates.
 Custom range/interval filtering is recorded in S03 draft, not implemented here.

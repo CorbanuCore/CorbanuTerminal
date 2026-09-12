@@ -5,13 +5,13 @@ status: in_progress
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 2
-owner: "Codex accounting latest-quote lane"
-parallel_lane: "accounting-latest-quote"
-write_scope: "codex-rs/state/src/runtime/accounting_estimates.rs, codex-rs/state/src/runtime/accounting_latest_quote_tests.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/latest-quote-increment.md"
-integration_gate: "Codex management reviews exact reader/no-repricing proof, serializes sibling test registration and reruns state/governance tests on combined tree. No retention mutation, production, worker commit/merge/push or live collection."
+owner: "Codex accounting retention-plan lane"
+parallel_lane: "accounting-retention-plan"
+write_scope: "codex-rs/state/src/runtime/accounting_lifecycle.rs, codex-rs/state/src/runtime/accounting_retention_plan.rs, codex-rs/state/src/runtime/accounting_retention_plan_tests.rs, codex-rs/state/src/runtime/accounting_retention_test_support.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/retention-plan-increment.md"
+integration_gate: "Codex management audits exact five-file read-only retention scope, no-write proof and original-price preservation, reviews once plus substantive corrections and reruns state/governance on receiving. No production migration, retention mutation, live collection or worker commit/push."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
 branch: "workstream/accounting-pf60-s01-20260911"
-base_commit: "99001e9b79676f78b6bd941125c2a8fcfca6d90e"
+base_commit: "87e31f521672e627e6230d48fc16a4cfaa7ff44c"
 depends_on: "PF-60-S01"
 created: 2026-09-09
 updated: 2026-09-11
@@ -21,9 +21,9 @@ updated: 2026-09-11
 
 S01 is archived; journal/quotation/storage/contributions/deletion are integrated.
 Exact compact values are reviewed/integrated; the worker is closed and previous
-literal scope frozen. Latest reader reviewed/tested in staging; next allocation pending. The
+literal scope frozen. Latest reader is now in canonical receiving; the retention preparation allocation below supersedes its frozen scope. The
 [retention handoff](../../../research/agent-cost-accounting/retention-design-handoff.md)
-records approved daily expiry; [latest-quote allocation](../../../research/agent-cost-accounting/latest-quote-allocation.md) owns the new exact mandate.
+records approved daily expiry; [latest-quote allocation](../../../research/agent-cost-accounting/latest-quote-allocation.md) is historical; [retention plan](../../../research/agent-cost-accounting/retention-plan-next.md) owns the current mandate.
 
 ## Execution mandate
 
@@ -40,18 +40,20 @@ records approved daily expiry; [latest-quote allocation](../../../research/agent
 ## Code boundaries
 
 - Existing, read before work: `codex-rs/state/migrations/0041_provider_request_cache_usage.sql`; `codex-rs/app-server/src/request_processors/token_usage_replay.rs`; `codex-rs/tui/src/chatwidget/usage.rs`; `codex-rs/tui/src/token_usage.rs`.
-- Output: front-matter paths are the three-file reader allocation; reviewed B1 paths remain frozen. Parent must separately allocate any retention mutation.
+- Output: front-matter paths are the five-file retention preparation allocation; reviewed B1 paths remain frozen. Parent must separately allocate any retention mutation.
 - Tests/evidence: accepted compact-values receipt; preserve it. Native ABI, dependencies, production migrations and collectors remain excluded.
 
 ## Preconditions
 
 - [x] Plan active under Travis's standing continuation authority; reservation transferred from completed S01, no fourth lane.
 - [x] S01 accepted/archived after defaults approval, combined-tree fixture proof and independently reviewed technical handoff.
-- [x] Exact worker/branch/base and three-file reader scope match plan; parent must clean-fast-forward and record launch HEAD at dispatch.
+- [x] Exact worker/branch/base and five-file retention scope match plan; parent must clean-fast-forward and record launch HEAD at dispatch.
 - [x] Travis approved the default policy; synthetic/local tests only, no billing/live collection. Bound this allocation to one worker, at most 500 non-test lines, one independent review plus scoped corrections; no exhausted allowance reset.
 - [x] Parent inspected DayTotals/Decimal visibility and amount/rate parsing distinction; B1 is now reviewed and tested, receipt below.
 
 ## Done
+
+- [x] Canonical receiving fast-forwarded to 87e31f521672e627e6230d48fc16a4cfaa7ff44c with reviewed native prerequisites; prior overlapping Facilities edits preserved privately and reconciled. Integrator authorizes two additional scoped review passes (code plus substantive correction only), preserving prior history.
 
 - [x] Latest quote8b6d629b6 reviewed clean and combined staging04ba6b8b7 passes242state/80TaskNode tests; reader only, no retention mutation. [Evidence](../../../../qa/initiative-control/native-staging-2026-09-12.md). Canonical receiving transfer/publication pending.
 
@@ -67,8 +69,7 @@ records approved daily expiry; [latest-quote allocation](../../../research/agent
 
 ## Remaining
 
-- [ ] Transfer reviewed/tested staging checkpoint into canonical receiving after its pending publication resolves, preserving the exact candidate.
-- [ ] Activate the [prepared read-only retention allocation](../../../research/agent-cost-accounting/retention-plan-next.md) after canonical receiving/ownership gates; record exact scope/base and review allowance before dispatch. Mutation must include read/delete/admission; late-import coverage remains an explicit gap, not a new defaults question.
+- [ ] Implement the [read-only retention allocation](../../../research/agent-cost-accounting/retention-plan-next.md) in the five front-matter paths: whole-store plan, strict validation, exact arithmetic, no writes, full snapshots and reopen tests; return for manager review. Coupled mutation/read/delete/admission follows separately; no S03 activation.
 - [ ] After reviewing the first increment, manager allocates production migration/dispatch/presence/price/retention wiring and complete S02 golden tests separately; do not broaden this worker's scope.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 

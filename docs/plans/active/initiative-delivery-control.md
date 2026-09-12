@@ -19,16 +19,18 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "99001e9b79676f78b6bd941125c2a8fcfca6d90e"
+    base_commit: "87e31f521672e627e6230d48fc16a4cfaa7ff44c"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
     branch: "workstream/tasknode-pf80-s01-20260911"
-    base_commit: "99001e9b79676f78b6bd941125c2a8fcfca6d90e"
+    base_commit: "87e31f521672e627e6230d48fc16a4cfaa7ff44c"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
     branch: "feat/provider-reauth-health"
     base_commit: "eb7af932bc8cc859122b5b2dbef223fbd45ea25c"
 ---
 
 # 3. Task Node integration and delivery control
+
+Current September12 continuation: native validity is now in canonical receiving at `87e31f521672e627e6230d48fc16a4cfaa7ff44c`. PF-80-S01 now allocates the five-file offline decision record/renderer slice in decision-projection-next.md; actual launch ID/HEAD are recorded by the manager. Independent intent-only design Volta is frozen with DEC-001..026. The integrator adds three review passes (design, code, evidence), retaining previous usage. No real state, posting or Slack connection is enabled.
 
 ## Activation record
 
@@ -81,7 +83,7 @@ owns the now-reviewed production-compiled private path bda5b35b4. Combined stagi
 The [dashboard decision/Slack amendment](../decision-escalation.md) is queued within
 PF-80-S01. Channel setup and publication qualification are separate from this code.
 The [prepared projection allocation](../../research/tasknode-integration/decision-projection-next.md)
-records exact proposed ownership, tests and launch gates; it is not dispatched.
+records the current five-file ownership, tests and dispatch gates; the manager receipt records actual running state.
 The [runtime recovery handoff](../../research/tasknode-integration/recovery-decision-handoff.md)
 records manager design work, recommendations and the gated human test plan.
 
@@ -101,8 +103,7 @@ recovery source, not this main baseline. PF-80-S01 must port the bounded tooling
 qualify it here and prepare a reviewed first-event path. The port and corrections
 are now integrated locally at the receiving base recorded above; remote main and
 the current publisher remain distinct. September12 cutover already selected
-the manager receiving checkout; its pending publication command prevents this
-new staging checkpoint being published yet. Do not copy the whole
+the manager receiving checkout; the old publisher was declined and its termination is being verified before fresh sync. Canonical source reconciliation no longer waits for publication. Do not copy the whole
 recovery branch or any auth/session/state directory.
 
 ## Invariants

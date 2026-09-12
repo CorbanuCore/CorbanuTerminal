@@ -1,5 +1,45 @@
 # Workstream continuation — September 11
 
+## September 12 — integrator discretion and resumed execution
+
+This supersedes older staging-only, allocation-pending and review-budget holds
+below. Travis delegated additional review authorization to the integrator,
+favoring unblocking work and moving on after clean substantive reviews. Root
+AGENTS.md and the ten-minute heartbeat now record it. Retain prior review usage;
+product/human/dependency gates and release/live permissions remain unchanged.
+
+Receiving fast-forwarded to87e31f521672e627e6230d48fc16a4cfaa7ff44c: accepted
+main1b7e9f3df, reviewed latest-quote8b6d629b6/native-validitybda5b35b4 and six static
+Facilities links. The old inline Facilities diff was preserved in a private
+recovery patch before reconciliation. No service-control bridge, local-mainf505
+or branch-only PF27 probe imported. No manager main push/release.
+
+Final receiving native run19517478-4f35-4ca6-9a36-fb88be228f71:322passed,
+1leaky,0skipped,8.936s. Individual leaking test is unidentified in retained
+summary; no leak-clean claim or attributed cause.83dashboard tests passed2.652s;
+13code-blind checker tests passed. Initial plan/sprint discovery ran0tests from
+the wrong directories; explicit tests/ directory runs replace that non-evidence.
+Validators3active/115current/126archived. Mock publication stdout is not deploy.
+
+Accounting remainsPF60S02: five-file read-only retention planner replaces frozen
+latest-quote scope. S03 awaits completed retention/read/delete/admission/runtime
+and acceptance. TaskNode remainsPF80S01: five-file offline decision records and
+renderer; original independent VoltaDEC001..026 design frozen. Real state,
+export, Slack and posting remain unconnected/OFF. Actual launch IDs/commits are
+in the private current manager receipt, not implied by allocations.
+
+Integrator review extensions, retaining old ledgers: accounting+2(code and
+substantive correction only); TaskNode+3(design used, code, evidence);
+Facilities+1(final evidence after actual browser proof); PF27+2 through its sole
+owner(Astra12/Fable13), acknowledged/dispatched at9c6b9406b. Do not use spare
+passes for another opinion on clean code. Further necessary extensions are
+integrator decisions, not routine human blockers.
+
+Travis declined the stale publisher. App still reports an approval-waiting turn;
+cancellation/no-retry instruction sent. Verify stopped before fresh native Luna
+sync; no bypass or overlapping publication. This no longer freezes independent
+approved local integration/implementation. Live publication remains unverified.
+
 September12 07:22UTC: accepted main1b7e9f3df merged cleanly only into private
 staging7f9ada31c. Combined322 tests pass with2 LEAK markers in unchanged state
 extraction tests;83 dashboard tests/checkers pass. See

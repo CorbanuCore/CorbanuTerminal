@@ -1,18 +1,17 @@
 # PF-80-S01 — contextual decision projection preparation
 
-Status: **prepared, not executable or dispatched**. September 12, 2026.
+Status: **allocated for same-sprint execution; launch ID/HEAD in manager receipt**. September 12, 2026.
 Product: **Internal delivery control — TO BUILD**, “Show blockers, rendered
 sprints, human test plans, machines, run logs and freshness.” The
 [active plan](../../plans/active/initiative-delivery-control.md) and
 [decision amendment](../../plans/decision-escalation.md) own approved behavior.
 
-Native validity `bda5b35b4` is independently reviewed and tested in staging.
-Latest accepted main is reconciled at `64cc30cf19a25f74ae07125eece91f6f766e8ebf`;
-322 combined native tests and 83 dashboard tests pass. This is not publication
-or canonical receiving acceptance. The older source command remains pending
-approval and new Facilities edits require ownership reconciliation.
+Native validity `bda5b35b4` and accepted main are now in canonical receiving at
+`87e31f521672e627e6230d48fc16a4cfaa7ff44c`. The old publication task was declined;
+verify its termination before any new sync, but do not freeze local work.
+Independent Volta design DEC-001..026 is frozen in the linked sprint's QA record.
 
-## Proposed first slice and launch gate
+## Allocated first slice and launch gate
 
 One native Astra High implementation worker, sequentially reusing
 `/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911`, branch
@@ -32,13 +31,23 @@ and sprint, replace the frozen validity allocation and run governance/overlap
 checks. No new implementation may rely on this draft as its active allocation.
 The manager owns shared state/export/source configuration and all later wiring.
 
-Before UX dispatch, freeze an independent intent-only design with fresh context
-and preserved original cases. Reconcile existing review usage and reserve design,
-code review and evidence-check capacity without resetting any exhausted track.
-The code-informed preparation proposal is not that independent test design.
-No new review invocation or allowance is recorded by this preparation document.
+Volta01a094c9-1364-7783-9493-9900d25f6fae used fresh context, no tools, code or
+results; all DEC-001..026 cases and questions are preserved unchanged. The
+integrator authorizes +3 passes for design (used), candidate code and final
+independent evidence, retaining earlier usage under root AGENTS.md. Do not
+repeat clean reviews. Full UI/feed cases remain required at later wiring.
 
-## Contract to finalize before allocation
+## Contract and fixture interpretation
+
+Fixture decisions use explicit manager assessment time; more than20minutes
+without a newer assessment is stale, matching source freshness. A render does
+not refresh it. Invalid/conflicting input rejects with unknown/unavailable state,
+never an empty-queue claim. Unknown optional context is explicitly labeled;
+required IDs and revision provenance cannot be invented. Retain complete
+append-only question/resolution history without pruning in this slice. Links
+are limited to approved sanitized published documents, never raw private logs.
+Later browser proof targets desktop1440x900 and phone390x844 plus keyboard;
+no browser/phone/live-delivery pass is claimed by this offline increment.
 
 One stable manager decision ID with append-only revisions binds exact initiative,
 sprint references, owner, raised/updated times, summary, background, impact,

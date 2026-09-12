@@ -113,10 +113,13 @@ integration must be explicit, never reported as delivered. Dashboard maintenance
 success does not mean product implementation is running. Process explicit answers
 into canonical records and the unlocked next action without another continue ask.
 
-Existing review limits remain binding; one fresh independent review of each new
-material candidate plus scoped corrections is the normal closeout, not repeated
-reviews of unchanged clean code. Do not reset exhausted budgets or resume paused
-PF13/security work. Main merges/pushes, releases, deployments, live Task Node
+Root AGENTS.md's September 12 delegation lets the named integrator extend review
+allowances to unblock work, preserving prior usage and recording each extension.
+One fresh independent review of a material candidate plus scoped corrections is
+normal, not repeated reviews of unchanged clean code. Move on when reviews have
+no substantive unresolved issues. The security owner retains sole execution
+ownership; only review-budget/time holds may be lifted by this delegation.
+Main merges/pushes, releases, deployments, live Task Node
 actions, new product contracts and paid-service commitments still need their
 separate authority. Current assignments/evidence are in the
 [manager handoff](../plans/workstream-manager-handoff-2026-09-11.md).

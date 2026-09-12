@@ -5,13 +5,13 @@ status: in_progress
 plan_file: "docs/plans/active/initiative-delivery-control.md"
 plan_feature: "PF-80"
 execution_order: 1
-owner: "Codex Task Node native-validity lane"
-parallel_lane: "tasknode-native-validity"
-write_scope: "codex-rs/tasknode-session/src/session_validity.rs, codex-rs/tasknode-session/src/session_validity_tests.rs, codex-rs/tasknode-session/src/client.rs, codex-rs/tasknode-session/src/lib.rs, qa/initiative-control/pf-80-s01/native-validity/receipt.md, qa/initiative-control/pf-80-s01/native-validity/SHA256SUMS"
-integration_gate: "Codex management audits the source-port manifest and literal worker diff, reruns control and governance suites on the combined tree, reviews the immutable queue migration/one-event preview, and owns CI registration and any later live source cutover; no worker main push or external mutation."
+owner: "Codex Task Node decision-projection lane"
+parallel_lane: "tasknode-decision-projection"
+write_scope: "scripts/initiative_control/decisions.py, scripts/initiative_control/attention.py, scripts/initiative_control/test_decisions.py, scripts/initiative_control/test_attention.py, qa/initiative-control/pf-80-s01/decision-projection/receipt.md"
+integration_gate: "Codex management audits five-file offline decision record/renderer scope and frozen design, reviews once plus substantive corrections and reruns control/governance on receiving. No collect/export/serve wiring, real state, Slack or posting. Manager owns later publication and agent dispatch."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
 branch: "workstream/tasknode-pf80-s01-20260911"
-base_commit: "99001e9b79676f78b6bd941125c2a8fcfca6d90e"
+base_commit: "87e31f521672e627e6230d48fc16a4cfaa7ff44c"
 depends_on: "none"
 created: 2026-09-10
 updated: 2026-09-11
@@ -43,7 +43,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - Port: `scripts/initiative_control/` from the recovery source; audit every file, no state/auth/credential directories.
 - Planned contract and tests: `docs/research/tasknode-integration/`, `qa/initiative-control/pf-80-s01/`, focused tests beside the ported scripts.
 - Manager alone owns plan/sprint allocation, CI registration and live dashboard state; submit a handoff for any needed shared changes.
-- Previous reconciliation scope is frozen. Front matter allocates private native validity/client byte reader; review/checks precede dispatch. No live authority inferred.
+- Previous reconciliation scope is frozen. Front matter now allocates offline contextual decision records and renderer; native validity scope is frozen. No live authority inferred.
 
 ## Preconditions
 
@@ -52,6 +52,8 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact owner, worker worktree/base and disjoint scope allocated; dispatch waits for the verified main merge and worker fast-forward.
 
 ## Done
+
+- [x] Canonical receiving reconciled at 87e31f521672e627e6230d48fc16a4cfaa7ff44c; native validity remains private/no caller. Independent intent-only [design DEC-001..026](../../../../qa/initiative-control/pf-80-s01/decision-projection/design-proposal.md) frozen before implementation. Integrator authorizes +3 design/code/evidence reviews, preserving earlier usage.
 
 - [x] Private native validitybda5b35b4 reviewed clean; combined staging04ba6b8b7 passes80TaskNode/242state tests. [Evidence](../../../../qa/initiative-control/native-staging-2026-09-12.md). No enabled caller; canonical receiving transfer/publication pending.
 
@@ -70,8 +72,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 
 ## Remaining
 
-- [ ] Transfer reviewed/tested staging checkpoint into canonical receiving after pending publication resolves; preserve ExpiryUnknown, private entry and posting OFF.
-- [ ] Activate the [prepared contextual-decision allocation](../../../research/tasknode-integration/decision-projection-next.md) after canonical receiving/ownership gates and independent intent-only design; exact scope/base/review allowance before dispatch. Slack remains unconnected under the [amendment](../../../plans/decision-escalation.md).
+- [ ] Implement the [contextual-decision allocation](../../../research/tasknode-integration/decision-projection-next.md) in the five declared paths, with strict records, atomic fixture persistence, pure renderer and applicable DEC cases. Preserve remaining browser/full-feed cases for sequential wiring; Slack remains unconnected.
 - [ ] Manager scopes accessible recovery/input/retention and restart/cross-process fences before the later CLI allocation; this is manager work, not unanswered product approval.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.
 - [ ] Give manager exact credential-scope/destination, enrollment, task-lifecycle and first-payload decisions; remain OFF if missing authority. Never inspect real credential stores as a worker.

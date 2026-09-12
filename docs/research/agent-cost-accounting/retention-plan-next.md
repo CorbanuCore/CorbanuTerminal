@@ -1,6 +1,6 @@
 # PF-60-S02 — next retention preparation allocation
 
-Status: **prepared, not executable or dispatched**. September 12, 2026.
+Status: **allocated for same-sprint execution; launch ID/HEAD in manager receipt**. September 12, 2026.
 This is continuation of PF-60-S02, not a new sprint or product contract.
 Product: **Product measurement**, “No commercial performance numbers have been
 supplied.” The [active plan](../../plans/active/portfolio-agent-cost-accounting.md)
@@ -8,11 +8,10 @@ and [approved retention handoff](retention-design-handoff.md) retain authority.
 
 ## Launch gate and ownership
 
-Latest quote `8b6d629b6` is reviewed; accepted main `bba52cecc` is reconciled in
-private staging `64cc30cf19a25f74ae07125eece91f6f766e8ebf`. The combined tree
-passes 242 state and 80 Task Node tests. That is not canonical receiving
-integration. The pending dashboard command and overlapping Facilities edits
-must be reconciled before changing its source; never discard those edits.
+Latest quote `8b6d629b6` and accepted main `1b7e9f3df` are now reconciled in
+canonical receiving at `87e31f521672e627e6230d48fc16a4cfaa7ff44c`. Overlapping Facilities edits
+were preserved recoverably before reconciliation. The old publisher was declined;
+no overlapping sync is authorized. Local work is no longer held by publication.
 
 Intended worker: one native Astra High agent in
 `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911`, branch
@@ -23,14 +22,16 @@ Intended worker: one native Astra High agent in
 - Record the actual new 40-character base in both active plan and sprint, replace
   the frozen latest-quote scope with the five paths below, and record the launch
   HEAD after a safe fast-forward. This document's staging SHA is not a launch SHA.
-- Preserve the review ledger, record remaining allowance and run both governance
-  checkers. Do not treat preparation or an old clean review as the new review.
+- Preserve the review ledger and run both governance checkers. The integrator
+  authorizes two additional passes: one new candidate review and one correction
+  only for substantive findings, under Travis's September12 delegation. Do not
+  rerun old clean reviews; further extensions are manager decisions.
 
 No changes to pricing, production admission or retention policy are authorized.
 Detail expires at dispatch+90 days, daily aggregates at UTC-day-start+365 days,
 and opaque replay records at dispatch+365 days; equality expires. No reapproval.
 
-## Literal proposed worker scope
+## Literal allocated worker scope
 
 1. `codex-rs/state/src/runtime/accounting_lifecycle.rs`: one private sibling
    registration only, delegated by the manager.

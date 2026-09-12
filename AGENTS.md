@@ -136,8 +136,28 @@ For non-user-facing work, record a reasoned not-applicable decision.
 - Normally use one independent design pass and one brief evidence check, both
   charged to the existing per-track review budget (default maximum five total,
   including code/external reviews). Do not reset the budget for this step.
-  Further reviews require the existing critical-finding exception or an explicit
-  human budget amendment; a spent budget is not permission to skip the gate.
+  Additional reviews may be authorized by the named integrator under the
+  September 12 delegation below; a spent budget never waives a required gate.
+
+### Integrator review discretion
+
+Travis's September 12, 2026 instruction delegates authority to the named
+integration owner to authorize additional scoped reviews without asking him each
+time. Favor extensions that remove real review/evidence blockers. Record scope,
+purpose, prior usage, additional allowance and result in the existing ledger;
+never erase earlier passes or disguise an extension as a reset. This applies to
+code, security, code-blind design and evidence reviews, including tracks held
+solely by review-count or replenishment-time limits. Security reviews remain
+coordinated through the existing security owner, without duplicate workers or
+resuming work paused for another reason.
+
+When earlier reviews have no substantive unresolved issue, move to the next
+required test, integration or assignment instead of seeking more opinions on
+unchanged code. Record cosmetic/nonblocking observations as follow-ups. Do not
+waive correctness/security findings, independence, actual test evidence,
+dependencies, product decisions, human acceptance or external-action permissions.
+Scope-break and convergence rules remain. Workers request routine extensions
+from the integrator rather than blocking on a new human review-spend decision.
 
 Use [the workflow and artifact templates](qa/code-blind-functional/README.md)
 and its handoff checker. The checker validates traceability, not the truth of

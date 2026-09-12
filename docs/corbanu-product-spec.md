@@ -488,6 +488,11 @@ features, successor preparation and concrete decision escalation under the
 sprint execution process. This is not blanket main-push, release, deployment,
 live-posting or product-contract acceptance authority.
 
+On September 12 Travis delegated additional-review authorization to the named
+integrator, particularly to unblock work. Preserve review history and move on
+when reviews have no substantive unresolved findings. Root AGENTS.md owns this
+execution rule; product and release acceptance remain separately authorized.
+
 Travis requested persistent, contextual decision cards on this dashboard and
 Slack alerts when human decisions stop work. He selected a dedicated private
 "The Corbanu Project" channel in AmbientCrypto. The manager owns one decision
