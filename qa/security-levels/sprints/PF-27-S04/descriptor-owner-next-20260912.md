@@ -1,6 +1,7 @@
 # Next bounded PF27 increment: asynchronous single-child owner
 
-Proposal for receiving integration owner; not yet allocated or implemented.
+Allocated by the receiving integration owner September12 after accepting
+fb7523f4b for branch continuation; main integration remains separate.
 The separate adapter source30b471a47/Rust2d270c5c has real non-root OS proof;
 Astra23 and Fable24 both completed clean with no findings. Approval
 of the isolated adapter is recorded; this record does not reopen that decision.
@@ -10,6 +11,46 @@ Keep the original PF-27-S04 owner/worktree/branch/base. Product citation:
 label; resolve them solely inside the trusted execution boundary.”
 
 ## Smallest next ownership boundary
+
+### Frozen allocation and private API
+
+Manager disposition:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/manager-continuation.9Id1V1/pf27-single-child-owner-disposition.md`.
+This implementation stays in the original worktree/branch/base, incremental
+fb7523f4b1fe3c8cfeafd8e11dca5d5f1be5c32f. Literal new runtime/test files:
+`codex-rs/secret-broker-service/src/launch/manifest/{spawn.rs,spawn_tests.rs}`;
+narrow changes in `manifest/{sealed.rs,mod.rs}`, service Cargo.toml/BUILD.bazel
+only for optional synthetic GNU dependency, Cargo.lock/MODULE.bazel.lock parity.
+Private QA lifecycle fixture:
+`qa/security-levels/sprints/PF-27-S04/descriptor-owner-20260912/lifecycle-tmux.sh`.
+It drives real owner tests using the already-hashed static hold/probe artifacts;
+no new public fixture binary/mode, source input path or exported launcher API.
+
+All interfaces below are private to the manifest module, gated GNU/Linux:
+`Reservation::acquire() -> io::Result<Reservation>` acquires the single
+process-local permit before callers prepare/consume an image.
+`Reservation::launch(self, image: SyntheticProfileInspectedImage,
+role: SyntheticChildRole, deadline: Instant)
+-> Result<LaunchHandle, (io::Error, SyntheticProfileInspectedImage)>` creates
+the worker before spawn and returns image ownership on worker creation failure.
+`LaunchHandle::{status() -> Status, cancel()}`; Drop requests cancellation only.
+`Status::{Launching,Running,CleanupPending,Complete(Completion),Quarantined}`
+and `Completion::{NotLaunched,Exited,Rejected}` are internal observations,
+not protocol or readiness claims. Fixed recipe IDs must match adapter101/201,
+102/202,103/203,anchor204 or reject before spawn; no adapter semantic change.
+Sealed image conversion stays inside the service without public FD export.
+
+Deterministic private generic child/worker seams exercise exact owner logic
+without changing adapter behavior. Shared state never holds its mutex across
+spawn/wait/signal. Sticky cancellation and absolute deadline require cleanup;
+only observed pre-spawn rejection/no-launch or reaping releases the permit.
+Panic/disconnect is Quarantined, never cleanup proof. Persistent OS errors
+retain the live owner, with polling retry after OS recovery; unrecoverable
+errors/panic remain quarantined with no in-process forced-reset API. Process
+crash recovery and privileged repair are explicitly outside this stage.
+No blind UX design applies: this internal seam has no new user-facing surface.
+Two new-source Astra/Fable closeouts are authorized and charged at dispatch;
+do not re-review the unchanged adapter.
 
 Add a synthetic-only, one-at-a-time launch owner under service
 `src/launch/manifest/{spawn.rs,spawn_tests.rs}`, narrow private conversion of

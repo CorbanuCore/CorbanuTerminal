@@ -982,6 +982,16 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
+September12 receiving owner accepted adapterfb7523f4b for branch continuation
+and allocated the [single-child asynchronous owner](../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-next-20260912.md).
+Exact private reservation/launch/status API and QA lifecycle script are frozen
+there before implementation; same owner/worktree/branch/base. Literal service
+manifest spawn/sealed/mod seams and synthetic dependency/lock parity only.
+No adapter semantic, children.rs/PF20/Core/Vault/native/dashboard/main changes.
+Permit-before-image, worker-before-spawn, sticky cancellation, no-block caller
+Drop, late-child cleanup and unrecoverable-quarantine evidence are required.
+Two necessary new-source reviews use the remaining scheduled allowance.
+
 September12 17:29UTC: Travis explicitly approved the isolated Linux launch
 adapter; manager relayed execution authority. The [accepted adapter-only
 allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-launch-next-20260912.md)
