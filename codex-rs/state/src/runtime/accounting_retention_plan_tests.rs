@@ -176,7 +176,7 @@ async fn whole_store_corruption_including_expired_and_orphan_rows_never_writes()
             "checkpoints",
         ),
         (
-            "INSERT INTO draft_accounting_retention_checkpoint VALUES (2, 0)",
+            "INSERT INTO draft_accounting_retention_checkpoint VALUES (2, 0, 0)",
             "checkpoints",
         ),
         (

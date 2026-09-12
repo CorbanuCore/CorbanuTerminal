@@ -1,5 +1,6 @@
 //! PF-60-S02 draft journal. The parent module registers this only under cfg(test).
 use super::StateRuntime;
+use anyhow::Context;
 use anyhow::ensure;
 use sqlx::SqliteConnection;
 use uuid::Uuid;
@@ -51,52 +52,7 @@ impl<'a> Journal<'a> {
         attempt.validate()?;
         ensure!(batch.len() <= 256, "observation batch too large");
         let mut tx = self.runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let result = async {
-            let installed: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'draft_accounting_tombstones')")
-                .fetch_one(&mut *tx).await?;
-            if installed {
-                let deleted: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM draft_accounting_tombstones WHERE attempt_id = ?)")
-                    .bind(attempt.attempt_id.to_string()).fetch_one(&mut *tx).await?;
-                ensure!(!deleted, "deleted attempt");
-            }
-            let existing = sqlx::query_scalar::<_, String>(
-                "SELECT payload FROM draft_accounting_attempts WHERE request_id = ?",
-            )
-            .bind(attempt.request_id.to_string())
-            .fetch_optional(&mut *tx)
-            .await?;
-            if let Some(existing) = existing {
-                ensure!(attempt.same_owner(&serde_json::from_str(&existing)?), "request owner conflict");
-            }
-            if let Some(predecessor) = attempt.retry_of {
-                let parent = read_attempt(&mut tx, predecessor).await?;
-                ensure!(parent.as_ref().is_some_and(|p| attempt.same_owner(p)), "invalid retry predecessor");
-            }
-            sqlx::query("INSERT INTO draft_accounting_attempts VALUES (?, ?, ?) ON CONFLICT(attempt_id) DO NOTHING")
-                .bind(attempt.attempt_id.to_string())
-                .bind(attempt.request_id.to_string())
-                .bind(serde_json::to_string(attempt)?)
-                .execute(&mut *tx).await?;
-            ensure!(read_attempt(&mut tx, attempt.attempt_id).await?.as_ref() == Some(attempt), "immutable identity conflict");
-            for observation in batch {
-                ensure!(i64::from(observation.revision) > 0, "revision must be positive");
-                sqlx::query("INSERT INTO draft_accounting_observations VALUES (?, ?, ?, ?, ?) ON CONFLICT(attempt_id, revision) DO NOTHING")
-                    .bind(attempt.attempt_id.to_string())
-                    .bind(i64::from(observation.revision))
-                    .bind(observation.source.to_string())
-                    .bind(i64::from(observation.sequence))
-                    .bind(serde_json::to_string(observation)?)
-                    .execute(&mut *tx).await?;
-                let stored: String = sqlx::query_scalar("SELECT payload FROM draft_accounting_observations WHERE attempt_id = ? AND revision = ?")
-                    .bind(attempt.attempt_id.to_string())
-                    .bind(i64::from(observation.revision))
-                    .fetch_one(&mut *tx).await?;
-                ensure!(serde_json::from_str::<Observation>(&stored)? == *observation, "observation conflict");
-            }
-            replay(attempt.dialect, &read_patches(&mut tx, attempt.attempt_id).await?)?;
-            anyhow::Ok(())
-        }.await;
-        match result {
+        match Self::append_on_connection(&mut tx, attempt, batch).await {
             Ok(()) => tx.commit().await?,
             Err(error) => {
                 tx.rollback().await?;
@@ -104,6 +60,96 @@ impl<'a> Journal<'a> {
             }
         }
         Ok(())
+    }
+
+    /// Caller holds a write transaction; the wrapper and contention tests share this body.
+    async fn append_on_connection(
+        conn: &mut SqliteConnection,
+        attempt: &Attempt,
+        batch: &[Observation],
+    ) -> anyhow::Result<()> {
+        attempt.validate()?;
+        ensure!(batch.len() <= 256, "observation batch too large");
+        if let RetentionFixture::Active(checkpoint) = retention_fixture_on_connection(conn).await? {
+            let dispatch = i64::from(attempt.dispatched_at_ms);
+            ensure!(dispatch <= checkpoint, "future dispatch");
+            let replay_expiry = dispatch
+                .checked_add(365 * 86_400_000)
+                .context("replay expiry overflow")?;
+            ensure!(replay_expiry > checkpoint, "expired replay import");
+            let detail_expiry = dispatch
+                .checked_add(90 * 86_400_000)
+                .context("detail expiry overflow")?;
+            ensure!(
+                detail_expiry > checkpoint,
+                "unsupported compact-only late import in this fixture"
+            );
+        }
+        let installed: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'draft_accounting_tombstones')")
+            .fetch_one(&mut *conn).await?;
+        if installed {
+            let deleted: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM draft_accounting_tombstones WHERE attempt_id = ?)",
+            )
+            .bind(attempt.attempt_id.to_string())
+            .fetch_one(&mut *conn)
+            .await?;
+            ensure!(!deleted, "deleted attempt");
+        }
+        let existing = sqlx::query_scalar::<_, String>(
+            "SELECT payload FROM draft_accounting_attempts WHERE request_id = ?",
+        )
+        .bind(attempt.request_id.to_string())
+        .fetch_optional(&mut *conn)
+        .await?;
+        if let Some(existing) = existing {
+            ensure!(
+                attempt.same_owner(&serde_json::from_str(&existing)?),
+                "request owner conflict"
+            );
+        }
+        if let Some(predecessor) = attempt.retry_of {
+            let parent = read_attempt(conn, predecessor).await?;
+            ensure!(
+                parent.as_ref().is_some_and(|p| attempt.same_owner(p)),
+                "invalid retry predecessor"
+            );
+        }
+        sqlx::query("INSERT INTO draft_accounting_attempts VALUES (?, ?, ?) ON CONFLICT(attempt_id) DO NOTHING")
+            .bind(attempt.attempt_id.to_string())
+            .bind(attempt.request_id.to_string())
+            .bind(serde_json::to_string(attempt)?)
+            .execute(&mut *conn).await?;
+        ensure!(
+            read_attempt(conn, attempt.attempt_id).await?.as_ref() == Some(attempt),
+            "immutable identity conflict"
+        );
+        for observation in batch {
+            ensure!(
+                i64::from(observation.revision) > 0,
+                "revision must be positive"
+            );
+            sqlx::query("INSERT INTO draft_accounting_observations VALUES (?, ?, ?, ?, ?) ON CONFLICT(attempt_id, revision) DO NOTHING")
+                .bind(attempt.attempt_id.to_string())
+                .bind(i64::from(observation.revision))
+                .bind(observation.source.to_string())
+                .bind(i64::from(observation.sequence))
+                .bind(serde_json::to_string(observation)?)
+                .execute(&mut *conn).await?;
+            let stored: String = sqlx::query_scalar("SELECT payload FROM draft_accounting_observations WHERE attempt_id = ? AND revision = ?")
+                .bind(attempt.attempt_id.to_string())
+                .bind(i64::from(observation.revision))
+                .fetch_one(&mut *conn).await?;
+            ensure!(
+                serde_json::from_str::<Observation>(&stored)? == *observation,
+                "observation conflict"
+            );
+        }
+        replay(
+            attempt.dialect,
+            &read_patches(conn, attempt.attempt_id).await?,
+        )?;
+        anyhow::Ok(())
     }
 
     async fn read_observations(
@@ -140,4 +186,78 @@ async fn read_patches(conn: &mut SqliteConnection, id: Uuid) -> anyhow::Result<V
         .iter()
         .map(|p| serde_json::from_str(p))
         .collect::<Result<_, _>>()?)
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum RetentionFixture {
+    Absent,
+    Staging,
+    Active(i64),
+}
+
+/// Strict fixture metadata, never an implicit install, repair or activation path.
+async fn retention_fixture_on_connection(
+    conn: &mut SqliteConnection,
+) -> anyhow::Result<RetentionFixture> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM sqlite_schema WHERE name IN (
+            'draft_accounting_compact_days', 'draft_accounting_compact_snapshots',
+            'draft_accounting_retention_checkpoint')",
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    if count == 0 {
+        return Ok(RetentionFixture::Absent);
+    }
+    ensure!(count == 3, "partial retention schema");
+    for (table, expected) in [
+        (
+            "draft_accounting_compact_days",
+            "thread_id:TEXT:1:1,utc_day:INTEGER:1:2,payload:TEXT:1:0",
+        ),
+        (
+            "draft_accounting_compact_snapshots",
+            "thread_id:TEXT:1:1,utc_day:INTEGER:1:2,snapshot_id:TEXT:1:3",
+        ),
+        (
+            "draft_accounting_retention_checkpoint",
+            "singleton:INTEGER:0:1,completed_as_of_ms:INTEGER:0:0,admission_active:INTEGER:1:0",
+        ),
+    ] {
+        let is_table: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name = ? AND type = 'table')",
+        )
+        .bind(table)
+        .fetch_one(&mut *conn)
+        .await?;
+        let columns: Vec<(String, String, i64, i64)> = sqlx::query_as(
+            "SELECT name, type, \"notnull\", pk FROM pragma_table_info(?) ORDER BY cid",
+        )
+        .bind(table)
+        .fetch_all(&mut *conn)
+        .await?;
+        let shape = columns
+            .iter()
+            .map(|(name, kind, required, key)| format!("{name}:{kind}:{required}:{key}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        ensure!(
+            is_table && shape == expected,
+            "invalid retention schema: {table}"
+        );
+    }
+    let rows: Vec<(i64, Option<i64>, i64)> = sqlx::query_as(
+        "SELECT singleton, completed_as_of_ms, admission_active FROM draft_accounting_retention_checkpoint",
+    ).fetch_all(conn).await?;
+    ensure!(rows.len() == 1, "missing or multiple checkpoints");
+    let (key, time, active) = rows[0];
+    ensure!(key == 1, "invalid checkpoint key");
+    ensure!(time.is_none_or(|time| time >= 0), "negative checkpoint");
+    match active {
+        0 => Ok(RetentionFixture::Staging),
+        1 => Ok(RetentionFixture::Active(
+            time.context("active NULL checkpoint")?,
+        )),
+        _ => anyhow::bail!("invalid admission bit"),
+    }
 }

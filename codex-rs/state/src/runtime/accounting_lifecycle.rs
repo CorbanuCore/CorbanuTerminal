@@ -1,5 +1,7 @@
 //! Retained-detail fixture lifecycle; no native ownership or retention service.
 use super::*;
+use crate::runtime::accounting::RetentionFixture;
+use crate::runtime::accounting::retention_fixture_on_connection;
 use codex_protocol::ThreadId;
 use std::collections::BTreeMap;
 
@@ -144,6 +146,13 @@ impl<'a> Lifecycle<'a> {
     async fn read_day(&self, thread: ThreadId, day: i64) -> anyhow::Result<Current<DayTotals>> {
         ensure!(day >= 0, "negative day");
         let mut tx = self.estimates.journal.runtime.pool.begin().await?;
+        ensure!(
+            matches!(
+                retention_fixture_on_connection(&mut tx).await?,
+                RetentionFixture::Absent
+            ),
+            "installed retention requires read_retained_day"
+        );
         let attempts = owned_attempts(&mut tx, thread).await?;
         let rows: Vec<(String, String)> = sqlx::query_as(
             "SELECT attempt_id, evidence FROM draft_accounting_contributions WHERE thread_id = ? AND utc_day = ?",
@@ -187,6 +196,10 @@ impl<'a> Lifecycle<'a> {
             .begin_with("BEGIN IMMEDIATE")
             .await?;
         let result = async {
+            ensure!(
+                matches!(retention_fixture_on_connection(&mut tx).await?, RetentionFixture::Absent),
+                "installed retention deletion requires coupled maintenance"
+            );
             let attempts = owned_attempts(&mut tx, thread).await?;
             let mut snapshots = HashSet::new();
             for (attempt, _) in attempts {

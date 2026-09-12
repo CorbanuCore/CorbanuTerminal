@@ -215,7 +215,7 @@ async fn read_validated_input_on_connection(
 }
 
 #[path = "accounting_retention_reduction.rs"]
-mod reduction;
+pub(super) mod reduction;
 
 #[cfg(test)]
 #[path = "accounting_retention_plan_tests.rs"]

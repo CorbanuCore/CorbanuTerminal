@@ -32,6 +32,7 @@ pub(super) fn row(a: &Attempt, revision: i64, input: i64) -> Observation {
 }
 
 pub(super) async fn install(runtime: &StateRuntime) -> anyhow::Result<Lifecycle<'_>> {
+    // Unactivated synthetic setup only: NULL is unknown, and zero does not imply a sweep.
     let store = Lifecycle::create_for_tests(runtime).await?;
     let mut tx = runtime.pool.begin().await?;
     sqlx::raw_sql(
@@ -44,8 +45,9 @@ pub(super) async fn install(runtime: &StateRuntime) -> anyhow::Result<Lifecycle<
             FOREIGN KEY(thread_id, utc_day) REFERENCES draft_accounting_compact_days(thread_id, utc_day),
             FOREIGN KEY(snapshot_id) REFERENCES draft_accounting_price_snapshots(snapshot_id));
          CREATE TABLE draft_accounting_retention_checkpoint (
-            singleton INTEGER PRIMARY KEY, completed_as_of_ms INTEGER);
-         INSERT INTO draft_accounting_retention_checkpoint VALUES (1, NULL);",
+            singleton INTEGER PRIMARY KEY, completed_as_of_ms INTEGER,
+            admission_active INTEGER NOT NULL CHECK(admission_active IN (0, 1)));
+         INSERT INTO draft_accounting_retention_checkpoint VALUES (1, NULL, 0);",
     ).execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(store)
@@ -98,7 +100,7 @@ pub(super) async fn dump(conn: &mut SqliteConnection) -> anyhow::Result<Vec<Vec<
         "SELECT json_array(attempt_id, expires_at_ms) FROM draft_accounting_tombstones ORDER BY attempt_id",
         "SELECT json_array(thread_id, utc_day, payload) FROM draft_accounting_compact_days ORDER BY thread_id, utc_day",
         "SELECT json_array(thread_id, utc_day, snapshot_id) FROM draft_accounting_compact_snapshots ORDER BY thread_id, utc_day, snapshot_id",
-        "SELECT json_array(singleton, completed_as_of_ms) FROM draft_accounting_retention_checkpoint ORDER BY singleton",
+        "SELECT json_array(singleton, completed_as_of_ms, admission_active) FROM draft_accounting_retention_checkpoint ORDER BY singleton",
     ] {
         tables.push(sqlx::query_scalar(query).fetch_all(&mut *conn).await?);
     }

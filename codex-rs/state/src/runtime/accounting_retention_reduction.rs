@@ -1,6 +1,9 @@
 //! Pure, checked retention preparation under the private test-only accounting tree.
 use super::*;
 
+#[path = "accounting_retention_atomic.rs"]
+pub(in crate::runtime::accounting::pricing::storage::lifecycle) mod atomic;
+
 #[derive(Debug, PartialEq, Eq)]
 struct CompactDay {
     values: CompactValues,
