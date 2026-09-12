@@ -105,8 +105,9 @@ def render_decisions(raw, now, sprints, documents):
     opened = [d for d in feed["decisions"] if d["id"] in view["open"]]
     body += f'<p>{"Last-known open" if stale else "Open decisions"}: {len(opened)}.'
     if opened:
-        age = max(int((stamp(now) - stamp(d["revisions"][0]["raised_at"])).total_seconds() // 60) for d in opened)
-        body += f' Oldest raised {age} minutes ago.'
+        raised = min(d["revisions"][0]["raised_at"] for d in opened)
+        age = int((stamp(now) - stamp(raised)).total_seconds() // 60)
+        body += f' <span id="oldest-open-decision-age" data-raised-at="{esc(raised)}">Oldest raised {age} minutes ago.</span>'
     elif not stale:
         body += ' No open decisions found in this fresh assessment.'
     body += '</p>'

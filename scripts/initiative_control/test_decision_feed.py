@@ -1,4 +1,5 @@
 import json
+from html.parser import HTMLParser
 import os
 from pathlib import Path
 import shutil
@@ -280,6 +281,7 @@ for (const connected of [true, false]) {
   let now = Date.parse("2026-09-12T12:20:00Z"), timer;
   const texts = ["Source manager-fixture / revision 1; assessed 2026-09-12T12:00:00Z. Fresh manager assessment.", "Open decisions: 0. No open decisions found in this fresh assessment.", "Revision 1: open; raised 2026-09-12T12:00:00Z; context updated 2026-09-12T12:00:00Z. Context within freshness window.", "Evidence within freshness window; assessed 2026-09-12T12:00:00Z", "Unknown assessment time", "Question Fresh manager assessment."];
   const paragraphs = texts.map(text => ({textContent:text}));
+  paragraphs[1].firstChild = paragraphs[1]; // This fixture has only a count text node.
   const section = {dataset:{assessedAt:"2026-09-12T12:00:00Z", freshSeconds:"1200"}, querySelectorAll:()=>paragraphs};
   paragraphs[0].parentElement = paragraphs[1].parentElement = section;
   paragraphs[3].firstElementChild = {tagName:"A", textContent:"Evidence within freshness window"};
@@ -307,3 +309,125 @@ for (const connected of [true, false]) {
 '''
         result = subprocess.run([shutil.which("node") or "node", "-e", script, str(control.HERE / "status.js")], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_f01_published_age_initial_reload_boundaries_and_failed_health(self):
+        self.value["decisions"][0]["id"] = "oldest-age"  # Legal permanent-link collision regression.
+        label = 'Oldest raised 0 minutes ago. Fresh manager assessment. <b>safe</b>'
+        record = self.value["decisions"][0]["revisions"][0]
+        record["question"] = record["evidence"][0]["label"] = label
+        self.save(self.value)
+        target, _ = self.bundle()
+        frozen = (target / "source" / transport.ARTIFACT).read_bytes()
+        self.activate(target)
+        _, page, _ = self.publish()
+        self.assertIn(f'data-raised-at="{NOW}"', page)
+        # Parse the actual published fragment, including its text/element children.
+        class Fragment(HTMLParser):
+            def __init__(self, markup):
+                super().__init__()
+                self.root = dict(tag="root", attrs={}, children=[])
+                self.stack = [self.root]
+                self.feed(markup)
+
+            def handle_starttag(self, tag, attrs):
+                node = dict(tag=tag, attrs=dict(attrs), children=[])
+                self.stack[-1]["children"].append(node)
+                self.stack.append(node)
+
+            def handle_endtag(self, tag):
+                assert self.stack.pop()["tag"] == tag
+
+            def handle_data(self, text):
+                self.stack[-1]["children"].append(dict(text=text))
+
+        fragment = '<section id="decisions"' + page.split('<section id="decisions"', 1)[1].split('</section>', 1)[0] + '</section>'
+        fragments = [Fragment(fragment).root]
+        for status in ("resolved", "superseded"):
+            markup = attention.render_decisions(revision(self.value, status), NOW, [], {})
+            markup = markup.replace('<section id="decisions">',
+                                    f'<section id="decisions" data-assessed-at="{NOW}" data-fresh-seconds="1200">')
+            fragments.append(Fragment(markup).root)
+        script = r'''
+const assert = require("node:assert/strict"), vm = require("node:vm"), fs = require("node:fs");
+const trees = JSON.parse(fs.readFileSync(0, "utf8"));
+const source = fs.readFileSync(process.argv[1], "utf8"), base = Date.parse("2026-09-12T12:00:00Z");
+const walk = n => [n, ...(n.children || []).flatMap(walk)];
+function node(raw, parentElement = null) {
+  const n = {...raw, parentElement, tagName:raw.tag?.toUpperCase(), dataset:{}};
+  for (const [key, value] of Object.entries(raw.attrs || {})) {
+    if (key.startsWith("data-")) n.dataset[key.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = value;
+  }
+  n.children = (raw.children || []).map(child => node(child, n));
+  Object.defineProperties(n, {
+    textContent:{get:() => n.text ?? n.children.map(c => c.textContent).join(""),
+      set:value => {n.text = value; n.children = []; }},
+    firstChild:{get:() => n.children[0]}, lastChild:{get:() => n.children.at(-1)},
+    firstElementChild:{get:() => n.children.find(c => c.tagName)}
+  });
+  n.querySelectorAll = tag => walk(n).filter(c => c.tag === tag);
+  n.closest = selector => selector === "#decisions" ? n.attrs?.id === "decisions" ? n : n.parentElement?.closest(selector) : null;
+  return n;
+}
+(async () => {
+for (const tree of trees) {
+for (const mode of ["healthy", "failed", "offline", "http", "pending"]) {
+  for (const start of [59999, 300000, 1200001]) { // Initial old snapshot/reload; stale on load.
+    let now = base + start, timer, calls = 0;
+    const root = node(tree), section = walk(root).find(n => n.attrs?.id === "decisions");
+    const freshness = {}, lookup = id => walk(root).find(n => n.attrs?.id === id);
+    const oldest = lookup("oldest-open-decision-age"), prefix = oldest?.parentElement.firstChild;
+    const detail = lookup("decision-oldest-age"), history = detail.children;
+    assert.equal(walk(root).filter(n => n.attrs?.id === "decision-oldest-age").length, 1);
+    assert.equal(detail.tagName, "DETAILS");
+    const user = walk(root).filter(n => n.tag === "a" || n.tag === "strong");
+    const original = user.map(n => n.tag === "a" ? n.textContent : n.parentElement.textContent);
+    const document = {body:{dataset:{generation:"same", collected:"2026-09-12T12:00:00Z"}},
+      getElementById:id => id === "freshness" ? freshness : lookup(id), querySelectorAll:() => []};
+    const context = vm.createContext({document, Date:{now:() => now, parse:Date.parse},
+      location:{hash:"#decision-oldest-age"}, window:{addEventListener:() => {}}, setInterval:(f, ms) => {assert.equal(ms,30000); timer=f;},
+      fetch:async () => {calls++; if (mode === "offline") throw Error("offline");
+        if (mode === "pending") return new Promise(() => {});
+        return {ok:mode !== "http", json:async () => ({ok:mode !== "failed", generation:"same", published_at:"2026-09-12T12:00:00Z"})};}});
+    vm.runInContext(source, context);
+    assert.equal(detail.open, true); // The permanent link opens the record, never the age span.
+    timer();
+    assert.equal(detail.children, history); // Age refresh must never erase decision/history markup.
+    if (!oldest) {
+      assert.match(detail.textContent, /Retained revision 1/);
+      assert.match(detail.textContent, /Five testers/);
+      assert(!detail.textContent.includes("Oldest raised age unknown."));
+      continue;
+    }
+    assert.equal(oldest.textContent, `Oldest raised ${Math.floor(start / 60000)} minutes ago.`);
+    for (const elapsed of [59999, 60000, 60001, 119999, 120000, 1200000, 1200001, 1800000]) {
+      now = base + elapsed; timer();
+      assert.equal(oldest.textContent, `Oldest raised ${Math.floor(elapsed / 60000)} minutes ago.`);
+      assert.equal(lookup("oldest-open-decision-age"), oldest); // Stale transition cannot detach target.
+    }
+    assert.match(prefix.textContent, /^Last-known open: 1\./);
+    const paragraphs = section.querySelectorAll("p");
+    assert(paragraphs.some(p => /Stale context/.test(p.textContent)));
+    assert(paragraphs.some(p => /Stale evidence/.test(p.textContent)));
+    user.forEach((n, i) => { // Evidence suffix may age; user label and other text must not.
+      assert.equal(n.tag === "a" ? n.textContent : n.parentElement.textContent, original[i]);
+    });
+    assert(paragraphs.some(p => /raised 2026-09-12T12:00:00Z; context updated 2026-09-12T12:00:00Z/.test(p.textContent)));
+    assert.equal(oldest.dataset.raisedAt, "2026-09-12T12:00:00Z");
+    assert.equal(section.dataset.assessedAt, "2026-09-12T12:00:00Z");
+    for (const stamp of ["invalid", "", "2099-01-01T00:00:00Z"]) {
+      oldest.dataset.raisedAt = stamp; timer(); assert.equal(oldest.textContent, "Oldest raised age unknown.");
+    }
+    assert(calls > 1);
+    await new Promise(resolve => setImmediate(resolve));
+    if (["offline", "http"].includes(mode)) assert.match(freshness.textContent, /Connection unavailable/);
+    if (mode === "failed") assert.match(freshness.textContent, /Publisher failed/);
+  }
+}
+}
+})().catch(error => {console.error(error); process.exitCode=1;});
+'''
+        result = subprocess.run([shutil.which("node") or "node", "-e", script,
+                                 str(self.install / "site/current/status.js")],
+                                input=json.dumps(fragments), capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((target / "source" / transport.ARTIFACT).read_bytes(), frozen)

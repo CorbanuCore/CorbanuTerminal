@@ -4,6 +4,13 @@ const freshness = document.getElementById("freshness");
 function updateDecisionAge() {
   const section = document.getElementById("decisions");
   if (!section || !section.dataset.assessedAt) return; // Unknown never becomes empty.
+  const oldest = document.getElementById("oldest-open-decision-age");
+  if (oldest) {
+    const elapsed = Date.now() - Date.parse(oldest.dataset.raisedAt);
+    oldest.textContent = Number.isFinite(elapsed) && elapsed >= 0
+      ? `Oldest raised ${Math.floor(elapsed / 60000)} minutes ago.`
+      : "Oldest raised age unknown.";
+  }
   const expired = stamp => Date.now() - Date.parse(stamp) > Number(section.dataset.freshSeconds) * 1000;
   const stale = expired(section.dataset.assessedAt);
   for (const p of section.querySelectorAll("p")) {
@@ -12,7 +19,7 @@ function updateDecisionAge() {
       p.textContent = p.textContent.replace("Fresh manager assessment.", "Stale: current decisions unknown; showing last-known records.");
     }
     if (stale && p.parentElement === section && p.textContent.startsWith("Open decisions:")) {
-      p.textContent = p.textContent
+      p.firstChild.textContent = p.firstChild.textContent
         .replace("Open decisions:", "Last-known open:")
         .replace(" No open decisions found in this fresh assessment.", "");
     }

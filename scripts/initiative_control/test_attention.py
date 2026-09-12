@@ -141,6 +141,40 @@ class DecisionRenderingTests(unittest.TestCase):
         self.assertIn("Open decisions: 1", acknowledged)
         self.assertIn("Acknowledged; unresolved", acknowledged)
 
+    def test_f01_oldest_target_uses_open_history_and_preserves_dates(self):
+        from test_decisions import LATER, revision
+        older = copy.deepcopy(self.value["decisions"][0])
+        older["id"] = "older"
+        older["revisions"][0]["raised_at"] = "2026-09-12T11:00:00Z"
+        for status in ("open", "acknowledged", "resolved", "superseded"):
+            value = revision(self.value, status)
+            value["decisions"].append(older)
+            before = copy.deepcopy(value)
+            for at, age in ((self.now, 60), (LATER, 81)):
+                page = self.render(value, at)
+                self.assertIn('id="oldest-open-decision-age" data-raised-at="2026-09-12T11:00:00Z"', page)
+                self.assertIn(f"Oldest raised {age} minutes ago.</span>", page)
+                self.assertEqual(page.count('id="oldest-open-decision-age"'), 1)
+            self.assertEqual(value, before)
+        # A resolved older decision must no longer determine the open age.
+        value = revision({**self.value, "decisions": [older]}, "resolved")
+        value["decisions"].append(self.value["decisions"][0])
+        self.assertIn(f'data-raised-at="{self.now}"', self.render(value))
+
+    def test_f01_empty_unknown_and_resolved_have_no_age_target(self):
+        from test_decisions import LATER, revision
+        invalid = copy.deepcopy(self.value)
+        invalid["decisions"][0]["revisions"][0]["raised_at"] = '<img src=x>'
+        future = copy.deepcopy(self.value)
+        future["decisions"][0]["revisions"][0]["raised_at"] = "2099-01-01T00:00:00Z"
+        for value in ({}, invalid, future, {**self.value, "decisions": []},
+                      revision(self.value, "resolved"), revision(self.value, "superseded")):
+            for at in (self.now, LATER):
+                page = self.render(value, at)
+                self.assertNotIn("oldest-open-decision-age", page)
+                self.assertNotIn("Oldest raised", page)
+                self.assertNotIn("<img", page)
+
     def test_dec008_014_freshness_unknown_and_mixed_age(self):
         from test_decisions import LATER
         empty = {**self.value, "decisions": []}
