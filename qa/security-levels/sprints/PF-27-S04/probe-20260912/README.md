@@ -81,6 +81,11 @@ under that RTX evidence directory's `candidate/`. Other binary hashes are in
 
 ## Review / native gates
 
+September12 08:43Z amendment: manager relayed Travis's integrator discretion and
+granted +2 scoped reviews (Astra12, required Fable13) now, without waiting for
+the scheduled reset. See ../review-budget.md; historical usage is preserved.
+This supersedes only the review wait in the original checkpoint below.
+
 Five slots were already spent in the window ending2026-09-12T11:25:45Z.
 Do not dispatch another review early or repeat finished reviews6–11. At the
 actual reset, compute the current allowance, reserve review12, then use Astra

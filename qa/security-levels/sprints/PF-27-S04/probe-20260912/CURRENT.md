@@ -1,4 +1,9 @@
-# Probe checkpoint — tests finished, review window pending
+# Probe checkpoint — tests finished, scoped review extension
+
+September12 08:43Z: manager relayed Travis's integrator-discretion amendment and
+authorized two additional scoped reviews now. Reviews12/13 are reserved in the
+budget ledger; this supersedes the scheduled wait below, not historical usage.
+No new code, test rerun, native installation or scope expansion is needed.
 
 Source baseline `a666c6cd9`; exact tested Rust tree
 `0934e62ae687f680746476c9374d35092a68ab83`. See README for all counts/limitations.
