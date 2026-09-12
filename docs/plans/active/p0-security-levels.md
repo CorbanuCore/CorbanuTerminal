@@ -985,7 +985,7 @@ for design provenance; product scope remains in the specification.
 Manager accepted receiving Stage B e1cc38a70/Rust2588dfe0: all17 commands+suite0,
 actual RTX/TMUX/provenance and unchanged locks verified. Next sole-owner
 [descriptor identity compatibility allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-allocation-20260912.md)
-starts at clean6b393f134 with ten exact paths/hard800, including narrow PF20
+starts at clean6b393f134 with eleven exact paths/hard800, including narrow PF20
 dependency surfaces now serialized to this owner. Reviews33/34 authorized without
 resetting1–32. No native/default activation or whole-sprint acceptance.
 
