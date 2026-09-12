@@ -22,6 +22,11 @@ struct Probe {
     panic_poll: AtomicBool,
 }
 struct Token(Arc<Probe>);
+impl Process for Token {
+    fn matches(&self, _peer: std::os::fd::BorrowedFd<'_>) -> io::Result<bool> {
+        Ok(false)
+    }
+}
 impl Child for Token {
     fn stop(&self) -> io::Result<()> {
         self.0.stops.fetch_add(1, Ordering::SeqCst);
@@ -97,7 +102,12 @@ fn images() -> PairImages<u8> {
 }
 fn launch(reservation: Reservation, backends: [Fake; 2], deadline: Instant) -> LaunchHandle {
     reservation
-        .launch_with(images(), PairBackend(backends), deadline, start_worker)
+        .launch_with(
+            images(),
+            PairBackend(backends, None),
+            deadline,
+            start_worker,
+        )
         .unwrap_or_else(|_| panic!("worker creation failed"))
 }
 fn released(permit: &AtomicBool) {
@@ -113,9 +123,12 @@ fn pf_27_s01_pair_reservation_worker_failure_and_prelaunch_cancel() {
     assert!(Reservation::acquire_from(Arc::clone(&permit)).is_err());
     let probes = probes();
     let (_, returned) = owner
-        .launch_with(images(), PairBackend(backends(&probes)), deadline(), |_| {
-            Err(io::ErrorKind::WouldBlock.into())
-        })
+        .launch_with(
+            images(),
+            PairBackend(backends(&probes), None),
+            deadline(),
+            |_| Err(io::ErrorKind::WouldBlock.into()),
+        )
         .err()
         .unwrap();
     assert_eq!((returned.journal, returned.policy), (1, 2));
@@ -126,7 +139,7 @@ fn pf_27_s01_pair_reservation_worker_failure_and_prelaunch_cancel() {
         let handle = owner
             .launch_with(
                 images(),
-                PairBackend(backends(&probes)),
+                PairBackend(backends(&probes), None),
                 if expired { Instant::now() } else { deadline() },
                 |job| {
                     start_worker(Box::new(move || {

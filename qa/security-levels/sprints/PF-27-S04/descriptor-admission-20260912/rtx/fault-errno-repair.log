@@ -1,0 +1,15 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-admission-20260912/codex-rs/secret-broker-service)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.36s
+────────────
+ Nextest run ID 17435254-bbbe-4dbd-a212-8a00d42ec822 with nextest profile: local
+    Starting 7 tests across 7 binaries (62 tests skipped)
+        PASS [   0.003s] (1/7) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_worker_lost_success_receiver
+        PASS [   0.003s] (2/7) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_late_success_and_lost_receiver_close_channels
+        PASS [   0.049s] (3/7) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_uid_mismatch_and_unrelated_process
+        PASS [   0.071s] (4/7) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_roles_reverse_duplicate_parent_old_and_dead
+        PASS [   0.103s] (5/7) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_kernel_faults_and_pre_delivery_cancellation
+        PASS [   0.104s] (6/7) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_bounded_queue_cancel_deadline_and_lost_ticket
+        PASS [   0.195s] (7/7) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_peer_eof_death_receipt_drop_and_caller_drop
+────────────
+     Summary [   0.195s] 7 tests run: 7 passed, 62 skipped

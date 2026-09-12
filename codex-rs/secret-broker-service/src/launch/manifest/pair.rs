@@ -1,4 +1,6 @@
-//! Private two-child lifecycle only; admission and PF20 wiring are separate.
+//! Private synthetic pair lifecycle/admission; no PF20 or native activation.
+#[path = "pair_admission.rs"]
+pub(super) mod admission;
 use super::super::SyntheticChildRole;
 use super::sealed::SyntheticProfileInspectedImage;
 use super::spawn::Backend;
@@ -7,6 +9,8 @@ use super::spawn::LaunchHandle;
 use super::spawn::Reservation;
 use super::spawn::Shared;
 use super::spawn::start_worker;
+use admission::Admission;
+use admission::Process;
 use std::io;
 use std::sync::Arc;
 use std::time::Instant;
@@ -23,10 +27,13 @@ impl Reservation {
     ) -> Result<LaunchHandle, (io::Error, PairImages)> {
         self.launch_with(
             images,
-            PairBackend([
-                Kernel(SyntheticChildRole::Journal),
-                Kernel(SyntheticChildRole::Policy),
-            ]),
+            PairBackend(
+                [
+                    Kernel(SyntheticChildRole::Journal),
+                    Kernel(SyntheticChildRole::Policy),
+                ],
+                None,
+            ),
             deadline,
             start_worker,
         )
@@ -40,12 +47,16 @@ impl Backend for Kernel {
         image.launch_owned(self.0)
     }
 }
-struct PairBackend<B>([B; 2]);
-struct PairChild<C: Child> {
+struct PairBackend<B>([B; 2], Option<Admission>);
+struct PairChild<C: Process> {
     children: [Option<C>; 2],
     control: Arc<Shared>,
+    admission: Option<Admission>,
 }
-impl<B: Backend> Backend for PairBackend<B> {
+impl<B: Backend> Backend for PairBackend<B>
+where
+    B::Child: Process,
+{
     type Image = PairImages<B::Image>;
     type Child = PairChild<B::Child>;
     fn spawn(self, images: Self::Image, control: &Arc<Shared>) -> io::Result<Self::Child> {
@@ -54,6 +65,7 @@ impl<B: Backend> Backend for PairBackend<B> {
         let mut pair = PairChild {
             children: [Some(first), None],
             control: Arc::clone(control),
+            admission: self.1,
         };
         if !control.cancelled() {
             match policy.spawn(images.policy, control) {
@@ -66,9 +78,12 @@ impl<B: Backend> Backend for PairBackend<B> {
         Ok(pair)
     }
 }
-impl<C: Child> Child for PairChild<C> {
+impl<C: Process> Child for PairChild<C> {
     fn stop(&self) -> io::Result<()> {
         self.control.cancel();
+        if let Some(admission) = &self.admission {
+            admission.close();
+        }
         let mut error = None;
         for child in self.children.iter().flatten() {
             if let Err(err) = child.stop() {
@@ -92,13 +107,16 @@ impl<C: Child> Child for PairChild<C> {
                 }
             }
         }
+        if let Some(admission) = &mut self.admission {
+            admission.tick(&mut self.children, &self.control);
+        }
         match error {
             Some(error) => Err(error),
             None => Ok(all),
         }
     }
 }
-impl<C: Child> Drop for PairChild<C> {
+impl<C: Process> Drop for PairChild<C> {
     fn drop(&mut self) {
         // Signal BOTH before either OwnedChild's potentially blocking Drop.
         // Panic still quarantines the permit, even if cleanup later succeeds.

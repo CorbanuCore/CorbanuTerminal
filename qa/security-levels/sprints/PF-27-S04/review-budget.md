@@ -18,6 +18,47 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Review32 dispatched21:27:12UTC and completedexit1: patchcorrect/no blocking
+runtime defect; independent checks confirm repairedhash/892lines/all18tracked
+zeroexits and logs. SoleP3 stale case-map count eight vs ten verified and fixed
+as documentation-only; no runtime change or additional opinion. Original
+descriptor-admission-20260912/fable32.{json,txt,exit} retained. Corrective
+extension used1/remaining0; no reset, no claim helperexit0. All1–32 preserved.
+StageB source7839f9f65/Rust5a4ee88b remains exact final tested source; qualified
+private increment handed to manager for receiving, no push/native permission.
+
+CorrectiveFable32 reserved September12 21:26UTC before dispatch, manager251074ef7.
+Frozen repairedsource7839f9f653a3471bb9bbed19ebc7bed43308bbe3/Rust5a4ee88b5fe4c9b946842a4709f9b88f85c54c79;
+review/size baseline remains6d770938c, measured892/same7paths/hard900. Actual
+unchanged-runtime regression failedexit100, repaired focused8/full18exits pass,
+fix/fmt/strictlint/parity/source/locks final. Original30/31 preserved and both
+findings accepted in scope. One corrective extension reserved; none unreserved,
+no reset or additional Astra. Outcome pending; record actual dispatch timestamp.
+
+Reviews30/31 dispatched21:13:07UTC, both completed exit1. Astra30 P2 buffered
+EOF accepted after source/kernel confirmation; manager251074ef7 authorizes only
+the shutdown-check fix and corresponding actual regression within same7/hard900.
+Fable31 judged runtime correct but found the bazel-parity.exit receipt ignored
+by root bazel-*; verified, accepted and original existing exit0 now force-added.
+Both findings belong to this exact increment; no different contract/scope.
+Preserve originals descriptor-admission-20260912/{astra30,fable31}.{json,txt,exit}.
+Manager grants exactly one corrective Fable32 after failing regression, repair,
+format and full proof. Not yet reserved/dispatched; no reset or extra opinion.
+
+StageB reviews30 AstraHigh and31 Fable5.1High Corbanu/privateTMUX reserved
+September12 21:11UTC before dispatch, exact sourceb59999635298069831165f0fab08cd6be862f419,
+Rust194ff9575e4016d2c3b45ddd639945fbbbc836ab over accepted6d770938c.
+Measured863 across7paths within manager3e76ee4ec hard900 test/runner exception;
+all18 final TMUX/command exits0, strict lint/parity/unchangedsource/locks pass.
+Two explicit extension slots reserved, none remaining unreserved; old1–29 and
+their scheduled-window accounting preserved. Results pending; no source push.
+
+StageB allocation manager67273f7e grants two necessary new-source reviews:
+30 AstraHigh and31 Fable5.1High Corbanu/privateTMUX, after final B proof.
+0 dispatched/2 available in this explicit extension; preserve1–29 and the
+scheduled current-window five used. Scope/baseline in admission allocation,
+not an unchanged A review. Reserve each pass before dispatch; no source push.
+
 Reviews28/29 completed exit0/findings[], patch correct. No accepted/actionable
 findings, no code repair and no additional review. Originals under
 descriptor-pair-20260912/{astra28,fable29}.{json,txt,exit}; reviewed source
