@@ -1,9 +1,11 @@
-# PF27 sealed-byte format inspection — qualification in progress
+# PF27 sealed-byte format inspection — tests complete, reviews pending
 
 Frozen source1b7ce9ea0, Rust `9033b2ed07c12d1375c3f817d864a031acf952b5`.
 Five exact Rust paths,458 additions (197 runtime/wiring,261 tests). RTX final
 fix/format leaves this source unchanged. Default3, synthetic44 and explicitly
-selected ignored artifact1 pass; affected suite finishing before closeout.
+selected ignored artifact1 pass; affected356 pass with2 existing helper skips.
+Actual-key TMUX completes parser-exit0. Full original outputs are in rtx/final;
+initial outputs are retained separately, not substituted for final-tree proof.
 
 Accepted contract and original cases: [allocation](../runtime-elf-next-20260912.md).
 PF-27-S04 remains in progress, same sole owner/worktree/original d870 base;
