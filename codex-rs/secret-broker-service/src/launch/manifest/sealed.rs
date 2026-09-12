@@ -37,9 +37,7 @@ impl SyntheticProfileInspectedImage {
     ) -> io::Result<codex_linux_pidfd_spawn::OwnedChild> {
         use codex_linux_pidfd_spawn::SyntheticRole;
         let recipe = &self._sealed._recipe;
-        if recipe.identities != [(101, 201), (102, 202), (103, 203)]
-            || recipe.anchor_gid != 204
-        {
+        if recipe.identities != [(101, 201), (102, 202), (103, 203)] || recipe.anchor_gid != 204 {
             return Err(denied("recipe not supported by synthetic adapter"));
         }
         let role = match role {

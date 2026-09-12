@@ -4242,6 +4242,7 @@ name = "codex-secret-broker-service"
 version = "0.1.42"
 dependencies = [
  "codex-keyring-store",
+ "codex-linux-pidfd-spawn",
  "codex-protected-state",
  "codex-secret-broker",
  "codex-security-audit",
