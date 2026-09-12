@@ -1,0 +1,11 @@
+---
+source: tui/src/chatwidget/provider_manager.rs
+expression: "crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 90)"
+---
+  Claude Account
+  Active
+
+› 1. Deactivate                   Exclude this provider from use; credentials are kept.
+  2. Replace with Claude account  Claude account
+
+  Press enter to confirm or esc to go back
