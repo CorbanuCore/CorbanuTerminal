@@ -26,6 +26,8 @@ run() {
 run fix-service just fix -p codex-secret-broker-service --features synthetic-fixture
 run fix-broker just fix -p codex-secret-broker --lib
 run fmt just fmt
+run clippy-default just clippy -p codex-secret-broker-service
+run clippy-synthetic just clippy -p codex-secret-broker-service --features synthetic-fixture
 git diff --binary > "$evidence/post-format.patch"
 run bazel-lock just bazel-lock-update
 bazel shutdown > "$evidence/bazel-shutdown.log" 2>&1 || true

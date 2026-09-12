@@ -1,0 +1,8 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+────────────
+ Nextest run ID 2627501c-fb32-494b-a5a6-9a1827aab1e3 with nextest profile: local
+    Starting 1 test across 3 binaries
+        PASS [   0.002s] (1/1) codex-secret-broker-service::lifecycle pf_27_s01_production_service_requires_qualified_bootstrap
+────────────
+     Summary [   0.002s] 1 test run: 1 passed, 0 skipped

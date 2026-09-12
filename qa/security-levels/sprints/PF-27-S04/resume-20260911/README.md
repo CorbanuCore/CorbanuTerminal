@@ -14,8 +14,8 @@ substage only. Product heading **Non-negotiable controls**: “Permit agents to
 reference credentials only by label; resolve them solely inside the trusted
 execution boundary.” No new user-facing feature is claimed.
 
-Nine original commits `db141e9cb..cd7457da7` replayed cleanly. The resumed service
-and Linux transport source are byte-identical to the staged source. Only the
+Nine original commits `db141e9cb..cd7457da7` replayed cleanly. Production service,
+fixture binary and Linux transport source are byte-identical to the staged source. Only the
 new service package's lock version is reconciled to workspace 0.1.42. The scope
 is 12 Rust/build paths, 648 added lines and one removed line, chiefly optional
 synthetic fixtures/tests. The production composition library is 75 lines, with
@@ -72,8 +72,41 @@ native bootstrap, provider streaming or all-OS qualification as completed.
 Read-only review only; no nested reviewers, privileged actions or live secrets.
 Record findings and classify them against this bounded scope before any fix.
 
-Review result is pending. The prior clean Astra review is historical evidence,
-not this sixth review's result. Do not launch another invocation if one is active.
+Review 6 completed on frozen `6d11635f6ac1ca162eaf7f1a569656d093c5ede5`.
+The [structured result](fable-six.json) says **patch is correct**, with no runtime,
+security or main-compatibility finding. The helper exited **1**, not clean,
+because it found one P2 test-support lint issue. The [text](fable-six.txt) and
+raw log preserve that result; no seventh review was run.
+
+Invocation: global `autoreview/scripts/autoreview`, `--engine codex`, a wrapper
+executing the signed Corbanu 0.1.41 candidate with Claude Plan authentication,
+`--model claude-fable-5-1-plan --thinking high --mode branch --base d870c92da`,
+and this repo-relative packet as `--prompt-file`. It ran in private TMUX session
+`fable-six`; Corbanu reported backend model `claude-fable-5-1`, the plan alias's
+expected route. Thread `01a093ef-c39b-70f3-887e-ffb250bceebe`. Credentials stayed
+in the private environment; the review did not install anything or run nested
+reviewers. Unauthenticated featured-plugin-cache warnings were incidental, not
+a failure of the Fable review request.
+
+### Verified disposition and final rerun
+
+Accepted in scope: non-test helper functions in the optional synthetic test
+module used `unwrap()`, forbidden by strict Clippy. Reproduced **12 errors,
+exit 101**, in `rtx-final/clippy-review-finding.log`. `just fix` alone caps these
+to warnings, so its earlier success was insufficient lint proof.
+
+Applied the repository's integration-test convention: a documented
+`allow(clippy::unwrap_used)` scoped only to `tests/support/subprocess.rs`.
+No production code, feature flag, test body/assertion or runtime policy changed.
+Added strict default and synthetic Clippy commands to the qualification script.
+Final fix/format, both strict Clippy configurations, Cargo/Bazel parity, service
+1/1 + 6/6, full affected 338/338, Core 6/6, build and TMUX lifecycle all pass.
+[Final logs and captures](rtx-final/) are separate from the reviewed evidence.
+Final local/RTX Rust tree: `a05e5df5566eaa814ded5ea42f27d6a7a7d1da2b`.
+Service and fixture executable hashes are unchanged. This mechanical test-only
+repair is verified directly; it is not described as a new independent clean
+review. The user's six-review cap is exhausted. Any further review needs a
+new explicit allowance unless the existing critical-finding exception applies.
 
 ## Remaining boundary
 

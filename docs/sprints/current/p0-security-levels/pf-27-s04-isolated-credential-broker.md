@@ -67,9 +67,9 @@ records exact coordinates, review-six approval and unchanged native setup limits
   Production service, data-plane and all-OS qualification remain open;
   see `qa/security-levels/sprints/PF-27-S04/round5-evidence.md`.
 
-## Remaining
+- [x] Reconciled and qualified the service construction stage on main/0.1.42: default 1, synthetic 6, full affected 338, Core 6 and supporting TMUX pass. Fable review 6 found no runtime/security issue; one test-only lint finding was reproduced and fixed, strict Clippy and affected proof rerun successfully. Six reviews spent, no seventh; see `qa/security-levels/sprints/PF-27-S04/resume-20260911/README.md`. No native deployment or activation claimed.
 
-- [ ] Close the constructed service substage: source from `cd7457da7` is reconciled to main/0.1.42, with 1 default + 6 subprocess + 338 full affected + 6 Core passes and supporting TMUX lifecycle proof. Five prior reviews remain spent; the explicitly approved sixth Fable 5.1 High review is pending. See `qa/security-levels/sprints/PF-27-S04/resume-20260911/README.md`. PF20's controller is now merged but production broker bootstrap, native installation/isolation and streaming remain unimplemented or unqualified; no real Vault transfer or protected activation is claimed.
+## Remaining
 
 - [ ] Implement the completed PF-27-S03 OS identity/IPC/handle design and PF-41-S03 durable-event contract; verify controller/broker state cannot be read or rewritten by the real agent process.
 - [ ] Include fresh connections after same-run re-registration with cached TLS handlers and admitted hosts, not only reuse of an old channel. Revocation fences queued dispatch, streams and uploads; new generations cannot inherit old credentials.

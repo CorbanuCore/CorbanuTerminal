@@ -1,3 +1,6 @@
+// Fixture setup must fail immediately; this allowance applies only to test helpers.
+#![allow(clippy::unwrap_used)]
+
 use codex_secret_broker::linux_transport::*;
 use codex_secret_broker::*;
 use pretty_assertions::assert_eq;

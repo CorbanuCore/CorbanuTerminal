@@ -1,0 +1,50 @@
+/home/travis/security-round5/evidence/pf27-resume-20260911/candidate/codex-secret-broker-service --synthetic-inherited-socket; printf "\nproduction-ex
+it=%s\n" "$?"
+bash-5.3$ /home/travis/security-round5/evidence/pf27-resume-20260911/candidate/codex-secret-broker-service --synthetic-inherited-socket; printf "\npro
+duction-exit=%s\n" "$?"
+credential broker service unavailable: qualified OS bootstrap required
+
+production-exit=78
+bash-5.3$ export PATH=/home/travis/security-round5/tools:/home/travis/.cargo/bin:$PATH; export CARGO_TARGET_DIR=/home/travis/repos/CorbanuTerminal-har
+ness/codex-rs/target; export CARGO_BUILD_JOBS=8 RUST_MIN_STACK=8388608 CORBANU_TEST_NO_NATIVE_KEYRING=1; export TMPDIR=/home/travis/.pf27t-hirboahy; f
+lock /home/travis/security-round5/locks/build.lock just test -p codex-secret-broker-service --features synthetic-fixture --retries 0 --test-threads 4;
+ printf "\nsynthetic-exit=%s\n" "$?"
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s
+────────────
+ Nextest run ID 039c9feb-d922-40f4-910e-e783e3116c11 with nextest profile: local
+    Starting 6 tests across 4 binaries
+        PASS [   0.002s] codex-secret-broker-service::lifecycle pf_27_s01_production_service_requires_qualified_bootstrap
+        PASS [   0.093s] codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_dispatch_uses_vault_and_settles_journal
+        PASS [   0.091s] codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_peer_mismatch_denies_before_audit
+        PASS [   0.271s] codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_death_and_restart_refuse_old_channel_and_key
+        PASS [   0.187s] codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_replay_denies_without_second_audit_or_secret
+        PASS [   5.495s] codex-secret-broker-service::lifecycle subprocess::pf_27_s01_signal_during_partial_read_preserves_absolute_deadline
+────────────
+     Summary [   5.495s] 6 tests run: 6 passed, 0 skipped
+
+synthetic-exit=0
+bash-5.3$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
