@@ -5,13 +5,13 @@ status: in_progress
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 2
-owner: "Codex accounting native-ownership lane"
-parallel_lane: "accounting-native-ownership"
-write_scope: "codex-rs/state/src/runtime/accounting.rs, codex-rs/state/src/runtime/accounting_native.rs, codex-rs/state/src/runtime/accounting_retention_atomic.rs, codex-rs/state/src/runtime/threads.rs, codex-rs/state/src/runtime/accounting_native_tests.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/native-ownership-increment.md"
-integration_gate: "Future six-path native ownership/deletion bridge only after parent allocation integration and dispatch; manager checks disjoint sole accounting threads.rs ownership. Target1200total/500non-test, estimate993/373; report overage before expansion. One new code review plus necessary correction, then combined receiving proof. Preserve A/B/C1/C2 and public deletion/no-schema behavior; cfg(test) accounting remains OFF normally, cross-database limits and90..365late-import gap retained. No partial API, schema, live actions or worker commits/pushes."
+owner: "Codex accounting production-store lane"
+parallel_lane: "accounting-production-store"
+write_scope: "codex-rs/state/src/runtime.rs, codex-rs/state/src/lib.rs, codex-rs/state/src/runtime/accounting.rs, codex-rs/state/src/runtime/accounting_types.rs, codex-rs/state/src/runtime/accounting_pricing.rs, codex-rs/state/src/runtime/accounting_estimates.rs, codex-rs/state/src/runtime/accounting_lifecycle.rs, codex-rs/state/src/runtime/accounting_retention_atomic.rs, codex-rs/state/src/runtime/accounting_native.rs, codex-rs/state/src/runtime/threads.rs, codex-rs/state/src/runtime/accounting_store.rs, codex-rs/state/src/migrations.rs, codex-rs/state/accounting_migrations/0001_usage.sql, codex-rs/state/BUILD.bazel, codex-rs/state/tests/accounting_store.rs, codex-rs/state/src/runtime/accounting_store_tests.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/production-store-increment.md"
+integration_gate: "Exact17-path opt-in normal-library store only after parent document acceptance/integration and source dispatch; manager checks disjoint shared state ownership. Target1900total/950conservative non-test including moves/receipt, estimate1515/795; report overage before expansion. One NEW code review plus necessary correction and one allocation review if needed; prior usage unchanged. Default no-install/collection OFF; separate _accounting_migrations sequence0001, ordinary migrator cannot adopt it. Preserve A/B/C1/C2/native and public deletion/no-schema behavior; installed deletion atomic even disabled. No silent schema repair/fake Active; cross-database limits and90..365late-import/fullcaller/real-price gaps retained. No live actions or worker commits/pushes."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
 branch: "workstream/accounting-pf60-s01-20260911"
-base_commit: "d5608c58d91a75396fea78b447477c44091d4625"
+base_commit: "8725e1ff755a5fa974058f465f3553b3f9b884eb"
 depends_on: "PF-60-S01"
 created: 2026-09-09
 updated: 2026-09-12
@@ -19,13 +19,13 @@ updated: 2026-09-12
 
 # PF-60-S02 — Idempotent usage persistence and replay
 
-S01 is archived; journal/quotation/storage/contributions, compact values and A/B/C1/C2 are integrated. Accepted scopes and receipts stay frozen. The [native ownership allocation](../../../research/agent-cost-accounting/native-ownership-allocation.md) owns the next mandate; [C2 allocation](../../../research/agent-cost-accounting/retention-coupled-next.md) is accepted history, not repeated work. The [retention handoff](../../../research/agent-cost-accounting/retention-design-handoff.md) retains approved daily expiry. This pass edits allocation documents only; source waits for parent integration and dispatch.
+S01 is archived; journal/quotation/storage/contributions, compact values and A/B/C1/C2/native are integrated. Accepted scopes and receipts stay frozen. The [production store allocation](../../../research/agent-cost-accounting/production-store-allocation.md) owns the next mandate; [native allocation](../../../research/agent-cost-accounting/native-ownership-allocation.md) and [C2 allocation](../../../research/agent-cost-accounting/retention-coupled-next.md) are accepted history, not repeated work. The [retention handoff](../../../research/agent-cost-accounting/retention-design-handoff.md) retains approved daily expiry. This pass edits allocation documents only; source waits for parent acceptance/integration and dispatch.
 
 ## Execution mandate
 
-- Next: same-S02 native ownership/admission and coupled native deletion under the existing accounting cfg(test) gate. Full S02 still owes production integration,90..365-day late imports and complete native goldens; S03 stays draft.
+- Next: same-S02 opt-in versioned normal-library store, typed facade and atomic original-price admission/observations; default no-install/collection OFF. Full S02 still owes actual dispatch/presence/trusted-price caller wiring,90..365-day late imports and complete native goldens; S03 stays draft.
 - Excludes: Changing prices, rebilling historical customers, collecting prompts, restoring legacy Plan allowances, or silently converting allowance to cash.
-- Approved target1200total/500non-test including receipt, estimate993/373; coherent native/accounting failure/concurrency proof justifies above800, not inherited C2 exception. Report measured overage to integrator before expanding; do not compress proof. One new code review plus necessary correction, no prior history reset.
+- Approved target1900total/950conservative non-test including moves/receipt, estimate1515/795; one coherent versioned-installation, normal-library/native lifecycle and atomic price-binding failure/concurrency unit justifies above800, not inherited exceptions. Report measured overage to integrator before expanding; do not compress proof. One NEW code review plus necessary correction and one allocation review if needed; prior usage unchanged.
 
 ## Plan linkage
 
@@ -36,20 +36,22 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 ## Code boundaries
 
 - Existing, read before work: `codex-rs/state/migrations/0041_provider_request_cache_usage.sql`; `codex-rs/app-server/src/request_processors/token_usage_replay.rs`; `codex-rs/tui/src/chatwidget/usage.rs`; `codex-rs/tui/src/token_usage.rs`.
-- Output: front-matter paths are exactly six future native bridge files, not permission to edit source in this documents-only pass. Manager verifies sole accounting threads.rs ownership under disjoint scope. No new auth principal/registry/partial transfer API; capture one time.
-- Tests/evidence: preserve A/B/C1/C2 assertions and receipts. Public delete signatures/counts/missing-row semantics and normal no-schema behavior stay unchanged, with no blanket new failure/activation checks. Accounting hook remains cfg(test); separate logs/memory/goals stores are not covered by main-state atomicity. No schema/production installation, dependencies or collectors.
+- Output: front-matter paths are exactly17 future store files, not source permission in this documents-only pass. Manager checks disjoint shared state ownership including threads.rs. Separate _accounting_migrations sequence0001 only; verify receiving collisions, no ordinary migration adoption. No new auth principal/registry/partial transfer API; capture one time.
+- Tests/evidence: preserve A/B/C1/C2/native assertions, failures and receipts. Public delete signatures/counts/missing-row semantics and normal no-schema behavior stay unchanged, no blanket activation/failure checks. Normal-library facade gates fixture constructors cfg(test); default installs/collects nothing, installed-store deletion remains atomic even disabled. Separate logs/memory/goals stores remain outside main-state atomicity. No dependencies or real collectors.
 
 ## Preconditions
 
 - [x] Plan active under Travis's standing continuation authority; reservation transferred from completed S01, no fourth lane.
 - [x] S01 accepted/archived after defaults approval, combined-tree fixture proof and independently reviewed technical handoff.
-- [x] Parent reports clean worker fast-forwarded to d5608c58d91a75396fea78b447477c44091d4625; exact worker/branch/base and six future paths match plan/allocation. Historical C2 zero-edit scope correction consumed no passes.
-- [x] Travis approved defaults; manager approved this native bridge and1200/500 target. Synthetic/local only, one worker, one new independent review plus necessary correction; prior failures/review usage retained, no billing/live authority.
-- [x] Parent read exact three-document allocation; native-ownership-allocation-review exited0 clean. Integrated f13e9740a atce8a81980; both checkers pass3/115/126, scope disjoint with sole accounting threads.rs ownership. Source dispatch may now proceed under the six-path mandate.
+- [x] Worker clean fast-forward to8725e1ff755a5fa974058f465f3553b3f9b884eb verified; exact worker/branch/base and17 future paths match plan/allocation. Historical C2 zero-edit scope correction consumed no passes.
+- [x] Travis approved defaults; manager approved separate ledger/sequence, default no-install/collection OFF, typed facade and1900/950 target. One existing worker; one NEW code review plus necessary correction and one allocation review if needed, prior failures/review usage retained. No new product/billing/live authority.
+- [x] Historical native allocation: parent read three documents; native-ownership-allocation-review exited0 clean. Integrated f13e9740a atce8a81980; checkers3/115/126, disjoint sole accounting threads.rs ownership. That six-path dispatch is completed, not current source authorization.
+- [ ] Parent accepts/integrates these three production-store documents and verifies exact17-path disjoint scope before new source dispatch.
 - [x] Parent inspected DayTotals/Decimal visibility and amount/rate parsing distinction; B1 is now reviewed and tested, receipt below.
 
 ## Done
 
+- [x] Native bridge accepted: exact six-file0eb98e8d3 integrated at8725e1ff755a5fa974058f465f3553b3f9b884eb. First independent Astra High native-ownership-code-review.json/txt, helper70866, exit0 clean. Parent receiving exec46485 combined `just test -p codex-state -p codex-tasknode-session` exit0:354/354passed,0skipped14.997s, nextest ef047f72-80c9-4700-863d-1f1e253b5d75; no final-summary LEAK,21fixture dead-code warnings(9duplicates). Parent governance3/115/126exit0. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/native-ownership-increment.md) retains950total/227non-test, worker failures/results and prior review usage; receiving evidence is parent-attributed, not rerun here.
 - [x] C2 accepted: exact six-file b7a3466de integrated at d5608c58d91a75396fea78b447477c44091d4625. First independent Astra High c2-atomic-review.json exited0 clean; parent combined `just test -p codex-state -p codex-tasknode-session` passed346/346,0skipped13.556s, run06b633c7-51ae-4dd8-bf96-81a2665c2871. No LEAK marker in final summary; existing11 fixture dead-code warnings remain. [Exact receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/atomic-retention-increment.md); c2-size-disposition.md accepts1519total/190non-test for that candidate, not800compliance. Original failures/review usage and seven-line interim C1 assertion removal/replacement mapping remain preserved.
 - [x] C1 consumers accepted with recorded1121-line candidate exception, one clean Astra review and combined335passed/2leaky/0skipped9.285s at8cdb6dcf; integrated5406e3506 then reconciledafe535c06 with identical Rust tree. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/retention-consumers-increment.md). No repeated review or new product decision required.
 
@@ -72,9 +74,9 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 
 ## Remaining
 
-- [ ] Implement the [native bridge](../../../research/agent-cost-accounting/native-ownership-allocation.md) after dispatch: native owner equality/existence admission and complete C2 deletion on the same held main-state transaction, preserving absent-schema behavior and cross-database limits.
-- [ ] New native proof: full ten-accounting/three-native-table snapshots; owner/missing/replay/archived cases; multi-owner and post-accounting native DELETE/commit failures, two reopens/retry; both actual append/delete contention orders and read snapshots; separate-store cleanup failures, time/activation/late-import no-writes. No repeated C2 matrix or deleted proof.
-- [ ] Production migration/dispatch/presence/original-price wiring, permanent deletion-fence qualification and complete native S02 goldens remain outside this bridge.90..365-day compact-only late import is explicitly unqualified, current guard unchanged, not waived; no new prerequisite chain. S03 stays draft.
+- [ ] Implement the [normal-library store](../../../research/agent-cost-accounting/production-store-allocation.md) after dispatch: optional independent versioned installation, typed facade, one-transaction native admission/original-price binding/estimate/contribution and observation updates. Default no-install/collection OFF; installed native deletion atomic even disabled, absent-schema and separate-store behavior preserved.
+- [ ] New store proof: external normal-library consumers; ordinary migration isolation; failed/partial/checksum/newer schemas fail closed; real install/activation interruption recoverable without fake Active. Full ten-accounting/three-native-table SQL/commit rollback markers, two reopens/retry; priced/NULL/unknown/zero/reordered cases; price-bound admission/delete contention both orders and held snapshots; disabled installed-store deletion. Preserve old proof, no repeated C2 matrix.
+- [ ] Actual dispatch/presence/trusted original-price provenance, permanent deletion-fence qualification and complete native S02 goldens remain outside this store.90..365-day compact-only late import is explicitly unqualified, current guard unchanged, not waived; no new prerequisite chain or product decision for approved defaults. S03 stays draft.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 
 ## Verification

@@ -19,17 +19,19 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "d5608c58d91a75396fea78b447477c44091d4625"
+    base_commit: "8725e1ff755a5fa974058f465f3553b3f9b884eb"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
     branch: "workstream/accounting-pf60-s01-20260911"
-    base_commit: "d5608c58d91a75396fea78b447477c44091d4625"
+    base_commit: "8725e1ff755a5fa974058f465f3553b3f9b884eb"
 ---
 
 # 2. Accounting — unified agent cost and usage
 
-Current September12: C2 accepted, six-file candidate `b7a3466de` integrated at `d5608c58d91a75396fea78b447477c44091d4625`. First independent Astra High `c2-atomic-review.json` exited0 clean. Parent combined `just test -p codex-state -p codex-tasknode-session` passed346/346,0skipped13.556s, run `06b633c7-51ae-4dd8-bf96-81a2665c2871`; no LEAK marker in final summary, existing11 fixture dead-code warnings remain. [C2 receipt](../../../qa/portfolio/agent-cost-accounting/pf-60-s02/atomic-retention-increment.md) and original failures/review usage stay frozen. Its1519total/190non-test one-candidate disposition is not800compliance; C1's1121-line exception and335passed/2leaky history remain recorded.
+Current September12: native bridge accepted, exact six-file candidate `0eb98e8d3` integrated at `8725e1ff755a5fa974058f465f3553b3f9b884eb`; worker clean fast-forward verified. First independent Astra High `native-ownership-code-review.json/txt`, helper70866, exited0 clean. Parent receiving exec46485 `just test -p codex-state -p codex-tasknode-session` exited0:354/354passed,0skipped14.997s, nextest `ef047f72-80c9-4700-863d-1f1e253b5d75`; no final-summary LEAK,21fixture dead-code warnings(9duplicates). Parent governance3/115/126exit0. [Native receipt](../../../qa/portfolio/agent-cost-accounting/pf-60-s02/native-ownership-increment.md) preserves950total/227non-test and original worker failures/results; parent evidence above is separately attributed.
 
-Next is the [native ownership/deletion bridge](../../research/agent-cost-accounting/native-ownership-allocation.md), exactly six future paths in current S02. Manager approved target1200total/500non-test, estimate993/373, justified by coherent native/accounting failure and concurrency proof, not inherited C2 exception. One new code review plus necessary correction; report actual overage before expanding. This pass changes allocation documents only; parent checks/integrates before source dispatch and verifies sole accounting ownership of `threads.rs` under disjoint scope. Production stays OFF, S03 stays draft and90..365-day late import remains explicitly unqualified.
+Accepted C2 history: six-file `b7a3466de` integrated at `d5608c58d91a75396fea78b447477c44091d4625`. First independent Astra High `c2-atomic-review.json` exited0 clean. Parent combined `just test -p codex-state -p codex-tasknode-session` passed346/346,0skipped13.556s, run `06b633c7-51ae-4dd8-bf96-81a2665c2871`; no LEAK marker in final summary, existing11 fixture dead-code warnings remain. [C2 receipt](../../../qa/portfolio/agent-cost-accounting/pf-60-s02/atomic-retention-increment.md) and original failures/review usage stay frozen. Its1519total/190non-test one-candidate disposition is not800compliance; C1's1121-line exception and335passed/2leaky history remain recorded.
+
+Next is the [opt-in normal-library store](../../research/agent-cost-accounting/production-store-allocation.md), exactly17 future paths in current S02. Manager approved target1900total/950conservative non-test including moves/receipt, estimate1515/795. Above800 is justified by one coherent versioned-installation, normal-library/native lifecycle and atomic original-price binding unit with failure/concurrency proof, not inherited exceptions. One NEW code review plus necessary correction and one allocation review if needed; prior usage unchanged. Report actual overage before expansion. This pass changes allocation documents only; parent inspects/reviews/integrates before source dispatch and checks disjoint shared state ownership. Default no-install/collection OFF, S03 draft and90..365-day late import/fullcaller/real-price provenance gaps remain explicit.
 
 Policy: repository-root `AGENTS.md`. Lifecycle: [plans](../index.md).
 Portfolio: [source coverage, sequencing and human capacity](../portfolio-2026-09-09.md).
@@ -99,7 +101,7 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Codex accounting native-ownership lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `d5608c58d91a75396fea78b447477c44091d4625` | PF-60-S02 six-path native ownership/deletion bridge; exact mandate in native-ownership-allocation.md, source dispatch pending parent allocation integration |
+| Codex accounting production-store lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `8725e1ff755a5fa974058f465f3553b3f9b884eb` | PF-60-S02 exact17-path opt-in normal-library store; production-store-allocation.md, source dispatch pending parent document acceptance/integration |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
 S02 retains its reservation; Travis approved conservative daily expiry in this
@@ -110,14 +112,21 @@ records the approved policy. The [latest-quote allocation](../../research/agent-
 owns the historical reviewed three-file prerequisite, now frozen. The
 [read-only allocation](../../research/agent-cost-accounting/retention-plan-next.md)
 and [C2 allocation](../../research/agent-cost-accounting/retention-coupled-next.md)
-are accepted history, not work to repeat. The native bridge joins complete C2
-operations to existing native owner admission/deletion under `cfg(test)`.
+are accepted history, not work to repeat. The [native bridge](../../research/agent-cost-accounting/native-ownership-allocation.md)
+is now accepted and joins complete C2 operations under `cfg(test)`. The next store
+unit promotes a typed normal-library facade with optional versioned installation,
+not a production collector. Separate `_accounting_migrations` sequence0001 is
+manager-approved; ordinary migrations must not create/adopt that ledger. Failed,
+partial/checksum/newer schema is not silently repaired; installation/activation
+crash must recover without a fake Active checkpoint. Default startup installs
+nothing; installed-store deletion remains atomic even when collection is disabled.
 Public deletion signatures/counts/missing-row semantics and normal no-schema
 behavior stay unchanged; no blanket new activation/failure checks. Separate
 logs/memory/goals stores remain outside main-state transaction atomicity.
 Custom range/interval filtering is recorded in S03 draft, not implemented here.
-No production migrations, API/Core wiring, manifests or additional state writers
-are allocated. The worker fast-forwards to
+Only the exact optional accounting migration and17-file store scope are allocated
+for future dispatch; API/Core wiring, manifests and extra state writers remain out.
+The worker fast-forwards to
 the reviewed receiving allocation before dispatch; its historical branch name
 does not change sprint ownership. Manager owns shared plans/integration.
 
@@ -147,7 +156,7 @@ All records belong to the single feature **PF-60**. Dependencies are hard prereq
 | Sprint | Record / outcome | Depends on | Planned output | Evidence |
 | --- | --- | --- | --- | --- |
 | PF-60-S01 | [Accounting contract and golden fixtures](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md) | none | docs/research/agent-cost-accounting/contract.md | Accepted local contract/fixtures and reviewed handoff; archived |
-| PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Native ownership/deletion bridge next, accounting test-only | C2 accepted at d5608c58d; combined346/346. Native bridge, production integration and complete goldens remain |
+| PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Opt-in normal-library store next; default no-install/collection OFF | Native accepted at8725e1ff7; parent combined354/354. Store, actual caller/import/provenance wiring and complete goldens remain |
 | PF-60-S03 | [Inspectable run and campaign totals](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md) | PF-60-S02 | codex-rs/tui/src/chatwidget/usage.rs | pending |
 | PF-60-S04 | [Cost-accounting acceptance and handoff](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md) | PF-60-S03 | qa/portfolio/agent-cost-accounting/qualification.md | pending |
 
@@ -198,9 +207,9 @@ Research outputs stay under the declared research/QA paths. Finished-feature doc
 
 ## Dependencies, decisions, and blockers
 
-- Approved defaults are recorded; reconcile the receiving branch and finish exact adapter/schema allocation before selecting the next migration number.
-- S01 is accepted/archived and defaults approved; A/B/C1/C2 are integrated. Next native bridge awaits parent allocation integration/dispatch, not a new product decision. Production/live scope stays OFF.
-- Production schema/dispatch/presence/original-price wiring and complete native goldens remain S02 obligations. The90..365-day compact-only late-import rejection remains, explicitly unqualified and not waived; this bridge adds neither a permanent deleted-ID fence nor cross-database atomicity. S03 remains draft.
+- Approved defaults stand; manager accepted separate `_accounting_migrations` sequence0001, typed facade and default no-install/collection OFF. Verify receiving collisions; ordinary migrator cannot adopt the separate ledger.
+- S01 archived; A/B/C1/C2/native accepted. The exact17-path store awaits parent document acceptance/integration and dispatch, not a new product decision. No live caller is allocated.
+- Actual dispatch/presence/original-price authority, full native goldens and90..365-day compact-only late import remain S02 obligations, explicitly unqualified and not waived. This store supplies neither permanent deleted-ID fencing nor cross-database erasure. S03 remains draft.
 - Before each next sprint: predecessor evidence accepted/archived, its handoff resolves concrete inputs and any newly discovered decisions; otherwise stop.
 - Cross-plan IDs in the table must exist and be completed in the receiving ledger. A draft dependency does not activate either plan.
 - Before dispatch: agreed budget, named human acceptance owner, exact scope and privacy permissions. No capacity or deadline is assumed from hardware ownership alone.
