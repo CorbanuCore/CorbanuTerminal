@@ -19,10 +19,10 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "c33d47f6ccd00a64fcb05a057472d8ca9f0139d4"
+    base_commit: "486d2fb9481c01f7d73a6f8d9992c6e1b96359dd"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
     branch: "workstream/tasknode-pf80-s01-20260911"
-    base_commit: "c33d47f6ccd00a64fcb05a057472d8ca9f0139d4"
+    base_commit: "486d2fb9481c01f7d73a6f8d9992c6e1b96359dd"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
     branch: "feat/provider-reauth-health"
     base_commit: "eb7af932bc8cc859122b5b2dbef223fbd45ea25c"
@@ -67,6 +67,9 @@ integrated locally at `c33d47f6c`: 42 native tests, 54 Python tests and two
 cross-language goldens pass on the receiving tree. The manager is preparing
 the next profile-bound one-event increment; no sender or production entry exists
 in the accepted preparation slice. Whole PF-80-S01 remains in progress.
+The bound engine 7e25982b5 is now reviewed/integrated at 486d2fb94, with all55
+Task Node tests passing. Next native schema-to-request adapter builds requests
+in memory using the actual Client and consumes pinned response fixtures; no send.
 
 PF-80 replaces only the recovery operations source's conflicting PF-76 identity.
 Main's provider-persistence PF-76 and security PF-77/PF-78 remain untouched.
@@ -108,18 +111,18 @@ Campaign Tracker contracts read-only initially. Port `scripts/initiative_control
 from the inspected recovery source under an audited manifest; tests must run on
 the receiving main tree. Keep `docs/plans/check.py` and `docs/sprints/check.py`
 manager-owned. The original kickoff was Python-only. The current PF-80-S01
-allocation now permits a test-only bound one-event request/response engine and
-sibling fixtures, reusing the accepted preparation. Its one test-only module
-registration is delegated serially by the manager. No production transport,
-CLI/TUI entry, auth, queue, dependencies or upstream protocol changes are allocated.
-See the [exact next allocation](../../research/tasknode-integration/native-one-event-allocation.md).
+allocation permits a test-only schema-to-request child adapter. Manager serially
+delegates its registration, behavior-preserving Client builder extraction and
+tiny test-only resolver/codec accessors. No new production entry, networking
+caller, auth decision, queue, dependency or upstream protocol changes.
+See the [exact next allocation](../../research/tasknode-integration/native-adapter-allocation.md).
 [Feature delivery contract](../feature-delivery.md).
 
 ## Sprint execution map
 
 | Feature | Sprint | State and acceptance |
 | --- | --- | --- |
-| PF-80 | [S01 native delivery-control integration](../../sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md) | Port and native preparation reviewed/integrated locally; manager owns next one-event allocation; live acceptance separate |
+| PF-80 | [S01 native delivery-control integration](../../sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md) | Port/preparation/one-event engine reviewed/integrated; native build-only adapter allocated, live acceptance separate |
 | PF-79 | [S01 Desktop beta channel/test contract](../../sprints/current/initiative-delivery-control/pf-79-s01-beta-channel-and-test-contract.md) | Draft; depends on PF-80-S01; Desktop source/permissions unresolved |
 | PF-79 | [S02 public beta pilot](../../sprints/current/initiative-delivery-control/pf-79-s02-public-beta-pilot.md) | Draft; depends on S01; no public launch |
 | PF-81 | [S01 bounded screenshot/inference QA harness](../../sprints/current/initiative-delivery-control/pf-81-s01-visual-test-harness.md) | Draft; depends on PF-80-S01; existing PF13 task owns later implementation, no new worker |

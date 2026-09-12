@@ -5,13 +5,13 @@ status: in_progress
 plan_file: "docs/plans/active/initiative-delivery-control.md"
 plan_feature: "PF-80"
 execution_order: 1
-owner: "Astra High Task Node one-event engine"
-parallel_lane: "tasknode-one-event-engine"
-write_scope: "codex-rs/tasknode-session/src/delivery_send.rs, codex-rs/tasknode-session/src/delivery_send_tests.rs, codex-rs/tasknode-session/src/lib.rs, qa/initiative-control/pf-80-s01/native-one-event/"
+owner: "Astra High Task Node native adapter"
+parallel_lane: "tasknode-native-adapter"
+write_scope: "codex-rs/tasknode-session/src/delivery_adapter.rs, codex-rs/tasknode-session/src/delivery_adapter_tests.rs, codex-rs/tasknode-session/src/delivery_send.rs, codex-rs/tasknode-session/src/client.rs, codex-rs/tasknode-session/src/recovery.rs, qa/initiative-control/pf-80-s01/native-adapter/"
 integration_gate: "Codex management audits the source-port manifest and literal worker diff, reruns control and governance suites on the combined tree, reviews the immutable queue migration/one-event preview, and owns CI registration and any later live source cutover; no worker main push or external mutation."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
 branch: "workstream/tasknode-pf80-s01-20260911"
-base_commit: "c33d47f6ccd00a64fcb05a057472d8ca9f0139d4"
+base_commit: "486d2fb9481c01f7d73a6f8d9992c6e1b96359dd"
 depends_on: "none"
 created: 2026-09-10
 updated: 2026-09-11
@@ -19,8 +19,8 @@ updated: 2026-09-11
 
 # PF-80-S01 — Native Task Node delivery-control integration
 
-Port and native preparation reviewed/integrated locally. This same sprint now
-allocates a test-only bound one-event engine; [allocation](../../../research/tasknode-integration/native-one-event-allocation.md)
+Port, preparation and bound engine reviewed/integrated locally. This sprint now
+allocates a native build-only schema adapter; [allocation](../../../research/tasknode-integration/native-adapter-allocation.md)
 owns exact boundaries, upstream pins and tests. Record agent identity at dispatch.
 
 ## Execution mandate
@@ -41,7 +41,7 @@ owns exact boundaries, upstream pins and tests. Record agent identity at dispatc
 - Port: `scripts/initiative_control/` from the recovery source; audit every file, no state/auth/credential directories.
 - Planned contract and tests: `docs/research/tasknode-integration/`, `qa/initiative-control/pf-80-s01/`, focused tests beside the ported scripts.
 - Manager alone owns plan/sprint allocation, CI registration and live dashboard state; submit a handoff for any needed shared changes.
-- Current worker: only front-matter paths; lib.rs gets one cfg(test) module declaration. Prior Python/preparation allocations closed. No CLI, Client, tracker, auth, dependencies or delivery_goal writes.
+- Current worker: exact child registration, Client builder extraction and cfg(test) codec/resolver accessors only in shared files. No auth decisions, live callers, lib.rs, tracker, dependencies or delivery_goal writes.
 
 ## Preconditions
 
@@ -58,11 +58,12 @@ owns exact boundaries, upstream pins and tests. Record agent identity at dispatc
 - [x] Combined baseline passed 54 focused tests plus both governance checkers; no native/live or human acceptance inferred.
 - [x] Pure native immutable-goal preparation and Python goldens reviewed clean, worker 2b281975a integrated at c33d47f6c; all 42 native crate tests and 54 Python tests pass on combined tree. [Receipt](../../../../qa/initiative-control/pf-80-s01/native-preparation/handoff.md).
 - [x] Selected-ID/full-digest, schema, mapping, byte-limit, secret/control and explicit-time negatives pass; two pinned cross-language goldens pass. Advisory-only, no sender.
+- [x] Bound one-event engine 7e25982b5 reviewed clean and integrated at 486d2fb94; all 55 crate tests pass there. Fixture authority, fencing/cancel/unknown outcomes only. [Receipt](../../../../qa/initiative-control/pf-80-s01/native-one-event/receipt.md).
 
 ## Remaining
 
-- [ ] Implement/test bound one-event request/receipt engine with fixture-only authority/transport; exact identity/preflight gates, cancellation/unknown outcome, no production constructor or sender.
-- [ ] Parent reviews and integrates this increment, then allocates native outer profile/preflight/Client and recovery wiring separately; no live authority delegated.
+- [ ] Implement actual inner-resolver fixture use, pinned raw identity/enrollment/task/entitlement parsing and in-memory actual Client request construction/receipt decoding; no sending.
+- [ ] Parent reviews/integrates exact adapter, then prepares real operator/validity/recovery wiring separately; no live authority delegated.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.
 - [ ] Give manager exact credential-scope/destination, enrollment, task-lifecycle and first-payload decisions; remain OFF if missing authority. Never inspect real credential stores as a worker.
 - [ ] After separate approval, qualify one live goal event and recovery; do not treat fixtures as delivery proof.
@@ -71,7 +72,7 @@ owns exact boundaries, upstream pins and tests. Record agent identity at dispatc
 ## Verification
 
 - [ ] Focused: `python3 -m unittest discover -s scripts/initiative_control -p 'test_*.py'`; install only pinned requirements in a disposable venv.
-- [ ] Native: delivery_send and delivery_goal selectors, then full codex-tasknode-session crate through just test after guarded formatting; normal builds exclude delivery_send.
+- [ ] Native: delivery_adapter, delivery_send and delivery_goal selectors, full crate via just test and normal-library check after guarded formatting; new adapter remains test-only.
 - [ ] Governance: `python3 docs/plans/check.py`, `python3 docs/sprints/check.py`, `git diff --check`.
 - [ ] Independent final-tree review and source manifest; inspect any registration/config changes before integration.
 - [ ] Actual-key native `/tasknode` success/cancel/expiry/relink if interactive runtime changes; otherwise record not applicable with reason.

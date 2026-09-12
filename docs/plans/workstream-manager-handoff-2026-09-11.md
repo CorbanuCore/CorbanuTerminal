@@ -31,6 +31,23 @@ promise to integrate later. New allocation/policy changes receive their own revi
 
 ## Current queue and owners
 
+Latest receiving checkpoint, September 12 01:07 UTC:
+`486d2fb9481c01f7d73a6f8d9992c6e1b96359dd` includes exact quotation
+`e8ffdad4e` and bound one-event engine `7e25982b5`. Both received a clean first
+independent Astra High review, then parent verified hashes and integrated them
+locally. Combined run `dbcabbc8-c24f-40d6-ac80-02617102842c`: 269 passed,
+0 skipped, 6.628s, with two process-leak warnings (not test failures). The JUnit
+report confirms zero failures/errors but does not identify those leak markers;
+their provenance is unresolved, not assumed to be an accounting defect or an
+existing issue. No repeated full run solely to suppress them. Both normal
+libraries passed offline cargo check in22.51s. Also all
+129 Python/governance regressions pass (54 Task Node, 48 accounting, 5 plan,
+22 sprint); checkers remain 3 active / 115 current / 122 archived. Worker
+formatting limitations remain in receipts; integrated Rust bytes are unchanged
+from those formatted/reviewed candidates. The manager is preparing next
+same-sprint storage and native-client allocations, not waiting on Travis.
+Both new increments remain test-only; no live authority, collection or send.
+
 Native receiving checkpoint (September 12 UTC / September 11 local):
 `c33d47f6ccd00a64fcb05a057472d8ca9f0139d4` combines accounting
 `3f39d7a65` and Task Node `2b281975a`. Both exact worker patches passed one
@@ -48,8 +65,8 @@ production collection, UI, live repository, benchmark or human acceptance.
 | Workstream | Completed | Next action | Who owns the gate? |
 | --- | --- | --- | --- |
 | PF13 | No new completion inferred | Preserve owner task and paused security allowance | Existing PF13 owner / Travis; do not reactivate here |
-| Accounting PF-60-S02 | S01 archived; native journal reviewed/integrated with combined-tree tests | Exact quotation helper allocated, still test-only | Manager dispatches; no repeated product question |
-| Task Node PF-80-S01 | Offline port and native preparation reviewed/integrated with combined-tree tests | Bound one-event fixture engine allocated, no production sender | Manager follows returned work; no live authority delegated |
+| Accounting PF-60-S02 | S01 archived; journal/quotation reviewed and integrated | Immutable estimate storage allocated, test-only | Manager dispatches; no repeated product question |
+| Task Node PF-80-S01 | Port/preparation/engine reviewed and integrated | Native schema/build-only Client adapter allocated | Manager follows returned work; no live authority delegated |
 
 Missing preparation, allocation or receiving evidence is manager work. It is
 not a request for Travis to coordinate workers. The scheduled parent must keep
@@ -139,23 +156,25 @@ No upstream upgrade qualification is claimed.
 ## Current next assignments
 
 Both active plans and sprints now record receiving base
-`c33d47f6ccd00a64fcb05a057472d8ca9f0139d4`. After this allocation's independent
+`486d2fb9481c01f7d73a6f8d9992c6e1b96359dd`. After this allocation's independent
 review, parent fast-forwards idle clean workers to its committed HEAD and records
 actual agent IDs/launch HEAD in the private continuation receipt. One Astra High
 worker per lane; no additional reserved sprint. Earlier literal allocations above
 and in old handoffs are historical, not permission to edit those files now.
 
-Accounting: [four-file exact quotation](../research/agent-cost-accounting/exact-pricing-allocation.md),
-using approved snapshots and the accepted journal reducer. Pure test-only exact
-amounts precede durable estimate storage; storage/retention/deletion qualification
-then precedes OFF-preserving production promotion and dispatch/presence wiring.
+Accounting: [five-file immutable storage](../research/agent-cost-accounting/estimate-storage-allocation.md),
+using accepted journal/quotation with exact serialization and atomic snapshot/
+binding/evidence versions. Test-only; retention/deletion qualification then
+precedes OFF-preserving production promotion and dispatch/presence wiring.
 No repeated policy question, live price fetch or billing. S03 remains gated.
 
-Task Node: [bound one-event engine](../research/tasknode-integration/native-one-event-allocation.md),
-four literal paths, fixture-only authority and transport, entire module test-only.
-It proves request/receipt fencing and ambiguous outcome handling before a later
-native outer profile/preflight/Client adapter. Synthetic facts are not a new
-production authority API. Existing profile link/expiry/recovery remains unchanged.
+Task Node: [native schema-to-request adapter](../research/tasknode-integration/native-adapter-allocation.md),
+six literal paths including evidence directory. Actual inner-resolver/codec and
+Client request construction, entirely in-memory fixtures with no send. Only
+Client's unchanged-behavior builder extraction touches production flow; tiny
+test-only accessors do not change auth decisions. Unknown native null expiry
+remains held, not fabricated or relaxed. A later exact human/operator packet
+must resolve validity and supported Proposed lifecycle before live activation.
 No queue, automatic retry, production sender or live qualification is implied.
 
 Live entitlement/enrollment/ownership checks and a send still require a

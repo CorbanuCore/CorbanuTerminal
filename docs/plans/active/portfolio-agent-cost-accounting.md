@@ -19,10 +19,10 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "c33d47f6ccd00a64fcb05a057472d8ca9f0139d4"
+    base_commit: "486d2fb9481c01f7d73a6f8d9992c6e1b96359dd"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
     branch: "workstream/accounting-pf60-s01-20260911"
-    base_commit: "c33d47f6ccd00a64fcb05a057472d8ca9f0139d4"
+    base_commit: "486d2fb9481c01f7d73a6f8d9992c6e1b96359dd"
 ---
 
 # 2. Accounting — unified agent cost and usage
@@ -44,6 +44,9 @@ resolves exact first-increment boundaries; S01 is now archived and S02 is select
 Native candidate `3f39d7a65` passed independent Astra High review and was received
 at `c33d47f6c`; all 202 state tests passed there. The manager owns the next
 same-sprint allocation; this is not full S02 or user-interface readiness.
+Quotation e8ffdad4e is also reviewed/integrated at 486d2fb94, with all214 state
+tests passing. Next is immutable synthetic estimate storage, still test-only;
+retention/deletion and production promotion remain separate future allocations.
 
 ## Activation record
 
@@ -85,12 +88,12 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Astra High accounting exact pricing | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `c33d47f6ccd00a64fcb05a057472d8ca9f0139d4` | PF-60-S02 four-file test-only exact quotation increment |
+| Astra High accounting estimate storage | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `486d2fb9481c01f7d73a6f8d9992c6e1b96359dd` | PF-60-S02 five-file test-only immutable estimate storage |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
-S02 is allocated to one Astra High subagent. The next literal four-file scope is
-in the sprint and [exact-pricing allocation](../../research/agent-cost-accounting/exact-pricing-allocation.md);
-the manager serially delegates only the child module declaration in accounting.rs.
+S02 is allocated to one Astra High subagent. The next literal five-file scope is
+in the sprint and [estimate-storage allocation](../../research/agent-cost-accounting/estimate-storage-allocation.md);
+the manager serially delegates exact serialization derives and child registration.
 No production migrations, API/Core wiring, manifests or other state writers are
 allocated. The idle worker fast-forwards to
 the reviewed receiving allocation before dispatch; its historical branch name
@@ -122,7 +125,7 @@ All records belong to the single feature **PF-60**. Dependencies are hard prereq
 | Sprint | Record / outcome | Depends on | Planned output | Evidence |
 | --- | --- | --- | --- | --- |
 | PF-60-S01 | [Accounting contract and golden fixtures](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md) | none | docs/research/agent-cost-accounting/contract.md | Accepted local contract/fixtures and reviewed handoff; archived |
-| PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Native journal then exact quotation, still test-only | Journal reviewed/integrated; 202 state tests pass; pricing allocated, full S02 pending |
+| PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Native journal/quotation then immutable storage, test-only | Journal/quotation reviewed and integrated; 214 state tests pass; storage allocated, full S02 pending |
 | PF-60-S03 | [Inspectable run and campaign totals](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md) | PF-60-S02 | codex-rs/tui/src/chatwidget/usage.rs | pending |
 | PF-60-S04 | [Cost-accounting acceptance and handoff](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md) | PF-60-S03 | qa/portfolio/agent-cost-accounting/qualification.md | pending |
 
