@@ -266,3 +266,80 @@ The latter is outside the currently proposed ownership API. No unsafe callback,
 nightly feature, new dependency or external helper is silently proposed as an
 already-approved solution. Once the API decision is recorded, the private live
 fixture and deterministic fault seams can be allocated together with it.
+
+## Adapter API disposition — September 12, 2026
+
+Manager chose a dedicated descriptor-exec/ownership adapter, preserving safe
+first-party Rust and no shell/path fallback, with bounded caller response and
+honest cleanup-pending quarantine (not hard termination). The hold fixture and
+4096-byte private stdout cap are accepted in principle. Builds and invocation
+remain unallocated. This section records the exact remaining API blocker.
+
+### Available pinned APIs, inspected without compilation
+
+RTX registry root:
+`/home/travis/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/`.
+Versions below match the existing Cargo.lock; no dependency was added.
+
+| API | Actual contract | Why it does not complete this adapter |
+| --- | --- | --- |
+| `nix 0.30.1`, `unistd.rs:1214`, safe `execveat<Fd: AsFd, SA: AsRef<CStr>, SE: AsRef<CStr>>(dirfd, pathname, args, env, flags) -> Result<Infallible>` | Calls SYS_execveat directly; use empty C string plus `AtFlags::AT_EMPTY_PATH` to execute the held FD. Existing `process` feature enables it. | Replaces the **calling process**; no child creation or parent pidfd ownership. Must not call it in our supervisor. |
+| `nix 0.30.1`, `unistd.rs:1187`, safe `fexecve` | Replaces current process through libc. | Same creation gap; direct execveat is preferable to libc's descriptor/path compatibility behavior. |
+| `nix 0.30.1`, `spawn.rs:364`, safe `posix_spawn(...) -> Result<Pid>` | Direct libc posix_spawn, not std's fast-path selection. | Returns numeric PID, not pidfd/Child; still pathname-based. Does not fill the selected descriptor-exec plus stable-owner API. |
+| `nix 0.30.1`, `unistd.rs:278`, `fork`; `sched.rs:107`, `clone` | Both public calls are `unsafe`. | Disallowed at the first-party call site. A safe execveat wrapper does not make post-fork execution safe. |
+| `rustix 1.1.4`, `runtime.rs:419/456` | `kernel_fork` and runtime `execveat` are unsafe; fork returns PID variants. | Not an available safe create-and-own primitive. |
+| `rustix 1.1.4`, `process/pidfd.rs:29/41`, `process/wait.rs:399/488` | Safe pidfd_open, pidfd_send_signal, and waitid with `WaitId::PidFd(BorrowedFd)`. | Monitoring/signaling/reaping are available **after** obtaining a pidfd; they do not eliminate spawn-to-pidfd failure. |
+| `process-wrap 9.0.1`, `generic_wrap.rs:79–97` | Its spawn wrapper calls the wrapped `command.spawn()` at line 90. | Does not add an atomic descriptor-exec/pidfd primitive. |
+
+Source hashes: nix `spawn.rs`
+`4a3d2918ec210199fab392757cd4577c46b484a6c923a70474ae049b8bcfc1c9`;
+nix `unistd.rs`
+`26b45c0e0861ca82a9300eb952bc81bf626bbde6d3606fd780ad27fc86360ba7`.
+These are installed source hashes, not crate archive checksums.
+
+Targeted external candidate check did not identify an adoptable dependency:
+[`clone3 0.2.3`](https://docs.rs/clone3/latest/clone3/struct.Clone3.html) exposes
+unsafe `call`/`call_unchecked`; it does not solve the safe call-site requirement.
+[`pidfd 0.2.4`](https://docs.rs/crate/pidfd/latest/source/README.md) describes
+converting an already-spawned Command child, not descriptor spawning.
+[`memfd-ng 0.1.1`](https://docs.rs/memfd-ng/latest/memfd_ng/) accepts image bytes
+and documents temporary-file fallback; its public overview does not establish
+adoption of our already-owned sealed FD or atomic pidfd ownership. Detailed
+process/executable source retrieval failed, so this is **not** a completed audit
+or an assertion that no configurable variant exists. None is recommended as
+an already-qualified dependency. No download/install/build was performed.
+
+### Exact missing capability and next allocation boundary
+
+Missing: a supported **safe spawn-from-owned-FD operation that creates the child
+and obtains its stable owned pidfd before any fallible post-spawn return can lose
+ownership**, directly execs the FD without shell/path fallback, and retains
+cleanup ownership on exec failure/cancellation. A numeric-PID wrapper, a new
+trait with a mock backend, or calling execveat in the supervisor would not provide
+that capability. There is no verified compilable end-to-end implementation using
+the inspected dependencies. This is a concrete dependency/API gap, not a request
+for another generic design pass or additional human authorization.
+
+The eventual dependency must expose an owned process token (not necessarily
+`std::process::Child`) with pidfd-based stop and wait, and distinguish failure
+before creation from failure after creation with retained cleanup ownership.
+The existing `TrustedChildRun`/PF20 consumers require actual `Child` today, so
+adapting them is a **separate future API boundary**, not a hidden conversion from
+PID. The single-child stage may remain private until that integration is allocated.
+
+Conditional first-party allocation after a concrete dependency is qualified:
+`launch/manifest/{sealed.rs,mod.rs,spawn.rs,spawn_tests.rs}`, `launch/mod.rs`,
+new `launch/manifest/spawn_integration_tests.rs`, and the accepted QA `hold.rs`.
+A new dependency additionally requires crate/workspace Cargo declarations,
+Cargo.lock, affected BUILD.bazel and MODULE.bazel.lock allocation. Estimate
+250–400 runtime lines and 350–550 test/fixture lines (600–950 nonmechanical),
+excluding the missing dependency implementation/audit. The old 800-line target
+cannot be promised without the actual backend. Required proof remains held-FD
+binding, no fallback, live/early exit, creation/exec/pidfd failures, late spawn,
+cancel/drop, quarantine/no-relaunch and observed reaping. Do not start a mock-only
+implementation and call it this end-to-end stage.
+
+Return to manager with this exact capability gap. A maintained safe library
+extension or separately qualified launch service could supply it, but neither
+currently has a verified version/API/source allocation. No unsafe shim, C helper,
+nightly feature or numeric-PID fallback is being silently introduced to close it.
