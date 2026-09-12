@@ -7,17 +7,19 @@ plan_feature: "PF-80"
 execution_order: 1
 owner: "Codex Task Node decision-projection lane"
 parallel_lane: "tasknode-decision-projection"
-write_scope: "scripts/initiative_control/decisions.py, scripts/initiative_control/attention.py, scripts/initiative_control/test_decisions.py, scripts/initiative_control/test_attention.py, qa/initiative-control/pf-80-s01/decision-projection/receipt.md"
-integration_gate: "Codex management audits five-file offline decision record/renderer scope and frozen design, reviews once plus substantive corrections and reruns control/governance on receiving. No collect/export/serve wiring, real state, Slack or posting. Manager owns later publication and agent dispatch."
+write_scope: "scripts/initiative_control/decision_feed.py, scripts/initiative_control/test_decision_feed.py, scripts/initiative_control/export.py, scripts/initiative_control/activate.py, scripts/initiative_control/control.py, scripts/initiative_control/status.js, scripts/initiative_control/test_control.py, qa/initiative-control/pf-80-s01/decision-projection/feed-receipt.md"
+integration_gate: "Manager audits bounded feed export/activation/collect/render/health wiring and frozen DEC cases, reviews and reruns combined control/governance. Fixture execution only; no real state, sync/deploy, Slack or posting. Manager owns actual publication and agent dispatch."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
 branch: "workstream/tasknode-pf80-s01-20260911"
-base_commit: "87e31f521672e627e6230d48fc16a4cfaa7ff44c"
+base_commit: "aa3f9e2c15b4cd84de28f0900f4055a6abcee80d"
 depends_on: "none"
 created: 2026-09-10
 updated: 2026-09-11
 ---
 
 # PF-80-S01 — Native Task Node delivery-control integration
+
+September12: corrected offline4ff73485c reviewed clean, integrated ataa3f9e2c;100combinedPython tests pass. [Feed transport/wiring](../../../research/tasknode-integration/decision-feed-next.md) supersedes the first offline mandate below. TwoP2s reproduced/corrected; no live feed/Slack or human-readiness claim.
 
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
 The previous literal write scope is frozen, not an active worker assignment.
@@ -52,6 +54,8 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact owner, worker worktree/base and disjoint scope allocated; dispatch waits for the verified main merge and worker fast-forward.
 
 ## Done
+
+- [x] Offline revision-bound decisions4ff73485c accepted after clean correction review;777lines,100combinedPython tests pass. Original VoltaDEC001..026 preserved; full UI/feed proof remains. [Receipt](../../../../qa/initiative-control/pf-80-s01/decision-projection/receipt.md).
 
 - [x] Canonical receiving reconciled at 87e31f521672e627e6230d48fc16a4cfaa7ff44c; native validity remains private/no caller. Independent intent-only [design DEC-001..026](../../../../qa/initiative-control/pf-80-s01/decision-projection/design-proposal.md) frozen before implementation. Integrator authorizes +3 design/code/evidence reviews, preserving earlier usage.
 

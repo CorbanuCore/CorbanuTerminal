@@ -19,10 +19,10 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "87e31f521672e627e6230d48fc16a4cfaa7ff44c"
+    base_commit: "aa3f9e2c15b4cd84de28f0900f4055a6abcee80d"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
     branch: "workstream/tasknode-pf80-s01-20260911"
-    base_commit: "87e31f521672e627e6230d48fc16a4cfaa7ff44c"
+    base_commit: "aa3f9e2c15b4cd84de28f0900f4055a6abcee80d"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
     branch: "feat/provider-reauth-health"
     base_commit: "eb7af932bc8cc859122b5b2dbef223fbd45ea25c"
@@ -30,7 +30,7 @@ implementation_worktrees:
 
 # 3. Task Node integration and delivery control
 
-Current September12 continuation: native validity is now in canonical receiving at `87e31f521672e627e6230d48fc16a4cfaa7ff44c`. PF-80-S01 now allocates the five-file offline decision record/renderer slice in decision-projection-next.md; actual launch ID/HEAD are recorded by the manager. Independent intent-only design Volta is frozen with DEC-001..026. The integrator adds three review passes (design, code, evidence), retaining previous usage. No real state, posting or Slack connection is enabled.
+Current September12: corrected offline decisions4ff73485c reviewed clean and integrated ataa3f9e2c;100combinedPython tests pass. [Feed transport/wiring](../../research/tasknode-integration/decision-feed-next.md) now owns exact8file scope. Prior design/code and additional correction consumed, evidence still pending; integrator adds one feed-code pass without reset. VoltaDEC001..026 preserved. No live feed, posting or Slack connection enabled.
 
 ## Activation record
 
