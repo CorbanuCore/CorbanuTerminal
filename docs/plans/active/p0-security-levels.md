@@ -695,6 +695,12 @@ enrollment, Core/PF20/Vault edit or installation. Source/tests can be prepared
 within the existing allocation; independent review must respect the six-hour
 budget. Later actual launcher/group/FD contract remains separately bounded.
 
+Post-exec probe source now passes final RTX default3/fixture23/affected356
+(two inherited helper skips), scoped lint/parity/build and private TMUX proof.
+[Checkpoint](../../../qa/security-levels/sprints/PF-27-S04/probe-20260912/CURRENT.md)
+is branch-only and **review pending** until the next allowed window; it is not
+qualified for main or native use. Keep the tested tree frozen until review.
+
 ## Round-five execution amendment — 2026-09-04
 
 The user authorized these three parallel agents and assigned integration to

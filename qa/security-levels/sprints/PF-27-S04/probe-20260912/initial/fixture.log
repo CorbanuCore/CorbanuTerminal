@@ -1,0 +1,53 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/secret-broker-service)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.92s
+────────────
+ Nextest run ID 7505e6fd-c755-425f-b2ca-7cc4bee2c79d with nextest profile: local
+    Starting 23 tests across 6 binaries
+        PASS [   0.002s] ( 1/23) codex-secret-broker-service children::tests::pf_27_s01_reaper_spawn_failure_returns_both_owned_children
+        PASS [   0.008s] ( 2/23) codex-secret-broker-service children::tests::pf_27_s01_early_drop_uses_preallocated_reaper
+        PASS [   0.018s] ( 3/23) codex-secret-broker-service root::tests::pf_27_s01_native_root_open_denies_nonroot_and_fences_children
+        PASS [   0.018s] ( 4/23) codex-secret-broker-service root::tests::pf_27_s01_root_mapping_uses_child_role_and_shutdown_releases_roots
+        PASS [   0.033s] ( 5/23) codex-secret-broker-service root::tests::pf_27_s01_root_open_failures_release_first_root_and_both_children
+        PASS [   0.033s] ( 6/23) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_duplicate_parent_and_wrong_uid_connections_deny
+        PASS [   0.043s] ( 7/23) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_exit_and_handler_failure_fence_generation
+        PASS [   0.059s] ( 8/23) codex-secret-broker-service root::tests::pf_27_s01_root_terminal_outcomes_fence_and_preserve_ambiguous_errors
+        PASS [   0.017s] ( 9/23) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_roles_route_independently_and_stalled_handlers_shutdown
+        PASS [   0.002s] (10/23) codex-secret-broker-service::lifecycle pf_27_s01_production_service_requires_qualified_bootstrap
+        PASS [   0.063s] (11/23) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_handler_deadline_fences_without_blocking_supervisor
+        PASS [   0.038s] (12/23) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_unknown_peer_and_old_generation_cannot_enter_replacement
+        PASS [   0.092s] (13/23) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_peer_mismatch_denies_before_audit
+        PASS [   0.097s] (14/23) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_dispatch_uses_vault_and_settles_journal
+        FAIL [   0.002s] (15/23) codex-secret-broker-service::probe_lifecycle pf_27_s01_probe_hardens_only_its_own_actual_process
+  stdout ───
+
+    running 1 test
+    test pf_27_s01_probe_hardens_only_its_own_actual_process ... FAILED
+
+    failures:
+
+    failures:
+        pf_27_s01_probe_hardens_only_its_own_actual_process
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'pf_27_s01_probe_hardens_only_its_own_actual_process' (731900) panicked at secret-broker-service/tests/probe_lifecycle.rs:39:9:
+    {"no_new_privileges":true,"nondumpable":true,"keepcaps_disabled":true,"capabilities_empty":true,"ambient_empty":true,"supplementary_group_count":3,"descriptor_allowlist":false,"native_eligible":false}
+
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.005s] (16/23) codex-secret-broker-service::probe_lifecycle pf_27_s01_probe_native_and_invalid_modes_remain_unavailable
+        PASS [   0.019s] (17/23) codex-secret-broker-service::probe_lifecycle pf_27_s01_probe_reports_inherited_synthetic_fd_without_disclosing_it
+        PASS [   0.002s] (18/23) codex-secret-broker-service::bin/codex-protected-root-probe hardening::tests::pf_27_s01_probe_each_failed_kernel_observation_prevents_success
+        PASS [   0.002s] (19/23) codex-secret-broker-service::bin/codex-protected-root-probe hardening::tests::pf_27_s01_probe_identity_requires_nonroot_and_all_saved_ids
+        PASS [   0.002s] (20/23) codex-secret-broker-service::bin/codex-protected-root-probe hardening::tests::pf_27_s01_probe_missing_malformed_or_duplicate_ambient_state_denies
+        PASS [   0.190s] (21/23) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_replay_denies_without_second_audit_or_secret
+        PASS [   0.377s] (22/23) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_death_and_restart_refuse_old_channel_and_key
+        PASS [   5.600s] (23/23) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_signal_during_partial_read_preserves_absolute_deadline
+────────────
+     Summary [   5.668s] 23 tests run: 22 passed, 1 failed, 0 skipped
+        FAIL [   0.002s] (15/23) codex-secret-broker-service::probe_lifecycle pf_27_s01_probe_hardens_only_its_own_actual_process
+error: test run failed
+error: recipe `test` failed on line 82 with exit code 100
