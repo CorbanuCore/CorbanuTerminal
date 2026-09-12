@@ -1,6 +1,6 @@
 # PF27 descriptor identity compatibility — final test evidence
 
-Tests pass; independent reviews pending. Allocation imported before code at launch
+Tests and both independent reviews pass. Allocation imported before code at launch
 `8eeabe2cc178d41f0fec9ce65c233b062bb4a08f`; relay amendment imported as
 `218124bc1`. Source baseline remains `6b393f134f83210be5a55829b63dc513f975fe57`.
 Eleven allocated paths, hard800 including this receipt, fixture and runner.
@@ -81,8 +81,14 @@ under `rtx/`; generated binaries and transfer bundles are not committed.
 ## Review and acceptance boundary
 
 Manager authorized scoped Astra High33 and Fable5.1High34 via Corbanu/private
-TMUX, against baseline6b393f134. Prior1–32 remain unchanged. Final review outcomes
-are pending, so no manager-ready or human-test-ready claim yet. This is transport
+TMUX, against baseline6b393f134; both dispatched 22:19:22 UTC. Prior1–32 unchanged.
+[Astra33](astra33.json) and [Fable34](fable34.json) each exit0, findings[], patch correct;
+confidence 0.92/0.80. Original JSON/text/exit/start receipts are retained here.
+Both inspected source/evidence, not new test runs. No repair or extra opinion.
+Fable notes fail-closed error/EINTR handling and process-isolated ignored OS tests;
+these match the actual code and explicit nextest execution, not landing blockers.
+Closeout sprint check initially rejected 101 lines; removed one blank line, rerun passes.
+Qualified for manager receiving proof, not human-test readiness. This is transport
 compatibility only: root.rs dispatch, separate-principal native containment,
 credential data plane, PF26/live-repository and independent functional proof,
 human acceptance, benchmarks and whole-sprint/release completion remain open.

@@ -50,6 +50,7 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - [x] Accepted the PF-27-S03 Linux service, macOS launchd/XPC and Windows service/AppContainer candidates for construction; protected eligibility and sprint completion remain blocked until measured all-OS qualification passes.
 
 ## Done
+- [x] Descriptor compatibility d776e938d/Rustb48e9c4f: all25 commands+suite0, retained identity2 and both transport entries/five rejection scenarios, strict lint/parity; Astra33/Fable34 exit0/findings[]. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-20260912/README.md). Internal/default-OFF only; original failures retained.
 - [x] Manager accepted receiving Stage B e1cc38a70/Rust2588dfe0 after reading all17 command exits+suite0, actual RTX/TMUX/provenance/test summaries and unchanged module/lock pairs. Internal increment only; original failures/reviews retained.
 - [x] StageB source7839f9f65/Rust5a4ee88b:892lines/same7paths within amended900; all18 repairedexits0, admission8/tenactualpeer scenarios, service59+11separatelycovered exclusions, preservedA/adapter suites, strictlint/parity/actual-keyRTXTMUX pass. Astra30 bufferedEOF reproduced/fixed, Fable31 receipt fixed, Fable32 patchcorrect/exit1 soleP3 count fixed without runtime change or extra review. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-admission-20260912/README.md). Privateincrement-only N/A; no product/native acceptance.
 - [x] StageA identity/private pair lifecycle sourcee0eb9eac4/Rustf64820d0:614 changed lines, ten allocated paths; adapter4+8/default3/pair5+real1/owner8+real3/profiles2/service57 pass, ignored cases separately exercised; strict scoped Clippy/parity/actual-key RTX TMUX pass; Astra28/Fable29 clean. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-pair-20260912/README.md). WIP758-line archive retained; policy1.7 N/A only for this private increment, no product readiness. Manager receiving63cbce998 proof accepted.
@@ -73,7 +74,7 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - [x] Sealed image `ee1ac023c`: default3/synthetic39/affected356 (2 existing skips), scoped lint/parity/build/TMUX pass; Astra18/Fable19 clean. Kernel write/truncate/seal denials and failure cleanup proven; no invocation or loader trust. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/sealed-20260912/README.md).
 - [x] Static probe build/linkage feasibility passes on unchanged Rust0aa65bd: staticPIE f6ca8e3368dc/no interpreter or external libs and GNU control, actual-key TMUX. Fable20 patch correct/P3 receipt gap repaired; original exit1 and failed attempts retained. No artifact invocation/native qualification. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/static-probe-20260912/CURRENT.md).
 ## Remaining
-- [ ] Execute allocated descriptor identity compatibility from6b393f134, preserve Child transport and synthetic/default-OFF boundaries; return exact reviewed proof then obtain manager combined qualification. Later protected-user/PF26 policy1.7 isolation mandatory.
+- [ ] Obtain manager combined receiving qualification for descriptor compatibility; runtime is frozen at d776e938d/Rustb48e9c4f. Later root composition requires its own allocation; protected-user/PF26 policy1.7 isolation remains mandatory.
 - [ ] Include fresh connections after same-run re-registration with cached TLS handlers and admitted hosts, not only reuse of an old channel. Revocation fences queued dispatch, streams and uploads; new generations cannot inherit old credentials.
 - [ ] Keep sentinel keys/raw registries outside agent-accessible processes; test open-channel revocation, upload cancellation, same-run-ID replacement and broker restart with old handles. The proxy's retained RegisteredRun concern requires a native regression, not just a copied new-connection test.
 
@@ -93,7 +94,6 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - [ ] Record candidate/commit, commands, expected/actual outcomes and safe artifact digests; no production credentials or funds.
 
 ## Exit evidence
-
 - [ ] Implementation commit and final-tree outputs under `qa/security-levels/sprints/PF-27-S04/`.
 - [ ] Acceptance and source-mapping assertions proven; applicable true-TUI keys/checkpoints captured after formatting.
 - [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.

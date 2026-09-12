@@ -18,6 +18,13 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Reviews33/34 actually dispatched 2026-09-12 22:19:22 UTC and completed exit0,
+findings[], patch correct (Astra confidence0.92, Fable0.80). Both inspect the same
+frozen d776e938d/Rustb48e9c4f source and final evidence; no runtime changes or
+extra review. Original descriptor-root-compat-20260912/{astra33,fable34} JSON,
+text, exit and start receipts retained. Two-pass scoped extension used2/remaining0;
+history1–32 and original failures remain. Manager receiving proof is next.
+
 Descriptor compatibility reviews33 AstraHigh and34 Fable5.1High Corbanu/TMUX
 reserved September12 22:19UTC under manager2623711d4/relay459efbc4c. New scoped
 extension2 reserved/0 unreserved; historical1–32, original exits and scheduled
