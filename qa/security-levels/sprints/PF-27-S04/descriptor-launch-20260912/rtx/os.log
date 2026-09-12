@@ -1,0 +1,14 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.14s
+────────────
+ Nextest run ID 5be729e2-9ef9-43db-81e3-00e437a6aad5 with nextest profile: local
+    Starting 7 tests across 1 binary (4 tests skipped)
+        PASS [   0.406s] (1/7) codex-linux-pidfd-spawn spawn::tests::pf27_all_fixed_recipes_deny_non_root_before_setters
+        PASS [   0.004s] (2/7) codex-linux-pidfd-spawn spawn::tests::pf27_enoexec_has_no_shell_fallback_or_fd_leak
+        PASS [   0.013s] (3/7) codex-linux-pidfd-spawn spawn::tests::pf27_exact_environment_cwd_stdio_and_fd_allowlist
+        PASS [   0.003s] (4/7) codex-linux-pidfd-spawn spawn::tests::pf27_exec_failure_reaps_without_fd_leaks
+        PASS [   0.015s] (5/7) codex-linux-pidfd-spawn spawn::tests::pf27_held_bytes_survive_original_path_replacement
+        PASS [   0.035s] (6/7) codex-linux-pidfd-spawn spawn::tests::pf27_live_pidfd_stop_and_drop_reap
+        PASS [   0.022s] (7/7) codex-linux-pidfd-spawn spawn::tests::pf27_pidfd_resource_failure_does_not_detach_a_child
+────────────
+     Summary [   0.499s] 7 tests run: 7 passed, 4 skipped

@@ -18,6 +18,11 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Review23 reserved/dispatched September12 17:49UTC: Astra High, adapter source
+30b471a47/Rust2d270c5c overc5b05d9d8, actual OS/TMUX receipts. Window17:25:45Z–
+23:25:45Z now1 used/4 available; history1–22 retained. Review24 Fable remains
+planned, not yet dispatched.
+
 Adapter stage allocation September12 17:29UTC: current scheduled window is
 17:25:45Z through23:25:45Z, five available and zero dispatched. Plan two necessary
 passes (next numbers23 Astra High,24 Fable5.1High through Corbanu/TMUX), reserving

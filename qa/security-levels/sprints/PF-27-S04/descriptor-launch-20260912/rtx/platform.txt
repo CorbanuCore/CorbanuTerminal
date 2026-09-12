@@ -1,0 +1,4 @@
+Linux ambient-System-Product-Name 7.0.0-31-generic #31-Ubuntu SMP PREEMPT_DYNAMIC Sat Aug  1 04:26:38 UTC 2026 x86_64 GNU/Linux
+glibc 2.43
+libc6:amd64	2.43-2ubuntu2.4
+libc6:i386	2.43-2ubuntu2.4
