@@ -1,0 +1,10 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s
+────────────
+ Nextest run ID 07202b13-8cd6-462d-a0e8-2ea4eae6a234 with nextest profile: local
+    Starting 3 tests across 3 binaries
+        PASS [   0.002s] (1/3) codex-secret-broker-service children::tests::pf_27_s01_reaper_spawn_failure_returns_both_owned_children
+        PASS [   0.002s] (2/3) codex-secret-broker-service::lifecycle pf_27_s01_production_service_requires_qualified_bootstrap
+        PASS [   0.007s] (3/3) codex-secret-broker-service children::tests::pf_27_s01_early_drop_uses_preallocated_reaper
+────────────
+     Summary [   0.007s] 3 tests run: 3 passed, 0 skipped

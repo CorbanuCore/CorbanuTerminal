@@ -1,0 +1,55 @@
+cargo clippy --tests {args}
+    Checking codex-utils-absolute-path v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/utils/absolute-path)
+    Checking codex-security-policy v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/security-policy)
+    Checking codex-utils-rustls-provider v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/utils/rustls-provider)
+    Checking codex-utils-cache v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/utils/cache)
+    Checking codex-utils-string v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/utils/string)
+    Checking codex-async-utils v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/async-utils)
+    Checking codex-keyring-store v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/keyring-store)
+    Checking codex-utils-cargo-bin v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/utils/cargo-bin)
+    Checking codex-http-client v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/http-client)
+    Checking codex-utils-image v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/utils/image)
+    Checking codex-utils-home-dir v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/utils/home-dir)
+    Checking codex-execpolicy v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/execpolicy)
+    Checking codex-extension-items v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/ext/items)
+    Checking codex-utils-path-uri v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/utils/path-uri)
+    Checking codex-network-proxy v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/network-proxy)
+    Checking codex-security-audit v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/security-audit)
+    Checking codex-secret-broker v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/secret-broker)
+    Checking codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/protocol)
+warning: large size difference between variants
+  --> protocol/src/security.rs:28:1
+   |
+28 | /   pub enum SecurityControlAction {
+29 | |       SetLevel {
+30 | |           level: SecurityLevel,
+31 | |       },
+32 | | /     CreateGrant {
+33 | | |         actor_chain: ActorChain,
+34 | | |         scope: GrantScope,
+35 | | |         expires_at_unix_seconds: i64,
+36 | | |     },
+   | | |_____- the largest variant contains at least 256 bytes
+37 | | /     Revoke {
+38 | | |         target: RevocationTarget,
+39 | | |         reason: RevocationReason,
+40 | | |     },
+   | | |_____- the second-largest variant contains at least 33 bytes
+41 | |   }
+   | |___^ the entire enum is at least 256 bytes
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#large_enum_variant
+   = note: `#[warn(clippy::large_enum_variant)]` on by default
+help: consider boxing the large fields or introducing indirection in some other way to reduce the total size of the enum
+   |
+34 -         scope: GrantScope,
+34 +         scope: Box<GrantScope>,
+   |
+
+warning: `codex-protocol` (lib) generated 1 warning
+    Checking codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/file-system)
+    Checking codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/git-utils)
+    Checking codex-secrets v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/secrets)
+    Checking codex-vault v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/vault)
+    Checking codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/secret-broker-service)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 14.22s

@@ -164,3 +164,9 @@ configurations, Cargo/Bazel lock parity, exact source/binary build and supportin
 TMUX13 + default exit78 all passed. The all-platform/native/real-data/full-PF27
 gates above remain open. The installed Mac application is unchanged. No new
 human acceptance or benchmark result is claimed for this internal source seam.
+
+Evidence publication: the repository globally ignores `.log`; these scoped
+synthetic qualification logs are explicitly tracked. Published TMUX text strips
+only trailing blank screen rows for whitespace checks; commands, output and
+assertions are unchanged. Raw captures remain on RTX. No credential files or
+unrelated runtime logs are included.

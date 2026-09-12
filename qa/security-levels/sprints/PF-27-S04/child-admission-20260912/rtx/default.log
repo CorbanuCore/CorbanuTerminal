@@ -1,0 +1,9 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-child-admission-20260912/codex-rs/secret-broker-service)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.60s
+────────────
+ Nextest run ID 77158fea-efbf-4042-b055-d7ec9dec1ff1 with nextest profile: local
+    Starting 1 test across 3 binaries
+        PASS [   0.002s] (1/1) codex-secret-broker-service::lifecycle pf_27_s01_production_service_requires_qualified_bootstrap
+────────────
+     Summary [   0.002s] 1 test run: 1 passed, 0 skipped

@@ -1,0 +1,20 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s
+────────────
+ Nextest run ID db86c98f-b825-42c0-8379-561ca746c872 with nextest profile: local
+    Starting 13 tests across 4 binaries
+        PASS [   0.002s] ( 1/13) codex-secret-broker-service children::tests::pf_27_s01_reaper_spawn_failure_returns_both_owned_children
+        PASS [   0.007s] ( 2/13) codex-secret-broker-service children::tests::pf_27_s01_early_drop_uses_preallocated_reaper
+        PASS [   0.017s] ( 3/13) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_roles_route_independently_and_stalled_handlers_shutdown
+        PASS [   0.033s] ( 4/13) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_duplicate_parent_and_wrong_uid_connections_deny
+        PASS [   0.002s] ( 5/13) codex-secret-broker-service::lifecycle pf_27_s01_production_service_requires_qualified_bootstrap
+        PASS [   0.043s] ( 6/13) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_exit_and_handler_failure_fence_generation
+        PASS [   0.038s] ( 7/13) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_unknown_peer_and_old_generation_cannot_enter_replacement
+        PASS [   0.063s] ( 8/13) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_handler_deadline_fences_without_blocking_supervisor
+        PASS [   0.090s] ( 9/13) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_peer_mismatch_denies_before_audit
+        PASS [   0.095s] (10/13) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_dispatch_uses_vault_and_settles_journal
+        PASS [   0.189s] (11/13) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_replay_denies_without_second_audit_or_secret
+        PASS [   0.369s] (12/13) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_death_and_restart_refuse_old_channel_and_key
+        PASS [   5.596s] (13/13) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_signal_during_partial_read_preserves_absolute_deadline
+────────────
+     Summary [   5.632s] 13 tests run: 13 passed, 0 skipped
