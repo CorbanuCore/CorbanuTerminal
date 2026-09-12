@@ -23,6 +23,7 @@ from markdown_it import MarkdownIt
 from activity import latest_reports, presentation
 from attention import notices
 from facilities import facilities
+import decision_feed
 
 HERE = Path(__file__).resolve().parent
 MAX_FILE = 1024 * 1024
@@ -229,6 +230,7 @@ def collect(repo, state):
     sprints = sprints_check.check_sprints(repo / "docs/sprints", repo)
     config = read_json(state / "control.json", state)
     source = read_json(state / "source.json", state)
+    decision_snapshot = decision_feed.read_snapshot(repo, source, now())
     timestamp(source["collected_at"])
     if not re.fullmatch(r"[a-f0-9]{40}", source["commit"]):
         raise ValueError("invalid source commit")
@@ -291,6 +293,7 @@ def collect(repo, state):
             writeback = None
             problems.append("Writeback status is unreadable; manager inspection required.")
     return dict(plans=plans, sprints=sprints, config=config, source=source, writeback=writeback,
+                decision_snapshot=decision_snapshot,
                 documents=documents, events=events[-100:], runs=list(latest.values()),
                 display_runs=latest_reports(events),
                 problems=problems + plans["errors"] + sprints["errors"])
@@ -305,6 +308,7 @@ def overview(data):
     body = '<section class="heading"><div><p class="eyebrow">DELIVERY / OPERATIONS</p><h1>Initiative map</h1></div>'
     body += f'<div class="counters"><strong>{len(active)} / {plans["active_limit"]}<small>active initiatives</small></strong><strong>{len(reserved)} / 3<small>reserved sprints</small></strong><strong>1<small>sprint per initiative</small></strong></div></section>'
     body += f'<aside class="notice"><strong>Source boundary</strong> {e(source["label"])} · {e(source["branch"])} · {e(source["commit"][:12])}. {e(source.get("note", ""))}<small>Checkout: {e(source.get("checkout", "not recorded"))} · content {e(source.get("tree_digest", "unknown")[:12])}</small><a href="manifest.json">Exact publication manifest</a></aside>'
+    body += decision_feed.render(data.get("decision_snapshot", {"feed": None}), now(), sprints["sprints"], data.get("documents", {}))
     body += notices(data)
     body += '<p class="muted">Current activity describes worker reports. Sprint lifecycle tracks overall completion; an open sprint does not mean an agent is running.</p>'
     body += '<section id="initiatives" aria-label="Active workstreams" class="lanes">'
@@ -398,11 +402,12 @@ def publish(repo, state, output):
                 (generation / route(path)).write_text(page(path, body, data["source"]["collected_at"], generation.name), encoding="utf-8")
             (generation / "index.html").write_text(page("Initiative map", overview(data), data["source"]["collected_at"], generation.name), encoding="utf-8")
             (generation / "facilities.html").write_text(page("Facilities", facilities(), data["source"]["collected_at"], generation.name), encoding="utf-8")
-            atomic_json(generation / "manifest.json", {"published_at": now(), "source": data["source"], "documents": sorted(data["documents"]), "run_count": len(data["runs"])})
+            feed_health = decision_feed.health(data.get("decision_snapshot", {"feed": None, "status": "unrecorded"}), data["source"], now())
+            atomic_json(generation / "manifest.json", {"published_at": now(), "source": data["source"], "decision_feed": feed_health, "documents": sorted(data["documents"]), "run_count": len(data["runs"])})
             pending = output / (".current-" + uuid.uuid4().hex)
             pending.symlink_to(generation.relative_to(output))
             os.replace(pending, output / "current")
-            atomic_json(output / "health.json", {"ok": True, "generation": generation.name, "published_at": now(), "collected_at": data["source"]["collected_at"], "warning_count": len(data["problems"])})
+            atomic_json(output / "health.json", {"ok": True, "generation": generation.name, "published_at": now(), "collected_at": data["source"]["collected_at"], "decision_feed": feed_health, "warning_count": len(data["problems"])})
             # Only this publisher's generated directories; keep three complete generations.
             candidates = [generation] + sorted((p for p in releases.iterdir()
                                                if p != generation and re.fullmatch(r"build-[a-z0-9_]{8}", p.name)
@@ -415,7 +420,14 @@ def publish(repo, state, output):
         except Exception:
             if generation and generation.exists() and (output / "current").resolve() != generation.resolve():
                 shutil.rmtree(generation)  # This attempt only; never remove the displayed snapshot.
-            atomic_json(output / "health.json", {"ok": False, "attempted_at": now(), "error": "Publication failed; displaying the last successful snapshot. Inspect publisher service logs."})
+            retained_feed = {"state": "unknown", "assessed_at": None}
+            try:
+                retained_feed = read_json(output / "current/manifest.json", output)["decision_feed"]
+                if retained_feed["assessed_at"] and (timestamp(now()) - timestamp(retained_feed["assessed_at"])).total_seconds() > decision_feed.d.FRESH_SECONDS:
+                    retained_feed["state"] = "stale"
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
+            atomic_json(output / "health.json", {"ok": False, "attempted_at": now(), "decision_feed": retained_feed, "error": "Publication failed; displaying the last successful snapshot. Inspect publisher service logs."})
             raise
 
 

@@ -9,6 +9,7 @@ import shutil
 import subprocess
 
 from control import atomic_json, now, read_file, read_json
+import decision_feed
 
 
 def source_paths(repo, config):
@@ -46,6 +47,9 @@ def export(repo, state, destination, expected_branch=None):
     if expected_branch and branch != expected_branch:
         raise ValueError("dashboard source is not the declared manager branch")
     config = read_json(state / "control.json", state)
+    collected_at = now()
+    if destination:
+        feed_bytes, feed_pin = decision_feed.capture(state, collected_at)
     paths = source_paths(repo, config)
     hashes = {}
     for path in sorted(paths):
@@ -57,16 +61,27 @@ def export(repo, state, destination, expected_branch=None):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(text, encoding="utf-8")
     manifest = {
-        "collected_at": now(), "commit": commit, "branch": branch,
+        "collected_at": collected_at, "commit": commit, "branch": branch,
         "checkout": str(repo.resolve()),
         "label": "Manager's declared receiving checkout" if expected_branch else "Manager's declared local planning checkout",
         "note": "Declared source files are pinned by hashes and may include uncommitted changes. Source identity does not prove deployment, enrollment or delivery.",
         "files": hashes,
         "tree_digest": hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest(),
     }
+    # Local metadata-only export has no immutable feed artifact: preserve its
+    # existing publication path with explicit unknown decisions, not a false pin.
+    if destination:
+        manifest["decision_feed"] = feed_pin
     verify_source(repo, manifest, expected_branch)
     if source_paths(repo, config) != paths or read_json(state / "control.json", state) != config:
         raise ValueError("dashboard source inventory/configuration changed during collection; retry")
+    decision_feed.verify_input(state, manifest, collected_at)
+    if destination:
+        # Fixed snapshot belongs to this export, never to mutable remote state.
+        target = destination / "source" / decision_feed.ARTIFACT
+        with target.open("xb") as stream:
+            stream.write(feed_bytes)
+        decision_feed.read_snapshot(destination / "source", manifest, collected_at)
     atomic_json(state / "source.json", manifest)
     if destination:
         atomic_json(destination / "state/source.json", manifest)
@@ -105,6 +120,7 @@ if __name__ == "__main__":
         inventory = {p.relative_to(args.repo.resolve()).as_posix() for p in source_paths(args.repo.resolve(), current_config)}
         if current_config != exported_config or inventory != set(manifest["files"]):
             raise ValueError("dashboard source inventory/configuration changed during synchronization; retry")
+        decision_feed.verify_input(args.state, manifest, manifest["collected_at"])
         print("Source checkout/revision/content match the collected export")
         raise SystemExit(0)
     result = export(args.repo.resolve(), args.state.resolve(), args.destination, args.expected_branch)
