@@ -1,7 +1,16 @@
 "use strict";
 let generation = document.body.dataset.generation || null;
 const freshness = document.getElementById("freshness");
+function updateActivityAge() {
+  for (const item of document.querySelectorAll("[data-activity-seen]")) {
+    if (Date.now() - Date.parse(item.dataset.activitySeen) > 45 * 60000) {
+      item.className = "badge stale";
+      item.textContent = "Stale report — last: " + item.dataset.activityLabel;
+    }
+  }
+}
 async function updateHealth() {
+  updateActivityAge();
   try {
     const response = await fetch("health.json", {cache: "no-store"});
     if (!response.ok) throw new Error("unavailable");

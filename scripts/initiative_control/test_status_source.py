@@ -58,7 +58,7 @@ class StatusSourceTests(unittest.TestCase):
             dict(sprint_id="PF-80-S01", status="pending", reason="Publisher approved")])
         self.data["runs"] = [{**run(), "status": "blocked", "summary": "Old question"}]
         label, details = control.sprint_status(self.sprint, self.data)
-        self.assertIn('class="badge in_progress"', label)
+        self.assertIn('Sprint lifecycle: in progress', label)
         self.assertNotIn("Block reasons", details)
         self.assertFalse(self.data["config"]["tasknode"]["enabled"])
 

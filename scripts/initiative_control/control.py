@@ -20,6 +20,7 @@ from urllib.parse import unquote, urlsplit
 import uuid
 
 from markdown_it import MarkdownIt
+from activity import latest_reports, presentation
 
 HERE = Path(__file__).resolve().parent
 MAX_FILE = 1024 * 1024
@@ -165,14 +166,21 @@ def badge(status):
     return f'<span class="badge {e(status)}">{e(status.replace("_", " "))}</span>'
 
 
+def activity_presentation(reports):
+    label, tone, seen = presentation(reports)
+    attrs = f' data-activity-seen="{e(seen)}" data-activity-label="{e(label)}"' if seen else ""
+    if seen and (timestamp(now()) - timestamp(seen)).total_seconds() > STALE_SECONDS:
+        label, tone = "Stale report — last: " + label, "stale"
+    return e(label), tone, attrs
+
+
 def sprint_status(sprint, data):
     """Status belongs to the manager's sprint; worker claims never override it."""
     status, sid = sprint["status"], sprint["sprint_id"]
     if status not in {"blocked", "in_progress"}:
         return badge(status), ""
     target = "status-" + sid
-    reports = sorted((r for r in data["runs"] if r["sprint_id"] == sid),
-                     key=lambda r: (timestamp(r["updated_at"]), r["run_id"]), reverse=True)
+    reports = latest_reports(r for r in data["runs"] if r["sprint_id"] == sid)
     if status == "blocked":
         reasons = [t["reason"] for t in data["config"].get("human_tests", [])
                    if t["sprint_id"] == sid and t.get("status") == "blocked"]
@@ -184,13 +192,19 @@ def sprint_status(sprint, data):
     else:
         latest = reports[0] if reports else None
         summary = ' '.join(latest["summary"].split()) if latest else "No progress report connected; implementation status is manager-recorded, not a live worker signal."
+        if len(reports) != len({r["run_id"] for r in reports}):
+            summary = "Conflicting same-time reports; no reliable latest note can be selected. See run details below."
         short = summary if len(summary) <= 260 else summary[:257].rstrip() + "…"
         observed = ("Last report " + latest["updated_at"]) if latest else "No report timestamp"
         stale = latest and (timestamp(now()) - timestamp(latest["updated_at"])).total_seconds() > STALE_SECONDS
         note = ("STALE · " if stale else "") + short + " · " + observed
-        label = f'<span class="status-hint"><a class="badge in_progress" href="#{e(target)}" aria-describedby="hint-{e(sid)}" aria-label="{e(sid)} in progress: latest notes">in progress</a><span class="status-tooltip" role="tooltip" id="hint-{e(sid)}">{e(note)}</span></span>'
+        text, tone, attrs = activity_presentation(reports)
+        label = f'<span class="status-hint"><a class="badge {tone}" href="#{e(target)}" aria-describedby="hint-{e(sid)}"{attrs}>{text}</a><span class="status-tooltip" role="tooltip" id="hint-{e(sid)}">{e(note)}</span></span>'
         details = f'<p>{e(summary)}</p><small>{e(observed)}{" · STALE report" if stale else ""}</small>'
+        if len(reports) > 1:
+            details += '<ul>' + ''.join(f'<li>{e(r["run_id"])} · {e(presentation([r])[0])} · {e(r["updated_at"])}<p>{e(r["summary"])}</p></li>' for r in reports) + '</ul>'
         title = "Latest progress"
+    label = '<span class="activity-heading">Current activity</span>' + label + f'<small class="lifecycle">Sprint lifecycle: {e(status.replace("_", " "))}</small>'
     details += '<p>' + link(sprint["path"], sid + " — full sprint and remaining gates") + '</p>'
     return label, f'<article class="test status-detail" id="{e(target)}" tabindex="-1"><h3>{e(sid)} · {title}</h3>{details}<a href="#initiatives">Back to workstreams</a></article>'
 
@@ -276,10 +290,13 @@ def collect(repo, state):
             problems.append("Writeback status is unreadable; manager inspection required.")
     return dict(plans=plans, sprints=sprints, config=config, source=source, writeback=writeback,
                 documents=documents, events=events[-100:], runs=list(latest.values()),
+                display_runs=latest_reports(events),
                 problems=problems + plans["errors"] + sprints["errors"])
 
 
 def overview(data):
+    # Conflicting observations stay visible without changing writeback selection.
+    data = {**data, "runs": data.get("display_runs", data["runs"])}
     plans, sprints, config, source = data["plans"], data["sprints"], data["config"], data["source"]
     active = sorted([p for p in plans["plans"] if p["status"] == "active"], key=lambda p: (p["priority"] or "P9", p["title"] or ""))
     reserved = [s for s in sprints["sprints"] if s["status"] in {"in_progress", "blocked"}]
@@ -288,6 +305,7 @@ def overview(data):
     body += f'<aside class="notice"><strong>Source boundary</strong> {e(source["label"])} · {e(source["branch"])} · {e(source["commit"][:12])}. {e(source.get("note", ""))}<small>Checkout: {e(source.get("checkout", "not recorded"))} · content {e(source.get("tree_digest", "unknown")[:12])}</small><a href="manifest.json">Exact publication manifest</a></aside>'
     if data["problems"]:
         body += '<aside class="notice danger"><strong>Manager attention required</strong><ul>' + ''.join(f'<li>{e(p)}</li>' for p in list(dict.fromkeys(data["problems"]))[:20]) + '</ul></aside>'
+    body += '<p class="muted">Current activity describes worker reports. Sprint lifecycle tracks overall completion; an open sprint does not mean an agent is running.</p>'
     body += '<section id="initiatives" aria-label="Active workstreams" class="lanes">'
     status_details = []
     for plan in active:
@@ -296,7 +314,7 @@ def overview(data):
         current = [s for s in children if s["lifecycle"] == "current"]
         completed = sum(s["status"] == "completed" for s in children)
         working = [s for s in current if s["status"] in {"in_progress", "blocked"}]
-        body += f'<article class="lane"><div class="lane-top">{badge(plan["priority"] or "unknown")} {badge("active")}</div><h2>{link(path, plan["title"])}</h2><p class="muted">{e(plan["owner"])}</p>'
+        body += f'<article class="lane"><div class="lane-top">{badge(plan["priority"] or "unknown")} {badge("initiative_active")}</div><h2>{link(path, plan["title"])}</h2><p class="muted">{e(plan["owner"])}</p>'
         body += f'<p>{completed} / {len(children)} sprints archived complete</p><progress value="{completed}" max="{max(1,len(children))}" aria-label="Archived sprint completion"></progress>'
         body += '<ol class="sprint-map">'
         ordered = working + [s for s in current if s not in working]
@@ -330,8 +348,9 @@ def overview(data):
         body += '<p>No human test plans mapped. This is missing coverage, not a pass.</p>'
     body += '</div></section><section id="runs"><h2>Runs & machines</h2><p class="muted">Explicit, redacted worker reports. “Finished” does not complete a sprint.</p><div class="table-wrap"><table><thead><tr><th>Sprint / run</th><th>Machine / role</th><th>Agent / session</th><th>Reported state</th><th>Last report</th></tr></thead><tbody>'
     for run in data["runs"]:
-        stale = (timestamp(now()) - timestamp(run["updated_at"])).total_seconds() > STALE_SECONDS
-        body += f'<tr><td>{e(run["sprint_id"])}<small>{e(run["run_id"])}</small></td><td>{e(run["machine"])}<small>{e(run["role"])}</small></td><td>{e(run["agent"])}<small>{e(run["session_id"])}</small></td><td>{badge(run["status"])} {badge("stale") if stale else ""}</td><td><time data-seen="{e(run["updated_at"])}">{e(run["updated_at"])}</time></td></tr>'
+        text, tone, attrs = activity_presentation([run])
+        conflict = '<small>Conflicting same-time reports — manager check</small>' if sum(r["run_id"] == run["run_id"] for r in data["runs"]) > 1 else ""
+        body += f'<tr><td>{e(run["sprint_id"])}<small>{e(run["run_id"])}</small></td><td>{e(run["machine"])}<small>{e(run["role"])}</small></td><td>{e(run["agent"])}<small>{e(run["session_id"])}</small></td><td><span class="badge {tone}"{attrs}>{text}</span>{conflict}</td><td><time data-seen="{e(run["updated_at"])}">{e(run["updated_at"])}</time></td></tr>'
     body += '</tbody></table></div><details><summary>Progress log · last 100 reports</summary><ol class="log">'
     for run in reversed(data["events"]):
         body += f'<li><time>{e(run["updated_at"])}</time><b>{e(run["sprint_id"])} / {e(run["run_id"])}</b><p>{e(run["summary"])}</p><small>{e(run["branch"])} @ {e(run["commit"])} · {e(run["worktree"])}</small></li>'
