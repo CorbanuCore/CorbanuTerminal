@@ -6,6 +6,35 @@ Product: **Product measurement**, “No commercial performance numbers have been
 supplied.” The [active plan](../../plans/active/portfolio-agent-cost-accounting.md)
 and [approved retention handoff](retention-design-handoff.md) retain authority.
 
+## Integrator reslice — September 12, 2026
+
+The returned 904-line draft is preserved, not accepted. The same worker is
+authorized to split it into two sequential, independently reviewed increments
+within this same sprint and exact five implementation/receipt paths above.
+This amendment supersedes the original single-increment planner mandate.
+
+**A, active now:** implement only the private validated whole-store input reader:
+checkpoint, compact rows/references, raw latest quotes/contribution freshness,
+tombstone validation and checked timestamps. Retain fixture installation/dumps,
+corruption/time-key cases and complete-input/two-reopen/no-write proof.
+No retention reduction, removals or apply capability in A. Keep its internal
+reader name explicit; the file may retain its already allocated name.
+Target at most 712 added+deleted lines including receipt; hard limit800/500
+non-test remains. Count before final handoff; do not remove required A proof.
+
+**B, queued after A integration:** checked pure retention reduction, exact90/365
+filtering, raw freshness/removals, compact merging and immutable-reference union.
+Preserve all draft mixed-day/boundary/unknown/original-price/reopen/overflow cases
+for B; do not claim them passed for A or silently discard them. B needs a new
+exact allocation before implementation. No successor sprint activation.
+
+Before changing the draft, preserve all five complete files and original receipt
+recoverably in a named private manager artifact directory, with hashes and path
+in the new receipt. Same worker/branch/launch HEAD, no duplicate worker or reset.
+The existing two additional review passes are unspent; parent handles review.
+Use scoped formatting and final tests. The earlier cargo-fix TCP-listener denial
+is an environment limitation; do not weaken the network restriction or hide it.
+
 ## Launch gate and ownership
 
 Latest quote `8b6d629b6` and accepted main `1b7e9f3df` are now reconciled in
