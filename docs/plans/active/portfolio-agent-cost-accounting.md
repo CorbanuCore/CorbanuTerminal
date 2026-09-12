@@ -105,6 +105,8 @@ is accepted and frozen, not a new worker assignment. The
 records the approved policy. The [latest-quote allocation](../../research/agent-cost-accounting/latest-quote-allocation.md)
 owns the reviewed three-file prerequisite, now frozen after return. Parent is
 preparing the next atomic-retention allocation; no new implementation dispatched.
+The [prepared next allocation](../../research/agent-cost-accounting/retention-plan-next.md)
+names the read-only prerequisite, coupled mutation follow-up and launch gates.
 Custom range/interval filtering is recorded in S03 draft, not implemented here.
 No production migrations, API/Core wiring, manifests or other state writers are
 allocated. The idle worker fast-forwards to

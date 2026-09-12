@@ -71,7 +71,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 ## Remaining
 
 - [ ] Transfer reviewed/tested staging checkpoint into canonical receiving after pending publication resolves; preserve ExpiryUnknown, private entry and posting OFF.
-- [ ] Then allocate contextual dashboard decisions and private AmbientCrypto Slack alerts per [amendment](../../../plans/decision-escalation.md); no deployment/connection claim from planning alone.
+- [ ] Activate the [prepared contextual-decision allocation](../../../research/tasknode-integration/decision-projection-next.md) after canonical receiving/ownership gates and independent intent-only design; exact scope/base/review allowance before dispatch. Slack remains unconnected under the [amendment](../../../plans/decision-escalation.md).
 - [ ] Manager scopes accessible recovery/input/retention and restart/cross-process fences before the later CLI allocation; this is manager work, not unanswered product approval.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.
 - [ ] Give manager exact credential-scope/destination, enrollment, task-lifecycle and first-payload decisions; remain OFF if missing authority. Never inspect real credential stores as a worker.

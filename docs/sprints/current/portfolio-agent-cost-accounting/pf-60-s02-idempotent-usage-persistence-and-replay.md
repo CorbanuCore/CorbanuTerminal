@@ -68,7 +68,7 @@ records approved daily expiry; [latest-quote allocation](../../../research/agent
 ## Remaining
 
 - [ ] Transfer reviewed/tested staging checkpoint into canonical receiving after its pending publication resolves, preserving the exact candidate.
-- [ ] Manager resolves daily/rolling expiry coverage, stale/unquoted source and late-import semantics before allocating any compaction mutation; no repeated defaults question.
+- [ ] Activate the [prepared read-only retention allocation](../../../research/agent-cost-accounting/retention-plan-next.md) after canonical receiving/ownership gates; record exact scope/base and review allowance before dispatch. Mutation must include read/delete/admission; late-import coverage remains an explicit gap, not a new defaults question.
 - [ ] After reviewing the first increment, manager allocates production migration/dispatch/presence/price/retention wiring and complete S02 golden tests separately; do not broaden this worker's scope.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 

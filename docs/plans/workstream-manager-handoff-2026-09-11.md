@@ -1,5 +1,19 @@
 # Workstream continuation — September 11
 
+September12 06:22UTC heartbeat: verified remote main
+`bba52cecc996a2f04ec558b7b86514426e67c845` is reconciled only in temporary manager
+staging `64cc30cf19a25f74ae07125eece91f6f766e8ebf`. Two documentation conflicts
+retain the accepted owner's newer PF27 closeout/budget text; no native edits.
+Combined322 native and83 dashboard tests pass. This is not canonical receiving
+or publication. The pending guarded publication still awaits approval; receiving
+also has another task's uncommitted Facilities changes, preserved for coordination.
+Do not overwrite those changes or dispatch a duplicate publisher. Current exact
+successor preparations are [accounting](../research/agent-cost-accounting/retention-plan-next.md)
+and [decision projection](../research/tasknode-integration/decision-projection-next.md).
+No implementation workers were dispatched; existing reservations/gates remain.
+The manager owns allocation and source reconciliation, not Travis's already
+answered product decisions. No new review allowance or sprint completion claimed.
+
 Status: local receiving integration, not remote main or release. Travis requested
 that management fix stalled progression. The
 [sprint continuation rule](../sprints/index.md#manager-owned-continuation) owns

@@ -80,6 +80,8 @@ owns the now-reviewed production-compiled private path bda5b35b4. Combined stagi
 [staging evidence](../../../qa/initiative-control/native-staging-2026-09-12.md).
 The [dashboard decision/Slack amendment](../decision-escalation.md) is queued within
 PF-80-S01. Channel setup and publication qualification are separate from this code.
+The [prepared projection allocation](../../research/tasknode-integration/decision-projection-next.md)
+records exact proposed ownership, tests and launch gates; it is not dispatched.
 The [runtime recovery handoff](../../research/tasknode-integration/recovery-decision-handoff.md)
 records manager design work, recommendations and the gated human test plan.
 
