@@ -18,6 +18,12 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+StageB allocation manager67273f7e grants two necessary new-source reviews:
+30 AstraHigh and31 Fable5.1High Corbanu/privateTMUX, after final B proof.
+0 dispatched/2 available in this explicit extension; preserve1–29 and the
+scheduled current-window five used. Scope/baseline in admission allocation,
+not an unchanged A review. Reserve each pass before dispatch; no source push.
+
 Reviews28/29 completed exit0/findings[], patch correct. No accepted/actionable
 findings, no code repair and no additional review. Originals under
 descriptor-pair-20260912/{astra28,fable29}.{json,txt,exit}; reviewed source

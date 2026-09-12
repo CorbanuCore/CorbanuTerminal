@@ -982,6 +982,15 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
+StageB now allocated by manager67273f7e19f3d515086147c7f8408245e986369d after
+accepted combinedA63cbce998 proof. [Literal admission allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-admission-allocation-20260912.md):
+seven exact paths, hard800 additions/deletions against qualified6d770938c;
+same sole owner/worktree/branch/original base, no rebase. Preserve A lifecycle,
+add private bounded socket admission and hashed static connector, all actual
+socket/UID/death/delivery/race cases. Reviews30/31 are +2, not reset. No source
+push/native/activation/dependencies/locks/Core/Vault/PF20 edits. Record launch
+checkpoint before source edits; policy1.7 N/A only this internal increment.
+
 September12 manager accepted combined receiving c5e606fa2/Rust18cf961a proof.
 The initial pair/admission draft reached758 lines before complete test coverage;
 unqualified WIPdb971e9b8 is preserved with hashes locally and onRTX, not accepted.
