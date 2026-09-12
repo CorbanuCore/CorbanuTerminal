@@ -18,6 +18,16 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Reviews30/31 dispatched21:13:07UTC, both completed exit1. Astra30 P2 buffered
+EOF accepted after source/kernel confirmation; manager251074ef7 authorizes only
+the shutdown-check fix and corresponding actual regression within same7/hard900.
+Fable31 judged runtime correct but found the bazel-parity.exit receipt ignored
+by root bazel-*; verified, accepted and original existing exit0 now force-added.
+Both findings belong to this exact increment; no different contract/scope.
+Preserve originals descriptor-admission-20260912/{astra30,fable31}.{json,txt,exit}.
+Manager grants exactly one corrective Fable32 after failing regression, repair,
+format and full proof. Not yet reserved/dispatched; no reset or extra opinion.
+
 StageB reviews30 AstraHigh and31 Fable5.1High Corbanu/privateTMUX reserved
 September12 21:11UTC before dispatch, exact sourceb59999635298069831165f0fab08cd6be862f419,
 Rust194ff9575e4016d2c3b45ddd639945fbbbc836ab over accepted6d770938c.

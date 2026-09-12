@@ -985,7 +985,8 @@ for design provenance; product scope remains in the specification.
 StageB now allocated by manager67273f7e19f3d515086147c7f8408245e986369d after
 accepted combinedA63cbce998 proof. [Literal admission allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-admission-allocation-20260912.md):
 seven exact paths, hard900 additions/deletions against qualified6d770938c;
-manager3e76ee4ec amended at measured791 for tests/runner only, runtime254 frozen;
+manager3e76ee4ec amended at measured791 for tests/runner only; manager251074ef7
+permits only review30 buffered-EOF repair to runtime254 plus regression/review32;
 same sole owner/worktree/branch/original base, no rebase. Preserve A lifecycle,
 add private bounded socket admission and hashed static connector, all actual
 socket/UID/death/delivery/race cases. Reviews30/31 are +2, not reset. No source

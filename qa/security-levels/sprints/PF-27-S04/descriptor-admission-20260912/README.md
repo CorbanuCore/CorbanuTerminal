@@ -2,6 +2,9 @@
 
 Internal synthetic increment only; not a protected service or human-test candidate.
 Product initiative PF-27 / sprint PF-27-S04 remains **in_progress**.
+The initial passing suite below is superseded for readiness by Astra30's
+confirmed buffered-EOF finding. Manager251074ef7 authorizes the bounded repair,
+actual failing regression and corrective Fable32; no final acceptance yet.
 Product authority: **Non-negotiable controls** — “Permit agents to reference
 credentials only by label; resolve them solely inside the trusted execution
 boundary.” No credential is used by this increment.
