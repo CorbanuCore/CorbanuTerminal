@@ -1,0 +1,33 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.76s
+    Starting 30 tests across 2 binaries (4024 tests skipped)
+        PASS [   0.008s] ( 1/30) codex-provider-auth claude_account_flow::tests::unproven_code_transport_and_stale_ready_have_typed_terminal_cleanup
+        PASS [   0.008s] ( 2/30) codex-provider-auth claude_account_flow::tests::correlated_success_requires_exact_method_status_and_rejects_stale_ids
+        PASS [   0.008s] ( 3/30) codex-provider-auth claude_account_flow::tests::code_transport_loss_preserves_cancel_and_correlated_success_origins
+        PASS [   0.008s] ( 4/30) codex-provider-auth claude_account_flow::tests::managed_submit_is_redacted_non_cancellable_and_reconciles_late_settlement
+        PASS [   0.008s] ( 5/30) codex-provider-auth claude_account_flow::tests::correlated_managed_success_with_nonmatching_status_fails_terminally
+        PASS [   0.008s] ( 6/30) codex-provider-auth claude_account_flow::tests::add_timeout_can_be_proved_by_status_but_replace_cannot
+        PASS [   0.009s] ( 7/30) codex-provider-auth claude_account_flow::tests::unauthorized_recovery_enforces_exact_selected_source_without_fallback
+        PASS [   0.018s] ( 8/30) codex-provider-auth claude_account_flow::tests::code_login_freezes_identity_policy_challenge_code_cancel_and_late_events
+        PASS [   0.027s] ( 9/30) codex-tui provider_account_auth_host::tests::pending_cancel_actions_target_the_exact_account_reducer
+        PASS [   0.027s] (10/30) codex-provider-auth claude_account_flow::tests::target_add_short_circuit_environment_block_and_restart_are_typed
+        PASS [   0.030s] (11/30) codex-tui chatwidget::claude_auth_adapter::tests::ready_before_start_return_registers_exact_sender_without_overwrite
+        PASS [   0.048s] (12/30) codex-tui chatwidget::claude_auth_adapter::tests::backend_results_collapse_without_retaining_raw_error_text
+        PASS [   0.048s] (13/30) codex-tui provider_account_auth_host::tests::submitted_claude_token_does_not_reopen_the_entry_form
+        PASS [   0.049s] (14/30) codex-tui chatwidget::claude_auth_adapter::tests::renderer_owned_effects_are_not_executed_by_backend_adapter
+        PASS [   0.031s] (15/30) codex-tui app::tests::provider_manager_claude_intent_uses_typed_status_and_recovery_source
+        PASS [   0.032s] (16/30) codex-tui chatwidget::provider_manager::tests::external_credential_copy_never_claims_deletion
+        PASS [   0.050s] (17/30) codex-tui provider_account_auth_host::tests::pending_cancel_actions_are_secret_free_and_distinct
+        PASS [   0.050s] (18/30) codex-tui chatwidget::claude_auth_adapter::tests::finished_before_start_return_cannot_be_followed_by_stale_insertion
+        PASS [   0.050s] (19/30) codex-tui provider_account_auth_host::tests::claude_recovery_snapshot_presents_the_method_choice
+        PASS [   0.051s] (20/30) codex-tui chatwidget::claude_auth_adapter::tests::authorization_code_effect_is_redacted_and_consumed_by_exact_process
+        PASS [   0.038s] (21/30) codex-tui chatwidget::claude_code_login::tests::claude_auth_recovery_snapshot
+        PASS [   0.039s] (22/30) codex-tui chatwidget::claude_code_login::tests::claude_auth_method_choice_snapshot
+        PASS [   0.058s] (23/30) codex-tui app::tests::provider_manager_open_preserves_lazy_command_authorization_without_shared_state
+        PASS [   0.082s] (24/30) codex-tui chatwidget::provider_manager::tests::refresh_preserves_provider_selection_by_identity_and_falls_back_when_removed
+        PASS [   0.064s] (25/30) codex-tui chatwidget::provider_manager::tests::opening_provider_actions_keeps_manager_as_the_parent_view
+        PASS [   0.069s] (26/30) codex-tui chatwidget::provider_manager::tests::provider_manager_uses_shared_status_copy_snapshot
+        PASS [   0.096s] (27/30) codex-tui chatwidget::provider_manager::tests::configured_credentials_can_be_replaced_while_active_or_inactive
+        PASS [   0.175s] (28/30) codex-tui onboarding::auth::tests::claude_auth_success_returns_plan_provider_only_after_success
+        PASS [   0.424s] (29/30) codex-tui app::tests::stale_provider_manager_claude_recovery_source_is_inert
+        PASS [   0.446s] (30/30) codex-tui app::tests::provider_manager_stale_api_key_completion_is_inert_and_current_settles
+     Summary [   0.481s] 30 tests run: 30 passed, 4024 skipped
