@@ -216,7 +216,7 @@ def page(title, body, collected, generation=""):
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>{e(title)} · Corbanu Control</title>
-<link rel="stylesheet" href="style.css"><script src="status.js" defer></script></head>
+<link rel="stylesheet" href="style.css"><link rel="stylesheet" href="facilities.css"><script src="status.js" defer></script><script src="facilities.js" defer></script></head>
 <body data-collected="{e(collected)}" data-generation="{e(generation)}"><a class="skip" href="#main">Skip to content</a>
 <header><a class="brand" href="index.html">CORBANU <span>CONTROL</span></a>
 <nav aria-label="Sections"><a href="index.html#initiatives">Workstreams</a><a href="facilities.html">Facilities</a><a href="index.html#human">Human tests</a><a href="index.html#runs">Runs & machines</a><a href="index.html#tasknode">Task Node</a></nav></header>
@@ -395,7 +395,7 @@ def publish(repo, state, output):
             releases = output / "releases"
             releases.mkdir(exist_ok=True, mode=0o700)
             generation = Path(tempfile.mkdtemp(prefix="build-", dir=releases))
-            for name in ("style.css", "status.js"):
+            for name in ("style.css", "facilities.css", "status.js", "facilities.js"):
                 shutil.copyfile(HERE / name, generation / name)
             for path, text in data["documents"].items():
                 body = '<p><a href="index.html">← Initiative map</a></p><article class="document">' + safe_markdown(text, path, data["documents"]) + '</article><p id="unpublished" class="muted">Unpublished source links require the repository. They are not copied automatically.</p>'
@@ -445,7 +445,7 @@ def serve(output, port):
                 self.send_error(403)
                 return  # DNS-rebinding protection for a private loopback service.
             path = unquote(urlsplit(self.path).path).lstrip("/") or "index.html"
-            if not re.fullmatch(r"(?:index\.html|facilities\.html|style\.css|status\.js|health\.json|manifest\.json|doc-[0-9a-f]{20}\.html)", path):
+            if not re.fullmatch(r"(?:index\.html|facilities\.html|style\.css|facilities\.css|status\.js|facilities\.js|health\.json|manifest\.json|doc-[0-9a-f]{20}\.html)", path):
                 self.send_error(404)
                 return
             file = output / "health.json" if path == "health.json" else output / "current" / path
@@ -462,7 +462,7 @@ def serve(output, port):
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Corbanu-Control", "1")
             self.send_header("Referrer-Policy", "no-referrer")
-            self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
+            self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' http://127.0.0.1:8770; img-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(payload)
