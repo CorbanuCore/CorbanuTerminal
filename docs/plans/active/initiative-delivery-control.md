@@ -19,10 +19,10 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "aa3f9e2c15b4cd84de28f0900f4055a6abcee80d"
+    base_commit: "adb36c528153247e252cb90bb23050298f8ebbe0"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
     branch: "workstream/tasknode-pf80-s01-20260911"
-    base_commit: "aa3f9e2c15b4cd84de28f0900f4055a6abcee80d"
+    base_commit: "adb36c528153247e252cb90bb23050298f8ebbe0"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
     branch: "feat/provider-reauth-health"
     base_commit: "eb7af932bc8cc859122b5b2dbef223fbd45ea25c"
@@ -30,7 +30,7 @@ implementation_worktrees:
 
 # 3. Task Node integration and delivery control
 
-Current September12: corrected immutable [feed transport](../../research/tasknode-integration/decision-feed-next.md)72854ec77 is reviewed clean and integrated at9a31f3aac;111combinedPython tests pass25.362s, including actual HTTP-server regression. Seven paths590changed/281non-test. Feedcode and added necessary correction passes consumed; future independent evidence pass retained. Browser execution of frozen VoltaDEC001..026 is assigned; Slack delivery/reply allocation follows. No live feed, posting or Slack connection enabled.
+Current September12: original feed/browser packet independently checked:24cases supported, DEC021partial redaction evidence, DEC025advisory scanning. Additional F01 relative-age defect is confirmed. [Five-file age correction](../../research/tasknode-integration/decision-age-followup.md) is the next exact allocation, including concrete Slack sender/reply successor preparation. Integrator adds one new-code review and one targeted evidence recheck, preserving all earlier usage. Facilities/source repair published separately; no live Task Node or Slack connection enabled.
 
 ## Activation record
 

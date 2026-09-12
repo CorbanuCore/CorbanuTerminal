@@ -7,11 +7,11 @@ plan_feature: "PF-80"
 execution_order: 1
 owner: "Codex Task Node decision-projection lane"
 parallel_lane: "tasknode-decision-projection"
-write_scope: "scripts/initiative_control/decision_feed.py, scripts/initiative_control/test_decision_feed.py, scripts/initiative_control/export.py, scripts/initiative_control/activate.py, scripts/initiative_control/control.py, scripts/initiative_control/status.js, scripts/initiative_control/test_control.py, qa/initiative-control/pf-80-s01/decision-projection/feed-receipt.md"
-integration_gate: "Manager audits bounded feed export/activation/collect/render/health wiring and frozen DEC cases, reviews and reruns combined control/governance. Fixture execution only; no real state, sync/deploy, Slack or posting. Manager owns actual publication and agent dispatch."
+write_scope: "scripts/initiative_control/attention.py, scripts/initiative_control/status.js, scripts/initiative_control/test_attention.py, scripts/initiative_control/test_decision_feed.py, qa/initiative-control/pf-80-s01/decision-projection/age-followup-receipt.md"
+integration_gate: "Manager audits F01 oldest-age correction, immutable timestamp and safe-text preservation, full Python/Node regressions, one new-code review and targeted actual-browser evidence/recheck. Receipt prepares exact Slack successor; no live state, sync/deploy, credentials, Slack or posting."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
 branch: "workstream/tasknode-pf80-s01-20260911"
-base_commit: "aa3f9e2c15b4cd84de28f0900f4055a6abcee80d"
+base_commit: "adb36c528153247e252cb90bb23050298f8ebbe0"
 depends_on: "none"
 created: 2026-09-10
 updated: 2026-09-11
@@ -19,7 +19,7 @@ updated: 2026-09-11
 
 # PF-80-S01 — Native Task Node delivery-control integration
 
-September12: corrected [feed transport](../../../research/tasknode-integration/decision-feed-next.md)72854ec77 reviewed clean and integrated at9a31f3aac;111combinedPython tests pass25.362s. Frozen source awaits actual browser/keyboard/phone and independent evidence, then Slack allocation. No live feed/Slack or human-readiness claim.
+September12: original feed/browser evidence checked independently:24supported/DEC021partial/DEC025advisory, additional F01 relative-age defect confirmed. [Age follow-up](../../../research/tasknode-integration/decision-age-followup.md) allocates the five-file correction and exact Slack successor preparation. No live Slack or unqualified human-readiness claim.
 
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
 The previous literal write scope is frozen, not an active worker assignment.
@@ -54,6 +54,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact owner, worker worktree/base and disjoint scope allocated; dispatch waits for the verified main merge and worker fast-forward.
 
 ## Done
+- [x] All26 original browser cases executed at72854ec77; independent check verified714filehashes,24supported/DEC021partial/DEC025advisory. F01 and Facilities phone-table observation retained; original evidence not relabeled as acceptance of newer code.
 - [x] Feed72854ec77 accepted590lines/281non-test after reproduced destination-less export failure, compatibility correction and clean additional review;111combined tests pass including actual server. [Receipt](../../../../qa/initiative-control/pf-80-s01/decision-projection/feed-receipt.md). Prior reviews preserved; independent evidence remains pending.
 - [x] Offline revision-bound decisions4ff73485c accepted after clean correction review;777lines,100combinedPython tests pass. Original VoltaDEC001..026 preserved; full UI/feed proof remains. [Receipt](../../../../qa/initiative-control/pf-80-s01/decision-projection/receipt.md).
 
@@ -76,7 +77,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 
 ## Remaining
 
-- [ ] Execute frozen DEC001..026 against accepted feed at desktop1440x900/phone390x844 with actual keys, inspect evidence independently, then allocate Slack alert/reply loop. Code remains frozen; fixture/browser artifacts private until manager acceptance. Slack remains unconnected.
+- [ ] Correct F01 under [five-path mandate](../../../research/tasknode-integration/decision-age-followup.md), preserve original DEC001..026 and immutable timestamps; new-code review plus targeted actual browser/redaction evidence/recheck. Prepare exact Slack sender/reply successor in receipt. Slack stays unconnected, DEC025 remains advisory.
 - [ ] Manager scopes accessible recovery/input/retention and restart/cross-process fences before the later CLI allocation; this is manager work, not unanswered product approval.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.
 - [ ] Give manager exact credential-scope/destination, enrollment, task-lifecycle and first-payload decisions; remain OFF if missing authority. Never inspect real credential stores as a worker.

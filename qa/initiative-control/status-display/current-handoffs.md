@@ -1,5 +1,18 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 11:56 UTC heartbeat, September 12
+
+Native Luna publication succeeded at11:40:05Z fromafe535c06, including Music
+Studio and all six existing interfaces. Duplicate desktop publisher archived;
+saved native-worker instructions now prohibit redelegation. No user click needed.
+This newer source awaits the next normal verified sync; no publication inferred.
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Mendel returned without edits because C1's interim deletion-rejection assertion contradicted C2. Manager inspected and authorized only that sixth-path test adaptation, preserving full replacement success/rollback proof. Clean launchadb36c528; same native Astra High worker resumed. No user decision or review pass spent on that correction.
+- [TaskNode PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): [F01 age correction and Slack successor preparation](../../../docs/research/tasknode-integration/decision-age-followup.md) allocated. Original browser evidence independently checked; DEC021partial and DEC025advisory retained. Exact worker dispatch is reported separately; no live Slack/posting claim.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): reviewed parser406aa3c5 landed on main and reconciled into receiving43e1e7864. Fable22P3 test gap corrected with actual rerun, not relabeled clean. Main window released. Descriptor-launch proposal is manager review/preflight only; no artifact invocation approved.
+
+No newly required human answer. These observations supersede earlier assignments.
+
 ## Current observation — Music Studio link integration, September 12
 
 The publication approval issue is resolved: nothing to click. Previous native
