@@ -111,3 +111,11 @@ early six-hour reset is introduced; the next scheduled replenishment is11:25:45Z
 | Review | Reservation UTC | Model / scope | Outcome / evidence |
 | --- | --- | --- | --- |
 | 20 | 2026-09-12 11:00:22Z | Fable5.1High Corbanu/privateTMUX; build/linkage evidence and QA tooling, Rust0aa65bd unchanged | Pre-model bundle failure retained; same-pass retry dispatched11:06Z. Exit1, patch correct, one P3 missing rejected-artifact hash receipt; receipt captured on RTX and matched, no code change or extra review. Originals: static-probe-20260912/fable-twenty-retry.json. |
+
+## Sealed-byte ELF profile — new-parser extension
+
+Receiving owner accepted runtime-elf-next-20260912.md and authorized +2 necessary
+source/security closeout passes: Astra High21 and Fable5.1High22 through existing
+Corbanu/private TMUX. **0 used / 2 available**; reserve before dispatch.
+History1–20, spent old contingency, six-hour anchor and scheduled replenishment
+are unchanged. This extension is not a reset or permission for unchanged reviews.

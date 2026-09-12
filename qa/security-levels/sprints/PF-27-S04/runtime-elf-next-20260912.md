@@ -1,9 +1,10 @@
 # PF27 proposal — inspect the sealed image's static ELF profile
 
-**Proposed, not allocated.** Receiving owner requested this proposal after
-accepting main checkpoint `97d4cb6e8bcaa00a7d1b4ea237cc823df6ffdbaa`.
-The main window is released. No implementation, review, image execution or
-installation is authorized by this document.
+**Accepted September 12 by the receiving owner** as sealed-byte format inspection.
+Clean launch HEAD `8d1a4f49fe010e8391606b0ac473c18e87deb2cf`; original and
+incremental source coordinates below are unchanged. Two necessary new-parser
+closeout passes authorized: Astra High and Fable5.1High through Corbanu/TMUX.
+No main window, image execution or installation is authorized.
 
 ## Coordinates and purpose
 
@@ -27,8 +28,8 @@ receipt. Acceptance must not imply permission to run those bytes.
 ## Smallest source allocation requested
 
 Only `codex-rs/secret-broker-service/src/launch/manifest/`:
-new `elf.rs` and `elf_tests.rs`; narrow wiring in `mod.rs` and `sealed.rs`, and
-colocated sealed-image tests where necessary. Add QA under
+literal files `elf.rs`, `elf_tests.rs`, `mod.rs`, `sealed.rs`, `sealed_tests.rs`.
+No outside export/lib/launch changes without an exact seam disposition. Add QA under
 `qa/security-levels/sprints/PF-27-S04/runtime-elf-20260912/` and update the existing
 plan/sprint/evidence ledgers after allocation. No Cargo/Bazel/dependency/lock,
 probe implementation, Core, Vault, PF20, service configuration or dashboard edits.
@@ -62,6 +63,16 @@ ELF-approved. Do not reopen a pathname or invoke readelf from the runtime API.
    Ownership/drop semantics close the consumed image on failure. No mutation of
    the sealed bytes, identity, environment, host settings or manifest format.
 
+Frozen vocabulary: PHDR, LOAD, TLS, DYNAMIC, GNU_RELRO, GNU_EH_FRAME, GNU_STACK;
+non-LOAD headers are singleton. Flags: LOAD R/RX/RW, DYNAMIC RW, STACK RW,
+all other allowed headers R. Dynamic tags: NULL, FLAGS (BIND_NOW only), FLAGS_1
+(NOW|PIE only, both required), DEBUG (zero), RELA/RELASZ/RELAENT (24), RELACOUNT,
+SYMTAB/SYMENT (24), STRTAB/STRSZ, GNU_HASH/HASH, INIT_ARRAY/INIT_ARRAYSZ,
+FINI_ARRAY/FINI_ARRAYSZ, INIT/FINI. All are singleton except zero padding after
+NULL; trailer entries must be all-zero and are not active tags. Unknowns deny.
+Both file and virtual load mappings must be non-overlapping; dynamic backing
+must match one file/virtual mapping. Entry must be file-backed executable data.
+Bounds and structural checks inspect format only, not relocation semantics.
 Exact accepted tags/structural rules must be recorded with implementation tests;
 an incompatible observed artifact returns for a bounded contract decision rather
 than silently weakening the rules. These are engineering recommendations for
