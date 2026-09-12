@@ -110,4 +110,4 @@ early six-hour reset is introduced; the next scheduled replenishment is11:25:45Z
 
 | Review | Reservation UTC | Model / scope | Outcome / evidence |
 | --- | --- | --- | --- |
-| 20 | 2026-09-12 11:00:22Z | Fable5.1High Corbanu/privateTMUX; build/linkage evidence and QA tooling, Rust0aa65bd unchanged | Reserved before dispatch; result pending. |
+| 20 | 2026-09-12 11:00:22Z | Fable5.1High Corbanu/privateTMUX; build/linkage evidence and QA tooling, Rust0aa65bd unchanged | Initial helper exited1 in branch_bundle before model dispatch: raw non-UTF8 GPG status. Same reserved pass retries after binary artifact classification; result pending. |

@@ -113,3 +113,11 @@ been reserved as Fable20 before dispatch; reviews1–19 remain intact. It review
 this artifact evidence and QA tooling, not unchanged Rust code. No main window
 is granted. Runtime ELF validation, static-dependency/CVE qualification, descriptor
 exec, supervision and exact privileged installation remain subsequent gates.
+
+The first review-helper attempt failed while decoding the Git diff, before model
+dispatch. Raw GPG status includes non-UTF8 bytes; it remains byte-for-byte intact
+and is now classified as a binary Git artifact. An ASCII-only VALIDSIG receipt
+is provided separately. Original helper failure/exit is retained; retrying this
+pre-dispatch infrastructure failure uses the same reserved review20, not another
+model opinion or another Rust review. Candidate/source and test evidence do not
+change with this artifact-classification correction.

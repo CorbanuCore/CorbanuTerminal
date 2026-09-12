@@ -1,0 +1,2 @@
+# Preserve raw GPG status bytes; it is not a UTF-8 source diff.
+rtx/openssl-retry/signature-status.txt -diff
