@@ -119,6 +119,10 @@ fn pf_27_s01_elf_profile_dynamic_vocabulary_and_termination() {
         1, 15, 29, 0x7fffffff, 0x7ffffffd, 0x6ffffefc, 0x6ffffefb, 0xdead,
     ] {
         let mut b = fixture();
+        put(&mut b, 152, 48);
+        put(&mut b, 160, 48);
+        put(&mut b, 400, 4);
+        assert!(parse(b.clone()).is_ok());
         put(&mut b, 400, tag);
         assert!(parse(b).is_err(), "external or unknown tag {tag}");
     }
@@ -128,8 +132,16 @@ fn pf_27_s01_elf_profile_dynamic_vocabulary_and_termination() {
         assert!(parse(b).is_err());
     }
     let mut b = fixture();
+    put(&mut b, 152, 48);
+    put(&mut b, 160, 48);
+    put(&mut b, 400, 4);
+    put(&mut b, 408, 0x08000001);
+    assert!(parse(b.clone()).is_ok());
     put(&mut b, 400, 0x6ffffffb);
     put(&mut b, 408, 0x08000001);
+    assert!(parse(b).is_err());
+    let mut b = fixture();
+    put(&mut b, 400, 4); // Supported tag but no room for DT_NULL.
     assert!(parse(b).is_err());
     let mut b = fixture();
     put(&mut b, 408, 1);
