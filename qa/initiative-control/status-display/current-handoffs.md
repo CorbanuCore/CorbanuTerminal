@@ -1,5 +1,23 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 09:46 UTC, September12
+
+Canonical source a0e2c3270 includes accepted launcher, retention-input A and
+corrected offline decisions. Two native implementation workers are now assigned:
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Rawls implements pure retention reduction B after A passed review and325combined state/TaskNode tests. Runtime/read/delete/admission and S03 remain later.
+- [TaskNode PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): Anscombe implements feed export/activation/render/health wiring in fixtures after corrected offline records passed review and100combinedPython tests. Slack delivery/reply routing follows; not connected yet.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): launcher cc931adf6 landed on main and reconciled locally. Sole owner has an accepted next manifest-inspection allocation and two new scoped reviews; no privileged installation/execution.
+
+No new user decision. Integrator recorded extra review allowances without
+resetting history. Earlier decision-record defects were reproduced and corrected
+before integration: stale answers could resolve changed context; canonical
+encoding could exceed storage limits. All original functional cases retained.
+Human browser/keyboard/phone evidence and live delivery remain unqualified.
+Routine mapped TaskNode progress is authorized once qualified, still OFF.
+Old publisher remains app approval-waiting despite decline; no overlapping sync
+or claim these new source records are live. Prior observations below are history.
+
 ## Current observation — 08:48 UTC, September 12
 
 This supersedes historical candidate notes below. Canonical receiving is
