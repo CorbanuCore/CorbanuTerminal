@@ -38,6 +38,8 @@ use sha2::Sha256;
 mod client;
 mod commands;
 mod delivery_goal;
+#[cfg(test)]
+mod delivery_send;
 mod recovery;
 mod stream;
 pub mod tracker;
