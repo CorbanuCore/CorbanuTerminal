@@ -8,6 +8,13 @@ runtime or the complete Slack workflow is already qualified.
 Saving, committing or pushing these instructions does not lift it. Commands
 below are operating instructions, not instructions to execute them immediately.
 
+September13 exception: Travis explicitly authorized the five-part management
+bootstrap and bounded live qualification. That work may proceed under
+[its allocation](docs/research/tasknode-integration/coordinator-bootstrap-20260913.md).
+Security/accounting product work and recurring portfolio operation stay paused
+until the recorded launch gates are met. Do not confuse bootstrap work with
+resuming all three product initiatives.
+
 ## 1. Role and objective
 
 Corbanu Terminal is a Codex fork for agentic trading. You are its execution
@@ -466,7 +473,7 @@ use the verified binding and supported checks, requesting authority only if need
 
 ## 11. Fable TMUX launch and reviews
 
-### Verified components and remaining setup
+### Installed binary and one-shot launcher
 
 Corbanu executable used for recent reviews:
 
@@ -487,91 +494,54 @@ pane capture and separate text/Enter input; do not copy its Astra settings,
 resume behavior or broad permissions. External review skill:
 `/Users/Neo/.codex/skills/autoreview/SKILL.md`.
 
-Before the first authorized cycle, prepare and qualify a dedicated launcher using
-the verified authentication mechanism. Each run needs a unique private directory,
-TMUX socket/session, fresh application home/history via supported configuration,
-allowlisted provider setup, briefing manifest, private logs and decision receipt.
-Do not copy whole user configuration, hooks, old instructions or sessions.
-No `resume`, `fork`, `--last` or inherited conversation. A new pane alone is not
-a fresh model context.
+Use `scripts/initiative_control/fable_launcher.py`, not a hand-built shared-home
+session. Its exact review/live receipts are in
+[launcher evidence](qa/initiative-control/management-bootstrap/fable-launcher.md)
+and [startup evidence](qa/initiative-control/management-bootstrap/live-startup.md).
+Check that the launcher is present at the recorded receiving commit before use;
+a worker candidate is not an installed coordinator runtime.
 
-The private launcher should invoke the verified binary interactively as follows;
-all variables must resolve to validated paths for that run:
-
-```bash
-"$FABLE_BINARY" \
-  --no-alt-screen \
-  --model claude-fable-5-1-plan \
-  --sandbox read-only \
-  --ask-for-approval never \
-  -C "$MANAGER_PACKET_DIR" \
-  -c 'model_provider="claude-plan"' \
-  -c 'model_reasoning_effort="high"' \
-  -c "log_dir=\"$MANAGER_LOG_DIR\""
-```
-
-Authentication/home setup belongs in the private launcher, not in the briefing.
-Follow the TUI skill's `RUST_LOG=trace` requirement with owner-only logs; inspect
-and redact artifacts before export. Never log or expose raw authentication values.
-The manager returns decisions, not code edits, worker launches or external actions.
-Read-only shell flags are not comprehensive filesystem/tool/network isolation;
-restrict other tools and do not claim this is the isolated acceptance executor.
-
-### Launch, interact and collect
-
-Only after the per-run launcher exists and execution is authorized:
+Provision a short owner-only run root outside Git (TMUX has a socket-path limit),
+an owner-only bounded JSON briefing, and an owner-only authentication JSON file
+whose sole field is `CLAUDE_CODE_OAUTH_TOKEN`. Values come only from the existing
+authorized credential adapter; never from logs, prompts, shell arguments or a
+copied user profile. All path variables below must be absolute and verified.
 
 ```bash
-tmux -L "$MANAGER_SOCKET" new-session \
-  -d -s "$MANAGER_SESSION" -x 150 -y 46 \
-  -c "$MANAGER_PACKET_DIR" \
-  "$MANAGER_RUN_DIR/launch.sh"
+python3 "$CONTROL_REPO/scripts/initiative_control/fable_launcher.py" \
+  --briefing "$MANAGER_BRIEFING_FILE" \
+  --runs-dir "$MANAGER_RUNS_ROOT" \
+  --binary "$FABLE_BINARY" \
+  --auth-file "$MANAGER_AUTH_FILE" \
+  --timeout 180
 ```
 
-`launch.sh` is a file to prepare, not an already-installed manager entry point.
-Preserve its contents/identity. Inspect readiness from the actual pane:
+The launcher creates its own fresh application home, neutral packet directory,
+private TMUX socket, logs and manifest. It verifies the loaded model, uses the
+supported Providers recovery flow to select the managed Claude token, enters
+it only into the confirmed masked field via a private stdin buffer, then sends
+the briefing and Enter separately. An environment token alone did not configure
+the fresh TUI; do not remove this supported initialization step.
 
-```bash
-tmux -L "$MANAGER_SOCKET" capture-pane \
-  -p -t "$MANAGER_SESSION" -S -120
-```
+Briefings are limited to64KiB. The manager has no tools in this mode: place the
+selected original evidence in the bounded briefing or handle a request for more
+evidence in a new cycle. Do not tell it to read a file it cannot access. Large
+evidence must stay durably referenced and retrievable by the coordinator, never
+silently disappear into a truncated preview.
 
-Verify requested model/provider/effort and application readiness. Resolve startup
-failures explicitly; never substitute a model. Send literal text and Enter in
-separate calls, not one input burst:
+Stdout contains one redacted receipt; exit0 means a complete validated decision
+and clean shutdown, not authorization or proof that any action was executed.
+Validate the actual model/provider/high, session/turn identity, state revision,
+complete decision, binary/briefing identity and clean shutdown before admitting
+actions. The owner bridge must bind the receipt to its claimed manager cycle.
+Timeout, cancellation, partial output, authentication failure or failed cleanup
+must retain evidence and pending events for reconciliation, never blind retry.
 
-```bash
-tmux -L "$MANAGER_SOCKET" send-keys \
-  -t "$MANAGER_SESSION" -l -- \
-  "Read briefing.md and return the bounded management decisions in the required format."
-```
-
-Then:
-
-```bash
-tmux -L "$MANAGER_SOCKET" send-keys -t "$MANAGER_SESSION" Enter
-```
-
-Do not interpolate the briefing into executable shell text. Wait for genuine
-completion, not fixed sleeps, vanished spinners or old scrollback. Preserve the
-current session's complete final assistant response and relevant pane evidence.
-Validate its action structure/state revision before dispatch. Timeout, partial
-answer, auth error or invalid decision is a failed attempt, not a usable decision.
-
-Record trigger IDs/revision, briefing/launcher hashes, binary path/version/hash,
-actual model/provider/effort, session/socket IDs, timestamps, complete decision,
-validation, dispatched action IDs, errors/timeouts and shutdown result.
-
-After durable recording, exit the application normally and confirm owned work
-has stopped. Remove only this run's session if it still exists:
-
-```bash
-tmux -L "$MANAGER_SOCKET" kill-session -t "$MANAGER_SESSION"
-```
-
-Never use a global `tmux kill-server`, terminate unrelated sessions or erase failed
-evidence. A nonzero cleanup result after normal session exit is not proof of a
-failed manager decision; inspect the actual session/process state.
+The launcher requests normal exit and verifies only its owned session/processes.
+Never use a global TMUX kill or erase failed runs. Run roots contain private
+authentication/native state: publish only an inspected redacted evidence record,
+not the whole run directory. Fresh context is not the permission-isolated
+functional-executor boundary.
 
 ### External reviews are separate
 
@@ -599,15 +569,31 @@ Inspect fresh status before reporting it. Use Codex automation tools for authori
 schedule changes, preserving existing settings; do not hand-edit their configuration
 or resume schedules during setup.
 
-This document's verification checks repository references, installed executable
-help, command syntax, Python entry points and prior receipts. It does **not** claim
-a newly executed Fable manager, a deployed event controller/watchdog, completed
-Slack reply qualification, private HTTPS access, or a newly qualified isolated
-functional executor. Those remain explicit startup prerequisites when authorized.
+The bootstrap has actual fresh Fable run evidence and reviewed internal
+coordination/integration components. This does **not** establish a deployed
+event-to-worker controller/watchdog, completed Slack reply qualification, private
+HTTPS access or a qualified isolated functional executor. Consult the linked
+receipts for exact candidates, failures and remaining gates.
 
 Relevant prior source/test checkpoints and unresolved Bazel/functional gates are
 in the [pause handoff](docs/plans/management-pause-2026-09-13.md). Integration-branch
 push preserves the handoff; it does not turn outstanding gates into passes.
+
+## 13. Remaining launch work
+
+1. Wire durable events to the fresh manager, actual native dispatch/ACK and the
+   next event; finish revision-bound allocations and stale/duplicate recovery.
+2. Connect explicit single-writer integration jobs to receiving evidence and
+   enforced completion/archive/dependency-gated successors.
+3. Qualify the real Slack alert → human reply → canonical decision → agent ACK
+   path, including disconnect/restart and applicable isolated functional cases.
+4. Finish administrator-enabled private HTTPS and authorized off-Mac access.
+   Current Mac and publisher tailnets differ; the human/admin setup question is
+   recorded on the dashboard and in the approved Slack channel. It holds remote
+   access qualification, not independent engineering.
+5. Reconcile final ownership/state for all three workstreams; run a complete
+   handoff plus crash/stall recovery rehearsal, then enable the verified watchdog
+   and recurring coordinator. Send the final Slack completion notice only then.
 Private state, credentials, raw logs and historical one-off launchers remain
 outside Git. No secret values belong in this document or its verification output.
 
