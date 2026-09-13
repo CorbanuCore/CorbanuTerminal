@@ -87,4 +87,11 @@ Slack's actual listener remains connected. Same-session authentication renewed a
 21:47:27UTC; the last drain found no ACK-only test reply. The supported journal
 projection was refreshed at21:55:26UTC to last-verified, sent test alert, zero replies
 and zero agent acknowledgments. This is projection input, not a new publication
-or complete two-way qualification. The published decision feed remains stale.
+or complete two-way qualification. At that observation the published feed was stale.
+
+At22:04UTC parent reassessed both open questions from the actual SSH/browser and
+Slack observations, saved feed29 through compare-and-swap, and refreshed the Slack
+projection. Every original question revision and history was preserved. The first
+attempt used the report clock's offset-format timestamp; validation rejected it
+before intent/state mutation. The corrected documented UTC-Z format succeeded.
+New publication is separately verified; freshness never implies human approval.
