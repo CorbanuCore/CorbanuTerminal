@@ -1,4 +1,4 @@
-"""Trusted host library; owner provisions paths, callers supply only UTF-8 text.
+"""Trusted host library; callers supply UTF-8 text and optionally inline PNG bytes.
 
 Not an isolation boundary against arbitrary Python in this owner process.
 Import, construction, help and OFF do not inspect credentials or start processes.
@@ -11,6 +11,7 @@ from pathlib import Path
 import selectors
 import signal
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -18,12 +19,15 @@ import threading
 import time
 from types import MappingProxyType
 import uuid
+import zlib
 
 BINARY_SHA = '4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e'
 CATALOG_SHA = 'f25b81d476efdad4f37fcd424bed00940f754214fcaf3e00452a79e560eaf09c'
 _CATALOG = Path(__file__).absolute().with_name('isolated-model-catalog.json')
 _CA = Path('/private/etc/ssl/cert.pem')
 _WALL, _OUTPUT, _INPUT = 90, 256 * 1024, 64 * 1024
+_IMAGE_BYTES, _IMAGE_SIDE, _IMAGE_PIXELS = 4 * 1024 * 1024, 4096, 4 * 1024 * 1024
+_IMAGE_NAME = 'observation.png'
 _NEUTRAL = 'Process the supplied text and return text.'
 _DISABLED = tuple('''hooks plugin_hooks shell_tool shell_snapshot unified_exec shell_zsh_fork
 unified_exec_zsh_fork apps plugins tool_suggest recommended_plugins memories
@@ -69,6 +73,50 @@ def _packed(value):
 
 def _digest(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def _png(data):
+    """Validate bounded noninterlaced RGB/RGBA scanlines; no image transformation."""
+    if type(data) is not bytes or not 57 <= len(data) <= _IMAGE_BYTES:
+        raise ValueError('expected bounded inline PNG bytes')
+    if data[:8] != b'\x89PNG\r\n\x1a\n':
+        raise ValueError('invalid PNG signature')
+    pos, chunks, payload_bytes, dimensions, payloads = 8, 0, 0, None, []
+    while pos < len(data):
+        chunks += 1
+        if chunks > 1024 or len(data) - pos < 12:
+            raise ValueError('invalid PNG chunk envelope')
+        size, kind = struct.unpack_from('>I4s', data, pos)
+        end = pos + 12 + size
+        if end > len(data) or zlib.crc32(data[pos + 4:end - 4]) != int.from_bytes(data[end - 4:end], 'big'):
+            raise ValueError('invalid PNG chunk length or CRC')
+        if kind == b'IHDR' and chunks == 1 and size == 13:
+            width, height, depth, color, compression, filtering, interlace = struct.unpack_from('>IIBBBBB', data, pos + 8)
+            if (not 1 <= width <= _IMAGE_SIDE or not 1 <= height <= _IMAGE_SIDE
+                    or width * height > _IMAGE_PIXELS):
+                raise ValueError('PNG dimensions exceed bounds')
+            if depth != 8 or color not in (2, 6) or (compression, filtering, interlace) != (0, 0, 0):
+                raise ValueError('unsupported PNG format')
+            dimensions = (width, height)
+        elif kind == b'IDAT' and dimensions is not None:
+            payload_bytes += size
+            payloads.append(data[pos + 8:end - 4])
+        elif kind == b'IEND' and dimensions is not None and payload_bytes and size == 0 and end == len(data):
+            stride = 1 + width * (3 if color == 2 else 4)
+            expected = height * stride
+            decoder = zlib.decompressobj()
+            try:
+                raw = decoder.decompress(b''.join(payloads), expected + 1)
+            except zlib.error as exc:
+                raise ValueError('invalid PNG compressed pixels') from exc
+            if (len(raw) != expected or not decoder.eof or decoder.unused_data
+                    or decoder.unconsumed_tail or any(value > 4 for value in raw[::stride])):
+                raise ValueError('invalid PNG scanlines or compressed stream')
+            return dimensions
+        else:
+            raise ValueError('unsupported PNG chunk or order')
+        pos = end
+    raise ValueError('missing PNG end')
 
 
 def _save(path, data):
@@ -140,7 +188,7 @@ def _chatgpt_auth(path, expected_sha):
         raise ValueError('owner must provision native ChatGPT auth')
 
 
-def _launch(owner, run):
+def _launch(owner, run, *, with_image=False):
     values = dict(_FIXED, model_catalog_json=str(run / 'model-only.json'))
     argv = [str(owner.binary), 'exec', '--strict-config', '--ephemeral', '--ignore-user-config',
             '--ignore-rules', '--skip-git-repo-check', '--json', '-s', 'read-only',
@@ -149,13 +197,15 @@ def _launch(owner, run):
         argv += ['-c', key + '=' + json.dumps(value)]
     for feature in _DISABLED:
         argv += ['--disable', feature]
+    if with_image:
+        argv += ['--image', str(run / _IMAGE_NAME), '--']
     env = {'PATH': '/usr/bin:/bin', 'HOME': str(run / 'home'),
            'CORBANU_HOME': str(run / 'home'), 'CODEX_HOME': str(run / 'home'),
            'TMPDIR': str(run / 'tmp'), 'CODEX_EXEC_SERVER_URL': 'none', 'SSL_CERT_FILE': str(_CA)}
-    return ('/usr/bin/sandbox-exec', '-p', _guard(owner, run), *argv, '-'), env
+    return ('/usr/bin/sandbox-exec', '-p', _guard(owner, run, with_image=with_image), *argv, '-'), env
 
 
-def _guard(owner, run):
+def _guard(owner, run, *, with_image=False):
     q = lambda p: json.dumps(str(p))
     return '\n'.join([
         '(version 1)', '(deny default)', '(allow signal (target self))', '(allow sysctl-read)',
@@ -187,7 +237,7 @@ def _guard(owner, run):
         '(deny file-read-data (regex #"/Keychains(/|$)"))',
         f'(allow process-exec (literal {q(owner.binary)}))',
         '(allow network-outbound (remote ip "*:443") (literal "/private/var/run/mDNSResponder"))',
-    ])
+    ] + ([f'(allow file-read* (literal {q(run / _IMAGE_NAME)}))'] if with_image else []))
 
 
 def _bounded(argv, env, run, packet):
@@ -326,8 +376,8 @@ class Transport:
     _sessions: set = field(default_factory=set, init=False, repr=False)
     _lock: object = field(default_factory=threading.Lock, init=False, repr=False)
 
-    def execute(self, text):
-        """Return immutable safe receipt; only status=ok carries validated agent text."""
+    def execute(self, text, *, image_png=None):
+        """Return a safe receipt; optional image is bytes only, never a path/URL."""
         if not self.owner.enabled:
             return MappingProxyType({'status': 'off', 'text': None})
         if type(text) is not str or len(text) > _INPUT:
@@ -335,14 +385,17 @@ class Transport:
         packet = text.encode('utf-8')
         if len(packet) > _INPUT:
             raise ValueError('input exceeds 64KiB')
+        dimensions = _png(image_png) if image_png is not None else None
+        if dimensions and ',' in str(self.owner.run_root):
+            raise ValueError('image owner root cannot contain CLI image delimiter')
         if not self._lock.acquire(blocking=False):
             raise ValueError('transport busy')
         try:
-            return self._execute(packet)
+            return self._execute(packet, image_png, dimensions)
         finally:
             self._lock.release()
 
-    def _execute(self, packet):
+    def _execute(self, packet, image_png, dimensions):
         owner = self.owner
         root_id = _path(owner.run_root, directory=True, private=True)
         run = Path(tempfile.mkdtemp(prefix='attempt-', dir=owner.run_root))
@@ -368,19 +421,33 @@ class Transport:
                 raise ValueError('catalog changed')
             _save(run / 'model-only.json', catalog)
             (run / 'home/auth.json').symlink_to(owner.auth)
-            argv, env = _launch(owner, run)
+            image_pin = None
+            if image_png is not None:
+                _save(run / _IMAGE_NAME, image_png)
+                image_pin = _fingerprint(run / _IMAGE_NAME, private=True)
+                if image_pin[-1] != _digest(image_png):
+                    raise ValueError('image changed before launch')
+                receipt.update(image_sha256=image_pin[-1], image_bytes=len(image_png),
+                               image_width=dimensions[0], image_height=dimensions[1],
+                               image_observation='supplied_not_attested')
+                _save(run / 'image.json', dict(identity=image_pin, **{
+                    k: v for k, v in receipt.items() if k.startswith('image_')}))
+            argv, env = _launch(owner, run, with_image=True) if image_pin else _launch(owner, run)
             _save(run / 'launch.json', dict(argv=argv, environment=env, pins=pins,
                   argv_sha256=_digest(_packed(argv)), policy_sha256=_digest(argv[2].encode()),
                   profile_sha256=_digest(_packed({'fixed': dict(_FIXED), 'disabled': _DISABLED})),
                   input_sha256=_digest(packet), input_bytes=len(packet), wall_seconds=_WALL, output_bytes=_OUTPUT))
             receipt['reason'] = 'launch'
+            if image_pin and _fingerprint(run / _IMAGE_NAME, private=True) != image_pin:
+                raise ValueError('image changed before launch')
             raw, process = _bounded(argv, env, run, packet)
             receipt.update(process)
             try:
                 unchanged = (_snapshots(owner) == before and _path(owner.run_root, directory=True, private=True) == root_id
                              and _fingerprint(run / 'model-only.json')[-1] == CATALOG_SHA
                              and (run / 'home/auth.json').is_symlink()
-                             and os.readlink(run / 'home/auth.json') == str(owner.auth))
+                             and os.readlink(run / 'home/auth.json') == str(owner.auth)
+                             and (image_pin is None or _fingerprint(run / _IMAGE_NAME, private=True) == image_pin))
             except (OSError, ValueError):
                 unchanged = False
             receipt['inputs_unchanged'] = unchanged
