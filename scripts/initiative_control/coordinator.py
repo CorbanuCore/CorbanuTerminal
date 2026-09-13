@@ -27,6 +27,7 @@ KINDS = frozenset({"implement", "revise", "review", "design", "functional_test",
                    "complete_sprint", "activate_successor", "wait", "pause", "cancel"})
 PASSIVE = frozenset({"wait", "pause", "cancel", "ask_human", "prepare_successor"})
 TERMINAL = frozenset({"accepted", "failed", "cancelled"})
+RESERVED = frozenset({"in_progress", "blocked"})
 ACTION_FIELDS = frozenset({"id", "kind", "workstream", "sprint", "rationale", "inputs",
                            "timeout_seconds", "expected_revision"})
 
@@ -133,6 +134,7 @@ class Coordinator:
             ident(key)
             require(stream["sprint"] in sprints and stream["mode"] in {"paused", "enabled"},
                     "invalid workstream")
+            require(sprints[stream["sprint"]]["workstream"] == key, "wrong current sprint workstream")
         for key, sprint in sprints.items():
             ident(key)
             require(sprint["workstream"] in workstreams, "unknown sprint workstream")
@@ -144,13 +146,9 @@ class Coordinator:
                 visit(dep, trail | {key})
         for key in sprints:
             visit(key, set())
+        self._reservations({"sprints": sprints, "workstreams": workstreams})
         for key, allocation in allocations.items():
-            ident(key)
-            require(allocation["sprint"] in sprints, "unknown allocation sprint")
-            require(set(allocation["kinds"]) <= KINDS, "unknown action kind")
-            require(isinstance(allocation["resources"], list) and bool(allocation["scope"]), "missing scope/resources")
-            require(isinstance(allocation["inputs"], dict), "missing frozen assignment inputs")
-            require(1 <= allocation["timeout_seconds"] <= 86400, "invalid timeout")
+            self._allocation(key, allocation, sprints)
         state = {"revision": 0, "enabled": False, "workstreams": workstreams,
                  "sprints": sprints, "allocations": allocations, "actions": {}, "manager": None}
         with self.connection() as db:
@@ -217,6 +215,179 @@ class Coordinator:
             state["enabled"] = enabled
         # Stop new effects immediately; already dispatched work needs explicit shutdown.
 
+    @staticmethod
+    def _allocation(key, allocation, sprints):
+        ident(key)
+        require(allocation["sprint"] in sprints, "unknown allocation sprint")
+        require(isinstance(allocation["kinds"], list) and allocation["kinds"]
+                and set(allocation["kinds"]) <= KINDS, "unknown action kind")
+        for field in ("scope", "resources"):
+            require(isinstance(allocation[field], list)
+                    and all(isinstance(p, str) and p.strip() for p in allocation[field]),
+                    "invalid scope/resources")
+        require(bool(allocation["scope"]), "missing scope")
+        require(isinstance(allocation["inputs"], dict) and "allocation" not in allocation["inputs"],
+                "invalid frozen assignment inputs")
+        require(type(allocation["timeout_seconds"]) is int
+                and 1 <= allocation["timeout_seconds"] <= 86400, "invalid timeout")
+        if "complete_sprint" in allocation["kinds"]:
+            inputs = allocation["inputs"]
+            ident(inputs["receiving_action"])
+            require(re.fullmatch("[a-f0-9]{40}", inputs["receiving_commit"]), "exact receiving commit required")
+            gates = inputs["mandatory_gates"]
+            require(isinstance(gates, list) and gates and len(set(gates)) == len(gates),
+                    "nonempty unique mandatory gates required")
+            for gate in gates:
+                ident(gate)
+
+    @staticmethod
+    def _reservations(state):
+        reserved = [(key, sprint) for key, sprint in state["sprints"].items()
+                    if sprint["status"] in RESERVED]
+        require(len(reserved) <= 3, "three-reservation limit")
+        streams = [sprint["workstream"] for _, sprint in reserved]
+        require(len(set(streams)) == len(streams), "workstream already reserved")
+        require(all(state["workstreams"][sprint["workstream"]]["sprint"] == key
+                    for key, sprint in reserved), "reservation differs from current sprint")
+
+    @contextmanager
+    def owner_mutation(self, operation, expected_revision, evidence, **details):
+        require(type(expected_revision) is int and isinstance(evidence, dict) and evidence,
+                "owner revision and evidence required")
+        audit = {**details, "expected_revision": expected_revision, "evidence": evidence}
+        with self.mutation(operation, audit) as (db, state):
+            require(state["revision"] == expected_revision, "stale owner revision")
+            yield db, state
+            self._event(db, {"id": f"{operation}:{expected_revision}",
+                             **details, "evidence": self._reference(db, audit)})
+
+    def put_allocation(self, allocation_id, allocation, replace, expected_revision, evidence):
+        require(type(replace) is bool, "explicit add/replace required")
+        with self.owner_mutation("owner_allocation", expected_revision, evidence,
+                                 allocation=allocation_id, replace=replace) as (db, state):
+            self._allocation(allocation_id, allocation, state["sprints"])
+            prior = state["allocations"].get(allocation_id)
+            require((prior is not None) == replace, "allocation exists or replacement target missing")
+            require(prior != allocation, "duplicate allocation")
+            affected = [a for a in state["actions"].values() if a["inputs"]["allocation"] == allocation_id]
+            require(all(a["status"] in TERMINAL | {"prepared"} for a in affected),
+                    "allocation has active reservation")
+            change = self._reference(db, {"before": prior, "after": allocation, "evidence": evidence})
+            for action in affected:
+                if action["status"] == "prepared":
+                    action.update(status="cancelled", owner_cancellation=change, updated=self.clock())
+            state["allocations"][allocation_id] = allocation
+            # Preserve every frozen version even after it leaves the live packet.
+            db.execute("INSERT INTO audit(at,operation,body) VALUES(?,?,?)",
+                       (self.clock(), "allocation_versions", encoded(change)))
+
+    def set_stream_mode(self, workstream, mode, expected_revision, evidence):
+        require(mode in {"enabled", "paused"}, "invalid workstream mode")
+        with self.owner_mutation("owner_stream_mode", expected_revision, evidence,
+                                 workstream=workstream, mode=mode) as (_, state):
+            stream = state["workstreams"][workstream]
+            require(stream["mode"] != mode, "workstream already in requested mode")
+            stream["mode"] = mode
+
+    @staticmethod
+    def _unpaused(state, sprint):
+        require(state["enabled"] and state["workstreams"][sprint["workstream"]]["mode"] == "enabled",
+                "dispatch/workstream paused")
+
+    @staticmethod
+    def _no_pending(state, sprint):
+        require(not any(a["sprint"] == sprint and a["status"] not in TERMINAL
+                        for a in state["actions"].values()), "sprint has pending reservations/actions")
+
+    @staticmethod
+    def _accepted(db, state, action_id, kinds):
+        action = state["actions"].get(action_id)
+        if action is None:
+            row = db.execute("SELECT body FROM action_history WHERE id=?", (action_id,)).fetchone()
+            action = json.loads(row[0]) if row else None
+        require(action and action["status"] == "accepted" and action["kind"] in kinds
+                and action.get("verification"), "accepted owner-verified action required")
+        require(action["allocation_digest"] == digest(state["allocations"].get(action["inputs"]["allocation"])),
+                "stale allocation proof")
+        return action
+
+    def complete_sprint(self, action_id, gates, expected_revision, evidence):
+        with self.owner_mutation("owner_complete", expected_revision, evidence, action=action_id) as (db, state):
+            action = self._accepted(db, state, action_id, {"complete_sprint"})
+            key, inputs = action["sprint"], action["inputs"]
+            sprint = state["sprints"][key]
+            self._unpaused(state, sprint)
+            self._reservations(state)
+            require(sprint["status"] in RESERVED and not sprint.get("archived"), "sprint not reserved")
+            require(self._dependencies(state, key), "unfinished dependency")
+            self._no_pending(state, key)
+            receiving = self._accepted(db, state, inputs["receiving_action"], {"integrate", "verify_integration"})
+            require(receiving["sprint"] == key, "wrong receiving sprint")
+            row = db.execute("SELECT body FROM evidence WHERE digest=?",
+                             (receiving["verification"]["evidence_digest"],)).fetchone()
+            receipt = json.loads(row[0])["receiving_receipt"]
+            require(receipt["status"] == "verified" and receipt["receiving_commit"] == inputs["receiving_commit"]
+                    and receipt["assignment"] == receiving["inputs"]["assignment"], "wrong receiving proof")
+            checks = receipt["tests"]
+            require(isinstance(checks, list) and checks
+                    and len(checks) == len(receipt["assignment"]["tests"]), "receiving tests missing")
+            for result, check in zip(checks, receipt["assignment"]["tests"]):
+                require(type(result["exit_code"]) is int and result["exit_code"] == 0
+                        and result["timed_out"] is False and result["argv"] == check["argv"],
+                        "receiving test not passed")
+            mandatory = inputs["mandatory_gates"]
+            require(mandatory and isinstance(gates, dict) and set(gates) == set(mandatory),
+                    "mandatory gate evidence missing or unexpected")
+            for gate in gates.values():
+                require(isinstance(gate, dict) and gate.get("owner_verified") is True
+                        and gate.get("status") in {"passed", "not_applicable"}
+                        and isinstance(gate.get("evidence"), dict) and gate["evidence"]
+                        and (gate["status"] != "not_applicable" or bool(gate.get("reason"))),
+                        "owner-verified gate evidence required")
+            sprint.update(status="completed", archived=False, completion=self._reference(db, {
+                "action": action, "receiving": receiving, "gates": gates, "evidence": evidence}),
+                receiving_commit=inputs["receiving_commit"])
+
+    def archive_sprint(self, sprint, expected_revision, evidence):
+        with self.owner_mutation("owner_archive", expected_revision, evidence, sprint=sprint) as (_, state):
+            record = state["sprints"][sprint]
+            self._unpaused(state, record)
+            require(record["status"] == "completed" and record.get("completion")
+                    and not record.get("archived"), "verified completion required; already archived or unverified")
+            require(self._dependencies(state, sprint), "unfinished dependency")
+            self._no_pending(state, sprint)
+            record["archived"] = True
+
+    def activate_successor(self, action_id, expected_revision, evidence):
+        with self.owner_mutation("owner_successor", expected_revision, evidence, action=action_id) as (db, state):
+            action = self._accepted(db, state, action_id, {"prepare_successor"})
+            key = action["sprint"]
+            sprint = state["sprints"][key]
+            self._unpaused(state, sprint)
+            self._reservations(state)
+            stream = state["workstreams"][sprint["workstream"]]
+            previous = state["sprints"][stream["sprint"]]
+            require(sprint["status"] == "draft" and not sprint.get("archived"), "successor not draft")
+            require(stream["sprint"] in sprint["dependencies"] and self._dependencies(state, key),
+                    "successor dependencies must be completed and archived")
+            require(previous.get("completion") and action["inputs"].get("base") == previous.get("receiving_commit"),
+                    "successor must start from verified receiving commit")
+            self._no_pending(state, stream["sprint"])
+            self._no_pending(state, key)
+            require(sum(s["status"] in RESERVED for s in state["sprints"].values()) < 3,
+                    "three-reservation limit")
+            stream["sprint"] = key
+            sprint.update(status="in_progress", activation={"action": action_id, "predecessor": action["inputs"]["base"]})
+            self._reservations(state)
+
+    def _executable(self, state, action):
+        if action["kind"] not in PASSIVE:
+            sprint = state["sprints"][action["sprint"]]
+            self._unpaused(state, sprint)
+            self._reservations(state)
+            require(sprint["status"] in RESERVED and not sprint.get("archived"), "sprint not reserved")
+            require(self._dependencies(state, action["sprint"]), "unfinished dependency")
+
     def begin_manager(self, timeout_seconds=600):
         require(1 <= timeout_seconds <= 3600, "invalid manager timeout")
         with self.mutation("begin_manager", {}) as (db, state):
@@ -282,9 +453,7 @@ class Coordinator:
                 require(action["inputs"] == {"allocation": action["inputs"]["allocation"], **allocation["inputs"]},
                         "manager cannot alter frozen assignment inputs")
                 require(0 < action["timeout_seconds"] <= allocation["timeout_seconds"], "timeout exceeds authority")
-                if action["kind"] not in PASSIVE:
-                    require(state["workstreams"][action["workstream"]]["mode"] == "enabled", "workstream paused")
-                    require(self._dependencies(state, action["sprint"]), "unfinished dependency")
+                self._executable(state, action)
                 state["actions"][key] = {**action, "status": "prepared", "manager_run": run_id,
                                          "resources": allocation["resources"], "scope": allocation["scope"],
                                          "allocation_digest": digest(allocation), "created": self.clock(),
@@ -298,9 +467,9 @@ class Coordinator:
             require(state["enabled"], "dispatch paused")
             action = state["actions"][action_id]
             require(action["status"] == "prepared", "action already claimed")
-            if action["kind"] not in PASSIVE:
-                require(state["workstreams"][action["workstream"]]["mode"] == "enabled", "workstream paused")
-                require(self._dependencies(state, action["sprint"]), "unfinished dependency")
+            require(action["allocation_digest"] == digest(state["allocations"].get(action["inputs"]["allocation"])),
+                    "stale allocation claim")
+            self._executable(state, action)
             for other in state["actions"].values():
                 if other["id"] != action_id and other["status"] not in TERMINAL | {"prepared"}:
                     require(not set(action["resources"]) & set(other["resources"]), "resource owned")
