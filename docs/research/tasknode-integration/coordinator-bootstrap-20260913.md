@@ -208,6 +208,28 @@ tool for that mediator. Report exact files, counts, hashes, tested effective pol
 supported override evidence and any remaining failed gate; stop at the hard scope
 limit. Parent receives the result and owns live qualification/allocation afterward.
 
+### Transport B owner correction: supported private provider alias
+
+Feynman returned788/361 lines and closed: the OS/text diagnostic passes, but the
+normal profile rejects reserved built-in `model_providers.openai` before inference.
+Original four-file source is retained in `evidence-02y437g5/four-file.diff` with
+hash manifest and failed replay `evidence-es59ei5y`. Do not alter that evidence.
+Parent verified an existing supported custom-provider route, not a source bypass:
+fixed alias `isolated-openai-transport`, display name `Isolated OpenAI transport`,
+Responses wire, `requires_openai_auth=true`, zero request/stream retries and the
+same synthetic loopback service/model/catalog. Actual pinned0.1.41 normal output,
+503 and dropped stream each sent exactly one Astra High/Responses Lite request
+and cleaned up. Preserve `evidence-parent-alias-3tdui4rw` (bad dictionary/TOML probe)
+and corrected `evidence-parent-alias-4qiiy100` (supported scalar fields).
+
+Parent owns this same four-file correction, inside the unchanged850/450 target
+and1000/550 hard scope. Replace only the rejected built-in provider configuration
+with that fixed alias, qualify every ordinary test through the actual execute path,
+retain explicit default-policy diagnostics and all original failures, then obtain
+the already-allocated Fable High material review. This is no model substitution,
+new endpoint/auth store or permission expansion. It does not authorize live auth,
+a public proxy, Rust validation changes or acceptance of functional product tests.
+
 ## Isolated-executor transport falsification allocation
 
 Parent inspected the read-only Hypatia audit and verified the Astra catalog's
