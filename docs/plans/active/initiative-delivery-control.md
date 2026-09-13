@@ -17,6 +17,9 @@ product_spec:
   heading: "Internal delivery control — TO BUILD"
   requirement_excerpt: "Use sequential sprints per initiative"
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-owned-ingress-20260913"
+    branch: "workstream/tasknode-owned-ingress-20260913"
+    base_commit: "6dde60fface29b0678b792926cbcff7bc8cc542e"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
     base_commit: "0368ed402a9dac4276b427313b9d7335670ee91c"
@@ -35,6 +38,15 @@ implementation_worktrees:
 ---
 
 # 3. Task Node integration and delivery control
+
+September13: Slack installation/access are complete; only the already-asked
+private credential-file handoff and actual live qualification remain. Earlier
+permission holds below are superseded. Corrected646-line isolation engineering
+and12tests accepted; not a confined reasoning executor. James now owns the
+[ten-file bounded synthetic ingress implementation](../../research/tasknode-integration/owned-ingress-allocation-20260913.md)
+in tasknode-owned-ingress-20260913. Source authoring starts now; parent serializes
+dependency/lock/build integration after accounting's current Mac correction.
+No worker waits on a human allocation decision; live alerts/posting stay OFF.
 
 23:16UTC: [actual Slack access question](../../../qa/initiative-control/status-display/slack-access-decision.md)
 is awaiting Travis's action-time confirmation; SocketMode ON but webhook-only
