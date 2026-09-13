@@ -60,7 +60,29 @@ New credential entry, if required, must follow the supported user handoff; no
 browser/session or Keychain extraction. Remote authenticated dashboard/phone
 and independently isolated functional acceptance remain separate gates.
 
-## Actual remaining setup and proactive testing
+## Current credential handoff: resolved
+
+Travis explicitly requested retrieval of the app tokens through Computer Use,
+then approved creation of one app-level token with only `connections:write`.
+The manager generated `corbanu-control-socket` in the existing app, retrieved
+its token and the existing bot token, and saved both in owner-only local
+configuration outside the repository and iCloud. No token values belong in
+this record. Browser password storage was declined. The temporary loopback
+receiver exited after the successful save; directory mode0700/file mode0600.
+
+Actual SDK qualification of these credentials returned the expected team
+`T074X5KNENT`, user `U0C1EBT4UJV` and bot `B0C1CCAU4Q2`. Reported bot scopes
+were exactly `chat:write`, `groups:history`, `incoming-webhook`. Socket Mode
+connected and received Slack's `hello`; the bounded probe closed normally,
+exit0. It posted no messages. This is credential/connection proof, not proof
+of durable alert, reply, routing or agent acknowledgment.
+
+No further token entry or access approval is needed from Travis. The manager
+owns supported runner injection and the bounded no-op alert/reply/native-ACK
+qualification. Do not resurrect the credential handoff as a human blocker.
+Independent isolated execution, phone and overnight acceptance remain separate.
+
+## Historical remaining setup, before the resolved handoff
 
 The supported control.py decision-slack launcher and SDK runtime exist. A
 read-only check found CORBANU_SLACK_BOT_TOKEN and CORBANU_SLACK_APP_TOKEN absent
