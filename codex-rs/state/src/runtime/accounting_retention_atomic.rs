@@ -1,6 +1,9 @@
 //! Complete atomic retention and deletion shared by fixtures and installed stores.
 use super::*;
 
+#[path = "accounting_late_import.rs"]
+mod late_import;
+
 impl Journal<'_> {
     pub(in crate::runtime::accounting) async fn retained_day_on_connection(
         conn: &mut SqliteConnection,

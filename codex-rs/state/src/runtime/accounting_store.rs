@@ -28,6 +28,31 @@ pub use super::types::Patch;
 pub use super::types::Presence;
 pub use super::types::Usage;
 
+/// Original dispatch-time evidence, never a catalog to select a replacement from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OriginalPriceEvidence {
+    Bound(Snapshot),
+    Unpriced,
+}
+
+/// A complete immutable original-evidence snapshot, not an incremental event feed.
+/// Completeness is the caller's contract; interrupted attempts may contain unknowns.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RetainedImport {
+    pub attempt: Attempt,
+    pub observations: Vec<Observation>,
+    pub original_price: OriginalPriceEvidence,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RetainedImportOutcome {
+    Imported,
+    /// Only UUID/expiry survives; this does not certify payload equality.
+    SuppressedByReplayRecord,
+    /// Conservative daily expiry discards totals, but retains the replay fence.
+    ExpiredAggregateDay,
+}
+
 /// Opt-in handle over the native state database. Dropping it stops no background
 /// task: there is no collector. Native deletion still cleans installed accounting.
 pub struct AccountingStore<'a> {
@@ -35,6 +60,30 @@ pub struct AccountingStore<'a> {
 }
 
 impl<'a> AccountingStore<'a> {
+    /// Atomically import 1..=64 complete attempts aged 90..365 days without raw
+    /// staging. Each has at most 256 observations, with at most 4096 in total.
+    /// Duplicate identical entries receive the same outcome but contribute once.
+    /// An all-suppressed bundle does not advance maintenance or read coverage.
+    /// Cancellation may lose a committed acknowledgement: retry the original IDs.
+    pub async fn import_retained(
+        &self,
+        owner: ThreadId,
+        bundle: &[RetainedImport],
+        as_of_ms: i64,
+    ) -> anyhow::Result<Vec<RetainedImportOutcome>> {
+        let mut tx = self.runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
+        match Journal::import_retained_on_connection(&mut tx, owner, bundle, as_of_ms).await {
+            Ok(outcomes) => {
+                tx.commit().await?;
+                Ok(outcomes)
+            }
+            Err(error) => {
+                tx.rollback().await?;
+                Err(error)
+            }
+        }
+    }
+
     /// Install only when wholly absent, otherwise validate without schema repair.
     /// Activation is a real complete retention sweep, never a fabricated checkpoint.
     pub async fn open(runtime: &'a StateRuntime, as_of_ms: i64) -> anyhow::Result<Self> {
