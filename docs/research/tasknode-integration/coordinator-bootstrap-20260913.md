@@ -412,6 +412,56 @@ changes, full mediator/action loop or product/browser/Slack acceptance is author
 by Stage A. Parent chooses and allocates subsequent enforced executor work after
 examining this falsification evidence and current machine reachability.
 
+## Isolated browser prerequisite allocation — September13 receiving8665ff1c9
+
+The accepted text transport and corrected Docker boundary do not yet provide
+visual observations or an action executor. Authorize two disjoint bounded
+prerequisites, preserving their original evidence and all product pauses.
+
+Fresh Astra High worker in `worktrees/isolated-image-transport-20260913`, branch
+`bootstrap/isolated-image-transport-20260913`, base
+`8665ff1c962ff2a6aa6a3157eb2251942d438c3f`, owns exactly
+`scripts/initiative_control/isolated_model_transport.py`, its existing adjacent
+`test_isolated_model_transport.py`, and new
+`qa/initiative-control/management-bootstrap/isolated-image-transport.md`.
+Target400 changed lines/200 non-test, hard650/350. Parent retains integration,
+policy, real credentials and actual native qualification. One fresh Fable High
+material review plus necessary scoped corrections, with previous reviews retained.
+
+Add one optional bounded inline PNG observation to the existing public text
+execution method. Never accept an image path, URL, guest-selected flags or a new
+provider/model. Keep text-only callers unchanged, OFF inert, all existing tool,
+credential and process restrictions. Validate byte size and PNG dimensions before
+launch; reject unsupported/malformed inputs. Store only validated bytes under one
+fixed owner-created exclusive private per-attempt filename. Verify the exact
+packaged CLI's supported image attachment syntax, grant read access to that one
+file only, and pin/hash its bytes before and after execution. No image editing,
+remote fetch, new dependency/parser framework or broad directory read permission.
+Tests use synthetic images/auth/fixtures and the existing execution path; cover
+OFF, rejection before auth/process, bounds, unchanged text behavior, exact argv,
+read policy, image mutation and preserved failure evidence. This is internal
+transport engineering, not independent visual functional acceptance. Parent owns
+the later actual native screenshot-observation proof and isolated action loop.
+
+Parent owns at most three authored files under a new private
+`.codex-work/docker-browser-*` root: `probe.py`, `guest.py`, `README.md`, target300
+lines/hard450, plus generated evidence. Inspect and launch only cached ARM64 image
+`sha256:fdbf57e27079258be976cf5d8d309c1c00faadfc24cec5c562caf661b27926bd`
+with the already-reviewed corrected seccomp policy, non-root/read-only root,
+no network/capabilities/new privileges, private IPC/PID and bounded resources.
+No pull/install/host service change, auth/source/socket/profile mounts or user
+container operations. The single permitted bind is the synthetic guest script,
+read-only. Inventory installed browser/Playwright paths and attempt a synthetic
+local-page render, screenshot and actual keyboard/mouse interaction. Browser
+children remain under the outer container boundary; record any browser-specific
+sandbox limitation rather than weakening the container policy. This preflight is
+engineering, not acceptance of dashboard, Slack or a full reasoning executor.
+Persist create intent before the Docker request; after any ambiguous create, hold
+further admission until exact labelled-container owner reconciliation. A missing
+immediate inspect result cannot close that uncertainty. Preserve failed attempts,
+effective runtime/config hashes, and remove only exact validated owned containers.
+Parent reviews the actual observations before allocating the combined action loop.
+
 ## Launcher interface for coordinator integration
 
 Standalone CLI reads a bounded JSON briefing from `--briefing`, fresh private
