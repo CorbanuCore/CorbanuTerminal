@@ -982,6 +982,14 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
+Private root-session pump qualified at source74263bbbc5bf2163f571947c6828fbf108866c3f/
+Rustb7275b0c0433f081d6423463993abc658141a6a7. [Literal evidence](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-session-20260912/README.md):
+29 command exits+suite0 on exact non-root RTX/TMUX (105s), seven actual session
+cases plus full retained proof, strict lint/parity/source/lock invariance.
+Astra37/Fable38 exit0/findings[]; no runtime corrections. Fixed two-listener
+private pump only; manager receiving is next. Policy1.7 internal-only N/A does
+not waive later protected-user/PF26 isolated functional/native/human gates.
+
 Private descriptor-pair root dispatch now qualified at source
 c7d48e4822293ec0899311be63fbd08848516ba0/Rustbd56b597e348d2924da21706c594c20a868bace4.
 [Literal evidence](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-dispatch-20260912/README.md):

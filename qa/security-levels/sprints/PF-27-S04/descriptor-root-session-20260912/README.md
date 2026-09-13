@@ -1,10 +1,10 @@
 # PF27 private descriptor root-session pump
 
-Private increment: exact RTX proof passed; independent reviews pending.
+Private increment qualified for manager receiving; no native/product readiness.
 Manager allocation06bf29c29 and fixed-pair clarification44b39817a imported as
 d46565dcf and4e1b57b69 respectively. Source/size base2c63e4cd5; seven exact paths,
 target700/hard800 including this receipt, tests, runner and frozen allocation.
-Reviews37 Astra High/38 Fable5.1 High allocated; reservation recorded in ledger.
+Reviews37 Astra High/38 Fable5.1 High completed; original outcomes in ledger.
 
 ## Contract and fixture boundary
 
@@ -73,7 +73,17 @@ Cargo.lock SHA5101ffe0dea88d84e213fcd31025f1d2ca0f9a8cbd069b8ac5ea787d392b1459;
 MODULE.bazel.lock SHAc8d7e3f8c8bec8f8e71cc3d1d39fcb952eec0f07a41cdac48401a6f64a60d979.
 Both before/after source trees, module files and five input artifacts match.
 No failed test/correction in this increment; older failures remain in predecessor
-receipts. Existing Bazel version warnings retained. Reviews not yet completed.
+receipts. Existing Bazel version warnings retained.
+
+Reviews37 Astra High and38 Fable5.1 High both dispatched00:49:58UTC September13
+through the established autoreview helper; both exit0/findings[], patch correct
+(confidence0.91/0.85). Branch mode/base2c63e4cd5, High, this receipt as context;
+Fable uses the established Corbanu wrapper, private TMUX
+`pf27rootsessionreview20260912:reviews`. Original JSON/text/exit/start files
+are beside this receipt. Rust stayed frozen; no repairs or extra opinions.
+Preserve reviews1–36. Scoped allowance used2/remaining0; no reset.
+Final authored scope662 added+deleted across seven allocated paths, below700/800.
+Plan/sprint checkers pass3 active/115 current/125 archived; authored whitespace clean.
 
 Manager accepted policy1.7 internal-only N/A for this private increment. Existing
 main exit78, fixed-system factories, public root.rs/Child, Core, Vault, credentials

@@ -1,0 +1,3 @@
+autoreview clean: no accepted/actionable findings reported
+overall: patch is correct (0.91)
+No actionable defects found in the provided bundle. The pump preserves receipt-based authority, bounded admission, listener fairness, and existing cancellation and completion semantics. The runner explicitly exercises all seven new ignored OS cases. Review used read-only inspection; tests were not rerun.

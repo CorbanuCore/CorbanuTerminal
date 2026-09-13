@@ -18,6 +18,13 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Reviews37/38 actually dispatched2026-09-13 00:49:58UTC; both completed exit0,
+findings[], patch correct, confidence0.91/0.85. Original descriptor-root-session-
+20260912/{astra37,fable38}.{json,txt,exit,started.txt} retained. Same frozen
+source74263bbbc/Rustb7275b0c and exact final29-command proof; no runtime changes,
+repairs or extra opinion. This scoped extension used2/remaining0; preserve all
+history1–36 and original attempts. Manager receiving remains a separate gate.
+
 Root-session reviews37 Astra High and38 Fable5.1 High through Corbanu/private
 TMUX reserved September13 00:49UTC under allocation06bf29c29 and clarification
 44b39817a; manager reconfirmed continuation. Two scoped extension slots reserved,
