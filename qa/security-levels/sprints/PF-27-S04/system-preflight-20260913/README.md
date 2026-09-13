@@ -1,10 +1,11 @@
 # PF27 private fixed-system preflight
 
-Final exact-source RTX proof passes; allocated reviews pending. Not native-ready.
+Private increment qualified: final exact-source RTX proof and both reviews pass.
+Not native-ready; manager receiving remains separate.
 Manager allocationab985f5f8 imported clean asb65bf1e932f8fb6d9b24d945fe67b18a57bb0ac2.
 Source/size/review baseae2a4c9407983d1877fce18f66d054d7cf90aa7e; seven exact
 paths target550/hard700 including allocation, tests, runner and this receipt.
-Reviews39 Astra High/40 Fable5.1 High reserved in the preserved review ledger.
+Reviews39 Astra High/40 Fable5.1 High completed; history1–38 remains preserved.
 
 ## Ownership and compatibility
 
@@ -73,6 +74,18 @@ are under [rtx/](rtx/). Remote originals remain at
 checkout /home/travis/worktrees/security-broker-system-preflight-20260913.
 No new-case failure or repair was omitted; predecessor failures stay preserved.
 Focused filter counts overlap the full suite, not additional unique tests.
+
+## Allocated reviews
+
+Both dispatched September13 01:30:17UTC through private TMUX, using the
+autoreview helper in branch mode with baseae2a4c940 and this receipt as context.
+Astra39 gpt-6-astra/high: exit0, findings[], patch correct, confidence0.92.
+Fable40 claude-fable-5-1-plan/high through established Corbanu wrapper: exit0,
+findings[], patch correct, confidence0.88. Original JSON/text/exit/start records
+are adjacent: [Astra39](astra39.json), [Fable40](fable40.json).
+No source repair, repeated clean review or extra opinion was needed.
+Final authored scope521 changed lines across seven allocated paths (550/700).
+Raw outputs and coordinated plan/sprint/review bookkeeping counted separately.
 
 Policy1.7 internal-only N/A accepted for this uncalled preflight only. Later
 distinct-principal native bootstrap, independently isolated protected-user/PF26
