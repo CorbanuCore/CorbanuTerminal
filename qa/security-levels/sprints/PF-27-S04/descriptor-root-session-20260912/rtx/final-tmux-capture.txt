@@ -1,0 +1,113 @@
+    Checking codex-async-utils v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/async-utils)
+    Checking codex-client v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/codex-client)
+    Checking codex-websocket-client v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/websocket-client)
+    Checking codex-product-brand v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/product-brand)
+    Checking codex-keyring-store v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/keyring-store)
+    Checking codex-utils-path v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/utils/path-utils)
+    Checking codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/linux-pidfd-spawn)
+    Checking codex-utils-cargo-bin v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/utils/cargo-bin)
+    Checking codex-network-proxy v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/network-proxy)
+    Checking codex-security-audit v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/security-audit)
+    Checking codex-secret-broker v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/secret-broker)
+    Checking codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/protocol)
+    Checking codex-api v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/codex-api)
+    Checking codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/file-system)
+    Checking codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/git-utils)
+    Checking codex-secrets v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/secrets)
+    Checking codex-vault v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/vault)
+    Checking codex-otel v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/otel)
+    Checking codex-model-provider-info v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/model-provider-info)
+    Checking codex-features v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/features)
+    Checking codex-config v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/config)
+    Checking codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/protected-state)
+    Checking codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/secret-broker-service)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 16.06s
+   Compiling codex-async-utils v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/async-utils)
+   Compiling codex-client v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/codex-client)
+   Compiling codex-websocket-client v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/websocket-client)
+   Compiling codex-security-audit v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/security-audit)
+   Compiling codex-product-brand v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/product-brand)
+   Compiling codex-keyring-store v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/keyring-store)
+   Compiling codex-utils-path v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/utils/path-utils)
+   Compiling codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/linux-pidfd-spawn)
+   Compiling codex-secret-broker v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/secret-broker)
+   Compiling codex-utils-cargo-bin v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/utils/cargo-bin)
+   Compiling codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/protocol)
+   Compiling codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/file-system)
+   Compiling codex-api v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/codex-api)
+   Compiling codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/git-utils)
+   Compiling codex-secrets v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/secrets)
+   Compiling codex-vault v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/vault)
+   Compiling codex-otel v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/otel)
+   Compiling codex-model-provider-info v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/model-provider-info)
+   Compiling codex-features v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/features)
+   Compiling codex-config v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/config)
+   Compiling codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/protected-state)
+   Compiling codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/secret-broker-service)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 25.52s
+────────────
+ Nextest run ID 96d5ff07-582c-4894-81cd-666615277ba0 with nextest profile: local
+    Starting 7 tests across 7 binaries (76 tests skipped)
+        PASS [   0.035s] (1/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_accept_faults_are_bounded
+        PASS [   0.036s] (2/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_duplicate_receipts
+        PASS [   0.040s] (3/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_routing_and_storage
+        PASS [   0.052s] (4/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_pending_cancellation
+        PASS [   0.063s] (5/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_protocol_errors
+        PASS [   0.070s] (6/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_flood_fairness
+        PASS [   0.794s] (7/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_lifecycle
+────────────
+     Summary [   0.794s] 7 tests run: 7 passed, 76 skipped
+PF27_SESSION_PRELIMINARY_COMPLETE
+travis@ambient-System-Product-Name:~$ bash /home/travis/security-round5/evidence/pf27-root-session-20260912/run-pf27-session-74263.sh
+    Checking codex-network-proxy v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/network-proxy)
+    Checking codex-security-audit v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/security-audit)
+    Checking codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/protocol)
+    Checking codex-api v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/codex-api)
+    Checking codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/file-system)
+    Checking codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/git-utils)
+    Checking codex-otel v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/otel)
+    Checking codex-model-provider-info v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/model-provider-info)
+    Checking codex-features v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/features)
+    Checking codex-config v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/config)
+    Checking codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-root-session-20260912/codex-rs/protected-state)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 14.28s
+PF27_ROOT_COMPAT_TMUX_COMPLETE
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.28s
+────────────
+ Nextest run ID 1cb4dceb-9b3c-41df-b9bc-453e937ace10 with nextest profile: local
+    Starting 1 test across 7 binaries (82 tests skipped)
+        PASS [   0.002s] (1/1) codex-secret-broker-service launch::manifest::elf::tests::pf_27_s01_elf_profile_frozen_artifacts_as_data
+────────────
+     Summary [   0.003s] 1 test run: 1 passed, 82 skipped
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+────────────
+ Nextest run ID 63363df7-12d8-48b2-95a8-887643cda825 with nextest profile: local
+    Starting 6 tests across 7 binaries (77 tests skipped)
+        PASS [   0.045s] (1/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_lost_reply
+        PASS [   0.061s] (2/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_wrong_and_stale_receipts
+        PASS [   0.070s] (3/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_actual_namespaces_and_duplicate
+        PASS [   0.101s] (4/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_construction_failures
+        PASS [   0.130s] (5/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_protocol_rejections
+        PASS [   0.809s] (6/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_lifecycle
+────────────
+     Summary [   0.810s] 6 tests run: 6 passed, 77 skipped
+PF27_ROOT_DISPATCH_TMUX_COMPLETE
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.28s
+────────────
+ Nextest run ID 243565e9-c147-478e-9844-c520136d1ab3 with nextest profile: local
+    Starting 7 tests across 7 binaries (76 tests skipped)
+        PASS [   0.030s] (1/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_accept_faults_are_bounded
+        PASS [   0.030s] (2/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_duplicate_receipts
+        PASS [   0.035s] (3/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_routing_and_storage
+        PASS [   0.051s] (4/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_pending_cancellation
+        PASS [   0.061s] (5/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_protocol_errors
+        PASS [   0.066s] (6/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_flood_fairness
+        PASS [   0.788s] (7/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_lifecycle
+────────────
+     Summary [   0.789s] 7 tests run: 7 passed, 76 skipped
+PF27_ROOT_SESSION_TMUX_COMPLETE
+PF27_ROOT_SESSION_74263_COMPLETE
+travis@ambient-System-Product-Name:~$
