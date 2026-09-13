@@ -156,7 +156,9 @@ class FeedTests(unittest.TestCase):
     def activate(self, target, at=NOW):
         with patch.object(activate, "now", return_value=at), patch.object(activate.subprocess, "run") as services:
             activate.activate(self.install, target, self.root / "units")
-        self.assertEqual(services.call_count, 5)
+        self.assertEqual(services.call_count, 4)
+        self.assertFalse(any("corbanu-control-publish.timer" in call.args[0]
+                             for call in services.call_args_list))
 
     def publish(self, at=NOW):
         with patch.object(control, "now", return_value=at):

@@ -517,6 +517,22 @@ protocol and fake-browser adapters without actual model/browser service access;
 parent performs real confined runtime/child denial and subsequent independent
 case execution. No original DEC001..026 changes or functional pass declarations.
 
+## Publication pause correction — September13
+
+Maxwell's actual one-shot publication of14019e412 succeeded as build-sagn5ou_,
+but the inherited installer unconditionally enabled the render timer, violating
+the bootstrap pause. Parent disabled only corbanu-control-publish.timer and
+verified disabled/inactive; the web service remains active. No product resumed.
+Parent owns the bounded correction in activate.py, test_control.py,
+test_decision_feed.py (existing activation call-count assertion), README.md
+under scripts/initiative_control/, this allocation and bootstrap QA. Remove the
+implicit timer enablement: source activation may publish once and refresh the
+web service, but must not change the operator's timer activation state. New
+installations remain unscheduled until separately authorized. No new scheduler,
+timer policy, flag, product dispatch or worker ownership change. Target100 changed
+lines; one scoped Fable High review plus necessary correction, followed by actual
+one-shot deployment and disabled/inactive verification. Prior review usage stays.
+
 ## Launcher interface for coordinator integration
 
 Standalone CLI reads a bounded JSON briefing from `--briefing`, fresh private

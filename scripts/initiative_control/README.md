@@ -66,7 +66,10 @@ decisions about historical events; see `docs/research/tasknode-integration/`.
 sprints, renders sanitized private HTML and retains the last good publication
 on failures. Stale source and worker ages remain separate. `export.py` exports
 declared document/tooling paths with hashes; it never scans agent homes.
-`activate.py` is the inherited manager-only Linux installer. Its synthetic
+`activate.py` is the manager-only Linux installer. It publishes once and refreshes
+the private web service without enabling or disabling the publication timer.
+New installations remain unscheduled until the operator separately authorizes
+timer activation; a source update must not resume a paused schedule. Its synthetic
 tests do not by themselves prove a real service update.
 `tick.py` publishes and queues explicitly mapped reports; OFF prevents network
 delivery but does not prevent local report collection or queue preparation.

@@ -339,8 +339,16 @@ class RefreshTests(unittest.TestCase):
             final = uploads[-1]
             control.atomic_json(final / "state/source.json", {"files": {}})
             control.atomic_json(final / "state/control.json", {"tasknode": {"enabled": False}})
-            with patch.object(activate.subprocess, "run"):
+            with patch.object(activate.subprocess, "run") as services:
                 activate.activate(root, final, root / "units")
+            # A one-shot source update must not resume a paused schedule or
+            # disable an already-running one. Timer activation is owner-only.
+            self.assertEqual([call.args[0] for call in services.call_args_list], [
+                ["systemctl", "--user", "daemon-reload"],
+                ["systemctl", "--user", "start", "corbanu-control-publish.service"],
+                ["systemctl", "--user", "enable", "corbanu-control-web.service"],
+                ["systemctl", "--user", "restart", "corbanu-control-web.service"],
+            ])
             self.assertEqual(control.read_json(root / "state/enrollment.json", root), receipt)
             self.assertEqual(len(list((root / "incoming").iterdir())), 3)
             self.assertEqual((root / "source").resolve(), (final / "source").resolve())

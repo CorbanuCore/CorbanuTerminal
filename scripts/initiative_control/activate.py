@@ -63,10 +63,11 @@ def activate(root, incoming, units):
                 shutil.rmtree(old)
     subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
     subprocess.run(["systemctl", "--user", "start", "corbanu-control-publish.service"], check=True)
-    subprocess.run(["systemctl", "--user", "enable", "--now", "corbanu-control-publish.timer"], check=True)
+    # Publication is not scheduling authority. Preserve the operator's timer
+    # activation state, including a paused or never-enabled installation.
     subprocess.run(["systemctl", "--user", "enable", "corbanu-control-web.service"], check=True)
     subprocess.run(["systemctl", "--user", "restart", "corbanu-control-web.service"], check=True)
-    print("Verified export activated; private server and half-hour timer started")
+    print("Verified export activated; private server refreshed; timer activation unchanged")
 
 
 if __name__ == "__main__":

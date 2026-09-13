@@ -655,6 +655,9 @@ push preserves the handoff; it does not turn outstanding gates into passes.
 
 ## 13. Remaining launch work
 
+Source activation now preserves the operator's timer activation state; it must
+not resume a paused schedule. See the [publication correction and verification](qa/initiative-control/management-bootstrap/publication-pause-20260913.md).
+
 Latest image/browser prerequisite: image support received at
 `1061417275ad04d803e77dfd451a9185727bb4c8`,108 receiving test executions, clean
 corrective Fable review and actual native screenshot/read-denial observations.
