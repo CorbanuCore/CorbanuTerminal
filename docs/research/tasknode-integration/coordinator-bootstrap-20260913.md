@@ -55,6 +55,21 @@ sprint is completed/archived by this implementation or its synthetic tests.
 The parent performs Fable material review and receiving integration, then owns
 actual native tool/rehearsal wiring in a subsequent explicitly allocated unit.
 
+## Bounded actual native handoff rehearsal
+
+After owner-controls receiving `fc7656ee370e33277f093144ba1ccf773fb2afc4`, the
+parent may exercise one actual fresh-manager decision and one fresh Astra High
+acknowledgment/reconciliation worker using the existing owner CLI and private
+operator artifacts. The worker has zero write scope: inspect only this canonical
+checkout's branch/HEAD/clean status and confirm the launcher/owner-control entry
+points exist. No product work, reviews, builds, source edits, services, credentials,
+network, document archives, Task Node sends or additional workers. Bind its ACK
+to the exact claim/allocation digest and its actual native identity before work.
+Capture actual return and independent owner comparison, close the worker, retain
+pending/history records and return global/delivery dispatch to paused afterward.
+Both other streams remain paused throughout. This is one operator-driven bridge
+rehearsal, not proof of a deployed automatic event controller or recurring loop.
+
 ## Launcher interface for coordinator integration
 
 Standalone CLI reads a bounded JSON briefing from `--briefing`, fresh private

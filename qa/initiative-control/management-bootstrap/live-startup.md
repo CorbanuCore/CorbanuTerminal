@@ -114,3 +114,22 @@ corrected here. Its original exit1 remains retained, not relabeled as clean.
 No production-code or expectation change; both final actual Fable runs still
 apply. The parent accepts this test-fixture correction and will reconcile the
 original failed receiving marker before a new explicit combined-verification job.
+
+Receiving re-verification succeeded at `36057c8907220e0e231b65a0472829d804d3d32e`:
+334 tests passed in255.461s, plus both governance checks and whitespace. The
+original failed merge receipt and explicit non-accepting reconciliation receipt
+remain in the private receiving directory; the successful second job released
+its integration marker. No failure was erased or inferred as passing.
+
+Reviewed owner controls `8749dda65954aec9909f90a6fa49c9701f88673f` then received
+as `fc7656ee370e33277f093144ba1ccf773fb2afc4`; its actual receiving job passed
+37 coordinator and13 integration tests, both governance checks and whitespace.
+The earlier broad334 suite applies to the preceding tree, not a broad346 claim.
+
+Canonical private-route decision is now revision2/feed25: the changed remaining
+question is open (acknowledgment cannot silently change context). Original first
+save failed validation before writing; it was corrected through the same CAS
+interface. Actual threaded Slack follow-up delivered at `1789281775.088889`.
+The browser still shows the administrator sign-in form; no sign-in or terms were
+completed. Direct TCP22 probe was stopped after hanging; online/shared inventory
+proves visibility, not end-to-end HTTPS access. Serve remains unconfigured.
