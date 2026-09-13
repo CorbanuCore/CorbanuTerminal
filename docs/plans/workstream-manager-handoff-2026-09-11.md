@@ -7,7 +7,8 @@ passes: Mac100/575, zero execution skips, Clippy/check; sole owner RTX28 exits+
 suite0 on unchangedeb5855959/Rust4222fd172. No repeated clean reviews. Manager
 accepts accounting's complete eight-path compact-import unit in new checkout
 accounting-late-import-20260913, target2000/650 STOP2200/750, material review+
-necessary correction. Source dispatch follows the allocation commit/checkers.
+necessary correction. Mendel dispatched at verified clean37d6ffcc9 after both
+checkers passed3/115/126; parent released the exclusive Mac target to him.
 PF13 owner dispatched on allocation06bf29c29, seven-path private root-session
 pump700/800, reviews37/38, existing RTX lease. Native bootstrap stays excluded.
 
