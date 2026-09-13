@@ -98,6 +98,44 @@ partial results, failure and persistence-before-observed semantics. No live API
 or credential access by this worker. Parent owns actual bounded replay and later
 monitor activation after the relevant launch gates; this is not recurring enablement.
 
+## Event-to-manager driver allocation
+
+Next bounded unit after collector receiving and actual read/dedup, base
+`bca6485a2e60803393bbca0ee56d98953022ed12`: fresh Astra High worker in
+`worktrees/manager-cycle-20260913`, branch `bootstrap/manager-cycle-20260913`,
+owns only `scripts/initiative_control/manager_cycle.py`, its adjacent
+`test_manager_cycle.py`, and `qa/initiative-control/management-bootstrap/manager-cycle.md`.
+Target800 total/450 non-test lines; hard1050/600. Parent retains coordinator,
+launcher, native tools, private credentials/state, policy and scheduling. One
+Fable High material review plus necessary scoped corrections, retaining history.
+
+Build the minimal owner-invoked one-cycle driver on existing Coordinator and
+`fable_launcher.run_launcher`, not a new daemon/framework. No native tool API is
+callable from this Python module: return accepted prepared actions for the actual
+host coordinator; never synthesize spawn/ACK/return or integrate anything here.
+Observe enabled/owned/pending state before inference; refuse duplicate cycles.
+Claim the existing manager token, freeze an owner-only briefing/artifact record,
+include the three workstreams and their last three actions plus original selected
+event/result evidence, and call the actual fresh launcher once. Enforce64KiB
+before inference, expose missing/oversized evidence as an owner hold without
+silently truncating it or consuming events. Trusted owner context is bounded data,
+not model-authored policy. Describe the seed as historical and allow separately
+dated owner observations; no invented current facts. Prompt short rationales under
+300 bytes while preserving the core's hard1000-byte limit and exact frozen inputs.
+
+Bind successful receipt to this manager token, exact briefing digest, binary and
+actual model/provider/high/session/turn/complete-response/shutdown evidence before
+calling `accept_decision`. Retain unsuccessful/stale/invalid attempts and report
+ownership/reconciliation requirements; never retry the model implicitly or clear
+uncertain ownership based on elapsed time, a caller boolean or PID guess. An owner
+uses existing reconciliation after actual shutdown inspection. No credential load,
+network, tools or state writes at import/help/OFF; execution uses the existing
+explicit private auth path only through the launcher. Test injected launcher
+receipts, empty/paused/owned, evidence overflow/missing, wrong identity/digest,
+stale revision, failed shutdown, crash boundaries and successful accepted action.
+Those fixtures are not live-manager or native-dispatch qualification. Parent owns
+actual fresh-manager replay, native bridge, future supervision and recurrence.
+
 ## Launcher interface for coordinator integration
 
 Standalone CLI reads a bounded JSON briefing from `--briefing`, fresh private
