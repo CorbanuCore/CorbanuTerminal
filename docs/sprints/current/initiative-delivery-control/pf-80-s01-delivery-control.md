@@ -19,7 +19,7 @@ updated: 2026-09-12
 
 # PF-80-S01 — Native Task Node delivery-control integration
 
-Current mandate: [bounded synthetic owned ingress](../../../research/tasknode-integration/owned-ingress-allocation-20260913.md), ten exact crate-local paths1250target/1500total850non-test hard. James authors code now; parent serializes dependency/build lease after accounting correction. No real model/service/Slack qualification claim. Earlier supervisor/isolation work stays accepted history.
+Current mandate: [bounded synthetic owned ingress](../../../research/tasknode-integration/owned-ingress-allocation-20260913.md), same ten paths; returned927/424 uncompiled. Manager accepts target1800/1000 STOP1950/1100 and scoped formatting now; parent serializes aliases/locks/build lease after accounting's active Mac gate. Slack credentials resolved, live/phone/nativeACK still unqualified; no human hold. Original1250/1500/850 and failures preserved.
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
 [Native validity allocation](../../../research/tasknode-integration/native-validity-allocation.md)
 and [recovery handoff](../../../research/tasknode-integration/recovery-decision-handoff.md).
