@@ -603,6 +603,12 @@ At the recorded shutdown:
 - Slack supervisor: stopped; automatic decision workflow OFF.
 - All implementation/review/publication agents: stopped or closed.
 
+September13 bootstrap update: the existing ten-minute initiative heartbeat's saved
+prompt now defers to this file and the fresh-Fable coordinator model, replacing
+the obsolete Astra-manager instructions. The app confirmed it remains PAUSED;
+the security monitor is unchanged. Configuration is not execution evidence: the
+full qualification and activation guards below still apply.
+
 Inspect fresh status before reporting it. Use Codex automation tools for authorized
 schedule changes, preserving existing settings; do not hand-edit their configuration
 or resume schedules during setup.
