@@ -102,6 +102,28 @@ def route(path):
     return "doc-" + hashlib.sha256(path.encode()).hexdigest()[:20] + ".html"
 
 
+def reference_documents(config):
+    """Explicit manager-selected Markdown only; never follow document links."""
+    paths = config.get("reference_documents", [])
+    if not isinstance(paths, list) or len(paths) > 100:
+        raise ValueError("invalid reference document inventory")
+    for value in paths:
+        if not isinstance(value, str) or not re.fullmatch(r"(?:qa|docs/research)/[A-Za-z0-9_/-]+\.md", value):
+            raise ValueError("reference document must be an explicit research/qa Markdown path")
+        if PurePosixPath(value).as_posix() != value:
+            raise ValueError("reference document path must be canonical")
+    return sorted(set(paths))
+
+
+def collect_references(repo, config, hashes):
+    result = {}
+    for relative in reference_documents(config):
+        if relative not in hashes:
+            raise ValueError("uncollected reference document; resync required")
+        result[relative] = safe_text(read_file(repo / relative, repo), MAX_FILE)
+    return result
+
+
 def checked_run(value):
     required = {"run_id", "sprint_id", "machine", "role", "agent", "session_id", "status", "summary", "updated_at", "commit", "branch", "worktree"}
     if not isinstance(value, dict) or set(value) != required:
@@ -262,6 +284,7 @@ def collect(repo, state):
         if not str(test["path"]).startswith("qa/") or ".." in Path(test["path"]).parts:
             raise ValueError("human plan must be an explicit qa path")
         documents[test["path"]] = safe_text(read_file(path, repo), MAX_FILE)
+    documents.update(collect_references(repo, config, hashes))
     if len(documents) > 1500 or sum(len(v) for v in documents.values()) > 25 * MAX_FILE:
         raise ValueError("publication exceeds document budget")
     events, problems = [], []

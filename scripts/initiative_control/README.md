@@ -83,6 +83,13 @@ introduced here. Workers cannot self-accept reports, close sprints or release.
 
 ## Dashboard source maintenance
 
+Manager configuration may list up to100 exact `reference_documents` Markdown
+paths under `docs/research/` or `qa/` for allocation/context/evidence links.
+Exporter and renderer use the same validated inventory; missing, unpinned,
+unsafe or credential-like references fail publication. These are not human-test
+cards, and links inside them never expand the export automatically. Managers
+must inspect each selected document for private content before listing it.
+
 The manager reconciles canonical plans/sprints, resolved decisions, human-test
 cards and redacted worker reports before each ten-minute sync. The Luna Extra
 High worker runs the existing private wrapper, now selecting the declared manager

@@ -8,7 +8,7 @@ import re
 import shutil
 import subprocess
 
-from control import atomic_json, now, read_file, read_json
+from control import MAX_FILE, atomic_json, now, read_file, read_json, reference_documents, safe_text
 import decision_feed
 
 
@@ -19,6 +19,10 @@ def source_paths(repo, config):
         paths.add(repo / root / "check.py")
     paths.update(p for p in (repo / "scripts/initiative_control").iterdir() if p.is_file() and p.suffix in {".py", ".css", ".js", ".sh", ".txt", ".json", ".md"})
     paths.update(repo / t["path"] for t in config["human_tests"])
+    for relative in reference_documents(config):
+        path = repo / relative
+        safe_text(read_file(path, repo), MAX_FILE)
+        paths.add(path)
     paths.add(repo / "codex-rs/features/src/lib.rs")
     paths.add(repo / "docs/corbanu-product-spec.md")
     return paths
