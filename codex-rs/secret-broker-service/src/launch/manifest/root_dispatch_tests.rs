@@ -18,6 +18,11 @@ use std::time::Duration;
 use std::time::Instant;
 
 fn setup(lifetime: Duration) -> (PairHandle, [[UnixStream; 3]; 2], Fixture) {
+    let (pair, listeners) = listening(lifetime);
+    let peers = listeners.map(|listener| fixture_streams(&listener));
+    (pair, peers, Fixture::fresh().unwrap())
+}
+pub(super) fn listening(lifetime: Duration) -> (PairHandle, [UnixListener; 2]) {
     let listeners = ['j', 'p'].map(|role| {
         let name = format!("corbanu-pf27-dispatch-{}{role}", std::process::id());
         let listener =
@@ -39,25 +44,25 @@ fn setup(lifetime: Duration) -> (PairHandle, [[UnixStream; 3]; 2], Fixture) {
             Instant::now() + lifetime,
         )
         .unwrap_or_else(|_| panic!("pair failed"));
-    let peers = listeners.map(|listener| {
-        std::array::from_fn(|_| {
-            let mut stream = None;
-            eventually(|| match listener.accept() {
-                Ok((accepted, _)) => {
-                    stream = Some(accepted);
-                    true
-                }
-                Err(error) if error.kind() == io::ErrorKind::WouldBlock => false,
-                Err(error) => panic!("accept: {error}"),
-            });
-            let stream = stream.unwrap();
-            stream
-                .set_read_timeout(Some(Duration::from_secs(2)))
-                .unwrap();
-            stream
-        })
-    });
-    (pair, peers, Fixture::fresh().unwrap())
+    (pair, listeners)
+}
+pub(super) fn fixture_streams<const N: usize>(listener: &UnixListener) -> [UnixStream; N] {
+    std::array::from_fn(|_| {
+        let mut stream = None;
+        eventually(|| match listener.accept() {
+            Ok((accepted, _)) => {
+                stream = Some(accepted);
+                true
+            }
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => false,
+            Err(error) => panic!("accept: {error}"),
+        });
+        let stream = stream.unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        stream
+    })
 }
 fn receipt(ticket: &mut AdmissionTicket) -> io::Result<AdmittedPeer> {
     let mut result = None;
@@ -85,7 +90,7 @@ fn clients(peers: &[[UnixStream; 3]; 2]) -> [NativeAnchorClient; 2] {
         .each_ref()
         .map(|peer| Fixture::client(peer[1].try_clone().unwrap()).unwrap())
 }
-fn reaped() {
+pub(super) fn reaped() {
     eventually(|| Reservation::acquire().is_ok());
     assert_eq!(
         rustix::process::waitid(
