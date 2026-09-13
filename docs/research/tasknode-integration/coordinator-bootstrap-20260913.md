@@ -136,6 +136,46 @@ stale revision, failed shutdown, crash boundaries and successful accepted action
 Those fixtures are not live-manager or native-dispatch qualification. Parent owns
 actual fresh-manager replay, native bridge, future supervision and recurrence.
 
+## Isolated-executor transport falsification allocation
+
+Parent inspected the read-only Hypatia audit and verified the Astra catalog's
+`code_mode_only` precedence in source. Its inspected default standalone0.1.36
+is not our current0.1.41 candidate; preserve that limitation. RTX SSH timed out,
+so no remote packaging, forwarding or runtime claim is established. The existing
+646-line/12-test five-file boundary runner and all old evidence remain frozen.
+
+Authorize only Stage A locally now: fresh Astra High worker may create exactly
+four private files under `.codex-work/executor-route-audit.Nerv9u/model-only-v1/`:
+`model_only_transport.py`, `model-only.json`, `test_model_only_transport.py`,
+`README.md`. Target650 total/400 non-test; hard850/550. This is manager-owned
+infrastructure within PF-80-S01, not PF81 activation or a fourth initiative.
+No canonical source edits or second storage/proxy/daemon framework. Parent owns
+the one Fable High boundary review and necessary corrections. The audit's
+eight-file full executor proposal is not simultaneously allocated.
+
+Use exact existing macos-candidate-final9 Corbanu0.1.41
+SHA256 `4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e`.
+Build the smallest fixed model-only command/profile on supported CLI/catalog
+configuration, with a neutral direct-mode Astra entry preserving required wire
+metadata. Explicit Astra/High, no fallback/session reuse, no operational tools,
+hooks, host docs/memories or guest-selected paths/providers/commands. First test
+only synthetic owner-private homes, file auth and loopback fixture servers; never
+read/use real auth, Keychain, models or external network. Bound processes, output
+and cleanup; inspect captured real request/response and hostile unadvertised tool
+calls for shell/file/image/MCP/code-mode/collaboration/extension capabilities.
+Exercise synthetic hook/notify/AGENTS/memory/plugin/config canaries and ordinary
+text success/invalid configuration failure. Distinguish wire-content proof,
+unsupported-tool responses, marker absence and filesystem-denial proof honestly.
+
+Return exact package/profile/catalog/argv hashes, actual tests and failures,
+remaining limitations and frozen four-file diff. If supported configuration
+cannot remove a required capability, identify the exact remaining registration
+and stop that admission path for a separately scoped source correction. No
+prompt-only isolation, live credentials/inference, remote SSH/forwarding, namespace
+changes, full mediator/action loop or product/browser/Slack acceptance is authorized
+by Stage A. Parent chooses and allocates subsequent enforced executor work after
+examining this falsification evidence and current machine reachability.
+
 ## Launcher interface for coordinator integration
 
 Standalone CLI reads a bounded JSON briefing from `--briefing`, fresh private
