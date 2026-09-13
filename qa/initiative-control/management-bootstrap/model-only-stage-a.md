@@ -26,7 +26,22 @@ the next enforcement unit, a scoped Fable5.1High review is checking the diagnost
 evidence and whether supported wrapper restrictions suffice. Its private review
 copy `.codex-work/model-only-review.BjOu7t/` is byte-identical to the four frozen
 files; no raw homes, auth stores or the large generated manifest were exported.
-Review01 is pending. Existing five-file RTX boundary runner remains unchanged.
+Review01 returned five findings. Parent accepted four diagnostic-evidence gaps:
+marker-label limits, missing per-retry identity checks, drop/timeout attribution,
+and pre-launch catalog/evidence write protection. The .git-accounting finding was
+rejected: .git existed only in the review copy; the actual frozen manifest had
+zero generated paths outside evidence directories. Existing RTX runner is unchanged.
+
+Fresh Astra High Arendt corrected only the four allocated files and closed.
+New size758 total/372 non-test; the original4670 generated files were hash-checked
+unchanged. New suite18 tests in57.376s:14 passed, the same4 capability probes failed,
+0 errors. Separate shell-start/write-positive controls prove actual catalog and
+owner-evidence write denial; pre/post catalog integrity and all captured retry
+identities are checked. No native retry-budget or startup-exclusion pass inferred.
+The fresh freeze is `evidence-ycpb8f4q/freeze.json`; explicit QA is
+`evidence-qa-1Yc084/qa.json`. Parent inspected the correction; Fable review02 is
+running against a byte-identical four-file copy. No new source capability change
+or full mediator is allocated by this diagnostic correction.
 
 Direct RPC SSH was separately verified. Its bubblewrap0.9.0/Python3.12.3 host
 failed a rootless namespace smoke with `RTM_NEWADDR: Operation not permitted`.

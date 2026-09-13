@@ -1,5 +1,39 @@
 # Management bootstrap — actual startup evidence
 
+## September13 08:26UTC checkpoint
+
+The actual owner driver and native crash-window recovery are now recorded in
+[the driver receipt](manager-cycle.md):124 receiving tests, two fresh Fable/TMUX
+cycles, real native ACK recovery, duplicate denial and clean shutdown. Coordinator
+returned to revision53/all paused, then recorded Travis's RPC topology clarification
+as an immutable event at revision54. No product sprint or recurring operation resumed.
+
+Remote integration `f701fe56f6f92111d34ba4153e9fb1380eaa2e5d` was pushed and
+independently verified with ls-remote. Luna Extra High Jason published it once:
+successful log `publication-20260913T082133Z.log` under the private control root;
+the earlier082037Z empty failed launch is retained. Actual publisher generation
+`build-rvyogvda` at08:21:44UTC, export tree
+`925b163d1bd4efcc1d3cebb879312454f5b37e196649f63ce459f35c98d0e3fc`.
+Health reports valid/fresh feed27, one open private-HTTPS question (revision3),
+ten retained warnings and Slack qualification unknown. Local preview build IDs
+are not the activated remote generation.
+
+The worker's tunnel attempt failed first because tunnel.sh was non-executable;
+a subsequent foreground forward did not persist. Parent closed Jason after its
+handoff, independently verified publisher timer disabled/inactive and web active,
+then restored the existing direct-SSH loopback forward with ssh -fN and no shared
+ControlPersist master. At08:26:18UTC, actual listener PID47015 served8769, dashboard
+health matched the remote generation, Facilities returned HTTP200/X-Corbanu-Control1.
+This repairs this Mac's access only, not the outstanding off-Mac private HTTPS route.
+No host security policy, public route or credentials were changed. Original failures
+remain retained; read-only serving/tunnel are intentionally left available.
+
+Separate [Stage A transport evidence](model-only-stage-a.md) retains its failures;
+it is not an admitted independent executor. Next unattended wiring also needs an
+explicit way to settle passive wait records without fake worker receipts or a
+wait-completion event loop. Existing prepared waits remain visible; no manual SQL
+cleanup or synthetic native acknowledgment was used to hide them.
+
 PF-80-S01, September 13. Parent owns live setup under the explicit five-part
 bootstrap authority. These are bounded engineering/operator attempts, not the
 independently isolated functional acceptance gate or full sprint completion.
