@@ -34,3 +34,22 @@ TMUX logs and original failures remain under private owner-transitions-review.Dp
 and transition-receive.qL5nIN. This review is additional to, not a reset of, earlier
 bootstrap review history. The owner accepts internal-only functional N/A for this
 packet projection; isolated combined dashboard/Slack acceptance remains required.
+
+## Subsequent actual attempts — not a launch pass
+
+After this correction was committed as 5056ba764, receiving-manager attempts
+ea397085 and a75bf3e7 also stopped before inference at the briefing-size gate.
+The former packet measured 65,805 bytes in a read-only diagnostic; the runtime
+limit was not changed. New pending reconciliation/allocation events had consumed
+the recovered room. Shortening redundant owner prose was insufficient once the
+next failure record was included. Every attempt retains its original claim and
+hold; no receiving worker was dispatched and ca0474fe4 is still not integrated.
+
+Stop prompt-trimming/relaunch attempts. The required next owner correction is
+bounded pending-event selection: include and consume only the selected durable
+batch, retain unselected events for later cycles, preserve all three workstreams
+and ordered recent actions, and prove selected evidence is complete. Oversized
+single events must remain explicitly held, never silently consumed or truncated.
+This is manager-owned implementation, not a missing user approval or a reason to
+resume product work. The accepted indexing correction remains useful but does
+not establish a reliable unattended manager loop.
