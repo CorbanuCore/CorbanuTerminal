@@ -41,3 +41,25 @@ no human-facing interactive workflow. The later mandatory independent isolated
 Slack/dashboard and full manager/worker handoff qualification remains open.
 TensorCash/Isometric, benchmarks, release and human acceptance are not qualified
 by this change. No product dispatch, recurrence, main or release activation.
+
+## Receiving and actual state
+
+Fable5.1High review01 found only the incorrect documentation flag `--state-dir`;
+accepted and corrected to `--state`, verified against actual CLI help. Review02
+completed clean, exit0, no findings; no further review of unchanged code. Retained
+private receipts: `.codex-work/wait-review.II2ijj/review01.json` and `review02.json`.
+Source `910a302662e10cfbe67a89760c1df9d8c270a175` has160 changed lines/64 non-test.
+Single-writer receiving commit `43e65299124d05ffec5dc76fa4085d8a986cf750` passed83
+tests in6.044s plus plan/sprint governance and whitespace checks. Exact assignment,
+merge and hashed test logs: `receiving/receive-wait-910a30266.json` in that directory.
+
+Owner CLI actually recorded four existing Fable waits, revision54 to58, preserving
+global/three-stream pauses, manager=None, all sprint/allocation records, rationales
+and all event rows byte-for-byte. Each operation has a real CLI receipt and audit.
+The original post-check raised KeyError because normal terminal retention archived
+`rehearsal01-delivery-native-ack-readonly`. No settlement was retried. A separate
+read-only recovery check compared live plus archived records and proved that action
+unchanged, all four waits recorded and no native receipt manufactured. Original
+script/receipts are retained alongside `actual-verification.json`; event digest
+`5f68e581a1a69d5fe8bfec7c4356a9fad09633eaacda68c0d62f8b2160d6fef5` unchanged.
+This is real owner bookkeeping proof, not autonomous dispatch or resolved blockers.

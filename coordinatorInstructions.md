@@ -567,8 +567,15 @@ python3 "$CONTROL_REPO/scripts/initiative_control/manager_cycle.py" --run \
 Without `--run`, it is OFF. Paused/owned/empty stores do not launch inference.
 The total claim window includes preparation and a30-second overhead reserve.
 An accepted result contains prepared proposals, not native dispatch receipts.
-The host still claims each authorized action and uses actual native tools; it
-must persist the real identity, ACK and result without inventing acknowledgments.
+For worker actions the host claims each authorized action and uses actual native
+tools; it must persist the real identity, ACK and result without inventing them.
+Prepared `wait` proposals are different: use the owner CLI operation `record_wait`
+with `action_id`, current `expected_revision` and nonempty observation `evidence`.
+It records the wait without a worker or a new meaningful event, including while
+dispatch is paused. It cannot resolve a blocker or advance a sprint; active manager
+ownership, stale allocations and already claimed/terminal actions reject. Never
+fake a claim/ACK to finish passive bookkeeping. See the
+[wait receiving and actual-state evidence](qa/initiative-control/management-bootstrap/wait-recording.md).
 On uncertainty inspect retained artifacts and actual tools before reconciliation.
 See [driver evidence and recovery procedure](qa/initiative-control/management-bootstrap/manager-cycle.md),
 including read-only hot-journal diagnostics. Do not delete journals or initialize
@@ -623,7 +630,10 @@ receipt limits are in the startup evidence linked above.
 The accepted owner cycle has additionally passed two real Fable runs and an actual
 native missing-dispatch-record/watchdog/duplicate-denial/ACK recovery rehearsal;
 [driver receipt](qa/initiative-control/management-bootstrap/manager-cycle.md).
-All dispatch modes returned to paused at coordinator revision53. The separate
+All dispatch modes returned to paused at coordinator revision53. At revision58,
+the four historical prepared waits were durably recorded without changing pauses,
+events or product state; normal terminal history preserved the older action.
+The separate
 [model-only transport falsification](qa/initiative-control/management-bootstrap/model-only-stage-a.md)
 found startup-context and retry limitations; it is not an admitted executor.
 
