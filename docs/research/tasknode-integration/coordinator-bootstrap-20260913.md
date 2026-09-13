@@ -462,6 +462,18 @@ immediate inspect result cannot close that uncertainty. Preserve failed attempts
 effective runtime/config hashes, and remove only exact validated owned containers.
 Parent reviews the actual observations before allocating the combined action loop.
 
+Actual non-root inventory found Playwright1.59.0 in `/app/.venv`, but its Chromium
+1217 cache lives under image-only `/root/.cache/ms-playwright`, inaccessible to
+UID65534. Parent authorizes extracting only that pinned image's public
+`chromium-1217` runtime from a never-started labelled disposable container to the
+same new private probe root, then mounting the extracted directory read-only at
+`/browser` for the synthetic probe. Record extraction intent, image identity and
+all runtime file hashes; reject links/special files before reuse. No host browser
+profile, real user home, credentials, source or socket is copied. This does not
+grant root execution, modify the cached image/host permissions or install packages.
+The original single-bind inventory remains historical; the browser attempt has
+exactly the guest-script and public-runtime read-only binds. `/tmp` stays noexec.
+
 ## Launcher interface for coordinator integration
 
 Standalone CLI reads a bounded JSON briefing from `--briefing`, fresh private
