@@ -1,6 +1,8 @@
 import copy
 import io
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -311,11 +313,14 @@ class OwnerControlsTests(unittest.TestCase):
 
     tearDown = CoordinatorTests.tearDown
 
+    def database_rows(self):
+        with self.c.connection() as db:
+            return {t: [tuple(row) for row in db.execute("SELECT * FROM " + t + " ORDER BY 1")]
+                    for t in ("state", "events", "audit", "action_history", "evidence", "sqlite_sequence")}
+
     def call(self, operation, error=None, **payload):
         before = self.c.snapshot()
-        with self.c.connection() as db:
-            counts = [db.execute("SELECT COUNT(*) FROM " + t).fetchone()[0]
-                      for t in ("events", "audit", "action_history", "evidence")]
+        rows = self.database_rows()
         output = io.StringIO()
         code = coordinator_cli.main([operation, "--state", str(self.root)],
                                     io.StringIO(json.dumps(payload)), output)
@@ -324,9 +329,7 @@ class OwnerControlsTests(unittest.TestCase):
         if error:
             self.assertIn(error, result["error"])
             self.assertEqual(before, self.c.snapshot())
-            with self.c.connection() as db:
-                self.assertEqual(counts, [db.execute("SELECT COUNT(*) FROM " + t).fetchone()[0]
-                                         for t in ("events", "audit", "action_history", "evidence")])
+            self.assertEqual(rows, self.database_rows())
         return result.get("result")
 
     def owner(self, operation, **payload):
@@ -361,19 +364,22 @@ class OwnerControlsTests(unittest.TestCase):
                 self.call("verify", action_id=key, evidence=verification or {"fixture": "owner inspection"}, accepted=True)
         return action
 
-    def closure(self, receipt_change=None, completion_verified=True):
+    def closure(self, receipt_change=None, completion_verified=True, prepared=False, receiving_receipt=None):
         assignment = {"id": "fixture-merge", "base": "a" * 40, "source": "b" * 40,
                       "branch": "fixture-receiving", "scope": ["scripts/initiative_control/"],
                       "approval": {"fixture": True}, "tests": [{"argv": ["fixture-test"], "timeout_seconds": 60}]}
         receipt = {"status": "verified", "receiving_commit": "c" * 40, "assignment": assignment,
                    "tests": [{"argv": ["fixture-test"], "exit_code": 0, "timed_out": False}]}
+        if receiving_receipt:
+            receipt, assignment = receiving_receipt, receiving_receipt["assignment"]
         self.allocation("receive", "integrate", {"assignment": assignment})
         if receipt_change:
             receipt_change(receipt)
         self.action("receiving", "receive", verification={"receiving_receipt": receipt})
         self.allocation("close", "complete_sprint", {"receiving_action": "receiving",
-                        "receiving_commit": "c" * 40, "mandatory_gates": ["review", "functional", "human"]})
-        self.action("completion", "close", verification=None if completion_verified else False)
+                        "receiving_commit": receiving_receipt["receiving_commit"] if receiving_receipt else "c" * 40,
+                        "mandatory_gates": ["review", "functional", "human"]})
+        self.action("completion", "close", finish=not prepared, verification=None if completion_verified else False)
         return {name: {"owner_verified": True, "status": "passed", "evidence": {"fixture": name}}
                 for name in ("review", "functional", "human")}
 
@@ -671,6 +677,204 @@ class OwnerControlsTests(unittest.TestCase):
         with ThreadPoolExecutor(max_workers=2) as pool:
             self.assertEqual(["accepted", "stale owner revision"], sorted(pool.map(record, range(2))))
         self.assertEqual(revision + 1, self.c.snapshot()["revision"])
+
+    def prepared_successor(self, base="c" * 40):
+        self.allocation("next", "prepare_successor", {"base": base}, sprint="PF81")
+        self.action("successor", "next", finish=False)
+
+    def assert_owner_effect(self, action_id, operation):
+        action = self.c.snapshot()["actions"][action_id]
+        self.assertEqual("accepted", action["status"])
+        self.assertEqual(action["verification"], action["owner_effect"])
+        self.assertFalse(set(action) & {"claim", "agent", "dispatch_receipt", "ack_receipt", "result"})
+        receipt = self.c.read_evidence(action["owner_effect"]["evidence_digest"])
+        self.assertEqual((operation, action_id, action["allocation_digest"]),
+                         (receipt["operation"], receipt["action"], receipt["allocation_digest"]))
+        return receipt
+
+    def test_prepared_owner_lifecycle_from_real_receiving_tests_to_first_claim(self):
+        # Real local Git merge/test receipt; native receiving-worker transport is a
+        # labelled fixture. Neither owner lifecycle action uses that transport.
+        from test_integration import IntegrationTests
+        fixture = IntegrationTests()
+        fixture.setUp()
+        self.addCleanup(fixture.tearDown)
+        receipt = fixture.runner.merge(fixture.assignment)
+        self.assertEqual("verified", receipt["status"])
+        base = receipt["receiving_commit"]
+        gates = self.closure(prepared=True, receiving_receipt=receipt)
+        self.prepared_successor(base)
+        authority = {"owner": "fixture integrator", "decision": "activate exact PF81 allocation"}
+        self.owner("activate_successor", action_id="successor", error="explicit owner activation authority")
+        self.owner("activate_successor", action_id="successor", activation_authority=authority,
+                   error="completed and archived")
+        self.owner("archive_sprint", sprint="PF80", error="verified completion")
+        with patch.object(Coordinator, "claim", side_effect=AssertionError("owner action cannot dispatch")):
+            ref = self.owner("complete_sprint", action_id="completion", gates=gates)
+            self.assertEqual(ref, self.c.snapshot()["actions"]["completion"]["owner_effect"])
+            proof = self.assert_owner_effect("completion", "owner_complete")
+            self.assertEqual(base, proof["effect"]["receiving_commit"])
+            self.assertEqual(gates, self.c.read_evidence(proof["effect"]["completion"]["evidence_digest"])["gates"])
+            self.owner("activate_successor", action_id="successor", activation_authority=authority,
+                       error="completed and archived")
+            self.owner("archive_sprint", sprint="PF80")
+            self.owner("activate_successor", action_id="successor", activation_authority=authority)
+        self.c = Coordinator(self.root)
+        self.assertEqual(authority, self.assert_owner_effect("successor", "owner_successor")["effect"]["activation_authority"])
+        self.owner("complete_sprint", action_id="completion", gates=gates, error="not reserved")
+        self.owner("archive_sprint", sprint="PF80", error="already archived")
+        self.owner("activate_successor", action_id="successor", activation_authority=authority, error="not draft")
+        self.allocation("next-work", "repair", {"base": base}, sprint="PF81")
+        self.action("first-successor-work", "next-work", finish=False)
+        claim = self.call("claim", action_id="first-successor-work")
+        self.assertEqual(base, claim["inputs"]["base"])
+        state = self.c.snapshot()
+        self.assertEqual("PF81", state["workstreams"]["delivery"]["sprint"])
+        self.assertTrue(Coordinator._dependencies(state, "PF81"))
+        self.assertEqual(3, sum(s["status"] in {"in_progress", "blocked"} for s in state["sprints"].values()))
+
+    def test_prepared_completion_receiving_and_gate_failures_are_atomic(self):
+        for index, mutate in enumerate([
+            lambda r: r.update(status="verification_failed"), lambda r: r.update(receiving_commit="d" * 40),
+            lambda r: r.update(tests=[]), lambda r: r["tests"][0].update(exit_code=1),
+            lambda r: r["tests"][0].update(timed_out=True), lambda r: r["tests"][0].update(argv=["wrong"]),
+            lambda r: r["assignment"].update(source="d" * 40),
+        ]):
+            with self.subTest(receiving=index):
+                self.root = Path(self.tmp.name) / ("prepared-negative-" + str(index))
+                self.c = Coordinator(self.root)
+                self.c.initialize(*seed())
+                self.c.set_enabled(True, {"fixture": True})
+                gates = self.closure(mutate, prepared=True)
+                self.owner("complete_sprint", action_id="completion", gates=gates, error="receiving")
+        self.root = Path(self.tmp.name) / "private"
+        self.c = Coordinator(self.root)
+        gates = self.closure(prepared=True)
+        for bad in ({}, {**gates, "extra": gates["review"]},
+                    {**gates, "human": {"owner_verified": False, "status": "passed", "evidence": {"claim": True}}},
+                    {**gates, "review": {"owner_verified": True, "status": "failed", "evidence": {"fixture": True}}},
+                    {**gates, "human": {"owner_verified": True, "status": "passed", "evidence": {}}},
+                    {**gates, "functional": {"owner_verified": True, "status": "not_applicable", "evidence": {"fixture": True}}}):
+            self.owner("complete_sprint", action_id="completion", gates=bad, error="gate evidence")
+        gates["functional"].update(status="not_applicable", reason="synthetic internal engineering only")
+        self.owner("complete_sprint", action_id="completion", gates=gates)
+
+    def test_prepared_lifecycle_rejects_wrong_kind_and_owned_or_terminal_actions(self):
+        from coordinator import KINDS
+        gates = self.closure(prepared=True)
+        self.prepared_successor()
+        for key, operation, payload in (("completion", "complete_sprint", {"gates": gates}),
+                ("successor", "activate_successor", {"activation_authority": {"fixture": True}})):
+            original = self.c.snapshot()["actions"][key]
+            for kind in sorted(KINDS - {original["kind"]}):
+                with self.subTest(action=key, wrong_kind=kind):
+                    with self.c.mutation("fixture_wrong_kind", {}) as (_, state):
+                        state["actions"][key]["kind"] = kind
+                    self.owner(operation, action_id=key, **payload, error="wrong owner lifecycle kind")
+            for status in ("dispatching", "dispatch_uncertain", "dispatched", "running", "returned", "failed", "cancelled"):
+                with self.subTest(action=key, status=status):
+                    with self.c.mutation("fixture_owned_status", {}) as (_, state):
+                        state["actions"][key] = {**original, "status": status}
+                    self.owner(operation, action_id=key, **payload, error="accepted owner-verified")
+            with self.c.mutation("fixture_restore", {}) as (_, state):
+                state["actions"][key] = original
+
+    def test_prepared_lifecycle_pause_revision_allocation_and_manager_guards(self):
+        gates = self.closure(prepared=True)
+        self.prepared_successor()
+        for key, operation, payload in (("completion", "complete_sprint", {"gates": gates}),
+                ("successor", "activate_successor", {"activation_authority": {"fixture": True}})):
+            for revision in (0, True):
+                self.owner(operation, action_id=key, **payload, expected_revision=revision, error="revision")
+            self.owner(operation, action_id=key, **payload, evidence={}, error="evidence")
+            self.call("set_enabled", enabled=False, evidence={"fixture": "pause"})
+            self.owner(operation, action_id=key, **payload, error="paused")
+            self.call("set_enabled", enabled=True, evidence={"fixture": "resume"})
+            self.owner("set_stream_mode", workstream="delivery", mode="paused")
+            self.owner(operation, action_id=key, **payload, error="paused")
+            self.owner("set_stream_mode", workstream="delivery", mode="enabled")
+            packet = self.call("begin_manager")
+            self.owner(operation, action_id=key, **payload, error="manager cycle already owned")
+            self.call("fail_manager", run_id=packet["manager_run"], reason="fixture stopped")
+            allocation = self.c.snapshot()["actions"][key]["inputs"]["allocation"]
+            with self.c.mutation("fixture_stale_allocation", {}) as (_, state):
+                state["allocations"][allocation]["scope"] = ["changed.py"]
+            self.owner(operation, action_id=key, **payload, error="stale allocation proof")
+
+    def test_prepared_lifecycle_respects_other_pending_and_cross_stream_resources(self):
+        gates = self.closure(prepared=True)
+        self.prepared_successor()
+        # This active fixture belongs to another stream, so _no_pending alone
+        # cannot protect the shared owner resource.
+        with self.c.mutation("fixture_shared_resource", {}) as (_, state):
+            for key in ("completion", "successor"):
+                action = state["actions"][key]
+                allocation = state["allocations"][action["inputs"]["allocation"]]
+                allocation["resources"] = action["resources"] = ["integration-writer"]
+                action["allocation_digest"] = digest(allocation)
+            state["actions"]["other-stream"] = {**state["actions"]["completion"], "id": "other-stream",
+                "sprint": "PF27", "workstream": "security", "status": "dispatch_uncertain"}
+        self.owner("complete_sprint", action_id="completion", gates=gates, error="resource owned")
+        self.owner("activate_successor", action_id="successor", activation_authority={"fixture": True}, error="resource owned")
+        with self.c.mutation("fixture_release", {}) as (_, state):
+            state["actions"]["other-stream"]["status"] = "failed"
+        self.action("pending", "bootstrap", finish=False)
+        self.owner("complete_sprint", action_id="completion", gates=gates, error="pending")
+
+    def test_prepared_successor_wrong_base_pending_and_authority_denials(self):
+        gates = self.closure(prepared=True)
+        self.owner("complete_sprint", action_id="completion", gates=gates)
+        self.owner("archive_sprint", sprint="PF80")
+        self.prepared_successor(base="d" * 40)
+        for authority in (None, {}, True, "approval"):
+            self.owner("activate_successor", action_id="successor", activation_authority=authority,
+                       error="explicit owner activation authority")
+        self.owner("activate_successor", action_id="successor", activation_authority={"fixture": True},
+                   error="verified receiving commit")
+        allocation = self.c.snapshot()["allocations"]["next"]
+        self.owner("put_allocation", allocation_id="next", replace=True, allocation={**allocation, "inputs": {"base": "c" * 40}})
+        self.owner("activate_successor", action_id="successor", activation_authority={"fixture": True}, error="accepted owner-verified")
+        self.action("correct-successor", "next", finish=False)
+        self.allocation("pending-next", "wait", {}, sprint="PF81")
+        self.action("pending-next", "pending-next", finish=False)
+        self.owner("activate_successor", action_id="correct-successor", activation_authority={"fixture": True}, error="pending")
+        self.owner("record_wait", action_id="pending-next")
+        self.owner("activate_successor", action_id="correct-successor", activation_authority={"fixture": True})
+
+    def test_owner_lifecycle_process_crash_rolls_back_or_preserves_whole_effect(self):
+        script = '''
+import json, os, sys
+from coordinator import Coordinator
+core = Coordinator(sys.argv[1])
+if sys.argv[4] == 'before_commit':
+    original = core._event
+    def interrupt(*args, **kwargs):
+        original(*args, **kwargs)
+        os._exit(73)
+    core._event = interrupt
+getattr(core, sys.argv[2])(**json.loads(sys.argv[3]))
+os._exit(74)
+'''
+        gates = self.closure(prepared=True)
+        for operation, key, extra in (("complete_sprint", "completion", {"gates": gates}),
+                ("activate_successor", "successor", {"activation_authority": {"fixture": True}})):
+            if operation == "activate_successor":
+                self.owner("archive_sprint", sprint="PF80")
+                self.prepared_successor()
+            revision = self.c.snapshot()["revision"]
+            payload = {"action_id": key, "expected_revision": revision, "evidence": {"fixture": "crash test"}, **extra}
+            before = self.database_rows()
+            for boundary, code in (("before_commit", 73), ("after_commit", 74)):
+                result = subprocess.run([sys.executable, "-B", "-c", script, str(self.root), operation,
+                                         json.dumps(payload), boundary], capture_output=True, timeout=10)
+                self.assertEqual(code, result.returncode, result.stderr)
+                self.c = Coordinator(self.root)
+                if boundary == "before_commit":
+                    self.assertEqual(before, self.database_rows())
+                else:
+                    self.assertEqual(revision + 1, self.c.snapshot()["revision"])
+                    self.assert_owner_effect(key, "owner_complete" if key == "completion" else "owner_successor")
+                    self.call(operation, **payload, error="stale owner revision")
 
 
 if __name__ == "__main__":

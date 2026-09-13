@@ -4,6 +4,10 @@ Each command takes a bounded JSON object on stdin and emits a result on stdout.
 Use claim -> actual native tool -> dispatched -> actual worker ACK -> acknowledge.
 A crash between those steps must go through native inspection and reconciliation.
 Prepared waits use record_wait instead: owner evidence only, no fake native ACK.
+Prepared lifecycle proposals use complete_sprint (with gates) or activate_successor
+(with separate activation_authority evidence). They atomically return a durable
+owner_effect reference and accept the action only when the SQLite transition occurs.
+archive_sprint records owner-confirmed archival separately; it does not move files.
 This interface must never be exposed as a Slack/web arbitrary-command endpoint.
 """
 
