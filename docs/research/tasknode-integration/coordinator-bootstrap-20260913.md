@@ -32,6 +32,29 @@ initiatives. Shared edits and receiving tests remain serialized.
 
 ## Sequential core owner-controls allocation
 
+### Passive wait recording, after the actual driver rehearsal
+
+Parent implements the next small internal unit in `worktrees/coordinator-wait-20260913`,
+branch `bootstrap/coordinator-wait-20260913`, base
+`9bafae46ba615768d9fff3e72c6beddf54771f95`. Exact four paths:
+`scripts/initiative_control/coordinator.py`, `coordinator_cli.py`,
+`test_coordinator.py`, and `qa/initiative-control/management-bootstrap/wait-recording.md`.
+Target200 changed lines/100 non-test, hard300/150. One Fable High material review
+plus necessary scoped correction, preserving previous units' ledgers.
+
+Add an owner-only revision-bound operation to record an already accepted manager's
+prepared `wait` proposal as durably observed. Retain its rationale, frozen allocation
+and evidence; do not invent a worker, claim, ACK or completed product task. It may
+record an intentional wait while dispatch is paused, without changing pause state,
+sprint lifecycle, human decisions or dependencies. Reject every other action kind,
+already claimed/terminal waits, stale revisions and changed allocations. No new
+meaningful event for this passive bookkeeping: otherwise wait completion would
+continually reawaken Fable. Keep its audit/evidence and existing terminal-history
+retention. Tests cover CLI/restart, duplicate/stale denial, all other kinds, active
+ownership and more than48 successive waits without a growing pending queue. Parent
+owns receiving integration and actual existing-wait recording after review; no
+recurrence, dispatch, broader passive side effects or completion gate is authorized.
+
 After accepted core84f16cceec87292296ff94a9d431a86d23a9fe52, a fresh Astra High
 worker owns only `scripts/initiative_control/coordinator.py`, `coordinator_cli.py`,
 `test_coordinator.py` and `qa/initiative-control/management-bootstrap/owner-controls.md`

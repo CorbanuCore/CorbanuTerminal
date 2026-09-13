@@ -17,6 +17,9 @@ product_spec:
   heading: "Internal delivery control — TO BUILD"
   requirement_excerpt: "Use sequential sprints per initiative"
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/coordinator-wait-20260913"
+    branch: "bootstrap/coordinator-wait-20260913"
+    base_commit: "9bafae46ba615768d9fff3e72c6beddf54771f95"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/manager-cycle-20260913"
     branch: "bootstrap/manager-cycle-20260913"
     base_commit: "bca6485a2e60803393bbca0ee56d98953022ed12"
