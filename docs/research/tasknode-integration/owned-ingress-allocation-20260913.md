@@ -1,5 +1,18 @@
 # PF-80-S01 — bounded synthetic owned-ingress implementation
 
+September13 02:27 manager disposition: source authoring returned927total/424
+non-test across nine files,17 authored tests, none executed; estimated formatted
+size1600–1800. Preserve that stop receipt. Authorize target1800total/1000non-test,
+STOP1950/1100 for the SAME ten paths and behavior, not an inherited exception.
+Readable complete connection-scope/socket/cancellation proof justifies the
+extension; do not compress tests or grow runtime modules beyond500. Prior review
+usage unchanged: one material review plus necessary correction remains allocated.
+Scoped pinned rustfmt on the eight allocated Rust files may run now without a
+Cargo target; this supersedes the historical blanket format hold below. Manager
+still owns exact root aliases/derived locks and serialized dependency/build
+handoff after accounting releases the Mac target and PF13 confirms shared-file
+reservation. No dependency/cache repair, source acceptance or new product gate.
+
 September13 manager allocation under **Internal delivery control — TO BUILD**,
 “Use sequential sprints per initiative”, and the mandatory independent isolated
 execution policy. This is internal qualification infrastructure in the existing

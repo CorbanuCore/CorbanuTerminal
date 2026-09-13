@@ -1,5 +1,23 @@
 # Workstream continuation — September 11
 
+## Current handoff — September13 02:27 manager cycle
+
+Accounting compact import is accepted at81d0f90e7 after clean review02 and parent
+595shared/100Core/20focused/6external/format/Clippy/check. Mendel is now executing
+the [two-path original-contract goldens](../research/agent-cost-accounting/original-contract-native-golden-allocation.md)
+at34f0786e6: three new/20import/598shared reported pass, Core still compiling at
+observation. Exclusive Mac target remains with him; no returned-candidate claim.
+James returned927/424 uncompiled ingress source. Manager grants same-ten-path
+formatting and1800/1000 target1950/1100 hard; dependency/build lease remains
+serialized, not a human blocker. PF13 owner asked for current exact preflight
+handoff and root-lock reservation; pending19f662493/f68dd66fe/10dcbb649 are NOT
+received or newly reviewed by this observation. No main/release change.
+
+Slack credential handoff is resolved; actual identity/Socket hello preflight
+passed. Supported durable operator/phone/nativeACK and isolated qualification
+remain manager work; do not reask access or credentials. Human test cards and
+redacted progress must reflect these facts before the sole Luna publication.
+
 ## Current handoff — September13 01:19 manager cycle
 
 PF13 acknowledged actual clean preflight launchb65bf1e932f8fb6d9b24d945fe67b18a57bb0ac2;

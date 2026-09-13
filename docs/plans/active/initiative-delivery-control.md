@@ -39,8 +39,15 @@ implementation_worktrees:
 
 # 3. Task Node integration and delivery control
 
-September13: Slack installation/access are complete; only the already-asked
-private credential-file handoff and actual live qualification remain. Earlier
+September13 02:27UTC: Slack credential/identity/Socket connection preflight is
+complete; no human credential hold remains. Durable alert/reply/phone/native ACK
+and independent isolated qualification remain manager-owned. James returned
+927/424 uncompiled owned-ingress source; scoped formatting is now authorized
+under the same ten paths, target1800/1000 STOP1950/1100. Dependency/build handoff
+is serialized behind accounting's active Mac gate; no user decision or new route.
+
+Historical September13: Slack installation/access are complete; then-pending
+private credential-file handoff and actual live qualification remained. Earlier
 permission holds below are superseded. Corrected646-line isolation engineering
 and12tests accepted; not a confined reasoning executor. James now owns the
 [ten-file bounded synthetic ingress implementation](../../research/tasknode-integration/owned-ingress-allocation-20260913.md)
