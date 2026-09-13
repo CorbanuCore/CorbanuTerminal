@@ -982,6 +982,13 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
+Manager accepted combined session c1d866fd4/Rustec50d0378:29 command exits+
+suite0,139s actual RTX/TMUX, strict/parity/source/modules/input invariance.
+Next [private system-preflight allocation](../../../qa/security-levels/sprints/PF-27-S04/system-preflight-allocation-20260913.md)
+uses same sole owner/worktree/plan base; sourcebaseae2a4c940, seven paths550/700,
+reviews39/40 retain1–38. All-or-nothing input preparation only, no spawn/bind,
+native activation or identity-guard relaxation. Later policy1.7 gates unchanged.
+
 Private root-session pump qualified at source74263bbbc5bf2163f571947c6828fbf108866c3f/
 Rustb7275b0c0433f081d6423463993abc658141a6a7. [Literal evidence](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-session-20260912/README.md):
 29 command exits+suite0 on exact non-root RTX/TMUX (105s), seven actual session

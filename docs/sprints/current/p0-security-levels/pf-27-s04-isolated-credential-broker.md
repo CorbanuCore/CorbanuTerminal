@@ -36,7 +36,7 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - Sources and archive disposition: [PF-27 reconciliation](../../../plans/security-source-reconciliation.md#pf-27).
 
 ## Code boundaries
-- Current narrower mandate: [private root-session pump](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-session-allocation-20260912.md), seven exact paths/700target800hard from2c63e4cd5 after accepted combinedeb5855959 proof; fixed bounded acceptance/admission/dispatch only. Reviews37/38 allocated, prior1–36 retained; no native/public bootstrap or broader edits.
+- Current narrower mandate: [private system preflight](../../../../qa/security-levels/sprints/PF-27-S04/system-preflight-allocation-20260913.md), seven exact paths/550target700hard fromae2a4c940 after accepted combinedc1d866fd4 proof. Reviews39/40 allocated, history1–38 retained; no spawn/bind/native/public bootstrap or broader edits.
 - OpenClaw adoption reference: [OC-1](../../../plans/openclaw-source-review-2026-08-28.md#oc-1), [OC-2](../../../plans/openclaw-source-review-2026-08-28.md#oc-2) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; see the review for named functions, callers, tests and limits. Reference tests are not candidate evidence.
 
 - Existing/foundation: codex-rs/vault/src/lib.rs; codex-rs/network-proxy/src/credential_broker.rs; PF-13 Core capability store.
@@ -75,7 +75,7 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - [x] Sealed image `ee1ac023c`: default3/synthetic39/affected356 (2 existing skips), scoped lint/parity/build/TMUX pass; Astra18/Fable19 clean. Kernel write/truncate/seal denials and failure cleanup proven; no invocation or loader trust. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/sealed-20260912/README.md).
 - [x] Static probe build/linkage feasibility passes on unchanged Rust0aa65bd: staticPIE f6ca8e3368dc/no interpreter or external libs and GNU control, actual-key TMUX. Fable20 patch correct/P3 receipt gap repaired; original exit1 and failed attempts retained. No artifact invocation/native qualification. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/static-probe-20260912/CURRENT.md).
 ## Remaining
-- [ ] Obtain manager combined receiving proof for qualified private root session and the next literal source allocation. Dispatch eb5855959 already accepted; protected-user/PF26 policy1.7 gates remain.
+- [ ] Implement allocated private system preflight and obtain final reviewed exact receiving proof. Session c1d866fd4 accepted; protected-user/PF26 policy1.7 gates remain.
 - [ ] Include fresh connections after same-run re-registration with cached TLS handlers and admitted hosts, not only reuse of an old channel. Revocation fences queued dispatch, streams and uploads; new generations cannot inherit old credentials.
 - [ ] Keep sentinel keys/raw registries outside agent-accessible processes; test open-channel revocation, upload cancellation, same-run-ID replacement and broker restart with old handles. The proxy's retained RegisteredRun concern requires a native regression, not just a copied new-connection test.
 - [ ] Move raw credential resolution/substitution and its key material into a separately constrained trusted process; Core, model clients, and agent-accessible workers receive only opaque references.
