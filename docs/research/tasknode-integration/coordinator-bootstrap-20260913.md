@@ -533,7 +533,68 @@ timer policy, flag, product dispatch or worker ownership change. Target100 chang
 lines; one scoped Fable High review plus necessary correction, followed by actual
 one-shot deployment and disabled/inactive verification. Prior review usage stays.
 
+## Run-bound browser isolation proof — September13
+
+Parent's fixed244-line screenshot/action engineering at private
+browser-model-live.yDoShR passed two real fresh Astra High turns; Fable review01
+had one nonblocking provenance clarification, retained in its QA. No portable
+runner or independent acceptance is inferred. Next parent-owned private
+browser-model-boundary.OKK8iU owns run.py, denials.py and README.md, target450
+authored lines/hard550 plus generated evidence. Reuse the accepted controller
+and existing Docker parent/child syscall probes, adapting only the already-used
+512MiB/128PID/oneCPU browser resource limits. Add existing unreadable synthetic
+source/history/auth directories and a synthetic socket behind an unreadable
+directory so EACCES is distinguished from missing host paths. This proves a
+protected IPC path, not separation from another live agent's IPC. Preserve the
+earlier Mac-shared socket EOPNOTSUPP as an unsuccessful test, not a permission
+denial. Keep raw canaries out of model observations.
+The extra readonly mounts are only the fixed probe and synthetic denial fixtures;
+never actual source, prior findings, user credentials or host automation sockets.
+Execute those probes in the actual browser container and its child before the
+model action loop; require live renderer restrictions and clean process/container
+removal. Failed probe means no model call. No new network authority, root use,
+packages, recurrence or PF81 activation. One material Fable review plus necessary
+correction; preserve previous review usage and all attempts. Parent separately
+owns the later complete frozen-case runner and independent evidence handoff.
+
 ## Launcher interface for coordinator integration
+
+### Native owner bridge — next bootstrap unit, September13
+
+Fresh Astra High worker owns only `scripts/initiative_control/native_owner.py`,
+`scripts/initiative_control/test_native_owner.py`, and
+`qa/initiative-control/management-bootstrap/native-owner.md` in
+`worktrees/native-owner-20260913`, branch `bootstrap/native-owner-20260913`,
+base a3368e443e09a9acfd1dd8c74432d9924ed8cd69. Parent retains all existing
+modules, state, Slack, integrations, policy and scheduler. Target900 authored
+lines/500 non-test, hard1200/700. One Fable High material review plus necessary
+correction; retain all prior review usage. No live effects by the worker.
+
+Implement the reusable trusted-owner bridge between accepted coordinator actions
+and actual native subagent tools. Use existing Coordinator APIs, not a second
+manager or replacement state machine. Expose bounded owner-invoked operations
+and a trusted adapter interface for spawn/send/status/close; adapters are supplied
+by the owner, never imported or selected from events/model output. Production
+native tools remain host-owned; injected test adapters must be labelled fixtures.
+Persist intent before each non-idempotent external operation. Exact real agent
+identity, allocation-bound startup ACK, work-submission receipt, return and close
+must be tracked. Obtain an ACK before sending the actual assignment. Interrupted
+spawn/send/close requires actual reconciliation, never automatic repeat. Polling
+may resume after restart; an observation timeout is not worker termination.
+Keep pause/dependency/resource/stale-allocation checks at existing owner/core
+boundaries, including immediately before work submission. Returned work is not
+accepted, merged, completed or successor authority. Surface those next owner
+actions explicitly; do not silently leave returns in a running state.
+
+Include executable bounded CLI/stdio handoff to actual host tools, rather than
+only an abstract adapter or a prose recipe. No arbitrary commands, credentials,
+dynamic imports, automatic manager retries or autonomous scheduler. Focused tests
+must cover real durable SQLite restart, duplicate requests, both effect/receipt
+crash windows, wrong identity/ACK, pause between ACK and work, running/timeouts,
+terminal failure and return awaiting verification. Parent will exercise this
+with real native agents and existing Fable cycle, then wire recurring operation
+only after the whole bootstrap gate. Internal-only N/A for browser/TUI here;
+actual native lifecycle proof is mandatory before operational acceptance.
 
 Standalone CLI reads a bounded JSON briefing from `--briefing`, fresh private
 `--runs-dir`, exact `--binary`, owner-only `--auth-file`, bounded `--timeout`.

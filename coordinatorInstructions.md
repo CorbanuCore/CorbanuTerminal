@@ -656,34 +656,20 @@ push preserves the handoff; it does not turn outstanding gates into passes.
 ## 13. Remaining launch work
 
 Fixed browser guest received at1c0c78998 with172 receiving test executions;
-[current checkpoint](qa/initiative-control/management-bootstrap/browser-guest-receiving-20260913.md)
-records actual controls, review disposition and verified pause-preserving deployment.
-Next is parent-owned interactive mediation and run-bound isolation/independent cases.
+[receiving checkpoint](qa/initiative-control/management-bootstrap/browser-guest-receiving-20260913.md)
+records controls, review disposition and deployed pause-preserving publication.
+The browser worker is closed. Parent's [actual mediated check](qa/initiative-control/management-bootstrap/mediated-browser-20260913.md)
+completed screenshot → fresh Astra High action → browser → fresh observation
+using a synthetic page. Its controller review is dispositioned; complete run-bound
+isolation/independent cases remain gates. Engineering success is not acceptance.
 
-Source activation now preserves the operator's timer activation state; it must
-not resume a paused schedule. See the [publication correction and verification](qa/initiative-control/management-bootstrap/publication-pause-20260913.md).
-
-Latest image/browser prerequisite: image support received at
-`1061417275ad04d803e77dfd451a9185727bb4c8`,108 receiving test executions, clean
-corrective Fable review and actual native screenshot/read-denial observations.
-`Transport(owner).execute(text, image_png=png_bytes)` accepts one bounded PNG;
-`image_observation=supplied_not_attested` never proves visual acceptance. The
-cached browser's real keyboard/mouse/render preflight also passed; it is not yet
-the independent executor. Fresh Astra High owns the fixed guest controls; parent
-owns mediation, actual boundary probes and frozen-case execution. Read the
-[combined receiving record](qa/initiative-control/management-bootstrap/image-browser-receiving-20260913.md).
-Normal dispatch and recurring operation remain paused.
-
-September13 receiving update: the fixed trusted model transport is integrated at
-`da4ebbaa6a779a56c308bdaaa11fa87ea44ec1c1`, default OFF. Its owner-only Python API
-is `isolated_model_transport.OwnerConfig(binary, auth, run_root, enabled=True)`
-and `Transport(owner).execute(text)`; no guest-supplied paths or credentials.
-It passed19 normal/19 optimized receiving tests,43 coordinator/13 integration
-tests, clean Fable review and an exact-candidate native model connection.
-The separately corrected cached-Docker diagnostic passed real parent/child
-probes and Fable review. Neither is a complete isolated action executor.
-Read [receiving evidence and remaining gates](qa/initiative-control/management-bootstrap/transport-receiving-20260913.md)
-before allocating the mediated PTY/browser executor or enabling anything.
+The accepted owner API is `isolated_model_transport.OwnerConfig(binary, auth,
+run_root, enabled=True)` and `Transport(owner).execute(text, image_png=png_bytes)`.
+It is default OFF; no guest paths/credentials. `image_observation=supplied_not_attested`
+never by itself proves visual acceptance. Original transport/image/browser evidence
+is retained through the receiving links, not replaced by this current summary.
+Source publication must preserve the operator's timer activation state. Normal
+product dispatch and recurring operation remain paused.
 
 1. Wire the accepted owner-invoked manager cycle and actual native-tool bridge
    into the supervised recurring owner path. Two actual driver cycles and a real
