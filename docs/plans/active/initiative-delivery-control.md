@@ -83,6 +83,11 @@ launcher and decision path are qualified; this is an explicit startup exception,
 not a claim the new management runtime already exists. The stale progress and
 allocations below are historical; no other owner should resume from them.
 
+September13 scope amendment: Travis removed the private off-Mac dashboard-access
+requirement. Tailscale administrator setup is no longer active work or a bootstrap
+launch gate; existing SSH publication and private loopback serving remain. Other
+Slack, independent functional and unattended-recovery gates are unchanged.
+
 September13 02:27UTC: Slack credential/identity/Socket connection preflight is
 complete; no human credential hold remains. Durable alert/reply/phone/native ACK
 and independent isolated qualification remain manager-owned. James returned

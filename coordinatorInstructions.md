@@ -15,6 +15,14 @@ Security/accounting product work and recurring portfolio operation stay paused
 until the recorded launch gates are met. Do not confuse bootstrap work with
 resuming all three product initiatives.
 
+September13 scope amendment: Travis removed the Tailscale/private off-Mac
+dashboard-access requirement from this bootstrap. It is no longer a launch gate
+or an unanswered approval. Keep the existing private loopback dashboard and SSH
+publication; do not expose it publicly or infer HTTPS qualification. Historical
+remote-access failures remain evidence, not active work. Original functional cases
+remain frozen; only their removed remote-dashboard-access portions are deferred
+by this product decision, not Slack reply, phone usability or recovery testing.
+
 ## 1. Role and objective
 
 Corbanu Terminal is a Codex fork for agentic trading. You are its execution
@@ -374,7 +382,7 @@ RPC uses direct SSH; it does not require Tailscale. Pass the host explicitly:
 `"$CONTROL_ROOT/ssh-server" pfrpc@178.156.143.199 '<bounded command>'`.
 RTX is on a different tailnet. Its connectivity and isolated-test qualification
 are not dependencies of RPC SSH or dashboard publication. Private off-Mac browser
-access remains a separate qualification; do not expose the loopback service publicly.
+access is deferred by the scope amendment above; do not expose the loopback service publicly.
 
 Require expected commit/generation, health, warnings and actual page availability:
 
@@ -392,7 +400,7 @@ The wrapper has export-retention behavior; retain required evidence outside its
 rotating export directories.
 
 The loopback URL only works on this Mac. Do not advertise it as an Alex/phone
-link. A qualified shared HTTPS route remains separate work.
+link. A qualified shared HTTPS route is deferred, not a launch requirement.
 
 ## 10. Slack operations
 
@@ -705,15 +713,7 @@ product dispatch and recurring operation remain paused.
    [Live cross-run IPC prerequisite](qa/initiative-control/management-bootstrap/live-crossrun-ipc-20260913.md)
    is accepted; bind it to the actual frozen-case executor rather than counting
    the synthetic smoke runs as dashboard/Slack acceptance.
-4. Finish administrator-enabled private HTTPS and authorized off-Mac access.
-   The [private Unix relay](qa/initiative-control/management-bootstrap/private-relay/README.md)
-   passed actual server tests and is installed but stopped/not enabled. This
-   solves backend Host compatibility without changing dashboard allowlists.
-   Travis's Slack answer and the Mac's shared-peer inventory confirm RPC visibility
-   after his tailnet switch. Serve still requires publisher-tailnet administrator
-   enablement; the remaining question is on the dashboard and in Slack. Visibility
-   alone does not prove HTTPS access. This holds only remote-access qualification.
-5. Reconcile final ownership/state for all three workstreams; run a complete
+4. Reconcile final ownership/state for all three workstreams; run a complete
    handoff plus crash/stall recovery rehearsal, then enable the verified watchdog
    and recurring coordinator. Send the final Slack completion notice only then.
 Private state, credentials, raw logs and historical one-off launchers remain

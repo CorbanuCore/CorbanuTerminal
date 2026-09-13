@@ -6,6 +6,13 @@ This allocation preserves the entire objective, not a replacement MVP. Parent
 coordinates startup until the Fable manager is qualified. Other product work and
 old automations remain paused; no main/release or live Task Node bulk operation.
 
+September13 scope amendment: Travis removed Tailscale/private off-Mac dashboard
+access from the goal. Existing loopback serving and direct-SSH publication remain;
+no public exposure or successful HTTPS claim is authorized. Historical access
+attempts below are retained, but no longer block launch. Preserve frozen case
+texts and defer only their remote-dashboard-access portions under this decision;
+all remaining independent functional, Slack, recovery and recurrence gates remain.
+
 ## Ownership and code boundaries
 
 Base eb01bf006eacbeef5be07174a3f37ad124abc74c. Parent canonical worktree/branch:
@@ -836,9 +843,9 @@ Never treat pane quietness or a JSON snippet in tool output as final acceptance.
 3. Integration: exclusive writer, actual temporary Git merge/receiving test and
    receipt; concurrent writer denial, conflict/failure recovery, branch/candidate
    checks and dependency-complete successor promotion. No unchecked worker claims.
-4. Slack/private HTTPS: actual authenticated question, actual human reply,
-   canonical decision, native-agent ACK, restart/recovery and stable links usable
-   without this Mac; approved audience/access-denial tests. Preserve old journals.
+4. Slack: actual authenticated question, actual human reply, canonical decision,
+   native-agent ACK and restart/recovery; approved audience and reply-authority
+   tests. Preserve old journals. Off-Mac dashboard access is explicitly deferred.
 5. Initialization/rehearsal: real three-lane baseline and approvals, aligned policy,
    complete handoff and failure/restart rehearsal, then qualified recurring enablement
    and final Slack completion ping. Until then no completion or running claim.

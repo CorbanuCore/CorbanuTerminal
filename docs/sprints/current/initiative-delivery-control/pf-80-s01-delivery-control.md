@@ -8,7 +8,7 @@ execution_order: 1
 owner: "Codex management-bootstrap coordinator"
 parallel_lane: "management-bootstrap"
 write_scope: "scripts/initiative_control/, docs/research/tasknode-integration/coordinator-bootstrap-20260913.md, qa/initiative-control/management-bootstrap/, coordinatorInstructions.md"
-integration_gate: "Five-part user-authorized coordinator bootstrap allocation; distinct launcher worker and parent coordination/Slack scopes. Preserve prior reviews and failures. Exact combined tests, fresh Fable TMUX runs, actual Slack human reply/native ACK, private HTTPS and replay/crash/integration rehearsal required before recurring enablement. No security/accounting product resumption or TaskNode bulk delivery."
+integration_gate: "User-authorized coordinator bootstrap allocation; distinct launcher worker and parent coordination/Slack scopes. Preserve prior reviews and failures. Exact combined tests, fresh Fable TMUX runs, actual Slack human reply/native ACK and replay/crash/integration rehearsal required before recurring enablement. September13 user removed private off-Mac dashboard access from launch scope. No security/accounting product resumption or TaskNode bulk delivery."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
 branch: "integrate/management-workstreams-20260911"
 base_commit: "eb01bf006eacbeef5be07174a3f37ad124abc74c"

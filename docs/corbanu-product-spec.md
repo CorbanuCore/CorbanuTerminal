@@ -471,10 +471,14 @@ September 13 management-bootstrap authorization: implement the five-part
 coordinator goal recorded in [coordinator instructions](../coordinatorInstructions.md):
 fresh Fable 5.1 High management through Corbanu/TMUX; durable event dispatch,
 acknowledgments and watchdog; serialized verified integration; actual Slack
-reply/decision/agent acknowledgment with private remote dashboard access; initialize
+reply/decision/agent acknowledgment; initialize
 and rehearse all three workstreams before enabling recurring operation. This
 authorizes the bootstrap and bounded live qualification, not premature product
 sprint resumption, new product scope, main/release or financial actions.
+
+September13 scope amendment: Travis removed Tailscale/private off-Mac dashboard
+access from the bootstrap goal. Keep private loopback viewing and direct-SSH
+publication; remote browser access is deferred, not qualified or a launch gate.
 
 Travis authorized up to three independent product initiatives on September 10,
 then selected PF-13, accounting and Task Node integration on September 11.
