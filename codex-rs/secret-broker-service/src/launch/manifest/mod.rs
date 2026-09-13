@@ -13,6 +13,9 @@ mod root_dispatch;
 #[cfg(target_env = "gnu")]
 #[allow(dead_code)]
 mod spawn;
+#[cfg(target_env = "gnu")]
+#[allow(dead_code)]
+mod system_preflight;
 pub use sealed::SyntheticSealedImage;
 
 use std::fs::File;
