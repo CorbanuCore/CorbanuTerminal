@@ -655,6 +655,17 @@ push preserves the handoff; it does not turn outstanding gates into passes.
 
 ## 13. Remaining launch work
 
+September13 receiving update: the fixed trusted model transport is integrated at
+`da4ebbaa6a779a56c308bdaaa11fa87ea44ec1c1`, default OFF. Its owner-only Python API
+is `isolated_model_transport.OwnerConfig(binary, auth, run_root, enabled=True)`
+and `Transport(owner).execute(text)`; no guest-supplied paths or credentials.
+It passed19 normal/19 optimized receiving tests,43 coordinator/13 integration
+tests, clean Fable review and an exact-candidate native model connection.
+The separately corrected cached-Docker diagnostic passed real parent/child
+probes and Fable review. Neither is a complete isolated action executor.
+Read [receiving evidence and remaining gates](qa/initiative-control/management-bootstrap/transport-receiving-20260913.md)
+before allocating the mediated PTY/browser executor or enabling anything.
+
 1. Wire the accepted owner-invoked manager cycle and actual native-tool bridge
    into the supervised recurring owner path. Two actual driver cycles and a real
    native crash-window/watchdog/duplicate-denial/ACK recovery rehearsal passed;
