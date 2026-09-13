@@ -76,6 +76,23 @@ cannot_complete response becomes an unsupported-action non-pass. Parent retains
 that safe failure as a wording follow-up; no code change or further opinion review.
 Controller review is dispositioned, not clean; the actual run remains failed.
 
+### Fresh replay after the transport failure
+
+September13 at20:34UTC, unchanged reviewed controller and pinned guest/transport
+ran as new `attempt-544ijlaq`. This replay passed in7.271s: actual parent/forked-
+child denial probes passed, two fresh Astra High sessions completed successfully,
+click157,214 executed and the next screenshot visibly showed Marked complete.
+Sessions `01a09c7a-98cd-72a1-ab67-decadc08743a` and
+`01a09c7a-a44d-7d43-93ea-41c2bdf0dbfd` have exit0/validated final receipts and
+owned process groups gone. Browser exited0/noOOM; exact owned container removed,
+and parent separately observed an empty label-filtered Docker inventory afterward.
+Receipt SHA256 `fe15b9e8970753b4e341781b65f94ba6611e09eadcf97b429775b51a3874f776`.
+All earlier attempts and findings remain unchanged. This is a successful run-bound
+synthetic engineering replay, not independent DEC/SLK acceptance or proof against
+another live agent's IPC. Protected dummy-socket-path and supplied_not_attested
+image limitations remain. Parent inspected the actual final frame; no new
+unchanged-code opinion review was requested.
+
 ## Private HTTPS: fresh authoritative failure
 
 On September13 at18:46UTC the existing RPC SSH wrapper succeeded. Serve1.98.10

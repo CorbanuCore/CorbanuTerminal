@@ -459,8 +459,10 @@ a command. Normal decision alerts must use the durable revision-bound workflow.
 
 Before relying on it, qualify actual alert → human reply → durable decision →
 correct dispatch → native-agent ACK, including restart/recovery and human-usable
-links. Current handoff evidence proves authentication, supervised connection and
-a one-off pause notice, not the complete two-way workflow.
+links. The [actual ACK-only rehearsal](qa/initiative-control/management-bootstrap/slack-ack-rehearsal-20260913.md)
+now proves normal durable summary/detail delivery, empty-interval connection
+recovery and real-journal duplicate suppression. Its human reply and native ACK
+remain pending; do not report the complete two-way workflow as qualified.
 
 A separately authorized administrative notice may use the approved bot's
 `chat.postMessage`. Persist an attempt ID before sending, retain returned
