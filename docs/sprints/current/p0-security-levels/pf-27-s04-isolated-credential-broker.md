@@ -37,7 +37,7 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - Sources and archive disposition: [PF-27 reconciliation](../../../plans/security-source-reconciliation.md#pf-27).
 
 ## Code boundaries
-- Current narrower mandate: [private root dispatch](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-dispatch-allocation-20260912.md), fifteen exact paths/740target800hard from12e0bc2d8; synthetic fresh-root/client bridge explicitly allocated, existing production factories unchanged. Broader scope does not authorize unrelated edits.
+- Current narrower mandate: [private root-session pump](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-session-allocation-20260912.md), seven exact paths/700target800hard from2c63e4cd5 after accepted combinedeb5855959 proof; fixed bounded acceptance/admission/dispatch only. Reviews37/38 allocated, prior1–36 retained; no native/public bootstrap or broader edits.
 - OpenClaw adoption reference: [OC-1](../../../plans/openclaw-source-review-2026-08-28.md#oc-1), [OC-2](../../../plans/openclaw-source-review-2026-08-28.md#oc-2) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; see the review for named functions, callers, tests and limits. Reference tests are not candidate evidence.
 
 - Existing/foundation: codex-rs/vault/src/lib.rs; codex-rs/network-proxy/src/credential_broker.rs; PF-13 Core capability store.
