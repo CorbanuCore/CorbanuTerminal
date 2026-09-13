@@ -82,3 +82,35 @@ was delivered to the approved private channelC0C0X2ELFKR, timestamp
 hyperlink, background, stopped/continuing work and an answerable administrator
 setup request. Remote dashboard publication of the record is pending. This is
 not evidence for the full automated question/reply/decision/native-ACK chain.
+
+## Receiving checkpoint and follow-up
+
+The real single-writer integration job received launcher `bf1db6008` into `60d0f1ade`.
+Its complete 334-test run failed 9 launcher fixture cases before application launch:
+the receiving checkout path exceeded the TMUX socket limit. The failed receiving
+receipt/marker remains retained; the merge is not yet verified. Parent corrects
+only the fixture temp root to resolved short system temp and moves the pure
+Checking regression out of the TMUX-only class, also resolving review03's P3.
+No production launcher code changed; final live runs remain candidate-applicable.
+One scoped test-only review04 is authorized under integrator discretion, retaining
+all earlier bootstrap reviews and the failed receiving receipt.
+
+Luna publication succeeded at `84f16ccee`, generation `build-7ldrmop1`, feed24 and
+12 reference documents. Facilities HTTP200 and private Serve/web status were checked;
+the publish timer is disabled/inactive after the one-off update. Full wrapper
+and second source verification passed; publication does not resume product work.
+
+Actual human Slack reply `1789281109.743799` in thread `1789278370.283259` reports the
+tailnet switch. Authenticated bot API read confirms author `U0758QY0MEZ`; the Mac's
+current shared-peer inventory now includes publisher `100.85.116.26`. Its shared
+device has no DNSName, so name-only discovery missed it initially. Recorded as
+durable coordinator event `slack-human-1789281109.743799` at revision2. Serve has
+no configured route yet. Reply reading was manual; no active periodic poll or
+supervised listener is claimed. Existing paused automations stay paused.
+
+Fixture correction: 32 focused tests pass in64.685s from the receiving checkout.
+Review04 confirms the code repair, with only a nonblocking evidence-spacing note
+corrected here. Its original exit1 remains retained, not relabeled as clean.
+No production-code or expectation change; both final actual Fable runs still
+apply. The parent accepts this test-fixture correction and will reconcile the
+original failed receiving marker before a new explicit combined-verification job.

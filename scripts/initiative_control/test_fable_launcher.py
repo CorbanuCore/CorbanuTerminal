@@ -49,9 +49,10 @@ def sequence(cwd):
 
 class Fixture:
     def setUp(self):
-        # Keep all generated test state in the allocated checkout. Short name is
-        # necessary for the macOS AF_UNIX socket path limit.
-        self.temp = tempfile.TemporaryDirectory(prefix="t", dir=WORKTREE)
+        # Checkout paths can exceed AF_UNIX limits even with a short suffix.
+        # Resolve /tmp so the launcher's no-symlink validation still applies.
+        short_root = Path("/tmp").resolve() if os.name == "posix" else None
+        self.temp = tempfile.TemporaryDirectory(prefix="cf", dir=short_root)
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.auth = self.root / "auth.json"
@@ -61,6 +62,19 @@ class Fixture:
 
 
 class Files(Fixture, unittest.TestCase):
+    def test_transient_provider_checking_uses_full_stage_budget(self):
+        setup = f.AuthSetup()
+        setup.stage, setup.since = 6, 100
+        pane = "Configure providers and control whether they are eligible for use.\nClaude Account  Checking"
+        with patch.object(f.time, "monotonic", return_value=102):
+            self.assertFalse(setup.advance(None, pane, FAKE_TOKEN))
+        with patch.object(f.time, "monotonic", return_value=111):
+            with self.assertRaisesRegex(f.LaunchError, "auth_stage_timeout"):
+                setup.advance(None, pane, FAKE_TOKEN)
+        for text in ("Claude subscription token was rejected: fixture",
+                     "Claude subscription token was not saved: fixture"):
+            self.assertTrue(f.provider_failure(text))
+
     def test_auth_contract_and_permissions(self):
         self.assertEqual(f.auth_token(self.auth), FAKE_TOKEN)
         self.auth.chmod(0o644)
@@ -562,19 +576,6 @@ class RealTmux(Fixture, unittest.TestCase):
         self.assertEqual(receipt["status"], "completed", receipt)
         self.assertEqual(receipt["decision"]["actions"][0]["rationale"], vocabulary)
         self.assert_stopped(receipt)
-
-    def test_transient_provider_checking_uses_full_stage_budget(self):
-        setup = f.AuthSetup()
-        setup.stage, setup.since = 6, 100
-        pane = "Configure providers and control whether they are eligible for use.\nClaude Account  Checking"
-        with patch.object(f.time, "monotonic", return_value=102):
-            self.assertFalse(setup.advance(None, pane, FAKE_TOKEN))
-        with patch.object(f.time, "monotonic", return_value=111):
-            with self.assertRaisesRegex(f.LaunchError, "auth_stage_timeout"):
-                setup.advance(None, pane, FAKE_TOKEN)
-        for text in ("Claude subscription token was rejected: fixture",
-                     "Claude subscription token was not saved: fixture"):
-            self.assertTrue(f.provider_failure(text))
 
     def test_sigterm_returns_receipt_and_stops_tmux(self):
         args = self.make_args("hang", timeout=20)
