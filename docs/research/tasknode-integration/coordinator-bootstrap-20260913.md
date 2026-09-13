@@ -30,6 +30,31 @@ Launcher worker: `worktrees/fable-launcher-20260913`,
 No Rust or dependency-cache campaign. Same-sprint disjoint workers are not extra
 initiatives. Shared edits and receiving tests remain serialized.
 
+## Sequential core owner-controls allocation
+
+After accepted core84f16cceec87292296ff94a9d431a86d23a9fe52, a fresh Astra High
+worker owns only `scripts/initiative_control/coordinator.py`, `coordinator_cli.py`,
+`test_coordinator.py` and `qa/initiative-control/management-bootstrap/owner-controls.md`
+in `worktrees/coordinator-bridge-20260913`, branch
+`bootstrap/coordinator-bridge-20260913`, base84f16cceec87292296ff94a9d431a86d23a9fe52.
+Parent relinquishes those four files until handoff. New unit target600 changed
+lines/350 non-test, hard950/550; this is a new authorized bootstrap unit, not
+unbounded extension of the completed first review. No live state/credentials,
+launcher, integration.py, dashboard, Slack, policy or scheduler writes.
+
+Deliver supported revision-bound owner controls to add/replace exact frozen
+allocations and enable/pause an individual stream without reinitializing SQLite;
+do not silently mutate a claimed allocation or leave prepared claims executable
+against changed scope. Add explicit completion/archive and successor transition
+operations that require verified receiving/action evidence and owner-checked
+mandatory gate records; dependency predicates alone are not completion. Preserve
+the three-reservation limit, owner-only authority, pause precedence, audit history,
+wrong-revision/duplicate/restart refusal and the distinction between claims and
+acceptance. Tests must prove these paths and denials through the CLI. No actual
+sprint is completed/archived by this implementation or its synthetic tests.
+The parent performs Fable material review and receiving integration, then owns
+actual native tool/rehearsal wiring in a subsequent explicitly allocated unit.
+
 ## Launcher interface for coordinator integration
 
 Standalone CLI reads a bounded JSON briefing from `--briefing`, fresh private

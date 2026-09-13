@@ -17,6 +17,9 @@ product_spec:
   heading: "Internal delivery control — TO BUILD"
   requirement_excerpt: "Use sequential sprints per initiative"
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/coordinator-bridge-20260913"
+    branch: "bootstrap/coordinator-bridge-20260913"
+    base_commit: "84f16cceec87292296ff94a9d431a86d23a9fe52"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/fable-launcher-20260913"
     branch: "bootstrap/fable-launcher-20260913"
     base_commit: "eb01bf006eacbeef5be07174a3f37ad124abc74c"
