@@ -1,0 +1,1 @@
+cc -nostdlib -static-pie -fPIE -fcf-protection=none -fno-stack-protector -fno-builtin -Os -Wl,--build-id=none,-z,now -o connector connector.c

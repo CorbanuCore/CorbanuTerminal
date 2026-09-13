@@ -1,10 +1,10 @@
 # PF27 private fixed-system preflight
 
-Work in progress; no qualified or native-ready claim.
+Final exact-source RTX proof passes; allocated reviews pending. Not native-ready.
 Manager allocationab985f5f8 imported clean asb65bf1e932f8fb6d9b24d945fe67b18a57bb0ac2.
 Source/size/review baseae2a4c9407983d1877fce18f66d054d7cf90aa7e; seven exact
 paths target550/hard700 including allocation, tests, runner and this receipt.
-Reviews39 Astra High/40 Fable5.1 High allocated, not reserved or dispatched.
+Reviews39 Astra High/40 Fable5.1 High reserved in the preserved review ledger.
 
 ## Ownership and compatibility
 
@@ -47,7 +47,32 @@ All29 predecessor commands plus the explicit new filter are required in the fina
 exact-tree RTX/TMUX proof. Preliminary RTX check0 (14.78s), fix0 (16.35s), fmt0;
 all five new cases pass (0.019s), with original logs/exits retained remotely.
 Only the four allocated Rust files changed after formatting and were copied back.
-Full final proof and allocated reviews remain pending.
+Final proof ran once September13 01:17:15–01:19:00UTC (105s), non-root uid1001,
+GNU2.43/Rust1.95.0, exclusive existing RTX target/build lock, ext-family TMPDIR.
+Frozen source19f6624938c53e0c9709e1b25ada4a44fd13267e,
+Rust09f72396304d80a82cf466e220378f763ea8313b; no subsequent Rust changes.
+
+| Final proof | Actual result |
+| --- | --- |
+| All30 command exits plus suite | All0; original final-tmux/*.exit and suite.exit |
+| New preflight filter | 5 passed in0.018s; no retry |
+| Full service / default | 64 passed / 3 passed; service24 exclusions covered by explicit retained filters |
+| Retained ownership/admission | Pair5/real1; owner8/real3; admission8; adapter4/OS10 |
+| Protected storage and session | Default18/feature18; compatibility4; dispatch6/session7 |
+| Five explicit profile checks | Hold, inspect, connector, root relay and dispatch relay each pass |
+| Strict scoped Clippy / compatibility Clippy | Exit0, 6.32s /14.38s |
+| Cargo/Bazel/source provenance | Parity0; source, four module inputs and five fixture hashes unchanged |
+
+Actual keys launched the frozen wrapper in RTX private TMUX
+pf27preflight20260913:proof:0.0, text and Enter separately. Both
+PF27_SYSTEM_PREFLIGHT_TMUX_COMPLETE and PF27_SYSTEM_PREFLIGHT_19F662493_COMPLETE
+appear in [the actual pane capture](rtx/final-tmux-capture.txt).
+Original commands, full logs, preliminary attempts and before/after provenance
+are under [rtx/](rtx/). Remote originals remain at
+/home/travis/security-round5/evidence/pf27-system-preflight-20260913;
+checkout /home/travis/worktrees/security-broker-system-preflight-20260913.
+No new-case failure or repair was omitted; predecessor failures stay preserved.
+Focused filter counts overlap the full suite, not additional unique tests.
 
 Policy1.7 internal-only N/A accepted for this uncalled preflight only. Later
 distinct-principal native bootstrap, independently isolated protected-user/PF26
