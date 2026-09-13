@@ -580,8 +580,14 @@ The bounded native rehearsal has now captured actual Fable → Astra High claim/
 retained and reconciled before a fresh successful retry; no response was silently
 edited into acceptance. Global/product dispatch returned to paused afterward.
 This remains operator-driven evidence, not an unattended controller. Read-only
-Slack polling is separately allocated; do not report periodic reception until an
-actual qualified monitor is enabled and its last successful observation is visible.
+Slack polling is now reviewed, merged and verified against the real thread in two
+separate processes: one recorded observation, then one duplicate without a state
+revision change. `scripts/initiative_control/slack_reply_poll.py` exposes a bounded
+owner-invoked `collect` with an authenticated injected SDK client; it is not a
+scheduler, decision resolver or replacement for qualified Socket Mode ingress.
+Do not report periodic reception until an actual qualified monitor is enabled and
+its last successful observation is visible. The source, receiving tests and live
+receipt limits are in the startup evidence linked above.
 
 Relevant prior source/test checkpoints and unresolved Bazel/functional gates are
 in the [pause handoff](docs/plans/management-pause-2026-09-13.md). Integration-branch

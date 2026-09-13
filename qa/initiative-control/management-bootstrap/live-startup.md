@@ -166,3 +166,32 @@ referenced launcher auth/session root must not be published wholesale).
 This demonstrates actual handoff and rejected-response recovery through owner
 calls, not an automatic native dispatch adapter, crash-recovery qualification,
 the normal Slack decision-to-agent chain or recurring operation.
+
+## Read-only Slack collector receiving and live replay
+
+Clean Fable High review01 accepted the three-file collector `b23da019b90a433cd07b079c25e6f3e94fe2c4cb`.
+Actual single-writer merge received it at `a60fd73969f457c2aa20a9caf5718e01d7309a91`.
+Receiving tests passed:60 Slack/transport,37 coordinator,30 decision-reply tests,
+both governance checks and whitespace. Private receipt:
+`.codex-work/bootstrap-poll-review.JBT5DY/receiving/receive-slack-poll-b23da019b.json`.
+Internal engineering acceptance only; no user-facing gate waived.
+
+Two separate actual owner processes then used the approved bot SDK to read only
+thread `1789278370.283259` in channel `C0C0X2ELFKR`. First process at revision26
+recorded one original human-reply observation, ignored one pinned bot follow-up,
+reached the API-indicated end with no issue and produced revision27. Second
+process found one duplicate, added nothing and retained revision27. Receipts:
+`actual-daemi2zb/receipt.json` and `actual-ywril9no/receipt.json` under that private
+review root. Actual observation differs from full Slack resolution: the original
+manual setup answer remains its own recorded evidence; no approval was re-applied.
+No source text or credentials were printed. Product dispatch stayed paused,
+no manager/native worker was launched and no Slack message was sent. Polling
+cannot establish unseen deletions/intermediate edits or an atomic history.
+
+The collector is merged and live read/dedup is proven. Periodic invocation,
+normal canonical question/reply/native-ACK qualification and the full unattended
+coordinator remain unqualified and OFF. The dashboard's latest one-off publication
+is source `a6365a384831f21c76f7f8127d7931cb60d9e78a`, generation `build-vtnxyfzp`,
+published07:12:20Z; parent directly verified health. Feed25 is honestly stale and
+Slack health unknown; publication success does not claim those gates passed.
+Publisher timer is disabled/inactive, web and Facilities remain available.
