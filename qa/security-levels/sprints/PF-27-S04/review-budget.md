@@ -19,7 +19,7 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 ## History and current window
 
 Root-session reviews37 Astra High and38 Fable5.1 High through Corbanu/private
-TMUX reserved September13 00:50UTC under allocation06bf29c29 and clarification
+TMUX reserved September13 00:49UTC under allocation06bf29c29 and clarification
 44b39817a; manager reconfirmed continuation. Two scoped extension slots reserved,
 zero unreserved; this does not reset history1–36 or the six-hour accounting.
 Frozen source74263bbbc5bf2163f571947c6828fbf108866c3f/Rustb7275b0c0433f081d6423463993abc658141a6a7,
