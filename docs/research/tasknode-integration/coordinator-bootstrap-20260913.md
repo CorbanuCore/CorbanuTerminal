@@ -136,6 +136,23 @@ stale revision, failed shutdown, crash boundaries and successful accepted action
 Those fixtures are not live-manager or native-dispatch qualification. Parent owns
 actual fresh-manager replay, native bridge, future supervision and recurrence.
 
+### Actual driver and uncertain-dispatch rehearsal
+
+After corrected driver review and verified receiving integration, the parent may
+run one fresh Fable cycle through that actual driver and allocate one fresh Astra
+High worker for an ACK-only native handoff. Its scope is zero writes, zero product
+execution, no credentials/network/builds/reviews, and no descendants. Bind the
+actual native receipt and exact allocation digest; do not manufacture tool results.
+Exercise the crash window between actual spawn and durable `dispatched` recording:
+retain the host receipt, inspect the actual agent, let the real claim deadline
+expire, run the watchdog in a new process, and verify uncertain/duplicate denial.
+Reconcile the known native identity, record its genuine ACK, close it through the
+actual tool, and reconcile shutdown as failed/cancelled rehearsal work, not success.
+Use a fresh manager to observe that terminal result. Security/accounting remain
+paused; only this explicit delivery allocation may run, with global/delivery pause
+restored in finally/recovery. Preserve all attempts, including any unexpected hold.
+No sprint completion, successor implementation or recurring enablement is implied.
+
 ## Isolated-executor transport falsification allocation
 
 Parent inspected the read-only Hypatia audit and verified the Astra catalog's
@@ -143,6 +160,16 @@ Parent inspected the read-only Hypatia audit and verified the Astra catalog's
 is not our current0.1.41 candidate; preserve that limitation. RTX SSH timed out,
 so no remote packaging, forwarding or runtime claim is established. The existing
 646-line/12-test five-file boundary runner and all old evidence remain frozen.
+
+September13 host clarification: Travis confirms RTX belongs to a different
+tailnet; Alex's RPC uses direct SSH. The parent verified direct
+`pfrpc@178.156.143.199` access independently of Tailscale. RPC has bubblewrap0.9.0,
+Python3.12.3 and systemd255.4; these are not the RTX runner's versions. A bounded
+rootless namespace/`true` probe failed with `bwrap: loopback: Failed RTM_NEWADDR:
+Operation not permitted`. RPC is not yet an accepted replacement executor. No
+host policy, packages, tailnet or network isolation were changed to bypass it.
+Private browser access is a separate route qualification, not an SSH/publication
+prerequisite. Stage A remains local/offline and does not wait on either tailnet.
 
 Authorize only Stage A locally now: fresh Astra High worker may create exactly
 four private files under `.codex-work/executor-route-audit.Nerv9u/model-only-v1/`:
