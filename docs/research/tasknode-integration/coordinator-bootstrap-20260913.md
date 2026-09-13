@@ -32,6 +32,43 @@ initiatives. Shared edits and receiving tests remain serialized.
 
 ## Sequential core owner-controls allocation
 
+### Executable owner-only lifecycle transitions
+
+Next unit after the actual native receiving checkpoint and460-test combined
+regression: fresh Astra High worker in `worktrees/owner-transitions-20260913`,
+branch `bootstrap/owner-transitions-20260913`, base
+`b004bb06c1b7aad432c0633ffdf319b2d247d8df`. Exactly four authored paths:
+`scripts/initiative_control/coordinator.py`, `coordinator_cli.py`,
+`test_coordinator.py`, and `qa/initiative-control/management-bootstrap/owner-transitions.md`.
+Parent relinquishes those four files until handoff. Target600 changed lines/
+250 implementation-only; hard850/350. One fresh Fable High material review plus
+necessary scoped correction; preserve all prior unit budgets/findings. No new
+daemon, schema migration, external dependency, shared policy/plan/sprint edit,
+credentials, service, live state, main/release or native/Slack call by the worker.
+
+Concrete gap: current completion and successor APIs require already-accepted
+actions; their CLI tests advance those actions through synthetic native worker
+receipts. Ordinary NativeOwner excludes these kinds. Complete the trusted
+owner's executable path from a fresh manager's prepared lifecycle proposal to
+its actual transaction without invented native IDs/dispatch/ACKs. Preserve the
+existing accepted-action compatibility path and all receipt/gate/dependency,
+pause, revision, resource and archive checks. An authorization or preparation
+receipt must not be described as a completed effect. Do not silently activate
+from a prepare-only proposal: explicit activation authority remains required.
+
+Prefer a small explicit owner-only API/CLI transaction over a generic command
+executor. Atomic successful lifecycle change must record its real owner receipt
+and terminal action state; failed/stale/duplicate/wrong-kind or insufficient-gate
+requests must leave all state/evidence/event tables unchanged. Preserve claimed,
+uncertain and running worker ownership: this path cannot bypass a native claim.
+Cover complete/archive/successor progression with normal prepared manager actions,
+no fake native lifecycle for the owner operations, and a dependency-gated first
+successor claim from the verified receiving base. Include independent failure/
+restart/duplicate and premature successor tests; retain all existing tests.
+Actual source-file archival and final full-loop qualification remain parent work,
+not something SQLite alone proves. This implements the existing five-part goal,
+not sprint completion, product resumption or recurring enablement.
+
 ### Passive wait recording, after the actual driver rehearsal
 
 Parent implements the next small internal unit in `worktrees/coordinator-wait-20260913`,
