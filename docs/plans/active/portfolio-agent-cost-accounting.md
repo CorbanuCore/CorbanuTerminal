@@ -17,9 +17,9 @@ product_spec:
   heading: "Product measurement"
   requirement_excerpt: "No commercial performance numbers have been supplied."
 implementation_worktrees:
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-late-import-20260913"
-    branch: "workstream/accounting-late-import-20260913"
-    base_commit: "eb58559590dd2b9332f2445971ee086988c67080"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-contract-goldens-20260913"
+    branch: "workstream/accounting-contract-goldens-20260913"
+    base_commit: "81d0f90e77c1e9217a16e70fef1019ff9aa13753"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
     base_commit: "c8358dd9b4329036c8f8fb525015bbd795433513"
@@ -33,9 +33,17 @@ implementation_worktrees:
 
 # 2. Accounting — unified agent cost and usage
 
-September13 next execution: manager accepts the [complete compact-only import
+September13 02:08UTC: compact import independently reviewed clean and received
+at81d0f90e7; combined595shared/100Core/20focused/6external, format/Clippy/check
+pass. [Receiving proof](../../../qa/portfolio/agent-cost-accounting/pf-60-s02/compact-late-import-receiving.md)
+preserves original failures and metadata correction. Manager hold cleared; next
+is [original-contract native golden tests](../../research/agent-cost-accounting/original-contract-native-golden-allocation.md),
+exact two paths, target800/150 STOP900/200, existing Mendel in the new checkout
+above. No new user decision; S02 active, S03 dependent, collection OFF.
+
+Historical September13 allocation: manager accepts the [complete compact-only import
 allocation](../../research/agent-cost-accounting/compact-late-import-allocation.md),
-exact eight state/test/receipt paths in the new checkout above, target2000/650,
+exact eight state/test/receipt paths in its recorded historical checkout, target2000/650,
 STOP2200/750 for one atomic operation plus native/public/process/failure proof.
 Combined Core correction100/575 tests, Clippy and check all pass; historical
 failures remain. One new material review plus necessary correction, default OFF.
@@ -187,7 +195,7 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Codex accounting compact-import lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-late-import-20260913` | `workstream/accounting-late-import-20260913` | `eb58559590dd2b9332f2445971ee086988c67080` | PF-60-S02 exact eight-path compact-late-import-allocation.md; no Core/lock/manifest edits |
+| Codex accounting contract-golden lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-contract-goldens-20260913` | `workstream/accounting-contract-goldens-20260913` | `81d0f90e77c1e9217a16e70fef1019ff9aa13753` | PF-60-S02 exact two-path original-contract-native-golden-allocation.md; accepted runtime frozen |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
 S02 retains its reservation; Travis approved conservative daily expiry in this
@@ -210,8 +218,8 @@ Public deletion signatures/counts/missing-row semantics and normal no-schema
 behavior stay unchanged; no blanket new activation/failure checks. Separate
 logs/memory/goals stores remain outside main-state transaction atomicity.
 Custom range/interval filtering is recorded in S03 draft, not implemented here.
-Only the exact optional accounting migration and17-file store scope are allocated
-for future dispatch; API/Core wiring, manifests and extra state writers remain out.
+The migration/17-file store allocation above is accepted history. Current dispatch
+is only the two-path original-contract golden allocation; runtime/manifests stay frozen.
 The worker fast-forwards to
 the reviewed receiving allocation before dispatch; its historical branch name
 does not change sprint ownership. Manager owns shared plans/integration.
