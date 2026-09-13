@@ -166,3 +166,26 @@ after both buffer load and paste. Final source/tests: **31 passed, 0 skipped,
 scoped whitespace check passes. Final allocation:1,451 lines (691 launcher,
 592 tests,168 receipt), within1,500. No Rust/provider contract changes.
 Parent owns material review, corrected live runs and combined coordinator checks.
+
+Parent continuation after worker closure: review02 found an in-scope false-failure
+on a transient Checking provider row after one second, plus rejection-message
+drift against the actual Rust strings. Both are corrected in these same files;
+Checking now receives the original ten-second stage budget, while definitive
+noncurrent rows and actual rejected/not-saved messages still fail. No new scope.
+Integrator authorizes one changed-candidate review03, preserving the seven prior
+bootstrap review uses. Before this correction, two unattended real runs completed
+with distinct sessions and unforced clean shutdown; all31 offline tests passed.
+Those results remain historical; final changed-candidate runs are required.
+
+Final correction:32 offline tests passed in66.561s, zero skips. Review03 verifies
+both production fixes; its only P3 is pure Checking-test placement in the
+TMUX-required test class. Integrator records this as a nonblocking portability
+follow-up: supported launcher qualification requires TMUX and this run executed
+the test. No runtime defect or missing supported-host test remains; review03
+exit1 is retained, not relabeled as a clean exit0. No extra unchanged-code review.
+Two automatic final-tree runs completed with exact model/provider/high and clean
+unforced shutdown: `f-6kapzpp9`, session01a09974-2a90-7a82-bbb4-db1194e596b9;
+`f-684we1b3`, session01a09976-84ac-77a2-851c-6a5aa46536e7. Both capture all three
+wait decisions, not real work dispatch. Private receipts under
+`/private/tmp/cfable.msxBbt` retain native evidence; never publish the whole root.
+Parent accepts this internal launcher checkpoint, not overall management launch.

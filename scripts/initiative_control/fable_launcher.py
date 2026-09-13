@@ -482,7 +482,8 @@ class AuthSetup:
             loaded and not providers and not any(s in pane for s in (
                 "Recover Claude Account", "Claude Plan authentication", "Save Claude subscription token")),
         )
-        if (self.stage == 6 and providers and not configured
+        if (self.stage == 6 and providers and re.search(
+                r"Claude Account\s+(?:Inactive|Credential needs attention|Not configured)\b", pane)
                 and time.monotonic() - self.since >= 1):
             raise LaunchError("auth_provider_not_current")
         if not expected[self.stage]:
@@ -507,6 +508,7 @@ def provider_failure(pane):
                           r"|Claude authentication needs attention|authentication failed"
                           r"|the subscription token (?:was not accepted|could not be stored|was empty)"
                           r"|token storage could not be confirmed|failed to save Claude"
+                          r"|Claude subscription token was (?:rejected|not saved)"
                           r"|Claude Plan authentication (?:failed|is unavailable))", pane))
 
 

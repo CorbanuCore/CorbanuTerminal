@@ -365,7 +365,7 @@ while True:
         screen("Claude authentication needs attention\n" + os.environ["CLAUDE_CODE_OAUTH_TOKEN"]
                if mode == "authfail" else providers + "› 2. Claude Account  Enabled · configured · current")
         if mode == "rejected":
-            screen("The subscription token was not accepted. Retry through Providers.")
+            screen("Claude subscription token was rejected: fixture. No fallback was attempted; inspect Providers and retry.")
         if mode == "notcurrent":
             screen(providers + "› 2. Claude Account  Inactive")
         continue
@@ -562,6 +562,19 @@ class RealTmux(Fixture, unittest.TestCase):
         self.assertEqual(receipt["status"], "completed", receipt)
         self.assertEqual(receipt["decision"]["actions"][0]["rationale"], vocabulary)
         self.assert_stopped(receipt)
+
+    def test_transient_provider_checking_uses_full_stage_budget(self):
+        setup = f.AuthSetup()
+        setup.stage, setup.since = 6, 100
+        pane = "Configure providers and control whether they are eligible for use.\nClaude Account  Checking"
+        with patch.object(f.time, "monotonic", return_value=102):
+            self.assertFalse(setup.advance(None, pane, FAKE_TOKEN))
+        with patch.object(f.time, "monotonic", return_value=111):
+            with self.assertRaisesRegex(f.LaunchError, "auth_stage_timeout"):
+                setup.advance(None, pane, FAKE_TOKEN)
+        for text in ("Claude subscription token was rejected: fixture",
+                     "Claude subscription token was not saved: fixture"):
+            self.assertTrue(f.provider_failure(text))
 
     def test_sigterm_returns_receipt_and_stops_tmux(self):
         args = self.make_args("hang", timeout=20)
