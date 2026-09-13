@@ -1,5 +1,16 @@
 # Workstream continuation — September 11
 
+## Current handoff — September13 combined session accepted; preflight dispatched
+
+Manager verified and accepted c1d866fd4's literal29-command receiving proof:
+all exits+suite0,139s actual RTX/TMUX, dispatch6/session7, strict15.12/14.26s,
+parity and source/module/five-input invariance. No repeat reviews needed.
+Same PF13 owner dispatched allocation ab985f5f8 for
+[private system preflight](../../qa/security-levels/sprints/PF-27-S04/system-preflight-allocation-20260913.md),
+seven paths550/700, sourcebaseae2a4c940, reviews39/40 preserving1–38.
+Existing RTX target stays with owner, Mac with accounting. No human hold,
+native activation or principal-guard change. Actual owner launch ACK pending.
+
 ## Current handoff — September13 root-session receiving
 
 [PF-27-S04](../sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md)

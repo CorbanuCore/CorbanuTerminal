@@ -1,5 +1,9 @@
 # Current workstream handoffs — September 12
 
+## Current handoff — September13 combined session accepted
+
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): exact combinedc1d866fd4 proof accepted, all29 exits+suite0, actual RTX/TMUX/invariance. Same owner dispatched [private system preflight](../../security-levels/sprints/PF-27-S04/system-preflight-allocation-20260913.md), allocationab985f5f8, seven paths550/700/reviews39–40. No user hold, process launch, native activation or sprint-completion claim.
+
 ## Current handoff — September13 root-session received
 
 - [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): [29-command owner proof and reviews37/38](../../security-levels/sprints/PF-27-S04/descriptor-root-session-20260912/README.md) inspected; source received locally through51d1a64f5, newer accounting lock preserved. Existing owner gets the exact combined receiving test next; no new human approval or native-service claim. Same-sprint successor is design-only pending combined proof and exact allocation.
