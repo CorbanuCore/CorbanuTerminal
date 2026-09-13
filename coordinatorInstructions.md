@@ -370,6 +370,12 @@ Publisher coordinates:
 - Remote loopback: `127.0.0.1:8768`.
 - This Mac's tunnel: `http://127.0.0.1:8769/`.
 
+RPC uses direct SSH; it does not require Tailscale. Pass the host explicitly:
+`"$CONTROL_ROOT/ssh-server" pfrpc@178.156.143.199 '<bounded command>'`.
+RTX is on a different tailnet. Its connectivity and isolated-test qualification
+are not dependencies of RPC SSH or dashboard publication. Private off-Mac browser
+access remains a separate qualification; do not expose the loopback service publicly.
+
 Require expected commit/generation, health, warnings and actual page availability:
 
 ```bash
@@ -543,6 +549,31 @@ authentication/native state: publish only an inspected redacted evidence record,
 not the whole run directory. Fresh context is not the permission-isolated
 functional-executor boundary.
 
+### Owner event-to-manager cycle
+
+The reviewed `scripts/initiative_control/manager_cycle.py` now joins durable
+pending events to the fresh launcher and validates its actual artifacts before
+core acceptance. Use the existing private coordinator directory, short run root,
+exact binary/auth paths above and a private bounded owner-context JSON file:
+`{"observed_at":"<actual UTC observation>","context":{"authority":"<scoped facts>"}}`.
+
+```bash
+python3 "$CONTROL_REPO/scripts/initiative_control/manager_cycle.py" --run \
+  --state "$CONTROL_STATE/coordinator" --runs-dir "$MANAGER_RUNS_ROOT" \
+  --binary "$FABLE_BINARY" --auth-file "$MANAGER_AUTH_FILE" \
+  --owner-context "$MANAGER_OWNER_CONTEXT_FILE" --timeout 300
+```
+
+Without `--run`, it is OFF. Paused/owned/empty stores do not launch inference.
+The total claim window includes preparation and a30-second overhead reserve.
+An accepted result contains prepared proposals, not native dispatch receipts.
+The host still claims each authorized action and uses actual native tools; it
+must persist the real identity, ACK and result without inventing acknowledgments.
+On uncertainty inspect retained artifacts and actual tools before reconciliation.
+See [driver evidence and recovery procedure](qa/initiative-control/management-bootstrap/manager-cycle.md),
+including read-only hot-journal diagnostics. Do not delete journals or initialize
+existing state. This owner-invoked bridge is not yet a recurring service.
+
 ### External reviews are separate
 
 Existing review integration uses the Python helper
@@ -589,15 +620,23 @@ Do not report periodic reception until an actual qualified monitor is enabled an
 its last successful observation is visible. The source, receiving tests and live
 receipt limits are in the startup evidence linked above.
 
+The accepted owner cycle has additionally passed two real Fable runs and an actual
+native missing-dispatch-record/watchdog/duplicate-denial/ACK recovery rehearsal;
+[driver receipt](qa/initiative-control/management-bootstrap/manager-cycle.md).
+All dispatch modes returned to paused at coordinator revision53. The separate
+[model-only transport falsification](qa/initiative-control/management-bootstrap/model-only-stage-a.md)
+found startup-context and retry limitations; it is not an admitted executor.
+
 Relevant prior source/test checkpoints and unresolved Bazel/functional gates are
 in the [pause handoff](docs/plans/management-pause-2026-09-13.md). Integration-branch
 push preserves the handoff; it does not turn outstanding gates into passes.
 
 ## 13. Remaining launch work
 
-1. Turn the proven operator-driven event/manager/native-ACK handoff into the
-   bounded owner bridge and unattended recovery path. Revision-bound allocation
-   and lifecycle controls are implemented; exercise actual crash/stall recovery.
+1. Wire the accepted owner-invoked manager cycle and actual native-tool bridge
+   into the supervised recurring owner path. Two actual driver cycles and a real
+   native crash-window/watchdog/duplicate-denial/ACK recovery rehearsal passed;
+   unattended execution and restart still require qualification.
 2. Connect explicit single-writer integration jobs to receiving evidence and
    enforced completion/archive/dependency-gated successors.
 3. Qualify the real Slack alert → human reply → canonical decision → agent ACK

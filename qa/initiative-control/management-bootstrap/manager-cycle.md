@@ -146,3 +146,38 @@ above the800 total target, within450 non-test target and1050/600 hard ceilings.
 Implementation SHA-256: `3e95db1d59c13173e31610c0914f1d1b3786b97f270c7763dfb2471c8890e411`.
 Test SHA-256: `bc95c42ccc163d5bab5b297452534cda92e9dcc483b8746f6e60a5355403581f`.
 Governance and whitespace checks pass; exactly three staged additions, no commit/push.
+
+## Parent review, receiving and actual recovery rehearsal
+
+Review02: Fable5.1High, helper exit0/no findings; original review01 retained.
+Parent reproduced86 focused passes in2.663s, accepted the992/439 scope, committed
+`b108c4ac81c10da2548878893e558b570754cdc9`, then received it with the actual
+single-writer job at `3b25e9d9e4684df10cea505a2022db20eec04db4`.
+All124 receiving tests passed73.157s, plus both governance checks and whitespace.
+The durable receiving receipt is `.codex-work/bootstrap-cycle-review.WVYhMZ/receiving/receive-manager-cycle-b108c4ac8.json`,
+SHA-256 `05f8f2807d455cc913814922d219a03415c85917623b426152ddcddbac003085`.
+
+Parent ran the accepted driver against the existing real coordinator, not a fixture.
+Private `/private/tmp/mc.CVU7SR/verification.json` records two complete fresh runs:
+`f-h7ano0vl`, session `01a099cf-34d5-71d2-a7de-be41366923df`,34857-byte briefing;
+`f-pbou3z1v`, session `01a099d0-b33e-77b1-aca9-de7888155190`,44795-byte briefing.
+Both loaded `claude-fable-5-1-plan`/`claude-plan`/`high`, passed artifact validation
+and core acceptance. Independent owner TMUX/ps probes confirmed both sessions
+and their owned processes absent. Run homes contain credentials; never export them.
+
+The first manager allocated a real zero-tool Astra High ACK agent, Godel
+`01a099cf-b9e8-7413-9f7d-7d541daef60f`. Parent deliberately omitted the durable
+dispatch recording after actual spawn, reproducing that crash window rather than
+claiming the host coordinator itself crashed. After the real15-second deadline,
+a fresh process recorded exactly one `dispatch_uncertain` watchdog event; another
+watchdog changed nothing and a duplicate claim was rejected even when enabled.
+Actual host spawn/ACK receipts reconciled the original identity and acknowledgment.
+Actual close returned its completed status; the subsequent tool lookup returned
+`not_found`, confirming removal (not the initially expected `shutdown` spelling).
+The owner then recorded intentional failure/stop, never fabricated work completion.
+The second fresh manager accepted a wait-only follow-up from that durable evidence.
+
+At08:10:42Z, coordinator revision53: global and all three dispatch modes paused,
+no manager claim; rehearsal action failed and follow-up wait prepared. No product
+sprint advanced. This proves operator-invoked driver/native crash-window recovery,
+not a deployed unattended controller, full Slack chain or isolated acceptance.
