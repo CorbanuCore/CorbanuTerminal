@@ -3,6 +3,7 @@
 Each command takes a bounded JSON object on stdin and emits a result on stdout.
 Use claim -> actual native tool -> dispatched -> actual worker ACK -> acknowledge.
 A crash between those steps must go through native inspection and reconciliation.
+Prepared waits use record_wait instead: owner evidence only, no fake native ACK.
 This interface must never be exposed as a Slack/web arbitrary-command endpoint.
 """
 
@@ -19,6 +20,7 @@ OPERATIONS = {
     "fail_manager", "accept_decision", "claim", "dispatched", "acknowledge",
     "returned", "verify", "reconcile_dispatch", "watchdog",
     "read_evidence",
+    "record_wait",
     "put_allocation", "set_stream_mode", "complete_sprint", "archive_sprint", "activate_successor",
 }
 
