@@ -655,6 +655,17 @@ push preserves the handoff; it does not turn outstanding gates into passes.
 
 ## 13. Remaining launch work
 
+Latest image/browser prerequisite: image support received at
+`1061417275ad04d803e77dfd451a9185727bb4c8`,108 receiving test executions, clean
+corrective Fable review and actual native screenshot/read-denial observations.
+`Transport(owner).execute(text, image_png=png_bytes)` accepts one bounded PNG;
+`image_observation=supplied_not_attested` never proves visual acceptance. The
+cached browser's real keyboard/mouse/render preflight also passed; it is not yet
+the independent executor. Fresh Astra High owns the fixed guest controls; parent
+owns mediation, actual boundary probes and frozen-case execution. Read the
+[combined receiving record](qa/initiative-control/management-bootstrap/image-browser-receiving-20260913.md).
+Normal dispatch and recurring operation remain paused.
+
 September13 receiving update: the fixed trusted model transport is integrated at
 `da4ebbaa6a779a56c308bdaaa11fa87ea44ec1c1`, default OFF. Its owner-only Python API
 is `isolated_model_transport.OwnerConfig(binary, auth, run_root, enabled=True)`
