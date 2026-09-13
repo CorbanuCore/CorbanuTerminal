@@ -51,6 +51,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact owner, worker worktree/base and disjoint scope allocated; dispatch waits for the verified main merge and worker fast-forward.
 
 ## Done
+
 - [x] Owner transitions ca0474fe4 received at ee93206c0 after 119 combined tests and exact parent/scope/log verification. [Batched live Fable-to-native integration](../../../../qa/initiative-control/management-bootstrap/event-batching.md) now passes; full sprint/successor, Slack, isolated functional and recurring gates remain open.
 - [x] Native owner bridge2093475e8 received atd3f742ac3 after106 combined tests; actual native ACK/send/return/close-gap recovery and fresh Fable-to-integration-agent handoff verified. [Checkpoint and retained failures](../../../../qa/initiative-control/management-bootstrap/native-owner-receiving-20260913.md). No recurring or functional acceptance inferred.
 - [x] Exact reviewed supervisor c7a1b9690 received92d6eb261;261 receiving tests pass187.549s, Facilities/governance pass. Review08 clean,09 unspent; internal-only N/A, actual Slack and independent functional acceptance remain open.
@@ -61,7 +62,6 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Feed72854ec77 accepted590lines/281non-test after reproduced destination-less export failure, compatibility correction and clean additional review;111combined tests pass including actual server. [Receipt](../../../../qa/initiative-control/pf-80-s01/decision-projection/feed-receipt.md). Prior reviews preserved; independent evidence remains pending.
 - [x] Offline revision-bound decisions4ff73485c accepted after clean correction review;777lines,100combinedPython tests pass. Original VoltaDEC001..026 preserved; full UI/feed proof remains. [Receipt](../../../../qa/initiative-control/pf-80-s01/decision-projection/receipt.md).
 - [x] Canonical receiving reconciled at 87e31f521672e627e6230d48fc16a4cfaa7ff44c; native validity remains private/no caller. Independent intent-only [design DEC-001..026](../../../../qa/initiative-control/pf-80-s01/decision-projection/design-proposal.md) frozen before implementation. Integrator authorizes +3 design/code/evidence reviews, preserving earlier usage.
-
 - [x] Private native validitybda5b35b4 reviewed clean; combined staging04ba6b8b7 passes80TaskNode/242state tests. [Evidence](../../../../qa/initiative-control/native-staging-2026-09-12.md). No enabled caller; canonical receiving transfer/publication pending.
 - [x] Travis approved this Mac/existing publisher for now and native server-backed no-expiry validity design; no credential/enrollment/post permission inferred.
 - [x] Recovery source implemented and independently reviewed the internal dashboard; historical evidence retained without claiming a main-tree port pass.
@@ -73,7 +73,6 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Selected-ID/full-digest, schema, mapping, byte-limit, secret/control and explicit-time negatives pass; two pinned cross-language goldens pass. Advisory-only, no sender.
 - [x] Bound one-event engine 7e25982b5 reviewed clean and integrated at 486d2fb94; all 55 crate tests pass there. Fixture authority, fencing/cancel/unknown outcomes only. [Receipt](../../../../qa/initiative-control/pf-80-s01/native-one-event/receipt.md).
 - [x] Native adapter d7bf73a52 reviewed clean and integrated at56295f668; all63 crate tests pass there. Actual build/codec/resolver with synthetic inputs, no send. [Original receipt](../../../../qa/initiative-control/pf-80-s01/native-adapter/receipt.md); manager allocation reconciliation in handoff.
-
 - [x] Exact-goal reconciliation177ec93fc reviewed clean and integrated at3898eaa65;73 native tests pass there. In-memory exact-ID GET, strict injected observation and preserved404uncertainty; no send/retry/live claim. [Receipt](../../../../qa/initiative-control/pf-80-s01/native-reconciliation/receipt.md).
 
 ## Remaining
