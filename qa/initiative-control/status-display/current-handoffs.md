@@ -1,5 +1,9 @@
 # Current workstream handoffs — September 12
 
+## Current handoff — September13 root-session received
+
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): [29-command owner proof and reviews37/38](../../security-levels/sprints/PF-27-S04/descriptor-root-session-20260912/README.md) inspected; source received locally through51d1a64f5, newer accounting lock preserved. Existing owner gets the exact combined receiving test next; no new human approval or native-service claim. Same-sprint successor is design-only pending combined proof and exact allocation.
+
 ## Current handoff — September13 combined proof accepted
 
 - [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): [combined100/575/Clippy/check all pass](combined-native-20260913.md). Mendel dispatched at clean37d6ffcc9 on the [complete eight-path compact-only import operation](../../../docs/research/agent-cost-accounting/compact-late-import-allocation.md), target2000/650 STOP2200/750, new accounting-late-import checkout and exclusive Mac target. S03 stays dependent and collection OFF.

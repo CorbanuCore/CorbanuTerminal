@@ -1,5 +1,20 @@
 # Workstream continuation — September 11
 
+## Current handoff — September13 root-session receiving
+
+[PF-27-S04](../sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md)
+owner ae2a4c940 received locally through51d1a64f5, Rustec50d037802ffa2c86345d3b1952be1279d989fb.
+Manager read the four Rust changes, literal29-command exits+suite0, seven actual
+session cases, both TMUX markers, source/module/input invariance and complete
+Astra37/Fable38 clean reports. [Original proof](../../qa/security-levels/sprints/PF-27-S04/descriptor-root-session-20260912/README.md).
+Service/protected-state subtrees equal the owner; receiving Cargo.lock ded15fd917
+and MODULE5ecff077db preserved. Sole documentation conflict retained the newer
+independent isolated-execution gate; historical prose reflowed for100-line limit.
+Next executable action is the sole security owner's same29-command proof on the
+exact combined receiving revision, not a repeated opinion or native activation.
+No successor implementation yet; request its bounded design alongside proof.
+Accounting retains its independent Mac target. PF27 remains in_progress.
+
 ## Current handoff — September13 combined proof accepted
 
 [Exact combined evidence](../../qa/initiative-control/status-display/combined-native-20260913.md)

@@ -18,8 +18,7 @@ updated: 2026-09-12
 ---
 # PF-27-S04 — Isolated credential broker process
 
-September 11 resumption: fresh main-based allocation after human acceptance.
-The earlier missing-checkout report was stale: `security-round5-broker` is clean
+September 11 resumption: fresh main-based allocation after human acceptance. The earlier missing-checkout report was stale: `security-round5-broker` is clean
 at pushed `cd7457da7`. Reconcile its existing service stage; do not redo it.
 The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/RESUME-20260911.md) records exact coordinates, review history and unchanged native setup limits.
 
@@ -50,7 +49,7 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - [x] Accepted the PF-27-S03 Linux service, macOS launchd/XPC and Windows service/AppContainer candidates for construction; protected eligibility and sprint completion remain blocked until measured all-OS qualification passes.
 
 ## Done
-- [x] Private session source74263bbbc/Rustb7275b0c:29 commands+suite0, seven real session cases, retained suites/strict lint/parity/RTX TMUX; Astra37/Fable38 exit0/findings[]. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-session-20260912/README.md). Internal-only N/A; receiving/native/user gates remain.
+- [x] Private session source74263bbbc/Rustb7275b0c:29 commands+suite0, seven real session cases, retained suites/strict lint/parity/RTX TMUX; Astra37/Fable38 exit0/findings[]. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-session-20260912/README.md). Received locally at51d1a64f5; combined proof pending, internal-only N/A; native/user gates remain.
 - [x] Private dispatch sourcec7d48e482/Rustbd56b597:28 commands+suite0, six real pair/PF20 cases, retained suites/strict lint/parity/actual RTX TMUX; Astra35/Fable36 exit0/findings[]. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-dispatch-20260912/README.md). Internal-only N/A; no native/product readiness.
 - [x] Descriptor compatibility d776e938d/Rustb48e9c4f: all25 commands+suite0, retained identity2 and both transport entries/five rejection scenarios, strict lint/parity; Astra33/Fable34 exit0/findings[]. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-20260912/README.md). Internal/default-OFF only; original failures retained.
 - [x] Manager accepted receiving Stage B e1cc38a70/Rust2588dfe0 after reading all17 command exits+suite0, actual RTX/TMUX/provenance/test summaries and unchanged module/lock pairs. Internal increment only; original failures/reviews retained.
