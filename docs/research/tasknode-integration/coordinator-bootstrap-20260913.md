@@ -261,7 +261,73 @@ An auth expiry/refresh failure holds live admission and uses supported operator
 reauthentication outside this read-only probe; it is not permission to clone more
 credentials or relax their protection. No recurring operation or product test pass.
 
+First attempt `attempt-rk_95g3z` failed in-process app-server initialization before
+a session because native state was pointed at the read-only real auth home. Keep
+that denial and unchanged-auth receipt. Use a fresh private home with one
+owner-created auth.json symlink to the same exact read-only source file; the
+explicit source-file read allowance is unchanged. Do not grant real-home writes,
+copy tokens or expose this link to an executor. This separates native working
+state from the already-authorized supported auth read without broadening access.
+
+Second attempt `attempt-a5uobjaw` started a fresh native session but failed sending
+the HTTPS request; source auth remained unchanged. A separate unauthenticated
+curl diagnostic reproduced DNS denial and then reached the native endpoint
+(HTTP401, as expected without auth) after allowing the exact macOS resolver
+socket `/private/var/run/mDNSResponder`. Authorize that socket only for the trusted
+transport, in addition to HTTPS443, not general UDP/Unix-socket or guest access.
+Preserve both failures and a new per-run policy receipt. Keep the fixed profile's
+two exact web-search deprecation warnings separately identified; they are not
+runtime failures. All other error items and failed/error events still fail the
+preflight, regardless of whether expected text was also emitted.
+
+DNS-only corrected attempt `attempt-zii29ueb` still failed HTTPS without changing
+auth. The inspected shared `http-client/src/custom_ca.rs` supports `SSL_CERT_FILE`
+and selects Rustls for an explicit PEM bundle, avoiding a grant to user Keychain
+services for native TLS. Authorize reading only the existing root-owned public
+system bundle `/private/etc/ssl/cert.pem` via this supported environment setting;
+record its hash and immutability. Do not disable certificate/hostname verification,
+add a private CA, change host trust settings or allow Keychain access. This is an
+explicit separately recorded preflight correction, not a claim about frozen B.
+
 ## Isolated-executor transport falsification allocation
+
+### Canonical fixed-transport extraction, after the live preflight
+
+The successful native preflight closes the model-connection uncertainty only.
+Authorize one fresh Astra High implementation worker in the separately recorded
+`worktrees/isolated-model-transport-20260913`, branch
+`bootstrap/isolated-model-transport-20260913`, from the commit containing this
+allocation (record its exact40-character base in the dispatch receipt).
+It owns exactly five new canonical files: `scripts/initiative_control/isolated_model_transport.py`,
+`test_isolated_model_transport.py` and `isolated-model-catalog.json` beside it,
+plus `qa/initiative-control/management-bootstrap/isolated-model-transport.md`
+and its own `transport-allocation.json` in that QA directory. Target900 total/450
+non-test, hard1200/600; one Fable High material review plus necessary corrections.
+This is one sequential PF-80 bootstrap unit, not a new initiative. Parent owns
+all existing modules, private auth/state, live requests, integration and activation.
+
+Extract the already-proved fixed trusted model transport into an import-safe,
+testable host library; preserve the B profile/catalog/package pins and explicit
+DNS/public-system-CA corrections. An immutable owner configuration selects exact
+verified binary/auth/run-root paths, never guest data. The only per-inference
+content is bounded UTF8 text; no guest-selected argv, model, effort, providers,
+endpoint, headers, files or tools. Fixed Astra High, native auth/endpoint, zero
+retries, fresh private state, source-auth read-only link, original policy denials,
+90s wall and256KiB aggregate output. A packet may be up to64KiB, so replace B's
+4KiB pipe-safe fixture shortcut with genuinely bounded nonblocking input/output.
+Preserve attempts/receipts and exact error-versus-known-warning classification.
+Return only validated text and safe identity/status receipts; raw diagnostics
+remain owner-private. Import/help/OFF must not read auth or invoke a process.
+
+Tests use synthetic credentials and test-only injected loopback/child fixtures,
+never real auth/network. Cover same actual public execution path for input/output
+bounds, timeout/cleanup, malformed/unknown/error events, unchanged auth/catalog,
+path/symlink/package refusal, fresh-session identity and no fallback/retry. Retain
+the private B negatives as historical supporting evidence, not tests of changed
+code. Parent performs actual exact-candidate OS/live requalification afterward.
+No socket mediator, browser/PTY executor, HTTP proxy, daemon, worker dispatch,
+Slack call or source profile rewriting is part of this extraction. Those remain
+explicit next integration gates, not excuses to expose host capabilities.
 
 Parent inspected the read-only Hypatia audit and verified the Astra catalog's
 `code_mode_only` precedence in source. Its inspected default standalone0.1.36

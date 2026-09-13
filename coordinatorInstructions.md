@@ -642,6 +642,12 @@ events or product state; normal terminal history preserved the older action.
 The separate
 [model-only transport falsification](qa/initiative-control/management-bootstrap/model-only-stage-a.md)
 found startup-context and retry limitations; it is not an admitted executor.
+The subsequent [transport B correction](qa/initiative-control/management-bootstrap/model-transport-b.md)
+passed its nine offline tests and Fable review. A separate
+[native-auth preflight](qa/initiative-control/management-bootstrap/live-model-preflight.md)
+now returns actual Astra High text with credential immutability and clean shutdown.
+This closes the narrow model-connectivity prerequisite, not the mediated executor
+or Slack functional gate. Keep those remaining requirements explicit.
 
 Relevant prior source/test checkpoints and unresolved Bazel/functional gates are
 in the [pause handoff](docs/plans/management-pause-2026-09-13.md). Integration-branch
