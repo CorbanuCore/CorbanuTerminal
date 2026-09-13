@@ -18,6 +18,13 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Reviews39/40 actually dispatched2026-09-13 01:30:17UTC and completed exit0,
+findings[], patch correct, confidence0.92/0.88. Original system-preflight-
+20260913/{astra39,fable40}.{json,txt,exit,started.txt} retained. Same frozen
+source19f662493/Rust09f723 and exact final30-command proof; no repairs or
+extra opinion. Scoped extension used2/remaining0, preserving history1–38
+and all original failures. Manager receiving remains a separate gate.
+
 System-preflight reviews39 Astra High and40 Fable5.1 High via Corbanu/private
 TMUX reserved September13 01:29UTC under manager allocationab985f5f8.
 Two scoped extension slots reserved / zero unreserved; preserve1–38 and all

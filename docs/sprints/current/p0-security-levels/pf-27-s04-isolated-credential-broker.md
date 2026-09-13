@@ -14,7 +14,7 @@ branch: "feat/security-broker-resume-20260911"
 base_commit: "d870c92dab2bf3fbb602dc3b8447fe9f3534aecb"
 depends_on: "PF-27-S01, PF-13-S04, PF-27-S03, PF-41-S03"
 created: 2026-08-28
-updated: 2026-09-12
+updated: 2026-09-13
 ---
 # PF-27-S04 — Isolated credential broker process
 
@@ -47,9 +47,9 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - [x] All dependencies in front matter are completed and archived; plan remains active.
 - [x] Read root and nearest implementation-path AGENTS.md; verified exact plan/worktree coordinates.
 - [x] Accepted the PF-27-S03 Linux service, macOS launchd/XPC and Windows service/AppContainer candidates for construction; protected eligibility and sprint completion remain blocked until measured all-OS qualification passes.
-
 ## Done
-- [x] Private session source74263bbbc/Rustb7275b0c:29 commands+suite0, seven real session cases, retained suites/strict lint/parity/RTX TMUX; Astra37/Fable38 exit0/findings[]. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-session-20260912/README.md). Received locally at51d1a64f5; combined proof pending, internal-only N/A; native/user gates remain.
+- [x] Private preflight source19f662493/Rust09f723:30 commands+suite0, five new cases and retained strict/parity/non-root RTX TMUX proof; Astra39/Fable40 exit0/findings[]. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/system-preflight-20260913/README.md). Internal-only N/A; no native/user readiness.
+- [x] Private session source74263bbbc/Rustb7275b0c:29 commands+suite0, seven real session cases, retained suites/strict lint/parity/RTX TMUX; Astra37/Fable38 exit0/findings[]. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-session-20260912/README.md). Received51d1a64f5, combinedc1d866fd4 proof accepted; internal-only N/A, native/user gates remain.
 - [x] Private dispatch sourcec7d48e482/Rustbd56b597:28 commands+suite0, six real pair/PF20 cases, retained suites/strict lint/parity/actual RTX TMUX; Astra35/Fable36 exit0/findings[]. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-dispatch-20260912/README.md). Internal-only N/A; no native/product readiness.
 - [x] Descriptor compatibility d776e938d/Rustb48e9c4f: all25 commands+suite0, retained identity2 and both transport entries/five rejection scenarios, strict lint/parity; Astra33/Fable34 exit0/findings[]. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-20260912/README.md). Internal/default-OFF only; original failures retained.
 - [x] Manager accepted receiving Stage B e1cc38a70/Rust2588dfe0 after reading all17 command exits+suite0, actual RTX/TMUX/provenance/test summaries and unchanged module/lock pairs. Internal increment only; original failures/reviews retained.
@@ -75,7 +75,7 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - [x] Sealed image `ee1ac023c`: default3/synthetic39/affected356 (2 existing skips), scoped lint/parity/build/TMUX pass; Astra18/Fable19 clean. Kernel write/truncate/seal denials and failure cleanup proven; no invocation or loader trust. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/sealed-20260912/README.md).
 - [x] Static probe build/linkage feasibility passes on unchanged Rust0aa65bd: staticPIE f6ca8e3368dc/no interpreter or external libs and GNU control, actual-key TMUX. Fable20 patch correct/P3 receipt gap repaired; original exit1 and failed attempts retained. No artifact invocation/native qualification. [Proof](../../../../qa/security-levels/sprints/PF-27-S04/static-probe-20260912/CURRENT.md).
 ## Remaining
-- [ ] Implement allocated private system preflight and obtain final reviewed exact receiving proof. Session c1d866fd4 accepted; protected-user/PF26 policy1.7 gates remain.
+- [ ] Obtain manager exact combined receiving proof for qualified private preflight. Session c1d866fd4 accepted; protected-user/PF26 policy1.7 gates remain.
 - [ ] Include fresh connections after same-run re-registration with cached TLS handlers and admitted hosts, not only reuse of an old channel. Revocation fences queued dispatch, streams and uploads; new generations cannot inherit old credentials.
 - [ ] Keep sentinel keys/raw registries outside agent-accessible processes; test open-channel revocation, upload cancellation, same-run-ID replacement and broker restart with old handles. The proxy's retained RegisteredRun concern requires a native regression, not just a copied new-connection test.
 - [ ] Move raw credential resolution/substitution and its key material into a separately constrained trusted process; Core, model clients, and agent-accessible workers receive only opaque references.

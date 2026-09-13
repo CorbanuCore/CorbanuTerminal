@@ -982,6 +982,14 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
+Private system preflight qualified at source19f6624938c53e0c9709e1b25ada4a44fd13267e/
+Rust09f72396304d80a82cf466e220378f763ea8313b. [Literal proof](../../../qa/security-levels/sprints/PF-27-S04/system-preflight-20260913/README.md):
+all30 command exits plus suite0 in105s, five preflight cases, retained suites,
+strict lint/parity and source/module/fixture invariance on non-root RTX/TMUX.
+Astra39/Fable40 exit0/findings[]; no source repair or extra opinion. Private
+uncalled all-or-nothing preparation only; no transfer, native activation or
+identity-guard relaxation. Manager receiving next; later policy1.7 gates remain.
+
 Manager accepted combined session c1d866fd4/Rustec50d0378:29 command exits+
 suite0,139s actual RTX/TMUX, strict/parity/source/modules/input invariance.
 Next [private system-preflight allocation](../../../qa/security-levels/sprints/PF-27-S04/system-preflight-allocation-20260913.md)
