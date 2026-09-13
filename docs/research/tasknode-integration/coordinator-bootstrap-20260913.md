@@ -230,6 +230,37 @@ the already-allocated Fable High material review. This is no model substitution,
 new endpoint/auth store or permission expansion. It does not authorize live auth,
 a public proxy, Rust validation changes or acceptance of functional product tests.
 
+## Supported live model-transport preflight
+
+After transport B review01 and its clean documentation correction, parent owns
+one bounded native-auth preflight under `.codex-work/transport-live.ZBeaq9/`.
+Exactly one operator script `probe.py` plus generated private attempts/receipts;
+target200/hard300 authored lines. This uses the goal's bounded live qualification
+authority, not product execution. Frozen B source/fixtures remain unchanged.
+
+Pin the same0.1.41 binary, catalog, model-only flags, fixed custom provider alias,
+Astra High and zero request/stream retries. Send only a fixed nonsensitive text
+probe through Corbanu's supported ChatGPT authentication and native endpoint
+selection. Parent verified `/Users/Neo/.codex/auth.json` is0600 with ChatGPT-mode
+credentials and an access expiry September15; do not print, copy to an executor,
+export, refresh or rewrite credentials. The trusted model transport may read that
+exact existing auth file; it is not the future confined action executor. Its empty
+environment and read-only auth access must exclude host config, instructions,
+skills, history, source, Keychain and unrelated credentials. Capture only validated
+assistant output in the public receipt; raw operator diagnostics stay private.
+
+A preliminary Seatbelt domain-filter syntax check rejected `chatgpt.com:443`:
+the filter accepts only `localhost` or `*`, not a hostname. Use HTTPS-port egress
+in the trusted model transport plus the fixed native default ChatGPT endpoint,
+normal TLS verification and no caller-supplied URL/headers/argv or executable tools.
+This is not domain-specific OS filtering or guest network authority; disclose the
+layered bound. Keep fork/helper execution denied,90s wall and256KiB output caps,
+private fresh state, exact process-group cleanup and immutable source-auth hashes.
+Preflight/failed connection attempts are retained, no silent retry or model fallback.
+An auth expiry/refresh failure holds live admission and uses supported operator
+reauthentication outside this read-only probe; it is not permission to clone more
+credentials or relax their protection. No recurring operation or product test pass.
+
 ## Isolated-executor transport falsification allocation
 
 Parent inspected the read-only Hypatia audit and verified the Astra catalog's
