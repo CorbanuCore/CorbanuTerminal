@@ -1,0 +1,11 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.25s
+────────────
+ Nextest run ID 11a6c038-5804-4e32-8d44-904da3008f08 with nextest profile: local
+    Starting 4 tests across 1 binary (20 tests skipped)
+        PASS [   0.026s] (1/4) codex-protected-state native::tests::pf27_root_compat_both_entries_cas_and_death
+        PASS [   0.047s] (2/4) codex-protected-state native::tests::pf27_root_compat_both_entries_lost_reply_is_ambiguous
+        PASS [   0.078s] (3/4) codex-protected-state native::tests::pf27_root_compat_both_entries_reject_malformed_and_replay
+        PASS [   0.103s] (4/4) codex-protected-state native::tests::pf27_root_compat_rejected_identity_never_receives_key
+────────────
+     Summary [   0.104s] 4 tests run: 4 passed, 20 skipped
