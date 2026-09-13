@@ -1,5 +1,12 @@
 # Workstream continuation — September 11
 
+## STOP — user-requested management pause, September 13
+
+All three workstreams are paused at the integrated checkpoint. No successors,
+reviews or automatic continuation are authorized until new user direction.
+[Current pause, exact checkpoints and remaining qualification](management-pause-2026-09-13.md)
+supersede every historical continuation instruction below. No answer requested.
+
 ## Current handoff — September13 02:27 manager cycle
 
 02:32 update: PF13 preflight is now received throughc51d2d6aa after literal

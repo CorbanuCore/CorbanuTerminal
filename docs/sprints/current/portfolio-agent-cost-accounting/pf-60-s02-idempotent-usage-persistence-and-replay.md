@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-60-S02"
 title: "Idempotent usage persistence and replay"
-status: in_progress
+status: blocked
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 2
@@ -19,7 +19,7 @@ updated: 2026-09-12
 
 # PF-60-S02 — Idempotent usage persistence and replay
 
-Current September13 02:08UTC: compact import received81d0f90e7, all combined gates pass; manager hold cleared. Next [original-contract native golden](../../../research/agent-cost-accounting/original-contract-native-golden-allocation.md), exactly two paths target800/150 STOP900/200. Earlier mandates/failures remain history; S03 dependent, no user question.
+**User-requested management pause, September 13.** Goldens/combined proof accepted; worker closed. [Checkpoint and gates](../../../plans/management-pause-2026-09-13.md). No answer requested; continuation mandates below suspended. S03 not started.
 17:22UTC: parent accepted review01's dropped role retry/timeout overrides P2 as
 in-scope; first correction queued after the matched baseline run. Same20 paths
 and existing allowance; native child override/mismatched-route proof required.

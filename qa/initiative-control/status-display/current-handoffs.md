@@ -1,5 +1,13 @@
 # Current workstream handoffs — September 12
 
+## STOP — user-requested management pause, September 13
+
+All three workstreams have reached a checkpoint and stopped. The implementation
+subagents are closed, security owner paused and both management monitors paused.
+[Integrated checkpoints, evidence and remaining gates](../../../docs/plans/management-pause-2026-09-13.md).
+This deliberate pause is not an unanswered question. No successor work or live
+enablement; older progress notes below are historical and do not authorize work.
+
 ## Current handoff — September13 02:27 manager cycle
 
 02:32 update supersedes the pending preflight below: PF13 source/evidence is

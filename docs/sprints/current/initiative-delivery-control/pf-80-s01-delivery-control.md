@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-80-S01"
 title: "Native Task Node delivery-control integration"
-status: in_progress
+status: blocked
 plan_file: "docs/plans/active/initiative-delivery-control.md"
 plan_feature: "PF-80"
 execution_order: 1
@@ -19,7 +19,7 @@ updated: 2026-09-12
 
 # PF-80-S01 — Native Task Node delivery-control integration
 
-Current mandate: [bounded synthetic owned ingress](../../../research/tasknode-integration/owned-ingress-allocation-20260913.md), same ten paths; returned927/424 uncompiled. Manager accepts target1800/1000 STOP1950/1100 and scoped formatting now; parent serializes aliases/locks/build lease after accounting's active Mac gate. Slack credentials resolved, live/phone/nativeACK still unqualified; no human hold. Original1250/1500/850 and failures preserved.
+**User-requested management pause, September 13.** Ingress checkpoint integrated; worker/Slack listener stopped. [Checkpoint and open qualification](../../../plans/management-pause-2026-09-13.md). No answer requested; continuation mandates below suspended. Live posting OFF.
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
 [Native validity allocation](../../../research/tasknode-integration/native-validity-allocation.md)
 and [recovery handoff](../../../research/tasknode-integration/recovery-decision-handoff.md).
