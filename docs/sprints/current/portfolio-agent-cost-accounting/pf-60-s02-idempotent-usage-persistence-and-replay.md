@@ -5,13 +5,13 @@ status: in_progress
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 2
-owner: "Codex accounting Core-policy lane"
-parallel_lane: "accounting-core-policy"
-write_scope: "codex-rs/core/src/accounting.rs, codex-rs/core/src/client.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/exec_env.rs, codex-rs/core/src/accounting_policy_tests.rs, codex-rs/core/src/accounting_tests.rs, codex-rs/core/src/exec_env_tests.rs, codex-rs/core/tests/suite/accounting_anthropic.rs, codex-rs/core/tests/suite/accounting_anthropic_support.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/core-policy-repair.md"
-integration_gate: "Eight-file correction clean-reviewed/received37f23b991; parent575/575 and six-library check pass. Core's eight lint errors remain. Current ten-path core-policy-repair-allocation.md targets950/300 STOP1100/375; new material review+necessary correction, history retained. Manager owns combined native/shared/check/Clippy proof; no S02/S03/live acceptance."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-core-policy-20260912"
-branch: "workstream/accounting-core-policy-20260912"
-base_commit: "37f23b991d6d79ba782aadc50dc5652674c91d20"
+owner: "Codex accounting compact-import lane"
+parallel_lane: "accounting-late-import"
+write_scope: "codex-rs/state/src/runtime/accounting_store.rs, codex-rs/state/src/runtime/accounting_retention_atomic.rs, codex-rs/state/src/runtime/accounting_late_import.rs, codex-rs/state/src/runtime/accounting_late_import_tests.rs, codex-rs/state/src/runtime/accounting_late_import_test_support.rs, codex-rs/state/tests/accounting_late_import.rs, codex-rs/state/tests/accounting_late_import_process.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/compact-late-import-increment.md"
+integration_gate: "Core correction reviewed/received; combinedeb5855959 parent100/575/Clippy/check PASS, old failures retained. Next exact eight-path compact-late-import-allocation.md target2000/650 STOP2200/750; one material review+necessary correction, manager combined proof. No S02/S03/live acceptance."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-late-import-20260913"
+branch: "workstream/accounting-late-import-20260913"
+base_commit: "eb58559590dd2b9332f2445971ee086988c67080"
 depends_on: "PF-60-S01"
 created: 2026-09-09
 updated: 2026-09-12
@@ -19,7 +19,7 @@ updated: 2026-09-12
 
 # PF-60-S02 — Idempotent usage persistence and replay
 
-Current23:13 mandate: [ten-file Core policy correction](../../../research/agent-cost-accounting/core-policy-repair-allocation.md). First835/249 passed100focused/575shared/normalcheck; only16 newly exposed native test unwrap sites added under same ceiling, runtime frozen. First material review after corrected proof. Earlier native/repair mandates and failures below are retained history.
+Current September13 mandate: [complete compact-only import](../../../research/agent-cost-accounting/compact-late-import-allocation.md), exactly eight paths, target2000/650 STOP2200/750. Core correction reviewed and combined100/575/Clippy/check pass. Earlier mandates/failures below remain history; S03 still dependent.
 17:22UTC: parent accepted review01's dropped role retry/timeout overrides P2 as
 in-scope; first correction queued after the matched baseline run. Same20 paths
 and existing allowance; native child override/mismatched-route proof required.
@@ -28,9 +28,9 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 
 ## Execution mandate
 
-- Next: [Core policy repair](../../../research/agent-cost-accounting/core-policy-repair-allocation.md): operation gate, short data locks, fail-closed poison/cancellation and exact profile JSON; preserve native caller and OFF behavior.
+- Next: [Compact-only original-evidence import](../../../research/agent-cost-accounting/compact-late-import-allocation.md): one complete atomic opt-in normal-library operation, exact eight paths; preserve native caller, raw guard and OFF behavior.
 - Excludes: Changing prices, rebilling historical customers, collecting prompts, restoring legacy Plan allowances, or silently converting allowance to cash.
-- Approved target1900total/950conservative non-test including moves/receipt, estimate1515/795; one coherent versioned-installation, normal-library/native lifecycle and atomic price-binding failure/concurrency unit justifies above800, not inherited exceptions. Report measured overage to integrator before expanding; do not compress proof. One NEW code review plus necessary correction and one allocation review if needed; prior usage unchanged.
+- Approved target2000total/650non-test, STOP2200/750; estimate1694/574. One complete atomic compact-import operation plus native/public/process/failure proof justifies this specific exception. No compressed tests or inherited allowance; one new material review plus necessary correction, prior usage retained.
 
 ## Plan linkage
 
@@ -41,7 +41,7 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 ## Code boundaries
 
 - Existing, read before work: `codex-rs/state/migrations/0041_provider_request_cache_usage.sql`; `codex-rs/app-server/src/request_processors/token_usage_replay.rs`; `codex-rs/tui/src/chatwidget/usage.rs`; `codex-rs/tui/src/token_usage.rs`.
-- Output: exact ten Core/test/receipt paths in front matter; no manifest/lock writes. No ownership overlap with PF27 or Slack. Accepted store is read-only; current size/review disposition is in the Core correction allocation.
+- Output: exact eight state/test/receipt paths in front matter; no manifest/lock/Core writes. No ownership overlap with PF27 or Slack. Current complete-operation bounds/review allowance are in the compact-import allocation.
 - Tests/evidence: preserve A/B/C1/C2/native assertions, failures and receipts. Public delete signatures/counts/missing-row semantics and normal no-schema behavior stay unchanged, no blanket activation/failure checks. Normal-library facade gates fixture constructors cfg(test); default installs/collects nothing, installed-store deletion remains atomic even disabled. Separate logs/memory/goals stores remain outside main-state atomicity. No dependencies or real collectors.
 
 ## Preconditions
@@ -55,7 +55,7 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 - [x] Parent inspected DayTotals/Decimal visibility and amount/rate parsing distinction; B1 is now reviewed and tested, receipt below.
 
 ## Done
-
+- [x] Ten-path Core policy correction b320ef722 independently reviewed clean0.94 and received2cb69e429; exact combinedeb5855959 passes100focused18.334s/575shared31.075s, zero execution skips, Clippy/check. [Receiving proof](../../../../qa/initiative-control/status-display/combined-native-20260913.md); old failures/internal-only N/A retained.
 - [x] Normal-library store6b2dbcab5 integrated at9518184ac after clean independent review03 (helper85655). Exact17 paths2057total/829non-test; second correction samples production deletion time after writer-lock acquisition, with real ordering regression. Receiving `just test -p codex-state -p codex-tasknode-session`:367passed,1leaky,0skipped,16.922s. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/production-store-increment.md) preserves287 worker tests, original failures and review history. Optional versioned installation, typed facade and atomic admission/observations accepted; collection remains OFF.
 - [x] Native bridge accepted: exact six-file0eb98e8d3 integrated at8725e1ff755a5fa974058f465f3553b3f9b884eb. First independent Astra High native-ownership-code-review.json/txt, helper70866, exit0 clean. Parent receiving exec46485 combined `just test -p codex-state -p codex-tasknode-session` exit0:354/354passed,0skipped14.997s, nextest ef047f72-80c9-4700-863d-1f1e253b5d75; no final-summary LEAK,21fixture dead-code warnings(9duplicates). Parent governance3/115/126exit0. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/native-ownership-increment.md) retains950total/227non-test, worker failures/results and prior review usage; receiving evidence is parent-attributed, not rerun here.
 - [x] C2 accepted: exact six-file b7a3466de integrated at d5608c58d91a75396fea78b447477c44091d4625. First independent Astra High c2-atomic-review.json exited0 clean; parent combined `just test -p codex-state -p codex-tasknode-session` passed346/346,0skipped13.556s, run06b633c7-51ae-4dd8-bf96-81a2665c2871. No LEAK marker in final summary; existing11 fixture dead-code warnings remain. [Exact receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/atomic-retention-increment.md); c2-size-disposition.md accepts1519total/190non-test for that candidate, not800compliance. Original failures/review usage and seven-line interim C1 assertion removal/replacement mapping remain preserved.
@@ -80,7 +80,7 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 
 ## Remaining
 
-- [ ] Implement and verify the current ten-file Core correction after manager dispatch; preserve admitted identity, cancellation/poison failure, native retry/HTTP independence and exact env routing. Return frozen diff for independent review and combined receiving gates.
+- [ ] Implement and prove exact eight-path compact-only original-evidence import after manager dispatch: full transaction, native public read/delete/replay, SQL faults and process proof; return frozen for material review and combined receiving.
 - [ ] Preserve accepted normal-library store tests and all original failed evidence as the unchanged dependency regression gate; do not re-author its installation/rollback matrix.
 - [ ] Actual dispatch/presence/trusted original-price provenance, permanent deletion-fence qualification and complete native S02 goldens remain outside this store.90..365-day compact-only late import is explicitly unqualified, current guard unchanged, not waived; no new prerequisite chain or product decision for approved defaults. S03 stays draft.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.

@@ -17,9 +17,9 @@ product_spec:
   heading: "Product measurement"
   requirement_excerpt: "No commercial performance numbers have been supplied."
 implementation_worktrees:
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-core-policy-20260912"
-    branch: "workstream/accounting-core-policy-20260912"
-    base_commit: "37f23b991d6d79ba782aadc50dc5652674c91d20"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-late-import-20260913"
+    branch: "workstream/accounting-late-import-20260913"
+    base_commit: "eb58559590dd2b9332f2445971ee086988c67080"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
     base_commit: "c8358dd9b4329036c8f8fb525015bbd795433513"
@@ -32,6 +32,20 @@ implementation_worktrees:
 ---
 
 # 2. Accounting — unified agent cost and usage
+
+September13 next execution: manager accepts the [complete compact-only import
+allocation](../../research/agent-cost-accounting/compact-late-import-allocation.md),
+exact eight state/test/receipt paths in the new checkout above, target2000/650,
+STOP2200/750 for one atomic operation plus native/public/process/failure proof.
+Combined Core correction100/575 tests, Clippy and check all pass; historical
+failures remain. One new material review plus necessary correction, default OFF.
+No new source acquisition, user import UI or complete S02 acceptance is implied.
+
+September13 00:14UTC: exact933/279 candidate b320ef722, review01 clean0.94,
+received2cb69e429 and combined with PF13 at eb5855959. Parent100 focused tests
+pass18.334s; shared575/Clippy/check are running on the frozen combined Rust tree.
+Mendel prepares only the smallest compact late-import allocation. S02 stays
+active, S03 dependent; collection OFF and historical failures are not waived.
 
 23:13UTC: ten-file Core candidate returned835/249,100focused and575shared tests
 plus normal check pass. Original eight errors cleared;24 emitted Clippy errors
@@ -173,7 +187,7 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Codex accounting native-Anthropic lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `c8358dd9b4329036c8f8fb525015bbd795433513` | PF-60-S02 exact20-path native caller; anthropic-dispatch-allocation.md; three dependency files serialized by manager |
+| Codex accounting compact-import lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-late-import-20260913` | `workstream/accounting-late-import-20260913` | `eb58559590dd2b9332f2445971ee086988c67080` | PF-60-S02 exact eight-path compact-late-import-allocation.md; no Core/lock/manifest edits |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
 S02 retains its reservation; Travis approved conservative daily expiry in this

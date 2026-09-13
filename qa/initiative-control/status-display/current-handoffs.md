@@ -1,5 +1,26 @@
 # Current workstream handoffs — September 12
 
+## Current handoff — September13 combined proof accepted
+
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): [combined100/575/Clippy/check all pass](combined-native-20260913.md). Manager accepts the [complete eight-path compact-only import operation](../../../docs/research/agent-cost-accounting/compact-late-import-allocation.md), target2000/650 STOP2200/750, new accounting-late-import checkout. Dispatch follows allocation commit; S03 stays dependent and collection OFF.
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): exact combined28-command RTX proof accepted; all exits/suite0, source/locks/artifacts unchanged. Existing owner dispatched on [private root-session pump](../../security-levels/sprints/PF-27-S04/descriptor-root-session-allocation-20260912.md), seven paths700/800, reviews37/38. No new native/public bootstrap or protected activation.
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): [private credential-path handoff already requested](slack-access-decision.md); installation/scopes stay complete. Pinned tiny_http cannot bound ingress/cleanup through its public APIs, so the old proxy proposal is not implemented. James prepares an exact opt-in same-binary owned-ingress scope using maintained existing parser/runtime machinery. Manager infrastructure, not another user decision or a qualified executor.
+
+These are same-sprint continuations after accepted evidence, not new initiatives,
+main/release or whole-sprint completion. Historical failures remain preserved.
+
+## Current handoff — September13 00:14UTC
+
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): reviewed933/279 candidate received2cb69e429, combined with security at eb5855959. Parent100 focused tests passed18.334s; shared575/Clippy/check are running. Mendel prepares only the next compact late-import allocation. S03 remains dependent, collection OFF.
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): reviewed740-line source and literal evidence received at eb5855959. Existing sole owner confirmed no pause and launched the same28-command RTX/TMUX proof against this combined source. No duplicate review or new native activation; successor stays a proposal until combined proof.
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): [installation complete; private credential handoff already requested](slack-access-decision.md). Feed18 shows this distinct setup question, not another access approval. James inspects actual pinned proxy timeout/body/schema APIs before a minimal infrastructure allocation. Corrected646-line/12-test engineering is accepted, not full isolation or live Slack qualification.
+
+No implementation source is being edited during combined verification. Current
+assignments are manager Mac tests, sole security owner RTX tests and two bounded
+preparation tasks. Main, release, sprint acceptance and protected activation are
+unchanged. The previous installation publication is verified separately; this
+new receiving observation awaits one Luna sync.
+
 ## Current handoff — Slack installation completed
 
 - [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): Travis approved access and separately approved the installation agreement. Reinstall is complete, the bot is in the private channel, and Socket Mode/private reply events are enabled. [Exact setup evidence and remaining credential handoff](slack-access-decision.md). Both required token environment inputs are absent in this runner; no token was extracted. Manager owns actual connection, bounded no-op alert/reply/native-ACK and independent qualification once privately provisioned. Alerts remain non-operational. The resolved access question must not reappear as a hold.

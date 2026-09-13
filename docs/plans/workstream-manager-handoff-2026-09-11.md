@@ -1,5 +1,42 @@
 # Workstream continuation — September 11
 
+## Current handoff — September13 combined proof accepted
+
+[Exact combined evidence](../../qa/initiative-control/status-display/combined-native-20260913.md)
+passes: Mac100/575, zero execution skips, Clippy/check; sole owner RTX28 exits+
+suite0 on unchangedeb5855959/Rust4222fd172. No repeated clean reviews. Manager
+accepts accounting's complete eight-path compact-import unit in new checkout
+accounting-late-import-20260913, target2000/650 STOP2200/750, material review+
+necessary correction. Source dispatch follows the allocation commit/checkers.
+PF13 owner dispatched on allocation06bf29c29, seven-path private root-session
+pump700/800, reviews37/38, existing RTX lease. Native bootstrap stays excluded.
+
+James proved the existing tiny_http public API cannot provide bounded pre-parser
+ingress or cleanup. Old three-file600/700 proxy proposal is not allocated.
+Manager classified an opt-in same-binary owned-ingress design as permitted
+internal infrastructure, default unchanged/synthetic only/no credential reader;
+James prepares exact maintained-parser/runtime/dependency/test scope privately.
+No new daemon, live route, package or executor acceptance is inferred.
+
+Slack installation/permissions remain complete; feed18 surfaces the already-
+asked private credential-path handoff. Live remains OFF, not another access
+approval. Source synchronization remains solely Luna xhigh; main unchanged.
+
+## Current handoff — September13 00:14UTC
+
+Both reviewed native candidates are received at eb5855959, Rust4222fd172:
+accounting b320ef722 received2cb69e429, security source/evidence received through
+eb5855959. Exact accounting hashes and security subtree parity verified; combined
+Cargo/MODULE locks preserved. Parent100focused passes18.334s, remaining575/
+Clippy/check ongoing under exclusive Mac target. Existing PF13 owner confirmed
+no pause and launched the exact28-command combined RTX/TMUX proof. No new review.
+Mendel prepares only the compact late-import allocation. James inspects the
+pinned proxy's actual timeout/body/schema APIs before a coherent infrastructure
+allocation; accepted646/12test boundary remains frozen, not a complete executor.
+The Slack private credential-file-path handoff was already asked in the user
+installation turn; feed18 now projects it without reopening approved access or
+agreement. Live stays OFF. [Current lane details](../../qa/initiative-control/status-display/current-handoffs.md).
+
 ## Current handoff — September12 Slack approval and proactive testing
 
 Travis approved the exact Slack access request and instructed the manager to

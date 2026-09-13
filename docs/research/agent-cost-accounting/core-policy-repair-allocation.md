@@ -1,5 +1,15 @@
 # PF-60-S02 — Core policy correction allocation
 
+## September13 receiving checkpoint
+
+Exact ten-path933/279 final hashes verified again; independent review01 exit0,
+no findings, confidence0.94. Manager committed frozen worker b320ef722 and
+received2cb69e429; combined with PF13 at eb58559590dd2b9332f2445971ee086988c67080,
+Rust4222fd172edfdb04d0e69e019454894f783f379c. Parent100focused passed18.334s,
+shared575 passed31.075s, existing-policy Clippy and normal check both exited0.
+No repeated clean review, source edit or full-Core waiver. The next exact
+eight-path compact-import allocation is accepted; Mac target returns on dispatch.
+
 ## September12 23:13 — exact test-helper continuation
 
 Frozen first candidate835total/249non-test,100focused/575shared/normal check
