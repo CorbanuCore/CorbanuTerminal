@@ -575,22 +575,32 @@ event-to-worker controller/watchdog, completed Slack reply qualification, privat
 HTTPS access or a qualified isolated functional executor. Consult the linked
 receipts for exact candidates, failures and remaining gates.
 
+The bounded native rehearsal has now captured actual Fable → Astra High claim/ACK
+→ verified return → fresh Fable follow-up. One overlong follow-up was rejected,
+retained and reconciled before a fresh successful retry; no response was silently
+edited into acceptance. Global/product dispatch returned to paused afterward.
+This remains operator-driven evidence, not an unattended controller. Read-only
+Slack polling is separately allocated; do not report periodic reception until an
+actual qualified monitor is enabled and its last successful observation is visible.
+
 Relevant prior source/test checkpoints and unresolved Bazel/functional gates are
 in the [pause handoff](docs/plans/management-pause-2026-09-13.md). Integration-branch
 push preserves the handoff; it does not turn outstanding gates into passes.
 
 ## 13. Remaining launch work
 
-1. Wire durable events to the fresh manager, actual native dispatch/ACK and the
-   next event; finish revision-bound allocations and stale/duplicate recovery.
+1. Turn the proven operator-driven event/manager/native-ACK handoff into the
+   bounded owner bridge and unattended recovery path. Revision-bound allocation
+   and lifecycle controls are implemented; exercise actual crash/stall recovery.
 2. Connect explicit single-writer integration jobs to receiving evidence and
    enforced completion/archive/dependency-gated successors.
 3. Qualify the real Slack alert → human reply → canonical decision → agent ACK
    path, including disconnect/restart and applicable isolated functional cases.
 4. Finish administrator-enabled private HTTPS and authorized off-Mac access.
-   Current Mac and publisher tailnets differ; the human/admin setup question is
-   recorded on the dashboard and in the approved Slack channel. It holds remote
-   access qualification, not independent engineering.
+   Travis's Slack answer and the Mac's shared-peer inventory confirm RPC visibility
+   after his tailnet switch. Serve still requires publisher-tailnet administrator
+   enablement; the remaining question is on the dashboard and in Slack. Visibility
+   alone does not prove HTTPS access. This holds only remote-access qualification.
 5. Reconcile final ownership/state for all three workstreams; run a complete
    handoff plus crash/stall recovery rehearsal, then enable the verified watchdog
    and recurring coordinator. Send the final Slack completion notice only then.
