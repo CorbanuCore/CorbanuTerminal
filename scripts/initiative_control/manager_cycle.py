@@ -34,6 +34,10 @@ DIRECTIVE = (
     "or conflicting facts require an allocated wait/escalation/reconciliation. "
     "last_three_actions contains ordered id-only entries; resolve each complete "
     "record in actions by id. These are lossless references, not summaries. "
+    "An action's inputs_from_allocation replaces only its exact duplicated inputs: "
+    "reconstruct inputs as {allocation: that id, ...allocations[id].inputs}. "
+    "Historical or changed inputs remain inline. New proposals still require the "
+    "full inputs object, never inputs_from_allocation. "
     "Derived event/action evidence previews are omitted; the exact full bodies "
     "are in original_evidence under their preserved evidence_digest. "
     "Preserve approvals, unresolved blockers, review budgets and pause boundaries."
@@ -113,6 +117,19 @@ def briefing(coordinator, packet, owner_context):
                               if field in reference_fields else value
                               for field, value in action.items()}
                         for key, action in packet["actions"].items()}
+    for action in brief["actions"].values():
+        inputs = action.get("inputs")
+        if not isinstance(inputs, dict) or "inputs_from_allocation" in action:
+            continue
+        key = inputs.get("allocation")
+        allocation = packet["allocations"].get(key) if isinstance(key, str) else None
+        # Never replace a historical assignment with its newer allocation, even
+        # when Python considers different JSON types equal (True versus 1).
+        if (allocation is not None
+                and action.get("allocation_digest") == f.digest(encoded(allocation).encode())
+                and encoded(inputs) == encoded({"allocation": key, **allocation["inputs"]})):
+            del action["inputs"]
+            action["inputs_from_allocation"] = key
     originals = brief["original_evidence"]
 
     def collect(value):

@@ -291,6 +291,48 @@ class CycleTests(unittest.TestCase):
             m.briefing(self.c, packet, self.root / "context.json")
         self.assertEqual(0, self.calls)
 
+    def test_repeated_action_inputs_are_losslessly_indexed(self):
+        with self.c.mutation("fixture", {}) as (_, state):
+            allocation = state["allocations"]["bootstrap"]
+            allocation["inputs"] = {"payload": "x" * 18000, "flag": True}
+            for index in range(3):
+                state["actions"][str(index)] = dict(id=str(index), workstream="delivery",
+                    status="accepted", sequence=[index, 0],
+                    inputs={"allocation": "bootstrap", **allocation["inputs"]},
+                    allocation_digest=f.digest(encoded(allocation).encode()))
+        packet = self.c.begin_manager()
+        before = encoded(packet, limit=240000)
+        self.assertGreater(len(before), f.BRIEF_LIMIT)
+        brief = json.loads(m.briefing(self.c, packet, self.root / "context.json"))
+        for key, action in brief["actions"].items():
+            restored = dict(action)
+            allocation_id = restored.pop("inputs_from_allocation")
+            restored["inputs"] = {"allocation": allocation_id, **brief["allocations"][allocation_id]["inputs"]}
+            self.assertEqual(encoded(packet["actions"][key]), encoded(restored))
+        self.assertEqual(before, encoded(packet, limit=240000))
+        self.assertEqual([], brief["evidence_omissions"])
+        self.assertLess(len(encoded(brief)), f.BRIEF_LIMIT)
+        self.assertEqual([{"id": str(i)} for i in range(3)], brief["last_three_actions"]["delivery"])
+        self.assertIn("New proposals still require the full inputs object", brief["directive"])
+
+    def test_historical_or_nonidentical_action_inputs_stay_inline(self):
+        packet = self.c.begin_manager()
+        allocation = packet["allocations"]["bootstrap"]
+        allocation["inputs"] = {"flag": True}
+        original = dict(id="prior", workstream="delivery", status="accepted", sequence=[0, 0],
+                        inputs={"allocation": "bootstrap", "flag": True},
+                        allocation_digest=f.digest(encoded(allocation).encode()))
+        variants = [dict(original, allocation_digest="0" * 64),
+                    dict(original, inputs={"allocation": "bootstrap", "flag": 1}),
+                    dict(original, inputs={"allocation": "missing", "flag": True}),
+                    dict(original, inputs={"allocation": [], "flag": True}),
+                    dict(original, inputs_from_allocation="preexisting user field")]
+        for action in variants:
+            packet["actions"] = {"prior": action}
+            packet["last_three_actions"]["delivery"] = [action]
+            brief = json.loads(m.briefing(self.c, packet, self.root / "context.json"))
+            self.assertEqual(encoded(action), encoded(brief["actions"]["prior"]))
+
     def test_missing_evidence_holds_before_launch(self):
         self.c.event({"id": "missing", "result": {"evidence_digest": "a" * 64}})
         result = self.cycle()

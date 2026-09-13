@@ -32,6 +32,24 @@ initiatives. Shared edits and receiving tests remain serialized.
 
 ## Sequential core owner-controls allocation
 
+### Lossless action-input indexing after the receiving launch hold
+
+September 13: Nash's owner-transition candidate ca0474fe4 has a clean Fable
+review, but its receiving-manager attempt hit the 64 KiB briefing gate before
+launch. The original attempt and earlier TMUX path-length failure remain
+retained. Parent owns a bounded correction in `manager_cycle.py` and
+`test_manager_cycle.py` under `scripts/initiative_control/`, plus this allocation
+and a QA receipt under `qa/initiative-control/management-bootstrap/`.
+Base 5b1d343df; target 100 changed lines/hard 160, one scoped Fable High review plus
+necessary correction, preserving prior reviews. Index only action inputs that
+exactly match their current frozen allocation and digest, with explicit manager
+reconstruction instructions. Preserve changed/historical inputs verbatim, raw
+claims, original evidence, last-three ordering, all limits and authority checks.
+Do not trim evidence, edit durable history or auto-retry failed manager claims.
+Tests prove lossless reconstruction, changed/digest-mismatched inputs and large
+repeated assignments. Parent remeasures the retained actual failed packet before
+an explicitly reconciled fresh manager. Product dispatch/recurrence remain paused.
+
 ### Executable owner-only lifecycle transitions
 
 Next unit after the actual native receiving checkpoint and460-test combined
