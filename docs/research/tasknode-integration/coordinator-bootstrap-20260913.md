@@ -474,6 +474,49 @@ grant root execution, modify the cached image/host permissions or install packag
 The original single-bind inventory remains historical; the browser attempt has
 exactly the guest-script and public-runtime read-only binds. `/tmp` stays noexec.
 
+## Fixed confined browser guest allocation — September13
+
+Fresh Astra High worker in `worktrees/isolated-browser-guest-20260913`, branch
+`bootstrap/isolated-browser-guest-20260913`, exact base
+`72429ddaec4ab0f2dd19f4e59da8d095c6bc39a8`, owns exactly
+`scripts/initiative_control/isolated_browser_guest.py`, adjacent
+`test_isolated_browser_guest.py`, and
+`qa/initiative-control/management-bootstrap/isolated-browser-guest.md`.
+Target650 total/350 non-test, hard850/450. This disjoint PF80 bootstrap unit may
+proceed while parent finishes image-transport qualification. It does not import
+or depend on the unfinished image change: host mediation remains parent-owned.
+One scoped Fable High review plus necessary corrections; no reset of prior ledgers.
+
+Implement the fixed guest-side browser action loop, not a host agent or Docker
+launcher. It runs only inside the parent-provisioned confined environment. No
+model/auth/service/SSH/Docker calls or host browser use by the worker. Import/help
+must not launch a browser. Use cached Playwright1.59.0 at actual runtime, no new
+dependency install. One fixed Chromium `/browser/chrome-linux/chrome`, fresh
+profile, read-only `/packet/site` assets and owner-only frozen `/packet/case.json`.
+Serve that directory only on private127.0.0.1:8768; packet supplies exact case/run
+identity, relative entry path and desktop1440x900 or phone390x844 profile. Validate
+paths and packet fields; no source/debugger/auth/history assets or optional plugins.
+
+Expose bounded strict JSONL over stdin/stdout, one sequential request at a time,
+unique monotonic sequence and latest frame identity. Actions are only observe,
+bounded viewport click/hover, literal text, enumerated key, bounded scroll, back,
+reload and finish. No arbitrary URL/path/selector/eval/shell/config/upload/download
+or host callback. Observe returns bounded body text with explicit truncation,
+viewport screenshot PNG, current URL and fresh frame identity. Reject stale-frame,
+unknown/duplicate keys, bad types, nonfinite/out-of-bounds coordinates and exhausted
+budgets before acting. Text and Enter are distinct. Unknown/failed operations must
+not imply success or silently retry. Limit action frames to8KiB, text4KiB, per-action
+timeout5s,40actions and300s whole guest run. Preserve structured terminal reason;
+parent owns durable raw I/O, process-tree watchdog and container reconciliation.
+
+Only the private local fixture origin may navigate/request; no file/remote URLs,
+downloads, popups or service workers. Chromium inner sandbox remains explicitly
+disabled within the outer enforced container, not an independence claim. Guest
+application checks supplement that boundary; they do not substitute for it. Test
+protocol and fake-browser adapters without actual model/browser service access;
+parent performs real confined runtime/child denial and subsequent independent
+case execution. No original DEC001..026 changes or functional pass declarations.
+
 ## Launcher interface for coordinator integration
 
 Standalone CLI reads a bounded JSON briefing from `--briefing`, fresh private
