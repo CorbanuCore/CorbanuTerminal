@@ -655,6 +655,11 @@ push preserves the handoff; it does not turn outstanding gates into passes.
 
 ## 13. Remaining launch work
 
+Fixed browser guest received at1c0c78998 with172 receiving test executions;
+[current checkpoint](qa/initiative-control/management-bootstrap/browser-guest-receiving-20260913.md)
+records actual controls, review disposition and verified pause-preserving deployment.
+Next is parent-owned interactive mediation and run-bound isolation/independent cases.
+
 Source activation now preserves the operator's timer activation state; it must
 not resume a paused schedule. See the [publication correction and verification](qa/initiative-control/management-bootstrap/publication-pause-20260913.md).
 
