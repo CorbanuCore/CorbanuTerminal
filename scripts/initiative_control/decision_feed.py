@@ -9,6 +9,7 @@ import re
 import stat
 
 import decisions as d
+import decision_inspection as inspection
 
 ARTIFACT = "decision-feed.json"
 SLACK_FILE = "decision-slack-status.json"
@@ -151,7 +152,7 @@ def sha(raw):
 
 def capture(state, at):
     """Only the fixed private fixture is input; errors never export its contents."""
-    feed, status, observed = None, "invalid", []
+    feed, status, observed, partial = None, "invalid", [], None
     path = Path(state) / "decisions.fixture.json"
     try:
         for entry in (Path(state), path):
@@ -171,14 +172,19 @@ def capture(state, at):
                 d.owner_only(os.fstat(stream.fileno()))
                 raw = stream.read(d.MAX_BYTES + 1)
             observed.append(sha(raw))
-            feed = d.validate(raw, clock(at))
-            status = "valid"
+            try:
+                feed = d.validate(raw, clock(at))
+                status = "valid"
+            except d.Invalid:
+                partial = inspection.extract(raw, clock(at))
     except (OSError, ValueError, RuntimeError):
         pass
     snapshot = {"schema": 1, "status": status, "feed": feed}
     slack_status, slack_value, slack_observed = read_slack(state, feed, at)
     observed.append(slack_observed)
-    if slack_status != "absent":
+    if partial is not None:
+        snapshot.update(schema=3, inspection=partial[0], withheld_count=partial[1])
+    elif slack_status != "absent":
         snapshot.update(schema=2, slack_status=slack_status, slack=slack_value)
     raw = d.canonical(snapshot)
     return raw, record(snapshot, sha(raw), d.digest(observed))
@@ -204,7 +210,7 @@ def read_snapshot(repo, manifest, at):
     try:
         pin = manifest["decision_feed"]
         d.shape(pin, "schema artifact digest input_digest payload_digest status feed_id revision assessed_at")
-        d.require(type(pin["schema"]) is int and pin["schema"] in (1, 2) and pin["artifact"] == ARTIFACT)
+        d.require(type(pin["schema"]) is int and pin["schema"] in (1, 2, 3) and pin["artifact"] == ARTIFACT)
         d.require(all(type(pin[k]) is str and re.fullmatch(r"[a-f0-9]{64}", pin[k]) for k in ("digest", "input_digest")))
         # Resolve only the source root (the installed generation is a symlink).
         fd = os.open(Path(repo).resolve(strict=True) / ARTIFACT, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -214,8 +220,12 @@ def read_snapshot(repo, manifest, at):
         d.require(len(raw) <= LIMIT and sha(raw) == pin["digest"])
         snapshot = json.loads(raw, object_pairs_hook=d.pairs)
         d.require(type(snapshot["schema"]) is int and snapshot["schema"] == pin["schema"])
-        d.shape(snapshot, "schema status feed" + (" slack_status slack" if snapshot["schema"] == 2 else ""))
+        extension = {1: "", 2: " slack_status slack", 3: " inspection withheld_count"}
+        d.shape(snapshot, "schema status feed" + extension[snapshot["schema"]])
         d.require(snapshot["status"] in ("valid", "missing", "invalid"))
+        if snapshot["schema"] == 3:
+            d.require(snapshot["status"] == "invalid" and snapshot["feed"] is None)
+            snapshot["inspection"] = inspection.validate(snapshot["inspection"], snapshot["withheld_count"], clock(at))
         if snapshot["status"] == "valid":
             snapshot["feed"] = d.validate(snapshot["feed"], clock(at))
         else:
@@ -246,6 +256,8 @@ def health(snapshot, manifest, at):
 
 
 def slack_health(snapshot, at):
+    if snapshot.get("schema") == 3:
+        return dict(state="unknown", assessed_at=None, last_verified=None)
     value = snapshot.get("slack")
     if value is None:
         return dict(state="unknown" if snapshot.get("slack_status") == "invalid" else "unrecorded", assessed_at=None, last_verified=None)
@@ -257,8 +269,9 @@ def slack_health(snapshot, at):
 
 def render(snapshot, at, sprints, documents):
     from attention import render_decisions
-    feed = snapshot["feed"]
+    feed = snapshot["feed"] or snapshot.get("inspection")
     assessed = feed["assessed_at"] if feed else ""
-    body = render_decisions(feed, clock(at), sprints, documents, slack=snapshot.get("slack"), slack_health=slack_health(snapshot, at))
+    body = render_decisions(snapshot["feed"], clock(at), sprints, documents, slack=snapshot.get("slack"), slack_health=slack_health(snapshot, at),
+                            inspection=snapshot.get("inspection"), withheld_count=snapshot.get("withheld_count"))
     return body.replace('<section id="decisions">',
                         f'<section id="decisions" class="notice attention" data-assessed-at="{assessed}" data-fresh-seconds="{d.FRESH_SECONDS}">', 1).replace('<details', '<details class="attention-item"')

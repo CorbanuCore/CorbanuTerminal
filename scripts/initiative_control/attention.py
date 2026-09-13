@@ -90,13 +90,29 @@ def notices(data):
                   data["sprints"]["sprints"], data.get("documents", {}))
 
 
-def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=None):
+def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=None, inspection=None, withheld_count=None):
     """Pure, unconnected fixture fragment; documents is the approved safe corpus."""
     from decisions import FRESH_SECONDS, project, stamp
 
     view = project(raw, now)
+    incomplete = inspection is not None
+    if incomplete:
+        from decision_inspection import validate
+        from decisions import Invalid
+        try:
+            if raw is not None:
+                raise Invalid()
+            view = project(validate(inspection, withheld_count, now), now)
+        except Invalid:
+            return '<section id="decisions"><h2>Decision inspection</h2><p>Unknown: decision input unavailable; open count unknown.</p></section>'
+        slack = None
     body = '<section id="decisions"><h2>Needs your decision</h2><p>Offline manager assessment. Slack not connected. Answer in the manager task. No operational approval or agent activity is established here.</p>'
-    if slack is not None:
+    if incomplete:
+        body = ('<section id="decisions"><h2>Decision inspection — incomplete input</h2>'
+                f'<p><strong>Inspection only: {withheld_count} records withheld. Total open count unknown.</strong> '
+                'Canonical decision input is invalid. These retained records establish no current decision state, '
+                'Slack delivery or answer authority, operational approval, or running workers.</p>')
+    elif slack is not None:
         health = slack_health or {}
         notice = ('Slack observation: ' + str(health.get("state", "unknown")) +
                   '; assessed ' + str(health.get("assessed_at") or "unknown") +
@@ -109,11 +125,12 @@ def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=N
         return body + '<p>Unknown: decision input unavailable; open count unknown.</p></section>'
     feed = view["feed"]
     esc = html.escape
-    stale = view["state"] == "stale"
-    body += f'<p>Source {esc(feed["feed_id"])} / revision {feed["revision"]}; assessed {esc(feed["assessed_at"])}. {"Stale: current decisions unknown; showing last-known records." if stale else "Fresh manager assessment."}</p>'
+    stale = incomplete or view["state"] == "stale"
+    source_status = "Incomplete input; inspection only." if incomplete else "Stale: current decisions unknown; showing last-known records." if stale else "Fresh manager assessment."
+    body += f'<p>Source {esc(feed["feed_id"])} / revision {feed["revision"]}; assessed {esc(feed["assessed_at"])}. {source_status}</p>'
     opened = [d for d in feed["decisions"] if d["id"] in view["open"]]
-    body += f'<p>{"Last-known open" if stale else "Open decisions"}: {len(opened)}.'
-    if opened:
+    body += '<p>Total open count unknown.' if incomplete else f'<p>{"Last-known open" if stale else "Open decisions"}: {len(opened)}.'
+    if opened and not incomplete:
         raised = min(d["revisions"][0]["raised_at"] for d in opened)
         age = int((stamp(now) - stamp(raised)).total_seconds() // 60)
         body += f' <span id="oldest-open-decision-age" data-raised-at="{esc(raised)}">Oldest raised {age} minutes ago.</span>'
@@ -176,7 +193,7 @@ def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=N
                 result += '<p>Slack status for this question revision: unknown.</p>'
         return result
 
-    for title, records in (("Open questions", opened), ("Decision history", [d for d in feed["decisions"] if d["id"] not in view["open"]])):
+    for title, records in (("Inspection records (recorded open)" if incomplete else "Open questions", opened), ("Inspection history" if incomplete else "Decision history", [d for d in feed["decisions"] if d["id"] not in view["open"]])):
         body += f'<div><h3>{title}</h3>'
         for decision in records:
             record = decision["revisions"][-1]
