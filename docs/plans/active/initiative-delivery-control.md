@@ -5,7 +5,7 @@ change_class: product-initiative
 priority: P1
 owner: "Codex Task Node integration lane; Travis Good accountable"
 parallel_sprint_limit: 1
-integration_owner: "Codex management"
+integration_owner: "Codex bootstrap coordinator; fresh Fable manager after qualification"
 activation_authority: "Travis Good"
 activation_basis: "September 10 delivery control request; September 11 three-workstream selection, task creation, beta planning and Astra High kickoff"
 target_release: "Internal operations; no Terminal or Desktop release authorized"
@@ -17,12 +17,15 @@ product_spec:
   heading: "Internal delivery control — TO BUILD"
   requirement_excerpt: "Use sequential sprints per initiative"
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/fable-launcher-20260913"
+    branch: "bootstrap/fable-launcher-20260913"
+    base_commit: "eb01bf006eacbeef5be07174a3f37ad124abc74c"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-owned-ingress-20260913"
     branch: "workstream/tasknode-owned-ingress-20260913"
     base_commit: "6dde60fface29b0678b792926cbcff7bc8cc542e"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "0368ed402a9dac4276b427313b9d7335670ee91c"
+    base_commit: "eb01bf006eacbeef5be07174a3f37ad124abc74c"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-slack-recovery-20260912"
     branch: "workstream/tasknode-slack-recovery-20260912"
     base_commit: "b9e671e60416b952cc20d7b7260d3678080aebd0"
@@ -38,6 +41,17 @@ implementation_worktrees:
 ---
 
 # 3. Task Node integration and delivery control
+
+## Current authority — September 13 management bootstrap
+
+Travis explicitly authorized all five bootstrap deliverables in
+[coordinatorInstructions.md](../../../coordinatorInstructions.md). Execute the
+[bounded bootstrap allocation](../../research/tasknode-integration/coordinator-bootstrap-20260913.md)
+within PF-80-S01. Security/accounting product implementation and old recurring
+automations remain paused. Parent coordinates bootstrap until the fresh Fable
+launcher and decision path are qualified; this is an explicit startup exception,
+not a claim the new management runtime already exists. The stale progress and
+allocations below are historical; no other owner should resume from them.
 
 September13 02:27UTC: Slack credential/identity/Socket connection preflight is
 complete; no human credential hold remains. Durable alert/reply/phone/native ACK

@@ -1,17 +1,17 @@
 ---
 sprint_id: "PF-80-S01"
 title: "Native Task Node delivery-control integration"
-status: blocked
+status: in_progress
 plan_file: "docs/plans/active/initiative-delivery-control.md"
 plan_feature: "PF-80"
 execution_order: 1
-owner: "James - Codex Task Node bounded transport lane"
-parallel_lane: "tasknode-owned-ingress"
-write_scope: "codex-rs/responses-api-proxy/src/lib.rs, codex-rs/responses-api-proxy/src/synthetic.rs, codex-rs/responses-api-proxy/src/synthetic_io.rs, codex-rs/responses-api-proxy/src/synthetic_exchange.rs, codex-rs/responses-api-proxy/src/synthetic_policy.rs, codex-rs/responses-api-proxy/src/synthetic_tests.rs, codex-rs/responses-api-proxy/src/synthetic_policy_tests.rs, codex-rs/responses-api-proxy/tests/synthetic_cli.rs, codex-rs/responses-api-proxy/README.md, codex-rs/responses-api-proxy/Cargo.toml"
-integration_gate: "Exact owned-ingress allocation: source authoring only until manager grants serialized dependency/build lease; parent owns root aliases and derived locks. Actual socket/CLI/default compatibility tests and Cargo/Bazel parity, one new material review plus correction; preserve prior history. Fixture-only internal N/A, real isolated executor and Slack phone/CAS/native ACK remain separate mandatory gates. Live OFF."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-owned-ingress-20260913"
-branch: "workstream/tasknode-owned-ingress-20260913"
-base_commit: "6dde60fface29b0678b792926cbcff7bc8cc542e"
+owner: "Codex management-bootstrap coordinator"
+parallel_lane: "management-bootstrap"
+write_scope: "scripts/initiative_control/, docs/research/tasknode-integration/coordinator-bootstrap-20260913.md, qa/initiative-control/management-bootstrap/, coordinatorInstructions.md"
+integration_gate: "Five-part user-authorized coordinator bootstrap allocation; distinct launcher worker and parent coordination/Slack scopes. Preserve prior reviews and failures. Exact combined tests, fresh Fable TMUX runs, actual Slack human reply/native ACK, private HTTPS and replay/crash/integration rehearsal required before recurring enablement. No security/accounting product resumption or TaskNode bulk delivery."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
+branch: "integrate/management-workstreams-20260911"
+base_commit: "eb01bf006eacbeef5be07174a3f37ad124abc74c"
 depends_on: "none"
 created: 2026-09-10
 updated: 2026-09-12
@@ -19,7 +19,7 @@ updated: 2026-09-12
 
 # PF-80-S01 — Native Task Node delivery-control integration
 
-**User-requested management pause, September 13.** Ingress checkpoint integrated; worker/Slack listener stopped. [Checkpoint and open qualification](../../../plans/management-pause-2026-09-13.md). No answer requested; continuation mandates below suspended. Live posting OFF.
+**September 13: bootstrap implementation authorized.** [Five-part allocation](../../../research/tasknode-integration/coordinator-bootstrap-20260913.md) supersedes old mandates. Other product work remains paused; recurring operation OFF until rehearsal passes. [Prior checkpoint](../../../plans/management-pause-2026-09-13.md).
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
 [Native validity allocation](../../../research/tasknode-integration/native-validity-allocation.md)
 and [recovery handoff](../../../research/tasknode-integration/recovery-decision-handoff.md).
@@ -27,7 +27,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 ## Execution mandate
 
 - Deliver: scoped main-tree port of existing internal projection/progress tooling, recoverable native contract and reviewed first-event preparation.
-- Excludes: new scheduler, native auth redesign, automatic task acceptance/rewards, beta launch and broad credential distribution.
+- Excludes: unrelated schedulers, native auth redesign, automatic task acceptance/rewards, beta launch and broad credential distribution; the explicit September13 coordinator/watchdog is authorized.
 - Identity: recovery-source PF-76-S01 is this feature's historical name, not main's provider-persistence feature. Preserve old event IDs/receipts.
 
 ## Plan linkage
@@ -76,7 +76,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact-goal reconciliation177ec93fc reviewed clean and integrated at3898eaa65;73 native tests pass there. In-memory exact-ID GET, strict injected observation and preserved404uncertainty; no send/retry/live claim. [Receipt](../../../../qa/initiative-control/pf-80-s01/native-reconciliation/receipt.md).
 
 ## Remaining
-- [ ] Implement allocated bounded fixture-only ingress, then qualify integrated supervisor/recovery with actual isolated executor and Slack identity/connection/phone/restart/CAS/native ACK. Manager owns dependencies/lease/live prerequisites; OFF until qualified.
+- [ ] Complete all five [bootstrap deliverables and gates](../../../research/tasknode-integration/coordinator-bootstrap-20260913.md); ingress checkpoint already integrated, Bazel qualification remains recorded separately. No early enablement.
 - [ ] Resolve retained DEC021 mixed-feed useful-content failure and baseline-provenance limit without rewriting cases; [completed independent check](../../../../qa/initiative-control/status-display/age-evidence-20260912.md) supports F01 age/collision only. No human-readiness claim or blocking independent Slack implementation; DEC025 remains advisory.
 - [ ] Manager scopes accessible recovery/input/retention and restart/cross-process fences before the later CLI allocation; this is manager work, not unanswered product approval.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.

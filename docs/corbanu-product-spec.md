@@ -467,6 +467,15 @@ These are target expansion workflows, not claims that every step is live today.
 
 ## Internal delivery control — TO BUILD
 
+September 13 management-bootstrap authorization: implement the five-part
+coordinator goal recorded in [coordinator instructions](../coordinatorInstructions.md):
+fresh Fable 5.1 High management through Corbanu/TMUX; durable event dispatch,
+acknowledgments and watchdog; serialized verified integration; actual Slack
+reply/decision/agent acknowledgment with private remote dashboard access; initialize
+and rehearse all three workstreams before enabling recurring operation. This
+authorizes the bootstrap and bounded live qualification, not premature product
+sprint resumption, new product scope, main/release or financial actions.
+
 Travis authorized up to three independent product initiatives on September 10,
 then selected PF-13, accounting and Task Node integration on September 11.
 Use sequential sprints per initiative, incremental merges behind verified
