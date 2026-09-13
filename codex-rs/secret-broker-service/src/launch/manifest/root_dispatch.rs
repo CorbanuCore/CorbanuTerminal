@@ -1,4 +1,7 @@
 //! Private synthetic composition. No listener, enrollment or public launch API.
+#[path = "root_session.rs"]
+mod session;
+
 use super::pair::admission::AdmissionTicket;
 use super::pair::admission::AdmittedPeer;
 use super::pair::admission::PairHandle;
