@@ -295,8 +295,8 @@ class Coordinator:
                 "dispatch/workstream paused")
 
     @staticmethod
-    def _no_pending(state, sprint):
-        require(not any(a["sprint"] == sprint and a["status"] not in TERMINAL
+    def _no_pending(state, sprint, excluding=None):
+        require(not any(a["sprint"] == sprint and a["id"] != excluding and a["status"] not in TERMINAL
                         for a in state["actions"].values()), "sprint has pending reservations/actions")
 
     @staticmethod
@@ -311,16 +311,42 @@ class Coordinator:
                 "stale allocation proof")
         return action
 
+    def _lifecycle_action(self, db, state, action_id, kind):
+        """Prepared proposals need no worker; legacy accepted proofs stay usable."""
+        require(state["manager"] is None, "manager cycle already owned")
+        action = state["actions"].get(action_id)
+        if action and action["status"] == "prepared":
+            require(action["kind"] == kind, "wrong owner lifecycle kind")
+            require(action["allocation_digest"] == digest(state["allocations"].get(action["inputs"]["allocation"])),
+                    "stale allocation proof")
+        else:
+            action = self._accepted(db, state, action_id, {kind})
+        self._resources_available(state, action)
+        return action
+
+    def _lifecycle_effect(self, db, state, action, operation, evidence, **effect):
+        # Called only after the actual SQLite effect; all writes share its commit.
+        receipt = self._reference(db, {"operation": operation, "action": action["id"],
+            "allocation_digest": action["allocation_digest"], "revision": state["revision"] + 1,
+            "effect": effect, "evidence": evidence})
+        if action["status"] == "prepared":
+            action.update(status="accepted", verification=receipt)
+        action.update(owner_effect=receipt, updated=self.clock())
+        if action["id"] not in state["actions"]:
+            db.execute("UPDATE action_history SET body=? WHERE id=?", (encoded(action), action["id"]))
+        return receipt
+
     def complete_sprint(self, action_id, gates, expected_revision, evidence):
+        """Execute an unclaimed proposal, or apply a legacy accepted completion."""
         with self.owner_mutation("owner_complete", expected_revision, evidence, action=action_id) as (db, state):
-            action = self._accepted(db, state, action_id, {"complete_sprint"})
+            action = self._lifecycle_action(db, state, action_id, "complete_sprint")
             key, inputs = action["sprint"], action["inputs"]
             sprint = state["sprints"][key]
             self._unpaused(state, sprint)
             self._reservations(state)
             require(sprint["status"] in RESERVED and not sprint.get("archived"), "sprint not reserved")
             require(self._dependencies(state, key), "unfinished dependency")
-            self._no_pending(state, key)
+            self._no_pending(state, key, excluding=action_id)
             receiving = self._accepted(db, state, inputs["receiving_action"], {"integrate", "verify_integration"})
             require(receiving["sprint"] == key, "wrong receiving sprint")
             row = db.execute("SELECT body FROM evidence WHERE digest=?",
@@ -347,6 +373,10 @@ class Coordinator:
             sprint.update(status="completed", archived=False, completion=self._reference(db, {
                 "action": action, "receiving": receiving, "gates": gates, "evidence": evidence}),
                 receiving_commit=inputs["receiving_commit"])
+            result = self._lifecycle_effect(db, state, action, "owner_complete", evidence,
+                sprint=key, status="completed", archived=False, receiving_commit=inputs["receiving_commit"],
+                completion=sprint["completion"])
+        return result
 
     def archive_sprint(self, sprint, expected_revision, evidence):
         with self.owner_mutation("owner_archive", expected_revision, evidence, sprint=sprint) as (_, state):
@@ -358,9 +388,13 @@ class Coordinator:
             self._no_pending(state, sprint)
             record["archived"] = True
 
-    def activate_successor(self, action_id, expected_revision, evidence):
+    def activate_successor(self, action_id, expected_revision, evidence, activation_authority=None):
+        """A prepared successor is not activation authority; the owner supplies it."""
         with self.owner_mutation("owner_successor", expected_revision, evidence, action=action_id) as (db, state):
-            action = self._accepted(db, state, action_id, {"prepare_successor"})
+            action = self._lifecycle_action(db, state, action_id, "prepare_successor")
+            if action["status"] == "prepared":
+                require(isinstance(activation_authority, dict) and activation_authority,
+                        "explicit owner activation authority required")
             key = action["sprint"]
             sprint = state["sprints"][key]
             self._unpaused(state, sprint)
@@ -373,12 +407,16 @@ class Coordinator:
             require(previous.get("completion") and action["inputs"].get("base") == previous.get("receiving_commit"),
                     "successor must start from verified receiving commit")
             self._no_pending(state, stream["sprint"])
-            self._no_pending(state, key)
+            self._no_pending(state, key, excluding=action_id)
             require(sum(s["status"] in RESERVED for s in state["sprints"].values()) < 3,
                     "three-reservation limit")
             stream["sprint"] = key
             sprint.update(status="in_progress", activation={"action": action_id, "predecessor": action["inputs"]["base"]})
             self._reservations(state)
+            result = self._lifecycle_effect(db, state, action, "owner_successor", evidence,
+                sprint=key, status="in_progress", predecessor=action["inputs"]["base"],
+                activation_authority=activation_authority)
+        return result
 
     def _executable(self, state, action):
         if action["kind"] not in PASSIVE:
@@ -498,6 +536,12 @@ class Coordinator:
             # Audit/evidence persist, but no meaningful event: settling a wait must
             # not trigger another manager wait. Dispatch/pause/lifecycle stay intact.
 
+    @staticmethod
+    def _resources_available(state, action):
+        for other in state["actions"].values():
+            if other["id"] != action["id"] and other["status"] not in TERMINAL | {"prepared"}:
+                require(not set(action["resources"]) & set(other["resources"]), "resource owned")
+
     def claim(self, action_id):
         with self.mutation("claim", {"action": action_id}) as (_, state):
             require(state["enabled"], "dispatch paused")
@@ -506,9 +550,7 @@ class Coordinator:
             require(action["allocation_digest"] == digest(state["allocations"].get(action["inputs"]["allocation"])),
                     "stale allocation claim")
             self._executable(state, action)
-            for other in state["actions"].values():
-                if other["id"] != action_id and other["status"] not in TERMINAL | {"prepared"}:
-                    require(not set(action["resources"]) & set(other["resources"]), "resource owned")
+            self._resources_available(state, action)
             action.update(status="dispatching", claim=str(uuid.uuid4()),
                           deadline=self.clock() + action["timeout_seconds"], updated=self.clock(), dispatch_epoch=0)
             receipt = json.loads(encoded(action))
