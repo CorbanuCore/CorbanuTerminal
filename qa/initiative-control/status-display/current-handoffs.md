@@ -2,6 +2,13 @@
 
 ## Current handoff — September13 02:27 manager cycle
 
+02:32 update supersedes the pending preflight below: PF13 source/evidence is
+received throughc51d2d6aa, original30 exits/reviews inspected; exact combined
+RTX/TMUX qualification dispatched to its sole owner. James formatting passed,
+actual1370/614; no dependency build yet. Slack OFF launcher preflight passed,
+no state/credential access; durable live/phone/ACK remains unqualified. Feed22
+records zero open human decisions, with previous questions/resolutions preserved.
+
 - [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): [compact import accepted](../../portfolio/agent-cost-accounting/pf-60-s02/compact-late-import-receiving.md); manager review/receiving hold cleared. Mendel runs [original-contract native goldens](../../../docs/research/agent-cost-accounting/original-contract-native-golden-allocation.md) at34f0786e6: three new/20import/598shared reported pass, Core compiling at observation. S03 remains dependent; collection OFF.
 - [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): James returned927/424 uncompiled source; same-ten-path formatting/size extension accepted in [allocation](../../../docs/research/tasknode-integration/owned-ingress-allocation-20260913.md). Parent serializes dependency/build lease. [Slack credential handoff resolved](slack-access-decision.md); durable alert/reply/phone/nativeACK and independent execution remain manager work, not an unanswered user question.
 - [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): latest task view idle; exact owner preflight handoff and shared dependency reservation requested. Pending19f662493/f68dd66fe/10dcbb649 are not yet manager-received; no duplicate security source assignment or approval hold inferred.

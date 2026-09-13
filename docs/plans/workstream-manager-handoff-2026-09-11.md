@@ -2,6 +2,15 @@
 
 ## Current handoff — September13 02:27 manager cycle
 
+02:32 update: PF13 preflight is now received throughc51d2d6aa after literal
+four-Rust-file inspection, both clean reviews and all30 exits+suite0. Service/
+protected-state subtrees match10dcbb649; newer Cargo ded15fd917/MODULE5ecff077
+preserved. Sole owner dispatched exact combined RTX/TMUX proof, not new source.
+James scoped rustfmt passed: actual1370/614, below even original1500; dependencies
+still untouched. Slack supported OFF launcher preflight passed without creating
+the proposed operator store or reading credentials; durable live qualification
+is not inferred. Feed22 has zero open decisions; normal Luna publication next.
+
 Accounting compact import is accepted at81d0f90e7 after clean review02 and parent
 595shared/100Core/20focused/6external/format/Clippy/check. Mendel is now executing
 the [two-path original-contract goldens](../research/agent-cost-accounting/original-contract-native-golden-allocation.md)
