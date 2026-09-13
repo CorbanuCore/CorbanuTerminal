@@ -291,6 +291,41 @@ explicit separately recorded preflight correction, not a claim about frozen B.
 
 ## Isolated-executor transport falsification allocation
 
+### Local Docker boundary feasibility, parallel to fixed-transport extraction
+
+Read-only host inventory found Docker Desktop27.5.1 running Linux6.12.5-linuxkit,
+ARM64, with cached `python:3.12-slim` image
+`sha256:944a73bd27d7b5fad206369e77bb7a6da51e073236b9dece9ff387df433de7bb`
+(repository digest `python@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de`).
+A cached ARM64 Scrapling browser image also exists, but no browser runtime has
+been launched or qualified. UTM lists two stopped macOS VMs; no VM was started.
+VMware's read-only inventory command stalled and only that command was terminated.
+Docker reports its default seccomp profile as unconfined: do not inherit that as
+an accepted sandbox. This is a potential local Linux route, not current isolation
+proof or a replacement for private remote dashboard access.
+
+Parent owns a separate three-file engineering probe in
+`.codex-work/docker-boundary.WcQbTX/`: `probe.py`, `guest.py`, `seccomp.json`,
+target300/hard450 authored lines plus generated private receipts. No overlap with
+Hilbert's five canonical files. Use only the pinned cached Python image, no pull
+or installation, and owned disposable containers. Non-root, read-only root,
+no capabilities/new privileges, private PID/IPC/network namespaces, networknone,
+explicit seccomp denying namespace/mount/ptrace/host-control operations, finite
+memory/CPU/PID/tmpfs limits. No Docker socket, credential/home/source/state mount;
+the only host bind may be this exact synthetic guest script, read-only.
+
+Probe actual parent/child source/history/credential namespace exclusion, symlink
+escape, package/root writes, forbidden syscalls and external networking, plus
+private scratch/interpreter/loopback positives and effective resource/config
+records. Distinguish namespace invisibility from EPERM and kernel limits from
+actual exhaustion. Bound owner Docker calls/output and retain failed attempts;
+remove only validated, labelled containers created by this probe, after capturing
+terminal state. No host Docker-daemon/VM/security-policy changes or existing
+container stops. One scoped Fable review after engineering proof plus necessary
+correction, preserving prior reviews. This does not qualify a browser, product
+binary or independent reasoning executor; later bounded stdio mediation may avoid
+host-network/socket exposure but needs its own explicit allocation and proof.
+
 ### Canonical fixed-transport extraction, after the live preflight
 
 The successful native preflight closes the model-connection uncertainty only.
