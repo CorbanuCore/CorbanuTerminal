@@ -1,5 +1,11 @@
 # Current workstream handoffs — September 12
 
+## Current handoff — September13 01:19 manager cycle
+
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): [private preflight](../../security-levels/sprints/PF-27-S04/system-preflight-allocation-20260913.md) actual clean launchb65bf1e932 acknowledged; existing owner implementing, seven paths/reviews39–40. Combined session proof accepted; no native activation.
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): 1970-line compact import returned with reported19+5/594/100 test passes. Manager review01 found a test that requires nondeterministic SQLite race diversity; Mendel is correcting it within the [same allocation](../../../docs/research/agent-cost-accounting/compact-late-import-allocation.md), retaining Mac target. No product approval or S03 activation.
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): [bounded fixture-only ingress](../../../docs/research/tasknode-integration/owned-ingress-allocation-20260913.md) coding dispatched to James at verifiede2400ed95, ten crate-local paths. Parent supplies dependency/build lease after accounting correction; source authoring continues. [Private credential handoff](slack-access-decision.md) still needed only for live Slack; installation approvals remain resolved.
+
 ## Current handoff — September13 combined session accepted
 
 - [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): exact combinedc1d866fd4 proof accepted, all29 exits+suite0, actual RTX/TMUX/invariance. Same owner dispatched [private system preflight](../../security-levels/sprints/PF-27-S04/system-preflight-allocation-20260913.md), allocationab985f5f8, seven paths550/700/reviews39–40. No user hold, process launch, native activation or sprint-completion claim.

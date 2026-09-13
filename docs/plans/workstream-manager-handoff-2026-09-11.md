@@ -1,5 +1,40 @@
 # Workstream continuation — September 11
 
+## Current handoff — September13 01:19 manager cycle
+
+PF13 acknowledged actual clean preflight launchb65bf1e932f8fb6d9b24d945fe67b18a57bb0ac2;
+same seven paths and reviews39/40, no native activation. Accounting returned
+1970/463 eight-path original-evidence import, reported19+5/594/100 tests and
+Clippy/check passing. Manager's Astra review01 found one actual scheduler-dependent
+test requiring both SQLite winners within16races; accepted after source inspection.
+Mendel dispatched deterministic-order correction plus genuine contention coverage,
+same scope/hard2200/750 and Mac target. Original proof and review retained;
+correction review/receiving pending, not a human hold.
+
+James's full pinned owned-ingress proposal accepted, fresh clean launch
+e2400ed9524301d70c7b2888da5c64dc52df0308 verified after allocationa6f2c040e,
+governance3/115/126. Ten crate-local paths in tasknode-owned-ingress-20260913;
+source authoring dispatched now, parent serializes dependency/build lease after
+accounting correction. No new model route or full confined-executor claim.
+Slack private credential handoff remains the already-asked live-only prerequisite.
+
+Dashboard omission confirmed: prior export selected plans/sprints/human-test
+paths only, dropping linked research/QA allocations despite current HEAD.
+Manager repaired explicit reference inventory shared by exporter/renderer in
+ce6867e2b; no link crawling or raw-log export. Bounded freshness fix under
+**Internal delivery control — TO BUILD**, “Show blockers, rendered sprints,
+human test plans, machines, run logs and freshness”. Four files102add/1delete;
+three focused tests and264 full tests pass188.957s using existing Slack SDK test
+venv plus publication packages. First publication-only venv suite failed three
+imports for absent slack_sdk; preserved, not a runtime regression or passed gate.
+Single AstraHigh review01 exit0/findings[] confidence0.93. No UI/renderer contract
+change; internal source plumbing N/A for a new code-blind design, not human
+acceptance of existing UI. Six inspected explicit reference paths registered.
+Feed20 retains one already-asked live Slack credential handoff and resolved access/
+PF27 decisions. Initial refresh used unsupported +00:00 timestamp spelling;
+CAS rejected it, corrected Z refresh succeeded without duplicate progress reports.
+Sole Luna publication receipt remains separate from source acceptance.
+
 ## Current handoff — September13 combined session accepted; preflight dispatched
 
 Manager verified and accepted c1d866fd4's literal29-command receiving proof:
@@ -9,7 +44,7 @@ Same PF13 owner dispatched allocation ab985f5f8 for
 [private system preflight](../../qa/security-levels/sprints/PF-27-S04/system-preflight-allocation-20260913.md),
 seven paths550/700, sourcebaseae2a4c940, reviews39/40 preserving1–38.
 Existing RTX target stays with owner, Mac with accounting. No human hold,
-native activation or principal-guard change. Actual owner launch ACK pending.
+native activation or principal-guard change. Actual clean launch ACKb65bf1e932.
 
 ## Current handoff — September13 root-session receiving
 
