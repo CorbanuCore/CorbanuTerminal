@@ -32,6 +32,52 @@ initiatives. Shared edits and receiving tests remain serialized.
 
 ## Sequential core owner-controls allocation
 
+### DEC021 mixed-feed inspection correction — September13
+
+Next same-sprint worker is a fresh Astra High context in
+`worktrees/decision-inspection-20260913`, branch
+`bootstrap/decision-inspection-20260913`, base239f7f82d5d410adb936963ef6be891a9184bbdd.
+Parent temporarily delegates exactly `scripts/initiative_control/decision_inspection.py`,
+`decision_feed.py`, `attention.py`, `test_decision_inspection.py`, and
+`qa/initiative-control/management-bootstrap/decision-inspection.md` in that checkout.
+Target500 changed lines/hard700, at most350 implementation lines. One Fable High
+material review plus necessary scoped correction; previous budgets/findings remain.
+Parent owns shared allocation, receiving, publication, private state and actual
+independent functional execution. No worker source/state/service changes elsewhere.
+
+Original DEC021 requires useful sanitized content alongside withheld unsafe input.
+Preserve strict canonical `decisions.validate/save_fixture` and every Slack
+resolution/dispatch gate: an invalid canonical feed remains invalid and cannot
+authorize a decision or reply. Restore read-only inspection of unrelated, wholly
+validated records; never repair fields, silently choose duplicate IDs, prune part
+of a decision history, or convert invalid input into an authoritative valid feed.
+An invalid top-level envelope, ambiguous JSON, untrusted file or oversized input
+still exposes no record content. For a valid envelope with invalid records,
+validate each complete decision/history independently and withhold every copy of
+any duplicate ID. Preserve the exact valid siblings without synthetic rewrites.
+If none survive, retain the existing invalid/unknown representation.
+
+Use a bounded inspection-only snapshot extension (schema3) when valid siblings
+survive: canonical `feed` stays null and overall input invalid, open count unknown.
+Bind the safe inspection and numeric withheld count into the existing immutable
+artifact digest; no excluded text/IDs/paths or raw payload enters exports.
+The renderer must prominently say input is incomplete and records are for
+inspection only, with total open count unknown, no fresh-empty/all-clear claim,
+no Slack delivery/answer authority and no inference that workers are running.
+Keep useful summaries/evidence, history, exact sprint links and timestamps;
+refresh never upgrades completeness. Existing schema1/2 valid behavior stays
+compatible. Unsupported older readers fail closed on schema3; no sender uses it.
+
+Tests retain validated pre-poison baselines and prove valid-plus-invalid siblings,
+secrets in current/history/link fields, all-invalid/envelope/duplicate/byte/owner
+failures, partial transfer tampering, source drift, actual export/activate/publish,
+unknown aggregate health, useful rendered evidence and no disclosure, unchanged
+canonical bytes and strict Slack rejection. Existing tests remain unchanged.
+No live credentials, inference, services, external network, other agents/reviews,
+Rust/dependencies, commits/pushes or product continuation by the worker. Return
+literal diff, test commands/exits, file hashes and remaining functional limits.
+Original DEC/SLK cases remain frozen; engineering checks do not pass them.
+
 ### Full disposable lifecycle rehearsal after db8afbba3
 
 Parent owns `/private/tmp/life.TuWkuY/` for the next operational rehearsal:

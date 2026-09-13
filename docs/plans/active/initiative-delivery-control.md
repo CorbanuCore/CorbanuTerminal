@@ -17,6 +17,9 @@ product_spec:
   heading: "Internal delivery control — TO BUILD"
   requirement_excerpt: "Use sequential sprints per initiative"
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/decision-inspection-20260913"
+    branch: "bootstrap/decision-inspection-20260913"
+    base_commit: "239f7f82d5d410adb936963ef6be891a9184bbdd"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-transitions-20260913"
     branch: "bootstrap/owner-transitions-20260913"
     base_commit: "b004bb06c1b7aad432c0633ffdf319b2d247d8df"
