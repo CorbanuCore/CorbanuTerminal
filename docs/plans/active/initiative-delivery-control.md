@@ -17,6 +17,9 @@ product_spec:
   heading: "Internal delivery control — TO BUILD"
   requirement_excerpt: "Use sequential sprints per initiative"
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/slack-reply-poll-20260913"
+    branch: "bootstrap/slack-reply-poll-20260913"
+    base_commit: "327eade129e186a5c66a3bacbf60c2342771de86"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/coordinator-bridge-20260913"
     branch: "bootstrap/coordinator-bridge-20260913"
     base_commit: "84f16cceec87292296ff94a9d431a86d23a9fe52"

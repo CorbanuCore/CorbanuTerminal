@@ -70,6 +70,34 @@ pending/history records and return global/delivery dispatch to paused afterward.
 Both other streams remain paused throughout. This is one operator-driven bridge
 rehearsal, not proof of a deployed automatic event controller or recurring loop.
 
+## Read-only Slack reply collection allocation
+
+Sequential bootstrap unit from receiving `327eade129e186a5c66a3bacbf60c2342771de86`:
+fresh Astra High worker in `worktrees/slack-reply-poll-20260913`, branch
+`bootstrap/slack-reply-poll-20260913`, owns only
+`scripts/initiative_control/slack_reply_poll.py`, `test_slack_reply_poll.py` in
+the same directory, and `qa/initiative-control/management-bootstrap/slack-reply-poll.md`.
+Target 650 total/350 non-test lines, hard 850/450. Parent retains all existing
+modules, registrations, credentials, live state and scheduling. One Fable High
+material review plus necessary in-scope corrections; prior review history remains.
+
+Deliver one bounded owner-invoked collector using an injected authenticated Slack
+WebClient and the existing durable Coordinator event API. Exact owner-pinned
+team/bot/human/channel and tracked thread-to-decision mapping, never discovered
+from untrusted replies. Read replies only; no Slack sends, canonical resolutions,
+worker dispatch, service/automation enablement or credential loading in the worker.
+Persist original bounded reply evidence with stable deduplication across repeated
+polls/restarts and distinct edited revisions. Pagination must not silently skip
+answers: bounded partial scans expose continuation/coverage, not a false caught-up
+claim. Failure/429 and unknown/deleted/malformed evidence must stay explicit;
+polling cannot prove unseen deletions or replace qualified Socket Mode ingress.
+No approvals inferred from text and no message text in diagnostic stdout. Recording
+events is allowed with product dispatch paused. Tests cover real API-shaped
+fixtures, identity/thread/author rejection, duplication/edit/restart, pagination,
+partial results, failure and persistence-before-observed semantics. No live API
+or credential access by this worker. Parent owns actual bounded replay and later
+monitor activation after the relevant launch gates; this is not recurring enablement.
+
 ## Launcher interface for coordinator integration
 
 Standalone CLI reads a bounded JSON briefing from `--briefing`, fresh private

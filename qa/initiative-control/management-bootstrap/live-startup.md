@@ -133,3 +133,36 @@ interface. Actual threaded Slack follow-up delivered at `1789281775.088889`.
 The browser still shows the administrator sign-in form; no sign-in or terms were
 completed. Direct TCP22 probe was stopped after hanging; online/shared inventory
 proves visibility, not end-to-end HTTPS access. Serve remains unconfigured.
+
+## Actual native handoff and rejected-response recovery
+
+Operator-driven rehearsal on exact clean receiving `327eade129e186a5c66a3bacbf60c2342771de86`:
+fresh Fable run `f-1y6bgsg2`, session `01a0998a-0ab4-7310-ab5c-b0959a1f57c9`,
+selected one allocated read-only delivery reconciliation and two explicit pauses.
+Actual fresh Astra High worker `01a0998b-09f3-7971-b583-bafdb64b3a0b` ACKed claim
+`4b1394b7-d383-489d-a1c5-0ca059a08ecb` and allocation digest
+`2f926614d4588ffb2dfb4140e9e25e54257edeb224045c6e88ccc0379543d44e` before execution.
+Its branch/commit/clean/file-presence result matched the parent's independent Git
+and filesystem observations. Actual native spawn, ACK, return and owner verification
+are retained in SQLite; native close confirmed completion. This accepts only the
+read-only handoff, not feature/sprint functionality.
+
+Completion then triggered fresh Fable `f-urkx48x9`, session
+`01a0998e-9eb2-7f81-b837-6b0b8decc6af`. Its 1037-byte rationale exceeded the
+1000-byte contract. The coordinator rejected it; no event consumption or new action
+was accepted. Finally guards returned dispatch to paused while retaining manager
+ownership for reconciliation. The owner verified clean launcher shutdown, actual
+TMUX no-server result and absence of recorded owned PIDs, then used `fail_manager`.
+The original receipt remains unchanged. A first reconciliation script attempt
+incorrectly expected socket-path deletion; it failed before mutation. A stale
+socket pathname is not a running server, so the corrected check uses TMUX and ps.
+
+Fresh retry `f-kx8oil66`, session `01a09994-bfe7-73e1-b530-446a8d3d2686`, generated
+one bounded wait action `rehearsal03-delivery-wait`, accepted at revision23.
+Final revision25 has global dispatch disabled, all three modes paused and no active
+manager. All actual Fable attempts used the required model/provider/high and clean,
+unforced shutdown. Private briefs/receipts: `/private/tmp/cbridge.rrpaOZ` (the
+referenced launcher auth/session root must not be published wholesale).
+This demonstrates actual handoff and rejected-response recovery through owner
+calls, not an automatic native dispatch adapter, crash-recovery qualification,
+the normal Slack decision-to-agent chain or recurring operation.
