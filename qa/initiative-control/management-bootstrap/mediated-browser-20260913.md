@@ -70,6 +70,11 @@ native turn exited1 after69.818s. Overall passed=false, reconciled=true and
 owned container removed. No retry occurred. This is partial engineering evidence,
 not a successful full run, reviewed controller, independent functional acceptance
 or proof against another live agent's IPC. Exact raw receipts/source remain private.
+Subsequent Fable High review01, session01a09c37-58c3-7013-a6f7-a8da968ec1aa,
+verified these artifacts and found only nonblocking P3 prompt wording: the model's
+cannot_complete response becomes an unsupported-action non-pass. Parent retains
+that safe failure as a wording follow-up; no code change or further opinion review.
+Controller review is dispositioned, not clean; the actual run remains failed.
 
 ## Private HTTPS: fresh authoritative failure
 
