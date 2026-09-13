@@ -1,0 +1,12 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-system-preflight-20260913/codex-rs/linux-pidfd-spawn)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
+────────────
+ Nextest run ID c882754d-24b6-42ad-86fa-8e9da965e5ae with nextest profile: local
+    Starting 4 tests across 1 binary (11 tests skipped)
+        PASS [   0.002s] (1/4) codex-linux-pidfd-spawn peer::tests::pf_27_s01_pidfs_identity_matches_process_not_descriptor_number
+        PASS [   0.002s] (2/4) codex-linux-pidfd-spawn spawn::tests::pf27_rejects_non_cloexec_image
+        PASS [   0.003s] (3/4) codex-linux-pidfd-spawn spawn::tests::pf27_rejects_unsealed_fd_without_spawning
+        PASS [   0.019s] (4/4) codex-linux-pidfd-spawn spawn::tests::pf27_rejects_unbounded_fd_actions
+────────────
+     Summary [   0.019s] 4 tests run: 4 passed, 11 skipped
