@@ -383,10 +383,11 @@ curl -fsS http://127.0.0.1:8769/health.json
 curl -I http://127.0.0.1:8769/facilities.html
 ```
 
-HTTP 200 alone does not prove current source. Activation enables
-`corbanu-control-publish.timer`; an authorized one-off sync during a continuing
-pause must be followed by disabling/stopping that timer and verification by the
-publication worker. Preserve `corbanu-control-web.service` and the read-only tunnel.
+HTTP 200 alone does not prove current source. The corrected activation preserves
+`corbanu-control-publish.timer` state; it no longer enables the timer. For an
+authorized one-off sync during a continuing pause, verify disabled/inactive both
+before and after publication. Stop and report an unexpected activation; preserve
+`corbanu-control-web.service` and the read-only tunnel.
 The wrapper has export-retention behavior; retain required evidence outside its
 rotating export directories.
 
@@ -662,6 +663,8 @@ The browser worker is closed. Parent's [actual mediated check](qa/initiative-con
 completed screenshot → fresh Astra High action → browser → fresh observation
 using a synthetic page. Its controller review is dispositioned; complete run-bound
 isolation/independent cases remain gates. Engineering success is not acceptance.
+Fresh Astra High now owns the allocated native-owner bridge; its implementation
+and real lifecycle qualification are pending, not a running recurring coordinator.
 
 The accepted owner API is `isolated_model_transport.OwnerConfig(binary, auth,
 run_root, enabled=True)` and `Transport(owner).execute(text, image_png=png_bytes)`.
