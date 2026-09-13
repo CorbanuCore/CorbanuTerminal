@@ -561,6 +561,22 @@ owns the later complete frozen-case runner and independent evidence handoff.
 
 ### Native owner bridge — next bootstrap unit, September13
 
+September13 actual lifecycle follow-up: source2093475e8 has reviewed native
+spawn/ACK/send/return/close-gap proof; the next actual manager attempt held before
+launch with `briefing_size_hold`. Parent owns a bounded lossless briefing fix in
+`scripts/initiative_control/manager_cycle.py` and `test_manager_cycle.py`: the
+last-three list must refer to the complete records already in `actions`, not
+repeat them. Preserve ordering, every original evidence body/digest, limits,
+authority and failed claim. No truncation or automatic failed-manager retry.
+Target80 changed lines; one scoped Fable High review plus necessary correction
+authorized within the existing integrator delegation. Receiving integration of
+the native bridge follows the reviewed repair and an explicit fresh manager.
+Actual failed packet re-encoded at61,668/65,536 bytes with all39 originals and
+every ordered action preserved. Combined manager/core/launcher tests104 passed
+in85.594s; Fable review `01a09c57-c7e6-74e1-b026-553f508f986e` clean. The original
+hold had only claim/hold files and no launch; owner explicitly reconciled it at
+revision125 without consuming its events. New live handoff remains to be run.
+
 Fresh Astra High worker owns only `scripts/initiative_control/native_owner.py`,
 `scripts/initiative_control/test_native_owner.py`, and
 `qa/initiative-control/management-bootstrap/native-owner.md` in

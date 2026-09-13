@@ -239,6 +239,35 @@ class CycleTests(unittest.TestCase):
         self.assertEqual(["1", "2", "3"], [a["id"] for a in brief["last_three_actions"]["delivery"]])
         self.assertEqual("z" * 800, brief["original_evidence"][reference["evidence_digest"]]["original"])
 
+    def test_large_actions_are_losslessly_indexed_without_duplicate_records(self):
+        expected = {}
+        for index in range(3):
+            action = {"id": "prior-" + str(index), "workstream": "delivery",
+                      "status": "accepted", "sequence": [index, 0],
+                      "full_frozen_input": str(index) * 11000}
+            expected[action["id"]] = action
+        with self.c.mutation("fixture", {}) as (_, state):
+            state["actions"].update(expected)
+        result = self.cycle()
+        self.assertEqual("accepted", result["status"], result)
+        cycle = Path(result["artifacts"])
+        claim = m.load_json(cycle / "claim.json")
+        self.assertGreater(len(encoded(claim, limit=240000).encode()), f.BRIEF_LIMIT)
+        brief = m.load_json(cycle / "briefing.json")
+        self.assertLessEqual(len(encoded(brief).encode()), f.BRIEF_LIMIT)
+        refs = brief["last_three_actions"]["delivery"]
+        self.assertEqual([{"id": key} for key in expected], refs)
+        self.assertEqual(list(expected.values()), [brief["actions"][r["id"]] for r in refs])
+        self.assertEqual([], brief["evidence_omissions"])
+        self.assertIn("lossless references", brief["directive"])
+
+    def test_mismatched_last_action_reference_holds_before_launch(self):
+        packet = self.c.begin_manager()
+        packet["last_three_actions"]["delivery"] = [{"id": "missing", "detail": "must not disappear"}]
+        with self.assertRaisesRegex(f.LaunchError, "last_action_reference_mismatch"):
+            m.briefing(self.c, packet, self.root / "context.json")
+        self.assertEqual(0, self.calls)
+
     def test_missing_evidence_holds_before_launch(self):
         self.c.event({"id": "missing", "result": {"evidence_digest": "a" * 64}})
         result = self.cycle()

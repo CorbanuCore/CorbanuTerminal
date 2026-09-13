@@ -32,6 +32,8 @@ DIRECTIVE = (
     "is historical, not a fresh observation of branches, workers, gates or services. "
     "Only separately dated owner observations assert newer external facts; unknown "
     "or conflicting facts require an allocated wait/escalation/reconciliation. "
+    "last_three_actions contains ordered id-only entries; resolve each complete "
+    "record in actions by id. These are lossless references, not summaries. "
     "Preserve approvals, unresolved blockers, review budgets and pause boundaries."
 )
 
@@ -83,7 +85,16 @@ def briefing(coordinator, packet, owner_context):
               and isinstance(context["context"], dict) and context["context"], "invalid_owner_context")
     timestamp(context["observed_at"])
     f.require(len(packet["workstreams"]) == 3, "three_workstreams_required")
-    brief = {**packet, "directive": DIRECTIVE, "owner_observation": context,
+    # The core packet repeats the same records for ordering. Keep one complete
+    # copy in actions; never truncate evidence or raise the briefing size limit.
+    last_three = {}
+    for stream, actions in packet["last_three_actions"].items():
+        for action in actions:
+            f.require(packet["actions"].get(action["id"]) == action,
+                      "last_action_reference_mismatch")
+        last_three[stream] = [{"id": action["id"]} for action in actions]
+    brief = {**packet, "last_three_actions": last_three,
+             "directive": DIRECTIVE, "owner_observation": context,
              "seed_metadata_status": "historical; current durable state is not external live proof",
              "original_evidence": {}, "evidence_omissions": []}
     originals = brief["original_evidence"]
