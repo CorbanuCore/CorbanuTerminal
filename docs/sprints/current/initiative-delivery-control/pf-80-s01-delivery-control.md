@@ -51,6 +51,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact owner, worker worktree/base and disjoint scope allocated; dispatch waits for the verified main merge and worker fast-forward.
 
 ## Done
+- [x] Owner transitions ca0474fe4 received at ee93206c0 after 119 combined tests and exact parent/scope/log verification. [Batched live Fable-to-native integration](../../../../qa/initiative-control/management-bootstrap/event-batching.md) now passes; full sprint/successor, Slack, isolated functional and recurring gates remain open.
 - [x] Native owner bridge2093475e8 received atd3f742ac3 after106 combined tests; actual native ACK/send/return/close-gap recovery and fresh Fable-to-integration-agent handoff verified. [Checkpoint and retained failures](../../../../qa/initiative-control/management-bootstrap/native-owner-receiving-20260913.md). No recurring or functional acceptance inferred.
 - [x] Exact reviewed supervisor c7a1b9690 received92d6eb261;261 receiving tests pass187.549s, Facilities/governance pass. Review08 clean,09 unspent; internal-only N/A, actual Slack and independent functional acceptance remain open.
 - [x] Gated real-SDK transport/shared status3561ebcc2 reviewed clean (combined06);244 staging tests pass, receiving243 plus exact source-guard rerun1 pass. [Integration limits/evidence](../../../../qa/initiative-control/status-display/slack-integration-20260912.md). Missing-fence and actual live/phone/ACK qualification remain; no S01 completion.

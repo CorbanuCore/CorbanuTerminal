@@ -35,3 +35,27 @@ Independent isolated dashboard/Slack acceptance remains a later required gate.
 Live fresh-manager selection, actual receiving integration and complete restart
 rehearsal remain unqualified at this source checkpoint. No product sprint,
 recurrence, Task Node posting, human acceptance or release is enabled here.
+
+## Actual fresh-manager and receiving handoff
+
+At committed 5b2ac8ea6, manager 145eadfa-ab7f-4bb5-852e-1bd0604ae682 selected
+18 events from 25 pending, leaving seven deferred at that claim snapshot. The
+65,461-byte briefing retained all selected original evidence; digest
+5f3814bea30d5bd72f573ab6387a107a500a2c9991953ea11dc6db28bd209605.
+Actual Fable session 01a09ca9-9203-79f1-b556-c3f7bca74135 used
+claude-fable-5-1-plan / claude-plan / high and exited cleanly without forced
+termination. Receipt digest
+c1da444e172a16bf1fdd4ec8a60a19cadb3d83bfbe86fcceb128d6b68415a5c2.
+The owner checked that exactly 18 events were consumed by this manager. Later
+owner-state events joined the still-pending queue; deferred does not mean deleted.
+
+The accepted proposal actually reached fresh Astra High integration executor
+01a09caa-75f6-7580-b4d1-733e6b7ec56a after exact native binding acknowledgment.
+Single-writer receiving merged ca0474fe4 into ee93206c0, passed 119 combined
+tests in 8.997 seconds and all four assigned checks. The owner rehashed all logs,
+checked both merge parents and literal four-file scope, verified the clean tree,
+closed the actual executor and accepted its receipt at coordinator revision 253.
+Private artifacts remain in transition-receive.qL5nIN; original failed attempts
+remain in that directory and tr.dGurO6. This proves a batched live manager-to-
+integration handoff, not the remaining full sprint/successor, Slack/private-HTTPS,
+independent functional or unattended recurring acceptance gates.
