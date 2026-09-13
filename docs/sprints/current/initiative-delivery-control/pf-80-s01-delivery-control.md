@@ -5,13 +5,13 @@ status: in_progress
 plan_file: "docs/plans/active/initiative-delivery-control.md"
 plan_feature: "PF-80"
 execution_order: 1
-owner: "Codex Task Node supervised-listener lane"
-parallel_lane: "tasknode-slack-supervisor"
-write_scope: "scripts/initiative_control/slack_transport.py, scripts/initiative_control/decision_manager.py, scripts/initiative_control/test_slack_transport.py, scripts/initiative_control/test_decision_manager.py, qa/initiative-control/pf-80-s01/decision-projection/slack-supervised-quiescence-receipt.md"
-integration_gate: "Manager accepted supervisor review08 and combined261 pass at92d6eb261,187.549s; Facilities/governance pass. Exact5-file814/343 inside850/400, review09 unspent; preserve01–08. Manager owns next isolated functional and actual Slack phone CAS native-ACK qualification; James verifies existing machine/tool prerequisites privately. Live OFF."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/slack-supervisor-20260912"
-branch: "workstream/slack-supervisor-20260912"
-base_commit: "a89a48548f644a64cbb8cd9da090b5b75578c922"
+owner: "James - Codex Task Node bounded transport lane"
+parallel_lane: "tasknode-owned-ingress"
+write_scope: "codex-rs/responses-api-proxy/src/lib.rs, codex-rs/responses-api-proxy/src/synthetic.rs, codex-rs/responses-api-proxy/src/synthetic_io.rs, codex-rs/responses-api-proxy/src/synthetic_exchange.rs, codex-rs/responses-api-proxy/src/synthetic_policy.rs, codex-rs/responses-api-proxy/src/synthetic_tests.rs, codex-rs/responses-api-proxy/src/synthetic_policy_tests.rs, codex-rs/responses-api-proxy/tests/synthetic_cli.rs, codex-rs/responses-api-proxy/README.md, codex-rs/responses-api-proxy/Cargo.toml"
+integration_gate: "Exact owned-ingress allocation: source authoring only until manager grants serialized dependency/build lease; parent owns root aliases and derived locks. Actual socket/CLI/default compatibility tests and Cargo/Bazel parity, one new material review plus correction; preserve prior history. Fixture-only internal N/A, real isolated executor and Slack phone/CAS/native ACK remain separate mandatory gates. Live OFF."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-owned-ingress-20260913"
+branch: "workstream/tasknode-owned-ingress-20260913"
+base_commit: "6dde60fface29b0678b792926cbcff7bc8cc542e"
 depends_on: "none"
 created: 2026-09-10
 updated: 2026-09-12
@@ -19,7 +19,7 @@ updated: 2026-09-12
 
 # PF-80-S01 — Native Task Node delivery-control integration
 
-Current mandate: supervisor integration accepted, review08 clean, combined261pass. James is now dispatched on [five-file private isolation engineering](../../../../qa/initiative-control/status-display/isolated-boundary-engineering-20260912.md), after actual RTX feasibility. Front-matter product source scope is frozen accepted history; no new product source writes. Manager owns isolated executor/actual-service qualification. Older port/recovery text is history, not repeated implementation.
+Current mandate: [bounded synthetic owned ingress](../../../research/tasknode-integration/owned-ingress-allocation-20260913.md), ten exact crate-local paths1250target/1500total850non-test hard. James authors code now; parent serializes dependency/build lease after accounting correction. No real model/service/Slack qualification claim. Earlier supervisor/isolation work stays accepted history.
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
 [Native validity allocation](../../../research/tasknode-integration/native-validity-allocation.md)
 and [recovery handoff](../../../research/tasknode-integration/recovery-decision-handoff.md).
@@ -76,7 +76,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact-goal reconciliation177ec93fc reviewed clean and integrated at3898eaa65;73 native tests pass there. In-memory exact-ID GET, strict injected observation and preserved404uncertainty; no send/retry/live claim. [Receipt](../../../../qa/initiative-control/pf-80-s01/native-reconciliation/receipt.md).
 
 ## Remaining
-- [ ] Qualify integrated supervisor/recovery with actual isolated execution, Slack identity/connection/phone/restart/CAS/native ACK. Manager owns this gate; James gathers existing machine/tool feasibility. OFF until qualified, no duplicate recovery implementation.
+- [ ] Implement allocated bounded fixture-only ingress, then qualify integrated supervisor/recovery with actual isolated executor and Slack identity/connection/phone/restart/CAS/native ACK. Manager owns dependencies/lease/live prerequisites; OFF until qualified.
 - [ ] Resolve retained DEC021 mixed-feed useful-content failure and baseline-provenance limit without rewriting cases; [completed independent check](../../../../qa/initiative-control/status-display/age-evidence-20260912.md) supports F01 age/collision only. No human-readiness claim or blocking independent Slack implementation; DEC025 remains advisory.
 - [ ] Manager scopes accessible recovery/input/retention and restart/cross-process fences before the later CLI allocation; this is manager work, not unanswered product approval.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.
