@@ -29,6 +29,19 @@ literal evidence for exact receiving proof before another successor.
 
 ## Preserved inspected design
 
+### Manager clarification — fixed pair of owned listeners
+
+Owner's actual frozen relay has distinct journal/policy rendezvous listeners.
+Accept consuming a fixed [UnixListener; 2], not a configurable collection. The
+accept<=4 and ticket<=2 budgets are aggregate per poll, round-robin over the
+pair; pending<=2/jobs<=2 remain global. Listener index conveys no role/generation
+authority. RootSession itself must accept every real server socket; fixture setup
+may consume only separate fixture client/control connections between polls, not
+pre-admit or inject server sockets to bypass the pump. Record this fixture phase
+explicitly. Prove both-listener fairness/flood bounds and receipt-based namespace
+routing. Same seven paths/hard800, no relay/protocol/public constructor widening.
+This supersedes singular-listener wording in the original proposal below.
+
 # PF27 successor proposal — bounded private root-session pump
 
 Proposal only, September 12. No implementation or additional review dispatched.
@@ -91,4 +104,3 @@ native bootstrap and protected-user/PF26 qualification still require independent
 isolated functional execution. It must not be presented as a live service or as
 completion of PF27. The next subsequent boundary would be a separately allocated
 fixed-system bootstrap/native deployment proof, not automatically authorized here.
-
