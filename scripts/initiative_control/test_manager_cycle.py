@@ -342,11 +342,63 @@ class CycleTests(unittest.TestCase):
 
     def test_oversized_original_holds_before_launch(self):
         self.c.event({"id": "large", "text": "é" * 20000})
+        # The earlier small event can progress, but the oversized event cannot be
+        # skipped or consumed on the next cycle even if later events would fit.
+        self.assertEqual("accepted", self.cycle()["status"])
+        self.c.event({"id": "later-small"})
         result = self.cycle()
-        self.assert_hold(result)
+        self.assertEqual("owner_hold", result["status"])
+        self.assertIsNotNone(self.c.snapshot()["manager"])
         self.assertEqual("briefing_size_hold", result["reason"])
-        self.assertEqual(0, self.calls)
+        self.assertEqual(1, self.calls)
+        self.assertEqual(["large", "later-small"], [row[0] for row in self.pending()])
         self.assertTrue((Path(result["artifacts"]) / "claim.json").exists())
+
+    def test_byte_bounded_batches_consume_only_selected_events_after_restart(self):
+        originals = []
+        for index in range(5):
+            event = {"id": f"large-{index}", "text": str(index) * 19000}
+            originals.append(event)
+            self.c.event(event)
+        result = self.cycle()
+        self.assertEqual("accepted", result["status"], result)
+        path = Path(result["artifacts"])
+        original = m.load_json(path / "claim.json")
+        selected = m.load_json(path / "selected-claim.json")
+        brief = m.load_json(path / "briefing.json")
+        count = len(selected["events"])
+        self.assertTrue(1 < count < len(original["events"]))
+        self.assertEqual(original["events"][:count], selected["events"])
+        self.assertEqual({"selected": count, "deferred": 6 - count}, brief["event_batch"])
+        self.assertEqual(original["state_revision"] + 1, selected["state_revision"])
+        self.assertEqual([], brief["evidence_omissions"])
+        for event in selected["events"]:
+            self.assertEqual(self.c.read_evidence(event["evidence_digest"]), brief["original_evidence"][event["evidence_digest"]])
+        self.assertEqual(1, self.calls)
+        self.c = Coordinator(self.c.directory)
+        with self.c.connection() as db:
+            self.assertEqual([e["id"] for e in original["events"][count:]],
+                             [row[0] for row in self.pending()])
+            rows = {json.loads(r[0])["id"]: json.loads(r[0]) for r in db.execute("SELECT body FROM events")}
+            for event in originals:
+                self.assertEqual(event, rows[event["id"]])
+        self.assertEqual("accepted", self.cycle()["status"])
+        self.assertFalse(self.pending())
+        self.assertEqual(2, self.calls)
+
+    def test_stale_during_batch_fit_never_restricts_or_launches(self):
+        self.c.event({"id": "oversized", "text": "x" * 90000})
+        original = m.briefing
+        def changed(*args):
+            result = original(*args)
+            self.c.event({"id": "new-during-fit"})
+            return result
+        with patch.object(m, "briefing", changed):
+            result = self.cycle()
+        self.assertEqual("owner_hold", result["status"])
+        self.assertEqual(0, self.calls)
+        self.assertEqual(2, len(self.c.snapshot()["manager"]["events"]))
+        self.assertEqual(3, len(self.pending()))
 
     def test_context_must_be_private_bounded_and_dated(self):
         path = self.root / "context.json"

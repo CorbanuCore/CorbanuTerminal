@@ -38,6 +38,9 @@ DIRECTIVE = (
     "reconstruct inputs as {allocation: that id, ...allocations[id].inputs}. "
     "Historical or changed inputs remain inline. New proposals still require the "
     "full inputs object, never inputs_from_allocation. "
+    "event_batch reports selected and deferred pending events. Only selected events "
+    "are supplied and consumed on acceptance; deferred events remain pending for "
+    "later fresh cycles. Do not claim the whole queue is reconciled. "
     "Derived event/action evidence previews are omitted; the exact full bodies "
     "are in original_evidence under their preserved evidence_digest. "
     "Preserve approvals, unresolved blockers, review budgets and pause boundaries."
@@ -163,6 +166,28 @@ def timestamp(value):
     return parsed.timestamp()
 
 
+def fit_briefing(coordinator, packet, context):
+    """Size locally, restrict once, launch once. Never drop an event out of order."""
+    total = len(packet["events"])
+    for count in range(total, 0, -1):
+        candidate = {**packet, "events": packet["events"][:count],
+                     "event_batch": {"selected": count, "deferred": packet["pending_event_count"] - count},
+                     "state_revision": packet["state_revision"] + (count != total)}
+        try:
+            raw = briefing(coordinator, candidate, context)
+        except (Rejected, f.LaunchError) as exc:
+            if str(exc) not in {"record exceeds JSON byte limit", "evidence_count_hold"} or count == 1:
+                raise
+            continue
+        if count != total:
+            revision = coordinator.restrict_manager_events(packet["manager_run"], count,
+                packet["state_revision"], {"reason": "largest fitting FIFO prefix before inference",
+                                            "bytes": len(raw), "event_batch": candidate["event_batch"]})
+            f.require(revision == candidate["state_revision"], "batch_revision_mismatch")
+        return candidate, raw
+    raise f.LaunchError("empty_manager_batch")
+
+
 def validate(receipt, attempt, cycle, raw):
     """Recheck the reviewed launcher's actual artifacts, including post-stop rollout."""
     f.require(isinstance(receipt, dict) and receipt.get("status") == "completed"
@@ -249,7 +274,8 @@ def run_cycle(*, state, runs_dir, binary, auth_file, owner_context, timeout=300,
         cycle = root / ("m-" + packet["manager_run"])
         cycle.mkdir(mode=0o700)
         f.write_json(cycle / "claim.json", packet)
-        raw = briefing(c, packet, owner_context)
+        packet, raw = fit_briefing(c, packet, owner_context)
+        f.write_json(cycle / "selected-claim.json", packet)
         f.write_file(cycle / "briefing.json", raw)
         binary = f.no_links(binary)
         f.require(binary.is_file() and os.access(binary, os.X_OK), "invalid_binary")

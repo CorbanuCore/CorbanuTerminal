@@ -32,6 +32,29 @@ initiatives. Shared edits and receiving tests remain serialized.
 
 ## Sequential core owner-controls allocation
 
+### Adaptive pending-event batches
+
+After cfffcd3f0, parent owns `coordinator.py`, `manager_cycle.py`,
+`test_coordinator.py` and `test_manager_cycle.py` under `scripts/initiative_control/`,
+this allocation and one QA receipt. Target 350 changed/160 implementation lines;
+hard 500/220. One fresh Fable High material review plus scoped corrections,
+preserving prior review history. Nash's reviewed ca0474fe4 remains frozen for
+later receiving integration; no worker is concurrently editing these files.
+
+The core currently selects up to 24 pending events regardless of briefing bytes.
+Before inference, allow the trusted owner to restrict an existing fresh manager
+claim to an ordered nonempty prefix, with revision/pause/deadline/identity checks.
+No event is consumed by selection. The driver chooses the largest prefix that
+fits the unchanged evidence/byte limits, records the original and selected claims,
+and exposes the deferred count. Preserve all three workstreams, last-three action
+ordering, frozen allocations and every original body needed by the selected
+packet. Only acceptance consumes the selected events; failed/stale/oversized-first
+cases leave pending history intact. Never skip ahead past an oversized first event,
+truncate evidence, call inference repeatedly or alter already launched claims.
+Tests cover durable restart/partial drain, selection rollback and stale/paused/
+expired/invalid claims, plus actual retained-packet sizing before a fresh manager.
+This is internal PF-80-S01 bootstrap, not product resumption or recurrence.
+
 ### Lossless action-input indexing after the receiving launch hold
 
 September 13: Nash's owner-transition candidate ca0474fe4 has a clean Fable

@@ -75,6 +75,54 @@ class CoordinatorTests(unittest.TestCase):
         next_packet = self.c.begin_manager()
         self.assertIn("one", [e["id"] for e in next_packet["events"]])
 
+    def test_owner_restricts_only_pending_prefix_and_preserves_it_after_restart(self):
+        for index in range(30):
+            self.c.event({"id": f"batch-{index}"})
+        packet = self.c.begin_manager()
+        self.assertEqual(30, packet["pending_event_count"])
+        self.assertEqual(24, len(packet["events"]))
+        before = self.c.snapshot()
+        revision = self.c.restrict_manager_events(packet["manager_run"], 2, packet["state_revision"], {"fixture": True})
+        reopened = Coordinator(self.root, lambda: self.clock)
+        after = reopened.snapshot()
+        self.assertEqual(before["manager"]["events"][:2], after["manager"]["events"])
+        self.assertEqual(before["manager"]["deadline"], after["manager"]["deadline"])
+        self.assertEqual(revision, after["manager"]["revision"])
+        for key in ("workstreams", "sprints", "allocations", "actions"):
+            self.assertEqual(before[key], after[key])
+        with reopened.connection() as db:
+            self.assertEqual(30, db.execute("SELECT COUNT(*) FROM events WHERE consumed IS NULL").fetchone()[0])
+        with self.assertRaisesRegex(Rejected, "stale"):
+            reopened.accept_decision(packet["manager_run"], {"state_revision": packet["state_revision"], "actions": []}, {"fixture": True})
+        with self.assertRaisesRegex(Rejected, "stale"):
+            reopened.restrict_manager_events(packet["manager_run"], 1, packet["state_revision"], {"fixture": True})
+
+    def test_batch_selection_denials_roll_back_every_table(self):
+        self.c.event({"id": "one"})
+        self.c.event({"id": "two"})
+        packet = self.c.begin_manager()
+        def rows():
+            with self.c.connection() as db:
+                return list(db.iterdump())
+        def deny(run, count, revision, evidence):
+            before = rows()
+            with self.assertRaises(Rejected):
+                self.c.restrict_manager_events(run, count, revision, evidence)
+            self.assertEqual(before, rows())
+        run, revision = packet["manager_run"], packet["state_revision"]
+        for count in (True, None, 0, -1, 2, 25):
+            deny(run, count, revision, {"fixture": True})
+        deny("wrong-run", 1, revision, {"fixture": True})
+        deny(run, 1, revision, {})
+        deny(run, 1, True, {"fixture": True})
+        self.clock += 601
+        deny(run, 1, revision, {"fixture": True})
+        self.clock -= 601
+        self.c.set_enabled(False, {"fixture": "pause"})
+        deny(run, 1, self.c.snapshot()["revision"], {"fixture": True})
+        self.c.set_enabled(True, {"fixture": "resume"})
+        deny(run, 1, revision, {"fixture": True})
+
     def test_lifecycle_claim_ack_return_verify(self):
         self.prepared()
         claim = self.c.claim("first")

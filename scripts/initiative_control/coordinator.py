@@ -399,6 +399,7 @@ class Coordinator:
                    "events": [row["seq"] for row in pending], "deadline": self.clock() + timeout_seconds}
             state["manager"] = run
             packet = {"state_revision": run["revision"], "manager_run": run["id"],
+                      "pending_event_count": db.execute("SELECT COUNT(*) FROM events WHERE meaningful=1 AND consumed IS NULL").fetchone()[0],
                       "events": [{"id": json.loads(row["body"])["id"],
                                   **self._reference(db, json.loads(row["body"]))} for row in pending],
                       "workstreams": state["workstreams"], "sprints": state["sprints"],
@@ -410,6 +411,22 @@ class Coordinator:
             # Validate before committing ownership, not while printing afterward.
             encoded(packet, limit=240000)
         return packet
+
+    def restrict_manager_events(self, run_id, count, expected_revision, evidence):
+        """Owner pre-inference restriction only; it does not consume any event."""
+        require(type(count) is int and type(expected_revision) is int
+                and isinstance(evidence, dict) and evidence, "invalid owner batch selection")
+        with self.mutation("manager_batch_selected", {"run": run_id, "count": count,
+                           "evidence": evidence}) as (_, state):
+            run = state["manager"]
+            require(state["enabled"] and run and run["id"] == run_id, "wrong/paused manager")
+            require(run["revision"] == state["revision"] == expected_revision, "stale manager selection")
+            require(run["deadline"] >= self.clock(), "manager deadline expired")
+            require(0 < count < len(run["events"]), "selection must restrict nonempty prefix")
+            run["events"] = run["events"][:count]
+            run["revision"] = state["revision"] + 1
+            revision = run["revision"]
+        return revision
 
     def fail_manager(self, run_id, reason):
         with self.mutation("manager_failed", {"run": run_id, "reason": reason}) as (db, state):
