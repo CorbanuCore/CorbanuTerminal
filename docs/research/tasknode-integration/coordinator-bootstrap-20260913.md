@@ -637,6 +637,35 @@ one-shot deployment and disabled/inactive verification. Prior review usage stays
 
 ## Run-bound browser isolation proof — September13
 
+### Live cross-run IPC prerequisite after full lifecycle rehearsal
+
+Next bounded qualification under the same PF-80-S01 source worktree: fresh Astra
+High worker owns only `probe.py`, `ipc_guest.py` and `README.md` under the existing
+empty private `.codex-work/live-crossrun-ipc.osUMyY/`, plus generated per-attempt
+evidence there. Target400 authored lines/hard550. No canonical source or prior
+runner edits. Parent owns Fable allocation, one material Fable High review plus
+necessary scoped correction, receiving evidence and later per-case runner linkage.
+
+Use only the already pinned cached ARM64 browser image, public extracted Chromium
+runtime and explicit reviewed seccomp policy from the accepted browser-boundary
+runner. Two owned disposable containers use nonroot65534, networknone, private
+PID/IPC, readonly root, zero capabilities/NNP and existing finite resource bounds.
+Prove a live peer IPC endpoint works in its own namespace before and after the
+other executor and its forked child cannot reach it. Preserve actual errno and
+namespace identities; distinguish namespace separation from file-permission denial.
+Include local IPC positives and an actual browser launch/UI positive in the tested
+executor; no model inference or real credentials. A live synthetic peer is not
+an actual native Codex agent, and this prerequisite alone is not functional acceptance.
+
+Persist exact create intents; use bounded commands, exact image/name/label ownership,
+and remove only the containers this attempt created after terminal evidence.
+Unknown create/cleanup outcomes remain held across restart, never automatically
+retried from a missing immediate lookup. No image pulls, packages, other container
+changes, user files/auth/source mounts, host services, external network, reviews
+by the worker, descendants or product resumption. Return exact hashes, attempts,
+positive/negative results, cleanup evidence and the minimal future per-case hook;
+the complete frozen dashboard/Slack cases remain the subsequent owner gate.
+
 Parent's fixed244-line screenshot/action engineering at private
 browser-model-live.yDoShR passed two real fresh Astra High turns; Fable review01
 had one nonblocking provenance clarification, retained in its QA. No portable
