@@ -40,8 +40,9 @@ read as data, never sourced. No actual token example is stored here. The child
 rechecks the file and its private digest before injecting the value into only
 Corbanu's environment. Auth values are absent from command arguments, briefing,
 launcher script, manifest and stdout. The file is neither copied nor deleted.
-This uses Corbanu's existing env-first Claude subscription resolver from
-`codex-rs/cli/src/claude_oauth.rs`; no login/credential-discovery command is run.
+The environment also serves the existing CLI resolver. The TUI additionally
+requires explicit native managed-source selection, now performed below before
+the first brief. The launcher invokes no setup-token or new-login command.
 
 Stdout is one JSON receipt. Successful exit 0 means `status="completed"`,
 `decision` is the parsed **entire** final JSON object, and `run_id`, `session_id`,
@@ -99,7 +100,7 @@ adversarial escaped descendants require an external supervisor/isolation owner.
 ## Offline verification and remaining acceptance
 
 Exact suite: `python3 -m unittest discover -s scripts/initiative_control -p test_fable_launcher.py -v`.
-Final run: **27 passed, 0 skipped, 23.032s**. Tests use synthetic
+Original candidate final run: **27 passed, 0 skipped, 23.032s**. Tests use synthetic
 tokens/records and actual private TMUX sessions with an offline fake terminal.
 The real reference binary is used only for `--help` and `--version` in fresh
 empty homes. Tests skip explicitly if TMUX/reference binary is absent.
@@ -112,7 +113,7 @@ late-final-record regressions: 25 tests / 20.278s and 27 tests / 23.419s passed;
 these results do not erase the first attempt. Final project-root isolation pass
 passed all 27 tests in 23.032s. `python3 docs/plans/check.py` passes (3/3 active),
 `python3 docs/sprints/check.py` passes (115 current / 126 archived), and scoped
-Git whitespace validation passes. Total allocation: 1,168 lines (599 launcher,
+Git whitespace validation passes. Original allocation: 1,168 lines (599 launcher,
 445 tests, 124 this evidence record), below the 1,200 target / 1,500 hard limit.
 
 Parent still owns two actual independent Fable runs, live identity/config/auth
@@ -122,3 +123,46 @@ the allocation's reasoned internal-only GUI N/A; later combined dashboard/Slack
 acceptance still requires independent code-blind design/execution/evidence.
 No TensorCash/Isometric runtime or release/benchmark acceptance is claimed; no
 human sign-off, recurring enablement or sprint completion is claimed.
+
+## September 13 correction worker
+
+Starting HEAD `627dd1f0841ac76384687de4844d6bbe0a8b9f6e`, same branch and three
+files. Review01 (review text only) found unanchored SECRET matching ordinary
+task/risk/bearer vocabulary and serialized-receipt redaction risking invalid JSON.
+Exact injected-token replacement remains primary; recognizable token patterns now
+have boundaries and minimum lengths. Receipt redaction walks decoded strings
+before encoding. Regressions retain normal vocabulary, trailing `bearer `, JSON
+quoting and escaped-secret rejection, including a complete TMUX decision round trip.
+
+Parent's installed 0.1.41 attempts01/02 timed out at120/90s, with clean owned
+shutdown; these remain failures. Parent reports successful manual diagnostic03
+after supported setup/resubmit: session `01a0995a-da26-7d23-b340-241ccabd8883`,
+turn `01a0995c-e64b-7520-8da6-7b000d57a252`, response `msg_011Cezw2VfcGxJA1ptUWPjBk`,
+run `f-6lvdp9vl`, exact model/provider/high, three complete wait actions and
+unforced shutdown. This is parent-reported diagnostic evidence, not automated
+qualification. No private parent auth, logs or state were accessed.
+
+Startup now waits for the loaded exact model/high header, opens `/providers`,
+asserts initial OpenAI selection, moves Down to Claude Account, presses `r`,
+asserts Recover Claude Account / selected Claude credential, enters the method
+picker, asserts recommended long-lived token selection, and enters the masked
+form. Only then does stdin feed a private named TMUX buffer; paste uses `-d`,
+finally deletes the buffer, and Enter is separate. No token or token hash enters
+the text/key journal. Native UI owns managed credential persistence; the launcher
+never synthesizes vault files. Claude Account must become Enabled/configured/current
+before Escape and the first brief. Current-screen captures exclude scrollback;
+unexpected stages time out, definite auth/inactive failures fail promptly.
+`auth-00` through `auth-07` pane files and numeric journal stages provide redacted
+setup evidence; failures retain `failure-pane.txt` and its receipt path. Runtime
+turn metadata remains authoritative, with no provider fallback or resubmission.
+
+All original27 test methods and prior failed-fixture history remain. First
+correction run:31 tests/53.064s,30 passed; forced-cleanup fixture failed because
+its Escape parser consumed Ctrl-U as an arrow. Corrected parser:31/56.652s pass.
+Final transport/failure additions verify actual TMUX stdin-only tokens, no token
+in arguments/artifacts, rejected/noncurrent providers, stale panes and interruption
+after both buffer load and paste. Final source/tests: **31 passed, 0 skipped,
+65.584s**. Plan checker passes3/3; sprint checker passes115 current/126 archived;
+scoped whitespace check passes. Final allocation:1,451 lines (691 launcher,
+592 tests,168 receipt), within1,500. No Rust/provider contract changes.
+Parent owns material review, corrected live runs and combined coordinator checks.

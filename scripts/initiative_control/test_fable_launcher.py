@@ -143,10 +143,21 @@ class Files(Fixture, unittest.TestCase):
 
     def test_redaction(self):
         self.assertNotIn(FAKE_TOKEN, f.redacted("token=" + FAKE_TOKEN, FAKE_TOKEN))
-        self.assertEqual(f.redacted("Bearer abc123"), "[REDACTED]")
+        self.assertEqual(f.redacted("Bearer abc123abcdefghijklmnop"), "[REDACTED]")
         encoded = '{"x":"\\u006f' + FAKE_TOKEN[1:] + '"}'
         with self.assertRaises(f.LaunchError):
             f.no_secrets(f.strict_json(encoded), FAKE_TOKEN, "secret")
+
+    def test_normal_vocabulary_and_decoded_receipt_redaction(self):
+        text = "task-management-bootstrap risk-mitigation-plan the bearer of bad news bearer "
+        self.assertEqual(f.redacted(text), text)
+        f.no_secrets({"rationale": text}, FAKE_TOKEN, "secret")
+        value = {"rationale": text, "items": [FAKE_TOKEN, 'Bearer ' + 'a' * 20, 'quote"\\']}
+        result = json.loads(json.dumps(f.redact_value(value, FAKE_TOKEN)))
+        self.assertEqual(result["rationale"], text)
+        self.assertEqual(result["items"], ["[REDACTED]", "[REDACTED]", 'quote"\\'])
+        for token in ("sk-ant-" + "a" * 24, "sk-proj-" + "b" * 24, "sk-" + "c" * 24):
+            self.assertEqual(f.redacted('"' + token + '",'), '"[REDACTED]",')
 
     def test_invalid_input_retains_one_redacted_receipt(self):
         f.write_file(self.auth, FAKE_TOKEN)
@@ -270,7 +281,7 @@ class Protocol(unittest.TestCase):
 # Synthetic program uses actual terminal input and writes native-shaped JSONL.
 # It contains no network, provider implementation, or real credentials.
 FAKE = r'''#!INTERPRETER
-import json, os, pathlib, subprocess, sys, time, uuid
+import json, os, pathlib, select, subprocess, sys, time, tty, uuid
 if "--version" in sys.argv:
     print("corbanu offline-fixture")
     sys.exit(0)
@@ -291,15 +302,79 @@ def emit(value):
         stream.write(json.dumps(value) + "\n")
         stream.flush()
 emit(records[0])
-print("Corbanu Terminal | tok/s", flush=True)
+tty.setcbreak(sys.stdin.fileno())
+def screen(text):
+    print("\x1b[2J\x1b[H" + text, flush=True)
+header = "Corbanu Terminal | tok/s\nmodel: claude-fable-5-1-plan high"
+providers = "Providers\nConfigure providers and control whether they are eligible for use.\n"
+screen("Corbanu Terminal | tok/s\nmodel: loading")
+time.sleep(0.15)
+assert not select.select([sys.stdin], [], [], 0)[0], "input before loaded model"
+screen(header)
 if mode == "exit":
     sys.exit(2)
-for line in sys.stdin:
+stage, line, flow, pending = "composer", "", [], b""
+while True:
+    key = (pending[:1] or os.read(sys.stdin.fileno(), 1)).decode()
+    pending = pending[1:]
+    if key == "\x1b":
+        pending = os.read(sys.stdin.fileno(), 1) if select.select([sys.stdin], [], [], 0.03)[0] else b""
+        if pending in (b"[", b"O"):
+            assert os.read(sys.stdin.fileno(), 1) == b"B" and stage == "openai"
+            pending = b""
+            stage = "claude"
+            screen(providers + "  1. OpenAI\n› 2. Claude Account  Credential needs attention")
+        else:
+            stage, line = "composer", ""
+            screen(header)
+        continue
+    if key == "\x15":
+        line = ""
+        continue
+    if stage == "claude" and key == "r":
+        stage = "recover"
+        screen("Recover Claude Account\n› Recover the selected Claude credential")
+        continue
+    if key not in ("\r", "\n"):
+        line += key
+        continue
     if line.strip() == "/exit":
         if mode == "stubborn":
+            line = ""
             continue
         break
+    flow.append(stage)
+    (run / "auth-flow.json").write_text(json.dumps(flow))
+    if stage == "composer" and line == "/providers":
+        stage, line = "openai", ""
+        screen(providers + "› 1. OpenAI\n  2. Claude Account  Credential needs attention")
+        continue
+    if stage == "recover":
+        stage = "method"
+        screen("Claude Plan authentication\n› Long-lived subscription token (Recommended)")
+        continue
+    if stage == "method":
+        stage = "masked"
+        screen("Save Claude subscription token\nLong-lived token — masked")
+        if mode == "stale":
+            print("\n" * 60 + "Claude Plan authentication\n› Claude Code login", flush=True)
+        continue
+    if stage == "masked":
+        assert line == os.environ["CLAUDE_CODE_OAUTH_TOKEN"]
+        stage, line = "configured", ""
+        screen("Claude authentication needs attention\n" + os.environ["CLAUDE_CODE_OAUTH_TOKEN"]
+               if mode == "authfail" else providers + "› 2. Claude Account  Enabled · configured · current")
+        if mode == "rejected":
+            screen("The subscription token was not accepted. Retry through Providers.")
+        if mode == "notcurrent":
+            screen(providers + "› 2. Claude Account  Inactive")
+        continue
+    assert "masked" in flow and stage == "composer", "brief before native source selection"
     assert "Briefing JSON:" in line
+    line = ""
+    if mode == "inactive":
+        screen("■ The current provider is unavailable or inactive. Choose an active provider.")
+        continue
     if mode in ("hang", "stubborn", "partial"):
         if mode == "stubborn":
             subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
@@ -334,20 +409,34 @@ class RealTmux(Fixture, unittest.TestCase):
 
     def test_two_fresh_actual_tmux_runs(self):
         args = self.make_args()
-        first, second = f.run_launcher(args), f.run_launcher(args)
+        original = f.Tui.tmux
+        def checked(tui, *args, **kwargs):
+            self.assertNotIn(FAKE_TOKEN, " ".join(args))
+            if kwargs.get("input") is not None:
+                self.assertEqual(args, ("load-buffer", "-b", "private-auth", "-"))
+                self.assertEqual(kwargs["input"], FAKE_TOKEN)
+            return original(tui, *args, **kwargs)
+        with patch.object(f.Tui, "tmux", checked):
+            first, second = f.run_launcher(args), f.run_launcher(args)
         for receipt in (first, second):
             self.assertEqual(receipt["status"], "completed", receipt)
             self.assertEqual(receipt["decision"], FINAL)
             self.assert_stopped(receipt)
+            self.assertFalse(receipt["shutdown"]["forced"])
             run = Path(receipt["artifacts"]["run_dir"])
             keys = json.loads((run / "keys.json").read_text())
-            self.assertIn("text_sha256", keys[0])
-            self.assertEqual(keys[1]["key"], "Enter")
+            self.assertIn("text_sha256", keys[1])
+            self.assertEqual(keys[2]["key"], "Enter")
+            self.assertEqual([k["auth_stage"] for k in keys if "auth_stage" in k], list(range(8)))
+            self.assertEqual(receipt["auth_source"], "managed_subscription_token")
+            self.assertEqual(json.loads((run / "auth-flow.json").read_text()),
+                             ["composer", "recover", "method", "masked", "composer"])
             self.assertNotIn(FAKE_TOKEN, (run / "launch.sh").read_text())
             self.assertNotIn(FAKE_TOKEN, (run / "manifest.json").read_text())
             for path in run.rglob("*"):
                 if path.is_file():
                     self.assertEqual(path.stat().st_mode & 0o077, 0, str(path))
+                    self.assertNotIn(FAKE_TOKEN.encode(), path.read_bytes(), str(path))
         for key in ("run_id", "session_id", "thread_id", "tmux_socket"):
             self.assertNotEqual(first[key], second[key])
 
@@ -385,8 +474,9 @@ class RealTmux(Fixture, unittest.TestCase):
 
     def test_timeout_and_partial_final_are_failed_attempts(self):
         for mode in ("hang", "partial"):
-            receipt = f.run_launcher(self.make_args(mode, timeout=1.5))
+            receipt = f.run_launcher(self.make_args(mode, timeout=4))
             self.assertEqual(receipt["status"], "timeout", receipt)
+            self.assertEqual(receipt["auth_stage"], 8, receipt)
             self.assertIsNone(receipt["decision"])
             self.assert_stopped(receipt)
 
@@ -399,7 +489,7 @@ class RealTmux(Fixture, unittest.TestCase):
             self.assert_stopped(receipt)
 
     def test_forced_cleanup_stops_owned_descendant(self):
-        receipt = f.run_launcher(self.make_args("stubborn", timeout=1.5))
+        receipt = f.run_launcher(self.make_args("stubborn", timeout=4))
         self.assertEqual(receipt["status"], "timeout", receipt)
         self.assertTrue(receipt["shutdown"]["forced"])
         self.assertGreaterEqual(len(receipt["shutdown"]["owned_pids"]), 2)
@@ -414,6 +504,63 @@ class RealTmux(Fixture, unittest.TestCase):
             receipt = f.run_launcher(self.make_args())
         self.assertEqual(receipt["status"], "failed")
         self.assertNotIn(FAKE_TOKEN, json.dumps(receipt))
+        self.assert_stopped(receipt)
+
+    def test_auth_failure_inactive_provider_and_stale_screen(self):
+        errors = {"authfail": "provider_auth_failure", "inactive": "provider_auth_failure",
+                  "rejected": "provider_auth_failure", "notcurrent": "auth_provider_not_current",
+                  "stale": "timeout"}
+        for mode, error in errors.items():
+            started = time.monotonic()
+            receipt = f.run_launcher(self.make_args(mode, timeout=4))
+            self.assertEqual(receipt.get("error"), error, receipt)
+            self.assertLess(time.monotonic() - started, 7)
+            self.assertIsNone(receipt["decision"])
+            run = Path(receipt["artifacts"]["run_dir"])
+            self.assertTrue((run / "failure-pane.txt").is_file())
+            if mode == "stale":
+                self.assertNotIn("masked_stdin_buffer", (run / "keys.json").read_text())
+            for path in run.rglob("*"):
+                if path.is_file() and path.name != "fake":
+                    self.assertNotIn(FAKE_TOKEN.encode(), path.read_bytes(), str(path))
+            self.assert_stopped(receipt)
+
+    def test_stdin_only_token_and_interrupted_buffer_cleanup(self):
+        original, seen = f.Tui.tmux, []
+        def interrupt(tui, *args, **kwargs):
+            self.assertNotIn(FAKE_TOKEN, " ".join(args))
+            result = original(tui, *args, **kwargs)
+            if args[0] == "load-buffer":
+                self.assertEqual(kwargs.get("input"), FAKE_TOKEN)
+            if args[0] == interrupt_at:
+                seen.append("loaded")
+                raise f.LaunchError("cancelled")
+            if args[0] == "delete-buffer" and seen:
+                self.assertNotEqual(original(tui, "show-buffer", "-b", "private-auth",
+                                             check=False).returncode, 0)
+                seen.append("deleted")
+            return result
+        for interrupt_at in ("load-buffer", "paste-buffer"):
+            seen.clear()
+            with patch.object(f.Tui, "tmux", interrupt):
+                receipt = f.run_launcher(self.make_args())
+            self.assertEqual(receipt.get("error"), "cancelled", receipt)
+            self.assertEqual(seen[:2], ["loaded", "deleted"])
+            self.assertNotIn(FAKE_TOKEN, json.dumps(receipt))
+            self.assert_stopped(receipt)
+            self.assertFalse(receipt["shutdown"]["forced"])
+
+    def test_normal_management_vocabulary_round_trip(self):
+        args = self.make_args()
+        vocabulary = "task-management-bootstrap risk-mitigation-plan the bearer of bad news bearer "
+        f.write_json(self.brief, {"state_revision": 7, "rationale": vocabulary})
+        source = args.binary.read_text().replace("'rationale': 'fixture'", "'rationale': " + repr(vocabulary))
+        # Final JSON is encoded inside the synthetic native record.
+        source = source.replace('"rationale": "fixture"', '"rationale": "' + vocabulary + '"')
+        f.write_file(args.binary, source, 0o700)
+        receipt = f.run_launcher(args)
+        self.assertEqual(receipt["status"], "completed", receipt)
+        self.assertEqual(receipt["decision"]["actions"][0]["rationale"], vocabulary)
         self.assert_stopped(receipt)
 
     def test_sigterm_returns_receipt_and_stops_tmux(self):

@@ -22,7 +22,8 @@ import uuid
 MODEL, PROVIDER, EFFORT = "claude-fable-5-1-plan", "claude-plan", "high"
 BRIEF_LIMIT, FINAL_LIMIT, RECORD_LIMIT = 65536, 131072, 16 * 1024 * 1024
 SAFE_PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin"
-SECRET = re.compile(r"sk-(?:ant-|proj-)?[A-Za-z0-9_-]{12,}|Bearer\s+\S+", re.I)
+SECRET = re.compile(r"(?<![A-Za-z0-9_-])sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}"
+                    r"|\bBearer[ \t]+[A-Za-z0-9._~+/=-]{16,}")
 INSTRUCTIONS = (
     "You are a bounded management decision maker. Use only the supplied JSON briefing. "
     "Do not use tools, read other files, edit code, launch workers, or take external actions. "
@@ -149,6 +150,16 @@ def no_secrets(value, token, code):
     elif isinstance(value, list):
         for item in value:
             no_secrets(item, token, code)
+
+
+def redact_value(value, token):
+    if isinstance(value, str):
+        return redacted(value, token)
+    if isinstance(value, dict):
+        return {redacted(k, token): redact_value(v, token) for k, v in value.items()}
+    if isinstance(value, list):
+        return [redact_value(v, token) for v in value]
+    return value
 
 
 def read_only_context(p):
@@ -337,10 +348,10 @@ class Tui:
         self.owned, self.pane, self.launched = {}, None, False
         self.events = []
 
-    def tmux(self, *args, check=True):
+    def tmux(self, *args, check=True, input=None):
         result = subprocess.run([self.tmux_bin, "-S", self.socket, *args],
                                 env=environment(self.run), cwd=self.run / "packet",
-                                capture_output=True, text=True, timeout=3)
+                                capture_output=True, text=True, timeout=3, input=input)
         require(not check or result.returncode == 0, "tmux_command_failed")
         return result
 
@@ -354,7 +365,25 @@ class Tui:
         self.tmux("set-option", "-w", "-t", self.pane, "remain-on-exit", "on")
 
     def capture(self):
-        return self.tmux("capture-pane", "-p", "-t", self.session, "-S", "-200", check=False).stdout
+        # Only the current screen may authorize a key; scrollback contains stale panes.
+        return self.tmux("capture-pane", "-p", "-t", self.session, check=False).stdout
+
+    def key(self, key):
+        self.tmux("send-keys", "-t", self.session, key)
+        self.events.append({"at": now(), "key": key})
+
+    def secret(self, token):
+        try:
+            self.tmux("load-buffer", "-b", "private-auth", "-", input=token)
+            self.tmux("paste-buffer", "-d", "-b", "private-auth", "-t", self.session)
+            self.events.append({"at": now(), "auth_input": "masked_stdin_buffer"})
+            time.sleep(0.1)
+            pane = self.capture()
+            require("Save Claude subscription token" in pane and "Long-lived token — masked" in pane
+                    and token not in pane, "auth_masked_entry_lost")
+            self.key("Enter")
+        finally:
+            self.tmux("delete-buffer", "-b", "private-auth", check=False)
 
     def send(self, text):
         for index in range(0, len(text), 4000):
@@ -394,6 +423,7 @@ class Tui:
             return {"clean": True, "forced": False, "errors": []}
         try:
             self.observe()
+            self.tmux("delete-buffer", "-b", "private-auth", check=False)
             self.tmux("send-keys", "-t", self.session, "Escape", check=False)
             self.tmux("send-keys", "-t", self.session, "C-u", check=False)
             self.send("/exit")
@@ -427,6 +457,57 @@ class Tui:
         return {"clean": session_gone and not self.observe(), "forced": forced,
                 "session_gone": session_gone, "errors": errors,
                 "owned_pids": sorted(self.owned)}
+
+
+class AuthSetup:
+    """Exact supported fresh-home UI sequence; no login command or source fallback."""
+    def __init__(self):
+        self.stage, self.since = 0, time.monotonic()
+
+    def advance(self, tui, pane, token):
+        selected = lambda label: re.search(r"(?m)^\s*›\s*(?:\d+\.\s*)?" + label, pane)
+        loaded = bool(re.search(r"model:\s*" + re.escape(MODEL) + r"\s+high\b", pane))
+        providers = "Configure providers and control whether they are eligible for use." in pane
+        configured = bool(re.search(r"Claude Account\s+Enabled · configured · current\s*$",
+                                    pane, re.M))
+        expected = (
+            loaded and "Corbanu Terminal" in pane and "loading" not in pane.lower(),
+            providers and selected(r"OpenAI\b") and "Claude Account" in pane,
+            providers and selected(r"Claude Account\b"),
+            "Recover Claude Account" in pane and selected("Recover the selected Claude credential"),
+            "Claude Plan authentication" in pane and selected(
+                r"Long-lived subscription token \(Recommended\)"),
+            "Save Claude subscription token" in pane and "Long-lived token — masked" in pane,
+            providers and configured,
+            loaded and not providers and not any(s in pane for s in (
+                "Recover Claude Account", "Claude Plan authentication", "Save Claude subscription token")),
+        )
+        if (self.stage == 6 and providers and not configured
+                and time.monotonic() - self.since >= 1):
+            raise LaunchError("auth_provider_not_current")
+        if not expected[self.stage]:
+            require(self.stage == 0 or time.monotonic() - self.since < 10,
+                    "auth_stage_timeout")
+            return False
+        write_file(tui.run / f"auth-{self.stage:02d}-pane.txt", redacted(pane, token))
+        tui.events.append({"at": now(), "auth_stage": self.stage})
+        if self.stage == 0:
+            tui.send("/providers")
+        elif self.stage in (1, 2, 3, 4, 6):
+            tui.key({1: "Down", 2: "r", 3: "Enter", 4: "Enter", 6: "Escape"}[self.stage])
+        elif self.stage == 5:
+            tui.secret(token)
+        self.stage += 1
+        self.since = time.monotonic()
+        return self.stage == 8
+
+
+def provider_failure(pane):
+    return bool(re.search(r"(?im)^\s*(?:■\s*)?(?:the current provider is unavailable or inactive"
+                          r"|Claude authentication needs attention|authentication failed"
+                          r"|the subscription token (?:was not accepted|could not be stored|was empty)"
+                          r"|token storage could not be confirmed|failed to save Claude"
+                          r"|Claude Plan authentication (?:failed|is unavailable))", pane))
 
 
 def rollout(run):
@@ -502,7 +583,7 @@ def run_launcher(args):
         receipt.update(tmux_socket=tui.socket, tmux_session=tui.session)
         deadline = time.monotonic() + args.timeout
         tui.start()
-        sent, gate = False, False
+        sent, gate, setup = False, False, AuthSetup()
         while time.monotonic() < deadline:
             alive = tui.observe()
             if (run / "child-error.json").exists():
@@ -515,12 +596,16 @@ def run_launcher(args):
             state = evidence(records, run / "packet")
             receipt.update({k: v for k, v in state.items() if k != "final"})
             pane = tui.capture()
-            if not sent and "Corbanu Terminal" in pane and "tok/s" in pane:
+            require(not provider_failure(pane), "provider_auth_failure")
+            if not sent:
                 require(state["final"] is None and not any(
                     r["type"] in ("turn_context", "response_item") for r in records), "preexisting_turn")
-                write_file(run / "ready-pane.txt", redacted(pane, token))
-                tui.send(INSTRUCTIONS + " Briefing JSON: " + brief_text)
-                sent = True
+                receipt["auth_stage"] = setup.stage
+                if setup.advance(tui, pane, token):
+                    receipt.update(auth_stage=setup.stage, auth_source="managed_subscription_token")
+                    write_file(run / "ready-pane.txt", redacted(pane, token))
+                    tui.send(INSTRUCTIONS + " Briefing JSON: " + brief_text)
+                    sent = True
             if state["final"] is not None:
                 require(sent, "unsolicited_completion")
                 require(redacted(state["final"], token) == state["final"], "secret_in_decision")
@@ -549,6 +634,13 @@ def run_launcher(args):
         try:
             if tui is not None:
                 try:
+                    if receipt["status"] != "completed":
+                        write_file(run / "failure-pane.txt", redacted(tui.capture(), token))
+                        receipt["artifacts"]["failure_pane"] = str(run / "failure-pane.txt")
+                    receipt["artifacts"]["auth_stages"] = str(run)
+                except Exception:
+                    pass
+                try:
                     receipt["shutdown"] = tui.stop()
                 except BaseException:
                     receipt["shutdown"] = {"clean": False, "errors": ["shutdown_verification_failed"]}
@@ -569,7 +661,7 @@ def run_launcher(args):
                     receipt.update(status="failed", error="final_evidence_invalid", decision=None)
             receipt["finished_at"] = now()
             # Fixed errors and selected metadata only; raw traces are private, never exported.
-            receipt = strict_json(redacted(json.dumps(receipt), token))
+            receipt = redact_value(receipt, token)
             if run is not None:
                 write_json(run / "receipt.json", receipt)
         except BaseException:
