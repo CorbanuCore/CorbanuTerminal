@@ -36,8 +36,12 @@ pub fn builder(endpoint: String, mode: AccountingMode) -> TestCodexBuilder {
             ..ModelProviderInfo::create_anthropic_provider()
         };
         config.accounting = mode;
-        config.model_catalog = Some(codex_models_manager::bundled_models_response().unwrap());
-        config.features.enable(Feature::Sqlite).unwrap();
+        config.model_catalog =
+            Some(codex_models_manager::bundled_models_response().expect("bundled fixture models"));
+        config
+            .features
+            .enable(Feature::Sqlite)
+            .expect("enable fixture SQLite");
     })
 }
 
@@ -54,7 +58,7 @@ pub fn sse(events: &[Value]) -> String {
         .map(|value| {
             format!(
                 "event: {}\ndata: {value}\n\n",
-                value["type"].as_str().unwrap()
+                value["type"].as_str().expect("fixture SSE event type")
             )
         })
         .collect()
@@ -81,12 +85,16 @@ pub fn success(input: Value, output: Value) -> wiremock::ResponseTemplate {
 }
 
 pub async fn connection(db: &StateRuntime) -> Result<SqliteConnection> {
-    Ok(SqliteConnection::connect_with(
-        &sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(db.sqlite().state_db_path())
-            .foreign_keys(true),
-    )
-    .await?)
+    let pool = db
+        .sqlite()
+        .open_read_write_pool(&db.sqlite().state_db_path())
+        .await?;
+    let mut connection = pool.acquire().await?.detach();
+    pool.close().await;
+    sqlx::query("PRAGMA foreign_keys=ON")
+        .execute(&mut connection)
+        .await?;
+    Ok(connection)
 }
 
 pub async fn payloads<T: DeserializeOwned>(db: &StateRuntime, table: &str) -> Result<Vec<T>> {
@@ -110,9 +118,9 @@ pub async fn payloads<T: DeserializeOwned>(db: &StateRuntime, table: &str) -> Re
         }
         _ => unreachable!("whitelisted fixture table"),
     };
-    let values: Vec<String> = sqlx::query_scalar(query)
-        .fetch_all(&mut connection(db).await?)
-        .await?;
+    let mut connection = connection(db).await?;
+    let values: Vec<String> = sqlx::query_scalar(query).fetch_all(&mut connection).await?;
+    connection.close().await?;
     values
         .into_iter()
         .map(|value| serde_json::from_str(&value).map_err(Into::into))
@@ -201,7 +209,10 @@ impl GateServer {
                     let mut data = Vec::new();
                     let header_end = loop {
                         let mut buffer = [0; 4096];
-                        let size = stream.read(&mut buffer).await.unwrap();
+                        let size = stream
+                            .read(&mut buffer)
+                            .await
+                            .expect("read fixture HTTP headers");
                         if size == 0 {
                             return;
                         }
@@ -210,18 +221,22 @@ impl GateServer {
                             break end + 4;
                         }
                     };
-                    let head = String::from_utf8(data[..header_end].to_vec()).unwrap();
+                    let head = String::from_utf8(data[..header_end].to_vec())
+                        .expect("fixture HTTP header UTF-8");
                     let length: usize = head
                         .lines()
                         .find_map(|line| {
                             let (name, value) = line.split_once(':')?;
                             name.eq_ignore_ascii_case("content-length")
-                                .then(|| value.trim().parse().unwrap())
+                                .then(|| value.trim().parse().expect("fixture content length"))
                         })
                         .unwrap_or(0);
                     while data.len() < header_end + length {
                         let mut buffer = [0; 4096];
-                        let size = stream.read(&mut buffer).await.unwrap();
+                        let size = stream
+                            .read(&mut buffer)
+                            .await
+                            .expect("read fixture HTTP body");
                         if size == 0 {
                             return;
                         }
@@ -233,8 +248,8 @@ impl GateServer {
                             .await;
                         return;
                     }
-                    let body =
-                        serde_json::from_slice(&data[header_end..header_end + length]).unwrap();
+                    let body = serde_json::from_slice(&data[header_end..header_end + length])
+                        .expect("fixture request JSON");
                     let unavailable = head
                         .lines()
                         .any(|line| line.eq_ignore_ascii_case("x-accounting-fixture-status: 503"));

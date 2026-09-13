@@ -1664,7 +1664,7 @@ async fn run_sampling_request(
     let _accounting_scope = crate::accounting::SamplingScope::attach(
         Arc::clone(&client_session.accounting),
         accounting.clone(),
-    );
+    )?;
 
     let base_instructions = sess.get_base_instructions().await;
     trace_turn_timing("after_get_base_instructions", sampling_started_at);

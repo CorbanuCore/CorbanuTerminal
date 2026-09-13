@@ -17,6 +17,9 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use uuid::Uuid;
 
+#[cfg(test)]
+#[path = "accounting_policy_tests.rs"]
+mod policy_tests;
 #[path = "accounting_prices.rs"]
 mod prices;
 #[path = "accounting_transport.rs"]
@@ -30,20 +33,52 @@ pub(crate) type Slot = Arc<Mutex<Option<Arc<Sampling>>>>;
 // transactions before sampling time so concurrent native children cannot commit
 // a later checkpoint ahead of an older local operation. Never hold across HTTP;
 // external writers still use the store's fail-visible validation contract.
-static WRITES: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+static WRITES: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
+
+pub(crate) fn read_slot(slot: &Slot) -> Result<Option<Arc<Sampling>>, CodexErr> {
+    match slot.lock() {
+        Ok(value) => Ok(value.clone()),
+        Err(poison) => {
+            if let Some(stale) = poison.into_inner().take() {
+                stale.reject();
+            }
+            Err(CodexErr::Fatal(FAILURE.into()))
+        }
+    }
+}
 
 pub(crate) struct SamplingScope(Slot);
 
 impl SamplingScope {
-    pub(crate) fn attach(slot: Slot, sampling: Option<Arc<Sampling>>) -> Self {
-        *slot.lock().expect("accounting slot") = sampling;
-        Self(slot)
+    pub(crate) fn attach(slot: Slot, sampling: Option<Arc<Sampling>>) -> Result<Self, CodexErr> {
+        {
+            match slot.lock() {
+                Ok(mut value) => *value = sampling,
+                Err(poison) => {
+                    if let Some(stale) = poison.into_inner().take() {
+                        stale.reject();
+                    }
+                    if let Some(incoming) = sampling {
+                        incoming.reject();
+                    }
+                    return Err(CodexErr::Fatal(FAILURE.into()));
+                }
+            }
+        }
+        Ok(Self(slot))
     }
 }
 
 impl Drop for SamplingScope {
     fn drop(&mut self) {
-        *self.0.lock().expect("accounting slot") = None;
+        match self.0.lock() {
+            Ok(mut value) => *value = None,
+            Err(poison) => {
+                if let Some(stale) = poison.into_inner().take() {
+                    stale.reject();
+                }
+            }
+        }
     }
 }
 
@@ -54,8 +89,23 @@ pub(crate) struct Sampling {
     request: Uuid,
     scope: Uuid,
     endpoint: String,
-    previous: tokio::sync::Mutex<Option<Uuid>>,
+    previous: Mutex<Option<Uuid>>,
     failed: AtomicBool,
+}
+
+// A cancelled SQL future may already have committed. Never reuse that sampling
+// with a guessed predecessor; release the permit normally and fail it closed.
+struct Completion<'a> {
+    sampling: &'a Sampling,
+    complete: bool,
+}
+
+impl Drop for Completion<'_> {
+    fn drop(&mut self) {
+        if !self.complete {
+            self.sampling.reject();
+        }
+    }
 }
 
 impl Sampling {
@@ -82,7 +132,10 @@ impl Sampling {
         {
             return Err(CodexErr::Fatal(FAILURE.into()));
         }
-        let _write = WRITES.lock().await;
+        let _write = WRITES
+            .acquire()
+            .await
+            .map_err(|_| CodexErr::Fatal(FAILURE.into()))?;
         AccountingStore::open(&runtime, now())
             .await
             .map_err(|_| CodexErr::Fatal(FAILURE.into()))?;
@@ -93,7 +146,7 @@ impl Sampling {
             request: Uuid::new_v4(),
             scope: *scope,
             endpoint: format!("{}/messages", approved_endpoint.trim_end_matches('/')),
-            previous: tokio::sync::Mutex::new(None),
+            previous: Mutex::new(None),
             failed: AtomicBool::new(false),
         }))
     }
@@ -113,8 +166,16 @@ impl Sampling {
     async fn admit(&self, model: &str, endpoint: &str) -> anyhow::Result<Attempt> {
         self.check()?;
         anyhow::ensure!(endpoint == self.endpoint, "accounting route mismatch");
-        let mut previous = self.previous.lock().await;
-        let _write = WRITES.lock().await;
+        let _write = WRITES.acquire().await?;
+        self.check()?;
+        let mut completion = Completion {
+            sampling: self,
+            complete: false,
+        };
+        let previous = *self.previous.lock().map_err(|_| {
+            self.reject();
+            anyhow::anyhow!(FAILURE)
+        })?;
         // The facade borrows its runtime. Reopening validates/maintains through
         // its public contract; never fabricate an attached or Active handle.
         let store = AccountingStore::open(&self.runtime, now()).await?;
@@ -124,7 +185,7 @@ impl Sampling {
             request_id: self.request,
             thread_id: self.owner,
             turn: self.turn.clone(),
-            retry_of: *previous,
+            retry_of: previous,
             provider: "anthropic".into(),
             model: model.into(),
             scope: self.scope,
@@ -133,7 +194,11 @@ impl Sampling {
         };
         let prices = prices::original(model, self.scope, dispatched_at)?;
         store.admit(self.owner, &attempt, &prices, now()).await?;
-        *previous = Some(attempt.attempt_id);
+        *self.previous.lock().map_err(|_| {
+            self.reject();
+            anyhow::anyhow!(FAILURE)
+        })? = Some(attempt.attempt_id);
+        completion.complete = true;
         Ok(attempt)
     }
 
@@ -159,11 +224,17 @@ impl Sampling {
             sequence: position,
             patch,
         };
-        let _write = WRITES.lock().await;
+        let _write = WRITES.acquire().await?;
+        self.check()?;
+        let mut completion = Completion {
+            sampling: self,
+            complete: false,
+        };
         let store = AccountingStore::open(&self.runtime, now()).await?;
         store
             .observe(self.owner, attempt, &[observation], now())
             .await?;
+        completion.complete = true;
         Ok(())
     }
 }

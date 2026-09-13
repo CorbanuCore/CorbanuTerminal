@@ -19,6 +19,154 @@ use wiremock::matchers::method;
 use wiremock::matchers::path;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn accounting_anthropic_cancel_held_http_other_owner_fresh_turn_and_two_resumes()
+-> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    let mut gate = GateServer::start().await?;
+    let endpoint = gate.endpoint.clone();
+    let mode = enabled(&endpoint);
+    let test = builder(endpoint.clone(), mode.clone())
+        .with_config(|config| config.model_provider.stream_idle_timeout_ms = Some(30000))
+        .build_with_auto_env(&server)
+        .await?;
+    submit(&test).await?;
+    let held = gate.next().await?;
+    let db = test.codex.state_db().unwrap();
+    let first = attempts(&db).await?;
+    assert_eq!(first.len(), 1);
+    assert_eq!(first[0].thread_id, test.session_configured.thread_id);
+    assert_eq!(first[0].retry_of, None);
+
+    // A real second owner completes admission AND observation while the first
+    // actual Messages response is still held open with no usage bytes.
+    let other = builder(endpoint.clone(), mode.clone())
+        .build_with_auto_env(&server)
+        .await?;
+    submit(&other).await?;
+    let other_http = gate.next().await?;
+    other_http
+        .chunks
+        .send(sse(&[start(json!({"input_tokens": 5}))]))
+        .await?;
+    other_http
+        .chunks
+        .send(sse(&ending(json!({"output_tokens": 2}))))
+        .await?;
+    assert!(
+        terminal(&other)
+            .await?
+            .iter()
+            .any(|event| matches!(event, EventMsg::TurnComplete(_)))
+    );
+    let other_db = other.codex.state_db().unwrap();
+    let other_attempts = attempts(&other_db).await?;
+    assert_eq!(other_attempts.len(), 1);
+    assert_eq!(
+        other_attempts[0].thread_id,
+        other.session_configured.thread_id
+    );
+    assert_ne!(other_attempts[0].thread_id, first[0].thread_id);
+    assert_ne!(other_attempts[0].request_id, first[0].request_id);
+    assert_eq!(observations(&other_db).await?.len(), 2);
+    assert!(observations(&db).await?.is_empty());
+    stop(&other).await;
+    drop(other);
+    other_db.close().await;
+
+    test.codex
+        .submit(codex_protocol::protocol::Op::Interrupt)
+        .await?;
+    assert!(
+        terminal(&test)
+            .await?
+            .iter()
+            .any(|event| matches!(event, EventMsg::TurnAborted(_)))
+    );
+    drop(held);
+    assert_eq!(attempts(&db).await?, first);
+    assert!(observations(&db).await?.is_empty());
+    submit(&test).await?;
+    let fresh_http = gate.next().await?;
+    fresh_http
+        .chunks
+        .send(sse(&[start(json!({"input_tokens": 7}))]))
+        .await?;
+    fresh_http
+        .chunks
+        .send(sse(&ending(json!({"output_tokens": 3}))))
+        .await?;
+    assert!(
+        terminal(&test)
+            .await?
+            .iter()
+            .any(|event| matches!(event, EventMsg::TurnComplete(_)))
+    );
+    let records = attempts(&db).await?;
+    assert_eq!(records.len(), 2);
+    assert_eq!(records[0], first[0]);
+    assert_eq!(records[1].thread_id, records[0].thread_id);
+    assert_ne!(records[1].turn, records[0].turn);
+    assert_ne!(records[1].request_id, records[0].request_id);
+    assert_ne!(records[1].attempt_id, records[0].attempt_id);
+    assert_eq!(records[1].retry_of, None);
+    let patches = observations(&db).await?;
+    assert_eq!(patches.len(), 2);
+    let home = test.home.clone();
+    let rollout = test.codex.rollout_path().unwrap();
+    stop(&test).await;
+    drop(test);
+    db.close().await;
+    drop(db);
+    for index in 0..2 {
+        let reopened = builder(endpoint.clone(), mode.clone())
+            .resume(&server, home.clone(), rollout.clone())
+            .await?;
+        let db = reopened.codex.state_db().unwrap();
+        let rows = attempts(&db).await?;
+        assert_eq!(&rows[..2], records.as_slice());
+        assert_eq!(&observations(&db).await?[..2], patches.as_slice());
+        assert_eq!(rows.len(), 2 + index);
+        if index == 0 {
+            submit(&reopened).await?;
+            let resumed_http = gate.next().await?;
+            resumed_http
+                .chunks
+                .send(sse(&[start(json!({"input_tokens": 1}))]))
+                .await?;
+            resumed_http
+                .chunks
+                .send(sse(&ending(json!({"output_tokens": 0}))))
+                .await?;
+            assert!(
+                terminal(&reopened)
+                    .await?
+                    .iter()
+                    .any(|event| matches!(event, EventMsg::TurnComplete(_)))
+            );
+            let rows = attempts(&db).await?;
+            assert_eq!(rows.len(), 3);
+            assert_eq!(rows[2].thread_id, records[0].thread_id);
+            assert_eq!(rows[2].retry_of, None);
+            assert!(
+                !records
+                    .iter()
+                    .any(|old| old.request_id == rows[2].request_id)
+            );
+        } else {
+            assert_eq!(observations(&db).await?.len(), 4);
+        }
+        stop(&reopened).await;
+        drop(reopened);
+        db.close().await;
+    }
+    assert!(
+        gate.incoming.try_recv().is_err(),
+        "no cancellation repair send"
+    );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn accounting_anthropic_native_spawned_children_role_reload_and_fork_own_only_new_sends()
 -> anyhow::Result<()> {
     let server = MockServer::start().await;
@@ -438,17 +586,31 @@ async fn role_override_native(case: RoleOverride) -> anyhow::Result<()> {
     );
     let test = builder(endpoint.clone(), enabled(&endpoint))
         .with_config(move |config| {
-            config.features.enable(Feature::Collab).unwrap();
-            config.features.enable(Feature::MultiAgentV2).unwrap();
-            config.features.disable(Feature::CodeModeOnly).unwrap();
+            config
+                .features
+                .enable(Feature::Collab)
+                .expect("enable fixture collaboration");
+            config
+                .features
+                .enable(Feature::MultiAgentV2)
+                .expect("enable fixture multi-agent");
+            config
+                .features
+                .disable(Feature::CodeModeOnly)
+                .expect("disable fixture code-only mode");
             config.agents_enabled = true;
             config.model_provider.stream_idle_timeout_ms = Some(1000);
-            for model in &mut config.model_catalog.as_mut().unwrap().models {
+            for model in &mut config
+                .model_catalog
+                .as_mut()
+                .expect("fixture model catalog")
+                .models
+            {
                 model.multi_agent_version = Some(codex_protocol::protocol::MultiAgentVersion::V2);
                 model.tool_mode = None;
             }
             let role_path = config.codex_home.join("accounting-transport-role.toml");
-            std::fs::write(&role_path, &role_text).unwrap();
+            std::fs::write(&role_path, &role_text).expect("write fixture role override");
             config.agent_roles.insert(
                 "transport-role".into(),
                 codex_core::config::AgentRoleConfig {
@@ -464,7 +626,7 @@ async fn role_override_native(case: RoleOverride) -> anyhow::Result<()> {
     let root = gate.next().await?;
     let tool = root.body["tools"]
         .as_array()
-        .unwrap()
+        .expect("fixture native tool array")
         .iter()
         .find_map(|tool| {
             tool["name"]
@@ -504,7 +666,10 @@ async fn role_override_native(case: RoleOverride) -> anyhow::Result<()> {
             request.chunks.send(sse(&response)).await?;
         }
     }
-    let db = test.codex.state_db().unwrap();
+    let db = test
+        .codex
+        .state_db()
+        .expect("fixture native state database");
     let edges: Vec<(String, String)> =
         sqlx::query_as("SELECT parent_thread_id, child_thread_id FROM thread_spawn_edges")
             .fetch_all(&mut connection(&db).await?)
@@ -615,7 +780,13 @@ async fn role_override_native(case: RoleOverride) -> anyhow::Result<()> {
             .len(),
         records.len()
     );
-    assert!(unapproved.received_requests().await.unwrap().is_empty());
+    assert!(
+        unapproved
+            .received_requests()
+            .await
+            .expect("unapproved endpoint request capture")
+            .is_empty()
+    );
     assert!(
         gate.incoming.try_recv().is_err(),
         "no extra retry or unowned request"

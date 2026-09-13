@@ -2504,11 +2504,7 @@ impl ModelClientSession {
                 "anthropic_http_after_client_setup",
                 provider_request_started_at,
             );
-            let evidence = self
-                .accounting
-                .lock()
-                .expect("accounting slot")
-                .clone()
+            let evidence = crate::accounting::read_slot(&self.accounting)?
                 .map(crate::accounting::transport::ResponseEvidence::new);
             let transport = if evidence.is_some() {
                 let client =

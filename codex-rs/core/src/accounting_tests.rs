@@ -278,19 +278,34 @@ impl Fixture {
     }
 
     async fn connection(&self) -> anyhow::Result<SqliteConnection> {
-        Ok(SqliteConnection::connect_with(
-            &sqlx::sqlite::SqliteConnectOptions::new()
-                .filename(self.db.sqlite().state_db_path())
-                .foreign_keys(true),
-        )
-        .await?)
+        let pool = self
+            .db
+            .sqlite()
+            .open_read_write_pool(&self.db.sqlite().state_db_path())
+            .await?;
+        let mut connection = pool.acquire().await?.detach();
+        pool.close().await;
+        sqlx::query("PRAGMA foreign_keys=ON")
+            .execute(&mut connection)
+            .await?;
+        Ok(connection)
     }
 
     async fn attempts(&self) -> anyhow::Result<Vec<Attempt>> {
+        // A read snapshot must not initialize writable connection pragmas while
+        // the separate fault-fixture connection intentionally holds its writer.
+        let pool = self
+            .db
+            .sqlite()
+            .open_read_only_pool(&self.db.sqlite().state_db_path())
+            .await?;
+        let mut connection = pool.acquire().await?.detach();
+        pool.close().await;
         let values: Vec<String> =
             sqlx::query_scalar("SELECT payload FROM draft_accounting_attempts ORDER BY rowid")
-                .fetch_all(&mut self.connection().await?)
+                .fetch_all(&mut connection)
                 .await?;
+        connection.close().await?;
         values
             .into_iter()
             .map(|value| serde_json::from_str(&value).map_err(Into::into))
@@ -544,7 +559,7 @@ async fn accounting_scope_drop_clears_cancelled_sampling_and_observation_failure
 -> anyhow::Result<()> {
     let fixture = Fixture::new().await?;
     let slot = Default::default();
-    let scope = SamplingScope::attach(Arc::clone(&slot), Some(fixture.sampling.clone()));
+    let scope = SamplingScope::attach(Arc::clone(&slot), Some(fixture.sampling.clone()))?;
     assert!(slot.lock().unwrap().is_some());
     drop(scope);
     assert!(slot.lock().unwrap().is_none());
