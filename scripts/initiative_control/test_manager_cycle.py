@@ -238,6 +238,29 @@ class CycleTests(unittest.TestCase):
         brief = m.load_json(Path(result["artifacts"]) / "briefing.json")
         self.assertEqual(["1", "2", "3"], [a["id"] for a in brief["last_three_actions"]["delivery"]])
         self.assertEqual("z" * 800, brief["original_evidence"][reference["evidence_digest"]]["original"])
+        self.assertNotIn("preview", brief["actions"]["3"]["result"])
+        claim = m.load_json(Path(result["artifacts"]) / "claim.json")
+        for key, action in brief["actions"].items():
+            restored = dict(action)
+            ref = restored.get("result")
+            if ref:
+                restored["result"] = {**ref, "preview": encoded(brief["original_evidence"][ref["evidence_digest"]])[:400]}
+            self.assertEqual(claim["actions"][key], restored)
+        for event, original in zip(brief["events"], claim["events"]):
+            self.assertEqual(original, {**event, "preview": encoded(brief["original_evidence"][event["evidence_digest"]])[:400]})
+
+    def test_frozen_inputs_that_resemble_references_are_not_rewritten(self):
+        with self.c.connection() as db:
+            ref = self.c._reference(db, {"original": "full body"})
+        with self.c.mutation("fixture", {}) as (_, state):
+            state["actions"]["prior"] = {"id": "prior", "workstream": "delivery", "status": "accepted",
+                                          "sequence": [0, 0], "inputs": {"data": ref},
+                                          "result": {**ref, "extra": "retain unknown shape"}}
+        result = self.cycle()
+        self.assertEqual("accepted", result["status"], result)
+        brief = m.load_json(Path(result["artifacts"]) / "briefing.json")
+        self.assertEqual({"data": ref}, brief["actions"]["prior"]["inputs"])
+        self.assertEqual({**ref, "extra": "retain unknown shape"}, brief["actions"]["prior"]["result"])
 
     def test_large_actions_are_losslessly_indexed_without_duplicate_records(self):
         expected = {}

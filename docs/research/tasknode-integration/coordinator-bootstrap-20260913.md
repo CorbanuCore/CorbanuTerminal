@@ -576,6 +576,17 @@ every ordered action preserved. Combined manager/core/launcher tests104 passed
 in85.594s; Fable review `01a09c57-c7e6-74e1-b026-553f508f986e` clean. The original
 hold had only claim/hold files and no launch; owner explicitly reconciled it at
 revision125 without consuming its events. New live handoff remains to be run.
+The next pre-launch attempt exposed additional duplicate preview text after the
+allocation-base replacement: complete brief65,840 bytes. Parent's same-boundary
+correction removes only derived previews at known core event/action-reference
+positions; all original bodies, frozen inputs and raw claim packets remain.
+No arbitrary data objects are rewritten. Scope target revised to120 lines for
+the two real failures, with one corrective Fable review; no hard-limit increase,
+event deletion, automatic retry or packet/authority protocol replacement.
+Correction passes73 manager/core tests in2.857s and Fable corrective review
+`01a09c5d-966b-7ea0-96e9-dce8d1332201` is clean. The actual second failed packet
+now fits52,277 bytes with all46 originals, no omissions. Owner reconciled that
+verified no-launch claim at revision132. Both original holds remain auditable.
 
 Fresh Astra High worker owns only `scripts/initiative_control/native_owner.py`,
 `scripts/initiative_control/test_native_owner.py`, and

@@ -34,6 +34,8 @@ DIRECTIVE = (
     "or conflicting facts require an allocated wait/escalation/reconciliation. "
     "last_three_actions contains ordered id-only entries; resolve each complete "
     "record in actions by id. These are lossless references, not summaries. "
+    "Derived event/action evidence previews are omitted; the exact full bodies "
+    "are in original_evidence under their preserved evidence_digest. "
     "Preserve approvals, unresolved blockers, review budgets and pause boundaries."
 )
 
@@ -97,6 +99,20 @@ def briefing(coordinator, packet, owner_context):
              "directive": DIRECTIVE, "owner_observation": context,
              "seed_metadata_status": "historical; current durable state is not external live proof",
              "original_evidence": {}, "evidence_omissions": []}
+    # Only core-owned reference positions, never arbitrary frozen inputs. The
+    # untouched packet is still scanned/verified below and retained in claim.json.
+    reference_fields = {"dispatch_receipt", "ack_receipt", "result", "verification",
+                        "owner_failure", "owner_cancellation"}
+    def without_preview(value, fields):
+        if isinstance(value, dict) and set(value) == fields:
+            return {k: v for k, v in value.items() if k != "preview"}
+        return value
+    reference_shape = {"evidence_digest", "bytes", "preview"}
+    brief["events"] = [without_preview(event, reference_shape | {"id"}) for event in packet["events"]]
+    brief["actions"] = {key: {field: without_preview(value, reference_shape)
+                              if field in reference_fields else value
+                              for field, value in action.items()}
+                        for key, action in packet["actions"].items()}
     originals = brief["original_evidence"]
 
     def collect(value):
