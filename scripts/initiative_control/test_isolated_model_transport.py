@@ -10,10 +10,12 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import struct
 import sys
 import tempfile
 import time
 import unittest
+import zlib
 from unittest.mock import patch
 
 import isolated_model_transport as m
@@ -23,6 +25,19 @@ REAL_LAUNCH = m._launch
 AUTH = json.dumps({'auth_mode': 'chatgpt', 'tokens': {
     'id_token': 'SYNTHETIC_ID', 'access_token': 'SYNTHETIC_ACCESS',
     'refresh_token': 'SYNTHETIC_REFRESH'}}).encode()
+
+
+def chunk(kind, data=b''):
+    return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
+
+
+def png(width=1, height=1, depth=8, color=6, compression=0, filtering=0, interlace=0, payload=None):
+    header = struct.pack('>IIBBBBB', width, height, depth, color, compression, filtering, interlace)
+    pixels = b'\0' * (height * (1 + width * (3 if color == 2 else 4)))
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', header)
+            + chunk(b'IDAT', zlib.compress(pixels) if payload is None else payload) + chunk(b'IEND'))
+
+
 CHILD = r'''
 import json, os, sys, time, uuid
 from pathlib import Path
@@ -41,6 +56,20 @@ if mode == 'duplex':
     os.write(2, b'd' * 131072)
 packet = sys.stdin.buffer.read()
 (run / 'packet.raw').write_bytes(packet)
+native = json.loads(sys.argv[3])
+if '--image' in native:
+    image = Path(native[native.index('--image') + 1])
+    (run / 'observed-image.raw').write_bytes(image.read_bytes())
+    if mode == 'image_mutation': image.write_bytes(b'CHANGED_IMAGE')
+    if mode == 'image_replacement':
+        replacement = run / 'replacement.png'; replacement.write_bytes(image.read_bytes())
+        replacement.chmod(0o600); replacement.replace(image)
+    if mode == 'image_symlink':
+        target = run / 'target.png'; target.write_bytes(image.read_bytes()); target.chmod(0o600)
+        image.unlink(); image.symlink_to(target)
+    if mode == 'image_hardlink': os.link(image, run / 'linked.png')
+    if mode == 'image_permissions': image.chmod(0o644)
+    if mode == 'image_deleted': image.unlink()
 if mode == 'auth_mutation':
     (run / 'home/auth.json').write_bytes(b'SYNTHETIC_MUTATED')
 if mode == 'auth_replacement':
@@ -105,6 +134,7 @@ class TransportTests(unittest.TestCase):
         self.transport = m.Transport(self.owner)
         self.mode = 'normal'
         self.calls = []
+        self.native_calls = []
         original_fingerprint = m._fingerprint
 
         def fingerprint(path, **checks):
@@ -112,20 +142,23 @@ class TransportTests(unittest.TestCase):
                 checks.pop('root', None)  # Synthetic CA belongs to fixture owner.
             return original_fingerprint(path, **checks)
 
-        def launch(owner, run):
+        def launch(owner, run, *, with_image=False):
             self.calls.append((owner, run))
+            native, env = REAL_LAUNCH(owner, run, with_image=with_image)
+            self.native_calls.append((native, env))
+            m._save(run / 'synthetic-native-launch.json', dict(argv=native, environment=env))
             return (sys.executable, '-I', '-B', '-c', CHILD, self.mode,
-                    json.dumps(sorted(m._WARNINGS)[0])), {'PATH': '/usr/bin:/bin'}
+                    json.dumps(sorted(m._WARNINGS)[0]), json.dumps(native)), {'PATH': '/usr/bin:/bin'}
 
         for name, value in (('_CA', self.ca), ('BINARY_SHA', hashlib.sha256(self.binary.read_bytes()).hexdigest()),
                             ('_fingerprint', fingerprint), ('_launch', launch), ('_WALL', 2)):
             self.enterContext(patch.object(m, name, value))
         self.enterContext(patch.object(m.sys, 'platform', 'darwin'))
 
-    def attempt(self, mode='normal', text='SYNTHETIC_INPUT', expected='ok'):
+    def attempt(self, mode='normal', text='SYNTHETIC_INPUT', expected='ok', image_png=None):
         self.mode = mode
         count = len(self.calls)
-        result = self.transport.execute(text)
+        result = self.transport.execute(text, image_png=image_png)
         self.assertEqual(result['status'], expected, dict(result))
         self.assertLessEqual(len(self.calls) - count, 1)  # No transport retry or fallback.
         run = self.root / result['attempt_id']
@@ -137,6 +170,126 @@ class TransportTests(unittest.TestCase):
             self.assertIsNone(result['text'])
             self.assertTrue((run / 'failure.json').exists())
         return result, run
+
+    def test_inline_png_content_identity_exact_argv_and_policy(self):
+        for color in (2, 6):
+            data = png(color=color)
+            result, run = self.attempt(image_png=data)
+            self.assertEqual((run / 'observed-image.raw').read_bytes(), data)
+            self.assertEqual((run / 'packet.raw').read_bytes(), b'SYNTHETIC_INPUT')
+            self.assertEqual(result['image_sha256'], m._digest(data))
+            self.assertEqual(result['image_observation'], 'supplied_not_attested')
+            self.assertEqual((result['image_bytes'], result['image_width'], result['image_height']), (len(data), 1, 1))
+            pin = json.loads((run / 'image.json').read_text())['identity']
+            self.assertEqual(pin, list(m._fingerprint(run / 'observation.png', private=True)))
+            native, env = self.native_calls[-1]
+            plain, plain_env = REAL_LAUNCH(self.owner, run)
+            self.assertEqual(native[3:], (*plain[3:-1], '--image', str(run / 'observation.png'), '--', '-'))
+            self.assertEqual(native[2], plain[2] + '\n(allow file-read* (literal ' + json.dumps(str(run / 'observation.png')) + '))')
+            self.assertEqual(env, plain_env)
+            self.assertTrue(result['inputs_unchanged'])
+        _, run = self.attempt()
+        self.assertNotIn('--image', self.native_calls[-1][0])
+        self.assertFalse((run / 'observation.png').exists())
+
+    def test_png_rejections_before_files_auth_or_process(self):
+        data = png()
+        header, idat, end = data[8:33], data[33:-12], data[-12:]
+        invalid = [b'', 'file.png', Path('/image.png'), 'https://example.test/image.png',
+                   bytearray(data), memoryview(data), [data], data + b'x', data[:-1],
+                   b'x' + data[1:], data[:40] + bytes([data[40] ^ 1]) + data[41:],
+                   data[:33] + b'\xff\xff\xff\xff' + data[37:], b'x' * (m._IMAGE_BYTES + 1),
+                   png(0), png(height=0), png(4097), png(height=4097), png(2049, 2048),
+                   png(depth=16), png(color=3), png(compression=1), png(filtering=1), png(interlace=1)]
+        for middle in (idat + header, header + header + idat, header, header + chunk(b'IDAT'),
+                       header + chunk(b'tEXt', b'key\0value') + idat, header + chunk(b'acTL') + idat,
+                       header + chunk(b'IDAT') * 1023 + idat):
+            invalid.append(data[:8] + middle + end)
+        invalid += [data[:-12], data[:-12] + chunk(b'IEND', b'x'), data + end]
+        with patch.object(m, '_path', side_effect=AssertionError('unexpected path read')), \
+             patch.object(m, '_snapshots', side_effect=AssertionError('unexpected auth read')), \
+             patch.object(m, '_launch', side_effect=AssertionError('unexpected process')):
+            for index, value in enumerate(invalid):
+                with self.subTest(index=index), self.assertRaises(ValueError):
+                    self.transport.execute('text', image_png=value)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(list(self.root.glob('attempt-*')), [])
+
+    def test_png_pixel_bounds_and_split_idat(self):
+        for data in (png(4096, 1), png(1, 4096), png(2048, 2048)):
+            self.attempt(image_png=data)
+        data = png()
+        self.attempt(image_png=data[:33] + chunk(b'IDAT') + data[33:])
+        payload = zlib.compress(b'\0' * 5)
+        self.attempt(image_png=data[:33] + chunk(b'IDAT', payload[:3]) + chunk(b'IDAT', payload[3:]) + chunk(b'IEND'))
+
+    def test_bad_compressed_pixels_rejected_before_auth_or_process(self):
+        payload = zlib.compress(b'\0' * 5)
+        invalid = [b'not deflate', payload[:-1], payload + b'x', payload + payload,
+                   zlib.compress(b'\0' * 4), zlib.compress(b'\0' * 6),
+                   zlib.compress(b'\0' * 1000000), zlib.compress(b'\5' + b'\0' * 4)]
+        with patch.object(m, '_path', side_effect=AssertionError('unexpected path read')), \
+             patch.object(m, '_snapshots', side_effect=AssertionError('unexpected auth read')), \
+             patch.object(m, '_launch', side_effect=AssertionError('unexpected process')):
+            for index, compressed in enumerate(invalid):
+                with self.subTest(index=index), self.assertRaises(ValueError):
+                    self.transport.execute('text', image_png=png(payload=compressed))
+        self.assertEqual(self.calls, [])
+        self.assertEqual(list(self.root.glob('attempt-*')), [])
+        for filtering in range(5):
+            self.attempt(image_png=png(payload=zlib.compress(bytes([filtering]) + b'\0' * 4)))
+
+    def test_image_mutations_fail_with_retained_original_pin_and_diagnostics(self):
+        data = png()
+        for mode in ('image_mutation', 'image_replacement', 'image_symlink',
+                     'image_hardlink', 'image_permissions', 'image_deleted'):
+            with self.subTest(mode=mode):
+                result, run = self.attempt(mode, expected='failed', image_png=data)
+                self.assertEqual(result['reason'], 'inputs_changed')
+                self.assertFalse(result['inputs_unchanged'])
+                self.assertEqual((run / 'observed-image.raw').read_bytes(), data)
+                self.assertEqual(json.loads((run / 'image.json').read_text())['identity'][-1], m._digest(data))
+                self.assertTrue((run / 'stdout.raw').stat().st_size)
+
+    def test_image_prelaunch_change_and_exclusive_collision_refused(self):
+        original_launch, original_save = m._launch, m._save
+        for mutation in ('bytes', 'symlink', 'replacement'):
+            def changed(owner, run, **kwargs):
+                result = original_launch(owner, run, **kwargs)
+                path = run / 'observation.png'
+                if mutation == 'bytes': path.write_bytes(b'CHANGED')
+                elif mutation == 'symlink':
+                    path.unlink(); path.symlink_to(run / 'model-only.json')
+                else:
+                    other = run / 'replacement.png'; original_save(other, path.read_bytes()); other.replace(path)
+                return result
+            with patch.object(m, '_launch', changed), patch.object(m, '_bounded', side_effect=AssertionError('must not spawn')):
+                _, run = self.attempt(expected='failed', image_png=png())
+                self.assertIn('ValueError', (run / 'failure.json').read_text())
+        for symlink in (False, True):
+            def collide(path, data):
+                if path.name == 'observation.png':
+                    if symlink: path.symlink_to(self.ca)
+                    else: original_save(path, b'EXISTING')
+                original_save(path, data)
+            count = len(self.calls)
+            with patch.object(m, '_save', collide):
+                _, run = self.attempt(expected='failed', image_png=png())
+            self.assertIn('FileExistsError', (run / 'failure.json').read_text())
+            self.assertEqual(len(self.calls), count)
+            self.assertEqual((run / 'observation.png').read_bytes(), self.ca.read_bytes() if symlink else b'EXISTING')
+
+    def test_image_off_is_inert_and_comma_root_rejected(self):
+        off = m.Transport(m.OwnerConfig(self.binary, self.auth, self.root))
+        with patch.object(m, '_png', side_effect=AssertionError('OFF validated image')), \
+             patch.object(m, '_path', side_effect=AssertionError('OFF path')), \
+             patch.object(m.subprocess, 'Popen', side_effect=AssertionError('OFF process')):
+            for value in (png(), b'broken', object(), b'x' * (m._IMAGE_BYTES + 1)):
+                self.assertEqual(dict(off.execute(object(), image_png=value)), {'status': 'off', 'text': None})
+        owner = m.OwnerConfig(self.binary, self.auth, self.root / 'comma,root', True)
+        with patch.object(m, '_path', side_effect=AssertionError('preflight path')):
+            with self.assertRaisesRegex(ValueError, 'delimiter'):
+                m.Transport(owner).execute('text', image_png=png())
 
     def test_fresh_success_private_receipts_and_no_raw_leak(self):
         first, a = self.attempt()
