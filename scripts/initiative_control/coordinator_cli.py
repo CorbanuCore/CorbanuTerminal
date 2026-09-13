@@ -19,6 +19,7 @@ OPERATIONS = {
     "fail_manager", "accept_decision", "claim", "dispatched", "acknowledge",
     "returned", "verify", "reconcile_dispatch", "watchdog",
     "read_evidence",
+    "put_allocation", "set_stream_mode", "complete_sprint", "archive_sprint", "activate_successor",
 }
 
 

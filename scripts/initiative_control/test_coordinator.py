@@ -302,5 +302,280 @@ class CoordinatorTests(unittest.TestCase):
             self.assertEqual(2, db.execute("SELECT COUNT(*) FROM events WHERE id LIKE 'dispatch-reconciled:first:%'").fetchone()[0])
 
 
+class OwnerControlsTests(unittest.TestCase):
+    """Synthetic owner/native receipts exercise the CLI; no live acceptance claimed."""
+
+    def setUp(self):
+        CoordinatorTests.setUp(self)
+        self.c = Coordinator(self.root)
+
+    tearDown = CoordinatorTests.tearDown
+
+    def call(self, operation, error=None, **payload):
+        before = self.c.snapshot()
+        with self.c.connection() as db:
+            counts = [db.execute("SELECT COUNT(*) FROM " + t).fetchone()[0]
+                      for t in ("events", "audit", "action_history", "evidence")]
+        output = io.StringIO()
+        code = coordinator_cli.main([operation, "--state", str(self.root)],
+                                    io.StringIO(json.dumps(payload)), output)
+        result = json.loads(output.getvalue())
+        self.assertEqual(2 if error else 0, code, result)
+        if error:
+            self.assertIn(error, result["error"])
+            self.assertEqual(before, self.c.snapshot())
+            with self.c.connection() as db:
+                self.assertEqual(counts, [db.execute("SELECT COUNT(*) FROM " + t).fetchone()[0]
+                                         for t in ("events", "audit", "action_history", "evidence")])
+        return result.get("result")
+
+    def owner(self, operation, **payload):
+        return self.call(operation, **{"expected_revision": self.c.snapshot()["revision"],
+                                      "evidence": {"owner": "synthetic test inspection"}, **payload})
+
+    def allocation(self, key, kind, inputs, sprint="PF80", **kwargs):
+        allocation = {"sprint": sprint, "kinds": [kind], "inputs": inputs,
+                      "resources": [], "scope": ["scripts/initiative_control/"], "timeout_seconds": 60}
+        self.owner("put_allocation", allocation_id=key, allocation=allocation, replace=False, **kwargs)
+        return allocation
+
+    def action(self, key, allocation, finish=True, verification=None):
+        frozen = self.c.snapshot()["allocations"][allocation]
+        self.call("event", event={"id": "trigger-" + key})
+        packet = self.call("begin_manager")
+        action = {"id": key, "kind": frozen["kinds"][0], "sprint": frozen["sprint"],
+                  "workstream": "delivery", "inputs": {"allocation": allocation, **frozen["inputs"]},
+                  "rationale": "synthetic CLI exercise", "timeout_seconds": 60,
+                  "expected_revision": packet["state_revision"]}
+        self.call("accept_decision", run_id=packet["manager_run"],
+                  decision={"state_revision": packet["state_revision"], "actions": [action]},
+                  launcher_receipt={"fixture": "not a live launcher"})
+        if finish:
+            claim = self.call("claim", action_id=key)
+            self.call("dispatched", action_id=key, claim=claim["claim"], agent_id="fixture-agent",
+                      native_receipt={"fixture": "dispatch"})
+            self.call("acknowledge", action_id=key, agent_id="fixture-agent",
+                      allocation_digest=claim["allocation_digest"], native_receipt={"fixture": "ack"})
+            self.call("returned", action_id=key, agent_id="fixture-agent", result={"claim": "all gates passed"})
+            if verification is not False:
+                self.call("verify", action_id=key, evidence=verification or {"fixture": "owner inspection"}, accepted=True)
+        return action
+
+    def closure(self, receipt_change=None, completion_verified=True):
+        assignment = {"id": "fixture-merge", "base": "a" * 40, "source": "b" * 40,
+                      "branch": "fixture-receiving", "scope": ["scripts/initiative_control/"],
+                      "approval": {"fixture": True}, "tests": [{"argv": ["fixture-test"], "timeout_seconds": 60}]}
+        receipt = {"status": "verified", "receiving_commit": "c" * 40, "assignment": assignment,
+                   "tests": [{"argv": ["fixture-test"], "exit_code": 0, "timed_out": False}]}
+        self.allocation("receive", "integrate", {"assignment": assignment})
+        if receipt_change:
+            receipt_change(receipt)
+        self.action("receiving", "receive", verification={"receiving_receipt": receipt})
+        self.allocation("close", "complete_sprint", {"receiving_action": "receiving",
+                        "receiving_commit": "c" * 40, "mandatory_gates": ["review", "functional", "human"]})
+        self.action("completion", "close", verification=None if completion_verified else False)
+        return {name: {"owner_verified": True, "status": "passed", "evidence": {"fixture": name}}
+                for name in ("review", "functional", "human")}
+
+    def test_allocation_replace_cancels_prepared_and_retains_versions_on_restart(self):
+        self.action("old", "bootstrap", finish=False)
+        old = self.c.snapshot()["allocations"]["bootstrap"]
+        new = {**old, "scope": ["scripts/initiative_control/coordinator.py"]}
+        revision = self.c.snapshot()["revision"]
+        self.owner("put_allocation", allocation_id="bootstrap", allocation=new, replace=True)
+        self.c = Coordinator(self.root)
+        self.call("claim", action_id="old", error="already claimed")
+        self.owner("put_allocation", allocation_id="bootstrap", allocation=old, replace=True,
+                   expected_revision=revision, error="stale")
+        action = self.c.snapshot()["actions"]["old"]
+        versions = self.call("read_evidence", evidence_digest=action["owner_cancellation"]["evidence_digest"])
+        self.assertEqual((old, new), (versions["before"], versions["after"]))
+        self.action("new", "bootstrap")
+        self.owner("put_allocation", allocation_id="bootstrap", allocation=new, replace=True, error="duplicate")
+
+    def test_replacement_denied_through_active_returned_and_uncertain_reservations(self):
+        self.action("active", "bootstrap", finish=False)
+        frozen = self.c.snapshot()["allocations"]["bootstrap"]
+        new = {**frozen, "timeout_seconds": 30}
+        claim = self.call("claim", action_id="active")
+        def denied():
+            self.owner("put_allocation", allocation_id="bootstrap", allocation=new, replace=True, error="active reservation")
+        denied()
+        Coordinator(self.root, lambda: claim["deadline"] + 1).watchdog()
+        denied()
+        self.call("reconcile_dispatch", action_id="active", evidence={"fixture": "found"}, agent_id="fixture-agent")
+        denied()
+        self.call("acknowledge", action_id="active", agent_id="fixture-agent", allocation_digest=claim["allocation_digest"],
+                  native_receipt={"fixture": True})
+        denied()
+        self.call("returned", action_id="active", agent_id="fixture-agent", result={"fixture": True})
+        denied()
+        self.call("verify", action_id="active", evidence={"fixture": True}, accepted=True)
+        self.owner("put_allocation", allocation_id="bootstrap", allocation=new, replace=True)
+
+    def test_owner_inputs_staleness_and_manager_authority(self):
+        allocation = self.c.snapshot()["allocations"]["bootstrap"]
+        self.owner("put_allocation", allocation_id="bootstrap", allocation=allocation, replace=False, error="exists")
+        self.owner("put_allocation", allocation_id="absent", allocation=allocation, replace=True, error="missing")
+        self.owner("put_allocation", allocation_id="fresh", allocation=allocation, replace=False,
+                   expected_revision=True, error="owner revision")
+        self.owner("put_allocation", allocation_id="fresh", allocation=allocation, replace=False, evidence={}, error="evidence")
+        self.call("event", event={"id": "before-owner-edit"})
+        packet = self.call("begin_manager")
+        self.allocation("fresh", "repair", {"base": "b" * 40})
+        self.call("accept_decision", run_id=packet["manager_run"], launcher_receipt={"fixture": True},
+                  decision={"state_revision": packet["state_revision"], "actions": []}, error="stale")
+        self.call("fail_manager", run_id=packet["manager_run"], reason="fixture launcher stopped")
+        self.action("worker-claims", "fresh", verification=False)
+        self.owner("complete_sprint", action_id="worker-claims", gates={}, error="accepted owner-verified")
+
+    def test_stream_pause_reopen_and_global_pause_precedence(self):
+        self.action("queued", "bootstrap", finish=False)
+        self.owner("set_stream_mode", workstream="delivery", mode="paused")
+        self.call("claim", action_id="queued", error="paused")
+        self.owner("set_stream_mode", workstream="delivery", mode="paused", error="already")
+        self.owner("set_stream_mode", workstream="delivery", mode="bogus", error="invalid")
+        self.call("set_enabled", enabled=False, evidence={"fixture": "global pause"})
+        self.owner("set_stream_mode", workstream="delivery", mode="enabled")
+        self.call("claim", action_id="queued", error="paused")
+        self.call("set_enabled", enabled=True, evidence={"fixture": "resume"})
+        self.call("claim", action_id="queued")
+        self.assertEqual("paused", self.c.snapshot()["workstreams"]["security"]["mode"])
+
+    def test_completion_archive_successor_cli_restart_and_history(self):
+        gates = self.closure()
+        self.allocation("next", "prepare_successor", {"base": "c" * 40}, sprint="PF81")
+        self.action("successor", "next")
+        self.owner("activate_successor", action_id="successor", error="completed and archived")
+        # Accepted closure/receiving actions age into SQLite history, still usable.
+        for i in range(4):
+            self.action("history-" + str(i), "bootstrap")
+        self.assertNotIn("completion", self.c.snapshot()["actions"])
+        self.owner("complete_sprint", action_id="completion", gates=gates)
+        self.owner("complete_sprint", action_id="completion", gates=gates, error="not reserved")
+        self.owner("activate_successor", action_id="successor", error="completed and archived")
+        self.owner("set_stream_mode", workstream="delivery", mode="paused")
+        self.owner("archive_sprint", sprint="PF80", error="paused")
+        self.owner("set_stream_mode", workstream="delivery", mode="enabled")
+        self.owner("archive_sprint", sprint="PF80")
+        self.owner("archive_sprint", sprint="PF80", error="already archived")
+        self.owner("set_stream_mode", workstream="delivery", mode="paused")
+        self.owner("activate_successor", action_id="successor", error="paused")
+        self.owner("set_stream_mode", workstream="delivery", mode="enabled")
+        self.owner("activate_successor", action_id="successor")
+        self.owner("activate_successor", action_id="successor", error="not draft")
+        state = self.call("snapshot")
+        self.assertEqual("PF81", state["workstreams"]["delivery"]["sprint"])
+        self.assertEqual(3, sum(s["status"] in {"in_progress", "blocked"} for s in state["sprints"].values()))
+        self.allocation("next-work", "repair", {"base": "c" * 40}, sprint="PF81")
+        self.action("next-implementation", "next-work")
+
+    def test_gate_pause_pending_and_stale_completion_denials(self):
+        gates = self.closure()
+        for bad in ({}, {**gates, "extra": gates["review"]},
+                    {**gates, "human": {"owner_verified": False, "status": "passed", "evidence": {"claim": True}}},
+                    {**gates, "human": {"owner_verified": True, "status": "passed", "evidence": {}}},
+                    {**gates, "functional": {"owner_verified": True, "status": "not_applicable", "evidence": {"fixture": True}}}):
+            self.owner("complete_sprint", action_id="completion", gates=bad, error="gate evidence")
+        self.owner("archive_sprint", sprint="PF80", error="verified completion")
+        self.owner("complete_sprint", action_id="completion", gates=gates, expected_revision=0, error="stale")
+        self.owner("set_stream_mode", workstream="delivery", mode="paused")
+        self.owner("complete_sprint", action_id="completion", gates=gates, error="paused")
+        self.owner("set_stream_mode", workstream="delivery", mode="enabled")
+        self.action("pending", "bootstrap", finish=False)
+        self.owner("complete_sprint", action_id="completion", gates=gates, error="pending")
+
+    def test_failed_wrong_or_incomplete_receiving_proof_cannot_complete(self):
+        mutations = [lambda r: r.update(status="verification_failed"),
+                     lambda r: r.update(receiving_commit="d" * 40),
+                     lambda r: r.update(tests=[]),
+                     lambda r: r["tests"][0].update(exit_code=1),
+                     lambda r: r["tests"][0].update(timed_out=True),
+                     lambda r: r["assignment"].update(source="d" * 40)]
+        for index, mutate in enumerate(mutations):
+            with self.subTest(index=index):
+                self.root = Path(self.tmp.name) / ("negative-" + str(index))
+                self.c = Coordinator(self.root)
+                self.c.initialize(*seed())
+                self.c.set_enabled(True, {"fixture": True})
+                gates = self.closure(mutate)
+                self.owner("complete_sprint", action_id="completion", gates=gates, error="receiving")
+
+    def test_legacy_stale_prepared_claim_and_changed_accepted_proof_refused(self):
+        self.action("legacy-prepared", "bootstrap", finish=False)
+        # Simulate a pre-controls owner edit in this disposable fixture database.
+        with self.c.mutation("fixture_legacy_edit", {}) as (_, state):
+            state["allocations"]["bootstrap"]["scope"] = ["different.py"]
+        self.call("claim", action_id="legacy-prepared", error="stale allocation claim")
+        frozen = self.c.snapshot()["allocations"]["bootstrap"]
+        self.owner("put_allocation", allocation_id="bootstrap", allocation={**frozen, "timeout_seconds": 30}, replace=True)
+        gates = self.closure()
+        frozen = self.c.snapshot()["allocations"]["close"]
+        self.owner("put_allocation", allocation_id="close", allocation={**frozen, "scope": ["changed.py"]}, replace=True)
+        self.owner("complete_sprint", action_id="completion", gates=gates, error="stale allocation proof")
+
+    def test_draft_cannot_execute_and_successor_requires_exact_receiving_base(self):
+        self.allocation("draft-work", "repair", {"base": "c" * 40}, sprint="PF81")
+        self.call("event", event={"id": "draft-implementation"})
+        packet = self.call("begin_manager")
+        action = {"id": "draft", "kind": "repair", "sprint": "PF81", "workstream": "delivery",
+                  "inputs": {"allocation": "draft-work", "base": "c" * 40}, "rationale": "fixture",
+                  "timeout_seconds": 60, "expected_revision": packet["state_revision"]}
+        self.call("accept_decision", run_id=packet["manager_run"], launcher_receipt={"fixture": True},
+                  decision={"state_revision": packet["state_revision"], "actions": [action]}, error="not reserved")
+        self.call("fail_manager", run_id=packet["manager_run"], reason="fixture launcher stopped")
+        gates = self.closure()
+        self.owner("complete_sprint", action_id="completion", gates=gates)
+        self.owner("archive_sprint", sprint="PF80")
+        self.allocation("wrong-base", "prepare_successor", {"base": "d" * 40}, sprint="PF81")
+        self.action("wrong-successor", "wrong-base")
+        self.owner("activate_successor", action_id="wrong-successor", error="verified receiving commit")
+
+    def test_seed_and_activation_enforce_reservation_limit_including_blocked(self):
+        streams, sprints, allocations = seed()
+        sprints["PF81"]["status"] = "blocked"
+        self.root = Path(self.tmp.name) / "invalid-seed"
+        output = io.StringIO()
+        self.assertEqual(2, coordinator_cli.main(["initialize", "--state", str(self.root)],
+                         io.StringIO(json.dumps(dict(workstreams=streams, sprints=sprints, allocations=allocations))), output))
+        self.assertIn("three-reservation limit", output.getvalue())
+        self.root = Path(self.tmp.name) / "private"
+        gates = self.closure()
+        self.owner("complete_sprint", action_id="completion", gates=gates)
+        self.owner("archive_sprint", sprint="PF80")
+        self.allocation("next", "prepare_successor", {"base": "c" * 40}, sprint="PF81")
+        self.action("next", "next")
+        # Legacy inconsistent state cannot reserve a second sprint in a stream.
+        with self.c.mutation("fixture_legacy_reservations", {}) as (_, state):
+            state["sprints"]["legacy"] = {"workstream": "security", "status": "blocked", "dependencies": []}
+        self.owner("activate_successor", action_id="next", error="already reserved")
+
+    def test_two_owner_connections_cannot_apply_same_revision(self):
+        from concurrent.futures import ThreadPoolExecutor
+        revision = self.c.snapshot()["revision"]
+        def attempt(mode):
+            output = io.StringIO()
+            result = coordinator_cli.main(["set_stream_mode", "--state", str(self.root)],
+                     io.StringIO(json.dumps({"workstream": mode, "mode": "enabled", "expected_revision": revision,
+                                             "evidence": {"fixture": "competing owner connections"}})), output)
+            return result, json.loads(output.getvalue())
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(attempt, ["security", "accounting"]))
+        self.assertEqual([0, 2], sorted(code for code, _ in results))
+        self.assertIn("stale owner revision", next(body["error"] for code, body in results if code == 2))
+        self.assertEqual(revision + 1, self.c.snapshot()["revision"])
+
+    def test_mandatory_gate_contract_and_explicit_owner_na(self):
+        self.allocation("invalid-close", "complete_sprint", {"receiving_action": "receiving",
+                        "receiving_commit": "c" * 40, "mandatory_gates": []}, error="mandatory gates")
+        gates = self.closure(completion_verified=False)
+        self.owner("complete_sprint", action_id="completion", gates=gates, error="accepted owner-verified")
+        self.call("verify", action_id="completion", accepted=True, evidence={"fixture": "owner acceptance"})
+        gates["functional"].update(status="not_applicable", reason="synthetic internal-only increment")
+        self.owner("complete_sprint", action_id="completion", gates=gates)
+        record = self.c.snapshot()["sprints"]["PF80"]["completion"]
+        self.assertEqual(gates, self.call("read_evidence", evidence_digest=record["evidence_digest"])["gates"])
+
+
 if __name__ == "__main__":
     unittest.main()
