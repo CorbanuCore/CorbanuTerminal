@@ -639,6 +639,11 @@ one-shot deployment and disabled/inactive verification. Prior review usage stays
 
 ### Live cross-run IPC prerequisite after full lifecycle rehearsal
 
+Completed internal prerequisite: [actual assignment, three retained runs and
+review disposition](../../../qa/initiative-control/management-bootstrap/live-crossrun-ipc-20260913.md).
+Worker returned/closed; parent pinned the manifest and replayed successfully.
+This does not qualify another executor or waive the full frozen-case gate below.
+
 Next bounded qualification under the same PF-80-S01 source worktree: fresh Astra
 High worker owns only `probe.py`, `ipc_guest.py` and `README.md` under the existing
 empty private `.codex-work/live-crossrun-ipc.osUMyY/`, plus generated per-attempt

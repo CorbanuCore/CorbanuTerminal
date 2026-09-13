@@ -702,6 +702,9 @@ product dispatch and recurring operation remain paused.
    successor execution. Synthetic acceptance is not real product completion.
 3. Qualify the real Slack alert → human reply → canonical decision → agent ACK
    path, including disconnect/restart and applicable isolated functional cases.
+   [Live cross-run IPC prerequisite](qa/initiative-control/management-bootstrap/live-crossrun-ipc-20260913.md)
+   is accepted; bind it to the actual frozen-case executor rather than counting
+   the synthetic smoke runs as dashboard/Slack acceptance.
 4. Finish administrator-enabled private HTTPS and authorized off-Mac access.
    The [private Unix relay](qa/initiative-control/management-bootstrap/private-relay/README.md)
    passed actual server tests and is installed but stopped/not enabled. This
