@@ -695,8 +695,11 @@ product dispatch and recurring operation remain paused.
    into the supervised recurring owner path. Two actual driver cycles and a real
    native crash-window/watchdog/duplicate-denial/ACK recovery rehearsal passed;
    unattended execution and restart still require qualification.
-2. Connect explicit single-writer integration jobs to receiving evidence and
-   enforced completion/archive/dependency-gated successors.
+2. Wire the qualified owner-driven integration/lifecycle sequence into recurrence.
+   The [disposable full rehearsal](qa/initiative-control/management-bootstrap/full-lifecycle-rehearsal-20260913.md)
+   now proves four fresh Fable decisions, actual receiving/successor agents,
+   verified merge, completion, actual document archival and dependency-gated
+   successor execution. Synthetic acceptance is not real product completion.
 3. Qualify the real Slack alert → human reply → canonical decision → agent ACK
    path, including disconnect/restart and applicable isolated functional cases.
 4. Finish administrator-enabled private HTTPS and authorized off-Mac access.

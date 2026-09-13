@@ -32,6 +32,30 @@ initiatives. Shared edits and receiving tests remain serialized.
 
 ## Sequential core owner-controls allocation
 
+### Full disposable lifecycle rehearsal after db8afbba3
+
+Parent owns `/private/tmp/life.TuWkuY/` for the next operational rehearsal:
+one owner script, one fixed receiving script, a disposable Git fixture and generated
+private receipts. Target250 authored operator lines/hard350. Reuse the integrated
+Coordinator, manager cycle, fresh Fable launcher and single-writer Integrator;
+do not create another runtime framework or edit production lifecycle code here.
+One scoped Fable High operator-script review plus necessary corrections preserves
+prior review history. Synthetic sprint IDs, gates and repository contents must
+remain explicitly labelled; real manager and native-tool receipts may not be faked.
+
+Exercise a fresh Fable integration proposal, an actual fresh Astra High receiving
+executor, exact merge/test verification, prepared owner completion, actual fixture
+document archival, separate activation authority and an actual fresh successor
+worker from the verified receiving base. Capture fresh-process reopening and
+duplicate/premature/stale denial with unchanged state, plus retained failure and
+restart evidence. Actual source archival is owner work, not inferred from SQLite.
+The fixture has no remotes, credentials or product services. Only the trusted
+parent uses the existing authorized Fable auth file; never pass it to workers.
+No real product completion, production coordinator mutation, recurrence, Task Node
+send, main/release or remote deployment. Full combined functional/Slack/private
+access gates remain separate. Parent owns all shared plan and evidence updates;
+each receiving/successor worker gets one bounded allocation and no descendants.
+
 ### Adaptive pending-event batches
 
 After cfffcd3f0, parent owns `coordinator.py`, `manager_cycle.py`,
