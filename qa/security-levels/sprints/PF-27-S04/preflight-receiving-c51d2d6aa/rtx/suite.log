@@ -1,0 +1,350 @@
+c51d2d6aa76da780868bcf83c2738a6c0149a73c
+dc3ce10ff45c20c371db67b7b75e2b2317b31165
+Linux ambient-System-Product-Name 7.0.0-31-generic #31-Ubuntu SMP PREEMPT_DYNAMIC Sat Aug  1 04:26:38 UTC 2026 x86_64 GNU/Linux
+glibc 2.43
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/linux-pidfd-spawn)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.35s
+────────────
+ Nextest run ID 7001fa73-b6af-41a9-a706-94a40c578c8a with nextest profile: local
+    Starting 4 tests across 1 binary (11 tests skipped)
+        PASS [   0.002s] (1/4) codex-linux-pidfd-spawn spawn::tests::pf27_rejects_unsealed_fd_without_spawning
+        PASS [   0.002s] (2/4) codex-linux-pidfd-spawn spawn::tests::pf27_rejects_non_cloexec_image
+        PASS [   0.002s] (3/4) codex-linux-pidfd-spawn peer::tests::pf_27_s01_pidfs_identity_matches_process_not_descriptor_number
+        PASS [   0.026s] (4/4) codex-linux-pidfd-spawn spawn::tests::pf27_rejects_unbounded_fd_actions
+────────────
+     Summary [   0.027s] 4 tests run: 4 passed, 11 skipped
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
+────────────
+ Nextest run ID 87e5d0e0-1c3c-43db-84ff-78f2b8d958e3 with nextest profile: local
+    Starting 10 tests across 1 binary (5 tests skipped)
+        PASS [   0.004s] ( 1/10) codex-linux-pidfd-spawn spawn::tests::pf27_exec_failure_reaps_without_fd_leaks
+        PASS [   0.005s] ( 2/10) codex-linux-pidfd-spawn spawn::tests::pf27_enoexec_has_no_shell_fallback_or_fd_leak
+        PASS [   0.007s] ( 3/10) codex-linux-pidfd-spawn peer::tests::pf_27_s01_pidfs_reaped_owner_rejects_without_reinterpreting_a_peer
+        PASS [   0.016s] ( 4/10) codex-linux-pidfd-spawn spawn::tests::pf27_exact_environment_cwd_stdio_and_fd_allowlist
+        PASS [   0.017s] ( 5/10) codex-linux-pidfd-spawn spawn::tests::pf27_held_bytes_survive_original_path_replacement
+        PASS [   0.024s] ( 6/10) codex-linux-pidfd-spawn spawn::tests::pf27_pidfd_resource_failure_does_not_detach_a_child
+        PASS [   0.037s] ( 7/10) codex-linux-pidfd-spawn spawn::tests::pf27_live_pidfd_stop_and_drop_reap
+        PASS [   0.037s] ( 8/10) codex-linux-pidfd-spawn spawn::tests::pf27_retained_identity_clone_failure_preserves_owner
+        PASS [   0.038s] ( 9/10) codex-linux-pidfd-spawn spawn::tests::pf27_retained_identity_does_not_own_child_lifetime
+        PASS [   0.463s] (10/10) codex-linux-pidfd-spawn spawn::tests::pf27_all_fixed_recipes_deny_non_root_before_setters
+────────────
+     Summary [   0.464s] 10 tests run: 10 passed, 5 skipped
+   Compiling codex-keyring-store v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/keyring-store)
+   Compiling codex-utils-path v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/utils/path-utils)
+   Compiling codex-utils-cargo-bin v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/utils/cargo-bin)
+   Compiling codex-secret-broker v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/secret-broker)
+   Compiling codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/protocol)
+   Compiling codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/file-system)
+   Compiling codex-api v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/codex-api)
+   Compiling codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/git-utils)
+   Compiling codex-secrets v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/secrets)
+   Compiling codex-vault v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/vault)
+   Compiling codex-otel v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/otel)
+   Compiling codex-model-provider-info v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/model-provider-info)
+   Compiling codex-features v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/features)
+   Compiling codex-config v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/config)
+   Compiling codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/protected-state)
+   Compiling codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/secret-broker-service)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 23.43s
+────────────
+ Nextest run ID ead9e0c4-91a7-4dc9-adc7-7297c707892e with nextest profile: local
+    Starting 3 tests across 5 binaries
+        PASS [   0.002s] (1/3) codex-secret-broker-service::lifecycle pf_27_s01_production_service_requires_qualified_bootstrap
+        PASS [   0.003s] (2/3) codex-secret-broker-service children::tests::pf_27_s01_reaper_spawn_failure_returns_both_owned_children
+        PASS [   0.007s] (3/3) codex-secret-broker-service children::tests::pf_27_s01_early_drop_uses_preallocated_reaper
+────────────
+     Summary [   0.008s] 3 tests run: 3 passed, 0 skipped
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/linux-pidfd-spawn)
+   Compiling codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/protected-state)
+   Compiling codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/secret-broker-service)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.40s
+────────────
+ Nextest run ID 5d47ec3e-52f0-4a24-a9f3-5455ce951bcd with nextest profile: local
+    Starting 5 tests across 7 binaries (83 tests skipped)
+        PASS [   0.004s] (1/5) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_panic_signals_both_without_releasing_quarantine
+        PASS [   0.004s] (2/5) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_reservation_worker_failure_and_prelaunch_cancel
+        PASS [   0.005s] (3/5) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_first_second_failure_and_between_spawn_cancel
+        PASS [   0.035s] (4/5) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_either_death_and_asymmetric_errors_poll_and_stop_both
+        PASS [   0.206s] (5/5) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_late_second_spawn_cancel_drop_and_deadline_keep_capacity
+────────────
+     Summary [   0.207s] 5 tests run: 5 passed, 83 skipped
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.30s
+────────────
+ Nextest run ID 93b344ee-687a-4274-ac58-b99f98cb9cac with nextest profile: local
+    Starting 1 test across 7 binaries (87 tests skipped)
+        PASS [   0.484s] (1/1) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_real_two_holds_cancel_drop_and_reap
+────────────
+     Summary [   0.485s] 1 test run: 1 passed, 87 skipped
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s
+────────────
+ Nextest run ID e2aa5ec1-0b4e-4479-affb-a72d2f0f6385 with nextest profile: local
+    Starting 8 tests across 7 binaries (80 tests skipped)
+        PASS [   0.003s] (1/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_reservation_precedes_image_and_rejects_second_launch
+        PASS [   0.003s] (2/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_worker_failure_returns_image_without_spawn
+        PASS [   0.003s] (3/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_panic_is_not_cleanup_receipt_or_relaunch_permission
+        PASS [   0.003s] (4/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_cancel_before_worker_starts_never_launches
+        PASS [   0.004s] (5/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_late_spawn_drop_keeps_permit_until_reaping
+        PASS [   0.005s] (6/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_early_exit_and_rejected_spawn_release_only_after_cleanup
+        PASS [   0.024s] (7/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_signal_wait_failure_quarantines_until_same_owner_recovers
+        PASS [   0.104s] (8/8) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_deadline_while_spawn_blocked_is_not_cleanup
+────────────
+     Summary [   0.105s] 8 tests run: 8 passed, 80 skipped
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s
+────────────
+ Nextest run ID 5025e95b-d92f-4828-9d16-2b069044dc4b with nextest profile: local
+    Starting 3 tests across 7 binaries (85 tests skipped)
+        PASS [   0.120s] (1/3) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_rejects_identity_substitution_before_spawn
+        PASS [   0.124s] (2/3) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_real_child_returned_late_after_caller_drop_is_reaped
+        PASS [   7.868s] (3/3) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_real_static_hold_cancel_drop_and_early_exit
+────────────
+     Summary [   7.868s] 3 tests run: 3 passed, 85 skipped
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s
+────────────
+ Nextest run ID 8d2a9b86-aa90-4ce4-81ae-83418cea93d4 with nextest profile: local
+    Starting 1 test across 7 binaries (87 tests skipped)
+        PASS [   0.002s] (1/1) codex-secret-broker-service launch::manifest::elf::tests::pf_27_s01_elf_profile_frozen_artifacts_as_data
+────────────
+     Summary [   0.003s] 1 test run: 1 passed, 87 skipped
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s
+────────────
+ Nextest run ID 6ba56dae-10f5-4248-9572-083bdd9a25de with nextest profile: local
+    Starting 1 test across 7 binaries (87 tests skipped)
+        PASS [   0.002s] (1/1) codex-secret-broker-service launch::manifest::elf::tests::pf_27_s01_elf_profile_frozen_artifacts_as_data
+────────────
+     Summary [   0.003s] 1 test run: 1 passed, 87 skipped
+        PASS [   0.018s] (42/64) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_late_spawn_drop_keeps_permit_until_reaping
+        PASS [   0.019s] (43/64) codex-secret-broker-service launch::manifest::system_preflight::tests::pf27_system_preflight_retains_complete_owner_and_reservation
+        PASS [   0.037s] (44/64) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_reservation_worker_failure_and_prelaunch_cancel
+        PASS [   0.016s] (45/64) codex-secret-broker-service::probe_lifecycle pf_27_s01_probe_hardens_only_its_own_actual_process
+        PASS [   0.020s] (46/64) codex-secret-broker-service launch::manifest::system_preflight::tests::pf27_system_preflight_actual_invalid_manifest_hash_profile_deny
+        PASS [   0.034s] (47/64) codex-secret-broker-service root::tests::pf_27_s01_root_open_failures_release_first_root_and_both_children
+        PASS [   0.034s] (48/64) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_duplicate_parent_and_wrong_uid_connections_deny
+        PASS [   0.024s] (49/64) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_signal_wait_failure_quarantines_until_same_owner_recovers
+        PASS [   0.020s] (50/64) codex-secret-broker-service::probe_lifecycle pf_27_s01_probe_reports_inherited_synthetic_fd_without_disclosing_it
+        PASS [   0.030s] (51/64) codex-secret-broker-service launch::manifest::system_preflight::tests::pf27_system_preflight_every_stage_failure_releases_inputs
+        PASS [   0.039s] (52/64) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_unknown_peer_and_old_generation_cannot_enter_replacement
+        PASS [   0.044s] (53/64) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_exit_and_handler_failure_fence_generation
+        PASS [   0.055s] (54/64) codex-secret-broker-service root::tests::pf_27_s01_root_terminal_outcomes_fence_and_preserve_ambiguous_errors
+        PASS [   0.065s] (55/64) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_either_death_and_asymmetric_errors_poll_and_stop_both
+        PASS [   0.064s] (56/64) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_handler_deadline_fences_without_blocking_supervisor
+        PASS [   0.104s] (57/64) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_bounded_queue_cancel_deadline_and_lost_ticket
+        PASS [   0.090s] (58/64) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_peer_mismatch_denies_before_audit
+        PASS [   0.122s] (59/64) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_deadline_while_spawn_blocked_is_not_cleanup
+        PASS [   0.103s] (60/64) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_dispatch_uses_vault_and_settles_journal
+        PASS [   0.197s] (61/64) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_replay_denies_without_second_audit_or_secret
+        PASS [   0.226s] (62/64) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_late_second_spawn_cancel_drop_and_deadline_keep_capacity
+        PASS [   0.383s] (63/64) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_death_and_restart_refuse_old_channel_and_key
+        PASS [   5.603s] (64/64) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_signal_during_partial_read_preserves_absolute_deadline
+────────────
+     Summary [   5.624s] 64 tests run: 64 passed, 24 skipped
+PF27_PAIR_A_TMUX_COMPLETE
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s
+────────────
+ Nextest run ID c8ce97ef-b1cc-48f3-b394-2a90790f5ca5 with nextest profile: local
+    Starting 1 test across 7 binaries (87 tests skipped)
+        PASS [   0.002s] (1/1) codex-secret-broker-service launch::manifest::elf::tests::pf_27_s01_elf_profile_frozen_artifacts_as_data
+────────────
+     Summary [   0.003s] 1 test run: 1 passed, 87 skipped
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+────────────
+ Nextest run ID 6032c565-c816-406d-9571-ae46713b4aee with nextest profile: local
+    Starting 8 tests across 7 binaries (80 tests skipped)
+        PASS [   0.003s] (1/8) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_worker_lost_success_receiver
+        PASS [   0.004s] (2/8) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_late_success_and_lost_receiver_close_channels
+        PASS [   0.049s] (3/8) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_uid_mismatch_and_unrelated_process
+        PASS [   0.071s] (4/8) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_roles_reverse_duplicate_parent_old_and_dead
+        PASS [   0.104s] (5/8) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_kernel_faults_and_pre_delivery_cancellation
+        PASS [   0.104s] (6/8) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_bounded_queue_cancel_deadline_and_lost_ticket
+        PASS [   0.349s] (7/8) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_peer_eof_death_receipt_drop_and_caller_drop
+        PASS [   1.021s] (8/8) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_pending_ticket_and_deadline_reap_both
+────────────
+     Summary [   1.021s] 8 tests run: 8 passed, 80 skipped
+    Checking codex-utils-image v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/utils/image)
+    Checking codex-async-utils v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/async-utils)
+    Checking codex-product-brand v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/product-brand)
+    Checking codex-websocket-client v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/websocket-client)
+    Checking codex-client v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/codex-client)
+    Checking codex-keyring-store v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/keyring-store)
+    Checking codex-utils-path v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/utils/path-utils)
+    Checking codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/linux-pidfd-spawn)
+    Checking codex-utils-cargo-bin v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/utils/cargo-bin)
+    Checking codex-network-proxy v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/network-proxy)
+    Checking codex-security-audit v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/security-audit)
+    Checking codex-secret-broker v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/secret-broker)
+    Checking codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/protocol)
+    Checking codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/file-system)
+    Checking codex-api v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/codex-api)
+    Checking codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/git-utils)
+    Checking codex-secrets v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/secrets)
+    Checking codex-vault v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/vault)
+    Checking codex-otel v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/otel)
+    Checking codex-model-provider-info v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/model-provider-info)
+    Checking codex-features v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/features)
+    Checking codex-config v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/config)
+    Checking codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/protected-state)
+    Checking codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/secret-broker-service)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 15.12s
+WARNING: Running Bazel server needs to be killed, because the following startup options are different:
+  - Only in old server: bazel(security-broker-system-preflight-20260913) --workspace_directory=/home/travis/worktrees/security-broker-system-preflight-20260913
+  - Only in new server: --workspace_directory=/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa bazel(security-broker-preflight-receiving-c51d2d6aa)
+Starting local Bazel server (9.0.0) and connecting to it...
+INFO: Invocation ID: e0282a35-f7d4-4ad6-86b8-361b296bd416
+WARNING: For repository 'platforms', the root module requires module version platforms@1.0.0, but got platforms@1.1.0 in the resolved dependency graph. Please update the version in your MODULE.bazel or set --check_direct_dependencies=off
+WARNING: For repository 'rules_cc', the root module requires module version rules_cc@0.2.18, but got rules_cc@0.2.20 in the resolved dependency graph. Please update the version in your MODULE.bazel or set --check_direct_dependencies=off
+ no actions running
+<root> (codex@_)
+
+PF27_ADMISSION_B_TMUX_COMPLETE
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s
+────────────
+ Nextest run ID 92883932-c53c-40eb-9fff-e68d55cd1193 with nextest profile: local
+    Starting 1 test across 7 binaries (87 tests skipped)
+        PASS [   0.002s] (1/1) codex-secret-broker-service launch::manifest::elf::tests::pf_27_s01_elf_profile_frozen_artifacts_as_data
+────────────
+     Summary [   0.003s] 1 test run: 1 passed, 87 skipped
+   Compiling codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/protected-state)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 23.18s
+────────────
+ Nextest run ID fb4d5a5a-61f3-4dd9-81f8-05ea0fd43817 with nextest profile: local
+    Starting 18 tests across 1 binary (2 tests skipped)
+        PASS [   0.003s] ( 1/18) codex-protected-state native::tests::pf20_s03_lost_reply_consumes_capability_without_retry
+        PASS [   0.003s] ( 2/18) codex-protected-state native::tests::pf20_s03_saturated_native_backlog_fails_without_waiting
+        PASS [   0.004s] ( 3/18) codex-protected-state native::tests::pf20_s03_authenticated_definite_conflict_is_not_ambiguous
+        PASS [   0.004s] ( 4/18) codex-protected-state native::tests::pf20_s03_native_replay_cross_generation_and_oversized_frames_deny
+        PASS [   0.013s] ( 5/18) codex-protected-state store::tests::pf20_s03_foreign_binding_generation_and_sequence_never_commit
+        PASS [   0.015s] ( 6/18) codex-protected-state native::tests::pf20_s03_post_exec_child_native_cas_recovery
+        PASS [   0.024s] ( 7/18) codex-protected-state store::tests::pf20_s03_successor_overflow_and_generation_regression_deny
+        PASS [   0.010s] ( 8/18) codex-protected-state store::tests::pf20_s03_non_regular_root_record_never_blocks_before_rejection
+        PASS [   0.031s] ( 9/18) codex-protected-state store::tests::pf20_s03_torn_pending_and_symlink_replacements_latch_unavailable
+        PASS [   0.032s] (10/18) codex-protected-state store::tests::pf20_s03_real_second_process_cannot_acquire_controller_lock
+        PASS [   0.035s] (11/18) codex-protected-state store::tests::pf20_s03_data_rollback_rejected_by_real_pf41_journal
+        PASS [   0.037s] (12/18) codex-protected-state store::tests::pf20_s03_enrollment_cas_restart_and_wrong_namespace
+        PASS [   0.039s] (13/18) codex-protected-state store::tests::pf20_s03_open_directory_permission_drift_latches_unavailable
+        PASS [   0.041s] (14/18) codex-protected-state store::tests::pf20_s03_policy_anchor_retains_exact_existing_payload
+        PASS [   0.049s] (15/18) codex-protected-state native::tests::pf20_s03_partial_frame_obeys_one_total_deadline
+        PASS [   0.060s] (16/18) codex-protected-state store::tests::pf20_s03_every_failed_durability_boundary_withholds_and_latches
+        PASS [   0.073s] (17/18) codex-protected-state store::tests::pf20_s03_lost_corrupt_key_registry_head_and_partial_enrollment_deny
+        PASS [   2.014s] (18/18) codex-protected-state native::tests::pf20_s03_inherited_socketpair_does_not_prove_child_identity
+────────────
+     Summary [   2.014s] 18 tests run: 18 passed, 2 skipped
+   Compiling codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/protected-state)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 19.46s
+────────────
+ Nextest run ID 764bd99c-78c6-4e9a-aea0-b3bee9f02eba with nextest profile: local
+    Starting 18 tests across 1 binary (6 tests skipped)
+        PASS [   0.003s] ( 1/18) codex-protected-state native::tests::pf20_s03_saturated_native_backlog_fails_without_waiting
+        PASS [   0.003s] ( 2/18) codex-protected-state native::tests::pf20_s03_authenticated_definite_conflict_is_not_ambiguous
+        PASS [   0.004s] ( 3/18) codex-protected-state native::tests::pf20_s03_lost_reply_consumes_capability_without_retry
+        PASS [   0.004s] ( 4/18) codex-protected-state native::tests::pf20_s03_native_replay_cross_generation_and_oversized_frames_deny
+        PASS [   0.013s] ( 5/18) codex-protected-state store::tests::pf20_s03_data_rollback_rejected_by_real_pf41_journal
+        PASS [   0.014s] ( 6/18) codex-protected-state native::tests::pf20_s03_post_exec_child_native_cas_recovery
+        PASS [   0.017s] ( 7/18) codex-protected-state store::tests::pf20_s03_successor_overflow_and_generation_regression_deny
+        PASS [   0.026s] ( 8/18) codex-protected-state store::tests::pf20_s03_non_regular_root_record_never_blocks_before_rejection
+        PASS [   0.012s] ( 9/18) codex-protected-state store::tests::pf20_s03_torn_pending_and_symlink_replacements_latch_unavailable
+        PASS [   0.013s] (10/18) codex-protected-state store::tests::pf20_s03_real_second_process_cannot_acquire_controller_lock
+        PASS [   0.030s] (11/18) codex-protected-state store::tests::pf20_s03_foreign_binding_generation_and_sequence_never_commit
+        PASS [   0.032s] (12/18) codex-protected-state store::tests::pf20_s03_enrollment_cas_restart_and_wrong_namespace
+        PASS [   0.034s] (13/18) codex-protected-state store::tests::pf20_s03_open_directory_permission_drift_latches_unavailable
+        PASS [   0.038s] (14/18) codex-protected-state store::tests::pf20_s03_policy_anchor_retains_exact_existing_payload
+        PASS [   0.044s] (15/18) codex-protected-state native::tests::pf20_s03_partial_frame_obeys_one_total_deadline
+        PASS [   0.046s] (16/18) codex-protected-state store::tests::pf20_s03_every_failed_durability_boundary_withholds_and_latches
+        PASS [   0.057s] (17/18) codex-protected-state store::tests::pf20_s03_lost_corrupt_key_registry_head_and_partial_enrollment_deny
+        PASS [   2.011s] (18/18) codex-protected-state native::tests::pf20_s03_inherited_socketpair_does_not_prove_child_identity
+────────────
+     Summary [   2.011s] 18 tests run: 18 passed, 6 skipped
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.25s
+────────────
+ Nextest run ID 11a6c038-5804-4e32-8d44-904da3008f08 with nextest profile: local
+    Starting 4 tests across 1 binary (20 tests skipped)
+        PASS [   0.026s] (1/4) codex-protected-state native::tests::pf27_root_compat_both_entries_cas_and_death
+        PASS [   0.047s] (2/4) codex-protected-state native::tests::pf27_root_compat_both_entries_lost_reply_is_ambiguous
+        PASS [   0.078s] (3/4) codex-protected-state native::tests::pf27_root_compat_both_entries_reject_malformed_and_replay
+        PASS [   0.103s] (4/4) codex-protected-state native::tests::pf27_root_compat_rejected_identity_never_receives_key
+────────────
+     Summary [   0.104s] 4 tests run: 4 passed, 20 skipped
+    Checking codex-utils-rustls-provider v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/utils/rustls-provider)
+    Checking codex-security-policy v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/security-policy)
+    Checking codex-utils-cache v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/utils/cache)
+    Checking codex-utils-path-uri v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/utils/path-uri)
+    Checking codex-http-client v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/http-client)
+    Checking codex-utils-image v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/utils/image)
+    Checking codex-execpolicy v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/execpolicy)
+    Checking codex-utils-path v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/utils/path-utils)
+    Checking codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/linux-pidfd-spawn)
+    Checking codex-websocket-client v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/websocket-client)
+    Checking codex-client v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/codex-client)
+    Checking codex-network-proxy v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/network-proxy)
+    Checking codex-security-audit v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/security-audit)
+    Checking codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/protocol)
+    Checking codex-api v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/codex-api)
+    Checking codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/file-system)
+    Checking codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/git-utils)
+    Checking codex-otel v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/otel)
+    Checking codex-model-provider-info v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/model-provider-info)
+    Checking codex-features v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/features)
+    Checking codex-config v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/config)
+    Checking codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/protected-state)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 14.39s
+PF27_ROOT_COMPAT_TMUX_COMPLETE
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s
+────────────
+ Nextest run ID f45d1bdc-a189-4f5a-996b-79d41bddf3cf with nextest profile: local
+    Starting 1 test across 7 binaries (87 tests skipped)
+        PASS [   0.002s] (1/1) codex-secret-broker-service launch::manifest::elf::tests::pf_27_s01_elf_profile_frozen_artifacts_as_data
+────────────
+     Summary [   0.003s] 1 test run: 1 passed, 87 skipped
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+────────────
+ Nextest run ID 75c6aeab-d0ef-4a97-90f7-b9d57f4462ab with nextest profile: local
+    Starting 6 tests across 7 binaries (82 tests skipped)
+        PASS [   0.041s] (1/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_lost_reply
+        PASS [   0.065s] (2/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_actual_namespaces_and_duplicate
+        PASS [   0.083s] (3/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_wrong_and_stale_receipts
+        PASS [   0.121s] (4/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_construction_failures
+        PASS [   0.150s] (5/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_protocol_rejections
+        PASS [   0.829s] (6/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_lifecycle
+────────────
+     Summary [   0.830s] 6 tests run: 6 passed, 82 skipped
+PF27_ROOT_DISPATCH_TMUX_COMPLETE
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+────────────
+ Nextest run ID 152290e6-6a4c-410c-8cf3-72272ce3c74e with nextest profile: local
+    Starting 7 tests across 7 binaries (81 tests skipped)
+        PASS [   0.034s] (1/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_duplicate_receipts
+        PASS [   0.035s] (2/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_accept_faults_are_bounded
+        PASS [   0.035s] (3/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_routing_and_storage
+        PASS [   0.051s] (4/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_pending_cancellation
+        PASS [   0.062s] (5/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_protocol_errors
+        PASS [   0.070s] (6/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_flood_fairness
+        PASS [   0.793s] (7/7) codex-secret-broker-service launch::manifest::root_dispatch::session::tests::pf27_root_session_lifecycle
+────────────
+     Summary [   0.793s] 7 tests run: 7 passed, 81 skipped
+PF27_ROOT_SESSION_TMUX_COMPLETE
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+────────────
+ Nextest run ID 7141b595-9beb-4cac-9ae7-cafb12acdd85 with nextest profile: local
+    Starting 5 tests across 7 binaries (83 tests skipped)
+        PASS [   0.004s] (1/5) codex-secret-broker-service launch::manifest::system_preflight::tests::pf27_system_preflight_real_non_root_entry_denies_without_side_effects
+        PASS [   0.016s] (2/5) codex-secret-broker-service launch::manifest::system_preflight::tests::pf27_system_preflight_retains_complete_owner_and_reservation
+        PASS [   0.017s] (3/5) codex-secret-broker-service launch::manifest::system_preflight::tests::pf27_system_preflight_actual_invalid_manifest_hash_profile_deny
+        PASS [   0.018s] (4/5) codex-secret-broker-service launch::manifest::system_preflight::tests::pf27_system_preflight_same_bytes_different_recipe_and_source_deny
+        PASS [   0.018s] (5/5) codex-secret-broker-service launch::manifest::system_preflight::tests::pf27_system_preflight_every_stage_failure_releases_inputs
+────────────
+     Summary [   0.019s] 5 tests run: 5 passed, 83 skipped
+PF27_SYSTEM_PREFLIGHT_TMUX_COMPLETE

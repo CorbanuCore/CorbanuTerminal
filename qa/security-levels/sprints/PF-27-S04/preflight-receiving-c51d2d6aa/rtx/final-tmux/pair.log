@@ -1,0 +1,15 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/linux-pidfd-spawn)
+   Compiling codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/protected-state)
+   Compiling codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-preflight-receiving-c51d2d6aa/codex-rs/secret-broker-service)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.40s
+────────────
+ Nextest run ID 5d47ec3e-52f0-4a24-a9f3-5455ce951bcd with nextest profile: local
+    Starting 5 tests across 7 binaries (83 tests skipped)
+        PASS [   0.004s] (1/5) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_panic_signals_both_without_releasing_quarantine
+        PASS [   0.004s] (2/5) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_reservation_worker_failure_and_prelaunch_cancel
+        PASS [   0.005s] (3/5) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_first_second_failure_and_between_spawn_cancel
+        PASS [   0.035s] (4/5) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_either_death_and_asymmetric_errors_poll_and_stop_both
+        PASS [   0.206s] (5/5) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_late_second_spawn_cancel_drop_and_deadline_keep_capacity
+────────────
+     Summary [   0.207s] 5 tests run: 5 passed, 83 skipped
