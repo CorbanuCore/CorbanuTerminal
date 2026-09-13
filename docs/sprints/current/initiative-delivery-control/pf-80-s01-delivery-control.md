@@ -21,8 +21,7 @@ updated: 2026-09-12
 
 **September 13: bootstrap implementation authorized.** [Five-part allocation](../../../research/tasknode-integration/coordinator-bootstrap-20260913.md) supersedes old mandates. Other product work remains paused; recurring operation OFF until rehearsal passes. [Prior checkpoint](../../../plans/management-pause-2026-09-13.md).
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
-[Native validity allocation](../../../research/tasknode-integration/native-validity-allocation.md)
-and [recovery handoff](../../../research/tasknode-integration/recovery-decision-handoff.md).
+[Native validity allocation](../../../research/tasknode-integration/native-validity-allocation.md) and [recovery handoff](../../../research/tasknode-integration/recovery-decision-handoff.md).
 
 ## Execution mandate
 
@@ -52,6 +51,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 
 ## Done
 
+- [x] Supervised fresh-Fable receive/failure/reverification loop executed at c77123a7e9; corrected invocation passes482 tests and governance. First isolated DEC001 executed with independent visual support/provenance limits. [Exact evidence and remaining gates](../../../../qa/initiative-control/management-bootstrap/supervised-qualification-20260913.md). No full functional or recurring acceptance.
 - [x] Owner transitions ca0474fe4 received at ee93206c0 after119 tests. [Full disposable lifecycle rehearsal](../../../../qa/initiative-control/management-bootstrap/full-lifecycle-rehearsal-20260913.md) passes with four fresh Fable decisions, actual receiving/successor workers and document archival; Slack, isolated functional, private access and recurring gates remain open.
 - [x] Native owner bridge2093475e8 received atd3f742ac3 after106 combined tests; actual native ACK/send/return/close-gap recovery and fresh Fable-to-integration-agent handoff verified. [Checkpoint and retained failures](../../../../qa/initiative-control/management-bootstrap/native-owner-receiving-20260913.md). No recurring or functional acceptance inferred.
 - [x] Exact reviewed supervisor c7a1b9690 received92d6eb261;261 receiving tests pass187.549s, Facilities/governance pass. Review08 clean,09 unspent; internal-only N/A, actual Slack and independent functional acceptance remain open.

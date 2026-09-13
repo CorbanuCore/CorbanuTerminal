@@ -23,6 +23,15 @@ remote-access failures remain evidence, not active work. Original functional cas
 remain frozen; only their removed remote-dashboard-access portions are deferred
 by this product decision, not Slack reply, phone usability or recovery testing.
 
+September13 supervised-operation clarification: Travis explicitly directed the
+coordinator to dispatch Fable's validated decisions and run qualification now.
+An unattended scheduler is not a prerequisite to this supervised decision/dispatch
+loop. Exercise recovery through bounded actual trials, preserving failures and
+reconciling uncertain effects before retry. Missing manager-owned test setup is
+work to execute, not an unanswered human approval. Recurring portfolio enablement,
+product resumption and full functional acceptance retain their separate gates.
+See [executed handoff and qualification](qa/initiative-control/management-bootstrap/supervised-qualification-20260913.md).
+
 ## 1. Role and objective
 
 Corbanu Terminal is a Codex fork for agentic trading. You are its execution
