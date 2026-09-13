@@ -39,9 +39,12 @@ unchanged. New suite18 tests in57.376s:14 passed, the same4 capability probes fa
 owner-evidence write denial; pre/post catalog integrity and all captured retry
 identities are checked. No native retry-budget or startup-exclusion pass inferred.
 The fresh freeze is `evidence-ycpb8f4q/freeze.json`; explicit QA is
-`evidence-qa-1Yc084/qa.json`. Parent inspected the correction; Fable review02 is
-running against a byte-identical four-file copy. No new source capability change
-or full mediator is allocated by this diagnostic correction.
+`evidence-qa-1Yc084/qa.json`. Parent inspected the correction; Fable review02
+completed clean (exit0, no findings) against the byte-identical four-file copy.
+The structured result is retained at `.codex-work/model-only-review.BjOu7t/review02.json`.
+This closes diagnostic review, not the four failed capability gates or transport
+admission. No additional review of this unchanged candidate is needed. No new
+source capability change or full mediator is allocated by this correction.
 
 Direct RPC SSH was separately verified. Its bubblewrap0.9.0/Python3.12.3 host
 failed a rootless namespace smoke with `RTM_NEWADDR: Operation not permitted`.

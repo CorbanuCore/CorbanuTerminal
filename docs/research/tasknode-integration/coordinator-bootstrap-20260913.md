@@ -176,6 +176,38 @@ paused; only this explicit delivery allocation may run, with global/delivery pau
 restored in finally/recovery. Preserve all attempts, including any unexpected hold.
 No sprint completion, successor implementation or recurring enablement is implied.
 
+## Isolated model transport enforcement allocation
+
+Stage A review02 is clean, while its four failed capability probes remain failed.
+Parent authorizes a fresh Astra High worker to implement the next wrapper-owned
+transport unit, not to relabel the diagnostic as accepted. Exactly four authored
+files under `.codex-work/model-transport-b.I8BDWp/`: `model_only_transport.py`,
+`model-only.json`, `test_model_only_transport.py`, `README.md`. Generated private
+evidence is retained beneath that root. Target850 total/450 non-test lines,
+hard1000/550; one Fable High material review plus necessary scoped corrections.
+PF-80-S01 and its canonical worktree remain the governing allocation. No product
+worker, Rust edit, shared script, service, real credential or remote change.
+
+Read the frozen Stage A source/evidence without modifying it. Reuse its pinned
+0.1.41 package and exact Astra High model-only catalog. Enforce startup-input
+exclusions at the OS boundary even when synthetic AGENTS/skills/hooks/plugins
+canaries exist; a newly empty home or disabled-config assertion alone is not proof.
+Keep the fixed owner command builder closed to guest argv/model/effort overrides.
+Set supported request/stream retry limits and verify actual request counts for
+HTTP failure and dropped streams. Preserve wall/output bounds, no helper tools,
+no external network/Keychain/home/source access, immutable catalog/owner evidence,
+child confinement, cleanup and positive package/text controls. Actual negative
+read probes must demonstrate denial, not only marker absence or nonexistent files.
+
+Tests use only synthetic auth and a bounded loopback HTTP fixture, preserving all
+failed attempts and wire identities. This may qualify the constrained local
+transport profile, not an entire reasoning executor: credential mediation, target
+PTY/browser actions, independent frozen-case execution and evidence review remain
+explicit later gates. Do not substitute arbitrary HTTP proxying or a native host
+tool for that mediator. Report exact files, counts, hashes, tested effective policy,
+supported override evidence and any remaining failed gate; stop at the hard scope
+limit. Parent receives the result and owns live qualification/allocation afterward.
+
 ## Isolated-executor transport falsification allocation
 
 Parent inspected the read-only Hypatia audit and verified the Astra catalog's
