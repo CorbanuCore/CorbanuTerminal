@@ -6,8 +6,10 @@ acceptance, an inference mediator or a deployed executor.
 
 The owner ran the fixed nonsensitive text request through pinned Corbanu0.1.41,
 Astra High and the supported ChatGPT authentication path. A fresh private native
-home links only to the pre-authorized read-only auth file. No credential copying,
-refresh, host-home writes, model fallback or executable model tools were used.
+home links only to the pre-authorized read-only auth file. The operator did not
+copy credentials; source-auth hashes remained unchanged and host-home writes,
+model fallback and executable model tools were denied. This does not prove the
+binary performed no in-memory refresh or attempted writes.
 The fixed private provider alias has zero request/stream retries and no base-URL
 override. Native auth selects the ChatGPT endpoint.
 
@@ -31,9 +33,33 @@ Receipt: `attempt-6r5tj87e/receipt.json`; actual policy/argv/environment and inp
 are retained in `launch.json`, with private raw stdout/stderr and hashes.
 The exact requested text was returned. Two exact known web-search deprecation
 warnings are separately counted; no runtime error or unknown error item passed.
-Source auth, catalog and system CA hashes were unchanged. The one operator
-script is119 lines, SHA256
+Source auth, catalog and system CA hashes were unchanged. The original successful
+operator script was119 lines, retained as `attempt-6r5tj87e/probe.executed.py`, SHA256
 `c0a31a475b204b6c601253415c6296f5190c782dc958f0b525b93862b500f6b2`.
+
+Fable High review01 accepted two narrow corrections: replace security asserts
+(which Python optimization removes) with explicit rejection before importing the
+pinned helper, and narrow the no-refresh wording to actual file-immutability proof.
+Original source/evidence are preserved. Corrected script126 lines, SHA256
+`2992d2e02f969f88cc7249b4ab021429815f5bd9ee4d4ebac27d214f2440029b`.
+An optimized-interpreter negative check rejects a mismatched transport pin;
+no assert gates remain. Actual corrected `python -O` replay `attempt-dmo1y8lv`
+passed in3.271s, fresh session `01a09a17-a674-7431-a073-5371d584acf4`, exact text,
+completed turn, exit0, process group gone and unchanged auth/catalog/CA.
+Its launch receipt records interpreter optimization and the operator script hash.
+Fable High corrective review02 completed clean, exit0, with no findings; parent
+accepts this corrected operator preflight. Both review results are retained as
+`review01.*`/`review02.*` under the private preflight root. These tests do not
+upgrade the later functional gate.
+
+Owner recorded the original successful connection and actual Hilbert extraction
+assignment as two durable bootstrap events: coordinator revision58→60. All three
+stream pauses, sprint states, actions and manager ownership were unchanged. This
+records the bootstrap exception, not an invented normal dispatch/ACK. The latest
+manual Slack collector receipt `bootstrap-poll-review.JBT5DY/actual-918n1_82`
+found one existing human reply, one duplicate and no new event at revision58.
+Direct RPC SSH and remote Facilities HTTP200 were rechecked; Serve still reports
+no configuration. No periodic Slack reception or private off-Mac access is claimed.
 
 The OS network boundary is HTTPS443 plus the exact system DNS Unix socket,
 **not hostname-specific filtering**. The trusted fixed native endpoint and TLS
