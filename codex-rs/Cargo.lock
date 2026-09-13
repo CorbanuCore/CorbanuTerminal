@@ -4099,15 +4099,21 @@ name = "codex-responses-api-proxy"
 version = "0.1.42"
 dependencies = [
  "anyhow",
+ "bytes",
  "clap",
  "codex-process-hardening",
+ "codex-utils-cargo-bin",
  "ctor",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "libc",
  "pretty_assertions",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
  "tiny_http",
+ "tokio",
  "zeroize",
 ]
 

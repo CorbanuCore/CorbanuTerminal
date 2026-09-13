@@ -30,6 +30,10 @@ use tiny_http::StatusCode;
 
 mod dump;
 mod read_api_key;
+mod synthetic;
+mod synthetic_exchange;
+mod synthetic_io;
+mod synthetic_policy;
 use dump::ExchangeDumper;
 use read_api_key::read_auth_header_from_stdin;
 
@@ -37,6 +41,9 @@ use read_api_key::read_auth_header_from_stdin;
 #[derive(Debug, Clone, Parser)]
 #[command(name = "responses-api-proxy", about = "Minimal OpenAI responses proxy")]
 pub struct Args {
+    /// Internal fixed-fixture transport; requires distinct explicit loopback ports.
+    #[arg(long, value_name = "IP:PORT")]
+    pub synthetic_loopback_upstream: Option<SocketAddr>,
     /// Port to listen on. If not set, an ephemeral port is used.
     #[arg(long)]
     pub port: Option<u16>,
@@ -71,6 +78,9 @@ struct ForwardConfig {
 
 /// Entry point for the library main, for parity with other crates.
 pub fn run_main(args: Args) -> Result<()> {
+    if let Some(upstream) = args.synthetic_loopback_upstream {
+        return synthetic::run(&args, upstream);
+    }
     let auth_header = read_auth_header_from_stdin()?;
 
     let upstream_url = Url::parse(&args.upstream_url).context("parsing --upstream-url")?;
