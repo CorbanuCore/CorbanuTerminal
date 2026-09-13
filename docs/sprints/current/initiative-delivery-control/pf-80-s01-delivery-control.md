@@ -51,6 +51,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact owner, worker worktree/base and disjoint scope allocated; dispatch waits for the verified main merge and worker fast-forward.
 
 ## Done
+- [x] Native owner bridge2093475e8 received atd3f742ac3 after106 combined tests; actual native ACK/send/return/close-gap recovery and fresh Fable-to-integration-agent handoff verified. [Checkpoint and retained failures](../../../../qa/initiative-control/management-bootstrap/native-owner-receiving-20260913.md). No recurring or functional acceptance inferred.
 - [x] Exact reviewed supervisor c7a1b9690 received92d6eb261;261 receiving tests pass187.549s, Facilities/governance pass. Review08 clean,09 unspent; internal-only N/A, actual Slack and independent functional acceptance remain open.
 - [x] Gated real-SDK transport/shared status3561ebcc2 reviewed clean (combined06);244 staging tests pass, receiving243 plus exact source-guard rerun1 pass. [Integration limits/evidence](../../../../qa/initiative-control/status-display/slack-integration-20260912.md). Missing-fence and actual live/phone/ACK qualification remain; no S01 completion.
 - [x] Offline recovery730577f1d integrated9877c058d after clean review04;169 receiving Python/Facilities/governance pass. Manager accepts1506/638; original1151/1274/1412 and three failed reviews remain. [Review ledger](../../../../qa/initiative-control/status-display/integration-20260912-1356.md).
@@ -61,7 +62,6 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Canonical receiving reconciled at 87e31f521672e627e6230d48fc16a4cfaa7ff44c; native validity remains private/no caller. Independent intent-only [design DEC-001..026](../../../../qa/initiative-control/pf-80-s01/decision-projection/design-proposal.md) frozen before implementation. Integrator authorizes +3 design/code/evidence reviews, preserving earlier usage.
 
 - [x] Private native validitybda5b35b4 reviewed clean; combined staging04ba6b8b7 passes80TaskNode/242state tests. [Evidence](../../../../qa/initiative-control/native-staging-2026-09-12.md). No enabled caller; canonical receiving transfer/publication pending.
-
 - [x] Travis approved this Mac/existing publisher for now and native server-backed no-expiry validity design; no credential/enrollment/post permission inferred.
 - [x] Recovery source implemented and independently reviewed the internal dashboard; historical evidence retained without claiming a main-tree port pass.
 - [x] Verified native account setup and generated task IDs; no seed/password needed, no task accepted or completed.

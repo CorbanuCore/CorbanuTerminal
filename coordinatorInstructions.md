@@ -508,6 +508,12 @@ and [startup evidence](qa/initiative-control/management-bootstrap/live-startup.m
 Check that the launcher is present at the recorded receiving commit before use;
 a worker candidate is not an installed coordinator runtime.
 
+When composing owner context, explicitly require raw JSON: first character `{`,
+last character `}`, no Markdown/code fences or introductory text. An actual
+Fable run wrapped its otherwise complete result in a code block; strict framing
+correctly held it. Reconcile the terminal run and use a fresh manager, never
+silently parse prose, reuse stale decisions or relabel the failed receipt.
+
 Provision a short owner-only run root outside Git (TMUX has a socket-path limit),
 an owner-only bounded JSON briefing, and an owner-only authentication JSON file
 whose sole field is `CLAUDE_CODE_OAUTH_TOKEN`. Values come only from the existing
@@ -663,8 +669,17 @@ The browser worker is closed. Parent's [actual mediated check](qa/initiative-con
 completed screenshot → fresh Astra High action → browser → fresh observation
 using a synthetic page. Its controller review is dispositioned; complete run-bound
 isolation/independent cases remain gates. Engineering success is not acceptance.
-Fresh Astra High now owns the allocated native-owner bridge; its implementation
-and real lifecycle qualification are pending, not a running recurring coordinator.
+The native-owner bridge is received atd3f742ac3 after106 receiving tests and an
+actual worker → fresh Fable → fresh integration-worker checkpoint. Both workers
+are closed. [Evidence and retained failures](qa/initiative-control/management-bootstrap/native-owner-receiving-20260913.md)
+distinguishes supervised proof from a running recurring coordinator.
+Use the [native owner contract](qa/initiative-control/management-bootstrap/native-owner.md)
+for its one-operation stdio interface: spawn, poll, start-work, close, inspect,
+reconcile. Pipe JSON lines or use noncanonical input; ordinary terminal canonical
+input truncated a large observation in the real rehearsal. Native IDs/ACKs and
+effect receipts must come from actual host tools. Integration remains an explicit
+owner assignment through the existing single-writer Integrator, not an ordinary
+NativeOwner worker kind.
 
 The accepted owner API is `isolated_model_transport.OwnerConfig(binary, auth,
 run_root, enabled=True)` and `Transport(owner).execute(text, image_png=png_bytes)`.
@@ -683,6 +698,9 @@ product dispatch and recurring operation remain paused.
 3. Qualify the real Slack alert → human reply → canonical decision → agent ACK
    path, including disconnect/restart and applicable isolated functional cases.
 4. Finish administrator-enabled private HTTPS and authorized off-Mac access.
+   The [private Unix relay](qa/initiative-control/management-bootstrap/private-relay/README.md)
+   passed actual server tests and is installed but stopped/not enabled. This
+   solves backend Host compatibility without changing dashboard allowlists.
    Travis's Slack answer and the Mac's shared-peer inventory confirm RPC visibility
    after his tailnet switch. Serve still requires publisher-tailnet administrator
    enablement; the remaining question is on the dashboard and in Slack. Visibility

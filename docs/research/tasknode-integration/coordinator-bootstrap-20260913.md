@@ -588,7 +588,8 @@ Correction passes73 manager/core tests in2.857s and Fable corrective review
 now fits52,277 bytes with all46 originals, no omissions. Owner reconciled that
 verified no-launch claim at revision132. Both original holds remain auditable.
 
-Fresh Astra High worker owns only `scripts/initiative_control/native_owner.py`,
+Original implementation allocation, now closed after receiving atd3f742ac3:
+fresh Astra High worker owned only `scripts/initiative_control/native_owner.py`,
 `scripts/initiative_control/test_native_owner.py`, and
 `qa/initiative-control/management-bootstrap/native-owner.md` in
 `worktrees/native-owner-20260913`, branch `bootstrap/native-owner-20260913`,
@@ -618,9 +619,9 @@ only an abstract adapter or a prose recipe. No arbitrary commands, credentials,
 dynamic imports, automatic manager retries or autonomous scheduler. Focused tests
 must cover real durable SQLite restart, duplicate requests, both effect/receipt
 crash windows, wrong identity/ACK, pause between ACK and work, running/timeouts,
-terminal failure and return awaiting verification. Parent will exercise this
-with real native agents and existing Fable cycle, then wire recurring operation
-only after the whole bootstrap gate. Internal-only N/A for browser/TUI here;
+terminal failure and return awaiting verification. Parent exercised this
+with real native agents and existing Fable cycle; wiring recurring operation waits
+for the whole bootstrap gate. Internal-only N/A for browser/TUI here;
 actual native lifecycle proof is mandatory before operational acceptance.
 
 Standalone CLI reads a bounded JSON briefing from `--briefing`, fresh private
