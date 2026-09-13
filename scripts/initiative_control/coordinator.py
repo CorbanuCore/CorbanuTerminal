@@ -462,6 +462,25 @@ class Coordinator:
                 db.execute("UPDATE events SET consumed=? WHERE seq=? AND consumed IS NULL", (run_id, seq))
             state["manager"] = None
 
+    def record_wait(self, action_id, expected_revision, evidence):
+        """Owner records a passive wait, not worker completion or resolved blockage."""
+        require(type(expected_revision) is int and isinstance(evidence, dict) and evidence,
+                "owner revision and evidence required")
+        with self.mutation("wait_recorded", {"action": action_id,
+                           "expected_revision": expected_revision, "evidence": evidence}) as (db, state):
+            require(state["revision"] == expected_revision, "stale owner revision")
+            require(state["manager"] is None, "manager cycle already owned")
+            action = state["actions"][action_id]
+            require(action["kind"] == "wait" and action["status"] == "prepared",
+                    "unclaimed prepared wait required")
+            require(action["allocation_digest"] == digest(state["allocations"].get(action["inputs"]["allocation"])),
+                    "stale allocation proof")
+            action.update(status="accepted", updated=self.clock(), verification=self._reference(db, {
+                "kind": "wait_recorded", "meaning": "wait observed; no work executed or blocker resolved",
+                "evidence": evidence}))
+            # Audit/evidence persist, but no meaningful event: settling a wait must
+            # not trigger another manager wait. Dispatch/pause/lifecycle stay intact.
+
     def claim(self, action_id):
         with self.mutation("claim", {"action": action_id}) as (_, state):
             require(state["enabled"], "dispatch paused")

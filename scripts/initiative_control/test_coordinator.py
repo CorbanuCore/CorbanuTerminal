@@ -576,6 +576,102 @@ class OwnerControlsTests(unittest.TestCase):
         record = self.c.snapshot()["sprints"]["PF80"]["completion"]
         self.assertEqual(gates, self.call("read_evidence", evidence_digest=record["evidence_digest"])["gates"])
 
+    def test_record_wait_while_paused_preserves_state_without_native_receipts_or_wakeup(self):
+        self.allocation("waiting", "wait", {"reason": "operator pause"})
+        self.action("wait-1", "waiting", finish=False)
+        self.call("set_enabled", enabled=False, evidence={"owner": "pause"})
+        self.owner("set_stream_mode", workstream="delivery", mode="paused")
+        before = self.c.snapshot()
+        with self.c.connection() as db:
+            events = list(db.execute("SELECT body, meaningful, consumed FROM events"))
+        self.owner("record_wait", action_id="wait-1", evidence={"observed": "waiting intentionally"})
+        after = Coordinator(self.root).snapshot()
+        self.assertEqual(before["revision"] + 1, after["revision"])
+        for field in ("enabled", "workstreams", "sprints", "allocations", "manager"):
+            self.assertEqual(before[field], after[field])
+        action = after["actions"]["wait-1"]
+        self.assertEqual("accepted", action["status"])
+        self.assertEqual(before["actions"]["wait-1"]["rationale"], action["rationale"])
+        self.assertFalse({"claim", "agent", "dispatch_receipt", "ack_receipt", "result"} & action.keys())
+        proof = self.c.read_evidence(action["verification"]["evidence_digest"])
+        self.assertEqual("wait_recorded", proof["kind"])
+        self.assertIn("no work executed or blocker resolved", proof["meaning"])
+        with self.c.connection() as db:
+            self.assertEqual(events, list(db.execute("SELECT body, meaningful, consumed FROM events")))
+            self.assertEqual(1, db.execute("SELECT COUNT(*) FROM audit WHERE operation='wait_recorded'").fetchone()[0])
+        self.owner("record_wait", action_id="wait-1", error="prepared wait required")
+        self.owner("complete_sprint", action_id="wait-1", gates={}, error="accepted owner-verified")
+
+    def test_record_wait_rejects_other_kinds_stale_and_owned_state(self):
+        from coordinator import KINDS
+        for index, kind in enumerate(sorted(KINDS - {"wait", "complete_sprint"})):
+            self.allocation("kind-" + str(index), kind, {})
+            self.action("action-" + str(index), "kind-" + str(index), finish=False)
+            self.owner("record_wait", action_id="action-" + str(index), error="prepared wait required")
+        self.allocation("close-wait-test", "complete_sprint", {"receiving_action": "none",
+            "receiving_commit": "b" * 40, "mandatory_gates": ["review"]})
+        self.action("completion-wait-test", "close-wait-test", finish=False)
+        self.owner("record_wait", action_id="completion-wait-test", error="prepared wait required")
+        self.allocation("waiting", "wait", {})
+        self.action("wait-1", "waiting", finish=False)
+        self.owner("record_wait", action_id="wait-1", expected_revision=0, error="stale owner revision")
+        self.owner("record_wait", action_id="wait-1", evidence={}, error="owner revision and evidence")
+        self.call("event", event={"id": "another-cycle"})
+        packet = self.call("begin_manager")
+        self.owner("record_wait", action_id="wait-1", error="manager cycle already owned")
+        self.call("fail_manager", run_id=packet["manager_run"], reason="offline fixture; no process")
+        with self.c.mutation("legacy-fixture-change", {}) as (_, state):
+            state["allocations"]["waiting"]["inputs"] = {"changed": True}
+        self.owner("record_wait", action_id="wait-1", error="stale allocation proof")
+
+    def test_record_wait_cannot_hide_claimed_or_uncertain_dispatch(self):
+        self.allocation("waiting", "wait", {})
+        self.action("wait-1", "waiting", finish=False)
+        claim = self.call("claim", action_id="wait-1")
+        self.owner("record_wait", action_id="wait-1", error="prepared wait required")
+        self.c.clock = lambda: claim["deadline"] + 1
+        self.c.watchdog()
+        self.owner("record_wait", action_id="wait-1", error="prepared wait required")
+        self.assertEqual("dispatch_uncertain", self.c.snapshot()["actions"]["wait-1"]["status"])
+
+    def test_repeated_waits_archive_history_without_pending_queue_growth(self):
+        self.allocation("waiting", "wait", {})
+        for index in range(52):
+            key = "wait-" + str(index)
+            self.action(key, "waiting", finish=False)
+            self.owner("record_wait", action_id=key)
+        state = self.c.snapshot()
+        self.assertEqual(3, len(state["actions"]))
+        self.assertTrue(all(a["status"] == "accepted" for a in state["actions"].values()))
+        with self.c.connection() as db:
+            self.assertEqual(49, db.execute("SELECT COUNT(*) FROM action_history").fetchone()[0])
+            self.assertEqual(0, db.execute("SELECT COUNT(*) FROM events WHERE meaningful=1 AND consumed IS NULL").fetchone()[0])
+        self.call("begin_manager", error="no meaningful pending event")
+        self.assertEqual(state, Coordinator(self.root).snapshot())
+
+    def test_reallocated_wait_is_cancelled_and_cannot_be_recorded(self):
+        allocation = self.allocation("waiting", "wait", {})
+        self.action("wait-1", "waiting", finish=False)
+        self.owner("put_allocation", allocation_id="waiting", replace=True,
+                   allocation={**allocation, "inputs": {"reason": "changed scope"}})
+        self.assertEqual("cancelled", self.c.snapshot()["actions"]["wait-1"]["status"])
+        self.owner("record_wait", action_id="wait-1", error="prepared wait required")
+
+    def test_record_wait_serializes_competing_owner_connections(self):
+        from concurrent.futures import ThreadPoolExecutor
+        self.allocation("waiting", "wait", {})
+        self.action("wait-1", "waiting", finish=False)
+        revision = self.c.snapshot()["revision"]
+        def record(_):
+            try:
+                Coordinator(self.root).record_wait("wait-1", revision, {"fixture": "owner race"})
+                return "accepted"
+            except Rejected as exc:
+                return str(exc)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            self.assertEqual(["accepted", "stale owner revision"], sorted(pool.map(record, range(2))))
+        self.assertEqual(revision + 1, self.c.snapshot()["revision"])
+
 
 if __name__ == "__main__":
     unittest.main()
