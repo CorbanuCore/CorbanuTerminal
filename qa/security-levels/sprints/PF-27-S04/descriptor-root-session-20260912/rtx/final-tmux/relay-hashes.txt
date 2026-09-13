@@ -1,0 +1,2 @@
+49d3888ebe9780e3321e996d73a7dd6ec01082f576ebc07d613cdcd8c321c28b  /home/travis/worktrees/security-broker-root-session-20260912/qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-20260912/relay.c
+ac3f6dd19d64c504e5be9bd0cb0cd190ef62325c34a252ab49f597b23eaa8e5c  /home/travis/security-round5/evidence/pf27-root-session-20260912/final-tmux/root-relay

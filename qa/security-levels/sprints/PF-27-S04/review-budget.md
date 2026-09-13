@@ -18,6 +18,16 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Root-session reviews37 Astra High and38 Fable5.1 High through Corbanu/private
+TMUX reserved September13 00:50UTC under allocation06bf29c29 and clarification
+44b39817a; manager reconfirmed continuation. Two scoped extension slots reserved,
+zero unreserved; this does not reset history1–36 or the six-hour accounting.
+Frozen source74263bbbc5bf2163f571947c6828fbf108866c3f/Rustb7275b0c0433f081d6423463993abc658141a6a7,
+base2c63e4cd535b89c5e5bee02f435c1a35760e855c. Final actual-key RTX TMUX29 command
+exits plus suite0, seven new cases and full retained proof, strict lint/parity,
+unchanged source/modules/artifacts. Actual dispatch times/outcomes pending.
+No extra opinion, scope expansion, main/push or native authority.
+
 Reviews35/36 dispatched2026-09-12 23:15:26UTC and both completed exit0,
 findings[], patch correct, confidence0.90/0.82. Original descriptor-root-dispatch-
 20260912/{astra35,fable36}.{json,txt,exit,started.txt} retained. Same frozen
