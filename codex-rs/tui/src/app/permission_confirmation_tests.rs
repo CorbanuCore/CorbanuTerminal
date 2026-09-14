@@ -306,6 +306,88 @@ async fn permission_confirmation_orders_profiles_and_newer_observations() {
 }
 
 #[tokio::test]
+async fn permission_confirmation_dispatch_preserves_policy_for_fresh_threads() {
+    let (mut app, _events, _ops) = super::super::tests::make_test_app_with_channels().await;
+    let mut server = crate::start_embedded_app_server_for_picker(&app.config)
+        .await
+        .unwrap();
+    let mut tui = crate::tui::test_support::make_test_tui().unwrap();
+    let thread_id = ThreadId::new();
+    app.active_thread_id = Some(thread_id);
+    // Keep the launch configuration different from both confirmed selections.
+    // Reloading it exercises the same override path used by /new.
+    for (profile, active_profile, policy) in [
+        (
+            PermissionProfile::Disabled,
+            ActivePermissionProfile::new(":danger-full-access"),
+            AskForApproval::Never,
+        ),
+        (
+            PermissionProfile::workspace_write(),
+            ActivePermissionProfile::new(":workspace"),
+            AskForApproval::OnRequest,
+        ),
+        (
+            PermissionProfile::Disabled,
+            ActivePermissionProfile::new(":danger-full-access"),
+            AskForApproval::Never,
+        ),
+    ] {
+        let mut session =
+            super::super::tests::test_thread_session(thread_id, app.config.cwd.to_path_buf());
+        session.permission_profile = profile.clone();
+        session.active_permission_profile = Some(active_profile.clone());
+        session.approval_policy = policy;
+        app.chat_widget.handle_thread_session(session);
+        let selection_id = uuid::Uuid::new_v4();
+        app.pending_permission_confirmation = Some(PendingPermissionConfirmation {
+            selection_id,
+            requested: ThreadSettingsUpdateParams {
+                permissions: Some(active_profile.id.clone()),
+                approval_policy: Some(policy),
+                ..Default::default()
+            },
+            ..pending_confirmation(thread_id)
+        });
+        app.observe_permission_confirmation();
+        Box::pin(app.handle_event(
+            &mut tui,
+            &mut server,
+            AppEvent::PermissionConfirmationCompleted {
+                selection_id,
+                result: PermissionConfirmationResult::Applied,
+            },
+        ))
+        .await
+        .unwrap();
+
+        assert!(app.pending_permission_confirmation.is_none());
+        assert_eq!(app.config.permissions.permission_profile(), &profile);
+        assert_eq!(app.runtime_approval_policy_override, Some(policy));
+        assert_eq!(
+            app.runtime_permission_profile_override,
+            Some(RuntimePermissionProfileOverride::from_config(&app.config))
+        );
+        app.refresh_in_memory_config_from_disk().await.unwrap();
+        let fresh = app.fresh_session_config();
+        let next = server.start_thread(&fresh).await.unwrap();
+        assert_eq!(
+            (
+                next.session.permission_profile,
+                next.session.active_permission_profile,
+                next.session.approval_policy,
+            ),
+            (
+                fresh.permissions.effective_permission_profile(),
+                Some(active_profile),
+                policy,
+            )
+        );
+    }
+    server.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn permission_confirmation_held_input_resumes_only_after_matching_success() {
     for result in [
         PermissionConfirmationResult::Applied,
@@ -371,7 +453,21 @@ async fn permission_confirmation_held_input_resumes_only_after_matching_success(
                 app.observe_permission_confirmation();
             }
         }
-        app.finish_permission_confirmation(selection_id, result);
+        let mut server = crate::start_embedded_app_server_for_picker(&app.config)
+            .await
+            .unwrap();
+        let mut tui = crate::tui::test_support::make_test_tui().unwrap();
+        Box::pin(app.handle_event(
+            &mut tui,
+            &mut server,
+            AppEvent::PermissionConfirmationCompleted {
+                selection_id,
+                result,
+            },
+        ))
+        .await
+        .unwrap();
+        server.shutdown().await.unwrap();
         let submissions = std::iter::from_fn(|| events.try_recv().ok())
             .filter(|event| {
                 matches!(
