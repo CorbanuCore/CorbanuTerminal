@@ -21,6 +21,27 @@ workers run as TMUX Corbanu sessions.
 Product resumption, recurring activation, Task Node posting and public beta
 remain separately gated. Older sections below are historical.
 
+### Update — September 14 04:45 UTC: accounting gate opened; cycle 2 dispatched
+
+Travis directly authorized opening the **accounting** product-resumption gate;
+**security resumes only after the isolated executor is qualified.** Recorded as
+decision `accounting-product-resumption` (raised/resolved, feed revision 33) and
+coordinator stream mode `accounting: enabled` (revision 388). Dashboard was
+republished at `005cc644f` as `build-emg07z3v` (feed 32, 0 open; receipt
+`publication-one-shot-20260914T041440Z`). Fresh Fable decision runs
+`d36611fa…` and `dc371dd6…` accepted three actions, each dispatched to an Astra
+High TMUX session that returned the exact allocation-digest ACK:
+
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md) `dec001-provenance-closeout-01` (implement, private harness repo, 90 min): close the five DEC-001 provenance receipts and review02 follow-ups; no live replay.
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md) `slack-receiver-02` (evidence_review, ACK-only, tools disabled): live receiver for future human replies, replacing closed `01a09c75`.
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) `responses-dispatch-design-01` (design, read-only goldens checkout, 60 min): allocation proposal for Responses HTTP dispatch coverage; manager accepts/adjusts before any source dispatch.
+
+One fresh-manager attempt (`eee2a820…`) was held at `briefing_size_hold`
+(70,371 B at one event vs 65,536) and failed explicitly; eight consumed
+historical allocations were compacted via `put_allocation(replace)` with frozen
+originals retained in the audit table. No inference ran for that attempt.
+[PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md) stays intentionally paused by that decision.
+
 ## STOP — user-requested management pause, September 13
 
 All three workstreams have reached a checkpoint and stopped. The implementation
