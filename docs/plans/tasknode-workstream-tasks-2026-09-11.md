@@ -3,7 +3,7 @@
 Travis explicitly authorized three dedicated workstream tasks. Created once each
 using installed Corbanu 0.1.36's native `tasknode request create --kind personal`,
 then reconciled durable requests and read the generated tasks in the linked
-IridiumMaster / @iridiumeagle account. All three are **Proposed**, not Accepted,
+IridiumMaster / @iridiumeagle account. All three were **Proposed**, not Accepted, at creation (update 2026-09-14: all three accepted by Travis's instruction; see `qa/initiative-control/management-bootstrap/tasknode-acceptance-20260914.md`),
 submitted, completed or rewarded. Generated wording was inspected and matches
 coordination-only scope; no implementation or security completion is asserted.
 
