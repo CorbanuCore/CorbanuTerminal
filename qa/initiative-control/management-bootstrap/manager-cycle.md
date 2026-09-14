@@ -36,12 +36,37 @@ privately. This example supplies no production authority. Stored seed metadata i
 explicitly historical; durable modes/allocations are not fresh external proof.
 
 One meaningful pending batch is claimed through `begin_manager` (at most 24 events).
-The briefing includes all three streams, their last three actions, frozen scopes,
-pending actions, and recursively loaded original evidence keyed by verified digest.
-Original references and previews remain attached; previews never replace originals.
-There is no summarization or truncation fallback. Missing/corrupt evidence, excessive
-reference count, or a briefing exceeding 65536 encoded bytes produces an owner hold
-before authentication/inference, with pending events and the claim retained.
+The briefing includes all three streams, ordered last-three action IDs, frozen
+unconsumed scopes, pending actions, and recursively loaded original evidence keyed
+by verified digest. Action records retain identity, kind, workstream, sprint, status,
+rationale, allocation identity/digest, other lifecycle metadata and reference digests.
+Terminal actions (`accepted`, `failed`, `cancelled`) omit inline inputs and expansion
+of dispatch/ACK/result/verification references, except when both in the last three
+and represented by a status transition in the selected pending event batch. This
+exception supplies their exact inputs (or the existing lossless allocation index)
+and recursively verified originals. Owner failure/cancellation proofs remain expanded.
+Allocations with literal `inputs.consumed == true` retain metadata and only
+`{"consumed":true}` as inputs; active actions never index into compact allocation
+inputs. Other allocation scopes and non-terminal action inputs remain exact.
+
+Selected event originals and everything they reference always expand in full,
+including evidence also referenced by compact history. Status transitions are read
+from selected top-level event originals: returned/verified action IDs, exact
+reconciled-dispatch IDs, owner completion/successor action IDs, owner allocation
+cancellations and explicit matching action/status records. Nested evidence, unrelated
+mentions and deferred events do not establish this exception. FIFO batch sizing
+recomputes eligibility for each selected prefix before restricting the durable claim.
+
+`evidence_omissions` identifies each affected action/allocation by `source`, `id` and
+`reason`; `inputs_digest` hashes the exact omitted inputs and `evidence_digests`
+lists reference roots whose originals were not expanded elsewhere. Unloaded roots
+also identify their unexpanded descendants; they are not fetched just to enumerate
+omissions. This is unavailable context, never a success claim. The untouched core
+packet remains in `claim.json`. Derived previews are removed only at known reference
+positions. No original is shortened or summarized. Missing/corrupt retained evidence,
+excessive retained reference count, or a briefing exceeding the unchanged 65536
+encoded bytes produces an owner hold before authentication/inference, with pending
+events and the claim retained.
 Rationales are strongly directed below 300 UTF-8 bytes; the unchanged core still
 accepts at most 1000 bytes. Frozen inputs are never rewritten to fit acceptance.
 
@@ -181,3 +206,95 @@ At08:10:42Z, coordinator revision53: global and all three dispatch modes paused,
 no manager claim; rehearsal action failed and follow-up wait prepared. No product
 sprint advanced. This proves operator-invoked driver/native crash-window recovery,
 not a deployed unattended controller, full Slack chain or isolated acceptance.
+
+## September 14 briefing-size repair: scoped worker return
+
+Action `briefing-size-repair-01`, bounded internal reliability fix under
+**Internal delivery control — TO BUILD**: “Use sequential sprints per initiative”.
+Assigned worktree `/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-briefing-size-20260914`,
+branch `bootstrap/briefing-size-20260914`, base
+`c7ee093bc6a35c9fdd3f63d8f6bf49495cf61087`. The contract above describes the
+implemented selection rules. Coordinator state, original evidence, claim limits and
+authentication/inference boundaries are unchanged.
+
+Synthetic measurement uses `BriefingSizeTests.large_packet` in
+`scripts/initiative_control/manager_cycle_test.py`: one pending event, three
+terminal actions with distinct dispatch/ACK/result/verification originals and one
+consumed allocation with a referenced original. The base briefing holds at 65536;
+its complete encoding measures **245123 bytes**, versus **7197 bytes** after this
+repair. To count the rejected base output, only the base module's encoder ceiling
+was bypassed in memory; production `BRIEF_LIMIT` remains **65536**. No original was
+truncated. The new tests also cover terminal statuses, both recent-transition
+conditions, nested/shared originals, consumed allocation input safety, omission
+digests, missing/corrupt/size-mismatched retained evidence and FIFO batch restriction.
+
+Verification commands and actual outcomes:
+
+- `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/initiative_control -p '*_test.py'`:
+  **12 passed** (new regression module).
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts/initiative_control /Volumes/CorbanuDrive/Corbanu/.codex-work/slack-sdk-test.Ob3i5O/venv/bin/python -B -m unittest test_manager_cycle test_coordinator test_fable_launcher.Protocol test_slack_reply_poll manager_cycle_test`:
+  **120 ran; 117 passed, one failure, two errors**. The same existing focused
+  modules using the base implementation loaded in memory pass **108/108**.
+- Initial system-Python README discovery (`test_*.py`): **301 ran; six failures,
+  twelve errors**, including missing `markdown_it`/`slack_sdk`, a subprocess
+  `PYTHONPATH` failure and four launcher-environment failures. These are retained
+  as failed evidence, not a passing full-suite claim.
+- `PYTHONDONTWRITEBYTECODE=1 python3 docs/sprints/check.py` and
+  `git diff --check`: passed.
+
+**Initial scope blocker (resolved by the manager extension below):** the existing suite is actually
+`scripts/initiative_control/test_manager_cycle.py`, outside this allocation's
+explicit writable paths. Three tests still require terminal inputs inline:
+`test_frozen_inputs_that_resemble_references_are_not_rewritten`,
+`test_repeated_action_inputs_are_losslessly_indexed` and
+`test_historical_or_nonidentical_action_inputs_stay_inline`. Their fixtures need
+to use non-terminal actions to retain their original lossless-input coverage under
+the new contract. That file is untouched; the existing suite is not green and this
+return is not an acceptance claim. The manager must authorize the corrected test
+path before those three fixture adjustments and a final rerun.
+
+This is internal packet serialization, with no interactive product change. The
+prior internal-only N/A scope applies; parent still owns actual fresh-manager
+replay, evidence review and any later applicable functional/release qualification.
+No live coordinator, credentials or inference were used, and no push was performed.
+
+### Manager-authorized fixture adaptation
+
+The manager extended writable scope to `scripts/initiative_control/test_manager_cycle.py`
+for exactly the three conflicting fixtures above. Terminal cases now assert exact
+`evidence_omissions` input/reference digests and unchanged claim inputs; running
+cases retain the prior complete inline/indexed-input assertions. An AST comparison
+confirms that exactly those three test methods changed. The 64 KiB hold,
+`evidence_count_hold`, full-original and event-ordering tests remain unchanged.
+
+The documented focused command above now passes **120/120** in **8.632s**.
+Full discovery includes the README's `test_*.py` suite and the new `*_test.py`
+module via the superset pattern `*test*.py`. Dependencies come from the existing
+SDK interpreter and the existing initiative-control Markdown package directory;
+no shared environment was modified. Exact command:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 \
+PYTHONPATH=scripts/initiative_control:/Volumes/CorbanuDrive/Corbanu/.codex-work/initiative-control.oGQGyA/venv/lib/python3.14/site-packages \
+/Volumes/CorbanuDrive/Corbanu/.codex-work/slack-sdk-test.Ob3i5O/venv/bin/python -B \
+-m unittest discover -s scripts/initiative_control -p '*test*.py'
+```
+
+First dependency-complete full run: **494 ran; 487 passed, seven failures** in
+**299.696s**, all in unchanged `test_fable_launcher.RealTmux` cases:
+forced cleanup, late abort, management vocabulary, SIGTERM, interrupted-buffer
+cleanup, timeout/partial final and two fresh runs. A diagnostic single-test replay
+also failed and identified `subprocess.TimeoutExpired` in the synthetic binary's
+five-second `--version` probe, before TMUX launch. Subsequent direct probes
+succeeded; the unchanged two-fresh-runs case then passed **1/1 in 6.654s**.
+No launcher code, timeouts, assertions or test exclusions were changed. These
+failed attempts remain part of the evidence.
+
+Final replay of the exact full-discovery command above: **494/494 passed in
+276.132s**, with zero failures, errors or skips. This includes the unchanged real
+TMUX launcher cases and all twelve new briefing regression tests. The test and
+implementation tree was unchanged between the failed full attempt and this
+passing replay. Whitespace checks pass. The scope blocker is resolved; the
+synthetic briefing measurement remains **245123 → 7197 bytes** with the unchanged
+65536-byte production limit. Parent still owns live-manager acceptance; no push
+or release is claimed.

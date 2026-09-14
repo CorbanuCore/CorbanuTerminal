@@ -15,7 +15,7 @@ import sqlite3
 import stat
 import time
 
-from coordinator import Coordinator, Rejected, digest, encoded
+from coordinator import Coordinator, Rejected, TERMINAL, digest, encoded
 import fable_launcher as f
 
 # Total claim window includes preparation and acceptance; launcher has its own clock.
@@ -32,17 +32,22 @@ DIRECTIVE = (
     "is historical, not a fresh observation of branches, workers, gates or services. "
     "Only separately dated owner observations assert newer external facts; unknown "
     "or conflicting facts require an allocated wait/escalation/reconciliation. "
-    "last_three_actions contains ordered id-only entries; resolve each complete "
-    "record in actions by id. These are lossless references, not summaries. "
+    "last_three_actions contains ordered id-only entries; resolve records in actions. "
+    "These are lossless references to the supplied records. Terminal actions omit "
+    "inputs and dispatch/ACK/result/verification originals unless they are in "
+    "last_three_actions and changed status in the selected event batch. Consumed "
+    "allocations omit frozen inputs except consumed:true. evidence_omissions records "
+    "omitted inputs and unexpanded reference roots by digest; these are unavailable "
+    "context, not evidence of success. Event and non-terminal originals stay full. "
     "An action's inputs_from_allocation replaces only its exact duplicated inputs: "
     "reconstruct inputs as {allocation: that id, ...allocations[id].inputs}. "
-    "Historical or changed inputs remain inline. New proposals still require the "
+    "Other supplied inputs remain inline. New proposals still require the "
     "full inputs object, never inputs_from_allocation. "
     "event_batch reports selected and deferred pending events. Only selected events "
     "are supplied and consumed on acceptance; deferred events remain pending for "
     "later fresh cycles. Do not claim the whole queue is reconciled. "
     "Derived event/action evidence previews are omitted; the exact full bodies "
-    "are in original_evidence under their preserved evidence_digest. "
+    "are in original_evidence unless explicitly listed in evidence_omissions. "
     "Preserve approvals, unresolved blockers, review budgets and pause boundaries."
 )
 
@@ -94,8 +99,7 @@ def briefing(coordinator, packet, owner_context):
               and isinstance(context["context"], dict) and context["context"], "invalid_owner_context")
     timestamp(context["observed_at"])
     f.require(len(packet["workstreams"]) == 3, "three_workstreams_required")
-    # The core packet repeats the same records for ordering. Keep one complete
-    # copy in actions; never truncate evidence or raise the briefing size limit.
+    # Keep ordering as references; retain the untouched packet in claim.json.
     last_three = {}
     for stream, actions in packet["last_three_actions"].items():
         for action in actions:
@@ -106,8 +110,7 @@ def briefing(coordinator, packet, owner_context):
              "directive": DIRECTIVE, "owner_observation": context,
              "seed_metadata_status": "historical; current durable state is not external live proof",
              "original_evidence": {}, "evidence_omissions": []}
-    # Only core-owned reference positions, never arbitrary frozen inputs. The
-    # untouched packet is still scanned/verified below and retained in claim.json.
+    # Strip only core-owned previews; arbitrary frozen inputs remain exact.
     reference_fields = {"dispatch_receipt", "ack_receipt", "result", "verification",
                         "owner_failure", "owner_cancellation"}
     def without_preview(value, fields):
@@ -120,6 +123,72 @@ def briefing(coordinator, packet, owner_context):
                               if field in reference_fields else value
                               for field, value in action.items()}
                         for key, action in packet["actions"].items()}
+    brief["allocations"] = dict(packet["allocations"])
+    originals = brief["original_evidence"]
+
+    def read_reference(value):
+        key = value["evidence_digest"]
+        if key not in originals:
+            f.require(len(originals) < 256, "evidence_count_hold")
+            body = coordinator.read_evidence(key)
+            f.require(digest(body) == key, "evidence_digest_mismatch")
+            originals[key] = body
+        body = originals[key]
+        f.require("bytes" not in value or value["bytes"] == len(encoded(body).encode()),
+                  "evidence_size_mismatch")
+        return body
+
+    # Only selected top-level events establish a transition, never nested evidence
+    # or deferred events. Core verification/reconciliation IDs carry the action ID.
+    events = [read_reference(event) for event in packet["events"]]
+    changed = set()
+    for event in events:
+        event_id = event["id"]
+        for key, action in packet["actions"].items():
+            if (event_id in {"returned:" + key, "verified:" + key}
+                    or (event_id.rpartition(":")[0] == "dispatch-reconciled:" + key
+                        and event_id.rpartition(":")[2].isdigit())
+                    or (event_id.split(":", 1)[0] in {"owner_complete", "owner_successor"}
+                        and event.get("action") == key)
+                    or (event_id.startswith("owner_allocation:")
+                        and action.get("status") == "cancelled"
+                        and action.get("inputs", {}).get("allocation") == event.get("allocation"))
+                    or (event.get("action") == key and event.get("status") == action["status"])):
+                changed.add(key)
+    recent = {action["id"] for actions in last_three.values() for action in actions}
+    compact = {key for key, action in packet["actions"].items()
+               if action["status"] in TERMINAL and not (key in recent and key in changed)}
+    omitted_references = []
+
+    def reference_digests(value):
+        if isinstance(value, dict):
+            if "evidence_digest" in value:
+                yield value["evidence_digest"]
+            for item in value.values():
+                yield from reference_digests(item)
+        elif isinstance(value, list):
+            for item in value:
+                yield from reference_digests(item)
+
+    def omit(source, key, reason, inputs=None, references=None):
+        entry = {"source": source, "id": key, "reason": reason}
+        if inputs is not None:
+            entry["inputs_digest"] = digest(inputs)
+        omitted_references.append((entry, set(reference_digests(references))))
+
+    historical_fields = {"dispatch_receipt", "ack_receipt", "result", "verification"}
+    for key in sorted(compact):
+        action = brief["actions"][key]
+        inputs = action.pop("inputs", None)
+        if isinstance(inputs, dict) and "allocation" in inputs:
+            action["allocation"] = inputs["allocation"]
+        omit("actions", key, "terminal_history", inputs,
+             [inputs, *[action[field] for field in historical_fields if field in action]])
+    for key, allocation in packet["allocations"].items():
+        if allocation["inputs"].get("consumed") is True:
+            brief["allocations"][key] = {**allocation, "inputs": {"consumed": True}}
+            omit("allocations", key, "consumed_allocation", allocation["inputs"], allocation["inputs"])
+
     for action in brief["actions"].values():
         inputs = action.get("inputs")
         if not isinstance(inputs, dict) or "inputs_from_allocation" in action:
@@ -128,24 +197,20 @@ def briefing(coordinator, packet, owner_context):
         allocation = packet["allocations"].get(key) if isinstance(key, str) else None
         # Never replace a historical assignment with its newer allocation, even
         # when Python considers different JSON types equal (True versus 1).
-        if (allocation is not None
+        if (allocation is not None and allocation["inputs"].get("consumed") is not True
                 and action.get("allocation_digest") == f.digest(encoded(allocation).encode())
                 and encoded(inputs) == encoded({"allocation": key, **allocation["inputs"]})):
             del action["inputs"]
             action["inputs_from_allocation"] = key
-    originals = brief["original_evidence"]
+    expanded = set()
 
     def collect(value):
         if isinstance(value, dict):
             if "evidence_digest" in value:
                 key = value["evidence_digest"]
-                if key not in originals:
-                    f.require(len(originals) < 256, "evidence_count_hold")
-                    body = coordinator.read_evidence(key)
-                    f.require(digest(body) == key, "evidence_digest_mismatch")
-                    f.require("bytes" not in value or value["bytes"] == len(encoded(body).encode()),
-                              "evidence_size_mismatch")
-                    originals[key] = body
+                body = read_reference(value)
+                if key not in expanded:
+                    expanded.add(key)
                     encoded(brief, limit=f.BRIEF_LIMIT)
                     collect(body)
             for item in value.values():
@@ -154,9 +219,19 @@ def briefing(coordinator, packet, owner_context):
             for item in value:
                 collect(item)
 
-    # Include full originals recursively, including returned results and owner proofs.
-    # Never substitute the core's preview for an original or truncate to fit.
-    collect(packet)
+    # Scan exact retained sources, not the omission metadata or compact references.
+    collect({key: value for key, value in packet.items()
+             if key not in {"actions", "allocations", "last_three_actions"}})
+    collect(brief["allocations"])
+    for key, action in packet["actions"].items():
+        collect({field: value for field, value in action.items()
+                 if key not in compact or field not in historical_fields | {"inputs"}})
+    for entry, references in omitted_references:
+        missing = sorted(references - originals.keys())
+        if missing:
+            entry["evidence_digests"] = missing
+        if missing or "inputs_digest" in entry:
+            brief["evidence_omissions"].append(entry)
     return encoded(brief, limit=f.BRIEF_LIMIT).encode()
 
 
