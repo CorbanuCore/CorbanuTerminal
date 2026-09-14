@@ -129,6 +129,75 @@ class DecisionRenderingTests(unittest.TestCase):
         self.assertEqual(self.value, before)
         self.assertEqual(self.render(), page)
 
+    def test_dec025_long_context_keeps_all_owners_in_index_and_bounded_cards(self):
+        from test_decisions import revision
+        self.value = revision(self.value, "acknowledged")
+        template = self.value["decisions"][0]
+        self.value["decisions"] = []
+        for owner in ("Avery", "Blair", "Casey"):
+            decision = copy.deepcopy(template)
+            decision["id"] = owner.lower()
+            for record in decision["revisions"]:
+                record["owner"] = owner
+                record["summary"] = f"{owner}'s pilot choice"
+                record["background"] = "Long context for this decision. " * 50
+                record["evidence"] *= 30
+            self.value["decisions"].append(decision)
+        before = copy.deepcopy(self.value)
+        page = self.render()
+        index = page.split('id="open-decision-index"', 1)[1].split('</ul></div>', 1)[0]
+        self.assertNotIn("<details", index)
+        self.assertNotIn("Long context", index)
+        self.assertEqual(index.count("<li>"), 3)
+        self.assertLess(page.index('id="open-decision-index"'), page.index("<details"))
+        for owner in ("Avery", "Blair", "Casey"):
+            anchor = "decision-" + owner.lower()
+            self.assertIn(f'href="#{anchor}"', index)
+            self.assertIn(f"Owner: {owner}", index)
+            self.assertIn(f"{owner}&#x27;s pilot choice", index)
+            card = page.split(f'id="{anchor}"', 1)[1].split("</summary>", 1)[0]
+            self.assertIn(f"Owner: {owner}", card)
+            self.assertIn('class="decision-overview"', card)
+            self.assertIn(attention.document_url(self.path), Links(card).hrefs)
+            self.assertIn("acknowledged", card)
+        self.assertEqual(Links(index).hrefs.count(attention.document_url(self.path)), 3)
+        self.assertEqual(index.count('class="badge">acknowledged'), 3)
+        self.assertEqual(page.count('class="attention-item decision-card"'), 3)
+        self.assertEqual(page.count('class="decision-body-bounded" tabindex="0" role="region"'), 3)
+        self.assertEqual(page.count('aria-label="Decision context:'), 3)
+        self.assertEqual(Links(page).hrefs.count("#open-decision-index"), 3)
+        self.assertEqual(page.count("Retained revision 1"), 3)
+        self.assertEqual(page.count("Long context for this decision."), 300)
+        self.assertEqual(page.count("Sanitized test plan"), 180)
+        self.assertEqual(self.value, before)
+        self.assertNotIn("<script", page)
+        self.assertNotIn(" onclick=", page)
+
+    def test_dec025_index_only_lists_open_records_and_retains_safe_links(self):
+        from test_decisions import LATER, revision
+        resolved = revision(self.value, "resolved")
+        for value in ({}, {**self.value, "decisions": []}, resolved):
+            self.assertNotIn('id="open-decision-index"', self.render(value))
+        other = copy.deepcopy(self.value["decisions"][0])
+        other["id"] = "unsafe-text"
+        other["revisions"][0]["owner"] = '<img src=x onerror="bad()">'
+        other["revisions"][0]["summary"] = '<script>bad()</script> PF-99-S99'
+        resolved["decisions"].append(other)
+        for now in (self.now, LATER):
+            page = self.render(resolved, now)
+            index = page.split('id="open-decision-index"', 1)[1].split('</ul></div>', 1)[0]
+            self.assertNotIn('href="#decision-choice-1"', index)
+            self.assertIn('href="#decision-unsafe-text"', index)
+            self.assertIn("&lt;img", index)
+            self.assertIn("&lt;script&gt;", index)
+            self.assertNotIn("<img", page)
+            self.assertNotIn("<script", page)
+            self.assertTrue(any(h.startswith("#decision-context-") for h in Links(index).hrefs))
+            self.assertIn(attention.document_url(self.path), Links(index).hrefs)
+            self.assertEqual(page.count('id="decision-choice-1"'), 1)
+            self.assertEqual(page.count('id="decision-unsafe-text"'), 1)
+            self.assertEqual(page.count('class="decision-body-bounded"'), 2)
+
     def test_dec006_007_019_notices_separate_acknowledged_unresolved(self):
         from test_decisions import revision
         notice = attention.render([attention.issue(attention.LEGACY), attention.issue("Acknowledgment requested")], [], {})

@@ -161,7 +161,11 @@ def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=N
                            for part in re.split(r'(PF-\d{2}-S\d{2})', value))
 
         if summary_only:
-            return linked(record["summary"])
+            return ('<span class="decision-overview">'
+                    f'<span class="decision-title">{linked(record["summary"])}</span> '
+                    f'<span class="decision-owner">Owner: {esc(record["owner"] or "Unknown owner")}</span> '
+                    f'<span class="decision-sprints">{", ".join(refs.values())}</span> '
+                    f'<span class="badge">{esc(record["status"])}</span></span>')
         old = stale or (stamp(now) - stamp(record["updated_at"])).total_seconds() > FRESH_SECONDS
         result = f'<p>Revision {record["revision"]}: {esc(record["status"])}; raised {esc(record["raised_at"])}; context updated {esc(record["updated_at"])}. {"Stale context: stopped/continuing work and other details are last-known." if old else "Context within freshness window."}</p>'
         result += '<p>Sprints: ' + ', '.join(refs.values()) + '</p>'
@@ -195,14 +199,28 @@ def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=N
 
     for title, records in (("Inspection records (recorded open)" if incomplete else "Open questions", opened), ("Inspection history" if incomplete else "Decision history", [d for d in feed["decisions"] if d["id"] not in view["open"]])):
         body += f'<div><h3>{title}</h3>'
+        if records is opened and records:
+            body += ('<div class="decision-index" id="open-decision-index" tabindex="-1">'
+                     '<p class="muted">Decision overview — locate a summary, then expand it for context.</p><ul>')
+            for decision in records:
+                record = decision["revisions"][-1]
+                body += (f'<li><a href="#decision-{decision["id"]}" '
+                         f'aria-label="Locate: {esc(record["summary"])}">Locate</a> '
+                         f'{content(record, True)}</li>')
+            body += '</ul></div>'
         for decision in records:
             record = decision["revisions"][-1]
             anchor = 'decision-' + decision["id"]
-            body += f'<details id="{anchor}"><summary>{content(record, True)} — {esc(record["owner"] or "Unknown owner")} — {esc(record["status"])}</summary><a href="#{anchor}">Permanent decision link</a>'
+            body += f'<details class="attention-item decision-card" id="{anchor}" tabindex="-1"><summary>{content(record, True)}</summary>'
+            if records is opened:
+                body += '<a class="decision-back" href="#open-decision-index">Back to decision overview</a>'
+            body += (f'<div class="decision-body-bounded" tabindex="0" role="region" '
+                     f'aria-label="Decision context: {esc(record["summary"])}">'
+                     f'<a href="#{anchor}">Permanent decision link</a>')
             body += content(record, decision_id=decision["id"])
             for earlier in decision["revisions"][:-1]:
                 body += f'<details><summary>Retained revision {earlier["revision"]} (historical)</summary>' + content(earlier, decision_id=decision["id"]) + '</details>'
-            body += '</details>'
+            body += '</div></details>'
         body += '</div>'
     for key, label in unavailable.items():
         body += f'<div id="decision-context-{key}" tabindex="-1"><h3>{esc(label)}: unavailable context</h3><p>No exact approved published context is available; no substitute selected.</p><a href="#decisions">Back to decisions</a></div>'
