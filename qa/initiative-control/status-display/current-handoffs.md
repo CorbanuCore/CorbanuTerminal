@@ -52,6 +52,37 @@ Travis approved unattended recurrence (activation still gated on qualification),
 - **Competing writer**: `fix/live-permission-transition-20260913` (new sprint PF-83-S01 under the security plan, created by another agent) was merged into integration as `a51602037` outside the integration gate and carried to origin by a manager push before detection. Its only known review is "patch is incorrect" (pre-commit tree). Not reverted; treated as unverified; question `pf83-external-integration` sent to Slack (thread `1789375985.333669`) after a recorded outage-gap review re-qualified the transport. Default if unanswered: keep + Rust verification, revert on failure.
 - Slack receiver `slack-receiver-02` alive (session `01a09e29…`); listener journal re-qualified 08:52Z.
 
+### Update — September 14 12:50 UTC: overnight cycles 9–15 (Travis signed off ~08:40Z)
+
+Authority recorded: unattended recurrence approved pending qualification;
+`--yolo` for non-test workers; security relaunch once workstream 3 completes.
+
+- **DEC functional cases**: 18 independently supported (001, 002, 004–019 less
+  003), DEC-025 retained as a genuine product/UX finding, DEC-020/022/023/024
+  blocked by the pinned guest's ~20-action budget, DEC-003/021/026 unmapped.
+  Record: [supervised-execution-20260914](../management-bootstrap/supervised-execution-20260914.md).
+  Harness lineage through `714cb08`; every executor-found defect fixed and reviewed.
+- **Restart/stall/crash rehearsal** with real TMUX workers: crashed worker and
+  uncertain dispatch both flagged by `watchdog` and reconciled `failed` without
+  relaunch; receiver kept on inspection. Recorded in the same document.
+- **Owner daemon**: design accepted (`owner-daemon-design-01`); increment A
+  kernel `48f340767` reviewed correct (P3 temp-dir) and **received at
+  `bcec9862f`** (514 tests). Default OFF; live TMUX transport is increment B
+  (allocated). Recurrence is **not** activated; no Slack activation notice sent.
+- **SLK harness**: design accepted (14 offline cases, 4 live-no-human, SLK-009
+  needs Travis, SLK-006 deferred); increment 1 `c030e7f` in the private repo
+  (packaging, synthetic fixtures, dry diagnostics for five cases) accepted as a
+  bounded partial; increment 2 allocated with an integrator-recorded +800 lines.
+- **PF-83 external merge**: first Rust verification was invalid — my session's
+  `CODEX_HOME` leaked into spawned app-servers (real home read; 543 v2 failures);
+  retained as contaminated, rerun with home variables unset in progress. The
+  Slack question `pf83-external-integration` remains open.
+- **Blockers needing Travis**: (1) `git push` blocked — login keychain locked, so
+  origin stays at `f26ce7daa` while local integration is ahead; (2) Claude
+  provider (`claude-plan`) unresponsive from ~12:10Z: fresh Fable decisions and
+  independent reviews are paused; a bounded retry loop is running; OpenAI
+  workers unaffected. Nothing was pushed to main; no credentials were entered.
+
 ## STOP — user-requested management pause, September 13
 
 All three workstreams have reached a checkpoint and stopped. The implementation
