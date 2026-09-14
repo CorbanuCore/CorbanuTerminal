@@ -5,13 +5,13 @@ status: in_progress
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 2
-owner: "Astra High accounting Responses-dispatch lane (Fable manager receiving)"
-parallel_lane: "accounting-responses-dispatch"
-write_scope: "codex-rs/core/src/config/mod.rs, codex-rs/core/src/agent/role.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/client.rs, codex-rs/core/src/accounting.rs, codex-rs/core/src/accounting_transport.rs, codex-rs/core/src/accounting_prices.rs, codex-rs/core/src/accounting_prices_tests.rs, codex-rs/core/tests/suite/mod.rs, codex-rs/codex-api/src/lib.rs, codex-rs/codex-api/src/endpoint/responses.rs, codex-rs/codex-api/src/sse/responses.rs, codex-rs/core/src/accounting_responses.rs, codex-rs/core/src/accounting_responses_tests.rs, codex-rs/codex-api/src/endpoint/responses_accounting.rs, codex-rs/codex-api/src/endpoint/responses_accounting_tests.rs, codex-rs/core/tests/suite/accounting_responses.rs, codex-rs/core/tests/suite/accounting_responses_recovery.rs, codex-rs/core/tests/suite/accounting_responses_support.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/responses-dispatch-increment.md"
-integration_gate: "Responses HTTP dispatch e47e41870 received at d81bad635 (634/634 combined, 63/63 Core accounting). Next allocation: Responses WS or Chat coverage per S02 Remaining; one independent Fable review + necessary correction; manager receiving. S02 open, S03 dependent, collection OFF."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-responses-dispatch-20260914"
-branch: "workstream/accounting-responses-dispatch-20260914"
-base_commit: "25920ec8d17f3f8eb17cdb89f90892ca5848ae22"
+owner: "Astra High accounting Responses-WebSocket lane (Fable manager receiving)"
+parallel_lane: "accounting-responses-websocket"
+write_scope: "codex-rs/core/src/config/mod.rs, codex-rs/core/src/agent/role.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/client.rs, codex-rs/core/src/accounting.rs, codex-rs/core/src/accounting_responses.rs, codex-rs/core/src/accounting_transport.rs, codex-rs/core/src/accounting_websocket.rs, codex-rs/core/src/accounting_websocket_tests.rs, codex-rs/codex-api/src/lib.rs, codex-rs/codex-api/src/endpoint/responses_websocket.rs, codex-rs/codex-api/src/endpoint/responses_websocket_accounting.rs, codex-rs/codex-api/src/endpoint/responses_websocket_accounting_tests.rs, codex-rs/core/tests/suite/mod.rs, codex-rs/core/tests/suite/accounting_responses_ws.rs, codex-rs/core/tests/suite/accounting_responses_ws_recovery.rs, codex-rs/core/tests/suite/accounting_responses_ws_support.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/responses-websocket-increment.md"
+integration_gate: "Fable manager receives exact Responses WS sampling/fallback candidate: one independent Fable review plus necessary correction, 36 new cases and retained regressions, shared state/TaskNode-session and combined API/proxy gates on receiving tree; actual counts and failures retained. S02 open, S03 dependent, collection OFF."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-acct-ws-20260914"
+branch: "bootstrap/acct-ws-20260914"
+base_commit: "e3bd579bf4e0c7c58ad863af2a9c6098e2297f98"
 depends_on: "PF-60-S01"
 created: 2026-09-09
 updated: 2026-09-14
@@ -19,43 +19,37 @@ updated: 2026-09-14
 
 # PF-60-S02 — Idempotent usage persistence and replay
 
-**User-requested management pause, September 13.** Goldens/combined proof accepted; worker closed. [Checkpoint and gates](../../../plans/management-pause-2026-09-13.md). No answer requested; continuation mandates below suspended. S03 not started.
-17:22UTC: parent accepted review01's dropped role retry/timeout overrides P2 as
-in-scope; first correction queued after the matched baseline run. Same20 paths
-and existing allowance; native child override/mismatched-route proof required.
-
-S01 is archived; journal/quotation/storage/contributions, compact values and A/B/C1/C2/native are integrated. Accepted scopes and receipts stay frozen. The [production store allocation](../../../research/agent-cost-accounting/production-store-allocation.md) is completed history; [native allocation](../../../research/agent-cost-accounting/native-ownership-allocation.md) and [C2 allocation](../../../research/agent-cost-accounting/retention-coupled-next.md) are accepted history, not repeated work. The [retention handoff](../../../research/agent-cost-accounting/retention-design-handoff.md) retains approved daily expiry. Current source authority is the exact two-path golden allocation and manager dispatch.
+September 14: Fable's accepted `acct-ws-freeze-01` mandate freezes the next same-S02 unit; no running worker or build lease is claimed. Travis's accounting resumption supersedes the historical [September 13 pause](../../../plans/management-pause-2026-09-13.md); security remains with its owner. Prior two-path goldens and HTTP mandates are consumed, not current authorization.
 
 ## Execution mandate
 
-- Next: [Responses HTTP dispatch coverage](../../../research/agent-cost-accounting/responses-dispatch-allocation.md): 20 literal files, target 2700/1050, STOP 3000/1150, default OFF; original-contract goldens f4507cb50 accepted at 855ab3382 (prior Next consumed).
-- Excludes: Changing prices, rebilling historical customers, collecting prompts, restoring legacy Plan allowances, or silently converting allowance to cash.
-- Approved target800total/150non-test, STOP900/200; estimate700/110. Bounded contingency covers complete original-fixture parity/receipt, not inherited allowance; one material review plus necessary correction, prior usage retained.
+- Execute [Responses WS sampling and HTTP fallback](../../../research/agent-cost-accounting/responses-websocket-allocation.md): exactly 18 files, target 3000 total/1050 non-test, STOP before exceeding 3300/1200 or adding a path; default OFF.
+- Preserve the separate HTTP-only mode; startup prewarm accounting is out of scope, connection reuse preserved. Chat/Corbanu and auxiliary coverage remain deferred with reasons in the allocation.
+- Existing exclusions remain: no public activation, price/catalog changes, historical rebilling, prompt collection, Plan-allowance restoration or allowance-to-cash conversion.
 
 ## Plan linkage
 
-- Plan: [Unified agent cost and usage accounting](../../../plans/active/portfolio-agent-cost-accounting.md)
-- Feature: `PF-60`; acceptance: Replay each fixture twice and after process restart; persisted and reconstructed totals equal the approved fixture exactly.
-- Upstream/allocation: [plan record](../../../plans/active/portfolio-agent-cost-accounting.md#native-lifecycle-and-upstream-touch-record).
+- Plan: [Unified agent cost and usage accounting](../../../plans/active/portfolio-agent-cost-accounting.md); feature `PF-60`.
+- Exact product heading: **Measurement targets**; excerpt: “No commercial performance numbers have been supplied. The following metrics must be instrumented, with targets set through the decision rights defined above.”
+- Acceptance: replay each fixture twice and after restart; persisted and reconstructed totals equal the approved fixture exactly. S01 is accepted/archived; S03 remains dependent.
 
 ## Code boundaries
 
-- Existing, read before work: `docs/research/agent-cost-accounting/responses-dispatch-allocation.md`, `docs/research/agent-cost-accounting/contract.md`, `qa/portfolio/agent-cost-accounting/pf-60-s02/anthropic-dispatch-increment.md`, `codex-rs/core/src/accounting.rs`, `codex-rs/core/src/accounting_transport.rs`, `codex-rs/codex-api/src/sse/responses.rs`.
-- Output: exactly the 20 literal paths in front matter (12 existing edits, 8 new files including the increment receipt); target 2700 total/1050 non-test, STOP 3000/1150 or any added path. Manager retains core/Cargo.toml, Cargo.lock, MODULE.bazel.lock, BUILD files, plan/sprint/allocation documents. No overlap with PF-27's seven preflight paths, responses-api-proxy, or Slack scripts.
-- Tests/evidence: preserve every accepted Anthropic assertion, receipt and failed-run record; default OFF with no TOML/CLI/env/Feature/TUI activation; API-key direct Responses HTTP only; no-redirect endpoint binding; unknown-not-zero token presence; immutable price snapshots. Prior two-path original-contract golden boundaries are consumed history, not current authorization.
+- Read the [WS allocation](../../../research/agent-cost-accounting/responses-websocket-allocation.md), [contract](../../../research/agent-cost-accounting/contract.md) and [HTTP receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/responses-dispatch-increment.md) first.
+- Output: exactly the 18 literal paths in front matter, with per-file purposes and 36 named future tests in the allocation. Count additions, deletions, receipt and mixed glue conservatively.
+- Manager owns allocation/plan/sprint, manifests, locks and BUILD files; state/schema, price/catalog, accepted HTTP tests/receipt, shared decoder, generic retry, startup-prewarm owner, auth/transport policy and other lanes are excluded.
+- Historical production-store/native/C2/compact allocations, prior review allowances and failed evidence remain in the linked receipts and plan; no prior size allowance transfers.
 
 ## Preconditions
 
-- [x] Plan active under Travis's standing continuation authority; reservation transferred from completed S01, no fourth lane.
-- [x] S01 accepted/archived after defaults approval, combined-tree fixture proof and independently reviewed technical handoff.
-- [x] Worker clean fast-forward to8725e1ff755a5fa974058f465f3553b3f9b884eb verified; exact worker/branch/base and17 future paths match plan/allocation. Historical C2 zero-edit scope correction consumed no passes.
-- [x] Travis approved defaults; manager approved separate ledger/sequence, default no-install/collection OFF, typed facade and1900/950 target. One existing worker; one NEW code review plus necessary correction and one allocation review if needed, prior failures/review usage retained. No new product/billing/live authority.
-- [x] Historical native allocation: parent read three documents; native-ownership-allocation-review exited0 clean. Integrated f13e9740a atce8a81980; checkers3/115/126, disjoint sole accounting threads.rs ownership. That six-path dispatch is completed, not current source authorization.
-- [x] Parent read all three allocation documents; first production-store-allocation-review exit0 clean. Docs12032acc7 integrated atf32e99f08a6218539c7d2b9d82f38ca038cb3e2f; governance3/115/126pass, exact17-path scope disjoint and no accounting migration/ledger collision. Source dispatch now authorized; parent records actual launch HEAD separately.
-- [x] Parent inspected DayTotals/Decimal visibility and amount/rate parsing distinction; B1 is now reviewed and tested, receipt below.
+- [x] Active PF-60 plan and archived S01 retain the existing reservation and approved contract defaults; no new product/billing/live authority.
+- [ ] Manager verifies clean implementation checkout at the recorded base, current reservations and actual diffs; assigns exclusive build target and records dispatch.
+- [ ] Run governance checks before implementation handoff; reconcile plan/worktree coordinates and retain prior review usage.
 
 ## Done
-- [x] Responses HTTP dispatch coverage e47e41870 (20 files, 2871 total/1054 non-test) independently reviewed clean (0 findings) and received at d81bad635; combined 634/634 (responses-api-proxy/state/api/tasknode-session, --locked --offline) and Core accounting 63/63 on the receiving tree; fmt/clippy clean; default OFF; reserved-provider rule unchanged. Worker STOP history (sse/mod.rs re-export, role-premise correction) retained in [receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/responses-dispatch-increment.md). WS/Chat/auxiliary routes remain uncollected.
+
+- [x] Original-contract goldens f4507cb50 accepted at 855ab3382; [consumed allocation](../../../research/agent-cost-accounting/original-contract-native-golden-allocation.md), not work to repeat.
+- [x] Consumed [Responses HTTP allocation](../../../research/agent-cost-accounting/responses-dispatch-allocation.md): e47e41870 received at d81bad635, 634/634 combined and 63/63 Core accounting; [receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/responses-dispatch-increment.md) preserves review, size, corrections and failed-run history.
 - [x] Compact import281ee4ec1 independently reviewed clean02, received81d0f90e7; parent595shared/100Core/20focused/6external plus format/Clippy/check pass. [Receiving proof](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/compact-late-import-receiving.md) preserves failures, original review and metadata addendum; no live/full-S02 claim.
 - [x] Ten-path Core policy correction b320ef722 independently reviewed clean0.94 and received2cb69e429; exact combinedeb5855959 passes100focused18.334s/575shared31.075s, zero execution skips, Clippy/check. [Receiving proof](../../../../qa/initiative-control/status-display/combined-native-20260913.md); old failures/internal-only N/A retained.
 - [x] Normal-library store6b2dbcab5 integrated at9518184ac after clean independent review03 (helper85655). Exact17 paths2057total/829non-test; second correction samples production deletion time after writer-lock acquisition, with real ordering regression. Receiving `just test -p codex-state -p codex-tasknode-session`:367passed,1leaky,0skipped,16.922s. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/production-store-increment.md) preserves287 worker tests, original failures and review history. Optional versioned installation, typed facade and atomic admission/observations accepted; collection remains OFF.
@@ -64,37 +58,37 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 - [x] C1 consumers accepted with recorded1121-line candidate exception, one clean Astra review and combined335passed/2leaky/0skipped9.285s at8cdb6dcf; integrated5406e3506 then reconciledafe535c06 with identical Rust tree. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/retention-consumers-increment.md). No repeated review or new product decision required.
 - [x] Pure reduction B ac5a22d67 reviewed clean and integrated at7514be8ec; combined330 state/TaskNode tests pass9.928s, nextest178ce26c-71f5-4405-95b2-817ebdaa1a4b. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/retention-reduction-increment.md). Four paths507lines/131non-test; B code allowance used, unused correction retained. No mutation/runtime claim.
 - [x] Read-only input A8eca814f8 reviewed clean and integrated atfd46c5897; combined325 state/TaskNode tests pass9.100s. No reduction/mutation claim. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/retention-plan-increment.md). Original904-line draft preserved; accepted A775lines.
-
 - [x] Canonical receiving fast-forwarded to 87e31f521672e627e6230d48fc16a4cfaa7ff44c with reviewed native prerequisites; prior overlapping Facilities edits preserved privately and reconciled. Integrator authorizes two additional scoped review passes (code plus substantive correction only), preserving prior history.
-
 - [x] Latest quote8b6d629b6 reviewed clean and combined staging04ba6b8b7 passes242state/80TaskNode tests; reader only, no retention mutation. [Evidence](../../../../qa/initiative-control/native-staging-2026-09-12.md). Canonical receiving transfer/publication pending.
-
 - [x] Travis approved conservative UTC-day-start+365-day aggregate expiry; no reapproval needed. Detail90/replay365 policies unchanged; S03 requested range/interval filters remain draft.
 - [x] First test-only journal and native SQLite regressions reviewed clean and integrated at c33d47f6c (worker 3f39d7a65); 202 state tests pass on combined tree. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/first-increment.md).
 - [x] Real on-disk close/reopen, duplicate/reordered revision, rollback, concurrent writer, unknown/zero and partial Anthropic regressions pass; no process-kill or production claim.
 - [x] Exact quotation e8ffdad4e reviewed clean and integrated at 486d2fb94; 214 state tests pass there. Prospective snapshots, exact arithmetic/half-even, unknowns and journal replay covered. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/exact-pricing-increment.md).
 - [x] Immutable storage d898fbac0 reviewed clean and integrated at56295f668; all220 state tests pass there. Atomic snapshot/binding/evidence versions, corruption/reopen proof. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/estimate-storage-increment.md).
-
 - [x] Contributions/deletion b08fff66d reviewed clean and integrated at3898eaa65;226 state tests pass there. Exact current totals, atomic all-version deletion/shared snapshot retention, deterministic serialization orders and two disk reopens; no simultaneous lock-contention/pruning/native owner claim. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/contribution-deletion-increment.md).
-
 - [x] Exact compact-value codec c8d46d709 independently reviewed clean and integrated;237 state tests pass on receiving tree. Canonical u128/24-place USD, all seven metric populations, checked composition and malformed/overflow rejection; no DB mutation. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/compact-values-increment.md).
 
+- [x] B1:11 compact-value tests and four existing selectors passed; combined237 state/73 Task Node tests and normal-library check passed atc8d46d709. One non-accounting LEAK marker disclosed in manager handoff; no leak-clean claim.
+
 ## Remaining
-- [ ] Execute original six-attempt S01 fixture through native ownership, normal storage/replay/two reopens and compact original-bundle parity; return exact two-path frozen candidate for review/receiving.
-- [ ] Preserve accepted normal-library store tests and all original failed evidence as the unchanged dependency regression gate; do not re-author its installation/rollback matrix.
-- [ ] Actual dispatch/presence/original-price path is qualified for direct Anthropic and direct API-key Responses HTTP; Responses WS, Chat/Corbanu and auxiliary routes remain open. Legacy original-evidence acquisition is unqualified. Approved anonymous365-day fencing is not permanent owner revocation: recreated owner/new IDs and physical/cross-DB erasure remain limitations, not a new registry or human blocker. S03 stays draft.
-- [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
+
+- [ ] Implement combined-mode sampling identity and lazy binding; retain one request/predecessor chain across WS, reconnect and HTTP fallback, preserving OFF/HTTP-only behavior.
+- [ ] Add durable admission at the actual pump send boundary, immutable cached-route provenance, guards/no-redirect ordering and cancellation/failure latches within the allocated files.
+- [ ] Reuse numeric decoding before terminal conversion; preserve unknown-not-zero evidence, response-local positions and original-price snapshots with all four literal goldens.
+- [ ] Implement and execute the frozen 8 API + 8 Core + 20 native tests and every vector; retain HTTP/Anthropic, WS/retry/prewarm/incremental, role, guard and transport-policy regressions.
+- [ ] Record receipt, actual outputs, counterexamples and limitations; return exact candidate for independent Fable review and receiving. Stop on changed scope.
+- [ ] Subsequent allocation: Chat/Corbanu, prewarm and auxiliary collection, legacy evidence acquisition and complete application coverage remain unqualified; anonymous365-day fencing is not permanent owner revocation or physical/cross-DB erasure. S03 stays draft.
 
 ## Verification
-- [ ] Apply [independent isolated execution](../../../../qa/code-blind-functional/isolated-execution.md) to affected functional handoff; record schema-2 proof or integrator-accepted internal-only N/A and later gate. Historical tests are not upgraded.
-- [x] B1:11 compact-value tests and four existing selectors passed; combined237 state/73 Task Node tests and normal-library check passed atc8d46d709. One non-accounting LEAK marker disclosed in manager handoff; no leak-clean claim.
-- [ ] Integration: from repo root, `python3 docs/plans/check.py; python3 docs/sprints/check.py`; `git diff --check`.
-- [ ] Resolve TUI applicability against the plan; record actual-key success, failure/cancel, recovery/resume and final binary evidence for every affected interactive path.
-- [ ] Record expected versus actual results and nonzero test counts; no unchecked assumption is converted into a pass.
+
+- [ ] Read [test isolation](../../../development/test-isolation.md); Rust tests use guarded `just test` only, no live profiles/credential store. Native prompt invalidates the run and stops successors/retries.
+- [ ] Scope-constrained fix/format precedes final affected tests; record nonzero names, counts, run IDs, matching JUnit, raw frame/POST/readback evidence and all failures.
+- [ ] Receiving manager reruns shared state/TaskNode-session and combined API/proxy gates; discover current counts instead of copying historical 634/63 results.
+- [ ] Run `python3 docs/plans/check.py`, `python3 docs/sprints/check.py` and `git diff --check` on the final tree.
+- [ ] Implementation's internal-only N/A requires named-integrator acceptance; later S03/S04 need [isolated functional execution](../../../../qa/code-blind-functional/isolated-execution.md), independent evidence review and true-TUI keys on the final package. This documentation freeze changes no interactive behavior.
 
 ## Exit evidence
 
-- [ ] Output commit/digest and input provenance recorded; checks linked to that final artifact/tree.
-- [ ] Named human/receiving owner accepts the bounded output; needed go/no-go decision is recorded.
-- [ ] Handoff includes changed scope, contracts, known gaps and required combined-tree evidence.
-- [ ] Done/Remaining ledgers updated honestly; archive accepted record under `docs/sprints/archive/portfolio-agent-cost-accounting/` and update plan backlinks.
+- [ ] Return exact commit/digest, manifest, size, input provenance and increment receipt with case-to-evidence mapping; distinguish worker from receiving results.
+- [ ] Named receiving owner accepts the bounded candidate after independent review and final combined-tree evidence; no human-test/live-provider/release readiness inferred.
+- [ ] Preserve Done/Remaining, review usage, failures and deferred coverage; full S02 completion/archive and S03 activation require all remaining obligations.
