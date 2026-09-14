@@ -12,6 +12,7 @@ class FacilityControlTests(unittest.TestCase):
         states = {
             "comfyui-ui.service": "active",
             "yue2-ui.service": "active",
+            "yue2-realaudio.service": "active",
             "ace-step-ui.service": "active",
             "minimax-music3-api.service": "inactive",
             "minimax-music3-ui.service": "active",
@@ -30,6 +31,7 @@ class FacilityControlTests(unittest.TestCase):
 
         self.assertEqual(remote.call_count, 2)
         self.assertEqual(records["comfyui"]["status"], "running")
+        self.assertEqual(records["yue2-realaudio"]["status"], "running")
         self.assertEqual(records["minimax-music3"]["status"], "initializing")
         self.assertFalse(records["minimax-music3"]["actions"]["start"])
         self.assertEqual(records["rvc"]["status"], "unreachable")
@@ -49,6 +51,23 @@ class FacilityControlTests(unittest.TestCase):
             code, payload = facility_control.action("rvc", "stop", key)
         self.assertEqual(code, 503)
         self.assertFalse(payload["ok"])
+
+    def test_realaudio_actions_control_only_the_separate_user_unit(self):
+        item = facility_control.facility_map()["yue2-realaudio"]
+        self.assertEqual(item["host"], "100.99.88.49")
+        self.assertEqual(item["service_units"], ("yue2-realaudio.service",))
+        self.assertEqual(facility_control.facility_map()["yue2"]["service_units"], ("yue2-ui.service",))
+        key = pathlib.Path("/tmp/unused-key")
+        for verb, state, code in (("start", "active", 0), ("stop", "inactive", 3)):
+            with self.subTest(verb=verb), patch.object(
+                facility_control, "_run_remote", side_effect=[([], None, 0), ([state], None, code)]
+            ) as remote:
+                ok, _ = facility_control._perform_action(item, verb, key)
+                self.assertTrue(ok)
+                self.assertEqual(remote.call_args_list[0].args,
+                                 ("100.99.88.49", key, ["systemctl", "--user", verb, "yue2-realaudio.service"]))
+                self.assertEqual(remote.call_args_list[1].args,
+                                 ("100.99.88.49", key, ["systemctl", "--user", "is-active", "yue2-realaudio.service"]))
 
     def test_action_requires_zero_exit_from_start_stop_command(self):
         item = next(item for item in FACILITIES if item["id"] == "comfyui")

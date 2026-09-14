@@ -85,6 +85,7 @@ class ControlTests(unittest.TestCase):
             body = control.facilities()
         for name, endpoint in (("ComfyUI", "http://100.99.88.49:8188/"),
                                ("YuE2 (YuE)", "http://100.99.88.49:7861/"),
+                               ("YuE2 Real Audio", "http://100.99.88.49:7867/"),
                                ("ACE-Step", "http://100.99.88.49:7862/"),
                                ("MiniMax Music 3", "http://100.99.88.49:7863/"),
                                ("RVC", "http://100.81.145.102:7865/"),
@@ -95,10 +96,14 @@ class ControlTests(unittest.TestCase):
                            "ace-step/ACE-Step-1.5", "RVC-Project/Retrieval-based-Voice-Conversion-WebUI"):
             self.assertIn(f'href="https://github.com/{repository}"', body)
         self.assertIn('href="https://huggingface.co/MiniMaxAI/MiniMax-Music3"', body)
-        self.assertIn("7 registered interfaces", body)
-        self.assertEqual(body.count('<article class="test facility-card"'), 7)
-        self.assertEqual(body.count('data-facility-action="start"'), 6)
-        self.assertEqual(body.count('data-facility-action="stop"'), 6)
+        self.assertIn('href="https://huggingface.co/Mothersuperior/yue2-mothersuperior-realaudio-tokenizer-v4"', body)
+        self.assertIn("authorized audio only", body)
+        self.assertIn("non-commercial (CC BY-NC 4.0)", body)
+        self.assertIn("8 registered interfaces", body)
+        self.assertIn("Live service status for 7", body)
+        self.assertEqual(body.count('<article class="test facility-card"'), 8)
+        self.assertEqual(body.count('data-facility-action="start"'), 7)
+        self.assertEqual(body.count('data-facility-action="stop"'), 7)
         self.assertIn('data-control-endpoint="http://127.0.0.1:8770"', body)
         self.assertIn("Live service status", body)
         self.assertIn("At a glance", body)
