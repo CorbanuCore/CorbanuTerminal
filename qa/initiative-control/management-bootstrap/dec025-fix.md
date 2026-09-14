@@ -51,3 +51,46 @@ human-test handoff. Browser visual/keyboard execution and independent DEC-025
 replay on the exact packaged candidate remain with the manager's qualification
 lane; no visual pass or human acceptance is claimed here. This change affects
 the static browser dashboard, with no terminal interaction changed. No push.
+
+## DEC-001 revision — dec025-fix-02
+
+- Allocation digest: `c144bdefbed236e9ff5538c1c9b96ae63ba5af111d386222bd4f8a3ae09bd89e`.
+  Claim: `6e0ba3a7-7919-47fc-8c17-edfb2eebe57e`.
+- Implementer: gpt-6-astra / high; 2026-09-14.
+- Worktree and branch: same as above.
+- Assigned base and actual starting HEAD:
+  `fcbc2ad3149f9c89460614a6715006b723919ad2`.
+- Classification: **bounded fix** under **Internal delivery control — TO BUILD**:
+  “linked sprint summaries, expandable issue context and an answerable question
+  only when a decision is needed.” No plan/sprint scope added.
+
+Frozen finding: code-blind DEC-001 on candidate `fcbc2ad31`, attempt
+`attempt-tpi7m6j1`, failed because the single-decision overview repeated the
+details summary and made the section identifier-heavy. DEC-025 on the same
+candidate, attempt `attempt-7s87v6yz`, passed with three decisions.
+
+The compact index now appears only with two or more open decisions. The return
+links use the same condition so single-decision cards do not point to a missing
+index. The single details card keeps its existing summary, context and selectors.
+The 40vh bound, keyboard-focusable panels, multiple-decision return links,
+permanent anchors and CSS from `d71a8ef14` are preserved.
+
+Regression coverage checks a single open or acknowledged decision at fresh and
+stale times, one open decision alongside resolved history, and the two-open
+threshold alongside that history. The existing three-decision long-context test
+continues to check owners, retained revisions, links and bounded panels.
+
+Validation:
+- Documented Python suite (exact command recorded above): **517 tests passed**,
+  0 failures/errors, exit 0, 277.591 seconds; includes 19 attention tests.
+- Non-failing ResourceWarnings occurred during implicit cleanup of synthetic
+  HTTP 500 and HTTP 429 error fixtures.
+- `git diff --check`: passed. CSS is unchanged.
+
+This revision is an implementation return to the Fable manager. Independent
+DEC-001 and DEC-025 execution/evidence review on the revised exact package remain
+in the manager's qualification lane; the prior candidate's results above are
+historical evidence, not passes for this revision. Browser acceptance and human
+sign-off are not claimed. Terminal/live-repository qualification and benchmarks
+are outside this bounded browser-rendering assignment; no release is requested.
+No push.
