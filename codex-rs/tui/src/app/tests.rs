@@ -159,6 +159,46 @@ macro_rules! assert_app_snapshot {
 }
 
 #[tokio::test]
+async fn modal_tui_input_handoff_accounts_for_keys_and_returns_queue_to_chat() {
+    use crossterm::event::KeyCode;
+    use crossterm::event::KeyEvent;
+    let keys = [
+        KeyCode::Char('f'),
+        KeyCode::Down,
+        KeyCode::Esc,
+        KeyCode::Char('x'),
+    ];
+    let source =
+        tokio_stream::iter(keys.map(|code| TuiEvent::Key(KeyEvent::new(code, KeyModifiers::NONE))));
+    let mut drained = spawn_tui_event_drainer(Box::pin(source));
+    {
+        let mut modal = modal_tui_events(&mut drained.rx, &drained.watchdog);
+        for expected in &keys[..3] {
+            let event = time::timeout(Duration::from_secs(2), modal.next())
+                .await
+                .expect("modal receives input")
+                .expect("key");
+            assert!(matches!(event, TuiEvent::Key(key) if key.code == *expected));
+        }
+    }
+    let event = drained
+        .rx
+        .recv()
+        .await
+        .expect("chat retains ownership after cancel");
+    drained.watchdog.note_handled();
+    assert!(matches!(event, TuiEvent::Key(key) if key.code == KeyCode::Char('x')));
+    assert_eq!(drained.watchdog.pending_events.load(Ordering::Relaxed), 0);
+    // Reopening after EOF does not create another terminal reader or hang.
+    assert!(
+        modal_tui_events(&mut drained.rx, &drained.watchdog)
+            .next()
+            .await
+            .is_none()
+    );
+}
+
+#[tokio::test]
 async fn tui_event_drainer_keeps_polling_during_in_process_event_flood() {
     let terminal_events = (0..512).map(|_| {
         TuiEvent::Key(crossterm::event::KeyEvent::new(
