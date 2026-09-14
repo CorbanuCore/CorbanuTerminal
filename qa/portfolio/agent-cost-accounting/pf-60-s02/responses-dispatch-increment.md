@@ -10,7 +10,14 @@ Worktree: /Volumes/CorbanuDrive/Corbanu/worktrees/accounting-responses-dispatch-
 Allocation: docs/research/agent-cost-accounting/responses-dispatch-allocation.md
 Date: September 14, 2026
 
-## Current return after manager-authorized continuation
+## Current return after corrected role disposition
+
+**385/385 focused tests pass, including all 34 new Responses cases.** The two
+historical role failures are resolved under the manager's corrected contract.
+Default OFF and the reserved built-in provider rule remain unchanged. Broader
+receiving gates and the previously disclosed partial-vector coverage remain open.
+
+## Historical return at 2fae3e962 after first continuation
 
 **Unqualified partial increment: 383/385 focused tests pass; two role cases fail.**
 The original twenty-first-path tooling STOP is resolved. No additional path is
@@ -205,7 +212,7 @@ passed. Its existing leaky case was
 accounting_actual_transport_retries_and_old_response_keep_distinct_owned_identity.
 The final run's passes do not erase those earlier outcomes.
 
-## Remaining blocker and receiving limitations
+## Historical blocker at 2fae3e962 and receiving limitations
 
 accounting_responses_role_overlay_preserves_binding fails before overlay in the
 native role loader: model_providers contains reserved built-in provider ID
@@ -229,7 +236,7 @@ execution remain open. No scope expansion or review approval is inferred.
 Collection remains default OFF. Internal-stage N/A still needs integrator
 acceptance; S03/S04 functional gates remain mandatory.
 
-## Final artifacts and bounds
+## Artifacts and bounds at 2fae3e962
 
 Authoritative final JUnit is
 /tmp/responses-dispatch-final-tests-actual-junit.xml, read from this worktree's
@@ -250,3 +257,56 @@ this receipt; only dedicated test/support bodies are classified as test. Total
 exceeds the 2700 target by 81; hard STOP bounds 3000/1150 remain unbreached.
 No new path, manifest/lock/BUILD/config-schema/protocol change or push.
 The return remains unqualified, with the concrete role-contract blocker above.
+
+## Second manager disposition: corrected role premise
+
+The manager explicitly corrected the two frozen cases: roles must NOT override
+the reserved built-in openai provider. Its configuration validator remains
+correct and out of scope. This disposition supersedes the earlier positive
+override requirement, not the validator. Only two allocated test files and this
+receipt changed after 2fae3e962; no production/configuration rule changed.
+
+The unit case now asserts reserved-provider parsing rejection and native role
+application rejection, unchanged provider/mode/ID, positive typed API-key
+eligibility, and successful built-in Responses binding with exact endpoint,
+provider, dialect, scope, request UUID and native owner. There is no successful
+role provider overlay in this proof.
+
+The native case uses a role containing only developer instructions. Its captured
+child request proves those instructions reloaded. Root plus two children reach
+four initial admitted sends, three owners and two native spawn edges. Closing
+the role child's stream forces a real native retry: five attempts total, linked
+to that child's predecessor with the same owner/request identity. Four usage
+observations complete; a native fork leaves the attempt set unchanged. All these
+assertions executed and passed, rather than stopping at the former deadline.
+
+All commands below use the same Rust prefix/working directory above; local
+profile still retries once. Logs are /tmp/responses-dispatch-role-<suffix>.
+
+| Command after prefix | Result / log suffix |
+| --- | --- |
+| just fix -p codex-core -p codex-api --locked | First exit 101, E0603 private ConfigToml import in revised test; fix-01.log. Corrected to existing public codex_config type. |
+| Same just fix command | Exit 0, 51.93s; fix-02.log. No sse/mod.rs edit. |
+| cargo fmt -p codex-core -p codex-api | Exit 0; fmt.log, before final tests. |
+| cargo fmt -p codex-core -p codex-api --check | Exit 0; fmt-check.log. Stable formatter configuration warnings retained. |
+| cargo nextest list -p codex-api -p codex-core -p codex-state -E 'test(accounting) \| package(codex-state)' --locked | Exit 0; list.log. Exactly 385 runnable names, including both revised cases. |
+| just test -p codex-core -p codex-api -p codex-state -E 'test(accounting) \| package(codex-state)' --test-threads 2 --locked | Exit 0; tests-01.log. 385 run, 385 passed, 0 failed, 3733 skipped; 30.510s; no flaky/leaky result reported. |
+| just clippy -p codex-core -p codex-api --locked | Exit 0, 1m51s; clippy.log. Existing dependency/test warnings retained. Final whitespace/scope and plan/sprint checks also pass (3 active/115 current/126 archived). |
+
+Final run ID: bab89c73-ad5b-4e70-a79d-f81e60e898ee. Matched JUnit:
+ /tmp/responses-dispatch-role-tests-01-junit.xml, copied from this worktree's
+codex-rs/target/nextest/local/junit.xml. API accounting 12/12; Core unit accounting
+27/27; Core native accounting 36/36; state 310/310. New cases: API 8/8, Core unit
+8/8, Core native 18/18. The earlier failure logs/XML-copy defects are preserved.
+
+Current artifact manifest: /tmp/responses-dispatch-role-final-manifest.json;
+current complete diff --stat: /tmp/responses-dispatch-role-final-stat.txt.
+Both use original base fda20ff3a34d8fbae3fde25a1b196b0c8809826e. Candidate file
+hashes, diff hash and raw log/JUnit hashes are in the manifest.
+Current counts: +2776/-95 = 2871 total / 1054 non-test / 1817 test, across 20 files.
+Targets 2700/1050 exceeded; hard STOP bounds 3000/1150 remain unbreached.
+Only the exact 20 allocated files differ from base;
+sse/mod.rs remains identical. No manifests, locks, BUILD files or public
+activation/configuration surfaces changed. No push or independent acceptance.
+The role blocker is resolved; previously listed broader receiving and functional
+gates remain open. Passing names do not qualify missing frozen vectors.

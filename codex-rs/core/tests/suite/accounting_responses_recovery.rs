@@ -350,7 +350,7 @@ async fn accounting_responses_native_spawned_role_children() -> anyhow::Result<(
             let role = config.codex_home.join("responses-child.toml");
             std::fs::write(
                 &role,
-                "[model_providers.openai]\nname = \"fixture child\"\nrequest_max_retries = 0\n",
+                "developer_instructions = \"responses role fixture\"\n",
             )
             .unwrap();
             config.agent_roles.insert(
@@ -417,6 +417,27 @@ async fn accounting_responses_native_spawned_role_children() -> anyhow::Result<(
         assert_eq!(parent, test.session_configured.thread_id.to_string());
         assert!(owners.contains(&codex_protocol::ThreadId::from_string(&child)?));
     }
+    let role_index = held
+        .iter()
+        .position(|request| request.body.to_string().contains("responses role fixture"))
+        .expect("reloaded role instructions in a native child request");
+    drop(held.remove(role_index)); // EOF forces the role child's native stream retry.
+    let retried = gate.next().await?;
+    assert!(retried.body.to_string().contains("responses role fixture"));
+    let retries = attempts(&db).await?;
+    assert_eq!(retries.len(), 5);
+    assert!(records.iter().all(|attempt| attempt.retry_of.is_none()));
+    let retry = retries.last().unwrap();
+    let predecessor = records
+        .iter()
+        .find(|attempt| Some(attempt.attempt_id) == retry.retry_of)
+        .expect("child retry references its own admitted predecessor");
+    assert_ne!(retry.thread_id, test.session_configured.thread_id);
+    assert_eq!(
+        (retry.thread_id, retry.request_id),
+        (predecessor.thread_id, predecessor.request_id)
+    );
+    held.push(retried);
     for held in held {
         held.chunks.send(success(usage(Some(0)))).await?;
     }

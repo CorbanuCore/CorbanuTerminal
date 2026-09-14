@@ -297,12 +297,12 @@ async fn accounting_responses_response_local_identity() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn accounting_responses_role_overlay_preserves_binding() -> anyhow::Result<()> {
-    let _ = tracing_subscriber::fmt().with_test_writer().try_init();
+    let fixture = Fixture::new().await?;
     let mut config = crate::config::test_config().await;
     config.model_provider_id = "openai".into();
     config.model = Some("gpt-5.6-sol".into());
     config.model_provider = provider();
-    config.accounting = mode();
+    config.accounting = fixture.deferred.mode.clone();
     let role = config.codex_home.join("responses-role.toml");
     std::fs::create_dir_all(config.codex_home.as_path())?;
     std::fs::write(
@@ -317,28 +317,37 @@ async fn accounting_responses_role_overlay_preserves_binding() -> anyhow::Result
             nickname_candidates: None,
         },
     );
-    let mode = config.accounting.clone();
-    let expected = ModelProviderInfo {
-        name: "fixture role".into(),
-        request_max_retries: Some(0),
-        stream_idle_timeout_ms: Some(9876),
-        supports_websockets: true,
-        ..provider()
-    };
-    crate::agent::role::apply_role_to_config(&mut config, Some("fixture"))
-        .await
-        .map_err(anyhow::Error::msg)?;
-    assert_eq!(config.model_provider, expected);
-    assert_eq!(config.accounting, mode);
-    std::fs::write(
-        &role,
-        "[model_providers.openai]\nname = \"fixture role\"\nwire_api = \"anthropic\"\n",
-    )?;
+    let parse_error =
+        toml::from_str::<codex_config::config_toml::ConfigToml>(&std::fs::read_to_string(&role)?)
+            .unwrap_err()
+            .to_string();
+    assert!(parse_error.contains("reserved built-in provider IDs: `openai`"));
     assert!(
         crate::agent::role::apply_role_to_config(&mut config, Some("fixture"))
             .await
             .is_err()
     );
-    assert_eq!(config.model_provider, expected);
+    assert_eq!(config.model_provider, provider());
+    assert_eq!(config.model_provider_id, "openai");
+    assert_eq!(config.accounting, fixture.deferred.mode);
+    assert!(eligible(&config.model_provider, Some(&auth())));
+    let endpoint = format!("{ENDPOINT}/responses");
+    let sampling = fixture
+        .deferred
+        .resolve(&config.model_provider, Some(&auth()), &endpoint)
+        .await?
+        .expect("built-in API-key Responses binding");
+    assert_eq!(sampling.endpoint, endpoint);
+    assert_eq!(sampling.provider, "openai");
+    assert_eq!(
+        sampling.dialect,
+        codex_state::accounting::Dialect::Inclusive
+    );
+    assert_eq!(sampling.request, fixture.deferred.request);
+    assert_eq!(sampling.owner, fixture.deferred.session.thread_id);
+    let AccountingMode::DirectOpenAiResponsesHttp { scope, .. } = config.accounting else {
+        unreachable!("fixture Responses mode")
+    };
+    assert_eq!(sampling.scope, scope);
     Ok(())
 }
