@@ -342,6 +342,12 @@ Experimental clients that want the live resume subscription plus a turns page in
 
 By default, resume uses the latest persisted `model` and `reasoningEffort` values associated with the thread. Supplying any of `model`, `modelProvider`, `config.model`, or `config.model_reasoning_effort` disables that persisted fallback and uses the explicit overrides plus normal config resolution instead.
 
+Without explicit model or tier overrides, resume also restores the latest matching
+durable `serviceTier`. Legacy sessions without a recorded tier use standard
+routing, not the current global new-session tier. Explicit `serviceTier`
+(including `null`) or `config.service_tier` still takes precedence. Unsupported
+explicit tiers retain normal warning-and-omission handling.
+
 Example:
 
 ```json

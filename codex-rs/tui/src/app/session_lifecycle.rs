@@ -1055,17 +1055,20 @@ impl App {
             self.chat_widget.thread_name(),
             self.chat_widget.rollout_path().as_deref(),
         );
+        let model_settings = self.resume_model_settings();
         match app_server
             .resume_thread(
                 resume_config.clone(),
                 target_session.thread_id,
-                self.resume_model_settings(),
+                model_settings,
                 self.resume_permission_settings(),
             )
             .await
         {
             Ok(resumed) => {
                 let resumed_thread_id = resumed.session.thread_id;
+                let resumed_session = resumed.session.clone();
+                let remember_model = !resumed.blocks_direct_input;
                 self.shutdown_current_thread(app_server).await;
                 apply_persisted_resume_runtime(
                     &mut resume_config,
@@ -1073,6 +1076,7 @@ impl App {
                     resumed.session.model_provider_id.as_str(),
                     resumed.session.reasoning_effort.clone(),
                 );
+                resume_config.service_tier = resumed.session.service_tier.clone();
                 self.config = resume_config;
                 tui.set_notification_settings(
                     self.config.tui_notifications.method,
@@ -1090,6 +1094,19 @@ impl App {
                     .await
                 {
                     Ok(()) => {
+                        if remember_model
+                            && let Err(error) = super::resume_defaults::remember_resumed_model(
+                                app_server,
+                                &self.config,
+                                model_settings,
+                                &resumed_session,
+                            )
+                            .await
+                        {
+                            self.chat_widget.add_error_message(format!(
+                                "Session restored, but failed to save its startup model: {error}"
+                            ));
+                        }
                         self.backfill_loaded_subagent_threads(app_server).await;
                         if let Some(summary) = summary {
                             let mut lines: Vec<Line<'static>> = Vec::new();
