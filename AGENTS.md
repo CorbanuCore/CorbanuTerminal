@@ -89,6 +89,16 @@ from plan prose.
 - Plans maintain a sprint execution map for every feature. Run
   `python3 docs/sprints/check.py` before implementation handoff and in CI.
 
+## Automated-test credential isolation
+
+Use `just test` for ordinary Rust tests, including manager, scheduled and
+subagent verification runs. Read [safe automated tests](docs/development/test-isolation.md)
+before launching a test campaign. Fixture children must not inherit live profile
+aliases or access the operator's native credential store. A native prompt or
+live-profile read stops successor/retry dispatch and invalidates that run; never
+ask the operator to authorize test binaries against their personal Keychain.
+Native/packaged credential qualification requires the separate isolated lane.
+
 ## Interactive product proof
 
 A user-facing interactive feature is not complete until the final built

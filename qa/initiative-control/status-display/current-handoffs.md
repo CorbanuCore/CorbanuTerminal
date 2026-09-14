@@ -1,5 +1,15 @@
 # Current workstream handoffs — September 12
 
+## September 14 correction — overnight Keychain prompts
+
+The first PF-83 verification run inherited the live Corbanu home and generated
+100 native-Keychain prompt requests from separate test app-server processes.
+The earlier “unlock the Mac” explanation below is incomplete and must not be
+used as a recovery instruction. Preserve the contaminated run, stop unsafe
+retries, and use [the guarded test procedure](../../../docs/development/test-isolation.md).
+[Repair scope and qualification](../../reliability/test-keychain-isolation-20260914.md)
+do not close PF-83's separate functional gate or resume paused product work.
+
 ## Management takeover — September 14 01:40 UTC (Fable 5.1 High)
 
 Fable took over management/integration under the authorized PF-80-S01 bootstrap

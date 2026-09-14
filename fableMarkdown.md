@@ -1,5 +1,11 @@
 # Fable: Corbanu management takeover
 
+September 14 test-safety amendment: before any verification campaign, follow
+[safe automated tests](docs/development/test-isolation.md). Use the guarded
+`just test` entry point; a native credential prompt or live-profile read stops
+successor/retry dispatch. Do not ask Travis to unlock/authorize his personal
+Keychain for test binaries. Native qualification uses a separate isolated lane.
+
 Operator handoff consolidated September 13, 2026. Read this as the brief for
 **Fable 5.1 High taking over management, integration and execution coordination**,
 not as instructions to remain a passive adviser to Astra. Travis is the human

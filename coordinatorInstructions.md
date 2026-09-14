@@ -1,5 +1,11 @@
 # Corbanu Workstream Coordinator
 
+September 14 test-safety amendment: before any verification campaign, follow
+[safe automated tests](docs/development/test-isolation.md). Use the guarded
+`just test` entry point; a native credential prompt or live-profile read stops
+successor/retry dispatch. Do not ask Travis to unlock/authorize his personal
+Keychain for test binaries. Native qualification uses a separate isolated lane.
+
 Consolidated coordinator prompt and operator handoff, September 13, 2026.
 User-authorized process documentation; not a claim that the new orchestration
 runtime or the complete Slack workflow is already qualified.
