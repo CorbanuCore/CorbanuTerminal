@@ -521,7 +521,7 @@ Authenticated Fable High review wrapper:
 
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/pf27-resume-20260911/review-fable-high`
 
-Model `claude-fable-5-1-plan`, provider `claude-plan`, effort `high`.
+Model `claude-opus-5-plan` (Opus 5.0 High; Travis directive 2026-09-14 replacing `claude-fable-5-1-plan`), provider `claude-plan`, effort `high`.
 The wrapper privately loads authentication but hardcodes a shared review home
 and temporary directory. It is a reference, not a qualified fresh-manager launcher.
 Do not overwrite it or copy its old conversation state into a manager run.
@@ -623,7 +623,7 @@ existing state. This owner-invoked bridge is not yet a recurring service.
 
 Existing review integration uses the Python helper
 `/Users/Neo/.codex/skills/autoreview/scripts/autoreview`, engine `codex`, the
-Corbanu wrapper through `--codex-bin`, model `claude-fable-5-1-plan` and
+Corbanu wrapper through `--codex-bin`, model `claude-opus-5-plan` (Opus 5.0 High since 2026-09-14) and
 `--thinking high`. Read its skill and verify current helper/binary compatibility
 before execution. Supply exact scope/base, prompt and separate text/JSON/log/exit
 artifacts; historical invocation is not proof that later helper versions work.

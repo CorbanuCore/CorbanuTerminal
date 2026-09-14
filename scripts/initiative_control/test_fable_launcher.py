@@ -319,7 +319,7 @@ emit(records[0])
 tty.setcbreak(sys.stdin.fileno())
 def screen(text):
     print("\x1b[2J\x1b[H" + text, flush=True)
-header = "Corbanu Terminal | tok/s\nmodel: claude-fable-5-1-plan high"
+header = "Corbanu Terminal | tok/s\nmodel: MODEL_SLUG high"
 providers = "Providers\nConfigure providers and control whether they are eligible for use.\n"
 screen("Corbanu Terminal | tok/s\nmodel: loading")
 time.sleep(0.15)
@@ -408,7 +408,7 @@ while True:
 class RealTmux(Fixture, unittest.TestCase):
     def make_args(self, mode="good", timeout=8):
         binary = self.root / "fake"
-        source = FAKE.replace("INTERPRETER", sys.executable).replace("MODE", repr(mode)).replace(
+        source = FAKE.replace("INTERPRETER", sys.executable).replace("MODEL_SLUG", f.MODEL).replace("MODE", repr(mode)).replace(
             "RECORDS", repr(sequence(Path("/packet"))))
         f.write_file(binary, source, 0o700)
         return argparse.Namespace(briefing=self.brief, runs_dir=self.root, binary=binary,
