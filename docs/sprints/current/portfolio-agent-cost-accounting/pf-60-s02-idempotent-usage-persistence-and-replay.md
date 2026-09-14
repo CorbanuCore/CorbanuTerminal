@@ -1,20 +1,20 @@
 ---
 sprint_id: "PF-60-S02"
 title: "Idempotent usage persistence and replay"
-status: blocked
+status: in_progress
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 2
-owner: "Codex accounting contract-golden lane"
-parallel_lane: "accounting-contract-goldens"
-write_scope: "codex-rs/state/tests/accounting_contract_golden.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/original-contract-native-golden.md"
-integration_gate: "Compact import reviewed/received81d0f90e7; parent595shared/100Core/20focused/6external and format/Clippy/check PASS, old failures retained. Next exact two-path original-contract-native-golden-allocation.md target800/150 STOP900/200; one material review+necessary correction, manager receiving. S02 open, S03 dependent, collection OFF."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-contract-goldens-20260913"
-branch: "workstream/accounting-contract-goldens-20260913"
-base_commit: "81d0f90e77c1e9217a16e70fef1019ff9aa13753"
+owner: "Astra High accounting Responses-dispatch lane (Fable manager receiving)"
+parallel_lane: "accounting-responses-dispatch"
+write_scope: "codex-rs/core/src/config/mod.rs, codex-rs/core/src/agent/role.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/client.rs, codex-rs/core/src/accounting.rs, codex-rs/core/src/accounting_transport.rs, codex-rs/core/src/accounting_prices.rs, codex-rs/core/src/accounting_prices_tests.rs, codex-rs/core/tests/suite/mod.rs, codex-rs/codex-api/src/lib.rs, codex-rs/codex-api/src/endpoint/responses.rs, codex-rs/codex-api/src/sse/responses.rs, codex-rs/core/src/accounting_responses.rs, codex-rs/core/src/accounting_responses_tests.rs, codex-rs/codex-api/src/endpoint/responses_accounting.rs, codex-rs/codex-api/src/endpoint/responses_accounting_tests.rs, codex-rs/core/tests/suite/accounting_responses.rs, codex-rs/core/tests/suite/accounting_responses_recovery.rs, codex-rs/core/tests/suite/accounting_responses_support.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/responses-dispatch-increment.md"
+integration_gate: "Original-contract goldens f4507cb50 received; combined 626 passed at 855ab3382. Next: responses-dispatch-allocation.md, 20 literal files, target 2700/1050 STOP 3000/1150; one independent Fable review + necessary correction; manager receiving with focused nonzero selectors, combined core/api/state tests, fmt/clippy/check. S02 open, S03 dependent, collection OFF."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-responses-dispatch-20260914"
+branch: "workstream/accounting-responses-dispatch-20260914"
+base_commit: "25920ec8d17f3f8eb17cdb89f90892ca5848ae22"
 depends_on: "PF-60-S01"
 created: 2026-09-09
-updated: 2026-09-12
+updated: 2026-09-14
 ---
 
 # PF-60-S02 — Idempotent usage persistence and replay
@@ -40,9 +40,9 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 
 ## Code boundaries
 
-- Existing, read before work: `codex-rs/state/migrations/0041_provider_request_cache_usage.sql`; `codex-rs/app-server/src/request_processors/token_usage_replay.rs`; `codex-rs/tui/src/chatwidget/usage.rs`; `codex-rs/tui/src/token_usage.rs`.
-- Output: exact two test/receipt paths in front matter; no accepted-file/runtime/manifest/lock/Core writes. No overlap with PF27 or Slack. Bounds/review allowance are in the original-contract golden allocation.
-- Tests/evidence: preserve A/B/C1/C2/native assertions, failures and receipts. Public delete signatures/counts/missing-row semantics and normal no-schema behavior stay unchanged, no blanket activation/failure checks. Normal-library facade gates fixture constructors cfg(test); default installs/collects nothing, installed-store deletion remains atomic even disabled. Separate logs/memory/goals stores remain outside main-state atomicity. No dependencies or real collectors.
+- Existing, read before work: `docs/research/agent-cost-accounting/responses-dispatch-allocation.md`, `docs/research/agent-cost-accounting/contract.md`, `qa/portfolio/agent-cost-accounting/pf-60-s02/anthropic-dispatch-increment.md`, `codex-rs/core/src/accounting.rs`, `codex-rs/core/src/accounting_transport.rs`, `codex-rs/codex-api/src/sse/responses.rs`.
+- Output: exactly the 20 literal paths in front matter (12 existing edits, 8 new files including the increment receipt); target 2700 total/1050 non-test, STOP 3000/1150 or any added path. Manager retains core/Cargo.toml, Cargo.lock, MODULE.bazel.lock, BUILD files, plan/sprint/allocation documents. No overlap with PF-27's seven preflight paths, responses-api-proxy, or Slack scripts.
+- Tests/evidence: preserve every accepted Anthropic assertion, receipt and failed-run record; default OFF with no TOML/CLI/env/Feature/TUI activation; API-key direct Responses HTTP only; no-redirect endpoint binding; unknown-not-zero token presence; immutable price snapshots. Prior two-path original-contract golden boundaries are consumed history, not current authorization.
 
 ## Preconditions
 
