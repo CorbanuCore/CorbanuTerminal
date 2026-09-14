@@ -1,6 +1,7 @@
 import copy
 import unittest
 from html.parser import HTMLParser
+from pathlib import Path
 
 import attention
 
@@ -145,7 +146,34 @@ class DecisionRenderingTests(unittest.TestCase):
                     self.assertIn('class="decision-body-bounded" tabindex="0" role="region"', page)
                     self.assertIn('href="#decision-choice-1">Permanent decision link</a>', page)
 
-    def test_dec025_long_context_keeps_all_owners_in_index_and_bounded_cards(self):
+    def test_dec002_full_page_flow_and_dec025_sticky_index_styles(self):
+        css = Path(attention.__file__).with_name("style.css").read_text()
+        body = css.split(".decision-body-bounded{", 1)[1].split("}", 1)[0]
+        properties = dict(rule.split(":", 1) for rule in body.split(";") if rule)
+        for name in ("height", "max-height", "overflow", "overflow-y", "scrollbar-gutter"):
+            self.assertNotIn(name, properties)
+        self.assertNotIn("40vh", css)
+        self.assertEqual(css.count(".decision-body-bounded{"), 1)
+        self.assertIn(".decision-body-bounded:focus-visible{outline:", css)
+        index = css.split(".decision-index{", 1)[1].split("}", 1)[0]
+        properties = dict(rule.split(":", 1) for rule in index.split(";") if rule)
+        self.assertEqual(properties["position"], "sticky")
+        self.assertEqual(properties["top"], "0")
+        self.assertGreater(int(properties["z-index"]), 0)
+        for count in (0, 1, 2, 3):
+            with self.subTest(open_decisions=count):
+                value = copy.deepcopy(self.value)
+                value["decisions"] = []
+                for number in range(count):
+                    decision = copy.deepcopy(self.value["decisions"][0])
+                    decision["id"] = f"choice-{number}"
+                    value["decisions"].append(decision)
+                page = self.render(value)
+                self.assertEqual(page.count('class="decision-index"'), int(count >= 2))
+                self.assertEqual(page.count('href="#open-decision-index"'),
+                                 count if count >= 2 else 0)
+
+    def test_dec025_long_context_keeps_all_owners_in_index_and_full_cards(self):
         from test_decisions import revision
         self.value = revision(self.value, "acknowledged")
         template = self.value["decisions"][0]

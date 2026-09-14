@@ -94,3 +94,52 @@ historical evidence, not passes for this revision. Browser acceptance and human
 sign-off are not claimed. Terminal/live-repository qualification and benchmarks
 are outside this bounded browser-rendering assignment; no release is requested.
 No push.
+
+## DEC-002 revision — dec025-fix-03
+
+- Allocation digest: `0935453563b2d91adf56cb11d6adbe5c6b702c927eff7a60b81f8adddf002cae`.
+  Claim: `7f00950a-6ae9-4e26-8d37-61fa25681220`.
+- Implementer: gpt-6-astra / high; 2026-09-14.
+- Worktree and branch: same as above.
+- Assigned base and actual starting HEAD:
+  `d8d8e3516ecd6e8f74d0f484db0abf29102cc662`.
+- Classification: **bounded fix** under **Internal delivery control — TO BUILD**:
+  “linked sprint summaries, expandable issue context and an answerable question
+  only when a decision is needed.” No plan/sprint scope added.
+
+Frozen finding: code-blind DEC-002 on candidate `d8d8e3516`, attempt
+`attempt-ie37kvk2`, failed because the expanded body was clipped at 40vh and
+required inner scrolling unavailable to the page-scroll/key actor. Choices,
+recommendation, question and evidence were not visually exposed. DEC-025 on
+that candidate, attempt `attempt-q27z3wg0`, passed with the compact overview.
+
+Expanded content now occupies normal page flow: removed the body's max-height,
+overflow and scrollbar-gutter declarations. The existing
+`decision-body-bounded` selector is retained for compatibility but no longer
+bounds height or creates an inner scroll region. Its focusability, named region,
+focus outline, return links and all other selectors remain unchanged.
+The compact overview still appears only for at least two open decisions; CSS
+`position:sticky;top:0` keeps it at the viewport top while scrolling its
+open-decisions group. Its opaque background and stacking order keep it legible.
+Print uses a static index. Rendering logic and CSP are unchanged; no JavaScript
+was added.
+
+Regression coverage checks the absence of body height/overflow constraints,
+preserved focus styling, sticky positioning and the index/return-link threshold
+with zero, one, two and three open decisions. Existing long-context assertions
+retain complete evidence and revision content, owners, links and focus targets.
+
+Validation:
+- Documented Python suite (exact command recorded above): **543 tests passed**,
+  0 failures/errors, exit 0, 293.061 seconds.
+- Non-failing ResourceWarnings occurred during implicit cleanup of synthetic
+  HTTP 500 and HTTP 429 error fixtures.
+- `git diff --check`: passed.
+
+This is an implementation return to the Fable manager. Independent browser
+execution of DEC-002 and DEC-025 (including page scrolling and index navigation)
+and evidence review on the revised exact package remain in the manager's
+qualification lane. Prior attempts are preserved as historical results, not
+passes for this revision. No browser acceptance or human sign-off is claimed.
+No terminal flow changed; live-repository qualification and benchmarks remain
+outside this bounded browser assignment. No release or push.
