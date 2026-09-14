@@ -40,11 +40,88 @@ identity. Report/queue files are owner-only metadata, not encrypted storage.
 
 The inherited `flush` remains a **batch operation, up to 20 eligible events**.
 `flush --event-id` is explicitly rejected; it cannot masquerade as a one-event
-send. No live single-event sender is introduced in this slice. The timer's
-existing delivery path requires literal `enabled: true` and local enrollment;
+send. The separate guarded sender below requires batch posting to remain OFF.
+The timer's existing delivery path requires literal `enabled: true` and local enrollment;
 absent/false enablement remains OFF. Keep posting OFF throughout preparation.
 The inherited enrollment/flush/activation entry points are retained for source
 compatibility, but invoking them against live state is outside this slice.
+
+## Single-event readiness candidate (not live-qualified)
+
+The PF-80 readiness allocation adds `send --state STATE --event-id EXACT_CC_ID`
+with exactly one of `--dry-run` or `--live`. This is internal implementation
+evidence, not shipped guidance or authority to post. Dry-run validates the
+immutable schema/hash and explicit PF-80-S01 mapping, returns a logical request
+digest and gate observations, and performs no writes or credential reads.
+
+Live mode additionally requires `--owner-activation-file FILE` and
+`--credentials-file FILE`. It keeps `tasknode.enabled: false` (batch OFF),
+requires local enrollment, a pending fresh observation, elapsed backoff, and
+matching current workspace/mapping. It never calls flush, enqueue or retry and
+never changes the outbox/index/config/enrollment. Exactly one request goes to
+the fixed production events endpoint, with the immutable event ID as its
+idempotency key. The inherited batch transport is unchanged.
+
+The activation file must be a regular file owned by the executing OS user with
+no group/other permissions. The manager supplies this exact schema:
+
+```json
+{
+  "schema": 1,
+  "owner": "NAMED_OWNER",
+  "enabled": true,
+  "event_id": "EXACT_CC_ID",
+  "request_digest": "DIGEST_FROM_DRY_RUN",
+  "workspace_id": "EXACT_WORKSPACE",
+  "task_ids": ["EXPLICIT_PF80_TARGET"],
+  "origin": "https://tasknode.postfiat.org",
+  "expires_at": "OWNER_SELECTED_EXPIRY_WITH_TIMEZONE",
+  "gates": {
+    "identity": true,
+    "entitlement": true,
+    "enrollment": true,
+    "target_lifecycle": true,
+    "payload_review": true
+  }
+}
+```
+
+These are owner attestations, not independent server proof. Local files do not
+authenticate the named human or fence credential rotation. Only the trusted
+manager may provision activation/credentials after the remaining native identity,
+destination/visibility, entitlement, lifecycle, payload and recovery gates pass.
+No activation or real credentials were created in this allocation.
+
+`send-receipts/CC_ID.intent.json` is exclusively created and fsynced before
+transport. `CC_ID.result.json` is another create-once receipt with logical
+request digest (excluding credentials), idempotency key, HTTP status and
+allowlisted response facts: success boolean, matching event ID, deletion flag.
+Raw responses, error bodies and credentials are never recorded. Receipts are
+owner-only, append-only by this adapter; this is not protection against the OS
+owner modifying files. Do not delete them, copy them across account scopes, or
+enable batch delivery over these retained queue records.
+
+A retry revalidates gates and returns the prior receipt without another POST.
+A missing result, timeout, rejection, malformed response or crash stays uncertain
+and requires manager reconciliation. Even an intent written before a crash that
+preceded HTTP blocks retransmission. The server's existing account/event-ID
+deduplication remains authoritative; the HTTP header alone is not delivery proof.
+Dry-run creates no receipt.
+
+`identity-check` takes no state or write flags and prints a redacted JSON receipt.
+It resolves the installed helper while preserving inherited home/profile,
+checks `tasknode --help` for profile support, then uses only `link status`,
+`status`, and `task show` for the three documented personal targets. Missing
+or conflicting scope, unsupported helper, mismatched origin/profile, command
+failure, timeout or observed native credential prompt stops successor reads.
+Never authorize a native prompt. Unknown task shapes/states remain unverified.
+It does not invoke balance, wallet, acceptance, signing, enrollment or posting.
+The current read-only CLI does not expose authoritative Tracker entitlement or
+enrollment, so both remain explicitly unverified; successful status is not proof.
+
+For this allocation use the SDK Python suite recorded in the
+[readiness evidence](../../qa/initiative-control/management-bootstrap/tasknode-readiness-20260914.md).
+Synthetic fixtures exercise delivery; do not invoke `--live` against real state.
 
 ## Source and history boundaries
 
