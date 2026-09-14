@@ -29,6 +29,17 @@ FACILITIES = (
         "service_units": ("yue2-ui.service",),
     },
     {
+        "id": "yue2-realaudio",
+        "name": "YuE2 Real Audio",
+        "machine": "RTX PRO 6000",
+        "purpose": "Audio tokenization and optional reconstruction · short-clip smoke tested · authorized audio only · non-commercial (CC BY-NC 4.0)",
+        "url": "http://100.99.88.49:7867/",
+        "upstream": "https://huggingface.co/Mothersuperior/yue2-mothersuperior-realaudio-tokenizer-v4",
+        "host": "100.99.88.49",
+        "service_units": ("yue2-realaudio.service",),
+        "detail": "Separate from stock YuE2; on-demand GPU workers. Artist training is not qualified.",
+    },
+    {
         "id": "ace-step-rtx",
         "name": "ACE-Step",
         "machine": "RTX PRO 6000",
@@ -88,7 +99,7 @@ def facilities():
              'the dashboard host never stores machine passwords. An unavailable machine remains unavailable rather than being '
              'treated as stopped.</aside>')
     body += ('<section data-facilities-root data-control-endpoint="http://127.0.0.1:8770">'
-             '<div class="section-title"><h2>Machine interfaces</h2><span>7 registered interfaces · Live service status for 6 · refreshes every 15 seconds</span></div>'
+             '<div class="section-title"><h2>Machine interfaces</h2><span>8 registered interfaces · Live service status for 7 · refreshes every 15 seconds</span></div>'
              '<div class="test-grid">')
     for item in FACILITIES:
         detail = item.get("detail", "Service status and controls are provided by the local operator bridge.")
