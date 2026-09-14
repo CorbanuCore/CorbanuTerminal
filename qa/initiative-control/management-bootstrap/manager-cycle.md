@@ -41,10 +41,14 @@ unconsumed scopes, pending actions, and recursively loaded original evidence key
 by verified digest. Action records retain identity, kind, workstream, sprint, status,
 rationale, allocation identity/digest, other lifecycle metadata and reference digests.
 Terminal actions (`accepted`, `failed`, `cancelled`) omit inline inputs and expansion
-of dispatch/ACK/result/verification references, except when both in the last three
-and represented by a status transition in the selected pending event batch. This
-exception supplies their exact inputs (or the existing lossless allocation index)
-and recursively verified originals. Owner failure/cancellation proofs remain expanded.
+of dispatch/ACK/result/verification/owner-failure/owner-cancellation references,
+except when both in the last three and represented by a status transition in the
+selected pending event batch. This exception supplies their exact inputs (or the
+existing lossless allocation index) and recursively verified originals. Compacted
+actions retain the core-stored result, verification, owner_failure and
+owner_cancellation previews, each at most 400 characters, so later managers can
+read partial outcome context after the transition batch is consumed. These previews
+are untrusted partial context and do not replace the omitted full originals.
 Allocations with literal `inputs.consumed == true` retain metadata and only
 `{"consumed":true}` as inputs; active actions never index into compact allocation
 inputs. Other allocation scopes and non-terminal action inputs remain exact.
@@ -63,7 +67,10 @@ lists reference roots whose originals were not expanded elsewhere. Unloaded root
 also identify their unexpanded descendants; they are not fetched just to enumerate
 omissions. This is unavailable context, never a success claim. The untouched core
 packet remains in `claim.json`. Derived previews are removed only at known reference
-positions. No original is shortened or summarized. Missing/corrupt retained evidence,
+positions, except for the four compacted outcome fields above. Compacted action
+references do not load originals; a shared reference still expands when required by
+a selected event or another retained source. No original is shortened or summarized.
+Missing/corrupt retained evidence,
 excessive retained reference count, or a briefing exceeding the unchanged 65536
 encoded bytes produces an owner hold before authentication/inference, with pending
 events and the claim retained.
@@ -298,3 +305,53 @@ passing replay. Whitespace checks pass. The scope blocker is resolved; the
 synthetic briefing measurement remains **245123 → 7197 bytes** with the unchanged
 65536-byte production limit. Parent still owns live-manager acceptance; no push
 or release is claimed.
+
+### September 14 terminal outcome preview repair
+
+Action `briefing-previews-01`, allocation digest
+`6557ec41aaf752d415cce0cd20dab53694e2d2e43891fae22b95489c86fa10e6`.
+Bounded internal reliability follow-up to accepted compaction `673773188`, review P3,
+under **Internal delivery control — TO BUILD**: “fresh Fable 5.1 High management
+through Corbanu/TMUX; durable event dispatch”. Assigned branch
+`bootstrap/previews-20260914`, worktree
+`/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-previews-20260914`, base
+`a51602037877d7dfdcdd626fe39de26a6379b8d2`.
+
+The four terminal outcome previews now survive compaction after a transition batch
+is consumed. Owner failure/cancellation originals follow the same omission rules
+as result/verification originals. Selected-event and other retained-source evidence
+still expands fully, including shared references; omission digests describe only
+unexpanded roots. The core packet is unchanged and previews are copied as stored,
+without loading or summarizing omitted originals.
+
+The unchanged `BriefingSizeTests.large_packet` measures **7197 → 9928 bytes**
+(**+2731 bytes**, including the directive change) by loading the assigned base
+module in memory and passing both versions the same synthetic packet. No encoder
+ceiling was bypassed; production `BRIEF_LIMIT` remains **65536 bytes**.
+Two new regression tests cover all three terminal statuses, all four outcome
+fields, consumed-transition behavior, forbidden original reads and bounded
+Unicode preview growth. Existing terminal/shared-evidence expectations are updated.
+Against the base module, the two new tests produce three expected status-subcase
+failures and one expected oversized-briefing error; against the repair they pass.
+
+Focused SDK command: the full-discovery environment above with
+`-m unittest manager_cycle_test test_manager_cycle`: **48/48 passed in 1.749s**.
+Internal serialization only: the prior internal-only functional/TUI N/A applies.
+The parent retains fresh-manager replay, independent evidence review and later
+applicable functional/release qualification. No live state or credentials were
+used; no push or release is authorized by this repair.
+
+Final full-suite command:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 \
+PYTHONPATH=scripts/initiative_control:/Volumes/CorbanuDrive/Corbanu/.codex-work/initiative-control.oGQGyA/venv/lib/python3.14/site-packages \
+/Volumes/CorbanuDrive/Corbanu/.codex-work/slack-sdk-test.Ob3i5O/venv/bin/python -B \
+-m unittest discover -s scripts/initiative_control -p '*test*.py'
+```
+
+**496/496 passed in 275.159s**, zero failures, errors or skips, including
+`test_fable_launcher.RealTmux`. No replay was needed. Python emitted two cleanup
+ResourceWarnings for synthetic HTTP 500/429 error fixtures; the suite exited zero.
+All implementation/test edits preceded this run; only this result was appended
+afterward. `git diff --check` passed.

@@ -238,14 +238,9 @@ class CycleTests(unittest.TestCase):
         brief = m.load_json(Path(result["artifacts"]) / "briefing.json")
         self.assertEqual(["1", "2", "3"], [a["id"] for a in brief["last_three_actions"]["delivery"]])
         self.assertEqual("z" * 800, brief["original_evidence"][reference["evidence_digest"]]["original"])
-        self.assertNotIn("preview", brief["actions"]["3"]["result"])
+        self.assertEqual(reference, brief["actions"]["3"]["result"])
         claim = m.load_json(Path(result["artifacts"]) / "claim.json")
-        for key, action in brief["actions"].items():
-            restored = dict(action)
-            ref = restored.get("result")
-            if ref:
-                restored["result"] = {**ref, "preview": encoded(brief["original_evidence"][ref["evidence_digest"]])[:400]}
-            self.assertEqual(claim["actions"][key], restored)
+        self.assertEqual(claim["actions"], brief["actions"])
         for event, original in zip(brief["events"], claim["events"]):
             self.assertEqual(original, {**event, "preview": encoded(brief["original_evidence"][event["evidence_digest"]])[:400]})
 
