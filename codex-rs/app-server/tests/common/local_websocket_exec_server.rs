@@ -30,7 +30,7 @@ impl LocalWebsocketExecServer {
         command.stdout(Stdio::piped());
         command.stderr(Stdio::inherit());
         command.current_dir(codex_home);
-        command.env("CODEX_HOME", codex_home);
+        crate::test_environment::isolate_profile(command.as_std_mut(), codex_home);
         #[cfg(target_os = "linux")]
         command.env(
             CODEX_LINUX_SANDBOX_EXE_ENV_VAR,
