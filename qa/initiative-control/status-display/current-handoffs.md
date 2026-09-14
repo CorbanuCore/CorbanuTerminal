@@ -124,6 +124,56 @@ contaminated. Since the relaunch (rebuilt host 0.1.42; worker pin unchanged):
   expectation, traceback retention, ceiling citation 1987) dispatched.
 - Dashboard `build-uflvf0tt` @ `a826527bb`; integration tip `a9801395b` == origin.
 
+### Update — September 15 00:15 UTC: Task Node records landed; model switch to Opus 5.0 High
+
+Travis (chat): accepted all three Task Node coordination tasks and asked for the
+work they describe; then, citing quota, directed that after this round every use
+of Fable 5.1 High (independent reviews, evidence reviews, the fresh-manager loop)
+move to **Opus 5.0 High** (`claude-opus-5-plan`, provider `claude-plan`, effort
+`high`) and that this round be merged onto integration and pushed.
+
+- **Task Node** ([PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)):
+  acceptance receipt [tasknode-acceptance-20260914](../management-bootstrap/tasknode-acceptance-20260914.md)
+  (three off-chain `accepted` lifecycle events, CLI statuses, JSON digests).
+  Guarded single-event transport `c37d68969` reviewed (correct, two P3 follow-ups:
+  `flush` must skip intent-bearing events before any batch enablement; add a
+  `send`→`post` idempotency wiring test) and received at `5c2cfc04b`. Posting OFF;
+  no activation file exists.
+- **Workstream records** (each reviewed by Opus 5.0 High as a truthfulness audit,
+  all hashes/links verified, "Human review and approval" left blank for Travis):
+  PF-13 security `ccac81090` → `08a5b105b`; PF-60 accounting `2de349bcd` →
+  `56410b5aa` (P3: row-29 "stale" wording is an author disposition, flagged for
+  Travis); PF-80 status packet `5d4089851` + owner receipt fix `ad000956c` →
+  `677e970cd`. Next: Travis reads each document and fills the approval block;
+  only then a guarded dry-run, then one `--live` evidence submission per task.
+- **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
+  both P2s were already fixed in the merged tip; `4fd27d0b6` adds real-dispatch
+  regression coverage (guarded focused TUI 9/9; three pre-existing broader
+  failures documented, incl. version snapshot 0.1.38 vs 0.1.42), reviewed
+  (correct, 1 P3) and received at `02abee2ec`. Independent functional gate still
+  open. PF-27-S04 successor design accepted (revoke idle broker channels on
+  generation cancellation; reconcile `c51d2d6aa` receiving receipt); dispatch
+  waits for PF-83-S01 closure and PF-27-S04 re-reservation.
+- **Accounting** ([PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md)):
+  next-unit design accepted — Responses **WebSocket sampling** (18 files, 36
+  tests, 3000/1050 target, 3300/1200 stop; reuses the accepted decoder and
+  price snapshots; startup prewarm explicitly outside scope; Chat deferred with
+  cited reasons). Next: freeze the allocation document, reconcile plan/sprint,
+  dispatch implementation.
+- **SLK harness** increment 4 (`f97406f`) reviewed correct (1 P3: readiness read
+  lacks OSError retry); offline runs are scripted-actor only — code-blind actor
+  wiring is next.
+- **Model switch** landed at `76efe32eb` ([record](../management-bootstrap/model-switch-opus5-20260914.md)):
+  `fable_launcher.MODEL = claude-opus-5-plan`; Python suite green under the
+  receiving tree. The first live decision cycle on the new model qualifies it.
+  Review wrappers now pass `--model claude-opus-5-plan`.
+- **Briefing size**: two `briefing_size_hold` runs failed explicitly; resolved by
+  compacting consumed allocations and moving long record briefs into frozen
+  digest-checked private files. Structural growth (36 consumed allocations,
+  ~2 KB per retained terminal action) remains a delivery follow-up.
+- Dispatch defect fixed: worker START must be re-sent until the pane shows
+  `Working (`; the dispatch helper now verifies that.
+
 ### Update — September 14 13:15 UTC: overnight close-out
 
 - **Root cause of the blockers**: the Mac's login keychain locked overnight
