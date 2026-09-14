@@ -945,6 +945,18 @@ impl App {
         app_server: &mut AppServerSession,
         target_session: SessionTarget,
     ) -> Result<AppRunControl> {
+        let mut events = tui.event_stream();
+        self.resume_target_session_with_events(tui, app_server, target_session, &mut events)
+            .await
+    }
+
+    pub(super) async fn resume_target_session_with_events(
+        &mut self,
+        tui: &mut tui::Tui,
+        app_server: &mut AppServerSession,
+        target_session: SessionTarget,
+        events: &mut (dyn Stream<Item = TuiEvent> + Send + Unpin),
+    ) -> Result<AppRunControl> {
         if self.ignore_same_thread_resume(&target_session) {
             tui.frame_requester().schedule_frame();
             return Ok(AppRunControl::Continue);
@@ -985,7 +997,7 @@ impl App {
         let resume_cwd = if self.app_server_target.uses_remote_workspace() {
             current_cwd.clone()
         } else {
-            let outcome = crate::session_resume::resolve_cwd_for_resume_or_fork(
+            let outcome = crate::session_resume::resolve_cwd_for_resume_or_fork_with_events(
                 tui,
                 &self.config,
                 self.state_db.as_deref(),
@@ -998,6 +1010,7 @@ impl App {
                         || cwd_override.is_some(),
                     mode: resume_cwd_mode,
                 },
+                events,
             )
             .await;
             match outcome {

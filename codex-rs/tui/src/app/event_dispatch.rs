@@ -82,6 +82,61 @@ const RESERVED_PANE_DISPLAY_NAMES: &[&str] = &[
 ];
 
 impl App {
+    pub(super) async fn handle_resume_picker_event(
+        &mut self,
+        tui: &mut tui::Tui,
+        app_server: &mut AppServerSession,
+        tui_events: &mut (dyn Stream<Item = TuiEvent> + Send + Unpin),
+    ) -> Result<AppRunControl> {
+        let picker_app_server = match crate::start_app_server_for_picker(
+            &self.config,
+            &self.app_server_target,
+            self.state_db.clone(),
+            self.environment_manager.clone(),
+        )
+        .await
+        {
+            Ok(app_server) => app_server,
+            Err(err) => {
+                self.chat_widget
+                    .add_error_message(format!("Failed to start TUI session picker: {err}"));
+                self.chat_widget.maybe_send_next_queued_input();
+                return Ok(AppRunControl::Continue);
+            }
+        };
+        let selection =
+            crate::resume_picker::run_resume_picker_from_existing_session_with_app_server(
+                tui,
+                &self.config,
+                /*show_all*/ false,
+                /*include_non_interactive*/ false,
+                picker_app_server,
+                tui_events,
+            )
+            .await?;
+        match selection {
+            SessionSelection::Resume(target_session) => {
+                match self
+                    .resume_target_session_with_events(tui, app_server, target_session, tui_events)
+                    .await?
+                {
+                    AppRunControl::Continue => {}
+                    AppRunControl::Exit(reason) => return Ok(AppRunControl::Exit(reason)),
+                }
+            }
+            SessionSelection::Exit
+            | SessionSelection::StartFresh
+            | SessionSelection::ResumePanesOnly { .. } => {
+                self.refresh_in_memory_config_from_disk_best_effort("closing the session picker")
+                    .await;
+            }
+            SessionSelection::Fork(_) => {}
+        }
+        self.chat_widget.maybe_send_next_queued_input();
+        tui.frame_requester().schedule_frame();
+        Ok(AppRunControl::Continue)
+    }
+
     pub(super) async fn handle_external_agent_config_migration_event(
         &mut self,
         tui: &mut tui::Tui,
@@ -862,57 +917,10 @@ impl App {
                 .await;
             }
             AppEvent::OpenResumePicker => {
-                let picker_app_server = match crate::start_app_server_for_picker(
-                    &self.config,
-                    &self.app_server_target,
-                    self.state_db.clone(),
-                    self.environment_manager.clone(),
-                )
-                .await
-                {
-                    Ok(app_server) => app_server,
-                    Err(err) => {
-                        self.chat_widget.add_error_message(format!(
-                            "Failed to start TUI session picker: {err}"
-                        ));
-                        self.chat_widget.maybe_send_next_queued_input();
-                        return Ok(AppRunControl::Continue);
-                    }
-                };
-                match crate::resume_picker::run_resume_picker_from_existing_session_with_app_server(
-                    tui,
-                    &self.config,
-                    /*show_all*/ false,
-                    /*include_non_interactive*/ false,
-                    picker_app_server,
-                )
-                .await?
-                {
-                    SessionSelection::Resume(target_session) => {
-                        match self
-                            .resume_target_session(tui, app_server, target_session)
-                            .await?
-                        {
-                            AppRunControl::Continue => {}
-                            AppRunControl::Exit(reason) => {
-                                return Ok(AppRunControl::Exit(reason));
-                            }
-                        }
-                    }
-                    SessionSelection::Exit
-                    | SessionSelection::StartFresh
-                    | SessionSelection::ResumePanesOnly { .. } => {
-                        self.refresh_in_memory_config_from_disk_best_effort(
-                            "closing the session picker",
-                        )
-                        .await;
-                    }
-                    SessionSelection::Fork(_) => {}
-                }
-
-                self.chat_widget.maybe_send_next_queued_input();
-                // Leaving alt-screen may blank the inline viewport; force a redraw either way.
-                tui.frame_requester().schedule_frame();
+                // The main loop must lend its drained input queue to modal screens.
+                self.chat_widget.add_error_message(
+                    "Resume could not acquire terminal input. Retry /resume.".to_string(),
+                );
             }
             AppEvent::OpenExternalAgentConfigMigration => {
                 self.chat_widget.add_error_message(

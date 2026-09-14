@@ -301,7 +301,7 @@ struct SessionPickerRunOptions {
 /// sessions appear during pagination.
 ///
 /// Filtering happens in two layers:
-/// 1. Provider, source, and eligible working-directory filtering at the backend.
+/// 1. Source and eligible working-directory filtering at the backend.
 /// 2. Typed search filtering over loaded rows in the picker.
 pub async fn run_resume_picker_with_app_server(
     tui: &mut Tui,
@@ -310,6 +310,7 @@ pub async fn run_resume_picker_with_app_server(
     include_non_interactive: bool,
     app_server: AppServerSession,
 ) -> Result<SessionSelection> {
+    let mut tui_events = tui.event_stream();
     run_resume_picker_with_launch_context(
         tui,
         config,
@@ -317,6 +318,7 @@ pub async fn run_resume_picker_with_app_server(
         include_non_interactive,
         app_server,
         SessionPickerLaunchContext::Startup,
+        &mut tui_events,
     )
     .await
 }
@@ -327,6 +329,7 @@ pub async fn run_resume_picker_from_existing_session_with_app_server(
     show_all: bool,
     include_non_interactive: bool,
     app_server: AppServerSession,
+    tui_events: &mut (dyn tokio_stream::Stream<Item = TuiEvent> + Send + Unpin),
 ) -> Result<SessionSelection> {
     run_resume_picker_with_launch_context(
         tui,
@@ -335,6 +338,7 @@ pub async fn run_resume_picker_from_existing_session_with_app_server(
         include_non_interactive,
         app_server,
         SessionPickerLaunchContext::ExistingSession,
+        tui_events,
     )
     .await
 }
@@ -346,6 +350,7 @@ async fn run_resume_picker_with_launch_context(
     include_non_interactive: bool,
     app_server: AppServerSession,
     launch_context: SessionPickerLaunchContext,
+    tui_events: &mut (dyn tokio_stream::Stream<Item = TuiEvent> + Send + Unpin),
 ) -> Result<SessionSelection> {
     let (bg_tx, bg_rx) = mpsc::unbounded_channel();
     let uses_remote_workspace = app_server.uses_remote_workspace();
@@ -356,7 +361,9 @@ async fn run_resume_picker_with_launch_context(
         app_server.remote_cwd_override(),
     );
     let local_filter_cwd = local_picker_cwd_filter(&cwd_filter, uses_remote_workspace);
-    let provider_filter = picker_provider_filter(config, uses_remote_workspace);
+    // A saved chat remains resumable when the current chat uses another provider.
+    // The selected thread's persisted provider is restored by the resume path.
+    let provider_filter = ProviderFilter::Any;
     let runtime_keymap = picker_runtime_keymap(config)?;
     let options = SessionPickerRunOptions {
         show_all,
@@ -383,6 +390,7 @@ async fn run_resume_picker_with_launch_context(
             bg_tx,
         ),
         bg_rx,
+        tui_events,
     )
     .await
 }
@@ -393,6 +401,7 @@ pub async fn run_fork_picker_with_app_server(
     show_all: bool,
     app_server: AppServerSession,
 ) -> Result<SessionSelection> {
+    let mut tui_events = tui.event_stream();
     let (bg_tx, bg_rx) = mpsc::unbounded_channel();
     let uses_remote_workspace = app_server.uses_remote_workspace();
     let cwd_filter = picker_cwd_filter(
@@ -429,6 +438,7 @@ pub async fn run_fork_picker_with_app_server(
             bg_tx,
         ),
         bg_rx,
+        &mut tui_events,
     )
     .await
 }
@@ -438,6 +448,7 @@ async fn run_session_picker_with_loader(
     options: SessionPickerRunOptions,
     picker_loader: PickerLoader,
     bg_rx: mpsc::UnboundedReceiver<BackgroundEvent>,
+    tui_events: &mut (dyn tokio_stream::Stream<Item = TuiEvent> + Send + Unpin),
 ) -> Result<SessionSelection> {
     let alt = AltScreenGuard::enter(tui);
     let mut state = PickerState::new(
@@ -457,7 +468,9 @@ async fn run_session_picker_with_loader(
     state.start_initial_load();
     state.request_frame();
 
-    let mut tui_events = alt.tui.event_stream().fuse();
+    // The caller owns input. In-app pickers must consume the main drainer's
+    // queue, never create a second reader competing for the shared event broker.
+    let mut tui_events = tui_events.fuse();
     let mut background_events = UnboundedReceiverStream::new(bg_rx).fuse();
 
     loop {
@@ -1851,7 +1864,8 @@ fn thread_list_params(
         sort_key: Some(sort_key),
         sort_direction: None,
         model_providers: match provider_filter {
-            ProviderFilter::Any => None,
+            // Omission means the server's default provider, not all providers.
+            ProviderFilter::Any => Some(Vec::new()),
             ProviderFilter::MatchDefault(default_provider) => Some(vec![default_provider]),
         },
         source_kinds: Some(crate::resume_source_kinds(include_non_interactive)),
@@ -3571,7 +3585,7 @@ mod tests {
     }
 
     #[test]
-    fn remote_thread_list_params_omit_provider_filter() {
+    fn all_provider_thread_list_params_explicitly_disable_provider_filter() {
         let params = thread_list_params(
             Some(String::from("cursor-1")),
             Some(Path::new("repo/on/server")),
@@ -3581,7 +3595,7 @@ mod tests {
         );
 
         assert_eq!(params.cursor, Some(String::from("cursor-1")));
-        assert_eq!(params.model_providers, None);
+        assert_eq!(params.model_providers, Some(Vec::new()));
         assert_eq!(
             params.source_kinds,
             Some(vec![ThreadSourceKind::Cli, ThreadSourceKind::VsCode])
@@ -3603,7 +3617,7 @@ mod tests {
         );
 
         assert_eq!(params.cursor, Some(String::from("cursor-1")));
-        assert_eq!(params.model_providers, None);
+        assert_eq!(params.model_providers, Some(Vec::new()));
         let source_kinds = crate::resume_source_kinds(/*include_non_interactive*/ true);
         assert_eq!(params.source_kinds, Some(source_kinds));
     }

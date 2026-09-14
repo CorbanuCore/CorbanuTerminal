@@ -339,6 +339,36 @@ fn spawn_tui_event_drainer(mut tui_events: BoxedTuiEventStream) -> DrainedTuiEve
     DrainedTuiEvents { rx, watchdog }
 }
 
+/// Lend the single input queue to a modal without losing watchdog accounting.
+fn modal_tui_events<'a>(
+    rx: &'a mut mpsc::UnboundedReceiver<TuiEvent>,
+    watchdog: &'a TuiInputDrainWatchdog,
+) -> impl Stream<Item = TuiEvent> + Send + Unpin + 'a {
+    ModalTuiEvents { rx, watchdog }
+}
+
+struct ModalTuiEvents<'a> {
+    rx: &'a mut mpsc::UnboundedReceiver<TuiEvent>,
+    watchdog: &'a TuiInputDrainWatchdog,
+}
+
+impl Stream for ModalTuiEvents<'_> {
+    type Item = TuiEvent;
+
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        this.rx.poll_recv(cx).map(|event| {
+            if event.is_some() {
+                this.watchdog.note_handled();
+            }
+            event
+        })
+    }
+}
+
 fn spawn_tui_input_watchdog(
     watchdog: TuiInputDrainWatchdog,
     frame_requester: tui::FrameRequester,
@@ -1842,7 +1872,15 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
                             .await;
                             AppRunControl::Continue
                         } else {
-                            match Box::pin(app.handle_event(tui, &mut app_server, event)).await {
+                            let result = if matches!(event, AppEvent::OpenResumePicker) {
+                                // Keep a single reader of the terminal. Lend its queue to
+                                // the modal, including watchdog accounting, until it closes.
+                                let mut events = modal_tui_events(&mut tui_event_rx, &tui_input_watchdog_state);
+                                app.handle_resume_picker_event(tui, &mut app_server, &mut events).await
+                            } else {
+                                Box::pin(app.handle_event(tui, &mut app_server, event)).await
+                            };
+                            match result {
                                 Ok(control) => control,
                                 Err(err) => {
                                     tracing::error!(error = ?err, "contained app event handler failure");

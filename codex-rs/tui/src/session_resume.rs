@@ -112,6 +112,28 @@ pub(crate) async fn resolve_cwd_for_resume_or_fork(
     action: CwdPromptAction,
     cwd_context: ResumeCwdContext<'_>,
 ) -> color_eyre::Result<ResolveCwdOutcome> {
+    let mut events = tui.event_stream();
+    resolve_cwd_for_resume_or_fork_with_events(
+        tui,
+        config,
+        state_db_ctx,
+        target_session,
+        action,
+        cwd_context,
+        &mut events,
+    )
+    .await
+}
+
+pub(crate) async fn resolve_cwd_for_resume_or_fork_with_events(
+    tui: &mut Tui,
+    config: &Config,
+    state_db_ctx: Option<&StateRuntime>,
+    target_session: &SessionTarget,
+    action: CwdPromptAction,
+    cwd_context: ResumeCwdContext<'_>,
+    events: &mut (dyn tokio_stream::Stream<Item = crate::tui::TuiEvent> + Send + Unpin),
+) -> color_eyre::Result<ResolveCwdOutcome> {
     if matches!(cwd_context.mode, Some(ResumeCwdMode::Current)) {
         return Ok(ResolveCwdOutcome::Continue(Some(
             cwd_context.remembered_current_cwd.to_path_buf(),
@@ -146,6 +168,7 @@ pub(crate) async fn resolve_cwd_for_resume_or_fork(
             &history_cwd,
             cwd_context.remembered_current_cwd,
             cwd_context.allow_remember_current,
+            events,
         )
         .await?;
         return Ok(match selection_outcome {

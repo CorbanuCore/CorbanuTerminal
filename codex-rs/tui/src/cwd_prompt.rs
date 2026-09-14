@@ -111,6 +111,7 @@ pub(crate) async fn run_cwd_selection_prompt(
     session_cwd: &Path,
     remembered_current_cwd: &Path,
     allow_remember_current: bool,
+    events: &mut (dyn tokio_stream::Stream<Item = TuiEvent> + Send + Unpin),
 ) -> Result<CwdPromptOutcome> {
     let mut screen = CwdPromptScreen::new(
         tui.frame_requester(),
@@ -123,9 +124,6 @@ pub(crate) async fn run_cwd_selection_prompt(
     tui.draw(u16::MAX, |frame| {
         frame.render_widget_ref(&screen, frame.area());
     })?;
-
-    let events = tui.event_stream();
-    tokio::pin!(events);
 
     while !screen.is_done() {
         if let Some(event) = events.next().await {
