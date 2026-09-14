@@ -1,4 +1,4 @@
-"""Increment A: default-OFF one-tick kernel; only the fixed fixture adapter exists."""
+"""Default-OFF one-tick kernel; explicit TMUX transport, lifecycle routing deferred."""
 import argparse
 from contextlib import closing, contextmanager
 import fcntl
@@ -30,7 +30,7 @@ SCHEMA = {
 def package_digest():
     root = Path(__file__).resolve().parent
     return digest({name: f.file_digest(root / name) for name in
-                   ("owner_daemon.py", "coordinator.py", "manager_cycle.py", "fable_launcher.py")})
+                   ("owner_daemon.py", "owner_tmux.py", "coordinator.py", "manager_cycle.py", "fable_launcher.py")})
 
 
 def private_file(path):
@@ -47,8 +47,11 @@ def load(path):
 
 def configuration(path):
     value = load(path)
-    f.require(set(value) == {"coordinator", "worktrees", "package_digest", "manager_enabled"},
+    f.require(set(value) - {"transport"} == {"coordinator", "worktrees", "package_digest", "manager_enabled"},
               "invalid_config")
+    if "transport" in value:
+        from owner_tmux import validate
+        validate(value["transport"])
     f.require(type(value["manager_enabled"]) is bool and isinstance(value["worktrees"], list)
               and bool(value["worktrees"]), "invalid_config")
     coordinator = ExistingCoordinator(value["coordinator"])
@@ -128,6 +131,13 @@ class FixedTestAdapter:
     """A deterministic fixture receipt; no callable, command, or transport configuration."""
     def observe(self, request):
         return fixture_receipt(request)
+
+
+def configured_adapter(config):
+    if "transport" in config:
+        from owner_tmux import TmuxAdapter
+        return TmuxAdapter(config["transport"])
+    return FixedTestAdapter()
 
 
 class Kernel:
@@ -224,7 +234,13 @@ class Kernel:
         self.replay(self.db.execute("SELECT * FROM operations WHERE op_id=?", (op_id,)).fetchone())
 
     def tick(self, adapter=None):
-        f.require(type(adapter) is FixedTestAdapter, "live_adapter_unavailable")
+        adapter = configured_adapter(self.config) if adapter is None else adapter
+        from owner_tmux import TmuxAdapter
+        f.require(type(adapter) is FixedTestAdapter or (type(adapter) is TmuxAdapter
+                  and adapter.config == self.config.get("transport")), "live_adapter_unavailable")
+        # Increment C must supply admitted action/claim routing before any live effect.
+        if type(adapter) is TmuxAdapter:
+            return {"state": "HOLD", "reason": "tmux_lifecycle_routing_unavailable", "fixture_only": False}
         path = private_file(self.root / "owner.sqlite3")
         f.require(not any(Path(str(path) + suffix).exists() for suffix in ("-journal", "-wal", "-shm")),
                   "owner_recovery_required")
@@ -289,7 +305,7 @@ def main(argv=None):
     try:
         f.require(args.config is not None, "config_required")
         kernel = Kernel(args.config)
-        # No CLI injection seam: installed/live transport belongs to later increments.
+        # Configuration selects only built-in adapters; default remains the fixture.
         print(encoded(kernel.tick()))
         return 0
     except (f.LaunchError, OSError, sqlite3.Error, ValueError, TypeError, KeyError):

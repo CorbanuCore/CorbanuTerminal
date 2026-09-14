@@ -21,7 +21,7 @@ CLI = ROOT / "scripts/initiative_control/owner_daemon.py"
 
 class OwnerDaemonTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(prefix="owner-fixture-", dir=ROOT)
+        self.tmp = tempfile.TemporaryDirectory(prefix="owner-fixture-", dir=Path(tempfile.gettempdir()).resolve())
         self.root = Path(self.tmp.name) / "state"
         self.c = Coordinator(self.root)
         self.c.initialize(*seed())
@@ -55,7 +55,8 @@ class OwnerDaemonTests(unittest.TestCase):
         return owner.Kernel(self.config_path).tick(owner.FixedTestAdapter())
 
     def child(self, code=None, *args):
-        env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1",
+        env = {"PATH": f.SAFE_PATH, "PYTHONDONTWRITEBYTECODE": "1",
+               **{key: str(self.root) for key in ("HOME", "CODEX_HOME", "CORBANU_HOME", "PFTERMINAL_HOME")},
                "PYTHONPATH": str(CLI.parent) + os.pathsep + os.environ.get("PYTHONPATH", "")}
         argv = [sys.executable, "-B"]
         argv += ["-c", code, str(self.config_path)] if code else [str(CLI), *args]
@@ -74,12 +75,12 @@ class OwnerDaemonTests(unittest.TestCase):
         with self.assertRaisesRegex(f.LaunchError, "owner_state_exists"):
             owner.setup(self.config_path)
 
-    def test_no_cli_adapter_or_dynamic_import_seam(self):
+    def test_cli_defaults_to_fixed_fixture_without_dynamic_import_seam(self):
         self.arm()
         result = self.child(None, "--run", "--config", str(self.config_path))
-        self.assertEqual(2, result.returncode)
-        self.assertEqual({"state": "HOLD", "reason": "owner_run_refused"}, json.loads(result.stdout))
-        self.assertEqual([], self.sql("SELECT * FROM boots"))
+        self.assertEqual(0, result.returncode)
+        self.assertTrue(json.loads(result.stdout)["fixture_only"])
+        self.assertEqual(1, len(self.sql("SELECT * FROM boots")))
         with self.assertRaisesRegex(f.LaunchError, "live_adapter_unavailable"):
             owner.Kernel(self.config_path).tick(lambda request: {})
         self.assertEqual(2, self.child(None, "--run").returncode)

@@ -1,0 +1,264 @@
+"""Increment B: explicit, journaled TMUX worker transport; no lifecycle authority."""
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+
+import fable_launcher as f
+
+
+def boot_id():
+    return subprocess.check_output(["/usr/sbin/sysctl", "-n", "kern.boottime"],
+                                   timeout=2).decode().strip() if sys.platform == "darwin" else Path(
+                                       "/proc/sys/kernel/random/boot_id").read_text().strip()
+
+
+def validate(config):
+    f.require(set(config) == {"kind", "binary", "binary_sha256", "tmux", "runs_dir", "auth_link"}
+              and config["kind"] == "tmux", "invalid_tmux_config")
+    for key in ("binary", "tmux", "runs_dir", "auth_link"):
+        f.require(Path(config[key]).is_absolute(), "absolute_transport_path_required")
+    f.private_dir(config["runs_dir"])
+    f.require(f.file_digest(f.no_links(config["binary"])) == config["binary_sha256"],
+              "binary_drift")
+    f.require(f.no_links(config["tmux"]).is_file(), "tmux_missing")
+    # Link only. Never open, copy, hash or inspect the native authentication file.
+    f.require(Path(config["auth_link"]).name == "auth.json", "invalid_auth_link")
+    return config
+
+
+def provenance(records, binding, prompts, ack):
+    """Only correlated completed rollout turns count; pane echoes never authorize."""
+    result = {"session_id": None, "thread_id": None, "ack": False, "returned": None,
+              "submitted": False, "turn_id": None}
+    active, context, response, user, completed = None, False, None, None, []
+    for record in records:
+        kind, p = record["type"], record["payload"]
+        event = p.get("type")
+        if kind == "session_meta":
+            f.require(result["session_id"] is None and p.get("cwd") == binding["worktree"]
+                      and p.get("source") == "cli" and p.get("model_provider") == binding["provider"]
+                      and not any(p.get(k) for k in ("forked_from_id", "parent_thread_id",
+                                                    "history_base", "subagent_history_start_ordinal")),
+                      "wrong_session")
+            result.update(session_id=str(uuid.UUID(p["session_id"])), thread_id=str(uuid.UUID(p["id"])))
+        else:
+            f.require(result["session_id"] is not None, "missing_session")
+        if kind == "turn_context":
+            f.require(active and p.get("turn_id") == active and all(
+                p.get(k) == binding[v] for k, v in (("model", "model"), ("model_provider", "provider"),
+                ("effort", "effort"), ("cwd", "worktree"), ("approval_policy", "approval")))
+                and p.get("sandbox_policy", {}).get("type") == binding["sandbox"], "wrong_runtime")
+            context = True
+        if kind != "event_msg":
+            continue
+        f.require(event not in ("error", "model_reroute", "turn_aborted") and not p.get("error"),
+                  "runtime_failure")
+        if event in ("task_started", "turn_started"):
+            active = p.get("turn_id") if active is None else None
+            f.require(active and active not in completed and len(completed) < len(prompts),
+                      "unexpected_turn")
+            context, response, user = False, None, None
+        elif event == "user_message":
+            f.require(active and user is None and p.get("message") == prompts[len(completed)],
+                      "wrong_submission")
+            user = p["message"]
+        elif event == "model_response_completed":
+            f.require(active == p.get("turn_id") and context and user is not None
+                      and p.get("model") == binding["model"]
+                      and p.get("model_provider_id") == binding["provider"]
+                      and p.get("response_id"), "wrong_response")
+            response = p["response_id"] if p.get("finish_reason") in (
+                None, "stop", "end_turn", "stop_sequence") else None
+        elif event in ("task_complete", "turn_complete"):
+            final = p.get("last_agent_message")
+            f.require(active and p.get("turn_id") == active and context and response
+                      and user is not None and isinstance(final, str)
+                      and len(final.encode()) <= f.FINAL_LIMIT, "uncorrelated_completion")
+            if not completed:
+                f.require(final == ack, "wrong_ack")
+                result["ack"] = True
+            else:
+                f.require(re.match(r"\ARETURN(?:\n|$)", final) is not None, "wrong_return")
+                result["returned"] = final
+            completed.append(active)
+            result["turn_id"], active = active, None
+        if len(completed) == 1 and active and context and user == "START":
+            result.update(submitted=True, turn_id=active)
+    result["submitted"] |= len(completed) == 2
+    return result
+
+
+class TmuxAdapter:
+    def __init__(self, config):
+        self.config = validate(config)
+
+    def prepare(self, binding, assignment):
+        f.require(set(binding) == {"action_id", "claim", "allocation_digest", "model", "provider",
+                                  "effort", "worktree", "sandbox", "approval"}, "invalid_binding")
+        f.require(all(isinstance(v, str) and v and "\n" not in v for v in binding.values())
+                  and re.fullmatch(r"[0-9a-f]{64}", binding["allocation_digest"]), "invalid_binding")
+        uuid.UUID(binding["claim"])
+        f.require(all(re.fullmatch(r"[A-Za-z0-9_.:/-]+", binding[k]) for k in
+                      ("action_id", "model", "provider", "effort")), "invalid_runtime_identifier")
+        f.require(f.no_links(binding["worktree"]).is_dir()
+                  and Path(binding["worktree"]).is_absolute(), "missing_worktree")
+        f.require(binding["sandbox"] in ("read-only", "workspace-write", "danger-full-access")
+                  and binding["approval"] in ("never", "on-request", "untrusted"), "invalid_policy")
+        f.require(isinstance(assignment, str) and len(assignment.encode()) <= f.BRIEF_LIMIT
+                  and not any(ord(c) < 32 and c not in "\n\t" for c in assignment), "invalid_assignment")
+        run = Path(tempfile.mkdtemp(prefix="w-", dir=self.config["runs_dir"]))
+        f.require(len(str(run / "s").encode()) < 100, "socket_path_too_long")
+        (run / "home").mkdir(mode=0o700)
+        (run / "home/auth.json").symlink_to(self.config["auth_link"])
+        ack = "ACK {action_id} {allocation_digest} {model} {effort}".format(**binding)
+        prompt = (f"Action ID: {binding['action_id']}. Claim: {binding['claim']}.\n"
+                  f"First reply with exactly this line and nothing else:\n{ack}\n"
+                  "Then wait for START. Finish the assigned work with a RETURN heading.\n"
+                  f"Frozen assignment:\n{assignment}")
+        f.write_json(run / "worker.json", {"config": self.config, "binding": binding,
+                     "prompt": prompt, "ack": ack, "boot_id": boot_id(), "uid": os.getuid(),
+                     "session": run.name, "socket": str(run / "s")})
+        return Worker(run)
+
+
+class Worker:
+    def __init__(self, run):
+        self.run = f.private_dir(run)
+        self.meta = f.strict_json(f.read_file(self.run / "worker.json", 262144, private=True))
+        self.config, self.binding = self.meta["config"], self.meta["binding"]
+        self.env = {"PATH": f.SAFE_PATH, "TERM": "xterm-256color", "LANG": "en_US.UTF-8",
+                    **{key: str(self.run / "home") for key in
+                       ("HOME", "CODEX_HOME", "CORBANU_HOME", "PFTERMINAL_HOME")}}
+
+    def tmux(self, *args, check=True, input=None):
+        result = subprocess.run([self.config["tmux"], "-S", self.meta["socket"], *args],
+                                env=self.env, cwd=self.binding["worktree"], input=input,
+                                capture_output=True, text=True, timeout=3, umask=0o077)
+        f.require(not check or result.returncode == 0, "tmux_command_failed")
+        return result
+
+    def once(self, name, value):
+        path = self.run / (name + ".json")
+        f.require(not path.exists() and not path.with_suffix(".json.pending").exists(), "effect_uncertain")
+        f.write_json(path, value)
+
+    def launch(self):
+        f.require(not (self.run / "launch-intent.json").exists(), "effect_uncertain")
+        validate(self.config)
+        f.require(not Path(self.meta["socket"]).exists(), "socket_exists")
+        b = self.binding
+        argv = [self.config["binary"], "--no-alt-screen", "-C", b["worktree"], "--model", b["model"],
+                "-c", 'model_provider="' + b["provider"] + '"', "-c",
+                'model_reasoning_effort="' + b["effort"] + '"',
+                "--sandbox", b["sandbox"], "--ask-for-approval", b["approval"]]
+        self.once("launch-intent", {"argv": argv, "at": f.now()})
+        self.tmux("-f", "/dev/null", "new-session", "-d", "-s", self.meta["session"],
+                  "-x", "160", "-y", "48", *argv, ";", "set-option", "-w", "remain-on-exit", "on")
+        fields = self.tmux("display-message", "-p", "-t", self.meta["session"],
+                           "#{pane_id}|#{pane_pid}|#{pid}").stdout.strip().split("|")
+        pane, pid, server = fields[0], int(fields[1]), int(fields[2])
+        table = f.processes()
+        self.once("process", {"pane": pane, "pid": pid, "server": server, "start": table[pid][3],
+                             "server_start": table[server][3], "pgid": table[pid][1]})
+        return self.inspect()
+
+    def send(self, name, text):
+        f.require(name in ("prompt", "start", "quit") and text == {
+            "prompt": self.meta["prompt"], "start": "START", "quit": "/quit"}[name], "invalid_delivery")
+        state = self.inspect()
+        f.require(state["identity_valid"] and state["liveness"] == "alive", "worker_not_alive")
+        f.require(name != "start" or state.get("ack") is True, "ack_required")
+        pane = self.tmux("capture-pane", "-p", "-t", self.meta["session"]).stdout
+        f.require(not re.search(r"(?i)save .* token|sign in|keychain|trust this (?:folder|directory)"
+                                r"|allow once|approve this", pane), "interactive_prompt_requires_owner")
+        self.once(name + "-intent", {"text_digest": f.digest(text.encode()), "at": f.now()})
+        self.tmux("load-buffer", "-b", "prompt", "-", input=text)
+        try:
+            self.tmux("paste-buffer", "-p", "-d", "-b", "prompt", "-t", self.meta["session"])
+            time.sleep(0.1)
+            self.tmux("send-keys", "-t", self.meta["session"], "Enter")
+        finally:
+            self.tmux("delete-buffer", "-b", "prompt", check=False)
+        self.once(name + "-keys", {"at": f.now(), "accepted": False})
+
+    def prompt(self):
+        self.send("prompt", self.meta["prompt"])
+
+    def start(self):
+        f.require(self.inspect().get("ack") is True, "ack_required")
+        self.send("start", "START")
+
+    def inspect(self, deadline=None):
+        state = {"at": f.now(), "liveness": "unknown", "identity_valid": False}
+        try:
+            f.require(self.meta["boot_id"] == boot_id() and self.meta["uid"] == os.getuid(), "host_changed")
+            proc = f.strict_json(f.read_file(self.run / "process.json", 4096, private=True))
+            table = f.processes()
+            f.require(table.get(proc["server"], (None,) * 4)[3] == proc["server_start"], "server_unknown")
+            pane = self.tmux("display-message", "-p", "-t", self.meta["session"],
+                             "#{pane_id}|#{pane_pid}|#{pane_dead}|#{pane_dead_status}").stdout.strip().split("|")
+            f.require(pane[:2] == [proc["pane"], str(proc["pid"])], "pane_identity_changed")
+            alive = table.get(proc["pid"], (None,) * 4)[3] == proc["start"]
+            f.require(alive or pane[2] == "1", "process_identity_unknown")
+            state.update(identity_valid=True, liveness="crashed" if pane[2] == "1" else "alive",
+                         process=proc, exit_status=pane[3], pane_digest=f.digest(
+                             self.tmux("capture-pane", "-p", "-t", self.meta["session"]).stdout.encode()))
+            owned_path = self.run / "owned.json"
+            owned = f.strict_json(f.read_file(owned_path, 65536, private=True)) if owned_path.exists() else {}
+            owned[str(proc["pid"])] = proc["start"]
+            for _ in range(len(table)):
+                added = {str(pid): info[3] for pid, info in table.items() if str(pid) not in owned
+                         and any(owned.get(str(ref)) == table.get(ref, (None,) * 4)[3]
+                                 and str(ref) in owned for ref in info[:2])}
+                if not added:
+                    break
+                owned.update(added)
+            f.write_json(owned_path, owned)
+            state["survivors"] = [int(pid) for pid, start in owned.items() if
+                                 table.get(int(pid), (None,) * 4)[3] == start
+                                 and not table[int(pid)][2].startswith("Z")]
+            paths = sorted((self.run / "home/sessions").rglob("*.jsonl"))
+            f.require(len(paths) <= 1, "multiple_rollouts")
+            if paths:
+                raw = f.read_file(paths[0], f.RECORD_LIMIT, private=True)
+                records = [f.strict_json(line) for line in raw.split(b"\n")[:-1] if line]
+                prompts = [self.meta["prompt"]] if (self.run / "prompt-intent.json").exists() else []
+                if (self.run / "start-intent.json").exists():
+                    prompts.append("START")
+                state.update(provenance(records, self.binding, prompts, self.meta["ack"]),
+                             rollout=str(paths[0]), rollout_digest=f.digest(raw))
+            state["stalled"] = state["liveness"] == "alive" and deadline is not None and time.time() >= deadline
+        except (f.LaunchError, OSError, ValueError, KeyError, TypeError, IndexError,
+                AttributeError, subprocess.SubprocessError):
+            state.update(identity_valid=False, evidence_error="inspection_uncertain")
+        self.once("observation-" + uuid.uuid4().hex, state)
+        return state
+
+    def close(self, timeout=3):
+        f.require(0 <= timeout <= 25, "invalid_shutdown_timeout")
+        state = self.inspect()
+        if state["identity_valid"] and state["liveness"] == "alive" and not (self.run / "quit-intent.json").exists():
+            self.send("quit", "/quit")
+        until = time.monotonic() + timeout
+        while state["liveness"] == "alive" and time.monotonic() < until:
+            time.sleep(0.05)
+            state = self.inspect()
+        clean = state["identity_valid"] and state["liveness"] == "crashed" and not state["survivors"]
+        if clean:
+            self.tmux("kill-session", "-t", self.meta["session"])
+            until, server = time.monotonic() + 1, state["process"]
+            while time.monotonic() < until:
+                info = f.processes().get(server["server"])
+                clean = (info is None or info[3] != server["server_start"] or info[2].startswith("Z"))
+                if clean:
+                    break
+                time.sleep(0.02)
+            clean = clean and self.tmux("list-sessions", check=False).returncode != 0
+        receipt = {"clean": clean, "observation": state, "forced": False, "at": f.now()}
+        self.once("shutdown-" + uuid.uuid4().hex, receipt)
+        return receipt
