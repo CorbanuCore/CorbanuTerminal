@@ -56,10 +56,39 @@ impl AnthropicUsageObserver for ResponseEvidence {
     }
 }
 
+impl codex_api::ResponsesUsageObserver for ResponseEvidence {
+    fn observe(
+        &self,
+        position: i64,
+        usage: Result<codex_api::ResponsesUsagePatch, codex_api::InvalidResponsesUsage>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ApiError>> + Send + '_>> {
+        Box::pin(async move {
+            let result = async {
+                let attempt = self.attempt.get().ok_or_else(|| anyhow::anyhow!(FAILURE))?;
+                let usage = usage.map_err(|_| anyhow::anyhow!(FAILURE))?;
+                self.sampling
+                    .observe_patch(
+                        attempt,
+                        self.source,
+                        position,
+                        super::responses::patch(usage)?,
+                    )
+                    .await
+            }
+            .await;
+            result.map_err(|_| {
+                self.sampling.reject();
+                ApiError::Stream(FAILURE.into())
+            })
+        })
+    }
+}
+
 pub(crate) struct AccountingTransport<T> {
     inner: T,
     evidence: Option<Arc<ResponseEvidence>>,
     model: String,
+    tier: Option<String>,
 }
 
 impl<T> AccountingTransport<T> {
@@ -68,7 +97,13 @@ impl<T> AccountingTransport<T> {
             inner,
             evidence,
             model,
+            tier: None,
         }
+    }
+
+    pub(crate) fn with_tier(mut self, tier: Option<String>) -> Self {
+        self.tier = tier;
+        self
     }
 }
 
@@ -85,11 +120,12 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
             evidence.sampling.reject();
             return Err(TransportError::Build(FAILURE.into()));
         }
-        let attempt = evidence
-            .sampling
-            .admit(&self.model, &request.url)
-            .await
-            .map_err(|_| {
+        let admission = if evidence.sampling.provider == "anthropic" {
+            evidence.sampling.admit(&self.model, &request.url).await
+        } else {
+            evidence.sampling.admit_with_tier(&self.model, &request.url, self.tier.as_deref()).await
+        };
+        let attempt = admission.map_err(|_| {
                 evidence.sampling.reject();
                 TransportError::Build(FAILURE.into())
             })?;

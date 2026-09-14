@@ -1635,9 +1635,9 @@ async fn run_sampling_request(
     let turn_context = Arc::clone(&step_context.turn);
     let router = Arc::clone(&step_context.tool_router);
 
-    let accounting = if !matches!(
+    let accounting = if matches!(
         turn_context.config.accounting,
-        crate::config::AccountingMode::Disabled
+        crate::config::AccountingMode::DirectAnthropic { .. }
     ) && turn_context.config.model_provider_id == "anthropic"
         && turn_context.provider.info().wire_api == codex_model_provider_info::WireApi::Anthropic
     {
@@ -1666,6 +1666,22 @@ async fn run_sampling_request(
         accounting.clone(),
     )?;
 
+    let responses_accounting = (matches!(
+        turn_context.config.accounting,
+        crate::config::AccountingMode::DirectOpenAiResponsesHttp { .. }
+    ) && turn_context.config.model_provider_id == "openai"
+        && turn_context.provider.info().wire_api == codex_model_provider_info::WireApi::Responses)
+        .then(|| {
+            crate::accounting::responses::DeferredResponsesSampling::new(
+                Arc::clone(&sess),
+                turn_context.sub_id.clone(),
+                turn_context.config.accounting.clone(),
+            )
+        });
+    let _responses_scope = crate::accounting::responses::Scope::attach(
+        Arc::clone(&client_session.responses_accounting),
+        responses_accounting.clone(),
+    )?;
     let base_instructions = sess.get_base_instructions().await;
     trace_turn_timing("after_get_base_instructions", sampling_started_at);
 
@@ -1727,6 +1743,9 @@ async fn run_sampling_request(
         .await;
         let attempt_elapsed = attempt_started_at.elapsed();
         if let Some(accounting) = &accounting {
+            accounting.check()?;
+        }
+        if let Some(accounting) = &responses_accounting {
             accounting.check()?;
         }
         let err = match attempt_result {

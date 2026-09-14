@@ -2,6 +2,106 @@ use super::*;
 use pretty_assertions::assert_eq;
 
 #[test]
+fn accounting_responses_prices_exact_and_unknown() {
+    let scope = Uuid::new_v4();
+    let first = responses_original("gpt-5.6-sol", scope, 1000, None)
+        .unwrap()
+        .remove(0);
+    let later = responses_original("gpt-5.6-sol", scope, 2000, Some("default"))
+        .unwrap()
+        .remove(0);
+    assert_eq!(
+        first.rates,
+        Rates {
+            noncached: Some(rate(5000).unwrap()),
+            output: Some(rate(30000).unwrap()),
+            read: Some(rate(500).unwrap()),
+            write: None,
+        }
+    );
+    assert_eq!(first.provider, "openai");
+    assert_eq!(first.scope, scope);
+    assert_eq!(first.source_reference, later.source_reference);
+    assert_ne!(first.id, later.id);
+    assert_eq!(i64::from(first.effective_from_ms), 1000);
+    let source = serde_json::to_vec(&(
+        "openai-responses-api-key-bundled-v1",
+        "openai",
+        "gpt-5.6-sol",
+        "api_key",
+        "default",
+        "USD/million",
+        5000,
+        30000,
+        Some(500),
+    ))
+    .unwrap();
+    assert_eq!(
+        first.source_reference,
+        Uuid::new_v5(&Uuid::NAMESPACE_OID, &source)
+    );
+    for model in [
+        "gpt-6-astra",
+        "remote-only",
+        "Gpt-5.6-sol",
+        "openai/gpt-5.6-sol",
+        "claude-opus-5",
+    ] {
+        assert!(
+            responses_original(model, scope, 1000, None)
+                .unwrap()
+                .is_empty()
+        );
+    }
+    for tier in ["priority", "flex", "auto", "unknown"] {
+        assert!(
+            responses_original("gpt-5.6-sol", scope, 1000, Some(tier))
+                .unwrap()
+                .is_empty()
+        );
+    }
+    for billing in [
+        ModelBilling::Local,
+        ModelBilling::Plan {
+            relative_burn_millis: 1000,
+        },
+    ] {
+        assert!(
+            responses_project("fixture", scope, &billing, 1000)
+                .unwrap()
+                .is_empty()
+        );
+    }
+    for read in [None, Some(0)] {
+        let billing = ModelBilling::Metered {
+            input_milli_usd_per_million_tokens: 0,
+            output_milli_usd_per_million_tokens: 0,
+            cached_input_milli_usd_per_million_tokens: read,
+        };
+        let value = responses_project("fixture", scope, &billing, 1000)
+            .unwrap()
+            .remove(0);
+        assert_eq!(value.rates.read, read.map(|value| rate(value).unwrap()));
+        assert_eq!(value.rates.write, None);
+    }
+    let anthropic = original("claude-opus-5", scope, 1000).unwrap().remove(0);
+    let source = serde_json::to_vec(&(
+        "anthropic-bundled-v1",
+        "anthropic",
+        "claude-opus-5",
+        "USD/million",
+        5000,
+        25000,
+        Some(500),
+    ))
+    .unwrap();
+    assert_eq!(
+        anthropic.source_reference,
+        Uuid::new_v5(&Uuid::NAMESPACE_OID, &source)
+    );
+}
+
+#[test]
 fn accounting_bundled_prices_are_exact_prospective_and_content_identified() {
     let scope = Uuid::new_v4();
     let first = original("claude-opus-5", scope, 1000).unwrap().remove(0);

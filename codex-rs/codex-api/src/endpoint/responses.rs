@@ -8,8 +8,12 @@ use crate::requests::Compression;
 use crate::requests::headers::build_session_headers;
 use crate::requests::headers::insert_header;
 use crate::requests::headers::subagent_header;
-use crate::sse::spawn_response_stream;
+use crate::sse::responses::spawn_response_stream_with_observer;
+
+#[path = "responses_accounting.rs"]
+pub(crate) mod accounting;
 use crate::telemetry::SseTelemetry;
+use accounting::ResponsesUsageObserver;
 use codex_client::EncodedJsonBody;
 use codex_client::HttpTransport;
 use codex_client::RequestCompression;
@@ -26,6 +30,7 @@ use tracing::instrument;
 pub struct ResponsesClient<T: HttpTransport> {
     session: EndpointSession<T>,
     sse_telemetry: Option<Arc<dyn SseTelemetry>>,
+    usage_observer: Option<Arc<dyn ResponsesUsageObserver>>,
 }
 
 #[derive(Default)]
@@ -43,6 +48,7 @@ impl<T: HttpTransport> ResponsesClient<T> {
         Self {
             session: EndpointSession::new(transport, provider, auth),
             sse_telemetry: None,
+            usage_observer: None,
         }
     }
 
@@ -54,7 +60,16 @@ impl<T: HttpTransport> ResponsesClient<T> {
         Self {
             session: self.session.with_request_telemetry(request),
             sse_telemetry: sse,
+            usage_observer: self.usage_observer,
         }
+    }
+
+    pub fn with_usage_observer(
+        mut self,
+        observer: Option<Arc<dyn ResponsesUsageObserver>>,
+    ) -> Self {
+        self.usage_observer = observer;
+        self
     }
 
     #[instrument(
@@ -154,11 +169,12 @@ impl<T: HttpTransport> ResponsesClient<T> {
             )
             .await?;
 
-        Ok(spawn_response_stream(
+        Ok(spawn_response_stream_with_observer(
             stream_response,
             self.session.provider().stream_idle_timeout,
             self.sse_telemetry.clone(),
             turn_state,
+            self.usage_observer.clone(),
         ))
     }
 }
