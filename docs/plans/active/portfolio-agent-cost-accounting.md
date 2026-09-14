@@ -11,12 +11,15 @@ activation_basis: "Travis selected accounting September 11 and requested an Astr
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-09-09
-updated: 2026-09-12
+updated: 2026-09-14
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Product measurement"
   requirement_excerpt: "No commercial performance numbers have been supplied."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-responses-dispatch-20260914"
+    branch: "workstream/accounting-responses-dispatch-20260914"
+    base_commit: "25920ec8d17f3f8eb17cdb89f90892ca5848ae22"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-contract-goldens-20260913"
     branch: "workstream/accounting-contract-goldens-20260913"
     base_commit: "81d0f90e77c1e9217a16e70fef1019ff9aa13753"
@@ -195,7 +198,8 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Codex accounting contract-golden lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-contract-goldens-20260913` | `workstream/accounting-contract-goldens-20260913` | `81d0f90e77c1e9217a16e70fef1019ff9aa13753` | PF-60-S02 exact two-path original-contract-native-golden-allocation.md; accepted runtime frozen |
+| Astra High accounting Responses-dispatch lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-responses-dispatch-20260914` | `workstream/accounting-responses-dispatch-20260914` | `25920ec8d17f3f8eb17cdb89f90892ca5848ae22` | PF-60-S02 [Responses HTTP dispatch allocation](../../research/agent-cost-accounting/responses-dispatch-allocation.md): 20 literal files, target 2700/1050, STOP 3000/1150; default OFF |
+| Codex accounting contract-golden lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-contract-goldens-20260913` | `workstream/accounting-contract-goldens-20260913` | `81d0f90e77c1e9217a16e70fef1019ff9aa13753` | PF-60-S02 original-contract goldens f4507cb50 accepted at 855ab3382; consumed history |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
 S02 retains its reservation; Travis approved conservative daily expiry in this
@@ -218,8 +222,8 @@ Public deletion signatures/counts/missing-row semantics and normal no-schema
 behavior stay unchanged; no blanket new activation/failure checks. Separate
 logs/memory/goals stores remain outside main-state transaction atomicity.
 Custom range/interval filtering is recorded in S03 draft, not implemented here.
-The migration/17-file store allocation above is accepted history. Current dispatch
-is only the two-path original-contract golden allocation; runtime/manifests stay frozen.
+The migration/17-file store allocation above is accepted history. Travis opened the accounting resumption gate on September 14; current dispatch
+is the Responses HTTP dispatch allocation above. Manifests/locks stay manager-owned.
 The worker fast-forwards to
 the reviewed receiving allocation before dispatch; its historical branch name
 does not change sprint ownership. Manager owns shared plans/integration.
