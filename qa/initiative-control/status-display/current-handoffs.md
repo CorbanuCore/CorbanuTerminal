@@ -83,6 +83,25 @@ Authority recorded: unattended recurrence approved pending qualification;
   independent reviews are paused; a bounded retry loop is running; OpenAI
   workers unaffected. Nothing was pushed to main; no credentials were entered.
 
+### Update — September 14 13:15 UTC: overnight close-out
+
+- **Root cause of the blockers**: the Mac's login keychain locked overnight
+  (~12:00Z). Raw HTTPS egress is fine, but the Corbanu binary's auth/keyring path
+  blocks on the unlock prompt, so *every* new model session stalls (three held
+  Fable runs, a review probe, a Luna publisher) and `git push` prompts for
+  credentials. Unlocking the Mac restores all of it; no config was changed.
+- **PF-83 verification (clean env)**: app-server 1356/1374 (13 failed + 5 timed
+  out, none in PF-83 areas; the 15 PF-83-area tests passed); TUI 3955/4098 (106
+  failed + 37 timed out, mostly snapshot/provider/onboarding suites; 10 touch
+  permission/settings rendering). **Attribution unknown** without a baseline run
+  on `da456599d`; the merge stays unverified and unreverted; Slack question open.
+  Test artifacts (`.snap.new`, tmux artifacts) retained privately, tree clean.
+- **Not dispatched** (Fable decisions blocked): `owner-daemon-impl-02` and
+  `slk-harness-impl-02` allocations are prepared; dispatch resumes after unlock.
+- Local integration tip is ahead of origin by three commits; the dashboard still
+  shows `build-lasnxjjf` (`d4f61a978`). First morning actions: unlock → push →
+  republish → baseline run for PF-83 → answer/dispatch pending increments.
+
 ## STOP — user-requested management pause, September 13
 
 All three workstreams have reached a checkpoint and stopped. The implementation
