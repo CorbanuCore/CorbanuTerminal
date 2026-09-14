@@ -129,6 +129,22 @@ class DecisionRenderingTests(unittest.TestCase):
         self.assertEqual(self.value, before)
         self.assertEqual(self.render(), page)
 
+    def test_dec001_single_open_decision_has_no_duplicate_index(self):
+        from test_decisions import LATER, revision
+        for status in ("open", "acknowledged"):
+            value = self.value if status == "open" else revision(self.value, status)
+            for now in (self.now, LATER):
+                with self.subTest(status=status, now=now):
+                    page = self.render(value, now)
+                    self.assertNotIn('id="open-decision-index"', page)
+                    self.assertNotIn('href="#open-decision-index"', page)
+                    self.assertNotIn("Decision overview —", page)
+                    self.assertEqual(page.count('class="decision-overview"'), 1)
+                    self.assertEqual(page.count('class="attention-item decision-card"'), 1)
+                    self.assertIn('id="decision-choice-1" tabindex="-1"><summary>', page)
+                    self.assertIn('class="decision-body-bounded" tabindex="0" role="region"', page)
+                    self.assertIn('href="#decision-choice-1">Permanent decision link</a>', page)
+
     def test_dec025_long_context_keeps_all_owners_in_index_and_bounded_cards(self):
         from test_decisions import revision
         self.value = revision(self.value, "acknowledged")
@@ -185,9 +201,20 @@ class DecisionRenderingTests(unittest.TestCase):
         resolved["decisions"].append(other)
         for now in (self.now, LATER):
             page = self.render(resolved, now)
+            self.assertNotIn('id="open-decision-index"', page)
+            self.assertNotIn('href="#open-decision-index"', page)
+            self.assertEqual(page.count('class="attention-item decision-card"'), 2)
+        second = copy.deepcopy(self.value["decisions"][0])
+        second["id"] = "second-open"
+        resolved["decisions"].append(second)
+        for now in (self.now, LATER):
+            page = self.render(resolved, now)
             index = page.split('id="open-decision-index"', 1)[1].split('</ul></div>', 1)[0]
             self.assertNotIn('href="#decision-choice-1"', index)
             self.assertIn('href="#decision-unsafe-text"', index)
+            self.assertIn('href="#decision-second-open"', index)
+            self.assertEqual(index.count("<li>"), 2)
+            self.assertEqual(Links(page).hrefs.count("#open-decision-index"), 2)
             self.assertIn("&lt;img", index)
             self.assertIn("&lt;script&gt;", index)
             self.assertNotIn("<img", page)
@@ -196,7 +223,7 @@ class DecisionRenderingTests(unittest.TestCase):
             self.assertIn(attention.document_url(self.path), Links(index).hrefs)
             self.assertEqual(page.count('id="decision-choice-1"'), 1)
             self.assertEqual(page.count('id="decision-unsafe-text"'), 1)
-            self.assertEqual(page.count('class="decision-body-bounded"'), 2)
+            self.assertEqual(page.count('class="decision-body-bounded"'), 3)
 
     def test_dec006_007_019_notices_separate_acknowledged_unresolved(self):
         from test_decisions import revision

@@ -199,7 +199,8 @@ def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=N
 
     for title, records in (("Inspection records (recorded open)" if incomplete else "Open questions", opened), ("Inspection history" if incomplete else "Decision history", [d for d in feed["decisions"] if d["id"] not in view["open"]])):
         body += f'<div><h3>{title}</h3>'
-        if records is opened and records:
+        show_index = records is opened and len(records) >= 2
+        if show_index:
             body += ('<div class="decision-index" id="open-decision-index" tabindex="-1">'
                      '<p class="muted">Decision overview — locate a summary, then expand it for context.</p><ul>')
             for decision in records:
@@ -212,7 +213,7 @@ def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=N
             record = decision["revisions"][-1]
             anchor = 'decision-' + decision["id"]
             body += f'<details class="attention-item decision-card" id="{anchor}" tabindex="-1"><summary>{content(record, True)}</summary>'
-            if records is opened:
+            if show_index:
                 body += '<a class="decision-back" href="#open-decision-index">Back to decision overview</a>'
             body += (f'<div class="decision-body-bounded" tabindex="0" role="region" '
                      f'aria-label="Decision context: {esc(record["summary"])}">'
