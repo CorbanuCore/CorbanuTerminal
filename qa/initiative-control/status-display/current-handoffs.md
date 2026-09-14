@@ -42,6 +42,16 @@ historical allocations were compacted via `put_allocation(replace)` with frozen
 originals retained in the audit table. No inference ran for that attempt.
 [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md) stays intentionally paused by that decision.
 
+### Update — September 14 09:45 UTC: overnight cycles 3–8
+
+Travis approved unattended recurrence (activation still gated on qualification),
+`--yolo` for non-test workers, and security relaunch once workstream 3 is done.
+
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Responses HTTP dispatch allocation frozen (`25920ec8d`), governance reconciled after a correct worker preflight STOP (`c7ee093bc`); implementation `e47e41870` (20 files, 2871/1054 lines, 385/385 focused; two frozen role cases reframed because a role cannot override the reserved built-in `openai` provider) reviewed clean (0 findings) and **received at `d81bad635`**: combined 634/634, Core accounting 63/63. Collection OFF; WS/Chat/auxiliary routes remain open.
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): DEC-001 harness hardened (`7ce49a7` → P2 fixed `ebe0bd7`, corrective review clean), fresh attested fixture from a detached candidate worktree (`4713c31`), replay `attempt-waid23v9` raw pass with **independent evidence review "supported with limits"** (all five prior provenance gaps evidenced; residual: image consumption not attested, provider HTTP uncapturable). Briefing-size defect fixed and received (`da456599d`, 494 tests) plus preview follow-up (`82dda1ad2`, 496 tests). Multi-case harness `00ef50f` reviewed correct; DEC-021 marked unmapped (vacuous secret variant, P2) with DEC-003/026; two executor-found defects fixed by the manager (write-once receipt collisions → checkpoints `2761743`; venv interpreter). DEC-002 passed on `3ffeac0`; the remaining 21 mapped cases are executing sequentially with retained failures.
+- **Competing writer**: `fix/live-permission-transition-20260913` (new sprint PF-83-S01 under the security plan, created by another agent) was merged into integration as `a51602037` outside the integration gate and carried to origin by a manager push before detection. Its only known review is "patch is incorrect" (pre-commit tree). Not reverted; treated as unverified; question `pf83-external-integration` sent to Slack (thread `1789375985.333669`) after a recorded outage-gap review re-qualified the transport. Default if unanswered: keep + Rust verification, revert on failure.
+- Slack receiver `slack-receiver-02` alive (session `01a09e29…`); listener journal re-qualified 08:52Z.
+
 ## STOP — user-requested management pause, September 13
 
 All three workstreams have reached a checkpoint and stopped. The implementation
