@@ -1,4 +1,5 @@
 #[path = "accounting_anthropic_support.rs"]
+#[allow(dead_code)]
 mod existing;
 use codex_core::config::AccountingMode;
 use codex_features::Feature;
@@ -35,8 +36,14 @@ pub fn builder(endpoint: String, mode: AccountingMode) -> TestCodexBuilder {
                 ..ModelProviderInfo::create_openai_provider(Some(endpoint))
             };
             config.accounting = mode;
-            config.model_catalog = Some(codex_models_manager::bundled_models_response().unwrap());
-            config.features.enable(Feature::Sqlite).unwrap();
+            config.model_catalog = Some(
+                codex_models_manager::bundled_models_response()
+                    .expect("synthetic Responses fixture"),
+            );
+            config
+                .features
+                .enable(Feature::Sqlite)
+                .expect("synthetic Responses fixture");
         })
 }
 pub fn usage(write: Option<i64>) -> Value {
@@ -111,7 +118,10 @@ impl Gate {
                     let mut bytes = Vec::new();
                     let end = loop {
                         let mut buf = [0; 4096];
-                        let n = socket.read(&mut buf).await.unwrap();
+                        let n = socket
+                            .read(&mut buf)
+                            .await
+                            .expect("synthetic Responses fixture");
                         if n == 0 {
                             return;
                         }
@@ -120,25 +130,30 @@ impl Gate {
                             break end + 4;
                         }
                     };
-                    let headers = String::from_utf8(bytes[..end].to_vec()).unwrap();
+                    let headers = String::from_utf8(bytes[..end].to_vec())
+                        .expect("synthetic Responses fixture");
                     assert!(headers.starts_with("POST /v1/responses "));
                     let length: usize = headers
                         .lines()
                         .find_map(|line| {
                             let (key, value) = line.split_once(':')?;
                             key.eq_ignore_ascii_case("content-length")
-                                .then(|| value.trim().parse().unwrap())
+                                .then(|| value.trim().parse().expect("synthetic Responses fixture"))
                         })
-                        .unwrap();
+                        .expect("synthetic Responses fixture");
                     while bytes.len() < end + length {
                         let mut buf = [0; 4096];
-                        let n = socket.read(&mut buf).await.unwrap();
+                        let n = socket
+                            .read(&mut buf)
+                            .await
+                            .expect("synthetic Responses fixture");
                         if n == 0 {
                             return;
                         }
                         bytes.extend_from_slice(&buf[..n]);
                     }
-                    let body = serde_json::from_slice(&bytes[end..end + length]).unwrap();
+                    let body = serde_json::from_slice(&bytes[end..end + length])
+                        .expect("synthetic Responses fixture");
                     let (chunks, mut rx) = mpsc::channel::<String>(8);
                     if tx.send(Held { body, chunks }).await.is_err() {
                         return;
@@ -163,7 +178,7 @@ impl Gate {
         Ok(
             tokio::time::timeout(Duration::from_secs(10), self.incoming.recv())
                 .await?
-                .unwrap(),
+                .expect("synthetic Responses fixture"),
         )
     }
     pub fn no_pending(&mut self) {

@@ -123,12 +123,15 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
         let admission = if evidence.sampling.provider == "anthropic" {
             evidence.sampling.admit(&self.model, &request.url).await
         } else {
-            evidence.sampling.admit_with_tier(&self.model, &request.url, self.tier.as_deref()).await
+            evidence
+                .sampling
+                .admit_with_tier(&self.model, &request.url, self.tier.as_deref())
+                .await
         };
         let attempt = admission.map_err(|_| {
-                evidence.sampling.reject();
-                TransportError::Build(FAILURE.into())
-            })?;
+            evidence.sampling.reject();
+            TransportError::Build(FAILURE.into())
+        })?;
         let response = match self.inner.stream(request).await {
             Err(TransportError::Http { status, .. }) if status.is_redirection() => {
                 evidence.sampling.reject();

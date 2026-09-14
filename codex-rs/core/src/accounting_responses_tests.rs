@@ -62,7 +62,10 @@ impl Fixture {
             .await?
             .unwrap())
     }
-    async fn rows<T: serde::de::DeserializeOwned>(&self, query: &'static str) -> anyhow::Result<Vec<T>> {
+    async fn rows<T: serde::de::DeserializeOwned>(
+        &self,
+        query: &'static str,
+    ) -> anyhow::Result<Vec<T>> {
         let pool = self
             .db
             .sqlite()
@@ -294,8 +297,10 @@ async fn accounting_responses_response_local_identity() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn accounting_responses_role_overlay_preserves_binding() -> anyhow::Result<()> {
+    let _ = tracing_subscriber::fmt().with_test_writer().try_init();
     let mut config = crate::config::test_config().await;
     config.model_provider_id = "openai".into();
+    config.model = Some("gpt-5.6-sol".into());
     config.model_provider = provider();
     config.accounting = mode();
     let role = config.codex_home.join("responses-role.toml");

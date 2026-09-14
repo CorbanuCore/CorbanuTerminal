@@ -1,4 +1,4 @@
-# Responses dispatch increment — partial implementation STOP
+# Responses dispatch increment
 
 Action: responses-dispatch-impl-02
 Allocation digest: 4ccf4088510fd6a6ae0d02c730bbbbee4b260881c9e256f96e2bba6f049ca3ca
@@ -10,7 +10,15 @@ Worktree: /Volumes/CorbanuDrive/Corbanu/worktrees/accounting-responses-dispatch-
 Allocation: docs/research/agent-cost-accounting/responses-dispatch-allocation.md
 Date: September 14, 2026
 
-## Result and STOP boundary
+## Current return after manager-authorized continuation
+
+**Unqualified partial increment: 383/385 focused tests pass; two role cases fail.**
+The original twenty-first-path tooling STOP is resolved. No additional path is
+requested or changed. The remaining positive OpenAI role-provider override
+conflicts with the existing reserved-provider configuration rule outside this
+allocation. No public configuration rule was bypassed or changed.
+
+## Historical partial STOP at 5219f44fc
 
 Partial implementation committed for manager recovery, NOT receiving acceptance.
 The required scoped `just fix -p codex-core -p codex-api --locked` automatically
@@ -49,7 +57,7 @@ Preflight and final plan/sprint checkers both passed: active 3/3, current 115,
 archived 126. These counts do not validate the stale prose or qualify this code.
 Prior receipt 6db0edc7 is historical; this file replaces it as explicitly directed.
 
-## Implemented but not finally verified
+## Implementation and verification status at the historical STOP
 
 - Internal DirectOpenAiResponsesHttp mode; ordinary config remains Disabled.
 - Sampling-local UUID and deferred OnceCell bootstrap, scope cleanup and failure
@@ -118,7 +126,7 @@ Raw complete logs are local /tmp artifacts; retain them before temporary cleanup
 | responses-dispatch-fmt-01.log | 0b1640c2204b6c3704c7c20ce2cb1366421ef44f91e2390349767534013d1a41 |
 | responses-dispatch-fmt-02.log | 40fb37a0cb48659f9e05e0228f8de81e088ad05b38d0d3ef39f45fdc488dddd6 |
 
-## Counts and limitations
+## Historical STOP counts and limitations
 
 Source subtotal: 19 files, 2385 added+removed lines, 665 non-test, 1720 test.
 Final 20-file totals: +2484/-88 = 2572 total / 852 non-test / 1720 test.
@@ -134,3 +142,111 @@ This internal stage has no claimed human-test readiness, live-provider,
 TensorCash/Isometric, TUI, whole-S02 or release qualification. Code-blind N/A
 requires integrator acceptance; later S03/S04 functional gates remain mandatory.
 No missing or failed evidence has been represented as passed.
+
+## Authorized continuation and final verification
+
+Manager disposition explicitly resumed the stopped action without granting a
+twenty-first path. The allocated endpoint now calls the existing
+spawn_response_stream wrapper for None, and the observer-aware wrapper for Some.
+The rerun of just fix passed. Exact-base sse/mod.rs diff is zero after fix and at
+final verification. No subsequent tooling edit escaped the literal 20 paths.
+
+Fixture corrections preserved the assertions: consume the native RateLimits
+event before testing the observation barrier; correct DayTotals field order;
+select the existing legacy compaction fixture; enable ordinary Responses tools
+in the child fixture and handle namespaced native spawn tools. No production
+routing capability was disabled to pass these tests. The child fixture now
+reaches its held-send wait but times out; it is not a successful child proof.
+
+All commands below use the exact Rust prefix and working directory above.
+Nextest commands use the repository local profile with one configured retry.
+Final focused execution uses two test threads to reduce fixture contention.
+
+| Command after prefix | Actual result and /tmp log suffix |
+| --- | --- |
+| just fix -p codex-core -p codex-api --locked | Exit 0, 1m46s; fix-02.log. No sse/mod.rs edit. |
+| cargo fmt -p codex-core -p codex-api --check | Initial exit 1: formatting differences in allocated paths; cargo-fmt-check-01.log. |
+| cargo fmt -p codex-core -p codex-api | Four exit-0 passes as fixture corrections progressed; cargo-fmt-01.log through cargo-fmt-04.log. Stable imports_granularity warnings retained. Last modifying pass preceded final tests. |
+| cargo nextest list -p codex-api -p codex-core -p codex-state -E 'test(accounting) \| package(codex-state)' --locked | Exit 0; list-03.log. Discovered 385 cases: API 12, Core 63, state 310; all 34 frozen new names present. |
+| cargo nextest list -p codex-api responses_accounting --locked | Exit 0; api-list-01.log, eight discovered cases. |
+| just test -p codex-api responses_accounting --locked | Exit 100; api-test-01.log: 8 run, 6 passed, 2 failed, 208 skipped. Both failures were the RateLimits fixture ordering corrected above. |
+| just test -p codex-core -p codex-api -p codex-state -E '(package(codex-core) & test(accounting)) \| package(codex-state)' --locked | Exit 100; core-state-test-01.log: 373 run, 370 passed (1 flaky, 1 leaky), 3 failed, 3529 skipped. Failures: role overlay, auxiliary fixture, child fixture. |
+| just test -p codex-core -p codex-api -p codex-state -E 'test(accounting_responses) \| test(responses_accounting)' --locked | Exit 100; new-test-02.log: 34 run, 32 passed, 2 failed, 4084 skipped. Role overlay and child fixture failed. |
+| just clippy -p codex-core -p codex-api --locked | Exit 0, 1m47s; clippy-final.log. Existing dependency/test warnings remain; not warning-free. Reused Anthropic support adds a third occurrence to the existing duplicate-module warning. |
+| cargo fmt -p codex-core -p codex-api --check | Final exit 0; cargo-fmt-final.log. Stable formatter configuration warnings only. |
+| just test -p codex-core -p codex-api -p codex-state -E 'test(accounting) \| package(codex-state)' --test-threads 2 --locked | Final exit 100; final-tests.log: 385 run, 383 passed, 2 failed, 3733 skipped; 41.933s. No flaky/leaky result reported on this run. |
+| cargo clippy -p codex-core -p codex-api --lib --locked -- -D warnings | Exit 101; clippy-lib-final.log. Existing protocol/src/security.rs:28 large_enum_variant promoted to error before touched libraries complete. Excluded path unchanged; no warning-free strict pass claimed. |
+| git diff --check; git diff --exit-code fda20ff3a34d8fbae3fde25a1b196b0c8809826e -- codex-rs/codex-api/src/sse/mod.rs | Both exit 0 on final source tree. |
+| python3 docs/plans/check.py; python3 docs/sprints/check.py | Both exit 0; 3 active, 115 current, 126 archived. |
+
+All log suffixes above have prefix responses-dispatch-. Runtime discovery took
+2m38s including compilation; a diagnostic sample of PID 85849 exited 255 because
+the process had already exited (list-hang-sample-command.log). No process was
+killed and no build/cache workaround was applied.
+
+| Run | Nextest run ID |
+| --- | --- |
+| API first | b1e37797-fcec-495f-afc0-c6a42d7ff07a |
+| Core/state first | b3a68e32-45af-4c3c-b1f7-b6d995174375 |
+| New cases second | 3ed38ab8-5567-4aca-aa10-294fc1b68781 |
+| Final accounting/state | 04624f40-a1b8-4df1-8b46-089688882dbd |
+
+Final execution breakdown: API 12/12 (new Responses 8/8); Core unit accounting
+26/27 (new Responses 7/8); Core native accounting 35/36 (new Responses 17/18);
+state 310/310. All 34 new names executed; 32 passed and two failed.
+This is execution-count evidence, not completion of every vector in the frozen
+plan. The partial-vector limitations in the historical implementation section
+remain open; no passing name substitutes for its missing assertions.
+
+The first Core/state run's flaky existing case was
+accounting_anthropic_cancel_held_http_other_owner_fresh_turn_and_two_resumes:
+first attempt aborted during ctor alias setup with operation-would-block, retry
+passed. Its existing leaky case was
+accounting_actual_transport_retries_and_old_response_keep_distinct_owned_identity.
+The final run's passes do not erase those earlier outcomes.
+
+## Remaining blocker and receiving limitations
+
+accounting_responses_role_overlay_preserves_binding fails before overlay in the
+native role loader: model_providers contains reserved built-in provider ID
+openai; built-in providers cannot be overridden. The guard is
+codex-rs/config/src/config_toml.rs::validate_reserved_model_provider_ids, outside
+the 20-file allocation. The frozen positive explicit role override is therefore
+not qualified. Renaming it to a custom provider would also fail this allocation's
+exact configured-provider identity; no such substitution was made.
+
+accounting_responses_native_spawned_role_children fails waiting for all expected
+native held sends (10-second fixture deadline, twice). Its role contains the
+same rejected override; the timeout alone does not prove that is its only issue.
+Ownership/spawn/retry/fork assertions after the wait remain unproved. The manager
+must reconcile the role contract with the reserved-provider rule before the
+positive role cases can qualify; public-config changes are explicitly forbidden.
+
+Full affected Core/API suites, separate role/stage-one/Responses/WS compatibility
+selectors, retained login/http-client selectors, full-Core baseline comparison,
+shared TaskNode-session gate, independent review and combined receiving-tree
+execution remain open. No scope expansion or review approval is inferred.
+Collection remains default OFF. Internal-stage N/A still needs integrator
+acceptance; S03/S04 functional gates remain mandatory.
+
+## Final artifacts and bounds
+
+Authoritative final JUnit is
+/tmp/responses-dispatch-final-tests-actual-junit.xml, read from this worktree's
+codex-rs/target/nextest/local/junit.xml and matched to final run ID above.
+Earlier copies named api-test-01-junit.xml, core-state-test-01-junit.xml,
+new-test-02-junit.xml and final-tests-junit.xml under the same /tmp prefix were
+copied from the external Cargo build target by mistake. They contain stale
+September 12 run e8489c61-debc-4383-ab78-6ffa85e4fd86 and are NOT evidence for this
+increment. Those copies are retained as erroneous artifacts. Earlier execution
+counts and failures come from the matching raw console logs, not those XMLs.
+
+Final manifest and artifact hashes: /tmp/responses-dispatch-final-manifest.json.
+It records SHA-256 of all 20 candidate files, base-to-candidate diff and local
+logs including the corrected JUnit. Preserve /tmp artifacts before cleanup.
+Final base-relative diff counts: +2686/-95 = 2781 total / 994 non-test / 1787 test.
+Count includes additions and deletions, all mixed source/registration glue and
+this receipt; only dedicated test/support bodies are classified as test. Total
+exceeds the 2700 target by 81; hard STOP bounds 3000/1150 remain unbreached.
+No new path, manifest/lock/BUILD/config-schema/protocol change or push.
+The return remains unqualified, with the concrete role-contract blocker above.

@@ -9,6 +9,7 @@ use crate::requests::headers::build_session_headers;
 use crate::requests::headers::insert_header;
 use crate::requests::headers::subagent_header;
 use crate::sse::responses::spawn_response_stream_with_observer;
+use crate::sse::spawn_response_stream;
 
 #[path = "responses_accounting.rs"]
 pub(crate) mod accounting;
@@ -169,12 +170,20 @@ impl<T: HttpTransport> ResponsesClient<T> {
             )
             .await?;
 
-        Ok(spawn_response_stream_with_observer(
-            stream_response,
-            self.session.provider().stream_idle_timeout,
-            self.sse_telemetry.clone(),
-            turn_state,
-            self.usage_observer.clone(),
-        ))
+        Ok(match &self.usage_observer {
+            Some(observer) => spawn_response_stream_with_observer(
+                stream_response,
+                self.session.provider().stream_idle_timeout,
+                self.sse_telemetry.clone(),
+                turn_state,
+                Some(Arc::clone(observer)),
+            ),
+            None => spawn_response_stream(
+                stream_response,
+                self.session.provider().stream_idle_timeout,
+                self.sse_telemetry.clone(),
+                turn_state,
+            ),
+        })
     }
 }

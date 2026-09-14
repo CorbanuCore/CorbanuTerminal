@@ -75,8 +75,8 @@ async fn accounting_responses_native_complete_and_partial_goldens() -> anyhow::R
         assert_eq!(request.path(), "/v1/responses");
         assert_eq!(request.body_json()["model"], "gpt-5.6-sol");
         let expected = [
-            if write.is_some() { 80 } else { 0 },
             100,
+            if write.is_some() { 80 } else { 0 },
             20,
             0,
             40,
@@ -89,7 +89,7 @@ async fn accounting_responses_native_complete_and_partial_goldens() -> anyhow::R
             DayTotals {
                 measured: std::array::from_fn(|i| Metric {
                     known: expected[i],
-                    unknown: i64::from(write.is_none() && (i == 0 || i == 3))
+                    unknown: i64::from(write.is_none() && (i == 1 || i == 3))
                 }),
                 known_usd: if write.is_some() {
                     "0.00161"
@@ -297,18 +297,38 @@ async fn accounting_responses_native_ws_fallback_http_segment() -> anyhow::Resul
 async fn accounting_responses_native_sampling_and_auxiliary_scope() -> anyhow::Result<()> {
     let server = MockServer::start().await;
     let endpoint = format!("{}/v1", server.uri());
-    let mock = responses::mount_sse_sequence(&server, vec![
-        responses::sse(vec![
-            responses::ev_response_created("tools"),
-            responses::ev_shell_command_call("shell-fixture", "echo accounting"),
-            event("response.completed", usage(Some(0))),
-        ]),
-        success(usage(Some(0))),
-    ]).await;
-    let compact = responses::mount_compact_json_once(&server, json!({"output":[{
-        "type":"compaction","encrypted_content":"synthetic-summary"
-    }]})).await;
-    let test = builder(endpoint.clone(), enabled(&endpoint)).build_with_auto_env(&server).await?;
+    let mock = responses::mount_sse_sequence(
+        &server,
+        vec![
+            responses::sse(vec![
+                responses::ev_response_created("tools"),
+                responses::ev_shell_command_call("shell-fixture", "echo accounting"),
+                event("response.completed", usage(Some(0))),
+            ]),
+            success(usage(Some(0))),
+        ],
+    )
+    .await;
+    let compact = responses::mount_compact_json_once(
+        &server,
+        json!({"output":[{
+            "type":"compaction","encrypted_content":"synthetic-summary"
+        }]}),
+    )
+    .await;
+    let test = builder(endpoint.clone(), enabled(&endpoint))
+        .with_config(|config| {
+            config
+                .features
+                .disable(codex_features::Feature::TokenBudget)
+                .unwrap();
+            config
+                .features
+                .disable(codex_features::Feature::RemoteCompactionV2)
+                .unwrap();
+        })
+        .build_with_auto_env(&server)
+        .await?;
     test.submit_turn("fixture").await?;
     let db = test.codex.state_db().unwrap();
     let records = attempts(&db).await?;
@@ -317,7 +337,9 @@ async fn accounting_responses_native_sampling_and_auxiliary_scope() -> anyhow::R
     assert_ne!(records[0].request_id, records[1].request_id);
     assert_eq!(records[1].retry_of, None);
     assert_eq!(mock.requests().len(), 2);
-    test.codex.submit(codex_protocol::protocol::Op::Compact).await?;
+    test.codex
+        .submit(codex_protocol::protocol::Op::Compact)
+        .await?;
     terminal(&test).await?;
     assert_eq!(compact.single_request().path(), "/v1/responses/compact");
     assert_eq!(attempts(&db).await?, records);

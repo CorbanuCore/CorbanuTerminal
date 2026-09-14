@@ -264,6 +264,10 @@ async fn responses_accounting_awaits_observation_before_completion() {
             )],
             Some(sink.clone()),
         );
+        assert!(matches!(
+            stream.next().await,
+            Some(Ok(ResponseEvent::RateLimits(_)))
+        ));
         assert!(
             tokio::time::timeout(Duration::from_millis(30), stream.next())
                 .await
@@ -296,14 +300,15 @@ async fn responses_accounting_invalid_usage_latches_and_stops() {
         vec![(1, Err(InvalidResponsesUsage))]
     );
     assert_eq!(completed(&output), 0);
-    assert_eq!(output.len(), 1);
-    assert!(output[0].is_err());
+    assert_eq!(output.len(), 2);
+    assert!(matches!(output[0], Ok(ResponseEvent::RateLimits(_))));
+    assert!(output[1].is_err());
 }
 
 #[tokio::test]
 async fn responses_accounting_none_preserves_legacy_stream() {
     let payload = vec![
-        json!({"type":"response.created","response":{"id":"fixture"}}),
+        json!({"type":"response.created","response":{"id":"fixture"},"safety_buffering":false}),
         event("response.usage", json!({"input_tokens":-1})),
         event(
             "response.completed",

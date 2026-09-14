@@ -345,6 +345,7 @@ async fn accounting_responses_native_spawned_role_children() -> anyhow::Result<(
             for model in &mut config.model_catalog.as_mut().unwrap().models {
                 model.multi_agent_version = Some(codex_protocol::protocol::MultiAgentVersion::V2);
                 model.tool_mode = None;
+                model.use_responses_lite = false;
             }
             let role = config.codex_home.join("responses-child.toml");
             std::fs::write(
@@ -365,17 +366,36 @@ async fn accounting_responses_native_spawned_role_children() -> anyhow::Result<(
         .await?;
     submit(&test).await?;
     let root = gate.next().await?;
-    let tool = root.body["tools"]
+    let (namespace, tool) = root.body["tools"]
         .as_array()
         .unwrap()
         .iter()
-        .filter_map(|v| v["name"].as_str())
-        .find(|name| name.ends_with("spawn_agent"))
-        .unwrap();
+        .find_map(|item| {
+            if item["name"]
+                .as_str()
+                .is_some_and(|name| name.ends_with("spawn_agent"))
+            {
+                return Some((None, item["name"].as_str().unwrap()));
+            }
+            item["tools"].as_array()?.iter().find_map(|tool| {
+                let name = tool["name"].as_str()?;
+                name.ends_with("spawn_agent")
+                    .then_some((item["name"].as_str(), name))
+            })
+        })
+        .expect("native spawn tool");
     let mut events = vec![responses::ev_response_created("root")];
     for (index, role) in ["default", "fixture"].iter().enumerate() {
-        events.push(responses::ev_function_call(&format!("spawn-{index}"), tool,
-            &json!({"task_name":format!("child_{index}"),"message":"fixture","agent_type":role,"fork_turns":"none"}).to_string()));
+        let arguments = json!({"task_name":format!("child_{index}"),"message":"fixture","agent_type":role,"fork_turns":"none"}).to_string();
+        events.push(match namespace {
+            Some(namespace) => responses::ev_function_call_with_namespace(
+                &format!("spawn-{index}"),
+                namespace,
+                tool,
+                &arguments,
+            ),
+            None => responses::ev_function_call(&format!("spawn-{index}"), tool, &arguments),
+        });
     }
     events.push(event("response.completed", usage(Some(0))));
     root.chunks.send(responses::sse(events)).await?;
