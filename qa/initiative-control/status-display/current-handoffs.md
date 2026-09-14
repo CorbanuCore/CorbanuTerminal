@@ -93,6 +93,37 @@ Authority recorded: unattended recurrence approved pending qualification;
   independent reviews are paused; a bounded retry loop is running; OpenAI
   workers unaffected. Nothing was pushed to main; no credentials were entered.
 
+### Update — September 14 21:30 UTC: relaunched host, afternoon cycles
+
+Corrections: the overnight "locked keychain" framing was wrong — test app-servers
+inherited the live profile (repair `3ab6aa051`); both overnight PF-83 runs stay
+contaminated. Since the relaunch (rebuilt host 0.1.42; worker pin unchanged):
+
+- **PF-83 external merge**: guarded `just test` on the tip plus a pre-merge
+  baseline (`da456599d` + isolation harness, isolated build dir): app-server
+  0 tip-only failures (11 vs 13), TUI 4 tip-only all flaky on rerun, PF-83 area
+  tests 15/15. No attributable regression. Travis answered in Slack
+  (`Ev0C1N1SCT53`): keep and incorporate, fix the two P2s. Feed rev 36
+  resolved; PF-83 functional gate remains open for its owner.
+- **Slack**: the supervised listener child had been a zombie since ~10:16Z
+  (PID-only liveness checks missed it); replaced by a manager-owned supervised
+  listener (operator2, FIFO ops), re-qualified with gap reviews twice (one
+  self-inflicted supervisor bug, patched). **SLK-009 re-run completed**: fresh
+  ACK-only question, Travis ACK admitted live, interpreted, handoff delivered to
+  `slack-receiver-02` with exact `expected_ack`, feed rev 38 resolved,
+  acknowledged notice posted. Limit: the native `Bridge` evidence contract was
+  bypassed for the TMUX receiver (owner-daemon increment C input).
+- **DEC-025 fix** (Travis: fix now): `d71a8ef14` → `7a8ff466a` → `2aac8f840`,
+  all reviewed/received (`fcbc2ad31`, `d8d8e3516`, `a9801395b`); harness
+  re-pinned per candidate (v2–v4). On v4: DEC-002 ✓, DEC-005 ✓, DEC-025 ✓;
+  DEC-001 fails on the synthetic summary's wording (passed twice on v1 with the
+  same text) — under independent adjudication, not treated as a regression.
+- **Owner daemon**: increment B received (`e8d99d4cb`) after a corrective
+  review (two transport races fixed, 539 tests). Recurrence still not activated.
+- **SLK harness**: increments 2–3 corrected P1/P2 findings; increment 4 (SLK-013
+  expectation, traceback retention, ceiling citation 1987) dispatched.
+- Dashboard `build-uflvf0tt` @ `a826527bb`; integration tip `a9801395b` == origin.
+
 ### Update — September 14 13:15 UTC: overnight close-out
 
 - **Root cause of the blockers**: the Mac's login keychain locked overnight
