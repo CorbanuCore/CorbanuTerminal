@@ -2079,6 +2079,11 @@ pub(crate) enum AppEvent {
 
     /// Select a named permission profile, optionally applying built-in mode settings too.
     SelectPermissionProfile(PermissionProfileSelection),
+    SelectPermissionPreset(PermissionProfileSelection),
+    PermissionConfirmationCompleted {
+        selection_id: uuid::Uuid,
+        result: crate::app_server_session::PermissionConfirmationResult,
+    },
 
     /// Update the current approvals reviewer in the running app and widget.
     UpdateApprovalsReviewer(ApprovalsReviewer),

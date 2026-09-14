@@ -7,6 +7,22 @@ use super::user_messages::remap_colliding_paste_placeholders;
 use super::*;
 
 impl ChatWidget {
+    pub(crate) fn restore_initial_user_message(&mut self) {
+        if let Some(message) = self.initial_user_message.take() {
+            self.restore_user_message_to_composer(message);
+        }
+    }
+
+    pub(crate) fn submit_initial_user_message_after_permission_confirmation(&mut self) {
+        // Never turn held initial input into an active-turn steer or queued
+        // auto-send. Keep other drafts and all normal setup/suppression gates.
+        if self.bottom_pane.is_task_running() || self.has_queued_follow_up_messages() {
+            self.restore_initial_user_message();
+        } else {
+            self.submit_initial_user_message_if_pending();
+        }
+    }
+
     pub(crate) fn set_initial_user_message_submit_suppressed(&mut self, suppressed: bool) {
         self.suppress_initial_user_message_submit = suppressed;
     }

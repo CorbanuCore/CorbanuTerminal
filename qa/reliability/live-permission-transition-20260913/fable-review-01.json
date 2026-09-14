@@ -1,0 +1,29 @@
+{
+  "findings": [
+    {
+      "title": "Confirmed in-thread permission change no longer carries into /new or fresh thread starts",
+      "body": "Before this patch, selecting a permission preset/profile with an active thread updated App-level `self.config`, `runtime_approval_policy_override` and `runtime_permission_profile_override` (via `UpdateAskForApprovalPolicy` / `UpdateActivePermissionProfile` / `apply_permission_profile_selection`). Those values feed `fresh_session_config()` and `apply_runtime_policy_overrides()` used by `/new`, fork and any subsequent `thread/start` (`thread_start_params_from_config` sends `approval_policy`/`sandbox`/`permissions` from `config`).\n\nNow, when `active_thread_id` is `Some`, `apply_permission_profile_selection` returns early (config_persistence.rs:239) and `finish_permission_confirmation` on `Applied` only returns the reviewer to persist; nothing updates App config or runtime overrides. `thread/settings/updated` only syncs the ChatWidget config, not `App::config`.\n\nTrigger: start `codex --dangerously-bypass-approvals-and-sandbox` (or any permissive startup), run `/permissions` -> \"Ask for approval\" (confirmed `applied`), then `/new`. The new thread silently starts with the original full-access policy again. The reverse (startup workspace -> confirmed Full Access -> `/new` reverts to workspace) also differs from prior behavior. Minimal fix: on `Applied`, update `self.config`/runtime overrides (or sync App config from the effective `thread/settings/updated` snapshot) so new-thread creation reflects the confirmed selection.",
+      "priority": "P2",
+      "confidence": 0.6,
+      "category": "regression",
+      "code_location": {
+        "file_path": "codex-rs/tui/src/app/permission_confirmation.rs",
+        "line": 52
+      }
+    },
+    {
+      "title": "Pending initial user message is never submitted after a confirmed profile selection with an active thread",
+      "body": "`apply_permission_profile_selection` now returns `false` whenever `active_thread_id` is `Some` (it only requests confirmation). Callers gate `submit_initial_user_message_if_pending()` on that `true` return (event_dispatch.rs:4307-4312 Windows sandbox setup path, and the `SelectPermissionProfile` handler at 4644-4647). The `PermissionConfirmationCompleted` handler (event_dispatch.rs:4649) never calls `submit_initial_user_message_if_pending()`.\n\nTrigger: launch `codex \"<prompt>\"` in a flow where the initial message is held until the permission/sandbox selection completes (e.g. the Windows elevated-sandbox setup prompt, which previously submitted the held prompt from the 4311 branch once `apply_permission_profile_selection` returned `true`). With an active thread the prompt now stays in `initial_user_message` indefinitely and is neither submitted nor restored to the composer. Smallest fix: after a completed confirmation (any outcome) for the active thread, call `self.chat_widget.submit_initial_user_message_if_pending()` (it will be deferred/restored appropriately if needed).",
+      "priority": "P2",
+      "confidence": 0.45,
+      "category": "regression",
+      "code_location": {
+        "file_path": "codex-rs/tui/src/app/event_dispatch.rs",
+        "line": 4649
+      }
+    }
+  ],
+  "overall_correctness": "patch is incorrect",
+  "overall_explanation": "Server side is sound: per-request confirmation is keyed by a fresh submission id, completion is correlated via ThreadSettingsApplied/Error events with generation checks, listener replacement/disconnect/thread teardown clear pending entries (dropping the sender yields `uncertain`), a single spawned owner sends exactly one terminal reply, legacy `{}` behavior is preserved, and lock ordering (manager -> thread state) matches existing usage. Client side correctly refuses to treat `{}`/unsupported as applied, does not retry, drops per-turn permission overrides for confirmed threads so Core's sticky settings win, and preserves draft/queued input on deferral. However, because the TUI no longer updates App-level config/runtime overrides after a confirmed in-thread selection, the selection no longer carries into `/new`/fresh thread starts (a user-visible, security-relevant behavior regression), and the held initial user message can be orphaned because no code path submits it after the confirmation completes.",
+  "overall_confidence": 0.6
+}

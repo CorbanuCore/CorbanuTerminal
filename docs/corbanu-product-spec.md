@@ -75,6 +75,26 @@ silently change existing policies.** Moderate and Aggressive add deterministic
 protections around untrusted content, sensitive data, credentials, tools, and
 financial actions.
 
+## Permission selection confirmation — TO BUILD
+
+Travis explicitly expanded the permission repair scope on September 14, 2026
+to include app-server confirmation while retaining next-turn command permissions.
+A submitted selection is not a confirmed change. The TUI must distinguish
+requested, applied-to-next-turn, failed and uncertain results using an outcome
+correlated to that request, including unchanged selections. Existing active-turn
+approval/sandbox snapshots and pending approvals are not retroactively changed.
+Show a clear finish/stop-current-turn and continue path without automatic
+interruption, command approval or replay. Existing shared-service policy behavior
+is preserved; do not claim every service waits for the next turn.
+
+Keep old-client/server compatibility explicit: unsupported or acceptance-only
+replies cannot be presented as applied confirmation. Error, disconnect and
+restart recovery must not claim success or retry an uncertain change blindly.
+This is confirmation plumbing and truthful UI, not a new authorization policy,
+global quiescence, protected-mode activation, or live application replacement.
+The existing security/permission initiative owns its separately allocated PF-83
+feature; the isolated broker remains paused, not cancelled or completed.
+
 # Corbanu Plan — LIVE; DEPRECATION TARGET
 
 Corbanu Plan is wallet-native, one-calendar-month prepaid inference purchased through **x402**, normally using canonical USDC on Solana. The wallet proves ownership and receives a revocable Plan credential. Every tier uses the same model catalog and differs by allowance.

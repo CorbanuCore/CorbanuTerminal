@@ -249,7 +249,7 @@ impl TurnRequestProcessor {
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         self.thread_settings_update_inner(request_id, params)
             .await
-            .map(|response| Some(response.into()))
+            .map(|response| response.map(Into::into))
     }
 
     pub(crate) async fn turn_steer(
@@ -761,9 +761,8 @@ impl TurnRequestProcessor {
         let collaboration_mode =
             collaboration_mode.map(|mode| self.normalize_collaboration_mode(mode));
         let has_environment_override = environments.is_some();
-        // `thread/settings/update` only acknowledges that the update was queued.
-        // Clients that send dependent partial updates should wait for
-        // `thread/settings/updated` or combine the fields in one request.
+        // Legacy requests only acknowledge queueing. Dependent partial updates
+        // should opt into confirmation or combine their fields in one request.
         let snapshot = if permissions.is_some() {
             Some(thread.config_snapshot().await)
         } else {
@@ -891,8 +890,8 @@ impl TurnRequestProcessor {
         &self,
         request_id: &ConnectionRequestId,
         params: ThreadSettingsUpdateParams,
-    ) -> Result<ThreadSettingsUpdateResponse, JSONRPCErrorError> {
-        let (_, thread) = self.load_thread(&params.thread_id).await?;
+    ) -> Result<Option<ThreadSettingsUpdateResponse>, JSONRPCErrorError> {
+        let (thread_id, thread) = self.load_thread(&params.thread_id).await?;
         let cwd = resolve_request_cwd(params.cwd)?;
         let environments = self
             .build_environment_override(
@@ -923,6 +922,49 @@ impl TurnRequestProcessor {
             )
             .await?;
 
+        if params.confirm {
+            let trace = self.request_trace_context(request_id).await;
+            let operation_id = uuid::Uuid::new_v4().to_string();
+            let (state, completion) = self
+                .thread_state_manager
+                .register_settings_confirmation(
+                    thread_id,
+                    &thread,
+                    operation_id.clone(),
+                    request_id.clone(),
+                )
+                .await
+                .ok_or_else(|| {
+                    invalid_request(
+                        "settings confirmation requires a live thread listener and connection",
+                    )
+                })?;
+            let submission = codex_protocol::protocol::Submission {
+                id: operation_id.clone(),
+                op: Op::ThreadSettings { thread_settings },
+                client_user_message_id: None,
+                parent_turn_id: None,
+                trace,
+            };
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+            tokio::spawn(crate::settings_confirmation::complete_settings_submission(
+                state.clone(),
+                operation_id.clone(),
+                request_id.clone(),
+                completion,
+                self.outgoing.clone(),
+                deadline,
+            ));
+            // Keep enqueue order under the native per-thread request serializer.
+            // The deferred owner already exists if this handler is cancelled.
+            if !matches!(
+                tokio::time::timeout_at(deadline, thread.submit_with_id(submission)).await,
+                Ok(Ok(()))
+            ) {
+                state.lock().await.pending_settings.remove(&operation_id);
+            }
+            return Ok(None);
+        }
         if thread_settings != codex_protocol::protocol::ThreadSettingsOverrides::default() {
             self.submit_core_op(
                 request_id,
@@ -933,7 +975,7 @@ impl TurnRequestProcessor {
             .map_err(|err| internal_error(format!("failed to update thread settings: {err}")))?;
         }
 
-        Ok(ThreadSettingsUpdateResponse {})
+        Ok(Some(ThreadSettingsUpdateResponse::Accepted {}))
     }
 
     async fn thread_inject_items_response_inner(

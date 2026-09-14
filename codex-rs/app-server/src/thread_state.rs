@@ -90,6 +90,8 @@ pub(crate) struct TurnSummary {
 
 #[derive(Default)]
 pub(crate) struct ThreadState {
+    pub(crate) pending_settings:
+        HashMap<String, crate::settings_confirmation::PendingSettingsConfirmation>,
     pub(crate) pending_interrupts: PendingInterruptQueue,
     pub(crate) pending_rollbacks: Option<ConnectionRequestId>,
     pub(crate) turn_summary: TurnSummary,
@@ -123,6 +125,7 @@ impl ThreadState {
             let _ = previous.send(());
         }
         self.listener_generation = self.listener_generation.wrapping_add(1);
+        self.pending_settings.clear();
         self.last_thread_settings = Some(thread_settings_baseline);
         let (listener_command_tx, listener_command_rx) = mpsc::unbounded_channel();
         self.listener_command_tx = Some(listener_command_tx);
@@ -132,6 +135,7 @@ impl ThreadState {
     }
 
     pub(crate) fn clear_listener(&mut self) {
+        self.pending_settings.clear();
         if let Some(cancel_tx) = self.cancel_tx.take() {
             let _ = cancel_tx.send(());
         }
@@ -321,6 +325,42 @@ pub(crate) struct ThreadStateManager {
 }
 
 impl ThreadStateManager {
+    pub(crate) async fn register_settings_confirmation(
+        &self,
+        thread_id: ThreadId,
+        thread: &Arc<CodexThread>,
+        operation_id: String,
+        request_id: ConnectionRequestId,
+    ) -> Option<(
+        Arc<Mutex<ThreadState>>,
+        oneshot::Receiver<Result<(), codex_app_server_protocol::JSONRPCErrorError>>,
+    )> {
+        let manager = self.state.lock().await;
+        if !manager
+            .live_connections
+            .contains_key(&request_id.connection_id)
+        {
+            return None;
+        }
+        let state = manager.threads.get(&thread_id)?.state.clone();
+        let mut guard = state.lock().await;
+        if !guard.listener_matches(thread) {
+            return None;
+        }
+        let (completion, receiver) = oneshot::channel();
+        let generation = guard.listener_generation;
+        guard.pending_settings.insert(
+            operation_id,
+            crate::settings_confirmation::PendingSettingsConfirmation {
+                request_id,
+                generation,
+                completion,
+            },
+        );
+        drop(guard);
+        Some((state, receiver))
+    }
+
     pub(crate) fn new() -> Self {
         Self::default()
     }
@@ -567,6 +607,14 @@ impl ThreadStateManager {
         {
             let mut state = self.state.lock().await;
             state.live_connections.remove(&connection_id);
+            for entry in state.threads.values() {
+                entry
+                    .state
+                    .lock()
+                    .await
+                    .pending_settings
+                    .retain(|_, pending| pending.request_id.connection_id != connection_id);
+            }
             let thread_ids = state
                 .thread_ids_by_connection
                 .remove(&connection_id)
@@ -600,3 +648,7 @@ impl ThreadStateManager {
             .map(|thread_entry| thread_entry.has_connections_watcher.subscribe())
     }
 }
+
+#[cfg(test)]
+#[path = "settings_confirmation_tests.rs"]
+mod settings_confirmation_tests;

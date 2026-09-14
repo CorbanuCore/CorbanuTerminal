@@ -30,6 +30,79 @@ use tokio::time::timeout;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[tokio::test]
+async fn thread_settings_confirmation_noop_concurrent_and_legacy() -> Result<()> {
+    let server = responses::start_mock_server().await;
+    let codex_home = TempDir::new()?;
+    create_config_toml(codex_home.path(), &server.uri())?;
+    write_models_cache(codex_home.path())?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .build_initialized_with_timeout(DEFAULT_TIMEOUT)
+        .await?;
+    let thread = start_thread(&mut mcp).await?.thread;
+    let legacy = mcp
+        .send_thread_settings_update_request(ThreadSettingsUpdateParams {
+            thread_id: thread.id.clone(),
+            ..Default::default()
+        })
+        .await?;
+    assert_eq!(
+        timeout(DEFAULT_TIMEOUT, mcp.read_response::<Value>(legacy)).await??,
+        serde_json::json!({})
+    );
+    for sandbox_policy in [
+        SandboxPolicy::DangerFullAccess,
+        SandboxPolicy::ReadOnly {
+            network_access: false,
+        },
+    ] {
+        // Identical submissions each need their own outcome, even when the
+        // second operation produces no settings notification.
+        let params = ThreadSettingsUpdateParams {
+            thread_id: thread.id.clone(),
+            confirm: true,
+            sandbox_policy: Some(sandbox_policy),
+            ..Default::default()
+        };
+        let first = mcp
+            .send_thread_settings_update_request(params.clone())
+            .await?;
+        let second = mcp.send_thread_settings_update_request(params).await?;
+        for request in [first, second] {
+            assert_eq!(
+                timeout(
+                    DEFAULT_TIMEOUT,
+                    mcp.read_response::<ThreadSettingsUpdateResponse>(request)
+                )
+                .await??,
+                ThreadSettingsUpdateResponse::Confirmed {
+                    outcome: codex_app_server_protocol::ThreadSettingsUpdateOutcome::Applied
+                }
+            );
+        }
+    }
+    let empty = mcp
+        .send_thread_settings_update_request(ThreadSettingsUpdateParams {
+            thread_id: thread.id.clone(),
+            confirm: true,
+            ..Default::default()
+        })
+        .await?;
+    assert_eq!(
+        timeout(
+            DEFAULT_TIMEOUT,
+            mcp.read_response::<ThreadSettingsUpdateResponse>(empty)
+        )
+        .await??,
+        ThreadSettingsUpdateResponse::Confirmed {
+            outcome: codex_app_server_protocol::ThreadSettingsUpdateOutcome::Applied
+        }
+    );
+    assert!(received_response_bodies(&server).await?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
 async fn thread_settings_update_emits_notification_and_updates_future_turns() -> Result<()> {
     let server = create_mock_responses_server_sequence_unchecked(vec![
         create_final_assistant_message_sse_response("done")?,
@@ -294,6 +367,7 @@ async fn thread_settings_update_rejects_sandbox_policy_with_permissions() -> Res
 
     let request_id = mcp
         .send_thread_settings_update_request(ThreadSettingsUpdateParams {
+            confirm: true,
             thread_id: thread.id,
             sandbox_policy: Some(SandboxPolicy::DangerFullAccess),
             permissions: Some(":workspace".to_string()),

@@ -4307,7 +4307,7 @@ impl App {
                                         /*personality*/ None,
                                     ),
                                 ));
-                                if self.apply_permission_profile_selection(selection).await {
+                                if self.apply_permission_profile_selection(app_server, selection).await {
                                     self.chat_widget.submit_initial_user_message_if_pending();
                                 }
                                 self.chat_widget.add_plain_history_lines(vec![
@@ -4322,10 +4322,10 @@ impl App {
                                 self.app_event_tx.send(AppEvent::CodexOp(
                                     AppCommand::override_turn_context(
                                         /*cwd*/ None,
-                                        Some(AskForApproval::from(preset.approval)),
-                                        Some(self.config.approvals_reviewer),
-                                        Some(preset.permission_profile.clone()),
-                                        Some(preset.active_permission_profile.clone()),
+                                        /*approval_policy*/ None,
+                                        /*approvals_reviewer*/ None,
+                                        /*permission_profile*/ None,
+                                        /*active_permission_profile*/ None,
                                         #[cfg(target_os = "windows")]
                                         Some(windows_sandbox_level),
                                         /*model*/ None,
@@ -4336,13 +4336,12 @@ impl App {
                                         /*personality*/ None,
                                     ),
                                 ));
-                                self.app_event_tx.send(AppEvent::UpdateAskForApprovalPolicy(
-                                    AskForApproval::from(preset.approval),
-                                ));
-                                self.app_event_tx
-                                    .send(AppEvent::UpdateActivePermissionProfile(
-                                        preset.active_permission_profile.clone(),
-                                    ));
+                                self.app_event_tx.send(AppEvent::SelectPermissionProfile(PermissionProfileSelection {
+                                    profile_id: preset.active_permission_profile.id.clone(),
+                                    approval_policy: Some(AskForApproval::from(preset.approval)),
+                                    approvals_reviewer: Some(self.config.approvals_reviewer),
+                                    display_label: preset.active_permission_profile.id.clone(),
+                                }));
                                 self.chat_widget.add_plain_history_lines(vec![
                                     Line::from(vec!["• ".dim(), "Sandbox ready".into()]),
                                     Line::from(vec![
@@ -4643,7 +4642,34 @@ impl App {
                 }
             }
             AppEvent::SelectPermissionProfile(selection) => {
-                if self.apply_permission_profile_selection(selection).await {
+                if self.apply_permission_profile_selection(app_server, selection).await {
+                    self.chat_widget.submit_initial_user_message_if_pending();
+                }
+            }
+            AppEvent::PermissionConfirmationCompleted { selection_id, result } => {
+                if let Some(reviewer) = self.finish_permission_confirmation(selection_id, result)
+                    && let Err(error) = crate::config_update::write_config_batch(
+                        app_server.request_handle(),
+                        vec![crate::config_update::replace_config_value("approvals_reviewer", serde_json::json!(reviewer.to_string()))],
+                    ).await
+                {
+                    self.chat_widget.add_error_message(format!("Permissions applied, but the default reviewer could not be saved: {error}"));
+                }
+            }
+            AppEvent::SelectPermissionPreset(selection) => {
+                let reviewer = selection.approvals_reviewer;
+                if let Some(thread_id) = self.active_thread_id {
+                    self.request_permission_confirmation(app_server, codex_app_server_protocol::ThreadSettingsUpdateParams {
+                        thread_id: thread_id.to_string(),
+                        permissions: Some(selection.profile_id),
+                        approval_policy: selection.approval_policy,
+                        approvals_reviewer: reviewer.map(Into::into),
+                        ..Default::default()
+                    }, selection.display_label, reviewer);
+                } else if self.apply_permission_profile_selection(app_server, selection).await {
+                    if let Some(reviewer) = reviewer {
+                        self.app_event_tx.send(AppEvent::UpdateApprovalsReviewer(reviewer));
+                    }
                     self.chat_widget.submit_initial_user_message_if_pending();
                 }
             }

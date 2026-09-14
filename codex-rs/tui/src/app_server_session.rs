@@ -290,12 +290,44 @@ pub(crate) struct AppServerSession {
     remote_cwd_override: Option<PathBuf>,
     thread_params_mode: ThreadParamsMode,
     thread_settings_update_supported: bool,
+    server_permission_threads: std::collections::HashSet<ThreadId>,
     default_model: Option<String>,
     available_models: Vec<ModelPreset>,
     managed_new_thread_defaults: Option<NewThreadModelDefaults>,
     external_agent_config_import_completion_pending: AtomicBool,
     injected_turn_start_failures: usize,
     injected_spawn_agent_failures: usize,
+}
+
+#[derive(Debug)]
+pub(crate) enum PermissionConfirmationResult {
+    Applied,
+    Unsupported,
+    Failed(String),
+    Uncertain(String),
+}
+
+impl PermissionConfirmationResult {
+    fn from_reply(
+        reply: std::result::Result<ThreadSettingsUpdateResponse, TypedRequestError>,
+    ) -> Self {
+        match reply {
+            Ok(ThreadSettingsUpdateResponse::Confirmed {
+                outcome: codex_app_server_protocol::ThreadSettingsUpdateOutcome::Applied,
+            }) => Self::Applied,
+            Ok(ThreadSettingsUpdateResponse::Accepted {}) => Self::Unsupported,
+            Err(TypedRequestError::Server { source, .. }) => {
+                if is_thread_settings_update_unsupported(&source) {
+                    Self::Unsupported
+                } else if matches!(source.code, JSONRPC_INVALID_REQUEST | -32602) {
+                    Self::Failed(source.message)
+                } else {
+                    Self::Uncertain(source.message)
+                }
+            }
+            other => Self::Uncertain(format!("{other:?}")),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -379,6 +411,7 @@ impl AppServerSession {
             remote_cwd_override: None,
             thread_params_mode,
             thread_settings_update_supported: true,
+            server_permission_threads: Default::default(),
             default_model: None,
             available_models: Vec::new(),
             managed_new_thread_defaults: None,
@@ -1205,6 +1238,48 @@ impl AppServerSession {
         }
     }
 
+    pub(crate) fn confirm_permissions(
+        &mut self,
+        mut params: ThreadSettingsUpdateParams,
+        selection_id: Uuid,
+        tx: crate::app_event_sender::AppEventSender,
+    ) {
+        // Subsequent turns must use Core's sticky settings, including after an
+        // uncertain outcome, rather than replaying stale UI permission values.
+        if self.thread_settings_update_supported
+            && let Ok(thread_id) = ThreadId::from_string(&params.thread_id)
+        {
+            self.server_permission_threads.insert(thread_id);
+        }
+        params.confirm = true;
+        let request_id = self.next_request_id();
+        let handle = self.request_handle();
+        let supported = self.thread_settings_update_supported;
+        tokio::spawn(async move {
+            let result = if supported {
+                match tokio::time::timeout(
+                    Duration::from_secs(15),
+                    handle.request_typed::<ThreadSettingsUpdateResponse>(
+                        ClientRequest::ThreadSettingsUpdate { request_id, params },
+                    ),
+                )
+                .await
+                {
+                    Ok(reply) => PermissionConfirmationResult::from_reply(reply),
+                    Err(error) => PermissionConfirmationResult::Uncertain(error.to_string()),
+                }
+            } else {
+                PermissionConfirmationResult::Unsupported
+            };
+            tx.send(
+                crate::app_event::AppEvent::PermissionConfirmationCompleted {
+                    selection_id,
+                    result,
+                },
+            );
+        });
+    }
+
     pub(crate) async fn thread_inject_items(
         &mut self,
         thread_id: ThreadId,
@@ -1252,6 +1327,17 @@ impl AppServerSession {
     ) -> tokio::task::JoinHandle<Result<TurnStartOutcome>> {
         let (sandbox_policy, permissions) =
             turn_permissions_overrides(permissions_override, cwd.as_path());
+        let (approval_policy, approvals_reviewer, sandbox_policy, permissions) =
+            if self.server_permission_threads.contains(&thread_id) {
+                (None, None, None, None)
+            } else {
+                (
+                    Some(approval_policy),
+                    Some(approvals_reviewer.into()),
+                    sandbox_policy,
+                    permissions,
+                )
+            };
         let client_user_message_id =
             client_user_message_id.unwrap_or_else(|| Uuid::now_v7().to_string());
         let request_handle = self.request_handle();
@@ -1273,8 +1359,8 @@ impl AppServerSession {
                     environments: None,
                     cwd: Some(cwd.clone()),
                     runtime_workspace_roots: Some(workspace_roots.to_vec()),
-                    approval_policy: Some(approval_policy),
-                    approvals_reviewer: Some(approvals_reviewer.into()),
+                    approval_policy,
+                    approvals_reviewer,
                     sandbox_policy: sandbox_policy.clone(),
                     permissions: permissions.clone(),
                     model: Some(model.clone()),
@@ -2388,7 +2474,84 @@ pub(crate) fn app_server_rate_limit_snapshots(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn permission_confirmation_requires_explicit_applied_reply() {
+        use super::PermissionConfirmationResult as Outcome;
+        let decode = |wire| Outcome::from_reply(Ok(serde_json::from_str(wire).unwrap()));
+        assert!(matches!(decode("{}"), Outcome::Unsupported));
+        assert!(matches!(
+            decode(r#"{"outcome":"applied"}"#),
+            Outcome::Applied
+        ));
+        assert!(matches!(
+            decode(r#"{"outcome":"uncertain"}"#),
+            Outcome::Uncertain(_)
+        ));
+        assert!(matches!(
+            Outcome::from_reply(Err(super::TypedRequestError::Server {
+                method: "thread/settings/update".into(),
+                source: super::JSONRPCErrorError {
+                    code: -32603,
+                    message: "lost completion".into(),
+                    data: None
+                },
+            })),
+            Outcome::Uncertain(_)
+        ));
+        for (code, message, unsupported) in [
+            (-32601, "unknown method", true),
+            (
+                -32600,
+                "thread/settings/update requires experimentalApi",
+                true,
+            ),
+            (-32600, "Core rejected settings", false),
+        ] {
+            let result = Outcome::from_reply(Err(super::TypedRequestError::Server {
+                method: "thread/settings/update".into(),
+                source: super::JSONRPCErrorError {
+                    code,
+                    message: message.into(),
+                    data: None,
+                },
+            }));
+            assert_eq!(matches!(result, Outcome::Unsupported), unsupported);
+            assert_eq!(matches!(result, Outcome::Failed(_)), !unsupported);
+        }
+    }
+
     use super::*;
+    #[tokio::test]
+    async fn permission_confirmation_unsupported_keeps_turn_permission_ownership() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let config = build_config(&temp_dir).await;
+        let mut session = crate::start_embedded_app_server_for_picker(&config).await?;
+        session.thread_settings_update_supported = false;
+        let thread_id = ThreadId::new();
+        let selection_id = Uuid::new_v4();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        session.confirm_permissions(
+            ThreadSettingsUpdateParams {
+                thread_id: thread_id.to_string(),
+                approval_policy: Some(AskForApproval::Never),
+                ..Default::default()
+            },
+            selection_id,
+            crate::app_event_sender::AppEventSender::new(tx),
+        );
+        let event = tokio::time::timeout(Duration::from_secs(2), rx.recv()).await?;
+        assert!(matches!(
+            event,
+            Some(crate::app_event::AppEvent::PermissionConfirmationCompleted {
+                selection_id: id,
+                result: PermissionConfirmationResult::Unsupported,
+            }) if id == selection_id
+        ));
+        assert_eq!(session.server_permission_threads, Default::default());
+        session.shutdown().await?;
+        Ok(())
+    }
+
     use crate::legacy_core::config::ConfigBuilder;
     use crate::legacy_core::config::ConfigOverrides;
     use app_test_support::create_fake_rollout;
