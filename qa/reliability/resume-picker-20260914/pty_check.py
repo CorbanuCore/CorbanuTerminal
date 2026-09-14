@@ -15,6 +15,7 @@ import shlex
 import shutil
 import subprocess
 import time
+import tomllib
 import uuid
 
 
@@ -24,6 +25,7 @@ def main():
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--startup", action="store_true")
     parser.add_argument("--startup-select", action="store_true")
+    parser.add_argument("--remember-model-tier", action="store_true")
     args = parser.parse_args()
     args.evidence.mkdir(parents=True, exist_ok=False)
     root = args.evidence.resolve()
@@ -38,6 +40,9 @@ def main():
               "checks": [], "independent_acceptance": False}
     config = ['model = "gpt-5.6-sol"', 'model_provider = "fixture"',
               'cli_auth_credentials_store = "file"', 'check_for_update_on_startup = false']
+    if args.remember_model_tier:
+        config[0] = 'model = "gpt-5.4"'
+        config += ['service_tier = "fast"', '[features]', 'fast_mode = true']
     for provider in ("fixture", "fixture-claude", "fixture-fable"):
         config += [f"[model_providers.{provider}]", f'name = "{provider}"',
                    'base_url = "http://127.0.0.1:1/v1"', 'wire_api = "responses"',
@@ -60,7 +65,7 @@ def main():
             ("session_meta", {"id": ident, "session_id": ident, "timestamp": timestamp,
                               "cwd": str(cwd), "originator": "corbanu_cli_rs", "cli_version": "0.1.42",
                               "source": "cli", "model_provider": provider, "base_instructions": {"text": "Synthetic QA only."}}),
-            ("turn_context", {"cwd": str(cwd), "model": "gpt-5.6-sol", "model_provider": provider,
+            ("turn_context", {"cwd": str(cwd), "model": "fixture-fable-model" if args.remember_model_tier and provider != "fixture" else "gpt-5.6-sol", "model_provider": provider,
                               "approval_policy": "never", "sandbox_policy": {"type": "read-only"}, "summary": "auto"}),
             ("response_item", {"type": "message", "role": "user", "content": [{"type": "input_text", "text": label}]}),
             ("event_msg", {"type": "user_message", "message": label, "images": [], "local_images": []}),
@@ -121,6 +126,38 @@ def main():
     if os.uname().sysname == "Darwin":
         policy = '(version 1)(allow default)(deny network*)(deny file-read* file-write* (subpath "/Users/Neo/Library/Keychains") (subpath "/Users/Neo/.codex") (subpath "/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/home"))(deny mach-lookup (global-name "com.apple.securityd"))'
         argv = ["/usr/bin/sandbox-exec", "-p", policy, *argv]
+
+    def check_remembered_and_restart(provider):
+        time.sleep(.5)
+        screen = capture()
+        (root / "resumed-tier-check.txt").write_text(screen)
+        assert "Configured service tier" not in screen, screen
+        saved = tomllib.loads((home / "config.toml").read_text())
+        assert (saved["model"], saved["model_provider"], saved["service_tier"]) == (
+            "fixture-fable-model", provider, "default"), saved
+        (root / "saved-defaults.json").write_text(json.dumps({k: saved.get(k) for k in (
+            "model", "model_provider", "model_reasoning_effort", "service_tier")}, indent=2))
+        command("/quit")
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            probe = subprocess.run([tmux_bin, "-S", str(socket), "has-session", "-t", "probe"],
+                                   env=env, capture_output=True)
+            if probe.returncode != 0:
+                break
+            time.sleep(.1)
+        assert probe.returncode != 0, "normal quit did not finish"
+        restart_argv = list(argv)
+        if args.startup or args.startup_select:
+            assert restart_argv[-1] == "resume"
+            restart_argv.pop()
+        tmux("new-session", "-d", "-s", "probe", "-x", "150", "-y", "45", "-c", str(project), "exec " + shlex.join(restart_argv))
+        wait("Corbanu Terminal", "fresh-restart")
+        time.sleep(1)
+        command("/status")
+        screen = wait(provider, "fresh-restart-provider")
+        assert "fixture-fable-model" in screen, screen
+        assert "Configured service tier" not in screen, screen
+        passed("resume remembers model/provider/standard tier; normal quit and fresh launch restore them")
     try:
         tmux("new-session", "-d", "-s", "probe", "-x", "150", "-y", "45", "-c", str(project), "exec " + shlex.join(argv))
         if not (args.startup or args.startup_select):
@@ -148,6 +185,10 @@ def main():
             text("UNSENT_STARTUP_DRAFT")
             wait("UNSENT_STARTUP_DRAFT", "startup-editable-composer")
             passed("startup selection restores alternate-provider history and editable chat")
+            if args.remember_model_tier:
+                for _ in "UNSENT_STARTUP_DRAFT":
+                    keys("BSpace")
+                check_remembered_and_restart("fixture-claude")
             result["passed"] = True
             return
         keys("Escape")
@@ -170,6 +211,10 @@ def main():
         passed("reopen, select cross-provider session, restore history/provider and edit")
         for _ in draft:
             keys("BSpace")
+        if args.remember_model_tier:
+            check_remembered_and_restart("fixture-fable")
+            result["passed"] = True
+            return
         command("/resume")
         wait("CHARLIE_FABLE", "reopened-after-resume")
         keys("Right")  # Filter is the initially focused toolbar control.

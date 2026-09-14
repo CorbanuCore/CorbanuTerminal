@@ -236,6 +236,7 @@ mod provider_management_auth;
 mod provider_management_status;
 mod replay_filter;
 mod resize_reflow;
+mod resume_defaults;
 mod safety_buffering;
 mod session_lifecycle;
 mod side;
@@ -1372,6 +1373,28 @@ impl App {
                     )
                     .await
                     .map_err(|err| session_start_error("resume", &target_session, err))?;
+                apply_persisted_resume_runtime(
+                    &mut config,
+                    Some(&resumed.session.model),
+                    &resumed.session.model_provider_id,
+                    resumed.session.reasoning_effort.clone(),
+                );
+                config.service_tier = resumed.session.service_tier.clone();
+                if !resumed.blocks_direct_input
+                    && let Err(error) = resume_defaults::remember_resumed_model(
+                        &app_server,
+                        &config,
+                        model_settings,
+                        &resumed.session,
+                    )
+                    .await
+                {
+                    app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+                        history_cell::new_error_event(format!(
+                            "Session restored, but failed to save its startup model: {error}"
+                        )),
+                    )));
+                }
                 let init = crate::chatwidget::ChatWidgetInit {
                     config: config.clone(),
                     frame_requester: tui.frame_requester(),

@@ -1972,6 +1972,37 @@ fn service_tier_override_from_config(config: &Config) -> Option<Option<String>> 
     })
 }
 
+pub(crate) fn has_explicit_resume_service_tier(config: &Config) -> bool {
+    config
+        .config_layer_stack
+        .layers_high_to_low()
+        .into_iter()
+        .any(|layer| {
+            matches!(
+                &layer.name,
+                codex_config::ConfigLayerSource::SessionFlags
+                    | codex_config::ConfigLayerSource::User {
+                        profile: Some(_),
+                        ..
+                    }
+            ) && layer.config.get("service_tier").is_some()
+        })
+}
+
+fn resume_service_tier_override(
+    config: &Config,
+    model_settings: ResumeModelSettings,
+) -> Option<Option<String>> {
+    if model_settings == ResumeModelSettings::OverrideFromCurrentConfig
+        || has_explicit_resume_service_tier(config)
+    {
+        service_tier_override_from_config(config)
+    } else {
+        // Global defaults belong to new sessions, not the saved session being resumed.
+        None
+    }
+}
+
 fn sandbox_mode_from_permission_profile(
     permission_profile: &PermissionProfile,
     cwd: &std::path::Path,
@@ -2128,7 +2159,7 @@ fn thread_resume_params_from_config(
         thread_id: thread_id.to_string(),
         model,
         model_provider,
-        service_tier: service_tier_override_from_config(&config),
+        service_tier: resume_service_tier_override(&config, model_settings),
         cwd: thread_cwd_from_config(&config, thread_params_mode, remote_cwd_override),
         runtime_workspace_roots: Some(config.workspace_roots.clone()),
         approval_policy: override_permissions
@@ -3212,9 +3243,28 @@ mod tests {
     #[tokio::test]
     async fn persisted_resume_does_not_forward_implicit_service_tier() -> Result<()> {
         let codex_home = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            codex_home.path().join("config.toml"),
+            r#"
+model = "gpt-5.4"
+model_provider = "resume-fixture"
+cli_auth_credentials_store = "file"
+[features]
+fast_mode = true
+[model_providers.resume-fixture]
+name = "Resume fixture"
+base_url = "http://127.0.0.1:1/v1"
+wire_api = "responses"
+requires_openai_auth = false
+"#,
+        )?;
         let mut config = build_config(&codex_home).await;
+        // The generic rollout fixture uses `/`; keep the resumed skills watcher inside this
+        // disposable directory rather than registering host-root filesystem watches on macOS.
+        config.cwd =
+            codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(codex_home.path())?;
         config.model = Some("gpt-5.4".to_string());
-        config.service_tier = None;
+        config.service_tier = Some("priority".to_string());
         config
             .features
             .enable(Feature::FastMode)
@@ -3253,9 +3303,37 @@ mod tests {
             )
             .await?;
 
-        assert_eq!(resumed.session.service_tier, None);
+        assert_eq!(resumed.session.service_tier.as_deref(), Some("default"));
         app_server.shutdown().await?;
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn resume_service_tier_ignores_global_but_preserves_explicit_overrides() {
+        let home = tempfile::tempdir().expect("tempdir");
+        let mut config = build_config(&home).await;
+        config.service_tier = Some("priority".to_string());
+        assert_eq!(
+            resume_service_tier_override(&config, ResumeModelSettings::RestoreFromThread),
+            None
+        );
+        assert_eq!(
+            resume_service_tier_override(&config, ResumeModelSettings::OverrideFromCurrentConfig),
+            Some(Some("priority".to_string()))
+        );
+        config.config_layer_stack = codex_config::ConfigLayerStack::new(
+            vec![codex_config::ConfigLayerEntry::new(
+                codex_config::ConfigLayerSource::SessionFlags,
+                toml::from_str("service_tier = 'priority'").expect("config"),
+            )],
+            Default::default(),
+            Default::default(),
+        )
+        .expect("layers");
+        assert_eq!(
+            resume_service_tier_override(&config, ResumeModelSettings::RestoreFromThread),
+            Some(Some("priority".to_string()))
+        );
     }
 
     #[tokio::test]
