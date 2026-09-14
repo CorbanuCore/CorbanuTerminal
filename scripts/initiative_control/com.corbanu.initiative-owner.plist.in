@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.corbanu.initiative-owner</string>
+    <!-- Noninstalled design template. Increment A has no live adapter. -->
+    <key>Disabled</key><true/>
+    <key>ProgramArguments</key>
+    <array>
+        <string>@PINNED_PYTHON@</string>
+        <string>-B</string>
+        <string>@PRIVATE_RUNTIME@/owner_daemon.py</string>
+        <string>--run</string>
+        <string>--config</string>
+        <string>@PRIVATE_CONFIG@</string>
+    </array>
+    <key>WorkingDirectory</key><string>@PRIVATE_RUNTIME@</string>
+    <key>RunAtLoad</key><false/>
+    <key>KeepAlive</key><false/>
+    <!-- Reviewed activation in increment E supplies recurrence policy. -->
+    <key>ThrottleInterval</key><integer>30</integer>
+    <key>ExitTimeOut</key><integer>30</integer>
+    <key>ProcessType</key><string>Background</string>
+    <key>Umask</key><integer>63</integer>
+    <key>StandardOutPath</key><string>@PRIVATE_LOGS@/owner.stdout.log</string>
+    <key>StandardErrorPath</key><string>@PRIVATE_LOGS@/owner.stderr.log</string>
+    <key>AbandonProcessGroup</key><false/>
+</dict>
+</plist>
