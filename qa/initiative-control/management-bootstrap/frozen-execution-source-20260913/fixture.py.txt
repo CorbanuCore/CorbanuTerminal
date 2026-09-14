@@ -1,0 +1,178 @@
+"""Disposable execution harness; imports the immutable accepted product unchanged."""
+import copy, datetime, hashlib, json, os, pathlib, subprocess, sys, time, shutil
+from unittest.mock import patch
+
+ROOT = pathlib.Path(__file__).resolve().parent
+SOURCE = pathlib.Path('/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911')
+sys.path.insert(0, str(SOURCE / 'scripts/initiative_control'))
+import control, export, activate, decisions, attention
+
+def stamp(offset=0):
+    return (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=offset)).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+SPRINT = 'docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md'
+SECOND = 'docs/sprints/current/initiative-delivery-control/pf-79-s01-beta-channel-and-test-contract.md'
+
+def base(at):
+    return {'schema': 1, 'feed_id': 'volta-offline-fixture', 'revision': 1, 'assessed_at': at, 'decisions': [
+        {'id': 'pilot-size', 'revisions': [{'revision': 1, 'initiative': 'PF-80',
+        'sprints': [{'sprint_id':'PF-80-S01','path':SPRINT,'historical':False},
+                    {'sprint_id':'PF-79-S01','path':SECOND,'historical':False},
+                    {'sprint_id':'PF-76-S01','path':attention.HISTORY,'historical':True}],
+        'raised_at':at, 'updated_at':at,
+        'summary':'PF-80-S01 / PF-79-S01 pilot size; PF-76-S01 historical identity',
+        'owner':'Avery — pilot owner', 'background':'Synthetic planning: the pilot needs a bounded cohort before invitations.',
+        'impact':'Five testers need one triage session; ten testers need two sessions.',
+        'stopped':'Pilot invitations await the cohort size decision.',
+        'continuing':'Offline implementation and fixture testing can continue.',
+        'options':['Five testers: one triage session','Ten testers: two triage sessions'],
+        'recommendation':'Five testers to keep the first pilot manageable.',
+        'question':'Should the first pilot invite five or ten testers?',
+        'evidence':[{'label':'Sanitized current sprint plan','path':SPRINT,'assessed_at':at}],
+        'status':'open', 'resolution':None}]}]}
+
+def build(name):
+    area = ROOT / 'fixtures' / name
+    area.mkdir(parents=True, mode=0o700)
+    name = name.split('_')[0]
+    manager = area / 'manager'
+    control.atomic_json(manager / 'control.json', {'human_tests':[], 'tasknode':{'enabled':False}})
+    at = stamp(-1260 if name in ('stale','stale-empty') else (-1180 if name in ('aging','aging-open') else 0))
+    value = base(at)
+    if name in ('fresh-empty','stale-empty','aging'):
+        value['decisions'] = []
+    if name in ('ack','resolved','mixed-history'):
+        decisions.save_fixture(manager, value, None, stamp())
+        r = copy.deepcopy(value['decisions'][0]['revisions'][0])
+        r['revision'] = 2
+        r['status'] = 'acknowledged'
+        value['decisions'][0]['revisions'].append(r)
+        value['revision'] = 2
+        previous = decisions.load_fixture(manager, stamp())
+        decisions.save_fixture(manager, value, decisions.digest(previous), stamp())
+        if name != 'ack':
+            r = copy.deepcopy(r)
+            r.update(revision=3, status='resolved', resolution={'answered_revision':1,'actor':'Avery','answer':'Five testers','scope':'Synthetic pilot only','recorded_at':at})
+            value['decisions'][0]['revisions'].append(r)
+            value['revision'] = 3
+            if name == 'mixed-history':
+                other = copy.deepcopy(base(at)['decisions'][0])
+                other['id'] = 'next-pilot'
+                other['revisions'][0]['summary'] = 'PF-80-S01 next pilot timing'
+                other['revisions'][0]['question'] = 'Should the next pilot start Monday or Tuesday?'
+                other['revisions'][0]['options'] = ['Monday','Tuesday']
+                other['revisions'][0]['recommendation'] = 'Tuesday leaves a preparation day.'
+                value['decisions'].append(other)
+    if name in ('mixed-age','long'):
+        r = value['decisions'][0]['revisions'][0]
+        r.update(owner=None, impact=None, updated_at=stamp(-1300), raised_at=stamp(-1400))
+        r['evidence'][0]['assessed_at'] = stamp(-1500)
+        r['evidence'].append({'label':'Unassessed sanitized evidence','path':'qa/unpublished-synthetic.md','assessed_at':None})
+    if name == 'long':
+        value['assessed_at'] = stamp(-1260)
+        first = value['decisions'][0]['revisions'][0]
+        first['owner'] = 'Avery — pilot invitations and synthetic triage coordination owner'
+        first['summary'] = 'PF-80-S01 / PF-79-S01 extended pilot cohort choice and scheduling implications; PF-76-S01 historical identity'
+        first['background'] = ('The synthetic pilot has two alternatives that require a human choice before invitations. ' * 13).strip()
+        first['evidence'].extend({'label':f'Sanitized evidence {i}: ' + ('The synthetic rehearsal observed the invitation checklist and triage capacity with no live activity. ' * 4).strip(), 'path':SPRINT, 'assessed_at':stamp(-1500)} for i in range(1,4))
+        for i, owner in enumerate(('Blair — evidence owner','Casey — validation owner'), 2):
+            other = copy.deepcopy(value['decisions'][0])
+            other['id'] = 'long-choice-' + str(i)
+            other['revisions'][0]['owner'] = owner
+            other['revisions'][0]['summary'] = 'PF-80-S01 synthetic decision ' + str(i) + ' for ' + owner
+            value['decisions'].append(other)
+    if name == 'secret':
+        r = value['decisions'][0]['revisions'][0]
+        r['summary'] = 'SYNTHETIC_SECRET volta-secret-canary'
+        r['background'] = 'RAW_PRIVATE_LOG volta-private-log-canary'
+        r['evidence'][0]['path'] = 'https://example.invalid/?token=volta-link-canary'
+        control.atomic_json(manager / 'decisions.fixture.json', value)
+    elif name != 'missing':
+        old = decisions.load_fixture(manager, stamp())
+        decisions.save_fixture(manager, value, decisions.digest(old) if old else None, stamp())
+    # A held historical report produces a genuine manager notice, not a decision.
+    control.report(manager, dict(run_id='synthetic-notice',sprint_id='PF-76-S01',machine='synthetic-machine',
+        role='tester',agent='synthetic',session_id='offline',status='blocked',summary='Synthetic manager reconciliation bookkeeping; acknowledgment requested.',
+        updated_at=stamp(),commit='a'*40,branch='fixture',worktree='/synthetic/unused'))
+    if name == 'classification':
+        control.report(manager, dict(run_id='synthetic-ack-request',sprint_id='PF-80-S01',machine='synthetic-machine',
+            role='tester',agent='synthetic',session_id='offline',status='blocked',
+            summary='Acknowledgment requested: receipt of the synthetic manager schedule. No choice required.',
+            updated_at=stamp(),commit='a'*40,branch='fixture',worktree='/synthetic/unused'))
+    publish_area(area, manager)
+    print(name, flush=True)
+
+def publish_area(area, manager):
+    assert subprocess.check_output(['git','-C',str(SOURCE),'rev-parse','HEAD'],text=True).strip() == 'c77123a7e9d4540a5b3ff19a5a9dc0f12848c923'
+    assert not subprocess.check_output(['git','-C',str(SOURCE),'status','--porcelain'],text=True).strip()
+    install = area / 'corbanu-control'
+    number = len(list((install/'incoming').glob('upload-*'))) + 1
+    target = install / 'incoming' / ('upload-' + format(number,'032x'))
+    manifest = export.export(SOURCE, manager, target)
+    pin = ROOT/'export-source-pin.json'
+    if pin.exists():
+        assert manifest['files'] == json.loads(pin.read_text())
+    else:
+        control.atomic_json(pin, manifest['files'])
+    with patch.object(activate.subprocess, 'run') as services:
+        activate.activate(install, target, area / 'units-not-installed')
+        control.atomic_json(area / 'stubbed-services.json', [list(c.args[0]) for c in services.call_args_list])
+    # Run the real publisher from the exact exported generation, using existing Python.
+    cmd = [sys.executable,'-B',str(target/'source/scripts/initiative_control/control.py'),'publish',
+        '--repo',str(target/'source'),'--state',str(install/'state'),'--output',str(install/'site')]
+    started = stamp()
+    result = subprocess.run(cmd, capture_output=True,text=True)
+    control.atomic_json(area / f'publication-{number}.json', {'started_at':started,'finished_at':stamp(),'command':cmd,'returncode':result.returncode,'stdout':result.stdout,'stderr':result.stderr})
+    if result.returncode: raise RuntimeError(result.stderr)
+    shutil.copytree(install/'site/current', area/f'retained-publication-{number}')
+    assert all(hashlib.sha256((SOURCE/p).read_bytes()).hexdigest()==h for p,h in manifest['files'].items())
+    print(area.name, manifest['decision_feed']['status'], manifest['decision_feed']['assessed_at'], flush=True)
+
+def advance(name, state):
+    area = ROOT/'fixtures'/name
+    manager = area/'manager'
+    old = decisions.load_fixture(manager, stamp())
+    value = copy.deepcopy(old) if old else base(stamp())
+    value['revision'] = old['revision']+1 if old else 1
+    value['assessed_at'] = stamp()
+    if state in ('acknowledged','resolved'):
+        record = copy.deepcopy(value['decisions'][0]['revisions'][-1])
+        record['revision'] += 1
+        record['status'] = state
+        record['updated_at'] = stamp()
+        if state == 'resolved':
+            record['resolution'] = {'answered_revision':1,'actor':'Avery','answer':'Five testers','scope':'Synthetic pilot only','recorded_at':stamp()}
+        value['decisions'][0]['revisions'].append(record)
+    elif state == 'newer-mixed':
+        r=value['decisions'][0]['revisions'][0]
+        r.update(owner=None,impact=None,raised_at=stamp(-1600),updated_at=stamp(-1400))
+        r['evidence'][0]['assessed_at']=stamp(-1500)
+        r['evidence'].append({'label':'Unassessed sanitized evidence','path':'qa/unpublished-synthetic.md','assessed_at':None})
+    decisions.save_fixture(manager,value,decisions.digest(old) if old else None,stamp())
+    publish_area(area,manager)
+
+def select(name):
+    target = ROOT / 'fixtures' / name / 'corbanu-control/site'
+    if not (target/'current/index.html').is_file(): raise ValueError('not published')
+    pointer = ROOT / 'serving-next'
+    pointer.symlink_to(target)
+    os.replace(pointer, ROOT / 'serving')
+    print('Selected', name)
+
+def serve():
+    original = control.ThreadingHTTPServer
+    def bind(address, handler):
+        server = original(address, handler)
+        control.atomic_json(ROOT/'server.json', {'pid':os.getpid(),'host':server.server_address[0],'port':server.server_address[1],'url':f'http://127.0.0.1:{server.server_address[1]}/index.html'})
+        print('LOOPBACK', server.server_address, flush=True)
+        return server
+    with patch.object(control, 'ThreadingHTTPServer', bind):
+        control.serve(ROOT/'serving', 0)
+
+if __name__ == '__main__':
+    os.umask(0o077)
+    if sys.argv[1] == 'build':
+        for name in sys.argv[2:]: build(name)
+    elif sys.argv[1] == 'select': select(sys.argv[2])
+    elif sys.argv[1] == 'serve': serve()
+    elif sys.argv[1] == 'advance': advance(sys.argv[2],sys.argv[3])

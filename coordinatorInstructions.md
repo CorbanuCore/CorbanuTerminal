@@ -4,6 +4,12 @@ Consolidated coordinator prompt and operator handoff, September 13, 2026.
 User-authorized process documentation; not a claim that the new orchestration
 runtime or the complete Slack workflow is already qualified.
 
+For Travis's subsequent Fable-owned management takeover, use the consolidated
+[fableMarkdown.md](fableMarkdown.md). It supersedes this file's coordinator/manager
+role split when that takeover starts, and records newer scoped Slack and execution
+evidence. This file remains an operational and historical reference; neither
+document's publication starts a manager or resumes paused product work.
+
 **The management pause remains in effect until Travis explicitly resumes work.**
 Saving, committing or pushing these instructions does not lift it. Commands
 below are operating instructions, not instructions to execute them immediately.
