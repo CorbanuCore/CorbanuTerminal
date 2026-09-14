@@ -11,12 +11,15 @@ activation_basis: "September 10 delivery control request; September 11 three-wor
 target_release: "Internal operations; no Terminal or Desktop release authorized"
 deadline: "TBD"
 created: 2026-09-10
-updated: 2026-09-11
+updated: 2026-09-14
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Internal delivery control — TO BUILD"
   requirement_excerpt: "Use sequential sprints per initiative"
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-owner-daemon-20260914"
+    branch: "bootstrap/owner-daemon-20260914"
+    base_commit: "bebe14686b16295903a79606e4e0163c87dc403b"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/decision-inspection-20260913"
     branch: "bootstrap/decision-inspection-20260913"
     base_commit: "239f7f82d5d410adb936963ef6be891a9184bbdd"

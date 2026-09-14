@@ -14,7 +14,7 @@ branch: "integrate/management-workstreams-20260911"
 base_commit: "eb01bf006eacbeef5be07174a3f37ad124abc74c"
 depends_on: "none"
 created: 2026-09-10
-updated: 2026-09-12
+updated: 2026-09-14
 ---
 
 # PF-80-S01 — Native Task Node delivery-control integration
@@ -26,7 +26,7 @@ Port/preparation/engine/adapter/reconciliation are reviewed and integrated local
 ## Execution mandate
 
 - Deliver: scoped main-tree port of existing internal projection/progress tooling, recoverable native contract and reviewed first-event preparation.
-- Excludes: unrelated schedulers, native auth redesign, automatic task acceptance/rewards, beta launch and broad credential distribution; the explicit September13 coordinator/watchdog is authorized.
+- Excludes: unrelated schedulers, native auth redesign, automatic task acceptance/rewards, beta launch and broad credential distribution; the explicit September13 coordinator/watchdog is authorized. September14 allocations: owner daemon increment A (worktree `bootstrap-owner-daemon-20260914`, files per `owner-daemon-design-01`, 660/780) and the private SLK harness at `/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-slk.2Sn5C2` (five files, <=800 lines); Travis approved unattended recurrence pending qualification.
 - Identity: recovery-source PF-76-S01 is this feature's historical name, not main's provider-persistence feature. Preserve old event IDs/receipts.
 
 ## Plan linkage
