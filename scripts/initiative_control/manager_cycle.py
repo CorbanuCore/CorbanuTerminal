@@ -34,7 +34,8 @@ DIRECTIVE = (
     "or conflicting facts require an allocated wait/escalation/reconciliation. "
     "last_three_actions contains ordered id-only entries; resolve records in actions. "
     "These are lossless references to the supplied records. Terminal actions omit "
-    "inputs and dispatch/ACK/result/verification originals unless they are in "
+    "inputs and dispatch/ACK/result/verification/owner-failure/owner-cancellation "
+    "originals unless they are in "
     "last_three_actions and changed status in the selected event batch. Consumed "
     "allocations omit frozen inputs except consumed:true. evidence_omissions records "
     "omitted inputs and unexpanded reference roots by digest; these are unavailable "
@@ -46,8 +47,11 @@ DIRECTIVE = (
     "event_batch reports selected and deferred pending events. Only selected events "
     "are supplied and consumed on acceptance; deferred events remain pending for "
     "later fresh cycles. Do not claim the whole queue is reconciled. "
-    "Derived event/action evidence previews are omitted; the exact full bodies "
-    "are in original_evidence unless explicitly listed in evidence_omissions. "
+    "Compacted terminal actions retain core result, verification, owner_failure "
+    "and owner_cancellation previews (at most 400 characters each). These are "
+    "partial context, not full originals. Other derived event/action previews "
+    "are omitted; exact full bodies are in original_evidence unless explicitly "
+    "listed in evidence_omissions. "
     "Preserve approvals, unresolved blockers, review budgets and pause boundaries."
 )
 
@@ -111,18 +115,14 @@ def briefing(coordinator, packet, owner_context):
              "seed_metadata_status": "historical; current durable state is not external live proof",
              "original_evidence": {}, "evidence_omissions": []}
     # Strip only core-owned previews; arbitrary frozen inputs remain exact.
-    reference_fields = {"dispatch_receipt", "ack_receipt", "result", "verification",
-                        "owner_failure", "owner_cancellation"}
+    outcome_fields = {"result", "verification", "owner_failure", "owner_cancellation"}
+    reference_fields = {"dispatch_receipt", "ack_receipt"} | outcome_fields
     def without_preview(value, fields):
         if isinstance(value, dict) and set(value) == fields:
             return {k: v for k, v in value.items() if k != "preview"}
         return value
     reference_shape = {"evidence_digest", "bytes", "preview"}
     brief["events"] = [without_preview(event, reference_shape | {"id"}) for event in packet["events"]]
-    brief["actions"] = {key: {field: without_preview(value, reference_shape)
-                              if field in reference_fields else value
-                              for field, value in action.items()}
-                        for key, action in packet["actions"].items()}
     brief["allocations"] = dict(packet["allocations"])
     originals = brief["original_evidence"]
 
@@ -158,6 +158,11 @@ def briefing(coordinator, packet, owner_context):
     recent = {action["id"] for actions in last_three.values() for action in actions}
     compact = {key for key, action in packet["actions"].items()
                if action["status"] in TERMINAL and not (key in recent and key in changed)}
+    brief["actions"] = {key: {field: without_preview(value, reference_shape)
+                              if field in reference_fields
+                              and not (key in compact and field in outcome_fields) else value
+                              for field, value in action.items()}
+                        for key, action in packet["actions"].items()}
     omitted_references = []
 
     def reference_digests(value):
@@ -176,7 +181,7 @@ def briefing(coordinator, packet, owner_context):
             entry["inputs_digest"] = digest(inputs)
         omitted_references.append((entry, set(reference_digests(references))))
 
-    historical_fields = {"dispatch_receipt", "ack_receipt", "result", "verification"}
+    historical_fields = reference_fields
     for key in sorted(compact):
         action = brief["actions"][key]
         inputs = action.pop("inputs", None)

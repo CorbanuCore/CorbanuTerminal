@@ -65,7 +65,10 @@ class BriefingSizeTests(unittest.TestCase):
             for field in ("dispatch_receipt", "ack_receipt", "result", "verification"):
                 key = action[field]["evidence_digest"]
                 self.assertEqual(key, compact[field]["evidence_digest"])
-                self.assertNotIn("preview", compact[field])
+                if field in {"result", "verification"}:
+                    self.assertEqual(action[field], compact[field])
+                else:
+                    self.assertNotIn("preview", compact[field])
                 self.assertNotIn(key, brief["original_evidence"])
                 self.assertIn(key, omission["evidence_digests"])
         self.assertEqual(before, packet)
@@ -98,6 +101,69 @@ class BriefingSizeTests(unittest.TestCase):
                 self.assertEqual({"full": "z" * 2000},
                                  brief["original_evidence"][nested["evidence_digest"]])
                 self.assertEqual([], brief["evidence_omissions"])
+
+    def test_outcome_previews_survive_after_transition_batch_is_consumed(self):
+        fields = ("result", "verification", "owner_failure", "owner_cancellation")
+        for status in sorted(TERMINAL):
+            with self.subTest(status=status):
+                action = self.action(status=status)
+                for field in fields:
+                    action[field] = self.ref({"reason": field + ":" + "理由" * 1000})
+                event = {"id": "transition", "action": "prior", "status": status}
+                packet = {"events": [{"id": event["id"], **self.ref(event)}],
+                          "workstreams": dict.fromkeys(("delivery", "accounting", "privacy"), {}),
+                          "actions": {"prior": action}, "allocations": {},
+                          "last_three_actions": {"delivery": [action]}}
+                transition = self.brief(packet)
+                for field in fields:
+                    self.assertNotIn("preview", transition["actions"]["prior"][field])
+                    key = action[field]["evidence_digest"]
+                    self.assertEqual(self.c.read_evidence(key), transition["original_evidence"][key])
+
+                # A later claim contains only an unrelated event; the transition is consumed.
+                tick = {"id": "next-tick", "text": "pending work"}
+                packet["events"] = [{"id": tick["id"], **self.ref(tick)}]
+                before = copy.deepcopy(packet)
+                forbidden = {action[field]["evidence_digest"] for field in fields}
+                original_read = self.c.read_evidence
+
+                def read(key):
+                    self.assertNotIn(key, forbidden)
+                    return original_read(key)
+
+                with patch.object(self.c, "read_evidence", read):
+                    brief = self.brief(packet)
+                for field in fields:
+                    self.assertEqual(action[field], brief["actions"]["prior"][field])
+                    self.assertEqual(400, len(brief["actions"]["prior"][field]["preview"]))
+                    key = action[field]["evidence_digest"]
+                    self.assertNotIn(key, brief["original_evidence"])
+                    self.assertIn(key, brief["evidence_omissions"][0]["evidence_digests"])
+                self.assertEqual(before, packet)
+
+    def test_compact_preview_byte_growth_is_bounded(self):
+        packet = self.large_packet()
+        fields = ("result", "verification", "owner_failure", "owner_cancellation")
+        for action in packet["actions"].values():
+            for field in fields:
+                action[field] = self.ref({"reason": field + ":" + "理由" * 1000})
+        raw = m.briefing(self.c, packet, self.context)
+        brief = json.loads(raw)
+        without_previews = copy.deepcopy(brief)
+        count = 0
+        for action in without_previews["actions"].values():
+            for field in fields:
+                preview = action[field].pop("preview")
+                self.assertEqual(400, len(preview))
+                count += 1
+        growth = len(raw) - len(encoded(without_previews).encode())
+        self.assertGreater(growth, 0)
+        # Six bytes per character covers JSON escapes, plus the field syntax.
+        self.assertLessEqual(growth, count * (400 * 6 + 32))
+        self.assertLess(len(raw), f.BRIEF_LIMIT)
+        for action in packet["actions"].values():
+            for field in fields:
+                self.assertNotIn(action[field]["evidence_digest"], brief["original_evidence"])
 
     def test_changed_action_outside_last_three_stays_compact_but_event_is_full(self):
         action = self.action()
@@ -133,9 +199,12 @@ class BriefingSizeTests(unittest.TestCase):
         for field in ("dispatch_receipt", "ack_receipt", "result", "verification"):
             key = action[field]["evidence_digest"]
             self.assertEqual(self.c.read_evidence(key), brief["original_evidence"][key])
-        for ref in (nested, terminal["owner_failure"]):
-            key = ref["evidence_digest"]
-            self.assertEqual(self.c.read_evidence(key), brief["original_evidence"][key])
+        self.assertEqual(self.c.read_evidence(nested["evidence_digest"]),
+                         brief["original_evidence"][nested["evidence_digest"]])
+        self.assertEqual(terminal["owner_failure"], brief["actions"]["closed"]["owner_failure"])
+        key = terminal["owner_failure"]["evidence_digest"]
+        self.assertNotIn(key, brief["original_evidence"])
+        self.assertIn(key, brief["evidence_omissions"][0]["evidence_digests"])
 
     def test_consumed_allocations_stay_compact_without_losing_active_inputs(self):
         action = self.action(status="running")
