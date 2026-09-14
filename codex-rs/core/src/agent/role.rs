@@ -288,9 +288,21 @@ mod reload {
         // Overlay explicit role fields onto the embedding's runtime provider,
         // including nested settings. A whole-provider copy loses role overrides;
         // copying selected fields would lose the next supported provider setting.
+        let accounting_wire = match &config.accounting {
+            crate::config::AccountingMode::DirectAnthropic { .. }
+                if config.model_provider_id == "anthropic" =>
+            {
+                Some(codex_model_provider_info::WireApi::Anthropic)
+            }
+            crate::config::AccountingMode::DirectOpenAiResponsesHttp { .. }
+                if config.model_provider_id == "openai" =>
+            {
+                Some(codex_model_provider_info::WireApi::Responses)
+            }
+            _ => None,
+        };
         if next_config.model_provider_id == config.model_provider_id
-            && config.model_provider_id == "anthropic"
-            && !matches!(config.accounting, crate::config::AccountingMode::Disabled)
+            && let Some(accounting_wire) = accounting_wire
         {
             let mut provider = TomlValue::try_from(&config.model_provider)?;
             if let Some(overlay) = role_layer_toml
@@ -304,7 +316,7 @@ mod reload {
             // An explicit wire change cannot bypass the bound Messages adapter.
             // Endpoint changes remain visible to its existing pre-send rejection.
             anyhow::ensure!(
-                provider.wire_api == codex_model_provider_info::WireApi::Anthropic,
+                provider.wire_api == accounting_wire,
                 crate::accounting::FAILURE
             );
             next_config

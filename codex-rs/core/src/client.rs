@@ -325,6 +325,7 @@ pub struct ModelClient {
 /// contract and can cause routing bugs.
 pub struct ModelClientSession {
     pub(crate) accounting: crate::accounting::Slot,
+    pub(crate) responses_accounting: crate::accounting::responses::Slot,
     client: ModelClient,
     websocket_session: WebsocketSession,
     /// Turn state for sticky routing.
@@ -958,6 +959,7 @@ impl ModelClient {
     pub fn new_session(&self) -> ModelClientSession {
         ModelClientSession {
             accounting: Default::default(),
+            responses_accounting: Default::default(),
             client: self.clone(),
             websocket_session: self.take_cached_websocket_session(),
             turn_state: Arc::new(OnceLock::new()),
@@ -3141,9 +3143,35 @@ impl ModelClientSession {
                 provider_request_started_at,
             );
             let client_setup = self.client.current_client_setup().await?;
-            let transport = self
-                .client
-                .build_api_transport(&client_setup.api_provider, RESPONSES_ENDPOINT)?;
+            let sampling = match crate::accounting::responses::read(&self.responses_accounting)? {
+                Some(deferred) => {
+                    deferred
+                        .resolve(
+                            self.client.state.provider.info(),
+                            client_setup.auth.as_ref(),
+                            &client_setup.api_provider.url_for_path(RESPONSES_ENDPOINT),
+                        )
+                        .await?
+                }
+                None => None,
+            };
+            let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+            let transport = if evidence.is_some() {
+                let client =
+                    codex_login::default_client::create_client_for_route_without_redirects(
+                        &self.client.http_client_factory,
+                        &client_setup.api_provider.url_for_path(RESPONSES_ENDPOINT),
+                        ClientRouteClass::Api,
+                    )
+                    .map_err(std::io::Error::from)?;
+                crate::memory_stage_one::StageOneGuardedTransport::new(
+                    ReqwestTransport::from_http_client(client),
+                    self.client.stage_one_memory_binding.clone(),
+                )
+            } else {
+                self.client
+                    .build_api_transport(&client_setup.api_provider, RESPONSES_ENDPOINT)?
+            };
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),
                 client_setup.api_auth.as_ref(),
@@ -3198,12 +3226,23 @@ impl ModelClientSession {
             inference_trace_attempt.add_request_headers(&mut options.extra_headers);
             inference_trace_attempt.record_started(&request);
             maybe_dump_responses_request(&request);
+            let transport = transport.map_inner(|inner| {
+                crate::accounting::transport::AccountingTransport::new(
+                    inner,
+                    evidence.clone(),
+                    request.model.clone(),
+                )
+                .with_tier(request.service_tier.clone())
+            });
             let client = ApiResponsesClient::new(
                 transport,
                 client_setup.api_provider,
                 client_setup.api_auth,
             )
-            .with_telemetry(Some(request_telemetry), Some(sse_telemetry));
+            .with_telemetry(Some(request_telemetry), Some(sse_telemetry))
+            .with_usage_observer(
+                evidence.map(|value| value as Arc<dyn codex_api::ResponsesUsageObserver>),
+            );
             trace_stream_timing(
                 "responses_http_before_stream_request",
                 provider_request_started_at,

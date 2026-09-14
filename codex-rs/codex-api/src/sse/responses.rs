@@ -2,6 +2,7 @@ use crate::common::ResponseEvent;
 use crate::common::ResponseStream;
 use crate::common::SafetyBuffering;
 use crate::common::SafetyBufferingTreatment;
+use crate::endpoint::responses::accounting::{self, InvalidResponsesUsage, ResponsesUsageObserver};
 use crate::error::ApiError;
 use crate::rate_limits::parse_all_rate_limits;
 use crate::safety_buffering::treatment_from_headers;
@@ -36,6 +37,16 @@ pub fn spawn_response_stream(
     idle_timeout: Duration,
     telemetry: Option<Arc<dyn SseTelemetry>>,
     turn_state: Option<Arc<OnceLock<String>>>,
+) -> ResponseStream {
+    spawn_response_stream_with_observer(stream_response, idle_timeout, telemetry, turn_state, None)
+}
+
+pub(crate) fn spawn_response_stream_with_observer(
+    stream_response: StreamResponse,
+    idle_timeout: Duration,
+    telemetry: Option<Arc<dyn SseTelemetry>>,
+    turn_state: Option<Arc<OnceLock<String>>>,
+    observer: Option<Arc<dyn ResponsesUsageObserver>>,
 ) -> ResponseStream {
     let rate_limit_snapshots = parse_all_rate_limits(&stream_response.headers);
     let models_etag = stream_response
@@ -89,6 +100,7 @@ pub fn spawn_response_stream(
             idle_timeout,
             telemetry,
             safety_buffering_treatment,
+            observer,
         )
         .await;
     });
@@ -521,6 +533,7 @@ pub async fn process_sse(
         idle_timeout,
         telemetry,
         SafetyBufferingTreatment::default(),
+        None,
     )
     .await;
 }
@@ -531,7 +544,9 @@ async fn process_sse_with_treatment(
     idle_timeout: Duration,
     telemetry: Option<Arc<dyn SseTelemetry>>,
     safety_buffering_treatment: SafetyBufferingTreatment,
+    observer: Option<Arc<dyn ResponsesUsageObserver>>,
 ) {
+    let mut position = 0_i64;
     let mut stream = stream.eventsource();
     let mut response_error: Option<ApiError> = None;
     let mut last_server_model: Option<String> = None;
@@ -565,6 +580,32 @@ async fn process_sse_with_treatment(
             }
         };
 
+        if let Some(observer) = &observer {
+            let decoded = match position.checked_add(1) {
+                Some(next) => {
+                    position = next;
+                    accounting::decode(&sse.data)
+                }
+                None => Err(InvalidResponsesUsage),
+            };
+            let usage = match decoded {
+                Ok(None) => None,
+                Ok(Some(patch)) => Some(Ok(patch)),
+                Err(error) => Some(Err(error)),
+            };
+            if let Some(usage) = usage {
+                let invalid = usage.is_err();
+                let result = observer.observe(position, usage).await;
+                if invalid || result.is_err() {
+                    let _ = tx_event
+                        .send(Err(ApiError::Stream(
+                            "Responses accounting evidence rejected".into(),
+                        )))
+                        .await;
+                    return;
+                }
+            }
+        }
         trace!("SSE event: {}", &sse.data);
 
         let event: ResponsesStreamEvent = match serde_json::from_str(&sse.data) {

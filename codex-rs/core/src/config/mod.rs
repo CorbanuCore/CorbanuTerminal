@@ -646,6 +646,10 @@ pub enum AccountingMode {
         scope: uuid::Uuid,
         approved_endpoint: String,
     },
+    DirectOpenAiResponsesHttp {
+        scope: uuid::Uuid,
+        approved_endpoint: String,
+    },
 }
 
 /// Application configuration loaded from disk and merged with overrides.

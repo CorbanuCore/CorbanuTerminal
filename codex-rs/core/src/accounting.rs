@@ -22,6 +22,8 @@ use uuid::Uuid;
 mod policy_tests;
 #[path = "accounting_prices.rs"]
 mod prices;
+#[path = "accounting_responses.rs"]
+pub(crate) mod responses;
 #[path = "accounting_transport.rs"]
 pub(crate) mod transport;
 
@@ -89,6 +91,8 @@ pub(crate) struct Sampling {
     request: Uuid,
     scope: Uuid,
     endpoint: String,
+    provider: &'static str,
+    dialect: Dialect,
     previous: Mutex<Option<Uuid>>,
     failed: AtomicBool,
 }
@@ -115,12 +119,38 @@ impl Sampling {
         turn: String,
         mode: &AccountingMode,
     ) -> Result<Arc<Self>, CodexErr> {
-        let AccountingMode::DirectAnthropic {
-            scope,
-            approved_endpoint,
-        } = mode
-        else {
-            return Err(CodexErr::Fatal(FAILURE.into()));
+        Self::start_request(runtime, owner, turn, mode, Uuid::new_v4()).await
+    }
+
+    async fn start_request(
+        runtime: Arc<StateRuntime>,
+        owner: ThreadId,
+        turn: String,
+        mode: &AccountingMode,
+        request: Uuid,
+    ) -> Result<Arc<Self>, CodexErr> {
+        let (scope, approved_endpoint, provider, dialect, path) = match mode {
+            AccountingMode::DirectAnthropic {
+                scope,
+                approved_endpoint,
+            } => (
+                scope,
+                approved_endpoint,
+                "anthropic",
+                Dialect::NativeAnthropic,
+                "messages",
+            ),
+            AccountingMode::DirectOpenAiResponsesHttp {
+                scope,
+                approved_endpoint,
+            } => (
+                scope,
+                approved_endpoint,
+                "openai",
+                Dialect::Inclusive,
+                "responses",
+            ),
+            AccountingMode::Disabled => return Err(CodexErr::Fatal(FAILURE.into())),
         };
         let endpoint =
             url::Url::parse(approved_endpoint).map_err(|_| CodexErr::Fatal(FAILURE.into()))?;
@@ -143,9 +173,11 @@ impl Sampling {
             runtime,
             owner,
             turn,
-            request: Uuid::new_v4(),
+            request,
             scope: *scope,
-            endpoint: format!("{}/messages", approved_endpoint.trim_end_matches('/')),
+            endpoint: format!("{}/{path}", approved_endpoint.trim_end_matches('/')),
+            provider,
+            dialect,
             previous: Mutex::new(None),
             failed: AtomicBool::new(false),
         }))
@@ -164,6 +196,15 @@ impl Sampling {
     }
 
     async fn admit(&self, model: &str, endpoint: &str) -> anyhow::Result<Attempt> {
+        self.admit_with_tier(model, endpoint, None).await
+    }
+
+    async fn admit_with_tier(
+        &self,
+        model: &str,
+        endpoint: &str,
+        tier: Option<&str>,
+    ) -> anyhow::Result<Attempt> {
         self.check()?;
         anyhow::ensure!(endpoint == self.endpoint, "accounting route mismatch");
         let _write = WRITES.acquire().await?;
@@ -186,13 +227,17 @@ impl Sampling {
             thread_id: self.owner,
             turn: self.turn.clone(),
             retry_of: previous,
-            provider: "anthropic".into(),
+            provider: self.provider.into(),
             model: model.into(),
             scope: self.scope,
-            dialect: Dialect::NativeAnthropic,
+            dialect: self.dialect,
             dispatched_at_ms: dispatched_at.try_into()?,
         };
-        let prices = prices::original(model, self.scope, dispatched_at)?;
+        let prices = if self.provider == "openai" {
+            prices::responses_original(model, self.scope, dispatched_at, tier)?
+        } else {
+            prices::original(model, self.scope, dispatched_at)?
+        };
         store.admit(self.owner, &attempt, &prices, now()).await?;
         *self.previous.lock().map_err(|_| {
             self.reject();
@@ -217,6 +262,16 @@ impl Sampling {
             output: presence(usage.output_tokens)?,
             ..Patch::default()
         };
+        self.observe_patch(attempt, source, position, patch).await
+    }
+
+    async fn observe_patch(
+        &self,
+        attempt: &Attempt,
+        source: Uuid,
+        position: i64,
+        patch: Patch,
+    ) -> anyhow::Result<()> {
         let position = position.try_into()?;
         let observation = Observation {
             source,

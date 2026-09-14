@@ -84,6 +84,93 @@ fn project(
     }])
 }
 
+pub(super) fn responses_original(
+    model: &str,
+    scope: Uuid,
+    accepted_at: i64,
+    tier: Option<&str>,
+) -> anyhow::Result<Vec<Snapshot>> {
+    if !matches!(tier, None | Some("default")) {
+        return Ok(Vec::new());
+    }
+    let catalog = codex_models_manager::bundled_models_response()?;
+    let mut rows = catalog.models.iter().filter(|row| row.slug == model);
+    let Some(row) = rows.next() else {
+        return Ok(Vec::new());
+    };
+    if rows.next().is_some() {
+        return Ok(Vec::new());
+    }
+    let Some(ModelOrchestrationMetadata::Eligible {
+        provider_id,
+        billing,
+        ..
+    }) = &row.orchestration
+    else {
+        return Ok(Vec::new());
+    };
+    if provider_id != "openai" {
+        return Ok(Vec::new());
+    }
+    responses_project(model, scope, billing, accepted_at)
+}
+
+fn responses_project(
+    model: &str,
+    scope: Uuid,
+    billing: &ModelBilling,
+    accepted_at: i64,
+) -> anyhow::Result<Vec<Snapshot>> {
+    let (input, output, read) = match billing {
+        ModelBilling::Metered {
+            input_milli_usd_per_million_tokens,
+            output_milli_usd_per_million_tokens,
+            cached_input_milli_usd_per_million_tokens,
+        } => (
+            *input_milli_usd_per_million_tokens,
+            *output_milli_usd_per_million_tokens,
+            *cached_input_milli_usd_per_million_tokens,
+        ),
+        ModelBilling::AuthDependent {
+            api_key_input_milli_usd_per_million_tokens,
+            api_key_output_milli_usd_per_million_tokens,
+            api_key_cached_input_milli_usd_per_million_tokens,
+            ..
+        } => (
+            *api_key_input_milli_usd_per_million_tokens,
+            *api_key_output_milli_usd_per_million_tokens,
+            *api_key_cached_input_milli_usd_per_million_tokens,
+        ),
+        ModelBilling::Plan { .. } | ModelBilling::PlanSchedule { .. } | ModelBilling::Local => {
+            return Ok(Vec::new());
+        }
+    };
+    let mut snapshots = project(
+        model,
+        scope,
+        &ModelBilling::Metered {
+            input_milli_usd_per_million_tokens: input,
+            output_milli_usd_per_million_tokens: output,
+            cached_input_milli_usd_per_million_tokens: read,
+        },
+        accepted_at,
+    )?;
+    let source = serde_json::to_vec(&(
+        "openai-responses-api-key-bundled-v1",
+        "openai",
+        model,
+        "api_key",
+        "default",
+        "USD/million",
+        input,
+        output,
+        read,
+    ))?;
+    snapshots[0].provider = "openai".into();
+    snapshots[0].source_reference = Uuid::new_v5(&Uuid::NAMESPACE_OID, &source);
+    Ok(snapshots)
+}
+
 fn rate(milli: u32) -> anyhow::Result<Decimal> {
     let whole = milli / 1000;
     let fraction = milli % 1000;
