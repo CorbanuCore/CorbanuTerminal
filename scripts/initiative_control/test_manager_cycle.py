@@ -259,7 +259,12 @@ class CycleTests(unittest.TestCase):
         result = self.cycle()
         self.assertEqual("accepted", result["status"], result)
         brief = m.load_json(Path(result["artifacts"]) / "briefing.json")
-        self.assertEqual({"data": ref}, brief["actions"]["prior"]["inputs"])
+        self.assertNotIn("inputs", brief["actions"]["prior"])
+        self.assertEqual([{"source": "actions", "id": "prior", "reason": "terminal_history",
+                          "inputs_digest": f.digest(encoded({"data": ref}).encode()),
+                          "evidence_digests": [ref["evidence_digest"]]}], brief["evidence_omissions"])
+        claim = m.load_json(Path(result["artifacts"]) / "claim.json")
+        self.assertEqual({"data": ref}, claim["actions"]["prior"]["inputs"])
         self.assertEqual({**ref, "extra": "retain unknown shape"}, brief["actions"]["prior"]["result"])
 
     def test_large_actions_are_losslessly_indexed_without_duplicate_records(self):
@@ -303,17 +308,30 @@ class CycleTests(unittest.TestCase):
         packet = self.c.begin_manager()
         before = encoded(packet, limit=240000)
         self.assertGreater(len(before), f.BRIEF_LIMIT)
-        brief = json.loads(m.briefing(self.c, packet, self.root / "context.json"))
-        for key, action in brief["actions"].items():
-            restored = dict(action)
-            allocation_id = restored.pop("inputs_from_allocation")
-            restored["inputs"] = {"allocation": allocation_id, **brief["allocations"][allocation_id]["inputs"]}
-            self.assertEqual(encoded(packet["actions"][key]), encoded(restored))
-        self.assertEqual(before, encoded(packet, limit=240000))
-        self.assertEqual([], brief["evidence_omissions"])
-        self.assertLess(len(encoded(brief)), f.BRIEF_LIMIT)
-        self.assertEqual([{"id": str(i)} for i in range(3)], brief["last_three_actions"]["delivery"])
-        self.assertIn("New proposals still require the full inputs object", brief["directive"])
+        for status in ("accepted", "running"):
+            with self.subTest(status=status):
+                for action in packet["actions"].values():
+                    action["status"] = status
+                before = encoded(packet, limit=240000)
+                brief = json.loads(m.briefing(self.c, packet, self.root / "context.json"))
+                omissions = []
+                for key, action in brief["actions"].items():
+                    self.assertNotIn("inputs", action)
+                    restored = dict(action)
+                    if status == "accepted":
+                        self.assertNotIn("inputs_from_allocation", action)
+                        allocation_id = restored.pop("allocation")
+                        omissions.append({"source": "actions", "id": key, "reason": "terminal_history",
+                            "inputs_digest": f.digest(encoded(packet["actions"][key]["inputs"]).encode())})
+                    else:
+                        allocation_id = restored.pop("inputs_from_allocation")
+                    restored["inputs"] = {"allocation": allocation_id, **brief["allocations"][allocation_id]["inputs"]}
+                    self.assertEqual(encoded(packet["actions"][key]), encoded(restored))
+                self.assertEqual(before, encoded(packet, limit=240000))
+                self.assertEqual(omissions, brief["evidence_omissions"])
+                self.assertLess(len(encoded(brief)), f.BRIEF_LIMIT)
+                self.assertEqual([{"id": str(i)} for i in range(3)], brief["last_three_actions"]["delivery"])
+                self.assertIn("New proposals still require the full inputs object", brief["directive"])
 
     def test_historical_or_nonidentical_action_inputs_stay_inline(self):
         packet = self.c.begin_manager()
@@ -327,11 +345,23 @@ class CycleTests(unittest.TestCase):
                     dict(original, inputs={"allocation": "missing", "flag": True}),
                     dict(original, inputs={"allocation": [], "flag": True}),
                     dict(original, inputs_from_allocation="preexisting user field")]
-        for action in variants:
-            packet["actions"] = {"prior": action}
-            packet["last_three_actions"]["delivery"] = [action]
-            brief = json.loads(m.briefing(self.c, packet, self.root / "context.json"))
-            self.assertEqual(encoded(action), encoded(brief["actions"]["prior"]))
+        for status in ("accepted", "running"):
+            for variant in variants:
+                with self.subTest(status=status, variant=variant):
+                    action = {**variant, "status": status}
+                    packet["actions"] = {"prior": action}
+                    packet["last_three_actions"]["delivery"] = [action]
+                    brief = json.loads(m.briefing(self.c, packet, self.root / "context.json"))
+                    if status == "accepted":
+                        self.assertNotIn("inputs", brief["actions"]["prior"])
+                        expected = {key: value for key, value in action.items() if key != "inputs"}
+                        expected["allocation"] = action["inputs"]["allocation"]
+                        self.assertEqual(encoded(expected), encoded(brief["actions"]["prior"]))
+                        self.assertEqual([{"source": "actions", "id": "prior", "reason": "terminal_history",
+                            "inputs_digest": f.digest(encoded(action["inputs"]).encode())}], brief["evidence_omissions"])
+                    else:
+                        self.assertEqual(encoded(action), encoded(brief["actions"]["prior"]))
+                        self.assertEqual([], brief["evidence_omissions"])
 
     def test_missing_evidence_holds_before_launch(self):
         self.c.event({"id": "missing", "result": {"evidence_digest": "a" * 64}})
