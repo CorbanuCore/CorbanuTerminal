@@ -46,7 +46,7 @@ the first brief. The launcher invokes no setup-token or new-login command.
 
 Stdout is one JSON receipt. Successful exit 0 means `status="completed"`,
 `decision` is the parsed **entire** final JSON object, and `run_id`, `session_id`,
-`model="claude-fable-5-1-plan"`, `provider="claude-plan"`, `effort="high"` are present.
+`model="claude-opus-5-plan"` (Opus 5.0 High; `claude-fable-5-1-plan` before the 2026-09-14 directive), `provider="claude-plan"`, `effort="high"` are present.
 `thread_id`, `turn_id`, `response_id`, timestamps, exact private socket/session,
 artifact paths and verified `shutdown` accompany them. `session_id` comes from
 session metadata, not the TMUX name or a fabricated UUID.

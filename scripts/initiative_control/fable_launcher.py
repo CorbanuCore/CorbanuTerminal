@@ -19,7 +19,8 @@ import tempfile
 import time
 import uuid
 
-MODEL, PROVIDER, EFFORT = "claude-fable-5-1-plan", "claude-plan", "high"
+# Travis 2026-09-14 (quota): manager/review inference moved from claude-fable-5-1-plan to Opus 5.0 High.
+MODEL, PROVIDER, EFFORT = "claude-opus-5-plan", "claude-plan", "high"
 BRIEF_LIMIT, FINAL_LIMIT, RECORD_LIMIT = 65536, 131072, 16 * 1024 * 1024
 SAFE_PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin"
 SECRET = re.compile(r"(?<![A-Za-z0-9_-])sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}"
