@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-27-S04"
 title: "Isolated credential broker process"
-status: blocked
+status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 28
@@ -18,9 +18,9 @@ updated: 2026-09-13
 ---
 # PF-27-S04 — Isolated credential broker process
 
+**September14:** owner returned paused reservation to draft for PF-83; no cancellation/completion/resumption. [Handoff preserves coordinates, checkpoints, reviews and A-D evidence](../../../../qa/reliability/live-permission-transition-20260913/expanded-allocation.md).
 **User-requested management pause, September 13.** Accepted work integrated; owner/probes stopped. [Checkpoint and gates](../../../plans/management-pause-2026-09-13.md). No answer requested; continuation mandates below suspended.
-Earlier September 11 resumption is historical: recovered `security-round5-broker` at pushed `cd7457da7`; do not redo it.
-The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/RESUME-20260911.md) records exact coordinates, review history and unchanged native setup limits.
+Earlier September 11 resumption is historical: recovered `security-round5-broker` at pushed `cd7457da7`; do not redo it. The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/RESUME-20260911.md) records exact coordinates, review history and unchanged native setup limits.
 
 ## Execution mandate
 

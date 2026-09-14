@@ -342,6 +342,7 @@ fn bypass_hook_trust_startup_warning_snapshot() {
 async fn enqueue_primary_thread_session_replays_buffered_approval_after_attach() -> Result<()> {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
     let thread_id = ThreadId::new();
+    app.pending_permission_confirmation = Some(test_support::pending_confirmation(thread_id));
     let approval_request =
         exec_approval_request(thread_id, "turn-1", "call-1", /*approval_id*/ None);
 
@@ -387,6 +388,7 @@ async fn enqueue_primary_thread_session_replays_buffered_approval_after_attach()
         } = app_event
         {
             assert_eq!(op_thread_id, thread_id);
+            assert!(app.pending_permission_confirmation.is_some());
             return Ok(());
         }
     }
@@ -8879,6 +8881,7 @@ async fn reset_memories_clears_local_memory_directories() -> Result<()> {
 #[tokio::test]
 async fn apply_permission_profile_selection_preserves_loader_overrides() -> Result<()> {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let mut app_server = start_config_write_test_app_server(&app).await?;
     let codex_home = tempdir()?;
     let selected_config = codex_home.path().join("work.config.toml");
     std::fs::write(
@@ -8896,12 +8899,15 @@ default_permissions = "locked-down"
     app.harness_overrides.permission_profile = Some(PermissionProfile::workspace_write());
 
     assert!(
-        app.apply_permission_profile_selection(PermissionProfileSelection {
-            profile_id: "locked-down".to_string(),
-            approval_policy: None,
-            approvals_reviewer: None,
-            display_label: "locked-down".to_string(),
-        })
+        app.apply_permission_profile_selection(
+            &mut app_server,
+            PermissionProfileSelection {
+                profile_id: "locked-down".to_string(),
+                approval_policy: None,
+                approvals_reviewer: None,
+                display_label: "locked-down".to_string(),
+            }
+        )
         .await
     );
 
@@ -8926,27 +8932,6 @@ default_permissions = "locked-down"
         app.runtime_permission_profile_override,
         Some(RuntimePermissionProfileOverride::from_config(&app.config))
     );
-    let op = match app_event_rx.try_recv() {
-        Ok(AppEvent::CodexOp(op)) => op,
-        other => panic!("expected CodexOp event, got {other:?}"),
-    };
-    assert_eq!(
-        op,
-        Op::OverrideTurnContext {
-            cwd: None,
-            approval_policy: None,
-            approvals_reviewer: None,
-            permission_profile: Some(app.config.permissions.permission_profile().clone()),
-            active_permission_profile: app.config.permissions.active_permission_profile(),
-            windows_sandbox_level: None,
-            model: None,
-            effort: None,
-            summary: None,
-            service_tier: None,
-            collaboration_mode: None,
-            personality: None,
-        }
-    );
     let cell = match app_event_rx.try_recv() {
         Ok(AppEvent::InsertHistoryCell(cell)) => cell,
         other => panic!("expected InsertHistoryCell event, got {other:?}"),
@@ -8957,7 +8942,8 @@ default_permissions = "locked-down"
         .map(|line| line.to_string())
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(rendered.contains("Permissions updated to locked-down"));
+    assert!(rendered.contains("Permissions selected for the new session: locked-down"));
+    app_server.shutdown().await?;
     Ok(())
 }
 
@@ -11370,7 +11356,7 @@ async fn clear_header_remains_source_backed_for_model_refresh() -> Result<()> {
     Ok(())
 }
 
-async fn make_test_app() -> App {
+pub(super) async fn make_test_app() -> App {
     let (chat_widget, app_event_tx, _rx, _op_rx) = make_chatwidget_manual_with_sender().await;
     let config = chat_widget.config_ref().clone();
     let file_search = FileSearchManager::new(config.cwd.to_path_buf(), app_event_tx.clone());
@@ -11399,6 +11385,7 @@ async fn make_test_app() -> App {
         cloud_config_bundle: CloudConfigBundleLoader::default(),
         runtime_approval_policy_override: None,
         runtime_permission_profile_override: None,
+        pending_permission_confirmation: None,
         file_search,
         transcript_cells: Vec::new(),
         claude_pane_transcript_cells: HashMap::new(),
@@ -11470,7 +11457,7 @@ async fn make_test_app() -> App {
     }
 }
 
-async fn make_test_app_with_channels() -> (
+pub(super) async fn make_test_app_with_channels() -> (
     App,
     tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
     tokio::sync::mpsc::UnboundedReceiver<Op>,
@@ -11504,6 +11491,7 @@ async fn make_test_app_with_channels() -> (
             cloud_config_bundle: CloudConfigBundleLoader::default(),
             runtime_approval_policy_override: None,
             runtime_permission_profile_override: None,
+            pending_permission_confirmation: None,
             file_search,
             transcript_cells: Vec::new(),
             claude_pane_transcript_cells: HashMap::new(),
@@ -11798,7 +11786,7 @@ async fn replace_goal_confirmation_snapshot() {
     );
 }
 
-fn test_thread_session(thread_id: ThreadId, cwd: PathBuf) -> ThreadSessionState {
+pub(super) fn test_thread_session(thread_id: ThreadId, cwd: PathBuf) -> ThreadSessionState {
     ThreadSessionState {
         thread_id,
         forked_from_id: None,
@@ -13912,6 +13900,7 @@ async fn interrupt_without_active_turn_is_treated_as_handled() {
             .await
             .expect("thread/start should succeed");
         let thread_id = started.session.thread_id;
+        app.pending_permission_confirmation = Some(test_support::pending_confirmation(thread_id));
         app.enqueue_primary_thread_session(started.session, started.turns)
             .await
             .expect("primary thread should be registered");
@@ -13928,6 +13917,7 @@ async fn interrupt_without_active_turn_is_treated_as_handled() {
 
         assert_eq!(handled, true);
         assert!(!app.backtrack.primed);
+        assert!(app.pending_permission_confirmation.is_some());
     })
     .await;
 }
@@ -13936,6 +13926,12 @@ async fn interrupt_without_active_turn_is_treated_as_handled() {
 async fn override_turn_context_sends_thread_settings_update() {
     Box::pin(async {
         let mut app = make_test_app().await;
+        // This test switches GPT models, so start with a compatible provider.
+        // The default fixture uses Ambient, which rejects GPT before submission.
+        let (chat_widget, _events, _ops) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(Some("gpt-5.3-codex")).await;
+        app.chat_widget = chat_widget;
+        app.config = app.chat_widget.config_ref().clone();
         let mut app_server =
             crate::start_embedded_app_server_for_picker(app.chat_widget.config_ref())
                 .await

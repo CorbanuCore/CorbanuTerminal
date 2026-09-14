@@ -910,6 +910,14 @@ impl App {
                     }
                 }
                 if should_start_turn {
+                    if self
+                        .pending_permission_confirmation
+                        .as_ref()
+                        .is_some_and(|pending| pending.thread_id == thread_id)
+                    {
+                        self.chat_widget.defer_turn_for_permission_confirmation();
+                        return Ok(true);
+                    }
                     let config = self.chat_widget.config_ref();
                     let approvals_reviewer =
                         approvals_reviewer.unwrap_or(config.approvals_reviewer);
@@ -1798,10 +1806,17 @@ impl App {
         );
         match event {
             ThreadBufferedEvent::Notification(notification) => {
+                let settings_updated = matches!(
+                    notification.as_ref(),
+                    ServerNotification::ThreadSettingsUpdated(_)
+                );
                 self.update_spawn_status_for_thread_notification(notification.as_ref());
                 self.cache_collab_receiver_threads_for_notification(notification.as_ref());
                 self.chat_widget
                     .handle_server_notification(*notification, /*replay_kind*/ None);
+                if settings_updated {
+                    self.observe_permission_confirmation();
+                }
             }
             ThreadBufferedEvent::Request(request) => {
                 if self

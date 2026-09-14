@@ -1,0 +1,5 @@
+---
+source: tui/src/app/permission_confirmation_tests.rs
+expression: message
+---
+• Permission request applied: old request. Newer settings are now active. Check current permissions before sending a new prompt. Held initial input was restored without submission.

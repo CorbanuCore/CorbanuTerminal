@@ -152,6 +152,18 @@ pub(crate) async fn apply_bespoke_event_handling(
         id: event_turn_id,
         msg,
     } = event;
+    if matches!(msg, EventMsg::ThreadSettingsApplied(_) | EventMsg::Error(_)) {
+        let mut state = thread_state.lock().await;
+        if state.listener_matches(&conversation) {
+            let result = match &msg {
+                EventMsg::Error(error) => {
+                    Err(crate::error_code::invalid_request(error.message.clone()))
+                }
+                _ => Ok(()),
+            };
+            state.finish_settings_confirmation(&event_turn_id, result);
+        }
+    }
     match msg {
         EventMsg::TurnStarted(payload) => {
             // While not technically necessary as it was already done on TurnComplete, be extra cautios and abort any pending server requests.

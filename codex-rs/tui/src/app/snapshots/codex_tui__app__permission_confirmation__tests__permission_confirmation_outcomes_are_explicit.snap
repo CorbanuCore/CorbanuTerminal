@@ -1,0 +1,12 @@
+---
+source: tui/src/app/permission_confirmation_tests.rs
+assertion_line: 92
+expression: messages
+---
+• Permissions applied for NEXT TURN: Full Access. Running command authority and pending approvals are unchanged. Let the current turn finish, or stop it with Esc, then send a new prompt. Shared services keep their existing refresh behavior.
+
+• Permissions unconfirmed: Full Access. This server does not provide application confirmation. The request may have been accepted. No automatic retry was made; reconnect to a server that supports confirmation to verify a new selection.
+
+• Permission selection failed: Full Access. rejected by requirements The rejected selection was not saved as a future-turn override. Choose again after resolving the error.
+
+• Permission outcome uncertain: Full Access. No automatic retry was made; running authority is unchanged. Reconnect and inspect session settings before choosing again. connection lost

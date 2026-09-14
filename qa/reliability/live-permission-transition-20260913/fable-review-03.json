@@ -1,0 +1,29 @@
+{
+  "findings": [
+    {
+      "title": "Unknown-unsupported confirm still marks thread server-owned and never downgrades capability",
+      "body": "V3 correctly skips `server_permission_threads.insert` when `thread_settings_update_supported` is already false. But the first confirm attempt against a server that rejects `thread/settings/update` (method-not-found / experimental gate) still inserts the thread before the reply, and the spawned task that learns `Unsupported` cannot clear the set or flip `thread_settings_update_supported` (only the legacy `thread_settings_update` path does). Scenario: older remote server, user opens /permissions first \u2192 thread marked server-owned, reply is Unsupported, config untouched (fine so far). Later a local-config path that still mutates TUI config and relies on OverrideTurnContext + per-turn `turn/start` overrides (e.g. the auto-review/feature toggle in config_persistence.rs ~655/1088) is used: the settings update is a silent no-op on that server, and `spawn_turn_start` now sends `approval_policy/permissions: None` for the marked thread, so the TUI displays settings Core never received. Before this patch the per-turn override kept those in sync on legacy servers. Smallest fix: on `PermissionConfirmationResult::Unsupported` in the `PermissionConfirmationCompleted` handler (which has `&mut AppServerSession`), remove the thread from `server_permission_threads` and/or set `thread_settings_update_supported = false`. Nonblocking; affects only servers without the experimental method.",
+      "priority": "P3",
+      "confidence": 0.45,
+      "category": "bug",
+      "code_location": {
+        "file_path": "codex-rs/tui/src/app_server_session.rs",
+        "line": 1249
+      }
+    },
+    {
+      "title": "Server `{\"outcome\":\"uncertain\"}` reply surfaces Rust Debug text to the user",
+      "body": "`from_reply` maps `Ok(Confirmed { outcome: Uncertain })` through the `other =>` arm, producing `Uncertain(\"Ok(Confirmed { outcome: Uncertain })\")`. `permission_confirmation_message` appends that string to the hint shown in the transcript, so the documented server uncertain outcome renders as a Debug dump instead of a user message. Add an explicit arm for the `Uncertain` outcome with a plain-language reason. Cosmetic; classification (Uncertain) is still correct.",
+      "priority": "P3",
+      "confidence": 0.6,
+      "category": "maintainability",
+      "code_location": {
+        "file_path": "codex-rs/tui/src/app_server_session.rs",
+        "line": 327
+      }
+    }
+  ],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "Verified the v3 change in app_server_session.rs: `confirm_permissions` now only inserts into `server_permission_threads` when `thread_settings_update_supported` is true, and the native regression test asserts an Unsupported result with an empty set. Traced the full contract: app-server registers a request-correlated pending confirmation (live connection + listener generation checked), Core emits `ThreadSettingsApplied`/`Error` with the submission id, the bespoke handler completes exactly one terminal reply via the spawned owner, and listener replacement/disconnect/submit failure/10s deadline all collapse to `uncertain` with no double reply. TUI side never mutates config optimistically: Applied requires both the reply and an observed `thread/settings/updated` snapshot (or an already-matching config), stale/failed/uncertain results leave config and runtime overrides untouched, held initial input is restored rather than auto-sent when a turn is running or queue is non-empty, and turn start is deferred while a confirmation is pending without touching active turns or approvals. Server-owned threads send no per-turn permission overrides so Core sticky settings govern subsequent turns. Legacy `{}` acceptance is preserved and decoded as Unsupported. Remaining findings are low-priority: residual ownership marking on the first unknown-unsupported attempt (v3 fixes only the known case) and a Debug-formatted message for the server uncertain outcome. Transcript duplication is the recorded nonblocking follow-up and was not re-raised.",
+  "overall_confidence": 0.72
+}

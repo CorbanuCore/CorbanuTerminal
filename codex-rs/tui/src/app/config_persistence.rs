@@ -172,6 +172,7 @@ impl App {
 
     pub(super) async fn apply_permission_profile_selection(
         &mut self,
+        app_server: &mut AppServerSession,
         selection: PermissionProfileSelection,
     ) -> bool {
         let PermissionProfileSelection {
@@ -235,6 +236,21 @@ impl App {
             config.approvals_reviewer = reviewer;
         }
         config.permissions.network = network.clone();
+        if let Some(thread_id) = self.active_thread_id {
+            self.request_permission_confirmation(
+                app_server,
+                codex_app_server_protocol::ThreadSettingsUpdateParams {
+                    thread_id: thread_id.to_string(),
+                    permissions: Some(profile_id),
+                    approval_policy,
+                    approvals_reviewer: approvals_reviewer.map(Into::into),
+                    ..Default::default()
+                },
+                display_label,
+                /*persist_reviewer*/ None,
+            );
+            return false;
+        }
         self.config = config;
 
         if let Some(policy) = approval_policy {
@@ -263,24 +279,9 @@ impl App {
             Some(RuntimePermissionProfileOverride::from_config(&self.config));
         self.sync_active_thread_permission_settings_to_cached_session()
             .await;
-        self.app_event_tx
-            .send(AppEvent::CodexOp(AppCommand::override_turn_context(
-                /*cwd*/ None,
-                approval_policy,
-                approvals_reviewer,
-                Some(permission_profile.clone()),
-                active_permission_profile,
-                /*windows_sandbox_level*/ None,
-                /*model*/ None,
-                /*effort*/ None,
-                /*summary*/ None,
-                /*service_tier*/ None,
-                /*collaboration_mode*/ None,
-                /*personality*/ None,
-            )));
         self.app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
             history_cell::new_info_event(
-                format!("Permissions updated to {display_label}"),
+                format!("Permissions selected for the new session: {display_label}. Application is not yet confirmed."),
                 /*hint*/ None,
             ),
         )));

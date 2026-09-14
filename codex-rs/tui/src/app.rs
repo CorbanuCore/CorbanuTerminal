@@ -227,6 +227,7 @@ mod history_ui;
 mod input;
 mod loaded_threads;
 mod pending_interactive_replay;
+mod permission_confirmation;
 mod pets;
 mod platform_actions;
 mod plugin_mentions;
@@ -728,6 +729,7 @@ pub(crate) struct App {
     cloud_config_bundle: CloudConfigBundleLoader,
     runtime_approval_policy_override: Option<AskForApproval>,
     runtime_permission_profile_override: Option<RuntimePermissionProfileOverride>,
+    pending_permission_confirmation: Option<permission_confirmation::PendingPermissionConfirmation>,
 
     pub(crate) file_search: FileSearchManager,
 
@@ -1578,6 +1580,7 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
             cloud_config_bundle,
             runtime_approval_policy_override: None,
             runtime_permission_profile_override: None,
+            pending_permission_confirmation: None,
             file_search,
             enhanced_keys_supported,
             keymap: runtime_keymap,

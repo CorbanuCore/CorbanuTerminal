@@ -11,12 +11,15 @@ activation_basis: "P0 sequencing plus Travis Good’s 2026-08-28 decision to rec
 target_release: "TBD — candidate qualified by 2026-10-08"
 deadline: 2026-10-08
 created: 2026-08-23
-updated: 2026-09-11
+updated: 2026-09-14
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
   requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/live-permission-transition-20260913"
+    branch: "fix/live-permission-transition-20260913"
+    base_commit: "005cc644f59b1e762e5497b329e106c67925d4ed"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-broker-resume-20260911"
     branch: "feat/security-broker-resume-20260911"
     base_commit: "d870c92dab2bf3fbb602dc3b8447fe9f3534aecb"
@@ -86,6 +89,73 @@ implementation_worktrees:
 ---
 
 # P0 `/security` levels
+
+## Current permission-confirmation allocation — September 14
+
+Travis's explicit "yes, scope is expanded" authorizes the app-server/TUI
+confirmation repair with next-turn command permission semantics. This narrow
+PF-83 amendment is distinct from the rejected global-quiescence/PF-22-S03
+proposal and does not change the protected `/security` contracts below.
+The security owner explicitly handed back PF-27-S04's reservation to the repair
+coordinator; PF27 returns to draft with its paused work/evidence intact. This
+supersedes historical PF27 execution-status prose, not its remaining scope.
+There remain three active plans and only one executable security sprint.
+
+Product citation: **Permission selection confirmation — TO BUILD**:
+"A submitted selection is not a confirmed change." Existing live capability
+citation: **Live MVP versus the P0 security controls**, "approvals, and general
+workspace sandboxing." Current user approval permits only confirmation API
+semantics and associated UI/compatibility tests; the no-Permissive-policy-change
+and no-replacement-of-`/permissions` exclusions continue to hold.
+
+| Feature | Contract | Sprint | Owner / receiving gate |
+| --- | --- | --- | --- |
+| PF-83 | Request-correlated permission application outcome and truthful next-turn UI | [PF-83-S01](../../sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md) | Astra High permission-confirmation worker; this repair coordinator receives and verifies, then coordinates any integration with the existing Fable writer |
+
+PF83 owns the exact worktree/branch/base above and only the literal sprint scope.
+The previous PF27 owner remains paused, no broker work is dispatched, and
+accounting/Task Node scopes do not overlap the selected app-server/TUI files.
+No canonical integration worktree, running app/profile/shortcut, service or
+credential is modified by the allocation. Raw estimate: one bounded engineering
+increment plus review and isolated qualification; reserve at least35% for
+integration/testing, no calendar completion guarantee. Local pinned Rust1.95
+builds use the repair's private cache, not historical RTX-only round-five tooling.
+
+### PF-83 outcome and evidence contract
+
+Success/no-op returns a request-specific applied outcome; invalid updates return
+their correlated failure. Unknown effects on timeout/disconnect stay uncertain
+without blind retry. Register correlation before submission and bind it to
+connection/thread/listener generation; clean pending state on terminal paths.
+TUI selection/cache must not claim backend confirmation before that outcome.
+Active-turn command authority stays unchanged; the next turn picks up the
+confirmed selection in either direction. Already-pending command approvals,
+background process lifetime, MCP policy refresh, persistence and provider wire
+are unchanged. Old servers with no applied acknowledgement remain visibly
+unconfirmed; old clients' acceptance behavior is preserved through a narrow
+opt-in confirmation path where required. No new dependency or Core authorization
+change is allocated.
+
+Upstream touch: canonical `https://github.com/openai/codex` ancestor
+`413492cd6c3a4d4f8dff6f406247ccda5a9d88aa`, verified by canonical commit API
+and local ancestry; fork base `005cc644f59b1e762e5497b329e106c67925d4ed`.
+This is not an upstream update: no merge/rebase candidate or upgrade pass.
+App-server pending outcome module and thin native processor/listener adapters
+own correlation, TUI adapters own presentation, generated v2 fixtures own wire
+parity. Detailed source proof and receipt live in
+[the repair evidence](../../../qa/reliability/live-permission-transition-20260913/manager-checkpoint.md).
+
+Required acceptance: success/no-op/failure, rapid stale responses, disconnect and
+restart, old/new server combinations, both permission directions, next-turn
+continuation and pending approvals. Freeze originals F01-F11; attach the user's
+next-turn scope as an explicit amendment, not rewritten cases. Exact-package
+independent enforced code-blind execution and independent evidence check remain
+mandatory. Both TensorCash and Isometric Game disposable workflows apply;
+resolve bases before execution. Human acceptance is pending. API documentation
+must describe actual semantics; finished user docs wait for qualified evidence.
+No release/install is authorized; benchmark/release assessment remains a later
+candidate gate. Plan/sprint checks and affected app-server, protocol, TUI plus
+unchanged relevant Core regressions must pass; commands are in the sprint.
 
 Policy: repository-root `AGENTS.md`
 

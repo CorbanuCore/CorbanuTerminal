@@ -317,6 +317,10 @@ impl ThreadStartResponse {
 #[ts(export_to = "v2/")]
 pub struct ThreadSettingsUpdateParams {
     pub thread_id: String,
+    /// Wait for this operation's Core outcome, including unchanged selections.
+    /// Omission preserves the legacy acceptance-only reply.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub confirm: bool,
     /// Override the working directory for subsequent turns.
     #[ts(optional = nullable)]
     pub cwd: Option<PathBuf>,
@@ -376,7 +380,23 @@ pub struct ThreadSettingsUpdateParams {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
-pub struct ThreadSettingsUpdateResponse {}
+#[serde(untagged)]
+pub enum ThreadSettingsUpdateResponse {
+    Confirmed {
+        outcome: ThreadSettingsUpdateOutcome,
+    },
+    Accepted {},
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase", export_to = "v2/")]
+pub enum ThreadSettingsUpdateOutcome {
+    /// Core applied this operation. Existing command turns retain their authority.
+    Applied,
+    /// Application could not be determined. Do not retry automatically.
+    Uncertain,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS, ExperimentalApi)]
 #[serde(rename_all = "camelCase")]

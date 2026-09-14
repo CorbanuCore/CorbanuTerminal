@@ -18969,6 +18969,24 @@
       ],
       "type": "object"
     },
+    "ThreadSettingsUpdateOutcome": {
+      "oneOf": [
+        {
+          "description": "Core applied this operation. Existing command turns retain their authority.",
+          "enum": [
+            "applied"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Application could not be determined. Do not retry automatically.",
+          "enum": [
+            "uncertain"
+          ],
+          "type": "string"
+        }
+      ]
+    },
     "ThreadSettingsUpdatedNotification": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {

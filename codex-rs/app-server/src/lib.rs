@@ -116,6 +116,7 @@ mod outgoing_message;
 mod request_processors;
 mod request_serialization;
 mod server_request_error;
+mod settings_confirmation;
 mod skills_watcher;
 mod thread_state;
 mod thread_status;
