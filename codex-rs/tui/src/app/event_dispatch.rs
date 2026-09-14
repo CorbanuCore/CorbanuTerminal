@@ -4655,6 +4655,8 @@ impl App {
                 }
             }
             AppEvent::PermissionConfirmationCompleted { selection_id, result } => {
+                // Completion also carries confirmed settings into fresh sessions and
+                // submits or restores held initial input after checking correlation.
                 if let Some(reviewer) = self.finish_permission_confirmation(selection_id, result)
                     && let Err(error) = crate::config_update::write_config_batch(
                         app_server.request_handle(),
