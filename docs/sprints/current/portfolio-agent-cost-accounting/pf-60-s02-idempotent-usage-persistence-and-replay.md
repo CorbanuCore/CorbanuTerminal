@@ -28,7 +28,7 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 
 ## Execution mandate
 
-- Next: [Original S01 native golden](../../../research/agent-cost-accounting/original-contract-native-golden-allocation.md): three literal raw/reopen/compact parity tests on the normal library; accepted runtime/tests unchanged.
+- Next: [Responses HTTP dispatch coverage](../../../research/agent-cost-accounting/responses-dispatch-allocation.md): 20 literal files, target 2700/1050, STOP 3000/1150, default OFF; original-contract goldens f4507cb50 accepted at 855ab3382 (prior Next consumed).
 - Excludes: Changing prices, rebilling historical customers, collecting prompts, restoring legacy Plan allowances, or silently converting allowance to cash.
 - Approved target800total/150non-test, STOP900/200; estimate700/110. Bounded contingency covers complete original-fixture parity/receipt, not inherited allowance; one material review plus necessary correction, prior usage retained.
 
