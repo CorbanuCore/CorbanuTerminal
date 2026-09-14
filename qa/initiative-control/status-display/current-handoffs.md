@@ -1,5 +1,26 @@
 # Current workstream handoffs — September 12
 
+## Management takeover — September 14 01:40 UTC (Fable 5.1 High)
+
+Fable took over management/integration under the authorized PF-80-S01 bootstrap
+per the takeover brief (root `fableMarkdown.md`) at `c0d5b38fd`, which matched
+`origin/integrate/management-workstreams-20260911`. Recorded as coordinator event
+`takeover:fable-manager-20260914T0140Z` (revision 373). Actual state inspected,
+not replayed: coordinator `enabled: false`, no manager run, 19 meaningful events
+pending; both monitors PAUSED; decision feed revision 32 with all five decisions
+resolved; supervised Slack listener still alive against the operator store
+(journal `held`, last verified 2026-09-13T22:55:59Z, one agent ACK); dashboard
+on `127.0.0.1:8769` is the RPC SSH forward serving stale `build-mppqf3at`
+(source `239f7f82`, feed revision 30). This host exposes no native subagents;
+workers run as TMUX Corbanu sessions.
+
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): active. Next owned actions: one Luna Extra High republication of this commit; close [DEC-001 provenance limits](../management-bootstrap/supervised-qualification-20260913.md); allocate a new Slack receiver and the next frozen DEC/SLK cases; qualify handoff/stall/restart paths before any recurring activation.
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): intentional pause (product resumption gate). Remaining ledger: non-Anthropic dispatch coverage; S03 dependent; collection OFF.
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): intentional pause (product resumption gate). Remaining: native/all-platform and independently isolated functional acceptance; PF-35-S01 dataset generation via DeepSeek API through Corbanu Terminal.
+
+Product resumption, recurring activation, Task Node posting and public beta
+remain separately gated. Older sections below are historical.
+
 ## STOP — user-requested management pause, September 13
 
 All three workstreams have reached a checkpoint and stopped. The implementation
