@@ -36,6 +36,11 @@ prepare creates a unique private home, run manifest and short dedicated socket.
 Worker.launch starts the pinned binary through a fresh TMUX server without user
 TMUX config, with explicit runtime/policy argv and a restricted environment.
 All home aliases point at the private worker home; no ambient credentials pass.
+The private socket/session identity is durable before new-session. A private TMUX
+configuration enables remain-on-exit before executing the binary. A client timeout
+or failure is recorded and reconciled by bounded socket inspection; creation is
+never retried. Worker(run).inspect can continue reconciliation after restart,
+including when the pane exited before its process start could be sampled.
 The parent calls prompt only after inspecting actual startup readiness. Known
 auth/trust/approval pane text refuses key delivery; no prompt is auto-approved.
 
@@ -54,11 +59,54 @@ retries after receipt loss. inspect records actual host boot, UID, pane/PID/serv
 process starts, process group, observed descendants, session/thread/turn IDs,
 rollout path/digest, pane digest, liveness and fixed-deadline stall status.
 Missing socket/server or malformed evidence stays unknown/invalid, never inferred
-successful or safely replaceable. Each observation gets a separate private file.
-close sends /quit once and waits boundedly. Clean means the observed pane exited,
+successful or safely replaceable. Changed observations get separate private files;
+unchanged polls do not rewrite evidence. Descendant discovery scans same-UID
+processes at most once per second per Worker instance; intervening polls refresh
+only recorded PIDs. Owned-process evidence is written only when it changes.
+close sends /quit once and waits boundedly, including through unknown observations
+and crashed panes with transient surviving processes. Clean means the observed pane exited,
 tracked descendants are gone, the recorded server exited, and its session probe
 fails. A stale socket file is harmless evidence, not a new launch permission.
 There is no forced termination or global-server cleanup in production code.
+Pane death is queried before sampling process identities. An exit after the pane
+query can still produce a temporary unknown result; close re-observes through its
+deadline. Exit status can briefly be empty while TMUX processes SIGCHLD. Shutdown
+receipts retain the final observation, delivery uncertainty and the sampled server
+identity/session-probe result, including unclean outcomes.
+
+## Review correction — owner-daemon-impl-03
+
+Bounded fix of existing Increment B behavior, within the same product heading and
+requirement excerpt above. Frozen base `652435d7a35548e6bfe114a09c5885e828c762d4`;
+allocation digest `af0facb692fd987f20f5368ba1eaaa763df8ebd345bd6a69d37c7ab36b097c04`;
+claim `3d7c2e13-b80c-4449-aaed-bd491be8c324`. Branch/worktree unchanged.
+Review input: `/private/tmp/frev.D98OWQ/review.log`.
+
+- P2 inspection/shutdown race: corrected query ordering and bounded re-observation.
+  Real harmless-shell regressions inject exits on both sides of the pane query,
+  replay transient unknown/stale-survivor observations, and verify final uncertain
+  evidence when the deadline expires.
+- P2 launch identity gap: pre-recorded socket/session and restartable reconciliation.
+  Real private TMUX regressions inject a client timeout after successful creation,
+  temporarily hide socket probes, reload the Worker, and run an immediately exiting
+  shell. Every created worker remains observable and closeable through its record.
+- Harness load: same-UID discovery is throttled, shutdown polls use selected PIDs,
+  unchanged observations/ownership skip durable writes, and poll cadence is 100ms.
+  A regression checks repeated stable inspection performs no evidence writes.
+
+The fixed default adapter and explicit-TMUX HOLD remain covered. This revision
+does not enable a live tick or claim functional handoff. The internal-only N/A
+proposal and later independent combined functional gate below remain unchanged.
+
+Revision validation: the initial focused command (same environment and interpreter
+as below, `-B -m unittest test_owner_tmux test_owner_daemon`) passed 42 tests in
+17.612s. After adding the eighth regression, the documented SDK discovery command
+below passed all 539 tests in 296.402s, including all 43 owner tests (25 TMUX,
+18 daemon). No intermittent failures reproduced in these runs; the previous
+Fable/version-probe and concurrency failures remain historical unresolved attempts,
+not erased or relabeled. Only HTTP-fixture cleanup ResourceWarnings occurred.
+`python3 docs/sprints/check.py` passed (116 current, 126 archived), and
+`git diff --check` passed. No native credential prompt occurred.
 
 ## Evidence and remaining gates
 

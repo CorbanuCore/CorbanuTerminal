@@ -68,7 +68,7 @@ class TmuxTests(unittest.TestCase):
             result = predicate()
             if result:
                 return result
-            time.sleep(0.03)
+            time.sleep(0.1)
         self.fail("fixture timed out: " + repr(self.worker.tmux(
             "capture-pane", "-p", "-t", self.worker.meta["session"]).stdout))
 
@@ -226,7 +226,9 @@ class TmuxTests(unittest.TestCase):
         self.launch()
         self.assertTrue(self.worker.inspect(deadline=time.time() - 1)["stalled"])
         self.fixture_input("CRASH")
-        state = self.wait(lambda: (s if (s := self.worker.inspect())["liveness"] == "crashed" else None))
+        # EOF may reach TMUX before SIGCHLD supplies the exit status.
+        state = self.wait(lambda: (s if (s := self.worker.inspect())["liveness"] == "crashed"
+                                  and s["exit_status"] else None))
         self.assertEqual("23", state["exit_status"])
         self.assertFalse(state.get("ack", False))
         self.assertTrue(list(self.worker.run.glob("observation-*.json")))
@@ -311,6 +313,181 @@ class TmuxTests(unittest.TestCase):
         with self.assertRaisesRegex(f.LaunchError, "interactive_prompt_requires_owner"):
             self.worker.prompt()
         self.assertFalse((self.worker.run / "prompt-intent.json").exists())
+
+    def test_exit_at_pane_query_uses_a_post_exit_process_snapshot(self):
+        self.launch()
+        original, snapshot = self.worker.tmux, t.processes
+        events = []
+        def query(*args, **kwargs):
+            if args[0] == "display-message":
+                self.assertNotIn("snapshot", events)
+                self.fixture_input("CRASH")
+                self.wait(lambda: original("display-message", "-p", "-t", self.worker.meta["session"],
+                                          "#{pane_dead}|#{pane_dead_status}").stdout.strip() == "1|23")
+                events.append("pane")
+            return original(*args, **kwargs)
+        def sample(*args, **kwargs):
+            events.append("snapshot")
+            return snapshot(*args, **kwargs)
+        with patch.object(self.worker, "tmux", side_effect=query), patch.object(t, "processes", side_effect=sample):
+            state = self.worker.inspect()
+        self.assertEqual(["pane", "snapshot"], events)
+        self.assertTrue(state["identity_valid"], state)
+        self.assertEqual("crashed", state["liveness"])
+        self.assertEqual([], state["survivors"])
+        self.assertTrue(self.worker.close()["clean"])
+
+    def test_exit_between_pane_query_and_snapshot_is_reobserved_by_close(self):
+        self.launch()
+        snapshot = t.processes
+        states = []
+        inspect = self.worker.inspect
+        def exit_before_snapshot(*args, **kwargs):
+            self.fixture_input("CRASH")
+            self.wait(lambda: self.worker.tmux(
+                "display-message", "-p", "-t", self.worker.meta["session"],
+                "#{pane_dead}|#{pane_dead_status}").stdout.strip() == "1|23")
+            return snapshot(*args, **kwargs)
+        def observe():
+            if not states:
+                with patch.object(t, "processes", side_effect=exit_before_snapshot):
+                    state = inspect()
+            else:
+                state = inspect()
+            states.append(state)
+            return state
+        with patch.object(self.worker, "inspect", side_effect=observe):
+            receipt = self.worker.close()
+        self.assertEqual("process_identity_unknown", states[0]["evidence_reason"])
+        self.assertEqual("unknown", states[0]["liveness"])
+        self.assertGreaterEqual(len(states), 2)
+        self.assertTrue(receipt["clean"], receipt)
+
+    def test_close_reobserves_unknown_and_stale_survivor_until_clean(self):
+        self.launch()
+        pid = self.worker.inspect()["process"]["pid"]
+        self.fixture_input("CRASH")
+        self.wait(lambda: self.worker.tmux("display-message", "-p", "-t", self.worker.meta["session"],
+                                          "#{pane_dead}|#{pane_dead_status}").stdout.strip() == "1|23")
+        inspect = self.worker.inspect
+        observations = []
+        def transient():
+            state = inspect()
+            if not observations:
+                state.update(identity_valid=False, liveness="unknown",
+                             evidence_error="inspection_uncertain")
+            elif len(observations) == 1:
+                state["survivors"] = [pid]
+            observations.append(copy.deepcopy(state))
+            return state
+        with patch.object(self.worker, "inspect", side_effect=transient):
+            receipt = self.worker.close()
+        self.assertGreaterEqual(len(observations), 3)
+        self.assertTrue(receipt["clean"], receipt)
+        self.assertEqual([], receipt["observation"]["survivors"])
+        self.assertNotEqual(0, receipt["server_shutdown"]["probe_returncode"])
+
+    def test_close_retains_final_unknown_evidence_after_bounded_reobservation(self):
+        self.launch()
+        self.fixture_input("CRASH")
+        self.wait(lambda: self.worker.tmux("display-message", "-p", "-t", self.worker.meta["session"],
+                                          "#{pane_dead}|#{pane_dead_status}").stdout.strip() == "1|23")
+        original = self.worker.tmux
+        queries = []
+        def stale_pane(*args, **kwargs):
+            result = original(*args, **kwargs)
+            if args[0] == "display-message":
+                fields = result.stdout.strip().split("|")
+                fields[2:4] = ["0", ""]
+                result.stdout = "|".join(fields) + "\n"
+                queries.append(True)
+            return result
+        with patch.object(self.worker, "tmux", side_effect=stale_pane):
+            receipt = self.worker.close(timeout=0.3)
+        self.assertGreaterEqual(len(queries), 2)
+        self.assertFalse(receipt["clean"])
+        self.assertEqual("process_identity_unknown", receipt["observation"]["evidence_reason"])
+        self.assertEqual("unknown", receipt["observation"]["liveness"])
+        self.assertEqual([], receipt["observation"]["survivors"])
+        self.assertTrue(self.worker.close()["clean"])
+
+    def test_post_start_client_timeout_is_reconciled_and_closeable_on_reload(self):
+        original = self.worker.tmux
+        creations = []
+        def timeout_after_creation(*args, **kwargs):
+            if "new-session" in args:
+                pending = f.strict_json(f.read_file(self.worker.run / "process.json", 4096, private=True))
+                self.assertEqual(self.worker.meta["socket"], pending["socket"])
+                self.assertEqual(self.worker.meta["session"], pending["session"])
+                creations.append(args)
+                original(*args, **kwargs)
+                raise subprocess.TimeoutExpired("tmux", 3)
+            return original(*args, **kwargs)
+        with patch.object(self.worker, "tmux", side_effect=timeout_after_creation):
+            state = self.worker.launch()
+        self.assertEqual(1, len(creations))
+        self.assertTrue(state["identity_valid"], state)
+        self.assertEqual("alive", state["liveness"])
+        self.assertEqual("timeout", f.strict_json(f.read_file(
+            self.worker.run / "launch-client.json", 4096))["outcome"])
+        self.worker = t.Worker(self.worker.run)
+        self.assertTrue(self.worker.inspect()["identity_valid"])
+        self.assertTrue(self.worker.close()["clean"])
+        with self.assertRaisesRegex(f.LaunchError, "effect_uncertain"):
+            self.worker.launch()
+
+    def test_timeout_and_temporarily_unavailable_socket_reconcile_after_reload(self):
+        original = self.worker.tmux
+        def timeout_and_lose_probe(*args, **kwargs):
+            if "new-session" in args:
+                original(*args, **kwargs)
+                raise subprocess.TimeoutExpired("tmux", 3)
+            if args[0] == "display-message":
+                raise subprocess.TimeoutExpired("tmux", 3)
+            return original(*args, **kwargs)
+        with patch.object(self.worker, "tmux", side_effect=timeout_and_lose_probe):
+            state = self.worker.launch()
+        self.assertFalse(state["identity_valid"])
+        self.assertEqual("TimeoutExpired", state["evidence_reason"])
+        pending = f.strict_json(f.read_file(self.worker.run / "process.json", 4096, private=True))
+        self.assertEqual(self.worker.meta["socket"], pending["socket"])
+        self.worker = t.Worker(self.worker.run)
+        self.assertTrue(self.worker.inspect()["identity_valid"])
+        self.assertTrue(self.worker.close()["clean"])
+
+    def test_fast_exit_before_launch_identity_collection_is_closeable(self):
+        f.write_file(self.binary, "#!/bin/bash\nexit 23\n", mode=0o700)
+        self.worker.config["binary_sha256"] = f.file_digest(self.binary)
+        f.write_json(self.worker.run / "worker.json", self.worker.meta)
+        original = self.worker.tmux
+        def await_reaping(*args, **kwargs):
+            result = original(*args, **kwargs)
+            if "new-session" in args:
+                self.wait(lambda: original("display-message", "-p", "-t", self.worker.meta["session"],
+                                          "#{pane_dead}|#{pane_dead_status}").stdout.strip() == "1|23")
+            return result
+        with patch.object(self.worker, "tmux", side_effect=await_reaping):
+            state = self.worker.launch()
+        self.assertTrue(state["identity_valid"], state)
+        self.assertEqual("crashed", state["liveness"])
+        self.assertEqual("23", state["exit_status"])
+        self.assertIsNone(state["process"]["start"])
+        self.assertIsNotNone(state["process"]["server_start"])
+        self.worker = t.Worker(self.worker.run)
+        self.assertTrue(self.worker.close()["clean"])
+
+    def test_polling_uses_targeted_ps_and_does_not_fsync_unchanged_evidence(self):
+        self.launch()
+        self.worker.inspect()
+        self.worker._next_discovery = time.monotonic() + 60
+        snapshot = t.processes
+        with patch.object(t, "processes", wraps=snapshot) as samples, patch.object(
+                f, "write_json", wraps=f.write_json) as writes:
+            self.worker.inspect()
+            self.worker.inspect()
+        self.assertEqual(2, samples.call_count)
+        self.assertTrue(all(call.args and call.args[0] for call in samples.call_args_list))
+        self.assertEqual(0, writes.call_count)
 
     def test_explicit_config_selection_never_dispatches_a_fixture_as_live(self):
         self.assertIs(type(owner.configured_adapter({})), owner.FixedTestAdapter)

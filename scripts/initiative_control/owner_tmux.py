@@ -17,6 +17,26 @@ def boot_id():
                                        "/proc/sys/kernel/random/boot_id").read_text().strip()
 
 
+def processes(pids=None):
+    """Discover same-UID processes infrequently; poll only recorded PIDs."""
+    selection = ["-U", str(os.getuid())] if pids is None else [
+        "-p", ",".join(str(pid) for pid in sorted(set(pids)))]
+    result = subprocess.run(["/bin/ps", *selection, "-o", "pid=,ppid=,pgid=,stat=,lstart="],
+                            capture_output=True, text=True, timeout=3,
+                            env={"PATH": f.SAFE_PATH})
+    # ps returns 1 when none of the selected PIDs exists.
+    f.require(result.returncode == 0 or (pids is not None and result.returncode == 1
+                                        and not result.stdout.strip() and not result.stderr.strip()),
+              "process_inspection_failed")
+    table = {}
+    for line in result.stdout.splitlines():
+        fields = line.split(None, 4)
+        if len(fields) == 5:
+            pid, parent, group = map(int, fields[:3])
+            table[pid] = (parent, group, fields[3], fields[4])
+    return table
+
+
 def validate(config):
     f.require(set(config) == {"kind", "binary", "binary_sha256", "tmux", "runs_dir", "auth_link"}
               and config["kind"] == "tmux", "invalid_tmux_config")
@@ -131,6 +151,8 @@ class Worker:
         self.run = f.private_dir(run)
         self.meta = f.strict_json(f.read_file(self.run / "worker.json", 262144, private=True))
         self.config, self.binding = self.meta["config"], self.meta["binding"]
+        self._next_discovery = 0
+        self._last_observation = None
         self.env = {"PATH": f.SAFE_PATH, "TERM": "xterm-256color", "LANG": "en_US.UTF-8",
                     **{key: str(self.run / "home") for key in
                        ("HOME", "CODEX_HOME", "CORBANU_HOME", "PFTERMINAL_HOME")}}
@@ -156,16 +178,28 @@ class Worker:
                 "-c", 'model_provider="' + b["provider"] + '"', "-c",
                 'model_reasoning_effort="' + b["effort"] + '"',
                 "--sandbox", b["sandbox"], "--ask-for-approval", b["approval"]]
+        # Install remain-on-exit before the worker can run, including an immediate exit.
+        config_path = self.run / "tmux.conf"
+        f.write_file(config_path, "set-option -g remain-on-exit on\n")
         self.once("launch-intent", {"argv": argv, "at": f.now()})
-        self.tmux("-f", "/dev/null", "new-session", "-d", "-s", self.meta["session"],
-                  "-x", "160", "-y", "48", *argv, ";", "set-option", "-w", "remain-on-exit", "on")
-        fields = self.tmux("display-message", "-p", "-t", self.meta["session"],
-                           "#{pane_id}|#{pane_pid}|#{pid}").stdout.strip().split("|")
-        pane, pid, server = fields[0], int(fields[1]), int(fields[2])
-        table = f.processes()
-        self.once("process", {"pane": pane, "pid": pid, "server": server, "start": table[pid][3],
-                             "server_start": table[server][3], "pgid": table[pid][1]})
-        return self.inspect()
+        self.once("process", {"socket": self.meta["socket"], "session": self.meta["session"]})
+        outcome = "completed"
+        try:
+            self.tmux("-f", str(config_path), "new-session", "-d", "-s", self.meta["session"],
+                      "-x", "160", "-y", "48", *argv)
+        except subprocess.TimeoutExpired:
+            outcome = "timeout"
+        except (f.LaunchError, OSError, subprocess.SubprocessError):
+            outcome = "failed"
+        self.once("launch-client", {"outcome": outcome, "at": f.now()})
+        # A client failure does not prove that creation failed. Never repeat creation.
+        # inspect() can also finish reconciliation after a parent restart.
+        until = time.monotonic() + 3
+        while True:
+            state = self.inspect()
+            if state["identity_valid"] or time.monotonic() >= until:
+                return state
+            time.sleep(0.1)
 
     def send(self, name, text):
         f.require(name in ("prompt", "start", "quit") and text == {
@@ -198,19 +232,41 @@ class Worker:
         try:
             f.require(self.meta["boot_id"] == boot_id() and self.meta["uid"] == os.getuid(), "host_changed")
             proc = f.strict_json(f.read_file(self.run / "process.json", 4096, private=True))
-            table = f.processes()
-            f.require(table.get(proc["server"], (None,) * 4)[3] == proc["server_start"], "server_unknown")
+            f.require(proc.get("socket", self.meta["socket"]) == self.meta["socket"]
+                      and proc.get("session", self.meta["session"]) == self.meta["session"],
+                      "launch_identity_changed")
+            # Query pane death BEFORE taking the process snapshot. A later exit can
+            # still be uncertain, but a dead pane cannot carry a pre-exit snapshot.
             pane = self.tmux("display-message", "-p", "-t", self.meta["session"],
-                             "#{pane_id}|#{pane_pid}|#{pane_dead}|#{pane_dead_status}").stdout.strip().split("|")
-            f.require(pane[:2] == [proc["pane"], str(proc["pid"])], "pane_identity_changed")
-            alive = table.get(proc["pid"], (None,) * 4)[3] == proc["start"]
-            f.require(alive or pane[2] == "1", "process_identity_unknown")
-            state.update(identity_valid=True, liveness="crashed" if pane[2] == "1" else "alive",
-                         process=proc, exit_status=pane[3], pane_digest=f.digest(
-                             self.tmux("capture-pane", "-p", "-t", self.meta["session"]).stdout.encode()))
+                             "#{pane_id}|#{pane_pid}|#{pane_dead}|#{pane_dead_status}|#{pid}").stdout.strip().split("|")
+            identity = {"pane": pane[0], "pid": int(pane[1]), "server": int(pane[4])}
+            f.require(all(k not in proc or proc[k] == v for k, v in identity.items()),
+                      "pane_identity_changed")
+            if "pane" not in proc:
+                proc.update(identity)
+                f.write_json(self.run / "process.json", proc)
+            state.update(process=proc, exit_status=pane[3], pane_dead=pane[2])
             owned_path = self.run / "owned.json"
             owned = f.strict_json(f.read_file(owned_path, 65536, private=True)) if owned_path.exists() else {}
-            owned[str(proc["pid"])] = proc["start"]
+            previous_owned = dict(owned)
+            discover = time.monotonic() >= self._next_discovery
+            table = processes() if discover else processes(
+                [proc["server"], proc["pid"], *map(int, owned)])
+            if discover:
+                self._next_discovery = time.monotonic() + 1
+            server_info, worker_info = table.get(proc["server"]), table.get(proc["pid"])
+            f.require(server_info is not None, "server_unknown")
+            if "server_start" not in proc:
+                # The pane may already be reaped. Its private server is still
+                # identifiable and closeable; never adopt a reused dead-pane PID.
+                proc.update(server_start=server_info[3],
+                            start=worker_info[3] if worker_info and pane[2] == "0" else None,
+                            pgid=worker_info[1] if worker_info and pane[2] == "0" else None)
+                f.write_json(self.run / "process.json", proc)
+            f.require(server_info[3] == proc["server_start"], "server_unknown")
+            alive = worker_info is not None and worker_info[3] == proc["start"]
+            if proc["start"] is not None:
+                owned[str(proc["pid"])] = proc["start"]
             for _ in range(len(table)):
                 added = {str(pid): info[3] for pid, info in table.items() if str(pid) not in owned
                          and any(owned.get(str(ref)) == table.get(ref, (None,) * 4)[3]
@@ -218,10 +274,15 @@ class Worker:
                 if not added:
                     break
                 owned.update(added)
-            f.write_json(owned_path, owned)
+            if owned != previous_owned:
+                f.write_json(owned_path, owned)
             state["survivors"] = [int(pid) for pid, start in owned.items() if
-                                 table.get(int(pid), (None,) * 4)[3] == start
+                                 int(pid) in table and table[int(pid)][3] == start
                                  and not table[int(pid)][2].startswith("Z")]
+            f.require(alive or pane[2] == "1", "process_identity_unknown")
+            state.update(identity_valid=True, liveness="crashed" if pane[2] == "1" else "alive",
+                         pane_digest=f.digest(self.tmux(
+                             "capture-pane", "-p", "-t", self.meta["session"]).stdout.encode()))
             paths = sorted((self.run / "home/sessions").rglob("*.jsonl"))
             f.require(len(paths) <= 1, "multiple_rollouts")
             if paths:
@@ -234,31 +295,63 @@ class Worker:
                              rollout=str(paths[0]), rollout_digest=f.digest(raw))
             state["stalled"] = state["liveness"] == "alive" and deadline is not None and time.time() >= deadline
         except (f.LaunchError, OSError, ValueError, KeyError, TypeError, IndexError,
-                AttributeError, subprocess.SubprocessError):
-            state.update(identity_valid=False, evidence_error="inspection_uncertain")
-        self.once("observation-" + uuid.uuid4().hex, state)
+                AttributeError, subprocess.SubprocessError) as exc:
+            state.update(identity_valid=False, evidence_error="inspection_uncertain",
+                         evidence_reason=str(exc) if isinstance(exc, f.LaunchError) else type(exc).__name__)
+        evidence = {k: v for k, v in state.items() if k != "at"}
+        if evidence != self._last_observation:
+            self.once("observation-" + uuid.uuid4().hex, state)
+            self._last_observation = evidence
         return state
 
     def close(self, timeout=3):
         f.require(0 <= timeout <= 25, "invalid_shutdown_timeout")
-        state = self.inspect()
-        if state["identity_valid"] and state["liveness"] == "alive" and not (self.run / "quit-intent.json").exists():
-            self.send("quit", "/quit")
         until = time.monotonic() + timeout
-        while state["liveness"] == "alive" and time.monotonic() < until:
-            time.sleep(0.05)
+        state = self.inspect()
+        delivery_error = None
+        while True:
+            clean = (state["identity_valid"] and state["liveness"] == "crashed"
+                     and not state["survivors"])
+            if clean:
+                break
+            if (state["identity_valid"] and state["liveness"] == "alive"
+                    and not (self.run / "quit-intent.json").exists()):
+                try:
+                    self.send("quit", "/quit")
+                except f.LaunchError as exc:
+                    if str(exc) != "worker_not_alive":
+                        raise
+                    delivery_error = str(exc)
+                except subprocess.SubprocessError as exc:
+                    delivery_error = type(exc).__name__
+            if time.monotonic() >= until:
+                # Include the post-delivery observation even for timeout=0.
+                state = self.inspect()
+                clean = (state["identity_valid"] and state["liveness"] == "crashed"
+                         and not state["survivors"])
+                break
+            time.sleep(0.1)
             state = self.inspect()
-        clean = state["identity_valid"] and state["liveness"] == "crashed" and not state["survivors"]
+        shutdown = None
         if clean:
-            self.tmux("kill-session", "-t", self.meta["session"])
-            until, server = time.monotonic() + 1, state["process"]
-            while time.monotonic() < until:
-                info = f.processes().get(server["server"])
-                clean = (info is None or info[3] != server["server_start"] or info[2].startswith("Z"))
-                if clean:
-                    break
-                time.sleep(0.02)
-            clean = clean and self.tmux("list-sessions", check=False).returncode != 0
-        receipt = {"clean": clean, "observation": state, "forced": False, "at": f.now()}
+            server = state["process"]
+            shutdown = {"server": server["server"], "expected_start": server["server_start"]}
+            clean = False
+            try:
+                self.tmux("kill-session", "-t", self.meta["session"])
+                until = time.monotonic() + 1
+                while True:
+                    info = processes([server["server"]]).get(server["server"])
+                    shutdown["process"] = info
+                    gone = (info is None or info[3] != server["server_start"] or info[2].startswith("Z"))
+                    if gone or time.monotonic() >= until:
+                        break
+                    time.sleep(0.1)
+                shutdown["probe_returncode"] = self.tmux("list-sessions", check=False).returncode
+                clean = gone and shutdown["probe_returncode"] != 0
+            except (f.LaunchError, OSError, subprocess.SubprocessError) as exc:
+                shutdown["error"] = str(exc) if isinstance(exc, f.LaunchError) else type(exc).__name__
+        receipt = {"clean": clean, "observation": state, "forced": False, "at": f.now(),
+                   "delivery_error": delivery_error, "server_shutdown": shutdown}
         self.once("shutdown-" + uuid.uuid4().hex, receipt)
         return receipt
