@@ -341,3 +341,233 @@ is committed. There was no code formatting/fix pass or Rust test campaign.
   notifying Travis. This assignment authorizes neither that activation nor
   launchd installation. No recurrence was activated, no Slack message sent and
   no branch/release pushed.
+
+## Follow-up — September 15, 2026: owner-daemon-impl-06
+
+**Unassisted startup and mid-turn expiry passed for this exact package and
+disposable fixture.** This follow-up supersedes the startup/mid-turn gaps for
+the revised source only. All preceding text, failed startup attempts, timing
+disclosures and limitations are preserved. Recurrence remains OFF.
+
+Classification: product initiative revision within active
+`docs/plans/active/initiative-delivery-control.md`, PF-80-S01 (`in_progress`).
+Product heading: **Internal delivery control — TO BUILD**; requirement excerpt:
+“durable event dispatch, acknowledgments and watchdog” and “initialize and
+rehearse all three workstreams before enabling recurring operation.”
+The exact worker coordinates below come from the frozen manager allocation;
+reconciliation into shared plan/sprint records remains manager-owned.
+
+- Allocation: `owner-daemon-impl-06`; worker OpenAI `gpt-6-astra`, High.
+- Allocation digest: `05aa5d37a1044672377cd243f4ac8fd350b99a2797dc54d406b6668e5afee9ff`.
+- Claim: `2e7cca5d-517c-4949-96b4-dcc5de011773`.
+- Brief: `/private/tmp/fmgr.Q1SIYZ/briefs/owner-daemon-impl-06.json`.
+- Verified SHA-256: `d517526bbc1b15aa2d8313cbe7011f235d30cd1913a99ce91a1d15dfbffa9998`.
+- Base: `1e33bb7bfa4a74d9081e96a5e65ed4d40014d995`.
+- Branch: `bootstrap/owner-daemon-c-20260915`.
+- Worktree: `/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-owner-daemon-c-20260915`.
+
+### Startup contract and exact source
+
+`TmuxAdapter.prepare` writes mode-0600 `home/config.toml` in the existing
+mode-0700 private profile before launch:
+
+```toml
+check_for_update_on_startup = false
+[tui]
+animations = false
+[analytics]
+enabled = false
+[projects."<exact binding worktree>"]
+trust_level = "trusted"
+```
+
+The worktree key is derived solely from `binding["worktree"]` and escaped as a
+TOML basic string using `json.dumps(..., ensure_ascii=False)`. There is exactly
+one project entry: no parent, sibling or hardcoded repository is trusted.
+`Worker.launch` adds exactly these manager-dispatch startup overrides:
+
+```text
+-c check_for_update_on_startup=false
+-c tui.animations=false
+-c analytics.enabled=false
+```
+
+The full argv still contains `--no-alt-screen -C <binding worktree> --model
+<binding model>`, the existing model/provider/effort overrides, and unchanged
+`--sandbox <binding sandbox> --ask-for-approval <binding approval>`.
+Project trust comes from the private config. The auth symlink, restricted
+environment, readiness/ACK/START/provenance checks and visible prompt refusal
+are unchanged. Nothing auto-answers or suppresses credential, authentication
+or permission prompts; no such prompt was observed.
+
+Artifact root **F**:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/daemon-qualify-20260915/20260915-06`.
+The executable [qualify.py](/Volumes/CorbanuDrive/Corbanu/.codex-work/daemon-qualify-20260915/20260915-06/qualify.py)
+adapts the earlier disposable harness. Its replay path calls the actual revised
+transport without monkeypatching prepare/launch or provisioning any extra
+profile settings. It preserves frozen allocations, checked target guards,
+actual key delivery, observations, per-tick snapshots, source patch and logs.
+`tested-source.json` and `source.patch` bind the tested implementation to the base:
+
+- `owner_tmux.py` SHA-256: `8f9ae08e7d98a24ffe5e7c2092f0efa082f1f0a8f1e05a48ed8a7b1d0d853cad`.
+- `test_owner_tmux.py`: `02da23dd052869c6e2ddd52cc9ec241a4c717bb3b6fd1bb4aa8d03247d73f5bf`.
+- Daemon package digest: `3ee535d78819f7a3d6b7112b29561cf76f1b388e336b0b677d317eba403c0645`.
+- Same pinned Corbanu **0.1.41** binary/path as the original receipt; SHA-256
+  `4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e`.
+- The daemon and daemon tests are unchanged: **531/660** and **745/780** lines.
+  Transport/test counts are **370/621**, with no assigned ceilings.
+
+No new trace/log-dir override was added: the exact transport is exercised, as
+requested. The test-tui actual-key method is used; raw panes/rollouts provide
+evidence, with the earlier trace-setting limitation retained.
+
+### Fixture-only targeting and inference
+
+Fresh Coordinators exist only at `F/live/state` and `F/expiry/state`. Each
+config is loaded through a guard requiring its resolved target to equal that
+case's disposable state under F and rejecting the production state path
+`.codex-work/initiative-control.oGQGyA/state`. No production Coordinator was
+opened or targeted. The similarly named SDK dependency directory is only a
+Python site-packages path.
+
+Each case has a fresh empty scratch Git repository, one implement allocation
+and two passive waits. Offline fixture activation records explicitly identify
+`owner-daemon-impl-06` and disposable-only authority. They are not production
+activation records. The transport creates the assigned auth symlink without
+opening/copying/hashing/printing its contents; all profile aliases point to the
+new private home. This is the same explicitly linked-auth inference contract
+as the preceding live qualification, not synthetic-credential or enforced
+malicious-worker isolation. No live profile was used as a test home.
+
+### Unassisted live result
+
+At **08:59:22.133Z**, real worker PID **20085** had `ready:true`, `ack:true`,
+`submitted:true`, `returned:null`, a valid process identity and a correlated
+START turn. Thread: `01a0a44a-a9d0-77d1-88c4-513199e9c615`;
+work turn: `01a0a44a-d091-7be0-8981-207ef625152f`.
+
+```text
+ACK live-delivery eb1f4acdf0509a5776a24758913bea6ba527ce54fa80068ff3306a371e332d6e gpt-6-astra high
+```
+
+The ACK was byte-exact. The transport sent prompt text and Enter separately,
+then START text and Enter separately. No human keys, update Skip, trust approval
+or harness profile patch occurred. The worker wrote exactly
+`b'daemon qualification proof\n'` to `F/live/scratch/proof.txt` and completed a
+correlated RETURN containing that path and content. `live/working.json`,
+`live/verification.json`, raw panes, rollout and key receipts retain the proof.
+
+| Lane/tick | Revision | Outcome |
+| --- | --- | --- |
+| live/1 | 4 → 5 | awaiting_ready |
+| live/2 | 5 → 5 | awaiting_ack |
+| live/3 | 5 → 7 | working |
+| live/4 | 7 → 8 | returned |
+| live/5–6 | 8 → 8 | returned; no new launch or delivery |
+| expiry/1 | 4 → 5 | awaiting_ready |
+| expiry/2 | 5 → 5 | awaiting_ack |
+| expiry/3 | 5 → 7 | working |
+| expiry/4 | 7 → 8 | HOLD; lease_expired |
+| expiry/5–6 | 8 → 8 | HOLD; no relaunch |
+
+Both passive waits remain byte-for-byte unchanged across every tick.
+`live/summary.json` retains all eleven lifecycle operations in applied phase.
+
+### EXPIRED-LEASE against a worker actually mid-turn
+
+The expiry replay uses an original, frozen **180-second lease**, allowing real
+startup and ACK inference, and observes its final five seconds. This is
+explicitly a longer allocation than the previous five-second startup-timeout
+fixture. No clock was mocked, deadline shortened/extended, lease renewed or
+state patched after claim. `expiry/fixed-lease.json` records deadline
+**09:03:03.307397Z** (epoch `1789462983.3073971`).
+
+Real worker PID **20423** reached working at **09:00:15Z**, then invoked
+`/bin/sleep 300` at **09:00:19.364Z** through the actual execution tool.
+That deliberate, harmless pending command keeps the correlated START turn
+active across the original lease; it accesses no files, credentials or network.
+Thread: `01a0a44b-79dc-7a52-96c9-fdc0de59abeb`;
+work turn: `01a0a44b-a0f2-7bd3-b168-6aad4831f19b`.
+
+```text
+ACK expiry-delivery d73ff06fc29c8d92e2966323cee814ae321f01af3e1761e13fc7b830b27eb2ee gpt-6-astra high
+```
+
+At **09:02:58.312Z**, `five-seconds-before-expiry.json` and its pane show
+`ready:true`, exact ACK, submitted START, no RETURN and the same live PID.
+The pane displays Working and one background terminal. The real tool call is
+retained in `midturn-tool-calls.json`. At **09:03:06.914Z**, after the expiry
+tick, `expired-alive.json` still shows that PID, the same start identity,
+submitted turn, no RETURN and live descendants. The process snapshot in
+`surviving-processes.txt` identifies sleep PID **20630** and its code-mode host.
+
+`expiry/verification.json` and `summary.json` prove owner process
+`terminal_status:lease_expired`, a durable `lease_expired` hold, and exactly
+one launch and one worker run after three HOLD ticks. Subsequent ticks add the
+existing `operation_held` refusal while retaining the original expiry hold.
+The daemon does not relaunch, renew or terminate the surviving worker.
+
+**No SDK suite ran concurrently with the lease or its final five-second
+window.** Focused tests finished at **08:58:50.759Z**, before live replay.
+Expiry finished at **09:03:07.803Z**; the full SDK suite began at
+**09:03:40.417Z**. Lanes ran sequentially without a concurrent test/build
+campaign. Recorded load was 2.70 before live and 3.44 before expiry on 24 logical
+CPUs; ordinary desktop processes remained active. The load snapshots and
+timestamped `commands.jsonl` preserve the actual shared-host conditions.
+
+### Cleanup and scope of the result
+
+Live cleanup at **08:59:52Z** returned `clean:true`. Both disposable owner modes
+were set OFF, and both auth symlinks were removed without following them.
+No recurrence, launchd job, Slack message, production activation, push or
+release was performed.
+
+Expiry cleanup deliberately killed the worker after the proof. Its first
+`cleanup.json` accurately records **clean:false**: sleep PID 20630 outlived the
+parent. The transport did not silently treat this as clean or kill that child.
+The separate [cleanup-residual.py](/Volumes/CorbanuDrive/Corbanu/.codex-work/daemon-qualify-20260915/20260915-06/cleanup-residual.py)
+checked the saved child start identity and exact `/bin/sleep` executable,
+sent fixture-only SIGTERM, then called transport close again.
+`cleanup-residual.json` records **clean:true** at **09:04:06Z**, with no survivors
+and the dedicated TMUX server gone. The original failed cleanup receipt remains.
+This residual cleanup overlapped the beginning of the SDK suite, after every
+lease assertion was complete; no SDK/deadline overlap occurred. Autonomous
+descendant cleanup/shutdown remains separate qualification work.
+
+These runs are code-aware engineering evidence from the implementation worker.
+They do not provide independent code-blind acceptance, enforced containment,
+live TensorCash/Isometric qualification, benchmarks or named-human acceptance.
+Manager review/receiving and plan/sprint allocation reconciliation remain open.
+The combined functional gate still needs independent design, confined execution
+with negative access probes and separate evidence review; internal-stage N/A
+requires integrator acceptance. Manager inference/receiving/verification, Slack
+decision/ACK, packaged supervision and broader recovery gates remain as above.
+Production activation still requires the separate manager decision and notice
+to Travis; no approval is inferred from these passes.
+
+### Follow-up automated validation
+
+Two added regressions verify a private config containing only the exact project
+(including spaces/dots/quotes/backslash/Unicode) and the complete launch argv
+under all nine existing sandbox/approval combinations. Existing visible-auth
+prompt refusal and real-TMUX lifecycle tests remain in the run.
+
+Focused transport: **30 passed in 21.663s**. Full SDK: **593 passed in 300.920s**,
+exit 0, from **09:03:40.417Z–09:08:41.711Z** (301.294s wall time). Only the
+existing HTTP 500/429 fixture-cleanup ResourceWarnings appeared; no test failed,
+no retry was needed and no native credential prompt occurred. Synthetic
+publication/activation messages in the suite log are test output only.
+Raw output: [suite.log](/Volumes/CorbanuDrive/Corbanu/.codex-work/daemon-qualify-20260915/20260915-06/suite.log).
+The exact interpreter, argv and constructed environment are in
+`F/commands.jsonl`; command suffix:
+`-B -m unittest discover -s scripts/initiative_control -p '*test*.py'`.
+`TMPDIR=/private/tmp`; HOME and all three profile aliases point to the empty
+`F/suite-home`; inherited inference credentials are excluded and
+`CORBANU_TEST_DISABLE_NATIVE_KEYRING=1`. No Rust tests were in scope or run.
+
+Governance checks passed: **3/3 active plans; 116 current / 126 archived sprints**.
+Only the transport, its tests and these two allocated evidence documents change.
+Final `git diff --check` passed. `F/final-verification.json` records unchanged
+tested source hashes, preservation of the complete original receipt, OFF fixture
+modes, removed auth links, single launch/prompt/START per lane, unchanged passive
+waits, eleven applied live effects and the disclosed final cleanup results.

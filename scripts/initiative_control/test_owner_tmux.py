@@ -7,6 +7,7 @@ import signal
 import subprocess
 import tempfile
 import time
+import tomllib
 import unittest
 import uuid
 from unittest.mock import patch
@@ -124,6 +125,40 @@ class TmuxTests(unittest.TestCase):
         self.assertIn("fixture-model", launch["argv"])
         for path in self.worker.run.glob("*.json"):
             self.assertEqual(0o600, path.stat().st_mode & 0o777)
+
+    def test_startup_config_trusts_only_exact_bound_worktree(self):
+        for name in ('ordinary', 'spaces . "quotes" \\ slash = é 🚀'):
+            with self.subTest(name=name):
+                worktree = self.root / name
+                worktree.mkdir()
+                worker = t.TmuxAdapter(self.config).prepare(
+                    {**self.binding, "worktree": str(worktree)}, "Fixture assignment.")
+                path = worker.run / "home/config.toml"
+                self.assertEqual(0o600, path.stat().st_mode & 0o777)
+                self.assertEqual({
+                    "check_for_update_on_startup": False,
+                    "tui": {"animations": False}, "analytics": {"enabled": False},
+                    "projects": {str(worktree): {"trust_level": "trusted"}},
+                }, tomllib.loads(path.read_text()))
+
+    def test_startup_overrides_preserve_each_bound_policy(self):
+        for sandbox in ("read-only", "workspace-write", "danger-full-access"):
+            for approval in ("never", "on-request", "untrusted"):
+                with self.subTest(sandbox=sandbox, approval=approval):
+                    worker = t.TmuxAdapter(self.config).prepare(
+                        {**self.binding, "sandbox": sandbox, "approval": approval}, "Fixture.")
+                    with patch.object(worker, "tmux"), patch.object(
+                            worker, "inspect", return_value={"identity_valid": True}):
+                        worker.launch()
+                    launch = f.strict_json(f.read_file(worker.run / "launch-intent.json", 65536))
+                    self.assertEqual([
+                        str(self.binary), "--no-alt-screen", "-C", str(self.root),
+                        "--model", "fixture-model", "-c", 'model_provider="fixture"',
+                        "-c", 'model_reasoning_effort="high"',
+                        "-c", "check_for_update_on_startup=false", "-c", "tui.animations=false",
+                        "-c", "analytics.enabled=false",
+                        "--sandbox", sandbox, "--ask-for-approval", approval,
+                    ], launch["argv"])
 
     def test_bracketed_paste_echo_is_not_ack_and_start_is_denied(self):
         self.launch()
