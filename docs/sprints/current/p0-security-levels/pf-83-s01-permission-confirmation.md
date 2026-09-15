@@ -58,7 +58,9 @@ updated: 2026-09-14
 - [x] Added pending-turn saved-draft deferral without automatic queue replay; no Core authorization/current-turn/MCP source changes.
 - [x] Documented API and regenerated affected schema fixtures; retained all failed attempts and formatter-restoration diagnosis in repair QA.
 
+- [x] **Guest network isolation executed and verified, 2026-09-15.** Tailscale was found connected on the guest, a second default route that a filter on `en0` alone would not have closed; it is logged out and disconnected. A default-deny packet filter now leaves only inbound SSH from the host, its reply path, DHCP with the host and host ICMP echo. The mediated inference pinhole is deliberately absent: it was opened on port 8111 and verification found Docker already listening there on the host, so it pointed the guest at an unrelated published port. The guest is sealed until a real mediator exists on a verified-unused port. All deny checks fail as required and host SSH works, reproduced after a reboot, with the filter restored at boot by a LaunchDaemon. `pflog0` does not exist on this build, so denial is evidenced by rule counters instead, which are stronger than timeouts: the block rule matched and dropped 839 packets after the reboot. [Receipt](../../../../qa/initiative-control/management-bootstrap/pf83-isolation-executed-20260915.md).
 ## Remaining
+- [ ] Re-run the authoritative preflight against the sealed guest and record the new control scores. The previous run scored 2 proven and 173 of 175 UNPROVEN; all 380 verdicts stay `not_reached` and no case may run until a separate manager decision after that re-run.
 
 - [ ] Verify both next-turn directions, unchanged MCP refresh and pending approval semantics with focused native fixtures.
 - [ ] Freeze implementation; obtain fresh Fable code review and correct substantive in-scope findings.
