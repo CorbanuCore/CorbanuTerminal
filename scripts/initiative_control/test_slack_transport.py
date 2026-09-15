@@ -1185,6 +1185,12 @@ class TransportTests(LiveFixture):
         self.assertEqual(self.transport.reconcile(request), receipt)
         self.assertEqual(len(self.messages), 1)
 
+    def test_reconcile_orphan_refuses_non_string_attempt(self):
+        # Owner input off the pipe must refuse like every other owner path.
+        for attempt in ([], {}, 7, None):
+            with self.subTest(attempt=attempt), self.assertRaises(d.Invalid):
+                self.transport.reconcile_orphan(attempt, request_digest="a" * 64, evidence="inspection")
+
     def test_malformed_orphan_classifies_without_http_and_owner_retains_evidence(self):
         request = self.orphan()
         before = self.store.read("transport")

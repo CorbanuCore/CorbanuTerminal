@@ -593,7 +593,10 @@ class Transport:
         a.token(evidence)
         now = self.now()
         d.stamp(now)
-        d.require(legacy_client_msg_id(attempt) is None)
+        # Owner input arrives straight off the pipe: refuse a non-string the same
+        # way every other owner path does, rather than letting it reach the posts
+        # index and surface as TypeError.
+        d.require(isinstance(attempt, str) and legacy_client_msg_id(attempt) is None)
         admitted = self.gate(allow_hold=True)
         with locked(self.store) as value:
             d.require(value["binding"] == self.binding and value["lifecycle"] == admitted["lifecycle"])
