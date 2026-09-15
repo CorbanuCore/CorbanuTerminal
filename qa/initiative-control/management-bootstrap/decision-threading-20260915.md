@@ -1,4 +1,186 @@
-# RETURN — decision-threading-01
+# RETURN — decision-threading-03: separate threads with fixed pointers
+
+Status: offline implementation candidate for manager review and integration.
+The two earlier candidates below were **rejected**, and their shared-thread
+design is removed. Historical attempts and their test results remain below;
+they do not describe the adopted implementation or establish acceptance.
+
+## Current allocation and authority
+
+- Action: `decision-threading-03`; worker: `gpt-6-astra`, effort `high`.
+- Allocation digest:
+  `612ec9af0a896c18fbcca2ecd2aefc933e67201a890c2db61a2033abfa45d3d0`.
+- Claim: `d46e56c1-c0c8-4b8b-8a30-658561903ef9`.
+- Read the frozen brief first and verified its SHA-256 with `shasum -a 256`:
+  `7d1524b98da0eb60799c2fadb3acb66d503c1a18b5125bfd261624d0c77f10d7`,
+  at `/private/tmp/fmgr.Q1SIYZ/briefs/decision-threading-03.json`.
+- Verified starting HEAD: `4aaf3cee183537119ac1fc36631d9373f8b9870e`.
+- Worktree: `/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-decision-threading-20260915`.
+- Branch: `bootstrap/decision-threading-20260915`.
+- Classification: revision within product initiative
+  `initiative-delivery-control`, feature PF-80, sprint PF-80-S01
+  (`in_progress`). The initial commentary called this a bounded revision;
+  the inherited initiative classification is authoritative because the
+  relationship and projection contracts are persisted.
+- Product heading: **Internal delivery control — TO BUILD**.
+  Requirement excerpts: “actual Slack reply/decision/agent acknowledgment” and
+  “durable event dispatch, acknowledgments and watchdog”.
+- The explicit frozen allocation authorizes this worker's paths and coordinates.
+  Shared plan/sprint records still name the manager checkout; the manager owns
+  their reconciliation before integration. They are outside this write scope.
+
+## Incident and both rejected attempts
+
+Travis answered a decision in its Slack thread, saw no response there, and
+asked, “You didn't reply to me in Slack?” The acknowledgment notice was skipped
+without a visible outstanding signal, and the follow-up question appeared in
+an unrelated thread with no pointer from the answered thread. A decision
+relationship is useful; moving another question into the answered thread was
+the wrong repair.
+
+Both review JSONs were read before edits:
+
+| Rejected candidate | Review | Why rejected |
+| --- | --- | --- |
+| `182818493ebca3fdf5aa3457be2bb6756b8b684d` | `/private/tmp/fmgr.Q1SIYZ/P1BuxK-review.json` | The follower copied its parent's root receipt. Between follower posting and route binding, including uncertainty/reconciliation, a reply to the follower could be silently recorded against the parent. Fallback provenance also lacked a status/projection surface. |
+| `4aaf3cee183537119ac1fc36631d9373f8b9870e` | `/private/tmp/fmgr.Q1SIYZ/r7v5EI-review.json` | The new ingress fence required every alert in the shared thread to be sent. A terminally rejected follower could never satisfy that condition, permanently making the parent's posted question unanswerable. Reconciliation could also move the shared route backward to an older alert. |
+
+## Adopted design
+
+Every question alert, including a follower, now runs its own original two-phase
+send: create a root message, then post its details under that root. No parent
+request or receipt is copied. A chain therefore has distinct question threads.
+
+For `follows`, enqueue pins the newest eligible alert for that parent decision:
+same feed, same complete Slack identity, not cancelled, with confirmed root and
+details receipts. It records `threading.mode=pointer` and `source_alert`, without
+changing the parent's alert or feed revisions.
+
+After the follower's own root and details are confirmed, its send invokes the
+existing `notice` machinery with kind `follow-up` and the pinned source alert
+as its basis. There is one durable notice slot per follower alert:
+`digest([follower_alert, "follow-up", source_alert])`. Its only text is:
+
+> A follow-up decision has been raised. Find it in its own thread: Open follow-up thread.
+
+“Open follow-up thread” is a fixed-label Slack `message_mention` in a fixed
+`rich_text` block. Its only variable fields are the validated pinned channel ID
+and the follower's genuine root receipt timestamp. This uses the existing
+`chat.postMessage` exchange; no additional API or transport is added. The notice
+targets the **parent** thread. It contains no question, answer, manager text or
+caller-supplied URL. Markdown and both unfurl flags remain false. Clarification
+and acknowledgment notices still target their own question thread, with
+unchanged fixed text.
+
+During local review, the initial hand-built permalink was removed: Slack's
+[permalink documentation](https://docs.slack.dev/reference/methods/chat.getPermalink/)
+shows workspace-specific links, but this binding does not retain that domain.
+The adopted native reference follows Slack's documented
+[message mention element](https://docs.slack.dev/reference/block-kit/block-elements/message-mention-element/).
+The SDK regression checks that the entire exact fixed block reaches the
+loopback HTTP endpoint; actual Slack rendering/navigation remains a later
+functional qualification gate.
+
+The notice request, state and receipt are stored solely on the follower's
+alert. Restarts do not repeat a sent, failed or uncertain pointer. Exact receipt
+reconciliation can resolve uncertainty without reposting. A cancelled target
+records a failed pointer without a POST. Identity or basis mismatch is refused.
+The CLI details-reconciliation path binds the follower's own thread and then
+runs the same send completion path to attempt its still-pending pointer.
+
+If enqueue finds no eligible parent thread, it retains
+`mode=new-thread`, `reason=followed-decision-has-no-eligible-slack-parent`.
+The existing `new_thread_fallbacks` aggregate, per-question projection and
+dashboard rendering remain. A late parent receipt does not silently change the
+pinned choice.
+
+### Why neither previous failure is reachable
+
+- **No reply can be attributed to a different decision than the owner of the
+  thread it arrived in.** Each root route names one alert; binding checks that
+  alert's own root receipt and refuses to replace an existing different route.
+  Callback attribution is a direct lookup by the incoming thread. The
+  shared-thread selector and latest-follower routing logic are deleted.
+  Reconciliation of an older alert can only reassert its own unchanged route.
+- **No decision can be made unanswerable by another decision's state.**
+  Callback admission no longer reads any alert rows or follower/pointer state.
+  Pending, posting, uncertain, failed and unbound followers cannot gate
+  admission on the parent thread. A pointer is just a fixed notice; it neither
+  registers a question in the parent's thread nor changes that thread's route.
+  Failed/refused pointer attempts leave parent replies attributable and
+  interpretable through the manager's guarded resolution store.
+
+Existing authentication, unknown-thread, ingress-loss and invalid-journal
+refusals remain. A reply to an unbound new thread is held, never guessed to be a
+parent reply. Superseded candidate rows that copied another alert's root request
+are refused on alert validation rather than silently replayed or migrated.
+No live store was inspected or converted.
+
+## Retained sound behavior
+
+- `unacknowledged_answers` stays outstanding until **both** real receiver ACK
+  evidence and the corresponding acknowledgment-notice receipt exist.
+  Read-only projection neither posts a notice nor creates receiver evidence.
+- Strict `follows` ID, same-feed target, self-reference and cycle validation;
+  immutable relationship; no parent revision rewrite or append when introducing
+  a follower; existing CAS/history checks.
+- Fallback visibility, legacy projection compatibility, receipt reconciliation,
+  cancellation/identity fences and current-audit execution eligibility.
+
+## Regression evidence
+
+| Regression | What it proves |
+| --- | --- |
+| `test_follower_owns_thread_and_posts_one_fixed_pointer_without_parent_mutation` | Own root/details plus exactly one fixed parent-thread pointer; exact payload/flags; restart idempotency; parent alert/feed unchanged; arbitrary text and unbound basis refused. |
+| `test_follower_chain_keeps_own_roots_and_preserves_send_refusals` | Chains keep separate roots; pointers target the immediate parent; identity/uncertain retry refusal survives; root reconciliation resumes correctly. |
+| `test_rejected_shared_root_candidate_cannot_be_replayed` | A copied historical root request is not accepted as a follower's own request. |
+| `test_follower_sdk_each_thread_attributes_only_its_own_question` | Real loopback SDK sends two distinct question roots and a fixed pointer, then each thread's reply resolves only its owner. |
+| `test_pending_follower_leaves_parent_answerable`, `test_sent_unbound_follower_leaves_parent_answerable`, `test_follower_post_in_progress_leaves_parent_answerable` | Parent ingress and guarded interpretation work across pending/posting/receipt-before-binding windows. |
+| `test_uncertain_follower_leaves_parent_answerable`, `test_failed_follower_leaves_parent_answerable`, `test_reconciled_unbound_follower_leaves_parent_answerable` | Lost response, terminal HTTP 429 and reconciled-but-unbound follower states cannot deadlock the parent. |
+| `test_failed_pointer_leaves_parent_answerable`, `test_uncertain_pointer_leaves_parent_answerable_and_reconciles_without_reposting`, `test_refused_pointer_leaves_parent_answerable` | Pointer HTTP rejection, socket-response loss and identity refusal preserve parent ingress plus manager-guarded answer/resolution; no retry or invented receipt. |
+| `test_unbound_follower_reply_is_never_attributed_to_parent` | Unknown follower thread retains the original hold; nothing is recorded against the parent. |
+| `test_old_parent_answer_edit_stays_with_parent_after_follower` | Later edits remain in the parent's audit and deny outdated execution eligibility. |
+| `test_cli_reconcile_binds_own_thread_posts_pointer_and_cannot_repoint_parent`, `test_route_binding_refuses_another_alert_on_an_existing_thread` | CLI recovery preserves both routes; older rebinding cannot steal the follower route; a colliding route is refused. |
+| Existing `follows`, fallback and acknowledgment regressions | Malformed/unknown/self/cyclic relationships and parent changes refused; fallback rendered without journal mutation; receiver ACK alone does not clear the outstanding count; exact notice receipt does. |
+
+Read `docs/development/test-isolation.md` before tests. All SDK work uses the
+existing synthetic private fixtures and loopback endpoints, with live profile
+aliases removed and `TMPDIR=/private/tmp`. No raw Rust tests, real credentials,
+native credential prompts, Slack messages, pushes or release operations occurred.
+
+Focused preliminary run: **63 tests passed in 40.005s**. After that run, parent
+answer regressions were strengthened to use `ResolutionStore`, and comment
+escaping was cleaned up. A full intermediate run then started. During that run,
+local link-format review replaced the initial hand-built URL with the documented
+native message mention. The intermediate run is not final-tree evidence.
+The full final-tree run uses the exact SDK command retained in the historical
+evidence below. Synthetic HTTP 429 cleanup warnings are retained as warnings,
+not hidden.
+
+Intermediate full SDK result: **618 tests passed in 328.227s**, exit 0.
+This run began before the pointer payload correction; it is supporting evidence.
+Corrected pointer focused result: **2 tests passed in 1.126s**, exit 0.
+Full final-tree SDK result: **618 tests passed in 328.614s**, exit 0, no
+failures or errors. The HTTP 500/429 cleanup ResourceWarnings were retained.
+Production and test files were unchanged throughout this final run; only this
+QA result was updated afterward. `git diff --check` passed.
+Governance: both checkers passed, **3/3 active plans; 116 current and 126 archived
+sprints**. They validate current manager records, not this worker allocation's
+pending shared-ledger reconciliation.
+
+## Handoff boundary
+
+This is an implementation return to the Fable manager, not a human-test-ready
+candidate. Independent review and current-candidate code-blind
+design/execution/evidence review remain manager-owned and unclaimed. Live Slack
+and actual interactive link/navigation qualification are excluded by this
+allocation and remain open before functional handoff. No human acceptance,
+internal-only N/A approval, sprint completion or release qualification is
+invented. TensorCash/Isometric release workflows and benchmarks were not run.
+
+---
+
+# Historical RETURN — decision-threading-01 (rejected)
 
 Status: implementation candidate for manager integration; no live Slack or human-test readiness claim.
 

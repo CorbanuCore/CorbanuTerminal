@@ -556,8 +556,12 @@ class Transport:
 
     def bind_alert(self, key, row):
         d.require(row["intent"]["identity"] == self.binding and row["parent"]["state"] == row["details"]["state"] == "sent")
+        a.check_receipt(a.request_for(key, row, "parent"), row["parent"]["receipt"])
         with locked(self.store) as value:
-            value["routes"][row["parent"]["receipt"]["ts"]] = dict(alert=key, details=row["details"]["receipt"]["ts"])
+            thread = row["parent"]["receipt"]["ts"]
+            route = dict(alert=key, details=row["details"]["receipt"]["ts"])
+            d.require(value["routes"].get(thread) in (None, route))
+            value["routes"][thread] = route
             self.store.write("transport", value)
 
     def callback(self, client, request):
@@ -575,8 +579,7 @@ class Transport:
                 event = normalize(payload, value, self.binding)
                 if event is not None:
                     key = event["event_id"]
-                    entry = dict(alert=routed_alert(self.store.read("alerts"), value, event, self.binding),
-                                 envelope=event, drained=False)
+                    entry = dict(alert=value["routes"][event["thread_ts"]]["alert"], envelope=event, drained=False)
                     if key in value["events"]:
                         d.require(value["events"][key]["envelope"] == event)
                     else:
@@ -661,33 +664,6 @@ class Transport:
                     disconnected()
                 finally:
                     owner.close()
-
-
-def routed_alert(alerts, value, event, pin):
-    """Admit shared-thread ingress only against a complete, current route.
-
-    Caller holds the transport lock, which also serializes outbound reservations.
-    Atomic alert reads see a follower before its POST can start, including while
-    send owns the store lock. Do not acquire that lock in an SDK callback.
-    """
-    thread = event["thread_ts"]
-    route = value["routes"][thread]
-    rows = [(key, a.alert(alerts, key)) for key, row in alerts.items()
-            if row["intent"]["identity"] == pin and row["parent"]["receipt"] is not None
-            and row["parent"]["receipt"]["ts"] == thread]
-    if len(rows) > 1:
-        # Pending, failed, uncertain and sent-but-unbound followers all hold.
-        # Cancellation cannot prove a previously attempted question was unseen.
-        d.require(all(row["details"]["state"] == "sent" for _, row in rows))
-        stamp = lambda ts: tuple(int(part) for part in a.slack_ts(ts).split("."))
-        newest_key, newest = max(rows, key=lambda item: stamp(item[1]["details"]["receipt"]["ts"]))
-        details = newest["details"]["receipt"]["ts"]
-        d.require(route == dict(alert=newest_key, details=details))
-        d.require(stamp(event["message_ts"]) > stamp(details))
-        # An old answer's edit/delete cannot become a new question's answer.
-        d.require(all(entry["alert"] == newest_key for entry in value["events"].values()
-                      if entry["envelope"]["message_ts"] == event["message_ts"]))
-    return route["alert"]
 
 
 def normalize(payload, value, pin):

@@ -235,59 +235,6 @@ class ManagerTests(fixtures.LiveFixture):
             with self.assertRaises(d.Invalid):
                 m.validate_status(dict(legacy, unacknowledged_answers=bad))
 
-    def test_followed_thread_rebinding_holds_prior_pending_execution(self):
-        key = self.retained_ack()
-        feed = d.load_fixture(self.feed_root, NOW)
-        original = copy.deepcopy(feed["decisions"][0])
-        child = copy.deepcopy(self.feed["decisions"][0])
-        child.update(id="choice-2", follows="choice-1")
-        feed["revision"] += 1
-        feed["decisions"].append(child)
-        saved = d.load_fixture(self.feed_root, NOW)
-        d.save_fixture(self.feed_root, feed, d.digest(saved), NOW)
-        follower = a.enqueue(self.store, feed, "choice-2", fixtures.REMOTE, PIN, OWNER, NOW)
-        row = a.send(self.store, follower, PIN, self.transport.exchange)
-        self.transport.bind_alert(follower, row)
-        self.assertFalse(m.finish(self.store, self.feed_root, key, self.transport, lambda: OWNER, NOW)["work_ready"])
-        self.callback(fixtures.payload("EvPriorEdit", subtype="message_changed",
-            message=dict(user=PIN["human"], thread_ts=row["parent"]["receipt"]["ts"],
-                         ts="101.000001", text="Ten testers", edited=dict(user=PIN["human"])),
-            previous_message=dict(user=PIN["human"]), event_ts="105.000001"))
-        self.assertFalse(self.transport.active)
-        self.assertNotIn("EvPriorEdit", self.store.read("transport")["events"])
-        self.assertEqual(s.drain(self.store), 0)
-        with self.assertRaises(d.Invalid):
-            m.finish(self.store, self.feed_root, key, self.transport, lambda: OWNER, NOW)
-        self.assertEqual(d.load_fixture(self.feed_root, NOW)["decisions"][0], original)
-
-    def test_follower_sdk_thread_routes_reply_to_new_question_only(self):
-        original = self.sending()
-        original_row = copy.deepcopy(self.store.read("alerts")[self.key])
-        feed = copy.deepcopy(self.feed)
-        feed["revision"] += 1
-        follower = copy.deepcopy(feed["decisions"][0])
-        follower.update(id="choice-2", follows="choice-1")
-        feed["decisions"].append(follower)
-        d.save_fixture(self.feed_root, feed, d.digest(self.feed), NOW)
-        key = a.enqueue(self.store, feed, "choice-2", fixtures.REMOTE, PIN, OWNER, NOW)
-        calls = len(self.calls)
-        row = a.send(self.store, key, PIN, self.transport.exchange)
-        self.transport.bind_alert(key, row)
-        self.assertEqual(row["parent"], original["parent"])
-        self.assertEqual(len(self.calls), calls + 1)
-        self.assertEqual(row["details"]["receipt"]["thread_ts"], original["parent"]["receipt"]["ts"])
-        self.callback(fixtures.payload("EvFollower"))
-        self.assertEqual(s.drain(self.store), 1)
-        self.assertEqual(self.store.read("replies")["events"]["EvFollower"]["alert"], key)
-        manager = dict(actor="manager-fixture", answer="Five testers", scope="Synthetic follower only", alert=key,
-                       context_digest=row["intent"]["context_digest"], audit=r.snapshot(self.store, key)["audit"],
-                       owner=OWNER, interpretation="answer")
-        handoff = r.interpret(self.store, self.feed_root, "EvFollower", manager, OWNER, NOW)
-        self.assertIsNotNone(handoff)
-        self.assertEqual(r.resume(self.store, self.feed_root, handoff, OWNER, NOW), "queued")
-        self.assertEqual(d.load_fixture(self.feed_root, NOW)["decisions"][0], self.feed["decisions"][0])
-        self.assertEqual(self.store.read("alerts")[self.key], original_row)
-
     def follower(self, *, parent=True):
         if parent:
             self.sending()
@@ -299,63 +246,172 @@ class ManagerTests(fixtures.LiveFixture):
         d.save_fixture(self.feed_root, feed, d.digest(self.feed), NOW)
         return a.enqueue(self.store, feed, "choice-2", fixtures.REMOTE, PIN, OWNER, NOW)
 
-    def assert_follower_held(self, *, already_received=False):
-        before = (self.store.root / "replies.json").read_bytes()
+    def assert_parent_answerable(self, *, already_received=False):
         if not already_received:
-            self.callback(fixtures.payload("EvUnboundFollower"))
-        self.assertFalse(self.transport.active)
-        self.assertEqual(self.acks, [])
-        self.assertEqual(self.store.read("transport")["hold"], "ingress-held")
-        self.assertEqual(self.store.read("transport")["events"], {})
-        self.assertEqual((self.store.root / "replies.json").read_bytes(), before)
+            self.callback(fixtures.payload("EvParent"))
+        self.assertTrue(self.transport.active)
+        self.assertEqual(self.acks, ["envelope-1"])
+        self.assertIsNone(self.store.read("transport")["hold"])
+        self.assertEqual(self.store.read("transport")["events"]["EvParent"]["alert"], self.key)
+        self.assertEqual(s.drain(self.store), 1)
+        self.assertEqual(self.store.read("replies")["events"]["EvParent"]["alert"], self.key)
+        row = a.inspect(self.store, self.key)
+        manager = dict(actor="manager-fixture", answer="Five testers", scope="Synthetic parent only", alert=self.key,
+                       context_digest=row["intent"]["context_digest"], audit=r.snapshot(self.store, self.key)["audit"],
+                       owner=OWNER, interpretation="answer")
+        guarded = m.ResolutionStore(self.transport)
+        handoff = r.interpret(guarded, self.feed_root, "EvParent", manager, OWNER, NOW)
+        self.assertIsNotNone(handoff)
+        self.assertEqual(r.resume(guarded, self.feed_root, handoff, OWNER, NOW), "queued")
+        self.assertEqual(d.load_fixture(self.feed_root, NOW)["decisions"][0]["revisions"][-1]["status"], "resolved")
 
-    def test_shared_thread_unbound_follower_holds_during_post(self):
+    def test_follower_sdk_each_thread_attributes_only_its_own_question(self):
+        key = self.follower()
+        original = copy.deepcopy(self.store.read("alerts")[self.key])
+        calls = len(self.calls)
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        self.transport.bind_alert(key, row)
+        self.assertNotEqual(row["parent"]["receipt"]["ts"], original["parent"]["receipt"]["ts"])
+        self.assertEqual(len(self.calls), calls + 3)
+        self.assertEqual(row["details"]["receipt"]["thread_ts"], row["parent"]["receipt"]["ts"])
+        pointer = row["notices"][d.digest([key, "follow-up", self.key])]
+        self.assertEqual(pointer["receipt"]["thread_ts"], original["parent"]["receipt"]["ts"])
+        self.assertEqual(pointer["request"]["payload"]["text"],
+            "A follow-up decision has been raised. Find it in its own thread: Open follow-up thread.")
+        mention = pointer["request"]["payload"]["blocks"][0]["elements"][0]["elements"][1]
+        self.assertEqual(mention, dict(type="message_mention", channel_id="CTEST", message_ts="100.000003",
+                                      text="Open follow-up thread"))
+        self.assertEqual(self.calls[-1][1]["blocks"], pointer["request"]["payload"]["blocks"])
+        self.assertEqual(self.store.read("alerts")[self.key], original)
+        a.send(a.Store(self.root), key, PIN, lambda _: self.fail("duplicate pointer"))
+        self.callback(fixtures.payload("EvFollower", thread_ts=row["parent"]["receipt"]["ts"], ts="102.000001"))
+        self.assertEqual(s.drain(self.store), 1)
+        self.assertEqual(self.store.read("replies")["events"]["EvFollower"]["alert"], key)
+        manager = dict(actor="manager-fixture", answer="Five testers", scope="Synthetic follower only", alert=key,
+                       context_digest=row["intent"]["context_digest"], audit=r.snapshot(self.store, key)["audit"],
+                       owner=OWNER, interpretation="answer")
+        handoff = r.interpret(self.store, self.feed_root, "EvFollower", manager, OWNER, NOW)
+        self.assertEqual(r.resume(self.store, self.feed_root, handoff, OWNER, NOW), "queued")
+        self.assertEqual(d.load_fixture(self.feed_root, NOW)["decisions"][0], self.feed["decisions"][0])
+        self.acks.clear()
+        self.assert_parent_answerable()
+
+    def test_pending_follower_leaves_parent_answerable(self):
+        self.follower()
+        self.assert_parent_answerable()
+
+    def test_sent_unbound_follower_leaves_parent_answerable(self):
+        key = self.follower()
+        a.send(self.store, key, PIN, self.transport.exchange)
+        self.assert_parent_answerable()
+
+    def test_follower_post_in_progress_leaves_parent_answerable(self):
         key = self.follower()
         exchange = self.transport.exchange
         def post(request):
-            receipt = exchange(request)
-            # Slack accepted the question, but alerts still says sending.
-            self.callback(fixtures.payload("EvUnboundFollower"))
-            return receipt
-        row = a.send(self.store, key, PIN, post)
-        self.assertEqual(row["details"]["state"], "sent")
-        self.assert_follower_held(already_received=True)
-
-    def test_shared_thread_pending_follower_holds(self):
-        self.follower()
-        self.assert_follower_held()
-
-    def test_shared_thread_sent_unbound_follower_holds(self):
-        key = self.follower()
-        self.assertEqual(a.send(self.store, key, PIN, self.transport.exchange)["details"]["state"], "sent")
-        self.assert_follower_held()
-
-    def test_shared_thread_uncertain_follower_holds(self):
-        self.uncertain_follower()
-        self.assert_follower_held()
-
-    def test_shared_thread_bound_follower_holds_delayed_old_reply(self):
-        key = self.follower()
-        row = a.send(self.store, key, PIN, self.transport.exchange)
-        self.transport.bind_alert(key, row)
-        self.callback(fixtures.payload("EvDelayedParent", ts="100.000002", event_ts="105.000001"))
-        self.assert_follower_held(already_received=True)
+            evidence = exchange(request)
+            if request["thread_ts"] is None:
+                self.callback(fixtures.payload("EvParent"))
+            return evidence
+        a.send(self.store, key, PIN, post)
+        self.assert_parent_answerable(already_received=True)
 
     def uncertain_follower(self):
         key = self.follower()
-        self.reply = lambda method, result: (None, 200, {}) if method == "chat.postMessage" else (result, 200, {})
+        # Lose only the follower details response, after its own root receipt.
+        self.reply = lambda method, result: ((None, 200, {})
+            if method == "chat.postMessage" and result["ts"] == "100.000004" else (result, 200, {}))
         row = a.send(self.store, key, PIN, self.transport.exchange)
         self.assertEqual(row["details"]["state"], "uncertain")
         self.reply = None
         return key, row
 
-    def test_shared_thread_reconciled_but_unbound_follower_holds(self):
+    def test_uncertain_follower_leaves_parent_answerable(self):
+        self.uncertain_follower()
+        self.assert_parent_answerable()
+
+    def test_failed_follower_leaves_parent_answerable(self):
+        key = self.follower()
+        self.reply = lambda method, result: ((dict(ok=False, error="ratelimited"), 429, {"Retry-After": "1"})
+            if method == "chat.postMessage" and result["ts"] == "100.000004" else (result, 200, {}))
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        self.assertEqual(row["details"]["state"], "failed")
+        self.assertEqual(row.get("notices", {}), {})
+        a.send(self.store, key, PIN, lambda _: self.fail("terminal failure retried"))
+        self.assert_parent_answerable()
+
+    def test_reconciled_unbound_follower_leaves_parent_answerable(self):
         key, row = self.uncertain_follower()
         a.reconcile(self.store, key, "details", self.transport.reconcile(row["details"]["request"]))
-        self.assertEqual(a.inspect(self.store, key)["details"]["state"], "sent")
-        self.assert_follower_held()
+        self.assert_parent_answerable()
 
-    def test_cli_reconcile_binds_follower_and_attributes_reply(self):
+    def test_unbound_follower_reply_is_never_attributed_to_parent(self):
+        key, row = self.uncertain_follower()
+        self.callback(fixtures.payload("EvUnbound", thread_ts=row["parent"]["receipt"]["ts"]))
+        self.assertFalse(self.transport.active)
+        self.assertEqual(self.acks, [])
+        self.assertEqual(self.store.read("transport")["events"], {})
+        self.assertEqual(self.store.read("replies")["events"], {})
+
+    def test_failed_pointer_leaves_parent_answerable(self):
+        key = self.follower()
+        self.reply = lambda method, result: ((dict(ok=False, error="ratelimited"), 429, {"Retry-After": "1"})
+            if method == "chat.postMessage" and result["ts"] == "100.000005" else (result, 200, {}))
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        self.assertEqual(row["details"]["state"], "sent")
+        self.assertEqual(row["notices"][d.digest([key, "follow-up", self.key])]["state"], "failed")
+        self.transport.bind_alert(key, row)
+        a.send(self.store, key, PIN, lambda _: self.fail("failed pointer retried"))
+        self.assert_parent_answerable()
+
+    def test_uncertain_pointer_leaves_parent_answerable_and_reconciles_without_reposting(self):
+        key = self.follower()
+        self.reply = lambda method, result: ((None, 200, {})
+            if method == "chat.postMessage" and result["ts"] == "100.000005" else (result, 200, {}))
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        slot = d.digest([key, "follow-up", self.key])
+        self.assertEqual(row["notices"][slot]["state"], "uncertain")
+        self.transport.bind_alert(key, row)
+        self.reply = None
+        self.assert_parent_answerable()
+        a.send(a.Store(self.root), key, PIN, lambda _: self.fail("uncertain pointer retried"))
+        a.reconcile(self.store, key, slot, self.transport.reconcile(row["notices"][slot]["request"]))
+        a.send(a.Store(self.root), key, PIN, lambda _: self.fail("reconciled pointer reposted"))
+        self.assertEqual(a.inspect(self.store, key)["notices"][slot]["state"], "sent")
+        self.assertEqual(self.store.read("transport")["routes"]["100.000001"]["alert"], self.key)
+
+    def test_refused_pointer_leaves_parent_answerable(self):
+        key, row = self.uncertain_follower()
+        a.reconcile(self.store, key, "details", self.transport.reconcile(row["details"]["request"]))
+        with self.assertRaises(d.Invalid):
+            a.notice(self.store, key, "follow-up", self.key, dict(PIN, generation="wrong"),
+                     lambda _: self.fail("refused pointer posted"))
+        self.assertEqual(a.inspect(self.store, key).get("notices", {}), {})
+        self.assert_parent_answerable()
+
+    def test_old_parent_answer_edit_stays_with_parent_after_follower(self):
+        handoff = self.retained_ack()
+        feed = d.load_fixture(self.feed_root, NOW)
+        child = copy.deepcopy(self.feed["decisions"][0])
+        child.update(id="choice-2", follows="choice-1")
+        changed = copy.deepcopy(feed)
+        changed["revision"] += 1
+        changed["decisions"].append(child)
+        d.save_fixture(self.feed_root, changed, d.digest(feed), NOW)
+        key = a.enqueue(self.store, changed, "choice-2", fixtures.REMOTE, PIN, OWNER, NOW)
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        self.transport.bind_alert(key, row)
+        self.callback(fixtures.payload("EvPriorEdit", subtype="message_changed",
+            message=dict(user=PIN["human"], thread_ts="100.000001",
+                         ts="101.000001", text="Ten testers", edited=dict(user=PIN["human"])),
+            previous_message=dict(user=PIN["human"]), event_ts="105.000001"))
+        self.assertTrue(self.transport.active)
+        self.assertEqual(self.store.read("transport")["events"]["EvPriorEdit"]["alert"], self.key)
+        self.assertEqual(s.drain(self.store), 1)
+        self.assertFalse(m.finish(self.store, self.feed_root, handoff, self.transport, lambda: OWNER, NOW)["work_ready"])
+        self.assertEqual(d.load_fixture(self.feed_root, NOW)["decisions"][0], feed["decisions"][0])
+
+    def test_cli_reconcile_binds_own_thread_posts_pointer_and_cannot_repoint_parent(self):
         key, row = self.uncertain_follower()
         original = copy.deepcopy(self.store.read("alerts")[self.key])
         with (tempfile.TemporaryFile(mode="w+") as source,
@@ -366,10 +422,26 @@ class ManagerTests(fixtures.LiveFixture):
             result = m.main(["reconcile", "--store", str(self.root), "--live"],
                             stdin=source, stdout=sink, credentials=lambda: ("fixture-bot", "fixture-app"), now=lambda: NOW)
         self.assertEqual(result, dict(reconciled=True))
-        self.callback(fixtures.payload("EvReconciledFollower"))
+        pointer = a.inspect(self.store, key)["notices"][d.digest([key, "follow-up", self.key])]
+        self.assertEqual(pointer["receipt"]["thread_ts"], "100.000001")
+        self.transport.bind_alert(self.key, original)  # Old reconciliation cannot change the follower route.
+        self.callback(fixtures.payload("EvReconciledFollower", thread_ts=row["parent"]["receipt"]["ts"]))
         self.assertEqual(s.drain(self.store), 1)
         self.assertEqual(self.store.read("replies")["events"]["EvReconciledFollower"]["alert"], key)
         self.assertEqual(self.store.read("alerts")[self.key], original)
+        self.acks.clear()
+        self.assert_parent_answerable()
+
+    def test_route_binding_refuses_another_alert_on_an_existing_thread(self):
+        key = self.follower()
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        before = self.store.read("transport")
+        collision = copy.deepcopy(row)
+        collision["parent"]["receipt"]["ts"] = "100.000001"
+        with self.assertRaises(d.Invalid):
+            self.transport.bind_alert(key, collision)
+        self.assertEqual(self.store.read("transport"), before)
+        self.assert_parent_answerable()
 
     def test_fallback_surfaces_without_mutating_legacy_alerts(self):
         import decision_feed as f

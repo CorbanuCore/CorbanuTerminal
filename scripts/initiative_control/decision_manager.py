@@ -224,8 +224,7 @@ def finish(store, feed_root, key, transport, observe_owner, now, *, notify=False
                  and journal["watermark"] == bridge["watermark"]
                  and not any(not e["drained"] for e in journal["events"].values())
                  and owner == intent["request"]["owner"] and owner["running"] and not row["cancelled"]
-                 # A shared thread now routed to a follower no longer observes
-                 # later edits in this question\'s audit. Hold its old work permit.
+                 # Execution requires the question's own immutable thread route.
                  and journal["routes"].get(row["parent"]["receipt"]["ts"], {}).get("alert") == intent["alert"]
                  and intent["manager"]["audit"] == r.audit(store.read("replies"), intent["alert"])
                  and r.resolution_present(feed, intent)
@@ -508,6 +507,7 @@ def main(argv=None, *, credentials=None, observe_owner=None, stdin=None, stdout=
             row = a.inspect(store, key)
             if phase == "details" and row["parent"]["state"] == row["details"]["state"] == "sent":
                 transport.bind_alert(key, row)
+                a.send(store, key, transport.binding, transport.exchange)
             result = dict(reconciled=True)
         else:
             retain_evidence(store, key, data["evidence"])
