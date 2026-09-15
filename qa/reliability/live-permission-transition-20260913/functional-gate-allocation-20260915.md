@@ -229,7 +229,9 @@ on timing and replay. Never relabel an idle selection as active-turn evidence.
 ## Cases: preconditions, actions, outcomes and refuting controls
 
 Every G case below is required; directions, outcomes and variants are separate
-IDs in the manifest, not success-only substeps. P0 unless explicitly P1. Budgets
+IDs in the manifest, not success-only substeps. P0 unless explicitly P1.
+In the mapping column `P2-scope` denotes the phase-2 held-input scope amendment
+(see `p2-fixes-20260914.md`); it is never a priority. Budgets
 are **per expanded case ID**, including its control, not for the whole suite.
 
 | ID / original mapping | Preconditions and literal actions | Observable expected outcome | Negative control | Calls / minutes |
@@ -244,11 +246,11 @@ are **per expanded case ID**, including its control, not for the whole suite.
 | G07-R, G07-F / F08 | From R/F, open picker and cancel with ESC; from R also select F then choose Cancel at full-access consent. PROBE(G07-after). | No change claimed for cancellation; former behavior remains. R transition may have no post-submission cancel: record this explicitly. | Reopen and actually confirm a transition in disjoint phase; observe the contrasting next-turn behavior. | 64 / 25 |
 | G08-failed, G08-unsupported-empty, G08-unsupported-method, G08-uncertain / F08,F10 | From each starting mode, frozen external fixture respectively supplies known rejection, acceptance-only {}, method unsupported, or loses completion/disconnects after submission. SELECT(opposite); WAIT(terminal outcome); PROBE(G08-after) only after safe recovery. | Failure/unsupported/uncertainty never displays confirmed success or retries blindly; known rejection preserves old authority; uncertain actual effect is reconciled, not assumed rolled back. | Pass-through real-server phase gives actual confirmation; count one request in fault phase and no implicit fallback/retry. | 96 / 40 |
 | G09-RF, G09-FR / F09 | Complete a uniquely tagged workspace write, begin active SLOW, SELECT(opposite), press CTRL_C through the visible stop path; after stopped checkpoint submit PROBE(G09-next). | Stop is explicit, context/partial work visible; next-turn permission correct; completed work not duplicated. | Observe before CTRL_C that selection did not stop work; marker/request counts detect replay afterward. | 96 / 40 |
-| G10-RF-new, G10-FR-new / F09 + P2 | Existing synthetic disk default is the starting mode. SELECT(opposite); WAIT(confirmed); NEW; PROBE(G10-new). | Confirmed full profile/reviewer survives /new despite conflicting disk default; probe matches. | A separate cancelled selection + NEW retains starting default; this can expose stale-config reset. | 96 / 40 |
-| G11-RF-start, G11-FR-start / F09 + P2 | Fresh process has no conversation yet and an initial prompt held through a confirmed startup selection, using the qualified public startup route. Confirm opposite of disk default; permit first thread creation; PROBE(G11-first). | First native thread uses confirmed full permission bundle; initial input proceeds once. | Identical startup with selection cancelled/unsuccessful cannot adopt the requested bundle or execute held prompt. | 96 / 40 |
-| G12-applied / P2,F02,F09 | Initial held text `PF83-G12: read input.txt once and report its content.`; selection pending with no active/queued turn. Release matching real confirmation/observation in each order (reply-first, observation-first). | Held input submits exactly once after matching success; one inference turn and one file read, no orphaned draft. | Keep barrier held first: zero submissions; duplicate/stale response afterward must not cause a second submission. | 96 / 40 |
-| G13-failed, G13-unsupported, G13-uncertain, G13-superseded / P2,F07,F08 | Same held text plus synthetic local/remote image, mention and pending-paste variants where public UI supports them; drive named unsuccessful outcome. | Exact held input restored, attachments/bindings preserved, zero automatic submission/queue drain; user can explicitly edit/resubmit after reconciliation. | Paired real success submits once; an explicit subsequent ENTER on restored draft is distinguishable from automatic dispatch. | 128 / 55 |
-| G14-active, G14-queued / P2,F09 | Held initial input exists but active turn or queued user work is also present when matching success arrives. Confirm; observe without Enter/stop; then explicitly follow continuation. | Success does not inject held text as steering or drain queue; input restored and continuation remains operator-controlled. | Idle/no-queue G12 actually submits; tagged active/queued inputs detect accidental dispatch or duplication. | 128 / 55 |
+| G10-RF-new, G10-FR-new / F09 + P2-scope | Existing synthetic disk default is the starting mode. SELECT(opposite); WAIT(confirmed); NEW; PROBE(G10-new). | Confirmed full profile/reviewer survives /new despite conflicting disk default; probe matches. | A separate cancelled selection + NEW retains starting default; this can expose stale-config reset. | 96 / 40 |
+| G11-RF-start, G11-FR-start / F09 + P2-scope | Fresh process has no conversation yet and an initial prompt held through a confirmed startup selection, using the qualified public startup route. Confirm opposite of disk default; permit first thread creation; PROBE(G11-first). | First native thread uses confirmed full permission bundle; initial input proceeds once. | Identical startup with selection cancelled/unsuccessful cannot adopt the requested bundle or execute held prompt. | 96 / 40 |
+| G12-applied / P2-scope,F02,F09 | Initial held text `PF83-G12: read input.txt once and report its content.`; selection pending with no active/queued turn. Release matching real confirmation/observation in each order (reply-first, observation-first). | Held input submits exactly once after matching success; one inference turn and one file read, no orphaned draft. | Keep barrier held first: zero submissions; duplicate/stale response afterward must not cause a second submission. | 96 / 40 |
+| G13-failed, G13-unsupported, G13-uncertain, G13-superseded / P2-scope,F07,F08 | Same held text plus synthetic local/remote image, mention and pending-paste variants where public UI supports them; drive named unsuccessful outcome. | Exact held input restored, attachments/bindings preserved, zero automatic submission/queue drain; user can explicitly edit/resubmit after reconciliation. | Paired real success submits once; an explicit subsequent ENTER on restored draft is distinguishable from automatic dispatch. | 128 / 55 |
+| G14-active, G14-queued / P2-scope,F09 | Held initial input exists but active turn or queued user work is also present when matching success arrives. Confirm; observe without Enter/stop; then explicitly follow continuation. | Success does not inject held text as steering or drain queue; input restored and continuation remains operator-controlled. | Idle/no-queue G12 actually submits; tagged active/queued inputs detect accidental dispatch or duplication. | 128 / 55 |
 | G15-R, G15-F, G15-pending-RF, G15-pending-FR, G15-approval / F10 | Establish each state with unique markers; ordinary exit/restart/RESUME; pending variants also use owned-process interruption at declared barrier. Inspect before PROBE(G15-new); never accept restored approval implicitly. | Restored or reset authority intelligible; no silent increase, inferred completion, automatic approval/replay; retained work identifiable. No cross-process persistence default is invented. | Pair confirmed versus pending restart; zero old-approval effect while withheld and request counts distinguish replay. | 128 / 55 |
 | G16-R, G16-F / product no-op contract | Effective R/F. SELECT(same); WAIT(explicit outcome); PROBE(G16-next). | Unchanged selection still has request-specific applied/no-op confirmation; no indefinite wait on deduplicated notifications. | Withhold matching outcome in paired phase: existing matching label alone must not produce confirmation. | 64 / 25 |
 | G17-old-id, G17-other-thread / F07,F10 | Old response held; use actual supported new-thread/navigation route to make it obsolete, or establish newer accepted observed state. Deliver old response; PROBE(G17-current). | Stale completion cannot alter active-thread state, release unrelated held input or overwrite newer selection. | Deliver current matching response in paired phase; only it can complete current request. | 128 / 55 |
@@ -332,9 +334,17 @@ checks a 200-second next-call cutoff, and its guest has a separate lifetime.
 The brief reports four cases lost to the roughly 20-action budget. Avoid both
 call and wall-time starvation; raising only the outer loop is insufficient.
 
-Use the table's 64/96/128-call budgets (25/40/55 minutes) per expanded case,
-including controls; reserve the final 8 calls for recovery observations and an
-honest verdict. No shared 20-action suite cap. Account text, Enter, each key,
+Use the table's 64/96/128-call budgets per expanded case, including controls;
+reserve the final 8 calls for recovery observations and an honest verdict.
+The 25/40/55-minute caps are floors derived from the per-action bounds below,
+not independent limits: a case whose permitted per-action waits (model transport
+up to 120 s, confirmation observation 30 s, slow-command fixture 60 s, framed
+exchange 10 s) sum above its cap must have the cap raised to that sum before
+dispatch, so wall time can never bind before the call budget. Reserve a
+wall-time tail equal to the reserved-call tail (at least 3 minutes, and never
+less than the time the 8 reserved calls may consume) in which the executor
+checkpoints, seals artifacts and emits `blocked: budget_exhausted`; exhausting
+the clock without that tail is itself a harness defect, not a case outcome. No shared 20-action suite cap. Account text, Enter, each key,
 observation, phase control and finish separately. An allowlisted deterministic
 key sequence can avoid inference on every arrow, but each actual key remains
 journaled and counted; cap total PTY/control operations at 4× the call budget.
@@ -404,6 +414,12 @@ setup failures, interrupted cases and corrected fresh replays:
 9. `results.json` maps all originals and expanded IDs to artifacts/dispositions;
    SHA-256 every retained artifact, including terminal receipts and packet bytes.
    Verify hashes independently before the evidence reviewer receives the set.
+   **Before dispatch the manager must normalize this additive scope amendment into
+   `design.json` with exactly this expanded ID set, preserving the original
+   F01-F11 bytes alongside.** `qa/code-blind-functional/check.py` requires
+   `proposals.keys() == outcomes.keys()`, so an un-normalized design makes the
+   schema-2 handoff checker exit `BLOCKED: missing or unproposed case IDs` even
+   for a clean run. Normalization is a prerequisite, not a post-run repair.
 
 | Classification | Rule |
 | --- | --- |
