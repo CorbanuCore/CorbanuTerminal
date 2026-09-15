@@ -565,3 +565,68 @@ revision. The later S03/S04 functional gates and all previously disclosed
 qualification limits remain pending; no new acceptance or readiness is claimed.
 Cumulative size from `59260f56e0f201fdadef9f73f25ab68a791041e5`: **2831 total / 841 non-test**,
 including receipt and mixed glue; below targets 3000/1050 and STOP 3300/1200.
+
+## acct-ws-vectors-01 — STOP: live stage-one injection needs additional scope
+
+Routine inspection/evidence continuation of the received PF-60-S02 unit; no Rust
+source changed. Product heading **Measurement targets**; excerpt: “No commercial
+performance numbers have been supplied. The following metrics must be instrumented,
+with targets set through the decision rights defined above.” S02 remains in_progress.
+
+- Action `acct-ws-vectors-01`; worker `gpt-6-astra` / `high`.
+- Allocation digest `4a580987f9e9065388b1fd56054338da96efe4622e19742f6ee745aee9766da4`;
+  claim `aa63b013-4eba-42b3-a3ca-e77ecbcdac14`.
+- Brief `/private/tmp/fmgr.Q1SIYZ/briefs/acct-ws-vectors-01.json`; verified first with
+  `shasum -a 256`: `34dd4586723da9c252a74f5fb3e6593ccaeea3b2a6aa48a499ebf19aa40bff35`.
+- Clean starting HEAD matched dispatched `a7682bc5c01e8196457932b19668fda6bd7bb7e4`;
+  worktree and branch match the assignment. The recorded plan/sprint base is an
+  older receiving ancestor; this dispatch explicitly extends the received unit.
+- Assigned target `/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-ws-20260915`
+  was not used. No Rust build/test, live profile, credential read/prompt, provider
+  inference, subagent or push occurred.
+
+### Concrete boundary and smallest proposed extension
+
+`core/src/client.rs` stores `stage_one_memory_binding` as a private optional Arc.
+Its consuming `with_stage_one_memory_binding` constructor is crate-private; its
+only production caller is `StageOneMemoryClient::new` in `memory_stage_one.rs`.
+That module owns the binding's private fields and the opaque memory client's
+private client/binding. `CodexThread::stage_one_memory_client` in `codex_thread.rs`
+returns that separate memory client, not a handle to UserInput's sampling client.
+Cloning/replacing a ModelClient does not update an existing session's optional
+binding. The WS check at `client.rs:3546` runs before stream dispatch; the live
+WS response loop has no stage-one check. Memory extraction's completion checks
+belong to the separate opaque memory client and do not wrap UserInput sampling.
+
+The required real binding cannot be constructed/extracted by the allocated native
+integration fixture. A fabricated accounting error, fresh wrong-owner factory call,
+client replacement or stream cancellation would not prove mid-dispatch binding.
+No synthetic substitute, unsafe private-field access or new production policy
+setter was introduced to claim this vector passed.
+
+Fable manager should add exactly `codex-rs/core/src/memory_stage_one.rs` and
+`codex-rs/core/src/codex_thread.rs` to a revised allocation: the former for a narrow
+host-owned binding fixture seam, the latter for native-thread attachment to the
+same running sampling client. Shared binding/stream checks and native cases can
+remain in the already allocated client/turn/accounting/test paths. The revised
+mandate must specify the attachment boundary and in-flight denial result with the
+existing security owner: the frozen allocation specifies pre-dispatch guards and
+zero frames on denial, whereas this brief additionally requires applying a newly
+arriving binding after dispatch and preserving a committed prefix. An integration
+fixture seam must not create a public production policy setter; its availability
+in the integration-test library build needs explicit design in that allocation.
+
+### Vector and experiment disposition
+
+The brief says STOP if either vector needs an additional path. That condition was
+found before edits, so neither `accounting_responses_ws_native_admission_and_guard_barriers`
+nor `accounting_responses_ws_native_auxiliary_scope_and_event_parity` was extended.
+Both mutation experiments: **not run**; commands/run IDs/failure output: **none**.
+The metadata matrix appears reachable through the existing Gate but was not
+implemented after the required STOP. Both previously disclosed gaps remain open.
+No new pass, independent acceptance, human-test handoff or release readiness is claimed.
+
+Read `docs/development/test-isolation.md` before checks. Pre-edit sprint checker
+passed (current 116, archived 126). Final plan/sprint/whitespace results and exact
+size are supplied in RETURN. Rust formatting is N/A because no Rust file changed.
+Only this receipt is committed; manager-owned plan/sprint records remain untouched.
