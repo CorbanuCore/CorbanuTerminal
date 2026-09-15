@@ -466,3 +466,16 @@ Return the following to the Fable receiving manager; do not push:
    with later S03/S04 isolated code-blind execution, independent evidence review,
    true-TUI and applicable live-repository gates. No full-S02, human-test or
    release-readiness claim follows from this unit.
+
+## Manager ceiling extension — September 15, 2026
+
+The unit reached 3294 total / 1120 non-test while landing two independent-review
+corrections (a shared stage-one binding slot that was replaced rather than set,
+and per-frame guard work that took the session state lock and cloned `Config` on
+the WebSocket pump). The worker correctly STOPPED 6 lines below the frozen 3300
+limit rather than breaching it.
+
+The integrator records an explicit bounded extension to **3700 total / 1350
+non-test**, for those two corrections and their proofs only. It is not authority
+to add scope or refactor. The original 3000/1050 target stands as the measure of
+the unit's intended size, and every return must report against both.
