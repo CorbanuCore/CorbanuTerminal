@@ -39,10 +39,7 @@ def validate_status(value):
             + (" supervisor_health" if "supervisor_health" in value else ""))
     if "supervisor_health" in value:
         health = value["supervisor_health"]
-        d.shape(health, "state event_flush_failures pending_events")
-        d.require(type(health["event_flush_failures"]) is int and health["event_flush_failures"] >= 0)
-        d.require(type(health["pending_events"]) is int and health["pending_events"] in (0, 1))
-        d.require(health["state"] == ("unhealthy" if health["event_flush_failures"] else "healthy"))
+        validate_supervisor_health(health)
     event = value.get("last_listener_exit")
     if event is not None:
         d.shape(event, "kind at returncode restarts fence_count ingress_count fence_gap epoch restart")
@@ -83,7 +80,42 @@ def unacknowledged_answers(ledger, alerts, alert_key=None):
     return len(outstanding)
 
 
-def project_disclosure(value, store, journal, alerts):
+def validate_supervisor_health(health):
+    extra = [key for key in ("observed_at", "reason") if key in health]
+    d.shape(health, ["state", "event_flush_failures", "pending_events"] + extra)
+    d.require(type(health["event_flush_failures"]) is int and health["event_flush_failures"] >= 0)
+    d.require(type(health["pending_events"]) is int and 0 <= health["pending_events"] <= 2)
+    d.require(health["state"] in ("healthy", "unhealthy", "unknown"))
+    if health["state"] != "unknown":
+        d.require(health["state"] == ("unhealthy" if health["event_flush_failures"] or health["pending_events"] else "healthy"))
+    if health.get("observed_at") is not None:
+        d.stamp(health["observed_at"])
+    if "reason" in health:
+        d.require(health["reason"] in ("event-flush-failed", "event-unflushed", "observation-unavailable", "observation-stale", None))
+
+
+def read_supervisor_health(store, now, binding):
+    """Independent observation cache; journal counts remain durable facts."""
+    unknown = dict(state="unknown", event_flush_failures=0, pending_events=0,
+                   observed_at=None, reason="observation-unavailable")
+    try:
+        observation = store.read("supervisor")
+        d.shape(observation, "binding health")
+        d.require(observation["binding"] == binding)
+        health = observation["health"]
+        validate_supervisor_health(health)
+        age = (d.stamp(now) - d.stamp(health["observed_at"])).total_seconds()
+        d.require(age >= 0)
+        # Never age an observed failure back into apparent health.
+        if age > 5 and health["state"] == "healthy":
+            return dict(unknown, observed_at=health["observed_at"], reason="observation-stale")
+        return copy.deepcopy(health)
+    except (OSError, ValueError, KeyError, TypeError):
+        return unknown
+
+
+def project_disclosure(value, store, journal, alerts, now=None):
+    value["supervisor_health"] = read_supervisor_health(store, now or utc_now(), journal["binding"])
     value["pending_pointers"] = len(a.pending_pointers(alerts))
     exits = [event for event in journal.get("listener_events", []) if event["kind"] == "child-exit"]
     pruned = journal.get("listener_events_pruned", {})
@@ -116,7 +148,7 @@ def project_status(store, now, enabled=False):
                 value.update(last_verified=transport["last_verified"], watermark=transport["watermark"],
                              pending=sum(not e["drained"] for e in transport["events"].values()))
                 value["state"] = "held" if transport["hold"] else "last-verified"
-                project_disclosure(value, store, transport, alerts)
+                project_disclosure(value, store, transport, alerts, now)
                 s.fenced(store, transport)
                 s.observe_session_locked(store, transport)
                 if any(p["receipt"] is None and not s.reconciled_never_sent(p) for p in transport["posts"].values()):
@@ -131,6 +163,8 @@ def project_status(store, now, enabled=False):
                         value[state] += 1
         except (OSError, ValueError, KeyError, TypeError):
             value["state"] = "held"
+    if enabled and value.get("supervisor_health", {}).get("state") == "unhealthy":
+        value["state"] = "held"
     return validate_status(value)
 
 
@@ -492,6 +526,7 @@ class ListenerSupervisor:
         self.options, self.deadline, self.pin = None, None, None
         self.restarts, self.retry_at, self.pointer_at = 0, None, 0
         self.pending_event, self.exited_process = None, None
+        self.pending_exit, self.failed_start_process = None, None
         self.event_flush_failures = 0
         self.pointer_version, self.pointers_pending = None, False
 
@@ -532,22 +567,42 @@ class ListenerSupervisor:
         if not safe:
             self.options = None
 
+    def health(self):
+        pending = int(self.pending_event is not None) + int(self.pending_exit is not None)
+        return dict(state="unhealthy" if self.event_flush_failures or pending else "healthy",
+                    event_flush_failures=self.event_flush_failures, pending_events=pending)
+
+    def publish_health(self):
+        # Independent file/write path: transport lock, size or validation failures
+        # cannot suppress this observation. Whole-filesystem failures still can.
+        health = dict(self.health(), observed_at=self.now(),
+                      reason="event-flush-failed" if self.event_flush_failures else
+                             "event-unflushed" if self.pending_event is not None else None)
+        try:
+            a.Store(self.manager.store.root).write("supervisor", dict(binding=self.manager.binding, health=health))
+        except (OSError, ValueError, KeyError, TypeError):
+            pass  # File readers treat missing/stale observations as unknown.
+
     def flush_event(self):
-        if self.pending_event is not None:
+        while self.pending_event is not None:
+            self.publish_health()  # Expose pending evidence before attempting the journal.
             try:
                 self.record(*self.pending_event)
             except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
                 self.event_flush_failures += 1
+                self.publish_health()
                 return False  # A broken journal must not prevent reaping or pointer checks.
-            self.pending_event = None  # Clear only after durable recording succeeds.
+            # At most one surviving failed-start child can wait behind a refusal;
+            # starts stay blocked until both observations have been recorded.
+            self.pending_event, self.pending_exit = self.pending_exit, None
             self.event_flush_failures = 0
+        self.publish_health()
         return True
 
     def status(self, enabled):
         value = project_status(self.manager.store, self.now(), enabled)
-        value["supervisor_health"] = dict(state="unhealthy" if self.event_flush_failures else "healthy",
-            event_flush_failures=self.event_flush_failures, pending_events=int(self.pending_event is not None))
-        if enabled and self.event_flush_failures:
+        value["supervisor_health"] = self.health()
+        if enabled and value["supervisor_health"]["state"] == "unhealthy":
             value["state"] = "held"
         return validate_status(value)
 
@@ -563,13 +618,21 @@ class ListenerSupervisor:
         if process is not None:
             code = process.poll()
             if code is not None:
-                expected = self.options is None or (code == 0 and self.deadline is not None
-                                                    and self.clock() >= self.deadline)
-                if not expected and self.exited_process is not process and self.pending_event is None:
-                    # Retain the observation even if journal locks/writes fail.
+                expected = process is not self.failed_start_process and (
+                    self.options is None or (code == 0 and self.deadline is not None
+                                             and self.clock() >= self.deadline))
+                if not expected and self.exited_process is not process:
+                    # Attribute each observed exit to its handle before reaping.
+                    # Never replace a different process's pending observation.
                     self.pin = None
-                    self.pending_event = ("child-exit", code)
+                    event = ("child-exit", code)
+                    if self.pending_event is None:
+                        self.pending_event = event
+                    else:
+                        d.require(self.pending_exit is None)
+                        self.pending_exit = event
                     self.exited_process = process
+                    self.failed_start_process = None
                     self.flush_event()
                 elif expected:
                     self.options = None
@@ -587,6 +650,7 @@ class ListenerSupervisor:
                     d.require(options["seconds"] > 0)
                 self.manager.start(**options, restart_pin=self.pin)
             except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
+                self.failed_start_process = self.manager.process
                 self.pending_event = ("restart-refused", None)
                 self.flush_event()
         if self.manager.process is not None and self.clock() >= self.pointer_at:

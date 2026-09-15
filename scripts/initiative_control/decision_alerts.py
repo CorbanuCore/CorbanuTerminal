@@ -83,7 +83,7 @@ class Store:
             raise d.Invalid() from None
 
     def read(self, name):
-        d.require(name in ("alerts", "replies", "transport"))
+        d.require(name in ("alerts", "replies", "transport", "supervisor"))
         fd = os.open(self.root / (name + ".json"), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         with os.fdopen(fd, "rb") as stream:
             d.owner_only(os.fstat(stream.fileno()))
@@ -100,7 +100,7 @@ class Store:
         return value["body"]
 
     def write(self, name, body):
-        d.require(name in ("alerts", "replies", "transport"))
+        d.require(name in ("alerts", "replies", "transport", "supervisor"))
         raw = d.canonical(dict(schema=2, body=body, digest=d.digest(body)))
         d.require(len(raw) <= d.MAX_BYTES and not d.SECRET.search(raw.decode("utf-8")))
         destination = self.root / (name + ".json")

@@ -683,3 +683,124 @@ along with prior gap repair and shared plan/sprint reconciliation. This stage
 changes Python supervision/error reporting and uses synthetic Slack fixtures;
 it does not qualify a packaged interactive workflow. No true-TUI,
 TensorCash/Isometric, named-human acceptance or benchmark pass is claimed.
+
+## Increment D file-reader and exit-observation correction — owner-daemon-supervision-04, September 15, 2026
+
+All three earlier supervision rounds remain historical evidence. This round
+addresses only findings A/B in the frozen brief and
+`/private/tmp/fmgr.Q1SIYZ/odsup3-review.json`.
+Base: `04a1670e8bc26775a3e28b2fc70a21eb354c0b44`; branch/worktree unchanged.
+Allocation digest:
+`358a91c3d4652c3baa776fba8c80fc6750b6247c2a25b6541e921008247f2011`.
+Claim: `354cb989-ddf0-483e-ad12-7d5c0ca1472b`.
+Brief SHA-256 verified before other reads:
+`efb8484944e616f9aa5ad3ed8051383b9c7ad0b3e46e738eaf392bfb00e65ef7`.
+Worker: gpt-6-astra / high.
+
+Classification: bounded fixes restoring the authorized increment D supervision
+and disclosure contract. Product heading: **Internal delivery control — TO BUILD**;
+excerpt: “durable event dispatch, acknowledgments and watchdog”.
+Existing initiative-delivery-control / PF-80-S01 context and manager ownership of
+shared governance records remain unchanged.
+
+### A — supervision health reaches file-only readers
+
+The supervisor writes a separate private, checksummed `supervisor.json`
+observation using the existing Store atomic replacement and fsync path. This
+small file has its own write path and is independent of the transport journal's
+lock, validation and size failures. It binds the observation to the Slack
+identity and includes `observed_at`, health state, pending-event count,
+consecutive flush failures and a fixed reason. It contains no credentials or
+raw exception text. Pending evidence is published before the journal attempt;
+a failed attempt publishes `event-flush-failed`, and successful flushing
+publishes healthy with zero pending events.
+
+`project_disclosure` reads that observation; both `project_status` and
+`decision_feed.project_slack` include it. The latter writes the existing
+`decision-slack-status.json` cache, and `decision_feed.slack_health` carries
+the observation into the dashboard health payload. Unhealthy observation holds
+the projected status without inventing a journal hold or exit record.
+
+The regression uses a separate Python interpreter for status, then reads the
+actual projected cache and dashboard health. During the first failed flush all
+surfaces report unhealthy / event-flush-failed / one pending event while durable
+`listener_exits` remains zero, `last_listener_exit` remains null and the
+transport journal remains unchanged from its synthetic no-hold baseline.
+
+Missing, invalid or mismatched observations report unknown. A healthy observation
+older than five seconds becomes unknown when projected; an observed failure is
+not aged into apparent health. This is an observation cache, not restart
+authority or a second durable event journal. A whole-filesystem outage can also
+prevent its write: then a prior healthy observation becomes unknown on its next
+projection after the five-second freshness window. Already published dashboard
+snapshots still require the existing projection/publication cycle. Unavailable
+storage cannot preserve new evidence, and file consumers cannot see an
+unpublished observation instantly.
+
+### B — retain the failed-start survivor's exit
+
+A retry that fails after spawning retains the exact surviving process handle as
+an unexpected-exit candidate, even if a successfully recorded refusal later
+disables normal restart options. One additional pending-exit slot preserves
+that child's observation behind the earlier pending refusal. Starts remain
+blocked while either event awaits recording. After recovery the refusal is
+followed by the child exit; the two facts never overwrite each other. Handle
+identity prevents repeated observations. Reaping proceeds during storage failure.
+
+The regression runs a real harmless Python child through ManagedListener.start,
+injects handshake failure and all cleanup wait timeouts while suppressing fixture
+terminate/kill effects, then restores real process methods, kills and reaps the
+owned child. It covers storage recovery both before the child's exit and while
+the refusal is still unflushed at exit. Both cases preserve exactly one refusal
+and one subsequent child-exit record with return code -9 and fence/ingress
+counts, keep restart held and consume no additional restart attempt.
+
+### Regression and mutation evidence
+
+New cases are in `test_decision_manager.ManagerTests`; names below omit
+`test_`. Each mutation compiled altered production source in memory, ran the
+named case, restored the original source and ran a fresh fixture. Production
+files were never mutated on disk. Raw broken/restored outputs are retained in
+this allocation's tool transcript.
+
+| Production mutation | Named case | Broken outcome | Restored |
+| --- | --- | --- | --- |
+| Suppress independent observation publication. | `first_unflushed_exit_reaches_file_only_status_and_dashboard` | FAIL: unknown/zero instead of unhealthy/one. | PASS |
+| Suppress disclosure's observation read. | Same file-reader case | ERROR: projected cache lacks supervisor_health. | PASS |
+| Drop supervision health from dashboard payload. | Same file-reader case | FAIL: null observation. | PASS |
+| Disable healthy-observation expiry. | `supervisor_observation_missing_stale_or_unwritable_is_not_healthy` | FAIL: healthy instead of unknown after both write paths fail. | PASS |
+| Reinstate the pending-event guard on exit observation. | `failed_start_survivor_exit_is_recorded_after_pending_refusal` | FAIL: surviving child's handle never observed while refusal is pending. | PASS |
+| Forget the failed-start process handle. | Same survivor case | FAIL: exit lost after refusal disables options. | PASS |
+| Discard the queued child exit after recording refusal. | Same survivor case | FAIL: only two journal events instead of three. | PASS |
+
+**Seven mutations failed as intended; all seven fresh restored runs passed.**
+The initial five-case focused run passed four cases and failed the file-reader
+fixture's no-hold precondition: existing fixture startup already records
+outage-gap. The test now explicitly establishes a synthetic no-hold baseline
+before injecting the first failed exit write. The corrected case passed, as did
+all its later restored runs. No native credential prompt occurred.
+
+### Final validation and retained limits
+
+Initial full run: **675 tests in 401.149s, three errors**, all from existing
+pointer fixtures whose stand-in managers omitted the binding present on real
+ManagedListener instances. Those three fixtures now supply the synthetic PIN;
+the focused replay passed **3 tests in 2.727s**. Initial run retained evidence:
+`/private/tmp/isolated-transport-tests-mrs3epbg`.
+Final full-suite replay: **675 tests passed in 401.610s**. Only the known
+synthetic HTTP 500/429 cleanup ResourceWarnings appeared; there were no errors,
+failures or native credential prompts. Final retained synthetic evidence:
+`/private/tmp/isolated-transport-tests-uelaxaed`.
+Both governance checkers passed: plans
+**3/3 active, 0 slots available**; sprints **116 current, 126 archived**.
+The full suite uses the existing SDK command above with profile aliases unset,
+`TMPDIR=/private/tmp` pinned and bytecode writes disabled. Final `git diff --check`
+passed. The commit is recorded in the worker RETURN.
+
+Recurrence stays OFF. This allocation performs no activation, service install,
+live Slack message, credential/profile read, push, release or approval.
+This is an internal implementation return to the Fable manager. Integrator
+acceptance of the internal-stage N/A and the later confined code-blind
+exact-package functional gate remain open; no packaged operator workflow,
+true-TUI, live-repository, human-test, benchmark or release qualification is
+claimed. Only the five allocated implementation/test/evidence files are changed.
