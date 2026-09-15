@@ -101,7 +101,7 @@ def provenance(records, binding, prompts, ack):
                       and len(final.encode()) <= f.FINAL_LIMIT, "uncorrelated_completion")
             if not completed:
                 f.require(final == ack, "wrong_ack")
-                result["ack"] = True
+                result.update(ack=True, ack_line=final)
             else:
                 f.require(re.match(r"\ARETURN(?:\n|$)", final) is not None, "wrong_return")
                 result["returned"] = final
@@ -138,7 +138,7 @@ class TmuxAdapter:
         ack = "ACK {action_id} {allocation_digest} {model} {effort}".format(**binding)
         prompt = (f"Action ID: {binding['action_id']}. Claim: {binding['claim']}.\n"
                   f"First reply with exactly this line and nothing else:\n{ack}\n"
-                  "Then wait for START. Finish the assigned work with a RETURN heading.\n"
+                  "Then wait for START. Finish with a final message beginning with the standalone line RETURN.\n"
                   f"Frozen assignment:\n{assignment}")
         f.write_json(run / "worker.json", {"config": self.config, "binding": binding,
                      "prompt": prompt, "ack": ack, "boot_id": boot_id(), "uid": os.getuid(),
@@ -264,7 +264,8 @@ class Worker:
                             pgid=worker_info[1] if worker_info and pane[2] == "0" else None)
                 f.write_json(self.run / "process.json", proc)
             f.require(server_info[3] == proc["server_start"], "server_unknown")
-            alive = worker_info is not None and worker_info[3] == proc["start"]
+            alive = (worker_info is not None and worker_info[3] == proc["start"]
+                     and not worker_info[2].startswith("Z"))
             if proc["start"] is not None:
                 owned[str(proc["pid"])] = proc["start"]
             for _ in range(len(table)):
@@ -280,9 +281,13 @@ class Worker:
                                  int(pid) in table and table[int(pid)][3] == start
                                  and not table[int(pid)][2].startswith("Z")]
             f.require(alive or pane[2] == "1", "process_identity_unknown")
+            screen = self.tmux("capture-pane", "-p", "-t", self.meta["session"]).stdout
             state.update(identity_valid=True, liveness="crashed" if pane[2] == "1" else "alive",
-                         pane_digest=f.digest(self.tmux(
-                             "capture-pane", "-p", "-t", self.meta["session"]).stdout.encode()))
+                         pane_digest=f.digest(screen.encode()),
+                         ready=bool("Corbanu Terminal" in screen and "loading" not in screen.lower()
+                                    and re.search(r"model:\s*" + re.escape(self.binding["model"])
+                                                  + r"\s+" + re.escape(self.binding["effort"])
+                                                  + r"\b", screen)))
             paths = sorted((self.run / "home/sessions").rglob("*.jsonl"))
             f.require(len(paths) <= 1, "multiple_rollouts")
             if paths:

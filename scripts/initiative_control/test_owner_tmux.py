@@ -91,7 +91,7 @@ class TmuxTests(unittest.TestCase):
             record("event_msg", type="task_started", turn_id=turn),
             record("turn_context", turn_id=turn, cwd=str(self.root), model="fixture-model",
                    model_provider="fixture", effort="high", approval_policy="never",
-                   sandbox_policy={"type": "read-only"}),
+                   sandbox_policy={"type": self.worker.binding["sandbox"]}),
             record("event_msg", type="user_message", message=text),
             record("event_msg", type="model_response_completed", turn_id=turn,
                    model="fixture-model", model_provider_id="fixture", response_id="response-" + turn),
@@ -154,6 +154,59 @@ class TmuxTests(unittest.TestCase):
         self.assertTrue(receipt["clean"], receipt)
         self.assertFalse(receipt["forced"])
         self.assertNotEqual(0, self.worker.tmux("list-sessions", check=False).returncode)
+
+    def test_daemon_records_durable_return_after_pane_is_killed(self):
+        from coordinator import digest
+        from test_owner_daemon import WorkerLifecycleTests
+        case = WorkerLifecycleTests()
+        case.setUp()
+        self.addCleanup(case.tearDown)
+        self.addCleanup(case.doCleanups)
+        original_worker = self.worker
+        def cleanup():
+            try:
+                self.cleanup_worker()
+            finally:
+                self.worker = original_worker
+        self.addCleanup(cleanup)
+        case.configure()
+        case.fake.stop()
+        f.write_file(self.binary, SHELL.replace("READY", "Corbanu Terminal model: fixture-model high READY"),
+                     mode=0o700)
+        case.config["transport"] = {**self.config, "binary_sha256": f.file_digest(self.binary)}
+        f.write_json(case.config_path, case.config)
+        case.sql("UPDATE meta SET config_digest=?", (digest(case.config),))
+        case.authority["config_digest"] = digest(case.config)
+        case.arm()
+        case.prepared()
+        self.root = case.root
+        self.records[0]["payload"]["cwd"] = str(self.root)
+        prepare = t.TmuxAdapter.prepare
+        def capture(adapter, binding, assignment):
+            self.worker = prepare(adapter, binding, assignment)
+            return self.worker
+        with patch.object(t.TmuxAdapter, "prepare", capture):
+            result = case.tick()["actions"]["one"]
+        self.assertIn(result, ("awaiting_ready", "awaiting_ack"))
+        self.wait(lambda: self.worker.inspect().get("ready"))
+        self.assertEqual("awaiting_ack", case.tick()["actions"]["one"])
+        self.turn(self.worker.meta["prompt"], self.worker.meta["ack"], "ack-turn")
+        self.assertEqual("awaiting_working", case.tick()["actions"]["one"])
+        self.turn("START", "RETURN\nfixture result", "work-turn")
+        proc = self.worker.inspect()["process"]
+        os.kill(proc["pid"], signal.SIGKILL)
+        self.wait(lambda: self.worker.inspect()["liveness"] == "crashed")
+        with patch.object(t.Worker, "send", side_effect=AssertionError("unexpected key delivery")):
+            for _ in range(2):
+                result = case.tick()
+                self.assertEqual(("ACTIVE", "returned"), (result["state"], result["actions"]["one"]))
+        self.assertEqual("returned", case.c.snapshot()["actions"]["one"]["status"])
+        self.assertEqual([], case.sql("SELECT * FROM holds"))
+        self.assertEqual([("work-turn", "crashed")], case.sql(
+            "SELECT active_turn_id,terminal_status FROM processes"))
+        with self.assertRaisesRegex(f.LaunchError, "worker_not_alive"):
+            self.worker.send("quit", "/quit")
+        self.assertFalse((self.worker.run / "quit-intent.json").exists())
 
     def test_wrong_digest_model_effort_claim_prompt_or_turn_cannot_ack(self):
         self.ack()
@@ -489,13 +542,43 @@ class TmuxTests(unittest.TestCase):
         self.assertTrue(all(call.args and call.args[0] for call in samples.call_args_list))
         self.assertEqual(0, writes.call_count)
 
+    def test_zombie_pid_cannot_qualify_as_alive(self):
+        self.launch()
+        pid = self.worker.inspect()["process"]["pid"]
+        sample = t.processes
+        def zombie(*args, **kwargs):
+            table = sample(*args, **kwargs)
+            parent, group, _, start = table[pid]
+            table[pid] = (parent, group, "Z", start)
+            return table
+        with patch.object(t, "processes", side_effect=zombie):
+            state = self.worker.inspect(deadline=time.time() - 1)
+        self.assertFalse(state["identity_valid"])
+        self.assertNotEqual("alive", state["liveness"])
+        self.assertNotIn(pid, state["survivors"])
+
+    def test_startup_readiness_requires_loaded_matching_model_and_effort(self):
+        self.launch()
+        original = self.worker.tmux
+        for text, ready in (("loading Corbanu Terminal model: fixture-model high", False),
+                            ("Corbanu Terminal model: wrong-model high", False),
+                            ("Corbanu Terminal model: fixture-model low", False),
+                            ("Corbanu Terminal model: fixture-model high", True)):
+            def pane(*args, **kwargs):
+                result = original(*args, **kwargs)
+                if args[0] == "capture-pane":
+                    result.stdout = text
+                return result
+            with self.subTest(text=text), patch.object(self.worker, "tmux", side_effect=pane):
+                self.assertEqual(ready, self.worker.inspect()["ready"])
+
     def test_explicit_config_selection_never_dispatches_a_fixture_as_live(self):
         self.assertIs(type(owner.configured_adapter({})), owner.FixedTestAdapter)
         adapter = owner.configured_adapter({"transport": self.config})
         self.assertIs(type(adapter), t.TmuxAdapter)
-        kernel = object.__new__(owner.Kernel)
-        kernel.config = {"transport": self.config}
-        self.assertEqual("tmux_lifecycle_routing_unavailable", kernel.tick()["reason"])
+        # Selection grants no authority; the kernel must still admit private activation.
+        with self.assertRaises(FileNotFoundError):
+            owner.Kernel(self.root / "missing-config.json")
         self.assertFalse((self.worker.run / "launch-intent.json").exists())
 
 
