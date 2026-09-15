@@ -429,3 +429,26 @@ PF-80-S01 exact-candidate independent functional/real-Slack/TMUX qualification
 gate remains open; this note does not close it or relabel earlier pane-by-eye
 handoffs as contract-compliant. There is no named-human acceptance or benchmark/
 release qualification claim.
+
+## Minimum remaining budget before a durable attempt — September 15, 2026
+
+Review of the baseline-retry fix found a new path to the state that fix existed
+to reduce. Baseline `RolloutPending` retries share the handoff budget, and the
+pre-`once()` gate only refused an **already expired** budget. So retries could
+burn almost the whole window, the gate would still pass, the durable intent would
+be written and keys sent, and the collection loop would then fail its first
+deadline check — leaving a durable, non-retryable attempt whose ACK can never be
+collected. Before the baseline fix that scenario refused before any durable
+attempt or key send.
+
+The gate now reserves a collection window before writing anything durable —
+`handoff_timeout - min(timeout, handoff_timeout / 2)` — so a nearly exhausted
+budget refuses cleanly with no durable record and no keys. The cap at half the
+budget keeps configurations where the two bounds are equal usable, which the
+test fixtures rely on.
+
+Regression: `test_bridge_refuses_when_too_little_budget_remains_to_collect`
+drives the clock to just inside the old gate and asserts `Invalid`, no `once()`
+call, no `bridge-*.json`, and no `load-buffer`, `paste-buffer` or `send-keys`.
+With the stricter bound reverted it fails `Invalid not raised`, so it
+discriminates.

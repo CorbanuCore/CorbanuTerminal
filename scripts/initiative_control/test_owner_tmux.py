@@ -297,6 +297,29 @@ class TmuxTests(unittest.TestCase):
         self.assertEqual(evidence["rollout"]["before_digest"], f.digest(baseline))
         receiver.verify(evidence, request, ack, consume=True)
 
+    def test_bridge_refuses_when_too_little_budget_remains_to_collect(self):
+        # Baseline retries share the handoff budget. Nearly exhausting it must
+        # refuse BEFORE the durable intent and keys, not manufacture an attempt
+        # whose ACK can never be collected.
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        clock = [0.0]
+        with (patch.object(self.worker, "once", wraps=self.worker.once) as once,
+              patch.object(self.worker, "tmux", wraps=self.worker.tmux) as tmux,
+              patch.object(t.time, "monotonic", side_effect=lambda: clock[0])):
+            original = receiver.capture
+            def burn(*args, **kwargs):
+                # Land inside the budget but with less than the collection window left.
+                clock[0] = receiver.handoff_timeout - min(receiver.timeout, receiver.handoff_timeout / 2) + 0.1
+                return original(*args, **kwargs)
+            with patch.object(receiver, "capture", side_effect=burn):
+                with self.assertRaises(d.Invalid):
+                    receiver.deliver(request, ack)
+            once.assert_not_called()
+            self.assertFalse(list(self.worker.run.glob("bridge-*.json")))
+            self.assertFalse(any(call.args[0] in ("load-buffer", "paste-buffer", "send-keys")
+                                 for call in tmux.call_args_list))
+
     def test_bridge_baseline_partial_deadline_and_malformed_send_no_keys(self):
         receiver = self.bridge_receiver()
         request, ack = self.bridge_request(receiver)

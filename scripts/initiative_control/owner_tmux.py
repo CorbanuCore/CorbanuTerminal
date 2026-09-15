@@ -220,7 +220,14 @@ class BridgeReceiver:
                                  "Acknowledge only; do not execute or forward work. "
                                  "Reply with exactly expected_ack, without fences or extra bytes.")).decode()
         d.require(len(prompt.encode()) <= 16384 and not d.SECRET.search(prompt))
-        d.require(time.monotonic() - started <= self.handoff_timeout)
+        # Refusing only an already-expired budget is not enough: baseline retries
+        # share this deadline, so a nearly exhausted budget would let us write the
+        # durable intent and send keys with no room left to collect the ACK,
+        # manufacturing the very uncertain, non-retryable state this path exists
+        # to avoid. Reserve a collection window, capped at half the budget so a
+        # configuration where the two are equal stays usable.
+        d.require(time.monotonic() - started
+                  <= self.handoff_timeout - min(self.timeout, self.handoff_timeout / 2))
         # Durable intent precedes any keys. An interrupted attempt cannot be retried,
         # including with a newly constructed receiver on this same worker.
         self.worker.once("bridge-" + d.digest(request["handoff"]), dict(
