@@ -30,22 +30,47 @@ def utc_now():
 
 
 def validate_status(value):
-    d.shape(value, "schema enabled state last_verified watermark pending " + " ".join(COUNTS))
+    extra = ["unacknowledged_answers"] if "unacknowledged_answers" in value else []
+    d.shape(value, "schema enabled state last_verified watermark pending " + " ".join(COUNTS + extra))
     d.require(type(value["schema"]) is int and value["schema"] == 1 and type(value["enabled"]) is bool)
     d.require(value["state"] in ("off", "unqualified", "held", "last-verified", "stale"))
     if value["last_verified"] is not None:
         d.stamp(value["last_verified"])
-    d.require(all(type(value[k]) is int and value[k] >= 0 for k in ["watermark", "pending"] + COUNTS))
+    d.require(all(type(value[k]) is int and value[k] >= 0 for k in ["watermark", "pending"] + COUNTS + extra))
     d.require(value["enabled"] or value["state"] == "off")
     return copy.deepcopy(value)
 
 
+def unacknowledged_answers(ledger, alerts, alert_key=None):
+    """Count distinct interpreted questions until real ACK and notice evidence.
+
+    Include recorded intents before/after the resolution CAS: a crash between
+    the feed save and queue write must not hide the omitted receiver handoff.
+    This is an observation only, never a delivery or execution permission.
+    """
+    outstanding = set()
+    for intent in ledger["intents"].values():
+        key = intent["alert"]
+        if alert_key is not None and key != alert_key:
+            continue
+        row = a.alert(alerts, key)
+        ack = intent["ack"]
+        slot = d.digest([key, "acknowledged", d.digest(ack)]) if ack is not None else None
+        notice = row.get("notices", {}).get(slot, {})
+        if ack is None or notice.get("state") != "sent" or notice.get("receipt") is None:
+            outstanding.add((row["intent"]["feed_id"], row["intent"]["decision_id"]))
+    return len(outstanding)
+
+
 def project_status(store, now, enabled=False):
     value = dict(schema=1, enabled=enabled, state="off", last_verified=None, watermark=0, pending=0,
+                 unacknowledged_answers=0,
                  **{k: 0 for k in COUNTS})
     if enabled:
         try:
             with store.lock(), s.locked(store) as transport:
+                ledger = store.read("replies")
+                value["unacknowledged_answers"] = unacknowledged_answers(ledger, store.read("alerts"))
                 value.update(last_verified=transport["last_verified"], watermark=transport["watermark"],
                              pending=sum(not e["drained"] for e in transport["events"].values()))
                 value["state"] = "held" if transport["hold"] else "last-verified"
@@ -196,6 +221,9 @@ def finish(store, feed_root, key, transport, observe_owner, now, *, notify=False
                  and journal["watermark"] == bridge["watermark"]
                  and not any(not e["drained"] for e in journal["events"].values())
                  and owner == intent["request"]["owner"] and owner["running"] and not row["cancelled"]
+                 # A shared thread now routed to a follower no longer observes
+                 # later edits in this question\'s audit. Hold its old work permit.
+                 and journal["routes"].get(row["parent"]["receipt"]["ts"], {}).get("alert") == intent["alert"]
                  and intent["manager"]["audit"] == r.audit(store.read("replies"), intent["alert"])
                  and r.resolution_present(feed, intent)
                  and r.latest(feed, row["intent"]["decision_id"])[-1] == r.latest(intent["target"], row["intent"]["decision_id"])[-1])

@@ -167,6 +167,123 @@ def cli_child(root, feed, endpoint):
 
 
 class ManagerTests(fixtures.LiveFixture):
+    def test_unacknowledged_answer_projects_until_real_ack_and_sent_notice(self):
+        import decision_feed
+        from test_decision_replies import receive
+        key = self.queue()
+        saved = d.load_fixture(self.feed_root, NOW)
+        self.assertEqual(saved["decisions"][0]["revisions"][-1]["status"], "resolved")
+        calls = len(self.calls)
+        before = {name: (self.root / (name + ".json")).read_bytes() for name in ("alerts", "replies")}
+        with patch.object(s.Transport, "web", side_effect=AssertionError("projection posted")):
+            status = m.project_status(self.store, NOW, True)
+            self.assertEqual(status["unacknowledged_answers"], 1)
+            output = io.StringIO()
+            cli = m.main(["project-status", "--store", str(self.root), "--live"],
+                         now=lambda: NOW, stdout=output)
+            self.assertEqual(json.loads(output.getvalue()), cli)
+            self.assertEqual(cli["unacknowledged_answers"], 1)
+            projected = decision_feed.project_slack(self.feed_root, self.root, NOW, True)
+        self.assertEqual(projected["status"]["unacknowledged_answers"], 1)
+        self.assertEqual(projected["decisions"][0]["replies"]["unacknowledged_answers"], 1)
+        snapshot = dict(schema=2, status="valid", feed=saved, slack_status="valid", slack=projected)
+        page = decision_feed.render(snapshot, NOW, [], {})
+        self.assertIn("unacknowledged answers: 1", page)
+        self.assertEqual(len(self.calls), calls)
+        for name, raw in before.items():
+            self.assertEqual((self.root / (name + ".json")).read_bytes(), raw)
+        intent = r.dispatch(self.store, self.feed_root, key, OWNER, receive, NOW)
+        self.assertEqual(m.project_status(self.store, NOW, True)["unacknowledged_answers"], 1)
+        ack = dict(handoff=key, agent=OWNER["agent"], allocation=OWNER["allocation"],
+                   payload_digest=intent["request"]["payload_digest"], receipt_id=intent["receipt"]["receipt_id"])
+        with self.assertRaises(d.Invalid):
+            r.reconcile_handoff(self.store, key, intent["receipt"], dict(ack, allocation="wrong"))
+        self.assertEqual(m.project_status(self.store, NOW, True)["unacknowledged_answers"], 1)
+        r.reconcile_handoff(self.store, key, intent["receipt"], ack)
+        self.assertEqual(m.project_status(self.store, NOW, True)["unacknowledged_answers"], 1)
+        requests = []
+        def timeout(request):
+            requests.append(request)
+            raise TimeoutError()
+        notice = a.notice(self.store, self.key, "acknowledged", d.digest(ack), PIN, timeout)
+        self.assertEqual(m.project_status(self.store, NOW, True)["unacknowledged_answers"], 1)
+        evidence = dict(attempt=requests[0]["attempt"], identity=PIN,
+                        payload_digest=requests[0]["payload_digest"], thread_ts=requests[0]["thread_ts"], ts="109.000001")
+        a.reconcile(self.store, self.key, notice["request"]["attempt"], evidence)
+        self.assertEqual(m.project_status(self.store, NOW, True)["unacknowledged_answers"], 0)
+        self.assertEqual(decision_feed.project_slack(self.feed_root, self.root, NOW, True)
+                         ["decisions"][0]["replies"]["unacknowledged_answers"], 0)
+        self.assertEqual(d.load_fixture(self.feed_root, NOW), saved)
+
+    def test_recorded_resolution_crash_and_held_transport_keep_outstanding_count(self):
+        key = self.queue()
+        # Recreate the durable crash boundary: resolution saved, queue write lost.
+        ledger = self.store.read("replies")
+        ledger["intents"][key]["state"] = "recorded"
+        ledger["events"]["Ev001"]["state"] = "recorded"
+        self.store.write("replies", ledger)
+        self.assertEqual(m.project_status(self.store, NOW, True)["unacknowledged_answers"], 1)
+        self.owner.release()
+        status = m.project_status(self.store, NOW, True)
+        self.assertEqual(status["state"], "held")
+        self.assertEqual(status["unacknowledged_answers"], 1)
+        legacy = m.project_status(None, NOW)
+        del legacy["unacknowledged_answers"]
+        self.assertEqual(m.validate_status(legacy), legacy)
+        for bad in (True, -1, "1", None):
+            with self.assertRaises(d.Invalid):
+                m.validate_status(dict(legacy, unacknowledged_answers=bad))
+
+    def test_followed_thread_rebinding_holds_prior_pending_execution(self):
+        key = self.retained_ack()
+        feed = d.load_fixture(self.feed_root, NOW)
+        original = copy.deepcopy(feed["decisions"][0])
+        child = copy.deepcopy(self.feed["decisions"][0])
+        child.update(id="choice-2", follows="choice-1")
+        feed["revision"] += 1
+        feed["decisions"].append(child)
+        saved = d.load_fixture(self.feed_root, NOW)
+        d.save_fixture(self.feed_root, feed, d.digest(saved), NOW)
+        follower = a.enqueue(self.store, feed, "choice-2", fixtures.REMOTE, PIN, OWNER, NOW)
+        row = a.send(self.store, follower, PIN, self.transport.exchange)
+        self.transport.bind_alert(follower, row)
+        self.assertFalse(m.finish(self.store, self.feed_root, key, self.transport, lambda: OWNER, NOW)["work_ready"])
+        self.callback(fixtures.payload("EvPriorEdit", subtype="message_changed",
+            message=dict(user=PIN["human"], thread_ts=row["parent"]["receipt"]["ts"],
+                         ts="101.000001", text="Ten testers", edited=dict(user=PIN["human"])),
+            previous_message=dict(user=PIN["human"]), event_ts="105.000001"))
+        self.assertEqual(s.drain(self.store), 1)
+        self.assertFalse(m.finish(self.store, self.feed_root, key, self.transport, lambda: OWNER, NOW)["work_ready"])
+        self.assertEqual(d.load_fixture(self.feed_root, NOW)["decisions"][0], original)
+
+    def test_follower_sdk_thread_routes_reply_to_new_question_only(self):
+        original = self.sending()
+        original_row = copy.deepcopy(self.store.read("alerts")[self.key])
+        feed = copy.deepcopy(self.feed)
+        feed["revision"] += 1
+        follower = copy.deepcopy(feed["decisions"][0])
+        follower.update(id="choice-2", follows="choice-1")
+        feed["decisions"].append(follower)
+        d.save_fixture(self.feed_root, feed, d.digest(self.feed), NOW)
+        key = a.enqueue(self.store, feed, "choice-2", fixtures.REMOTE, PIN, OWNER, NOW)
+        calls = len(self.calls)
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        self.transport.bind_alert(key, row)
+        self.assertEqual(row["parent"], original["parent"])
+        self.assertEqual(len(self.calls), calls + 1)
+        self.assertEqual(row["details"]["receipt"]["thread_ts"], original["parent"]["receipt"]["ts"])
+        self.callback(fixtures.payload("EvFollower"))
+        self.assertEqual(s.drain(self.store), 1)
+        self.assertEqual(self.store.read("replies")["events"]["EvFollower"]["alert"], key)
+        manager = dict(actor="manager-fixture", answer="Five testers", scope="Synthetic follower only", alert=key,
+                       context_digest=row["intent"]["context_digest"], audit=r.snapshot(self.store, key)["audit"],
+                       owner=OWNER, interpretation="answer")
+        handoff = r.interpret(self.store, self.feed_root, "EvFollower", manager, OWNER, NOW)
+        self.assertIsNotNone(handoff)
+        self.assertEqual(r.resume(self.store, self.feed_root, handoff, OWNER, NOW), "queued")
+        self.assertEqual(d.load_fixture(self.feed_root, NOW)["decisions"][0], self.feed["decisions"][0])
+        self.assertEqual(self.store.read("alerts")[self.key], original_row)
+
     def supervised(self, mode="connected", **options):
         self.quiesce()
         manager = m.ManagedListener(self.store, PIN, live=True)

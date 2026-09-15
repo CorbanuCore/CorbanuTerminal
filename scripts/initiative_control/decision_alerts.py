@@ -139,6 +139,8 @@ def prepare(raw, decision_id, remote, pinned_identity, allocation, now):
     binding = dict(feed_id=feed["feed_id"], feed_revision=feed["revision"], feed_digest=d.digest(feed),
                    decision_id=decision_id, record=record, context_digest=d.digest(record), kind=kind,
                    identity=identity(pinned_identity), owner=owner(allocation), remote=remote)
+    if "follows" in matches[0]:
+        binding["follows"] = matches[0]["follows"]
     suffix = "?feed=" + feed["feed_id"] + "&decision=" + decision_id + "&revision=" + str(record["revision"]) + "&context=" + d.digest(record)
     clean = lambda value: html.escape(str(value), quote=False).replace("@", "＠")
     detail = [clean(record["question"])]
@@ -154,6 +156,9 @@ def prepare(raw, decision_id, remote, pinned_identity, allocation, now):
         detail.extend(clean(key + ": " + record["resolution"][key]) for key in ("actor", "answer", "scope"))
     payloads = {"parent": kind.upper() + ": " + clean(record["summary"]) + "\n" + remote + "/index.html" + suffix + "#decision-" + decision_id,
                 "details": "\n".join(detail)}
+    if "follows" in binding:
+        payloads["details"] = (payloads["parent"] + "\nFollows decision: " + binding["follows"]
+                               + "\n" + payloads["details"])
     d.require(all(len(value.encode()) <= 12000 for value in payloads.values()))
     binding["payloads"] = {key: dict(text=value, mrkdwn=False, unfurl_links=False, unfurl_media=False) for key, value in payloads.items()}
     return binding
@@ -178,6 +183,23 @@ def enqueue(store, raw, decision_id, remote, pinned_identity, allocation, now):
             rows[key] = dict(intent=copy.deepcopy(intent), intent_digest=d.digest(intent), cancelled=False, reason=None,
                              parent=dict(state="pending", request=None, receipt=None),
                              details=dict(state="pending", request=None, receipt=None))
+            if "follows" in intent:
+                candidates = [(parent_key, alert(rows, parent_key)) for parent_key in rows
+                              if rows[parent_key]["intent"]["feed_id"] == intent["feed_id"]
+                              and rows[parent_key]["intent"]["decision_id"] == intent["follows"]
+                              and rows[parent_key]["intent"]["identity"] == intent["identity"]
+                              and not rows[parent_key]["cancelled"]
+                              and rows[parent_key]["parent"]["state"] == "sent"]
+                if candidates:
+                    parent_key, parent = max(candidates, key=lambda pair: pair[1]["intent"]["record"]["revision"])
+                    # Reuse genuine thread-creation evidence, never synthesize a
+                    # receipt for a follower post. Its own details phase posts
+                    # the full new question into this existing Slack thread.
+                    rows[key]["parent"] = copy.deepcopy(parent["parent"])
+                    rows[key]["threading"] = dict(mode="followed", source_alert=parent_key, reason=None)
+                else:
+                    rows[key]["threading"] = dict(mode="new-thread", source_alert=None,
+                                                  reason="followed-decision-has-no-eligible-slack-parent")
             store.write("alerts", rows)
     return key
 
