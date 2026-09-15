@@ -392,3 +392,43 @@ holds and defers rather than truncating silently.
 Regression tests: `test_terminal_history_omits_allocated_scope_but_keeps_its_digest`
 proves the omission, the digest, and that the claim still carries the manifest;
 `test_running_actions_keep_their_scope` proves non-terminal actions are untouched.
+
+## Spent allocations collapse to a digest index — September 15, 2026
+
+Fresh manager runs were failing `briefing_size_hold` on nearly every attempt,
+and the manager had taken to hand-trimming its own context to squeeze under the
+ceiling. That is the wrong shape of fix: it makes the briefing smaller by making
+it less useful, and it hides a cost that keeps growing.
+
+The cost was spent allocations. A stub reduced to `{consumed, original_digest}`
+still occupied a full object — `sprint`, `kinds`, `resources`, `scope` and
+`timeout_seconds`, all of them placeholder values reading "consumed". With 65
+such stubs that was **14,574 bytes**, larger than every live allocation combined,
+to communicate nothing a manager could act on.
+
+They are now collapsed into one `consumed_allocations` map of id → frozen
+original digest. The originals remain in the `allocation_versions` audit table
+and are unchanged; only the placeholder repetition is gone. A stub carrying
+anything beyond the bare marker still gets a full `evidence_omissions` entry, so
+nothing that might hide content is collapsed silently.
+
+Measured on the live state (12 actions, 65 spent allocations, one selected
+event): **66,020 → 55,350 bytes**. The briefing also fits four selected events
+where it previously fit one.
+
+Regressions: `test_minimal_consumed_stubs_collapse_into_a_digest_index` proves
+the collapse, the digest, the absence of an omission entry and that live
+allocations are untouched; `test_richer_consumed_stub_still_reports_an_omission`
+proves anything richer keeps its omission entry.
+
+### The 10 KiB grant, and handing it back
+
+Travis granted a temporary extra 10 KiB while this was unresolved. It was taken,
+recorded in code and tests, and **handed back the same day** once the fix landed,
+because the fix recovered more than the grant. `BRIEF_LIMIT` is 65536 again.
+
+He then granted a standing **15 KiB reserve** (`BRIEF_RESERVE`) to draw on
+pre-emptively if the manager gets stuck again. It is held at zero draw. Drawing
+on it means setting `BRIEF_GRANT` to the amount used, never above the reserve,
+and recording the reason here — and treating it as a debt to repay by removing
+the underlying cost rather than as a larger normal.

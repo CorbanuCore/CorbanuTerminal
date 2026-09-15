@@ -226,6 +226,39 @@ class BriefingSizeTests(unittest.TestCase):
         self.assertNotIn("evidence_digests", omission)  # Still needed by the running action.
         self.assertEqual(before, packet)
 
+    def test_minimal_consumed_stubs_collapse_into_a_digest_index(self):
+        # A stub holding only its consumed marker and the frozen original's
+        # digest carries no decision content, so it must not cost a full object.
+        packet = self.packet([])
+        stubs = {}
+        for index in range(20):
+            key = "spent-%02d" % index
+            stub = copy.deepcopy(packet["allocations"]["bootstrap"])
+            stub["inputs"] = {"consumed": True, "original_digest": "%064x" % index}
+            stubs[key] = stub
+        packet["allocations"].update(stubs)
+        brief = self.brief(packet)
+        for key in stubs:
+            self.assertNotIn(key, brief["allocations"])
+            self.assertEqual("%064x" % int(key.split("-")[1]), brief["consumed_allocations"][key])
+            self.assertFalse([e for e in brief["evidence_omissions"] if e["id"] == key])
+        # The index is dramatically cheaper than repeating the placeholder object.
+        self.assertLess(len(encoded(brief["consumed_allocations"]).encode()),
+                        len(encoded(stubs).encode()) // 2)
+        # Live allocations are untouched.
+        self.assertIn("bootstrap", brief["allocations"])
+
+    def test_richer_consumed_stub_still_reports_an_omission(self):
+        # Anything beyond the bare marker may hide content, so it keeps the
+        # existing omission entry rather than collapsing silently.
+        packet = self.packet([])
+        allocation = packet["allocations"]["bootstrap"]
+        allocation["inputs"] = {"consumed": True, "original_digest": "a" * 64, "task": "x" * 500}
+        brief = self.brief(packet)
+        self.assertEqual({"consumed": True}, brief["allocations"]["bootstrap"]["inputs"])
+        self.assertNotIn("bootstrap", brief["consumed_allocations"])
+        self.assertTrue([e for e in brief["evidence_omissions"] if e["id"] == "bootstrap"])
+
     def test_consumed_requires_boolean_true_and_omits_only_unneeded_references(self):
         packet = self.packet([])
         allocation = packet["allocations"]["bootstrap"]
@@ -273,7 +306,9 @@ class BriefingSizeTests(unittest.TestCase):
             self.brief(packet)
 
     def test_oversized_event_still_holds_without_truncation(self):
-        event = {"id": "large", "text": "z" * 70000}
+        # Oversized relative to the live ceiling, not a number that silently
+        # becomes "small" when the ceiling moves.
+        event = {"id": "large", "text": "z" * (f.BRIEF_LIMIT + 4464)}
         self.c.event(event)
         with self.assertRaisesRegex(Rejected, "record exceeds JSON byte limit"):
             self.brief(self.packet([]))
@@ -303,7 +338,15 @@ class BriefingSizeTests(unittest.TestCase):
         packet = self.large_packet()
         raw = m.briefing(self.c, packet, self.context)
         brief = json.loads(raw)
+        # The contract is 65536. A temporary 10 KiB grant on 2026-09-15 was
+        # handed back the same day once the structural cost was removed, so any
+        # nonzero grant means we are living on an allowance again.
+        self.assertEqual(0, f.BRIEF_GRANT)
         self.assertEqual(65536, f.BRIEF_LIMIT)
+        # The standing reserve exists to be drawn on deliberately, and never
+        # beyond what Travis actually granted.
+        self.assertEqual(15 * 1024, f.BRIEF_RESERVE)
+        self.assertLessEqual(f.BRIEF_GRANT, f.BRIEF_RESERVE)
         self.assertLess(len(raw), f.BRIEF_LIMIT)
         self.assertEqual(1, len(brief["events"]))
         self.assertEqual(4, len(brief["evidence_omissions"]))

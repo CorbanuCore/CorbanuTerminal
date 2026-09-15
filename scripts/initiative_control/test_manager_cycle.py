@@ -305,7 +305,7 @@ class CycleTests(unittest.TestCase):
         for index in range(3):
             action = {"id": "prior-" + str(index), "workstream": "delivery",
                       "status": "accepted", "sequence": [index, 0],
-                      "full_frozen_input": str(index) * 11000}
+                      "full_frozen_input": str(index) * (f.BRIEF_LIMIT // 6)}
             expected[action["id"]] = action
         with self.c.mutation("fixture", {}) as (_, state):
             state["actions"].update(expected)

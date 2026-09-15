@@ -52,6 +52,8 @@ DIRECTIVE = (
     "partial context, not full originals. Other derived event/action previews "
     "are omitted; exact full bodies are in original_evidence unless explicitly "
     "listed in evidence_omissions. "
+    "consumed_allocations maps a spent allocation id to its frozen original's digest; "
+    "those carry no decision content and their originals remain in the audit table. "
     "Preserve approvals, unresolved blockers, review budgets and pause boundaries."
 )
 
@@ -113,7 +115,7 @@ def briefing(coordinator, packet, owner_context):
     brief = {**packet, "last_three_actions": last_three,
              "directive": DIRECTIVE, "owner_observation": context,
              "seed_metadata_status": "historical; current durable state is not external live proof",
-             "original_evidence": {}, "evidence_omissions": []}
+             "original_evidence": {}, "evidence_omissions": [], "consumed_allocations": {}}
     # Strip only core-owned previews; arbitrary frozen inputs remain exact.
     outcome_fields = {"result", "verification", "owner_failure", "owner_cancellation"}
     reference_fields = {"dispatch_receipt", "ack_receipt"} | outcome_fields
@@ -200,11 +202,16 @@ def briefing(coordinator, packet, owner_context):
     for key, allocation in packet["allocations"].items():
         if allocation["inputs"].get("consumed") is True:
             inputs = allocation["inputs"]
-            # A stub already reduced to its consumed marker plus the frozen
-            # original's digest hides nothing: retain it verbatim rather than
-            # replacing it with an omission entry that only restates the digest.
+            # A stub reduced to its consumed marker plus the frozen original's
+            # digest carries no decision content: sprint, kinds, resources,
+            # scope and timeout are all "consumed" placeholders. Repeating that
+            # object per allocation costs more than the rest of the briefing
+            # combined once history accumulates, so collapse them into one
+            # id -> digest index. The frozen originals remain in the audit table
+            # and nothing that could inform a decision is dropped.
             if set(inputs) <= {"consumed", "original_digest"}:
-                brief["allocations"][key] = {**allocation, "inputs": dict(inputs)}
+                brief["consumed_allocations"][key] = inputs.get("original_digest", "")
+                del brief["allocations"][key]
                 continue
             brief["allocations"][key] = {**allocation, "inputs": {"consumed": True}}
             omit("allocations", key, "consumed_allocation", inputs, inputs)
