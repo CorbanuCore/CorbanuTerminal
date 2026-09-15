@@ -459,3 +459,109 @@ Final file-scoped rustfmt check exits 0; no `.snap.new` exists in Core/API.
 Final conservative size: 2707 changed lines, 735 non-test; all 18 allocated paths.
 Targets 3000/1050 and STOP 3300/1200 are respected. Candidate commit is supplied
 in RETURN, avoiding a self-referential commit hash in this committed receipt.
+
+## acct-ws-impl-04 — discriminating redirect-latch regression
+
+Routine test/evidence revision of PF-60-S02: no retained production behavior change.
+Product heading **Measurement targets**; excerpt: “No commercial performance
+numbers have been supplied. The following metrics must be instrumented, with
+targets set through the decision rights defined above.”
+
+- Worker: `gpt-6-astra` / `high`; action `acct-ws-impl-04`.
+- Allocation digest: `8966074f735c6c7ccc8cfcbfb7966466a924a00fc0831792197c6cea32423f0d`.
+- Claim: `50bfb2bd-324b-436f-a196-c6f5780ca498`.
+- Brief: `/private/tmp/fmgr.Q1SIYZ/briefs/acct-ws-impl-04.json`; verified by
+  `shasum -a 256`: `8b496f26b1cb1399d60c3cbede04604c814acc405b16c1ab5b49dc8c174d0ac8`.
+- Actual clean dispatch base: `cb2b0a9110d3ae7d305a8220d0ab4a0a32cec64b`.
+  Branch/worktree remain the allocated coordinates above. The current brief
+  explicitly reuses the exclusive target `acct-ws-20260915`.
+- Independent review input: `/private/tmp/fmgr.Q1SIYZ/acctws3-review.json`,
+  overall verdict “patch is correct”; single P3: the native redirect case
+  passed identically with the redirect-latch match arm deleted.
+
+The existing `accounting_responses_ws_native_redirects_never_escape_binding`
+now requires the exact fatal accounting error for each direct WS redirect.
+A plain unexpected-status transport error cannot satisfy that assertion. All
+original statuses (301/302/303/307/308), fallback variants, retry settings, error
+presence, zero target requests and POST/attempt count assertions are retained.
+This observes the accounting-specific failure at the sampling retry boundary;
+it does not infer latching merely from the absence of network sends.
+
+### Mutation experiment
+
+Before writing the assertion, removed exactly this eight-line match arm from
+`codex-rs/core/src/client.rs` using an exact-text edit:
+
+```rust
+                Err(ApiError::Transport(TransportError::Http { status, .. }))
+                    if status.is_redirection() && sampling.is_some() =>
+                {
+                    if let Some(deferred) = &deferred {
+                        deferred.reject();
+                    }
+                    return Err(CodexErr::Fatal(crate::accounting::FAILURE.into()));
+                }
+```
+
+Then added the assertion and formatted the test file. Both mutation and restored
+runs used this identical command from the allocated worktree:
+
+```sh
+CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-ws-20260915 just test -p codex-core --test all -E 'test(accounting_responses_ws_native_redirects_never_escape_binding)' --retries 0 --success-output immediate --locked --offline
+```
+
+| Tree | Run ID | Result |
+| --- | --- | --- |
+| Latch arm removed | `d4d6c364-bc7e-4990-8ba7-28690164132b` | Exit 100; 0 passed, 1 failed; 1156 filtered |
+| Exact arm restored | `cccb60ec-c90d-492c-b4da-786cd47ea877` | Exit 0; 1 passed; 1156 filtered |
+
+Mutation failure output (tool output chunk `e2e256`):
+
+```text
+assertion failed: `(left == right)`: WS redirect 301 must latch accounting failure
+Diff < left / right > :
+ [
+<    "unexpected status 301 Moved Permanently: Unknown error, url: ws://127.0.0.1:54862/v1/responses",
+>    "Fatal error: Native Anthropic accounting failed; request stopped without a repair send",
+ ]
+Summary [   0.617s] 1 test run: 0 passed, 1 failed, 1156 skipped
+```
+
+Restored output (tool output chunk `d4e926`):
+`Summary [   3.137s] 1 test run: 1 passed, 1156 skipped`.
+Every direct redirect printed two handshakes (prewarm and sampling), zero frames,
+zero POSTs, zero attempts and zero target requests. Each 426-to-HTTP redirect
+printed one handshake, zero frames, one POST/attempt and zero target requests.
+`git diff --exit-code -- codex-rs/core/src/client.rs` exited 0 after restoration.
+
+### Positive recovery controls and final checks
+
+Unchanged native controls demonstrate that ordinary recovery remains executable:
+
+```sh
+CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-ws-20260915 just test -p codex-core --test all -E 'test(accounting_responses_ws_native_connection_limit_reconnect) | test(accounting_responses_ws_native_upgrade_required_http_fallback) | test(accounting_responses_ws_native_fallback_http_transport_retry)' --retries 0 --success-output immediate --locked --offline
+```
+
+Run `168f150e-82de-40bf-855d-2f993a4920bf`: exit 0; 3 passed, 1154 filtered.
+The reconnect case records two linked WS attempts; transport retry records one WS
+attempt followed by two linked HTTP attempts. The 426 control succeeds over HTTP.
+Final JUnit at `codex-rs/target/nextest/local/junit.xml` identifies this control run;
+earlier report contents were overwritten by nextest, so the mutation/restoration
+run IDs and observed output are preserved above rather than claiming saved XML.
+All three runs disabled automatic retries; no flaky/leaky result was reported.
+
+Read test-isolation guidance before testing; every Rust test used guarded
+`just test` with disposable profiles and native-keyring denial. No live profile,
+native credential prompt, raw cargo/nextest command, provider inference or push.
+File-scoped `rustfmt --edition 2024 --config skip_children=true` and its `--check`
+passed; stable rustfmt emitted the existing nightly-only imports warning.
+Global format/fix was avoided to respect the literal writable manifest.
+Plan/sprint checkers passed (active 3/3; current 116/archived 126); whitespace passed.
+
+Only the test file and this receipt differ from the dispatch base; production
+source is restored byte-for-byte. Internal test-only work has no changed user
+workflow, so new interactive/code-blind execution is not applicable to this
+revision. The later S03/S04 functional gates and all previously disclosed
+qualification limits remain pending; no new acceptance or readiness is claimed.
+Cumulative size from `59260f56e0f201fdadef9f73f25ab68a791041e5`: **2831 total / 841 non-test**,
+including receipt and mixed glue; below targets 3000/1050 and STOP 3300/1200.

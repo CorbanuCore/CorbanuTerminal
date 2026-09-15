@@ -345,12 +345,30 @@ async fn accounting_responses_ws_native_redirects_never_escape_binding() -> anyh
                 .build_with_auto_env(&origin)
                 .await?;
             submit(&test).await?;
+            let events = terminal(&test).await?;
             assert!(
-                terminal(&test)
-                    .await?
+                events
                     .iter()
                     .any(|event| matches!(event, EventMsg::Error(_)))
             );
+            if !fallback {
+                // A plain 3xx transport error also sends nothing. Require the
+                // accounting latch's fatal outcome at the sampling retry boundary.
+                let errors: Vec<_> = events
+                    .iter()
+                    .filter_map(|event| match event {
+                        EventMsg::Error(error) => Some(error.message.as_str()),
+                        _ => None,
+                    })
+                    .collect();
+                assert_eq!(
+                    errors,
+                    [
+                        "Fatal error: Native Anthropic accounting failed; request stopped without a repair send"
+                    ],
+                    "WS redirect {status} must latch accounting failure"
+                );
+            }
             assert!(target.received_requests().await.unwrap().is_empty());
             let requests = origin.received_requests().await.unwrap();
             let handshakes = requests
