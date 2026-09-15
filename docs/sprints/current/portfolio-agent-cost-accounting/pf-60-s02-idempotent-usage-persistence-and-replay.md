@@ -76,6 +76,7 @@ September 15: Fable's verified `acct-chat-design-01` allocation ([direct Chat Co
 
 ## Remaining
 
+- [ ] Chat dispatch `acct-chat-impl-01` stopped before implementation at assigned base `70b7cd33f9a17c1cbb219f4d0d7b00d4a6cf5acf`: Fable manager must replace the consumed WS mandate, reconcile active-plan/S02 coordinates to the assigned Chat checkout and record the exclusive build-target lease/reservation audit before redispatch. Both governance checkers pass the old records; all 38 Chat cases remain unexecuted. [Stopped-attempt receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/chat-dispatch-increment.md). No code, build, provider call or acceptance claimed.
 - [ ] Two disclosed follow-ups from the native-vector review, non-blocking and recorded rather than silently dropped: the per-frame provider check reads the published `ModelClient`, which briefly lags `session_configuration` during a provider change, so a frame checked in that window compares against the old provider (the stage-one denial itself still fires); and `with_stage_one_memory_binding` keeps a consuming builder signature although its effect is now global to all clones and both call sites discard the return.
 - [ ] Subsequent allocation: Chat/Corbanu, prewarm and auxiliary collection, legacy evidence acquisition and complete application coverage remain unqualified; anonymous 365-day fencing is not permanent.
 
