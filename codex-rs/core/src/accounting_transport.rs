@@ -92,6 +92,29 @@ impl codex_api::ResponsesUsageObserver for ResponseEvidence {
     }
 }
 
+impl codex_api::ChatUsageObserver for ResponseEvidence {
+    fn observe(
+        &self,
+        position: i64,
+        usage: Result<codex_api::ChatUsagePatch, codex_api::InvalidChatUsage>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), ApiError>> + Send + '_>> {
+        Box::pin(async move {
+            let result = async {
+                let attempt = self.attempt.get().ok_or_else(|| anyhow::anyhow!(FAILURE))?;
+                let usage = usage.map_err(|_| anyhow::anyhow!(FAILURE))?;
+                self.sampling
+                    .observe_patch(attempt, self.source, position, super::chat::patch(usage)?)
+                    .await
+            }
+            .await;
+            result.map_err(|_| {
+                self.sampling.reject();
+                ApiError::Stream(FAILURE.into())
+            })
+        })
+    }
+}
+
 pub(crate) struct AccountingTransport<T> {
     inner: T,
     evidence: Option<Arc<ResponseEvidence>>,

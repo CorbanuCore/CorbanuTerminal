@@ -51,6 +51,12 @@ use tracing::instrument;
 use tracing::trace;
 use tracing::warn;
 
+#[path = "chat_accounting.rs"]
+pub(crate) mod accounting;
+#[cfg(test)]
+#[path = "chat_accounting_tests.rs"]
+mod accounting_tests;
+
 const REQUEST_ID_HEADER: &str = "x-request-id";
 const GENERATION_ID_HEADERS: [&str; 3] = [
     "x-openrouter-generation-id",
@@ -66,6 +72,7 @@ static CHAT_CALL_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 pub struct ChatCompletionsClient<T: HttpTransport> {
     session: EndpointSession<T>,
     sse_telemetry: Option<Arc<dyn SseTelemetry>>,
+    usage_observer: Option<Arc<dyn accounting::ChatUsageObserver>>,
 }
 
 #[derive(Default)]
@@ -83,7 +90,16 @@ impl<T: HttpTransport> ChatCompletionsClient<T> {
         Self {
             session: EndpointSession::new(transport, provider, auth),
             sse_telemetry: None,
+            usage_observer: None,
         }
+    }
+
+    pub fn with_usage_observer(
+        mut self,
+        observer: Option<Arc<dyn accounting::ChatUsageObserver>>,
+    ) -> Self {
+        self.usage_observer = observer;
+        self
     }
 
     pub fn with_telemetry(
@@ -94,6 +110,7 @@ impl<T: HttpTransport> ChatCompletionsClient<T> {
         Self {
             session: self.session.with_request_telemetry(request),
             sse_telemetry: sse,
+            usage_observer: self.usage_observer,
         }
     }
 
@@ -164,6 +181,7 @@ impl<T: HttpTransport> ChatCompletionsClient<T> {
             actionable_silence_timeout.unwrap_or(DEFAULT_ACTIONABLE_SILENCE_TIMEOUT),
             self.sse_telemetry.clone(),
             metrics,
+            self.usage_observer.clone(),
         ))
     }
 
@@ -178,6 +196,7 @@ fn spawn_chat_completions_stream(
     actionable_silence_timeout: Duration,
     telemetry: Option<Arc<dyn SseTelemetry>>,
     metrics: ChatCallMetrics,
+    observer: Option<Arc<dyn accounting::ChatUsageObserver>>,
 ) -> ResponseStream {
     let upstream_request_id = stream_response
         .headers
@@ -188,7 +207,7 @@ fn spawn_chat_completions_stream(
     let response_id_hint = upstream_request_id.clone();
     tokio::spawn(async move {
         let _ = tx_event.send(Ok(ResponseEvent::Created)).await;
-        process_chat_sse(
+        process_chat_sse_observed(
             stream_response.bytes,
             tx_event,
             idle_timeout,
@@ -196,6 +215,7 @@ fn spawn_chat_completions_stream(
             telemetry,
             response_id_hint,
             Some(metrics),
+            observer,
         )
         .await;
     });
@@ -1115,6 +1135,7 @@ fn diagnostic_excerpt(text: &str) -> String {
     excerpt.replace('\n', "\\n")
 }
 
+#[cfg(test)]
 async fn process_chat_sse(
     stream: ByteStream,
     tx_event: mpsc::Sender<Result<ResponseEvent, ApiError>>,
@@ -1124,6 +1145,31 @@ async fn process_chat_sse(
     response_id_hint: Option<String>,
     metrics: Option<ChatCallMetrics>,
 ) {
+    process_chat_sse_observed(
+        stream,
+        tx_event,
+        idle_timeout,
+        actionable_silence_timeout,
+        telemetry,
+        response_id_hint,
+        metrics,
+        None,
+    )
+    .await;
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn process_chat_sse_observed(
+    stream: ByteStream,
+    tx_event: mpsc::Sender<Result<ResponseEvent, ApiError>>,
+    idle_timeout: Duration,
+    actionable_silence_timeout: Duration,
+    telemetry: Option<Arc<dyn SseTelemetry>>,
+    response_id_hint: Option<String>,
+    metrics: Option<ChatCallMetrics>,
+    observer: Option<Arc<dyn accounting::ChatUsageObserver>>,
+) {
+    let mut position = 0_i64;
     let (activity, mut activity_rx) = ChatStreamActivity::new();
     let mut stream =
         byte_idle_timeout_stream(stream, idle_timeout, metrics.clone(), activity.clone())
@@ -1134,13 +1180,12 @@ async fn process_chat_sse(
 
     loop {
         let start = Instant::now();
-        let response = match poll_chat_sse_event(
-            &mut stream,
-            &mut activity_rx,
-            actionable_deadline_at,
-        )
-        .await
-        {
+        let polled = tokio::select! {
+            biased;
+            _ = tx_event.closed(), if observer.is_some() => return,
+            value = poll_chat_sse_event(&mut stream, &mut activity_rx, actionable_deadline_at) => value,
+        };
+        let response = match polled {
             ChatSsePoll::Activity => {
                 let now = Instant::now();
                 if first_activity_at.is_none() {
@@ -1208,6 +1253,38 @@ async fn process_chat_sse(
             let now = Instant::now();
             first_activity_at = Some(now);
             actionable_deadline_at = Some(now + actionable_silence_timeout);
+        }
+
+        if let Some(observer) = &observer {
+            let next = position.checked_add(1);
+            let patch = match next {
+                Some(next) => {
+                    position = next;
+                    if sse.data.trim() == "[DONE]" {
+                        Ok(None)
+                    } else {
+                        accounting::decode(&sse.data)
+                    }
+                }
+                None => Err(accounting::InvalidChatUsage),
+            };
+            if !matches!(patch, Ok(None)) {
+                let usage = patch.and_then(|value| value.ok_or(accounting::InvalidChatUsage));
+                let invalid = usage.is_err();
+                let result = tokio::select! {
+                    biased;
+                    _ = tx_event.closed() => return,
+                    result = observer.observe(position, usage) => result,
+                };
+                if invalid || result.is_err() {
+                    let _ = tx_event
+                        .send(Err(ApiError::Stream(
+                            "Chat accounting evidence rejected".into(),
+                        )))
+                        .await;
+                    return;
+                }
+            }
         }
 
         if sse.data.trim() == "[DONE]" {

@@ -17,6 +17,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use uuid::Uuid;
 
+#[path = "accounting_chat.rs"]
+pub(crate) mod chat;
 #[cfg(test)]
 #[path = "accounting_policy_tests.rs"]
 mod policy_tests;
@@ -86,6 +88,12 @@ impl Drop for SamplingScope {
     }
 }
 
+enum Pricing {
+    Anthropic,
+    Responses,
+    Chat,
+}
+
 pub(crate) struct Sampling {
     runtime: Arc<StateRuntime>,
     owner: ThreadId,
@@ -95,6 +103,7 @@ pub(crate) struct Sampling {
     endpoint: String,
     provider: &'static str,
     dialect: Dialect,
+    pricing: Pricing,
     previous: Mutex<Option<Uuid>>,
     failed: AtomicBool,
 }
@@ -156,6 +165,16 @@ impl Sampling {
                 Dialect::Inclusive,
                 "responses",
             ),
+            AccountingMode::DirectOpenAiChat {
+                scope,
+                approved_endpoint,
+            } => (
+                scope,
+                approved_endpoint,
+                "openai",
+                Dialect::Inclusive,
+                "chat/completions",
+            ),
             AccountingMode::Disabled => return Err(CodexErr::Fatal(FAILURE.into())),
         };
         let endpoint =
@@ -184,6 +203,13 @@ impl Sampling {
             endpoint: format!("{}/{path}", approved_endpoint.trim_end_matches('/')),
             provider,
             dialect,
+            pricing: match mode {
+                AccountingMode::DirectAnthropic { .. } => Pricing::Anthropic,
+                AccountingMode::DirectOpenAiChat { .. } => Pricing::Chat,
+                AccountingMode::DirectOpenAiResponsesHttp { .. }
+                | AccountingMode::DirectOpenAiResponses { .. } => Pricing::Responses,
+                AccountingMode::Disabled => unreachable!(),
+            },
             previous: Mutex::new(None),
             failed: AtomicBool::new(false),
         }))
@@ -239,10 +265,12 @@ impl Sampling {
             dialect: self.dialect,
             dispatched_at_ms: dispatched_at.try_into()?,
         };
-        let prices = if self.provider == "openai" {
-            prices::responses_original(model, self.scope, dispatched_at, tier)?
-        } else {
-            prices::original(model, self.scope, dispatched_at)?
+        let prices = match self.pricing {
+            Pricing::Anthropic => prices::original(model, self.scope, dispatched_at)?,
+            Pricing::Responses => {
+                prices::responses_original(model, self.scope, dispatched_at, tier)?
+            }
+            Pricing::Chat => prices::chat_original(model, self.scope, dispatched_at)?,
         };
         store.admit(self.owner, &attempt, &prices, now()).await?;
         *self.previous.lock().map_err(|_| {
