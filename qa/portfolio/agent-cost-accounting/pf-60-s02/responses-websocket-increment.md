@@ -750,3 +750,30 @@ remain. No full-S02, human-test, benchmark or release readiness is claimed.
 Final plan/sprint/whitespace checks pass. Cumulative size from `59260f56e0f201fdadef9f73f25ab68a791041e5`:
 **3267 total / 1087 non-test** (receipt and mixed glue counted): above target
 3000/1050 by 267/37; below STOP 3300/1200 by 33/113. Candidate commit/diff are in RETURN.
+
+## acct-ws-vectors-03 — size STOP before revision
+
+Routine evidence-only return; the assigned PF-60-S02 product-initiative revision remains undone.
+Product heading **Measurement targets**; excerpt: “No commercial performance numbers have been supplied.”
+Action `acct-ws-vectors-03`; worker `gpt-6-astra` / `high`; claim `69e15902-e9eb-41ce-8779-714e00976403`.
+Allocation digest `02b26dc49f932d61ae87e410a17d4e4a399389b6117059a7a26eb5e450918792`.
+First read `/private/tmp/fmgr.Q1SIYZ/briefs/acct-ws-vectors-03.json`; `shasum -a 256` matched
+`c77fbc10393d03e87fe224efdf80eadc81739fff38c5344e642ea8098016678b`; then read `/private/tmp/fmgr.Q1SIYZ/acctv2-review.json`.
+Clean dispatch HEAD `85e4952ad747c5c857ab4cd72640a6bd6fc5e111`; allocated branch/worktree match.
+The allocation's **Exact proposed worker ownership** says “STOP before exceeding 3300 / 1200”
+and “do not compress or drop tests to fit.” The new brief requests size reporting but supplies no increased ceiling.
+Verified literal 20-path `git diff --numstat 59260f56e0f201fdadef9f73f25ab68a791041e5 HEAD`:
+3267 total / **1093 non-test**, conservatively including the six mixed suite-registration lines.
+This corrects the previous receipt's 1087 non-test subtotal; only 33 total lines remain before this receipt.
+Both fixes plus a new regression and complete mutation/evidence receipt need an increased allocation or staged receiving base.
+Finding 1 remains open: `with_stage_one_memory_binding` replaces the shared Arc; use shared-slot `set`,
+explicitly handle a second binding, and exercise the production setter through a clone after native dispatch starts.
+Finding 2 remains open: each text calls Admission::check -> binding.check -> memory_stage_one_configuration,
+which takes the session mutex and clones Config. Caching only the initially empty slot would lose late-binding enforcement;
+checking only the denial latch would rely on another caller to refresh policy. Neither shortcut was implemented.
+No Rust changes, new regression, mutation experiment, test command/run ID or per-frame performance proof exists for this action.
+Test-isolation guidance was read. No Rust test/build, live profile, credentials, native prompt, inference, subagent or push.
+Assigned target `acct-ws-20260915` unused. Prior vector tests/evidence remain unchanged; both P3 findings need correction.
+Manager action: reallocate cumulative size or receive/stage the prior unit with an explicit new baseline and correction allowance.
+This receipt adds 27 lines: final 3294 total / 1120 non-test; target excess 294/70; STOP headroom 6/80.
+Plan/sprint and whitespace checks are recorded in RETURN. No new review, acceptance, functional or release readiness is claimed.
