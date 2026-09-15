@@ -38,6 +38,40 @@ Fable ran the review to receive to dispatch loop unattended on Opus 5.0 High.
   was never used, never stored, and rotation was requested. Key-based access to
   the guest already exists and is sufficient.
 
+## September 15 19:00 UTC — second unattended session
+
+- **Accounting** ([PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md)):
+  the direct Chat Completions unit is **received at `82f9dde0e`** and its
+  disclosed-debt cleanup at `533a16077`. Five workers were dispatched to get
+  there and three of them **correctly STOPPED**: twice because the manager had
+  not reconciled the dispatch prerequisites, once on a real contract conflict
+  where the frozen design expected continuation after a length finish while
+  Core terminates. Production behaviour won and the counterexample is kept.
+  The cleanup closed six leaky fixtures, the per-frame provider-check lag and
+  a dishonest builder signature. Two further worker stops were caused by
+  manager scope errors, recorded as such rather than blamed on the workers.
+- **Task Node** ([PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)):
+  threaded decision answers received at `4c501b710`, then owner-daemon
+  **increment D received at `aba3707b0`** after five review rounds. Increment D
+  exists because of a real incident this session: the Slack listener died at
+  12:22 UTC, the supervisor saw the exit and only stopped, nothing restarted or
+  recorded it, and it stayed dead about two hours while the fence ran three
+  marks ahead of recorded ingress with nothing surfacing the gap. Review found
+  and closed two P2s and six P3s along the way, including a watchdog that could
+  die from lock contention, a supervisor that contended with the callback lock
+  and could cause the very gap it discloses, and a fix that fsync-rewrote its
+  status file ten times a second. Final review: zero findings, confidence 0.82.
+  Recurrence stays **OFF**.
+- **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
+  still gated on Travis, but the question is now much sharper. Inspecting the
+  guest to write the execution brief found **Tailscale connected on it**, a
+  second default route through `utun6`. A packet filter on `en0` alone would
+  have looked enforced without being enforced, which is the worst available
+  outcome and is a plausible reason the preflight reached the internet. The
+  [execution brief](../management-bootstrap/pf83-isolation-execution-20260915.md)
+  removes that path first, then installs default-deny with two exceptions, with
+  a dead-man revert, boot persistence and a post-reboot verification matrix.
+
 ## September 14 correction — overnight Keychain prompts
 
 The first PF-83 verification run inherited the live Corbanu home and generated
