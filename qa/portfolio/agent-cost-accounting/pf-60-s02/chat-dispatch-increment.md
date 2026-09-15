@@ -554,3 +554,54 @@ N/A for this round. Existing S03/S04 functional gates and manager receiving rema
 S02 remains in_progress. No human acceptance, benchmark, release, public activation or push claimed.
 Size against 57cbefabb: 3286 total / 956 non-test; prior conservative formatting allowance yields
 3291 / 961 (STOP margin 9 / 339). No size extension or scope expansion claimed.
+
+## Cleanup preflight — acct-cleanup-01 (2026-09-15)
+
+Status: **BLOCKED BEFORE RUST EDITS OR TESTS: writable-scope mismatch**.
+Worker gpt-6-astra / high; receiving owner Fable manager; same branch/worktree above.
+Launch/base `390098a46e298f69e2453e79ed7ec1e373acffc5`, verified clean.
+Allocation digest `88f856b4ef3a61a7d05112f6fe142ab6a138f16dd3ff1e95af560499d02c9dd9`;
+claim `c4529d75-187f-4711-985c-fba3bb98fb42`.
+Brief `/private/tmp/fmgr.Q1SIYZ/briefs/acct-cleanup-01.json` verified with
+`shasum -a 256`, exit 0, SHA-256
+`7a25dba783686783d35c94c419989390999b9406ece5de5c276769861f4fc4ce`.
+This receipt is routine process evidence for the existing PF-60-S02 cleanup;
+**Measurement targets** and its requirement excerpt above remain the product linkage.
+
+The frozen twelve-path write scope excludes the implementation/fixture owners needed
+for all three requested items. Read-only inspection established:
+
+1. Policy fixtures `accounting_policy_wait_cancellation_and_post_wait_failure_have_no_effect`
+   and `accounting_policy_observe_wait_cancel_and_start_cancel_publish_nothing` live in
+   `codex-rs/core/src/accounting_policy_tests.rs`, not the allowed `accounting.rs`.
+   Their local `Fixture::two_reopens` already awaits database close; remaining held
+   sampling/runtime references need investigation in that fixture. No attribution of
+   their historical LEAK markers is established. Allowed Anthropic/Chat fixtures have
+   omitted stop/drop/awaited-close cleanup, but this blocked unit changes none of them.
+2. The actual per-frame comparison is `StageOneMemoryBinding::check_stream` in
+   excluded `codex-rs/core/src/memory_stage_one.rs`: it reads
+   `owner.services.model_client().provider_info()`. It cannot be corrected at its
+   owner within the allocation. A lag-window behavioral regression also needs an
+   explicitly allocated test location; no new shape assertion or mutation is claimed.
+3. The consuming builder in allowed `client.rs` has a production consumer in excluded
+   `memory_stage_one.rs`: `StageOneMemoryClient::new` assigns the chained return to
+   its `client` field. The premise that both call sites discard the return is false
+   on the exact launch tree. Another production/debug call is in excluded
+   `codex_thread.rs`; two test calls are in excluded `accounting_websocket_tests.rs`.
+   Returning unit would require adapting the production consumer to keep compilation.
+
+Manager must reconcile the allocation with these exact owners before redispatch;
+no scope extension, resource-drop workaround in production, suppression, or provider
+policy change is inferred. All three items remain open. No new production defect
+is diagnosed beyond the already-disclosed provider window; this is an allocation
+finding, not evidence that any LEAK is a production issue. Test isolation guidance
+was read. Rust tests/mutations: **not run**, zero executed cases, no leak-clean claim.
+Collection remains OFF; S02 in_progress, S03 dependent. Internal-only preflight has
+no interactive change; later S03/S04 functional gates remain. No acceptance or push.
+
+Initial `python3 docs/sprints/check.py` exited 1: adding the receipt link made the
+sprint 102 lines, above its 100-line limit. Removed two blank lines, preserving all
+ledger text, before the final replay.
+Final documentation checks: `git diff --check`, `python3 docs/plans/check.py`, and
+`python3 docs/sprints/check.py`, each exit 0; plans 3/3 active, sprints 116 current /
+126 archived. Only this receipt and the S02 Remaining ledger changed.
