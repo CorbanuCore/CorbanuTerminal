@@ -432,3 +432,32 @@ pre-emptively if the manager gets stuck again. It is held at zero draw. Drawing
 on it means setting `BRIEF_GRANT` to the amount used, never above the reserve,
 and recording the reason here — and treating it as a debt to repay by removing
 the underlying cost rather than as a larger normal.
+
+## Locate the files before freezing a scope — September 15, 2026
+
+Four workers stopped on the same manager mistake in one session, each costing a
+full round:
+
+- `acct-cleanup-01` — the leak fixtures and the provider check live in
+  `core/src/accounting_policy_tests.rs` and `core/src/memory_stage_one.rs`, and
+  neither was in the frozen scope.
+- `acct-cleanup-03` — the provider-publication fix needs
+  `core/src/session/mod.rs` and `core/src/session/turn_context.rs`; same error,
+  second time.
+- `acct-cleanup-02` — `brief_file` still pointed at the superseded brief while
+  `brief_sha256` had been updated, so the digest check refused, correctly.
+- `owner-daemon-qualify-fixes-01` — D09 needs `decision_alerts.py` and D14 needs
+  `decision_feed.py`; both omitted.
+
+Every one of those workers was right to stop, and the receipts say so. The cost
+is a dispatch round each time, plus the reviewer's and the manager's attention.
+
+**Before freezing a scope, locate the files rather than predicting them.** Run
+the search that the task will have to run — `rg -l` for the symbol, the fixture
+name, the failing test — and put what it returns into the scope. Guessing from
+the shape of the repository looks efficient and is not: a plausible path list
+that omits one file produces a correct stop, not a smaller diff.
+
+The same applies to `brief_file` and `brief_sha256`: change them together or not
+at all. They are a pair, and the worker verifies the pair before doing anything,
+which is the behaviour we want.
