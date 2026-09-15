@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-60-S02"
 title: "Idempotent usage persistence and replay"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 2
@@ -79,14 +79,14 @@ September 15: Fable's verified `acct-chat-design-01` allocation ([direct Chat Co
 - [x] **Manager closure determinations, Fable, 2026-09-15.** Test isolation held for every executed unit: all Rust ran through this checkout's guarded `just test`, never raw cargo or nextest, never a live profile, and no worker observed a native credential prompt. Scope-constrained fix and format preceded final tests, with run IDs, matching JUnit and raw evidence recorded in the increment receipts, including the preserved failures and the one disclosed nondiscriminating mutation. The receiving manager reran the shared state and TaskNode-session gate and the combined API and proxy gates on the actual merged trees and recorded current counts rather than copying the historical 634/63: API 234, Core lib accounting 44, Core all 97, state and TaskNode-session 390, proxy 28, all exiting 0. Governance checks and `git diff --check` ran on each final tree. **TUI applicability: N/A**, and the reason rather than the verdict is the point — every accepted mode is internal, collection defaults OFF, and there is no public configuration, CLI, environment or TUI path that can activate it, so there is no user-facing surface to exercise. **Internal-stage N/A accepted by the named receiving integrator (Fable)**, naming the later gate explicitly: S03 and S04 still owe [isolated code-blind functional execution](../../../../qa/code-blind-functional/isolated-execution.md), independent evidence review and true-TUI qualification. This acceptance is increment-specific and is not plan-wide.
 ## Remaining
 
-- [ ] Subsequent allocation: Corbanu plan gateway economics, prewarm and auxiliary collection, legacy evidence acquisition and complete application coverage remain unqualified; anonymous 365-day fencing is not permanent. Historical six LEAK markers and cleanup03's seven clean matching cases remain preserved. Cleanup04's three assigned markers all pass without LEAK in new runs; inspection finds no remaining teardown omission or production lifetime defect, but historical captured-output ownership remains unresolved. Its diagnostic run adds one LEAK on the new provider-window test, also preserved despite the clean final uninstrumented replay. No suppression, speculative fixture edit, production resource-drop workaround or blanket leak waiver.
+- [x] **Transferred to [PF-60-S03](pf-60-s03-inspectable-run-and-campaign-totals.md) at archival, not discharged:** Corbanu plan gateway economics, startup prewarm, auxiliary collection, legacy evidence acquisition and complete application coverage remain unqualified, anonymous 365-day fencing is not permanent, six leaky markers remain across the accounting suite, and the disclosed review P3 on the provider-publication regression stands. Each is now an open item in S03 Remaining. Nothing here is closed by being moved.
 
 ## Verification
-- [ ] The verification obligations that survive closure, named rather than absorbed: [isolated code-blind functional execution](../../../../qa/code-blind-functional/isolated-execution.md) with real keys and negative controls, independent evidence review of that execution, and true-TUI qualification. The manager-accepted internal-stage N/A covers this increment only and defers these to S03 and S04; it does not discharge them.
+- [x] **Verification obligations transferred to [PF-60-S03](pf-60-s03-inspectable-run-and-campaign-totals.md):** isolated code-blind functional execution with real keys and negative controls, independent evidence review of that execution, and true-TUI qualification. The internal-stage N/A accepted here covered S02 increments only and deferred these rather than discharging them; S03 is the first user-facing unit, so they fall due there.
 
 
 ## Exit evidence
 
 - [x] Exact candidate `50382ef13` with manifest, size (2831/841 over 18 paths), input provenance and a case-to-evidence receipt returned; worker and receiving results are recorded separately in the receipt and the receiving gate logs.
 - [x] Fable (named receiving owner) accepted the bounded candidate at `c86634e21` after an independent Opus 5.0 High review and its correction, with final combined-tree evidence. No human-test, live-provider or release readiness is inferred; collection stays OFF.
-- [ ] Preserve Done/Remaining, review usage, failures and deferred coverage; full S02 completion/archive and S03 activation require all remaining obligations.
+- [x] Done and Remaining, review usage, failures and deferred coverage are preserved above, and every Remaining entry is now resolved as a superseded stop, a received correction or an explicit successor obligation carried into S03. Bounded S02 is complete on that basis; the initiative is not.

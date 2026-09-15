@@ -51,6 +51,7 @@ updated: 2026-09-11
 - [x] Travis requested user-selected ranges and grouping intervals; recorded below without starting S03 or extending retention.
 
 ## Remaining
+- [ ] **Inherited from PF-60-S02 at its archival, transferred rather than discharged:** Corbanu plan gateway economics, startup prewarm, auxiliary collection, legacy evidence acquisition and complete application coverage all remain unqualified, and anonymous 365-day fencing is not permanent. Six leaky markers remain across the accounting suite (two in `accounting::policy_tests`, three in `accounting_anthropic`, one in `accounting_chat_native_mismatched_endpoint`); the three diagnosed in `acct-cleanup-04` showed no concrete fixture defect and were deliberately left rather than given speculative cleanup. Also inherited: the one disclosed review P3, that the provider-publication regression pins ordering against contributor emission rather than against the state lock.
 
 - [ ] Render root versus descendant totals, provider/model breakdown, estimate/billed distinctions and freshness.
 - [ ] Add custom start/end filtering and selectable grouping intervals (proposed hour/day/week/month). Show requested range, effective coverage, timezone and bucket boundaries explicitly; use half-open start-inclusive/end-exclusive queries and reject reversed/invalid ranges.
@@ -62,6 +63,7 @@ updated: 2026-09-11
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 
 ## Verification
+- [ ] **Inherited from PF-60-S02:** [isolated code-blind functional execution](../../../../qa/code-blind-functional/isolated-execution.md) with real keys and negative controls, independent evidence review of that execution, and true-TUI qualification. S02 accepted an internal-stage N/A for its own increments only, which deferred these here; it did not discharge them. This sprint is the first user-facing unit, so they fall due.
 
 - [ ] Focused: From codex-rs: just test -p codex-tui usage
 - [ ] Integration: from repo root, `python3 docs/plans/check.py; python3 docs/sprints/check.py`; `git diff --check`.
