@@ -174,6 +174,56 @@ move to **Opus 5.0 High** (`claude-opus-5-plan`, provider `claude-plan`, effort
 - Dispatch defect fixed: worker START must be re-sent until the pane shows
   `Working (`; the dispatch helper now verifies that.
 
+### Update — September 15 06:00 UTC: three parallel workers; goal-mode operation
+
+Travis placed the manager in goal mode (poll subagents on an interval, advance
+all three workstreams, Slack only if human help is genuinely required). Until
+now the manager only ran when prompted: workers are independent TMUX processes
+and kept running, but the review→receive→dispatch loop stalled between prompts.
+Owner-daemon increment C (below) is the structural fix.
+
+- **Accounting** ([PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md)):
+  WS sampling allocation frozen (`f07a6e7ef`), reviewed by Opus 5.0 High (correct,
+  0.83; two P3s fixed in `5c80b88ce`) and **received at `73fc51b1a`**; sprint
+  repointed at `556da8be7`. First implementation attempt `acct-ws-impl-01`
+  **correctly STOPPED** before touching code: the frozen allocation requires a
+  manager-assigned exclusive build-target lease and none existed. Its receipt-only
+  commit `4364dd53e` (0 lines in all 17 allocated Rust files, no Rust tests) was
+  received at `94ea8948e`. Lease `acct-ws-20260915` has since been granted after
+  comparing current reservations and actual diffs — a dedicated `CARGO_TARGET_DIR`,
+  exclusive while no other Rust build is active — and `acct-ws-impl-02` is running.
+- **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
+  the last open Remaining item is the independent code-blind functional gate. Its
+  allocation (`8f5ed4270`, 472 lines: cases G01–G19 each with a negative control,
+  enforced executor boundary, tiered 64/96/128-call budgets) was reviewed correct;
+  three P3s fixed in `3dc6e6c5b` — most importantly the expanded case IDs must be
+  normalized into the design manifest before dispatch or
+  `qa/code-blind-functional/check.py` hard-fails the handoff even on a clean run.
+  Received at `47acb6458`; harness increment 1 is running.
+- **Task Node** ([PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)):
+  all three coordination tasks are **Rewarded** — evidence submitted and the
+  verification requests answered after Travis approved the records ("approve all",
+  Slack `Ev0C1N8EPLQ3`, feed rev 40). Both transport P3s closed in `e3b3b2da9`
+  (received `7e6728f1d`): `flush` now skips intent-bearing events, including the
+  crash case, and a test pins the real `send`→`post` idempotency wiring. Owner
+  daemon increment C ("adds effects": real ACK/START/RETURN lifecycle, verified
+  START, lease-based liveness, per-operation error isolation) is running.
+- **Dashboard access**: the read-only service rejected the tailnet hostname with
+  403 — a hardcoded Host allowlist (DNS-rebinding protection). `serve` now takes
+  a repeatable `--allow-host` accepting exact DNS names only (no wildcard, suffix
+  match, port or address literal), driven from `control.json.web_allowed_hosts`
+  so it survives republication (`efbbf1403`). Verified on the server: loopback 200,
+  tailnet host 200, `evil.invalid` 403. Remaining and **not** ours to fix: Serve
+  only answers on the tailnet IPv6 address because another service holds
+  `0.0.0.0:443`, and the node shared with Travis was `postfiat1`, not
+  `productionrpc`.
+- **Suite repair**: the YuE2 facilities merge updated one facility-count assertion
+  but missed the second, leaving the Python suite red on integration. Fixed in
+  `f65639e89`.
+- **Briefing ceiling**: manager cycles were failing `briefing_size_hold` every run.
+  45 consumed allocation stubs were shrunk to the minimum the coordinator requires
+  (frozen originals retained in the audit table), 21.8 KB → 15.2 KB.
+
 ### Update — September 14 13:15 UTC: overnight close-out
 
 - **Root cause of the blockers**: the Mac's login keychain locked overnight
