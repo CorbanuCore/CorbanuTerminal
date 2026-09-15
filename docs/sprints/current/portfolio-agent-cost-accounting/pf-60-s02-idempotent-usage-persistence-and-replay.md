@@ -70,14 +70,12 @@ September 14: Fable's accepted `acct-ws-freeze-01` mandate freezes the next same
 
 - [x] B1:11 compact-value tests and four existing selectors passed; combined237 state/73 Task Node tests and normal-library check passed atc8d46d709. One non-accounting LEAK marker disclosed in manager handoff; no leak-clean claim.
 
+- [x] Responses **WebSocket sampling** unit received at `c86634e21`: combined-mode sampling identity with one request/predecessor chain across WS, reconnect and HTTP fallback; durable admission at the actual pump send boundary with immutable cached-route provenance, guard/no-redirect ordering and cancellation/failure latches; numeric decoding reused before terminal conversion with all four literal goldens; all 36 frozen cases (8 API + 8 Core + 20 native) implemented and executed. Receiving gates on the merged tree: codex-api 224/224, WS native 20/20, Core accounting 35/35, state + TaskNode-session 390/390, responses proxy 28/28. 18 paths, 2831 total / 841 non-test lines inside the 3000/1050 target. Independent review found the redirect-latch case non-discriminating; closed in `50382ef13` by deleting the latch arm (case fails, run `d4d6c364`) and restoring it (case passes, run `cccb60ec`). Two attempts stopped correctly before touching code (missing build lease, base divergence) and their receipts are retained. [Allocation](../../../research/agent-cost-accounting/responses-websocket-allocation.md), [receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/responses-websocket-increment.md).
+
 ## Remaining
 
-- [ ] Implement combined-mode sampling identity and lazy binding; retain one request/predecessor chain across WS, reconnect and HTTP fallback, preserving OFF/HTTP-only behavior.
-- [ ] Add durable admission at the actual pump send boundary, immutable cached-route provenance, guards/no-redirect ordering and cancellation/failure latches within the allocated files.
-- [ ] Reuse numeric decoding before terminal conversion; preserve unknown-not-zero evidence, response-local positions and original-price snapshots with all four literal goldens.
-- [ ] Implement and execute the frozen 8 API + 8 Core + 20 native tests and every vector; retain HTTP/Anthropic, WS/retry/prewarm/incremental, role, guard and transport-policy regressions.
-- [ ] Record receipt, actual outputs, counterexamples and limitations; return exact candidate for independent Fable review and receiving. Stop on changed scope.
-- [ ] Subsequent allocation: Chat/Corbanu, prewarm and auxiliary collection, legacy evidence acquisition and complete application coverage remain unqualified; anonymous365-day fencing is not permanent owner revocation or physical/cross-DB erasure. S03 stays draft.
+- [ ] Two native vectors remain only partially proven by the WS unit and need scoped fixture work or an explicit manager disposition: a stage-one binding is not injected into an already-running combined WS sampling dispatch, and the new native fixture does not emit the full safety/model-verification/moderation metadata matrix.
+- [ ] Subsequent allocation: Chat/Corbanu, prewarm and auxiliary collection, legacy evidence acquisition and complete application coverage remain unqualified; anonymous 365-day fencing is not permanent.
 
 ## Verification
 
@@ -90,6 +88,6 @@ September 14: Fable's accepted `acct-ws-freeze-01` mandate freezes the next same
 
 ## Exit evidence
 
-- [ ] Return exact commit/digest, manifest, size, input provenance and increment receipt with case-to-evidence mapping; distinguish worker from receiving results.
-- [ ] Named receiving owner accepts the bounded candidate after independent review and final combined-tree evidence; no human-test/live-provider/release readiness inferred.
+- [x] Exact candidate `50382ef13` with manifest, size (2831/841 over 18 paths), input provenance and a case-to-evidence receipt returned; worker and receiving results are recorded separately in the receipt and the receiving gate logs.
+- [x] Fable (named receiving owner) accepted the bounded candidate at `c86634e21` after an independent Opus 5.0 High review and its correction, with final combined-tree evidence. No human-test, live-provider or release readiness is inferred; collection stays OFF.
 - [ ] Preserve Done/Remaining, review usage, failures and deferred coverage; full S02 completion/archive and S03 activation require all remaining obligations.
