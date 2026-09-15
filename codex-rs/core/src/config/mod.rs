@@ -650,6 +650,11 @@ pub enum AccountingMode {
         scope: uuid::Uuid,
         approved_endpoint: String,
     },
+    /// Internal direct API-key Chat sampling; no public activation.
+    DirectOpenAiChat {
+        scope: uuid::Uuid,
+        approved_endpoint: String,
+    },
     /// Internal sampling-only Responses accounting across WebSocket and HTTP.
     DirectOpenAiResponses {
         scope: uuid::Uuid,

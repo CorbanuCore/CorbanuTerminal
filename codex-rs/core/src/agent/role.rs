@@ -300,6 +300,11 @@ mod reload {
             {
                 Some(codex_model_provider_info::WireApi::Responses)
             }
+            crate::config::AccountingMode::DirectOpenAiChat { .. }
+                if config.model_provider_id == "openai" =>
+            {
+                Some(codex_model_provider_info::WireApi::Chat)
+            }
             _ => None,
         };
         if next_config.model_provider_id == config.model_provider_id

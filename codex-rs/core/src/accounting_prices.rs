@@ -93,8 +93,21 @@ pub(super) fn responses_original(
     if !matches!(tier, None | Some("default")) {
         return Ok(Vec::new());
     }
+    openai_original(model, scope, accepted_at, "openai-responses-api-key-bundled-v1")
+}
+
+pub(super) fn chat_original(model: &str, scope: Uuid, accepted_at: i64) -> anyhow::Result<Vec<Snapshot>> {
+    openai_original(model, scope, accepted_at, "openai-chat-api-key-bundled-v1")
+}
+
+fn openai_original(model: &str, scope: Uuid, accepted_at: i64, source: &str) -> anyhow::Result<Vec<Snapshot>> {
     let catalog = codex_models_manager::bundled_models_response()?;
-    let mut rows = catalog.models.iter().filter(|row| row.slug == model);
+    openai_rows(&catalog.models, model, scope, accepted_at, source)
+}
+
+fn openai_rows(rows: &[codex_protocol::openai_models::ModelInfo], model: &str, scope: Uuid,
+    accepted_at: i64, source: &str) -> anyhow::Result<Vec<Snapshot>> {
+    let mut rows = rows.iter().filter(|row| row.slug == model);
     let Some(row) = rows.next() else {
         return Ok(Vec::new());
     };
@@ -112,14 +125,18 @@ pub(super) fn responses_original(
     if provider_id != "openai" {
         return Ok(Vec::new());
     }
-    responses_project(model, scope, billing, accepted_at)
+    openai_project(model, scope, billing, accepted_at, source)
 }
 
+#[cfg(test)]
 fn responses_project(
-    model: &str,
-    scope: Uuid,
-    billing: &ModelBilling,
-    accepted_at: i64,
+    model: &str, scope: Uuid, billing: &ModelBilling, accepted_at: i64,
+) -> anyhow::Result<Vec<Snapshot>> {
+    openai_project(model, scope, billing, accepted_at, "openai-responses-api-key-bundled-v1")
+}
+
+fn openai_project(
+    model: &str, scope: Uuid, billing: &ModelBilling, accepted_at: i64, source: &str,
 ) -> anyhow::Result<Vec<Snapshot>> {
     let (input, output, read) = match billing {
         ModelBilling::Metered {
@@ -156,7 +173,7 @@ fn responses_project(
         accepted_at,
     )?;
     let source = serde_json::to_vec(&(
-        "openai-responses-api-key-bundled-v1",
+        source,
         "openai",
         model,
         "api_key",
