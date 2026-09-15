@@ -1,4 +1,153 @@
-# RETURN — decision-threading-03: separate threads with fixed pointers
+# RETURN — decision-threading-04: retryable pre-admission refusal
+
+Status: scoped correction of the accepted separate-thread design; offline
+implementation return to the Fable manager. Earlier rejected designs and all
+prior evidence remain below.
+
+## Allocation and authority
+
+- Worker: `gpt-6-astra`, effort `high`; action `decision-threading-04`.
+- Allocation digest:
+  `340316bd2a0657ebc68a0305aaee624a198fd6886b8463fa8654edd7da00f2d3`.
+- Claim: `2a8d82ab-b50c-45b3-b212-548eb5a18408`.
+- First read and SHA-256 verification:
+  `/private/tmp/fmgr.Q1SIYZ/briefs/decision-threading-04.json`,
+  `fb8ff89bdc9260e70765d56ff754213a3e7fc8b45ebbe563e2caf5bdb850cfd4`.
+- Base: `776dac8dc2ae33e685a5a96e4b5301cf00364804`; branch:
+  `bootstrap/decision-threading-20260915`; worktree:
+  `/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-decision-threading-20260915`.
+- Classification remains a correction within active initiative
+  `initiative-delivery-control`, PF-80, sprint PF-80-S01 (`in_progress`).
+  Product heading: **Internal delivery control — TO BUILD**; excerpts:
+  “actual Slack reply/decision/agent acknowledgment” and
+  “durable event dispatch, acknowledgments and watchdog”.
+- The explicit allocation supplies worker coordinates and exact file scope.
+  Shared plan/sprint coordinates still name the manager checkout; their
+  reconciliation remains manager-owned and outside this worker's write scope.
+  The sprint checker passed before editing.
+
+## Independent review and dispositions
+
+Read `/private/tmp/fmgr.Q1SIYZ/dthr3-review.json` before implementation.
+The Opus 5.0 High review accepted the separate-thread design and found one
+blocking P2 plus a P3 payload issue. This correction adds no new review pass or
+approval claim.
+
+**P2 — corrected.** The transport now reports `NotDispatched` only when a
+pre-dispatch exception is followed by a locked journal read proving that this
+attempt has no `posts` entry. Root/details and notice senders preserve
+`pending` for that exception. The request remains stable and can be tried by
+a later admitted send. A recorded attempt, failed post-write fence check or
+unreadable journal retains the existing fail-closed uncertainty behavior.
+Post-dispatch exceptions still require positive reconciliation and never cause
+an automatic retry.
+
+The reconcile branch deliberately retains ordinary send admission. It may
+prepare the pointer and check admission after binding the follower's own thread,
+but held/sessionless recovery makes no pointer POST and leaves the slot pending.
+It does not widen `allow_hold`, assume a session or bypass either fence. A hold
+arising between the initial gate and the locked dispatch check is handled the
+same way. Parent rows and routes retain their accepted ownership semantics.
+
+**P3 — corrected.** The native `message_mention` now has exactly `type`,
+`channel_id` and `message_ts`; the unsupported custom `text` is removed.
+Fixed surrounding text and the plain-text fallback remain. The loopback SDK
+test asserts the actual transmitted element. This is schema/payload evidence,
+not a live Slack acceptance claim.
+
+The optional `invalid_blocks` reclassification was deliberately not taken:
+this correction removes the malformed field and keeps all existing transport
+error classifications identical, including auth/channel/rate-limit behavior.
+An unexpected `invalid_blocks` response therefore still requires investigation
+under the existing uncertainty policy; no new rejection or retry policy is
+introduced here.
+
+## Pre-fix failure proof
+
+All five new cases were first run against unchanged production files at
+`776dac8dc`: **5 tests, 5 failures, 5.375s, exit 1**. At that point
+`git diff --stat` showed only the new manager tests.
+
+A first corrected focused run was **8 tests, 3 failures, 7.801s, exit 1**.
+All retry/payload assertions passed; the three recovery tests then reached an
+incorrect test-only expectation of project status `active`. The existing
+status contract calls the recovered state `last-verified`; the assertions
+were corrected accordingly. This failed attempt is retained, not called a pass.
+
+The final test definitions were then replayed with production definitions
+loaded in memory from the exact base using `git show`: **5 tests, 5 failures,
+5.354s, exit 1**. No working-tree production file was reverted or overwritten.
+
+| Final new test in `test_decision_manager.ManagerTests` | Exact pre-fix failure | Corrected expectation |
+| --- | --- | --- |
+| `test_cli_reconcile_under_hold_leaves_pointer_pending_until_admitted_send` | `'uncertain' != 'pending'` | Pending, no pointer attempt, later qualified send posts once |
+| `test_cli_reconcile_without_session_leaves_pointer_pending_until_admitted_send` | `'uncertain' != 'pending'` | Same behavior with no listener session and no hold |
+| `test_cli_reconcile_held_and_sessionless_leaves_pointer_pending_until_admitted_send` | `'uncertain' != 'pending'` | Same behavior with both conditions |
+| `test_pointer_pre_admission_refusal_never_writes_uncertain` | Captured writes were `['sending', 'uncertain', 'uncertain']` | A hold after the first gate never persists uncertain; later send posts once |
+| `test_pointer_message_mention_contains_only_documented_fields` | Actual element had extra `text: Open follow-up thread` | Actual SDK request contains exactly the three documented fields |
+
+Reproduction: use the isolated SDK interpreter/environment below with `-B -c`
+and this driver, listing the five test names from the table:
+
+```python
+import importlib, subprocess, unittest, sys
+base = "776dac8dc2ae33e685a5a96e4b5301cf00364804"
+for name in ("decision_alerts", "slack_transport", "decision_manager"):
+    module = importlib.import_module(name)
+    path = "scripts/initiative_control/" + name + ".py"
+    source = subprocess.check_output(["git", "show", base + ":" + path], text=True)
+    exec(compile(source, base + ":" + path, "exec"), module.__dict__)
+names = [
+    "test_cli_reconcile_under_hold_leaves_pointer_pending_until_admitted_send",
+    "test_cli_reconcile_without_session_leaves_pointer_pending_until_admitted_send",
+    "test_cli_reconcile_held_and_sessionless_leaves_pointer_pending_until_admitted_send",
+    "test_pointer_pre_admission_refusal_never_writes_uncertain",
+    "test_pointer_message_mention_contains_only_documented_fields",
+]
+suite = unittest.defaultTestLoader.loadTestsFromNames(
+    ["test_decision_manager.ManagerTests." + name for name in names])
+result = unittest.TextTestRunner(verbosity=2).run(suite)
+sys.exit(not result.wasSuccessful())
+```
+
+## Final-tree verification
+
+Read `docs/development/test-isolation.md` before any test. Tests use disposable
+private state, synthetic credential strings and local SDK HTTP fixtures.
+No live profile or credential store was used, no native credential prompt
+occurred, and no live Slack message or push was sent.
+
+Exact full SDK command:
+
+```sh
+env -u CODEX_HOME -u CORBANU_HOME -u PFTERMINAL_HOME TMPDIR=/private/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts/initiative_control:/Volumes/CorbanuDrive/Corbanu/.codex-work/initiative-control.oGQGyA/venv/lib/python3.14/site-packages /Volumes/CorbanuDrive/Corbanu/.codex-work/slack-sdk-test.Ob3i5O/venv/bin/python -B -m unittest discover -s scripts/initiative_control -p '*test*.py'
+```
+
+Full final-tree SDK result: **623 tests passed in 336.778s, exit 0**, no
+failures, errors or skips. All five new cases passed, as did the existing
+post-dispatch uncertainty, receipt reconciliation, auth/channel/rate-limit and
+thread-attribution regressions. Synthetic HTTP 429/500 cleanup ResourceWarnings
+were retained. Production and test files were unchanged throughout the run;
+only this QA record was completed afterward.
+Governance: `python3 docs/plans/check.py` passed, **3/3 active plans**;
+`python3 docs/sprints/check.py` passed, **116 current / 126 archived**;
+`git diff --check` passed. These validate manager records, not completed
+reconciliation of this worker's coordinates.
+
+## Handoff boundary
+
+The Fable manager owns final independent review, receiving-tree integration
+and shared ledger reconciliation. Applicable code-blind design, isolated
+execution and independent evidence review, live Slack/link-navigation proof,
+and human acceptance remain open before an unqualified functional handoff.
+This worker has not declared an internal-only N/A approved, human-test
+readiness, sprint completion, release qualification or benchmark success.
+No Rust/TUI runtime changed; Rust tests and TensorCash/Isometric release
+workflows were outside this correction allocation.
+
+---
+
+# Historical RETURN — decision-threading-03: separate threads with fixed pointers
 
 Status: offline implementation candidate for manager review and integration.
 The two earlier candidates below were **rejected**, and their shared-thread

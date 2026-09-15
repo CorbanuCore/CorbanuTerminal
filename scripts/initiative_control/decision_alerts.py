@@ -241,6 +241,10 @@ def check_receipt(request, evidence):
     return copy.deepcopy(evidence)
 
 
+class NotDispatched(d.Invalid):
+    """Transport proved no durable POST attempt exists; admission may be retried."""
+
+
 class Rejected(Exception):
     """Injected transport guarantees this attempt was NOT accepted remotely."""
 
@@ -272,6 +276,8 @@ def send(store, key, current_identity, exchange, cancelled=False):
                 try:
                     state["receipt"] = check_receipt(state["request"], exchange(copy.deepcopy(state["request"])))
                     state["state"] = "sent"
+                except NotDispatched:
+                    state["state"] = "pending"
                 except Rejected:
                     state["state"] = "failed"
                 except Exception:
@@ -328,7 +334,7 @@ def notice(store, key, kind, basis, current_identity, exchange):
             blocks = [dict(type="rich_text", elements=[dict(type="rich_text_section", elements=[
                 dict(type="text", text=text),
                 dict(type="message_mention", channel_id=row["intent"]["identity"]["channel"],
-                     message_ts=slack_ts(thread), text="Open follow-up thread")])])]
+                     message_ts=slack_ts(thread))])])]
             text += "Open follow-up thread."
             thread = target["parent"]["receipt"]["ts"]
         slot = d.digest([key, kind, basis])
@@ -347,6 +353,8 @@ def notice(store, key, kind, basis, current_identity, exchange):
             store.write("alerts", rows)
             try:
                 state.update(receipt=check_receipt(state["request"], exchange(copy.deepcopy(state["request"]))), state="sent")
+            except NotDispatched:
+                state["state"] = "pending"
             except Rejected:
                 state["state"] = "failed"
             except Exception:

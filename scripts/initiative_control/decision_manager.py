@@ -507,6 +507,8 @@ def main(argv=None, *, credentials=None, observe_owner=None, stdin=None, stdout=
             row = a.inspect(store, key)
             if phase == "details" and row["parent"]["state"] == row["details"]["state"] == "sent":
                 transport.bind_alert(key, row)
+                # Normal send admission still applies: held/sessionless recovery
+                # retains a pending pointer until a later admitted send.
                 a.send(store, key, transport.binding, transport.exchange)
             result = dict(reconciled=True)
         else:

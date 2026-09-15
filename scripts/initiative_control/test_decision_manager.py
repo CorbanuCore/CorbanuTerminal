@@ -279,8 +279,7 @@ class ManagerTests(fixtures.LiveFixture):
         self.assertEqual(pointer["request"]["payload"]["text"],
             "A follow-up decision has been raised. Find it in its own thread: Open follow-up thread.")
         mention = pointer["request"]["payload"]["blocks"][0]["elements"][0]["elements"][1]
-        self.assertEqual(mention, dict(type="message_mention", channel_id="CTEST", message_ts="100.000003",
-                                      text="Open follow-up thread"))
+        self.assertEqual(mention, dict(type="message_mention", channel_id="CTEST", message_ts="100.000003"))
         self.assertEqual(self.calls[-1][1]["blocks"], pointer["request"]["payload"]["blocks"])
         self.assertEqual(self.store.read("alerts")[self.key], original)
         a.send(a.Store(self.root), key, PIN, lambda _: self.fail("duplicate pointer"))
@@ -410,6 +409,91 @@ class ManagerTests(fixtures.LiveFixture):
         self.assertEqual(s.drain(self.store), 1)
         self.assertFalse(m.finish(self.store, self.feed_root, handoff, self.transport, lambda: OWNER, NOW)["work_ready"])
         self.assertEqual(d.load_fixture(self.feed_root, NOW)["decisions"][0], feed["decisions"][0])
+
+    def assert_reconcile_defers_pointer(self, *, held, sessionless):
+        key, row = self.uncertain_follower()
+        original = copy.deepcopy(self.store.read("alerts")[self.key])
+        if sessionless:
+            self.owner.close()
+        with s.locked(self.store) as journal:
+            if sessionless:
+                journal["lifecycle"]["session"] = None  # Synthetic sessionless recovery fixture.
+            journal["hold"] = "outage-gap" if held else None
+            self.store.write("transport", journal)
+        posts = copy.deepcopy(self.store.read("transport")["posts"])
+        with (tempfile.TemporaryFile(mode="w+") as source,
+              tempfile.TemporaryFile(mode="w+") as sink,
+              patch("slack_sdk.WebClient", side_effect=lambda **kw: fixtures.WebClient(base_url=self.endpoint, **kw))):
+            source.write(json.dumps(dict(binding=PIN, key=key, phase="details")) + "\n")
+            source.seek(0)
+            result = m.main(["reconcile", "--store", str(self.root), "--live"],
+                            stdin=source, stdout=sink, credentials=lambda: ("fixture-bot", "fixture-app"), now=lambda: NOW)
+        self.assertEqual(result, dict(reconciled=True))
+        slot = d.digest([key, "follow-up", self.key])
+        pointer = a.inspect(self.store, key)["notices"][slot]
+        self.assertEqual(pointer["state"], "pending")
+        self.assertIsNone(pointer["receipt"])
+        self.assertNotIn(slot, self.store.read("transport")["posts"])
+        self.assertEqual(set(self.store.read("transport")["posts"]), set(posts))
+        self.assertEqual(len(self.messages), 4)
+        self.assertEqual(self.store.read("transport")["routes"][row["parent"]["receipt"]["ts"]]["alert"], key)
+        self.assertEqual(self.store.read("alerts")[self.key], original)
+        if sessionless:
+            self.owner = s.Session(self.store)
+            self.addCleanup(self.owner.release)
+            self.owner.update("connected")
+        self.review_gap()
+        sent = a.send(a.Store(self.root), key, PIN, self.transport.exchange)
+        self.assertEqual(sent["notices"][slot]["state"], "sent")
+        self.assertEqual(sent["notices"][slot]["request"], pointer["request"])
+        a.send(a.Store(self.root), key, PIN, lambda _: self.fail("duplicate deferred pointer"))
+        self.assertEqual(len(self.messages), 5)
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "last-verified")
+        self.assertEqual(self.store.read("alerts")[self.key], original)
+
+    def test_cli_reconcile_under_hold_leaves_pointer_pending_until_admitted_send(self):
+        self.assert_reconcile_defers_pointer(held=True, sessionless=False)
+
+    def test_cli_reconcile_without_session_leaves_pointer_pending_until_admitted_send(self):
+        self.assert_reconcile_defers_pointer(held=False, sessionless=True)
+
+    def test_cli_reconcile_held_and_sessionless_leaves_pointer_pending_until_admitted_send(self):
+        self.assert_reconcile_defers_pointer(held=True, sessionless=True)
+
+    def test_pointer_pre_admission_refusal_never_writes_uncertain(self):
+        key, row = self.uncertain_follower()
+        a.reconcile(self.store, key, "details", self.transport.reconcile(row["details"]["request"]))
+        slot = d.digest([key, "follow-up", self.key])
+        gate = self.transport.gate
+        def hold_after_gate():
+            admitted = gate()
+            with s.locked(self.store) as journal:
+                journal["hold"] = "outage-gap"
+                self.store.write("transport", journal)
+            return admitted
+        writes = []
+        write = self.store.write
+        def capture(name, value):
+            if name == "alerts" and slot in value[key].get("notices", {}):
+                writes.append(value[key]["notices"][slot]["state"])
+            write(name, value)
+        with patch.object(self.transport, "gate", side_effect=hold_after_gate), patch.object(self.store, "write", side_effect=capture):
+            row = a.send(self.store, key, PIN, self.transport.exchange)
+        self.assertNotIn("uncertain", writes)
+        self.assertEqual(row["notices"][slot]["state"], "pending")
+        self.assertNotIn(slot, self.store.read("transport")["posts"])
+        self.assertEqual(len(self.messages), 4)
+        self.review_gap()
+        self.assertEqual(a.send(self.store, key, PIN, self.transport.exchange)["notices"][slot]["state"], "sent")
+        a.send(self.store, key, PIN, lambda _: self.fail("duplicate pointer"))
+        self.assertEqual(len(self.messages), 5)
+
+    def test_pointer_message_mention_contains_only_documented_fields(self):
+        key = self.follower()
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        mention = self.calls[-1][1]["blocks"][0]["elements"][0]["elements"][1]
+        self.assertEqual(mention, dict(type="message_mention", channel_id="CTEST",
+                                      message_ts=row["parent"]["receipt"]["ts"]))
 
     def test_cli_reconcile_binds_own_thread_posts_pointer_and_cannot_repoint_parent(self):
         key, row = self.uncertain_follower()

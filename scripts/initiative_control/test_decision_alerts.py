@@ -87,8 +87,7 @@ class AlertTests(SlackFixture):
             thread_ts="100.000001", mrkdwn=False, unfurl_links=False, unfurl_media=False,
             blocks=[dict(type="rich_text", elements=[dict(type="rich_text_section", elements=[
                 dict(type="text", text=fixed),
-                dict(type="message_mention", channel_id="CTEST", message_ts="200.000001",
-                     text="Open follow-up thread")])])]))
+                dict(type="message_mention", channel_id="CTEST", message_ts="200.000001")])])]))
         self.assertEqual(sent["threading"], dict(mode="pointer", source_alert=self.key, reason=None))
         self.assertNotEqual(sent["parent"], original["parent"])
         self.assertEqual(list(sent["notices"]), [d.digest([key, "follow-up", self.key])])

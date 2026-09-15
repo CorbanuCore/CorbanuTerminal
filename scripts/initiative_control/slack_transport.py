@@ -484,21 +484,29 @@ class Transport:
         return pin
 
     def exchange(self, request):
-        admitted = self.gate()["lifecycle"]
-        d.require(request["identity"] == self.binding and request["payload_digest"] == d.digest(request["payload"]))
         attempt = request["attempt"]
-        with locked(self.store) as value:
-            d.require(observe_session_locked(self.store, value) == (admitted["session"]["id"], admitted["epoch"]))
-            fenced(self.store, value)
-            d.require(value["hold"] is None)
-            if attempt in value["posts"]:
-                saved = value["posts"][attempt]
-                d.require(saved["request"] == request and saved["receipt"] is not None)
-                return copy.deepcopy(saved["receipt"])
-            value["posts"][attempt] = dict(request=copy.deepcopy(request), receipt=None, retry_after=None)
-            self.store.write("transport", value)
-            d.require(observe_session_locked(self.store, self.store.read("transport")) == (admitted["session"]["id"], admitted["epoch"]))
-            fenced(self.store, value)  # A slow durable request write cannot authorize a later stale POST.
+        try:
+            admitted = self.gate()["lifecycle"]
+            d.require(request["identity"] == self.binding and request["payload_digest"] == d.digest(request["payload"]))
+            with locked(self.store) as value:
+                d.require(observe_session_locked(self.store, value) == (admitted["session"]["id"], admitted["epoch"]))
+                fenced(self.store, value)
+                d.require(value["hold"] is None)
+                if attempt in value["posts"]:
+                    saved = value["posts"][attempt]
+                    d.require(saved["request"] == request and saved["receipt"] is not None)
+                    return copy.deepcopy(saved["receipt"])
+                value["posts"][attempt] = dict(request=copy.deepcopy(request), receipt=None, retry_after=None)
+                self.store.write("transport", value)
+                d.require(observe_session_locked(self.store, self.store.read("transport")) == (admitted["session"]["id"], admitted["epoch"]))
+                fenced(self.store, value)  # A slow durable request write cannot authorize a later stale POST.
+        except Exception:
+            # Only positive absence permits retry. Existing attempts or an unreadable
+            # journal retain uncertainty, including a failed post-write fence check.
+            with locked(self.store) as value:
+                if attempt not in value["posts"]:
+                    raise a.NotDispatched() from None
+            raise
         try:
             response = self.web().chat_postMessage(channel=self.binding["channel"],
                 client_msg_id=str(uuid.UUID(attempt[:32])), **request["payload"])
