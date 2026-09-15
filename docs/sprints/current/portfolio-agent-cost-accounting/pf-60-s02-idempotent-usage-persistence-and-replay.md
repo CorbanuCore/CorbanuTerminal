@@ -5,11 +5,11 @@ status: in_progress
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 2
-owner: "Astra High accounting Responses-WebSocket lane (Fable manager receiving)"
-parallel_lane: "accounting-responses-websocket"
-write_scope: "codex-rs/core/src/config/mod.rs, codex-rs/core/src/agent/role.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/client.rs, codex-rs/core/src/accounting.rs, codex-rs/core/src/accounting_responses.rs, codex-rs/core/src/accounting_transport.rs, codex-rs/core/src/accounting_websocket.rs, codex-rs/core/src/accounting_websocket_tests.rs, codex-rs/codex-api/src/lib.rs, codex-rs/codex-api/src/endpoint/responses_websocket.rs, codex-rs/codex-api/src/endpoint/responses_websocket_accounting.rs, codex-rs/codex-api/src/endpoint/responses_websocket_accounting_tests.rs, codex-rs/core/tests/suite/mod.rs, codex-rs/core/tests/suite/accounting_responses_ws.rs, codex-rs/core/tests/suite/accounting_responses_ws_recovery.rs, codex-rs/core/tests/suite/accounting_responses_ws_support.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/responses-websocket-increment.md"
-integration_gate: "Fable manager receives exact Responses WS sampling/fallback candidate: one independent Fable review plus necessary correction, 36 new cases and retained regressions, shared state/TaskNode-session and combined API/proxy gates on receiving tree; actual counts and failures retained. S02 open, S03 dependent, collection OFF."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-acct-ws-20260914"
+owner: "Astra High accounting direct-Chat lane (Fable manager receiving)"
+parallel_lane: "accounting-chat-completions"
+write_scope: "codex-rs/core/src/config/mod.rs, codex-rs/core/src/agent/role.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/client.rs, codex-rs/core/src/accounting.rs, codex-rs/core/src/accounting_chat.rs, codex-rs/core/src/accounting_chat_tests.rs, codex-rs/core/src/accounting_prices.rs, codex-rs/core/src/accounting_prices_tests.rs, codex-rs/core/src/accounting_transport.rs, codex-rs/codex-api/src/lib.rs, codex-rs/codex-api/src/endpoint/chat_completions.rs, codex-rs/codex-api/src/endpoint/chat_accounting.rs, codex-rs/codex-api/src/endpoint/chat_accounting_tests.rs, codex-rs/core/tests/suite/mod.rs, codex-rs/core/tests/suite/accounting_chat.rs, codex-rs/core/tests/suite/accounting_chat_recovery.rs, codex-rs/core/tests/suite/accounting_chat_support.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/chat-dispatch-increment.md"
+integration_gate: "Fable manager receives the exact direct Chat Completions sampling candidate: one independent Opus 5.0 High review plus necessary correction, 38 new cases and retained regressions, shared state/TaskNode-session and combined API/proxy gates on the receiving tree; actual counts and failures retained. S02 open, S03 dependent, collection OFF."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-chat-20260915"
 branch: "bootstrap/acct-ws-20260914"
 base_commit: "73fc51b1a73ec6304fb51603b6fb46ee9f61b56b"
 depends_on: "PF-60-S01"
@@ -23,8 +23,8 @@ September 15: Fable's verified `acct-chat-design-01` allocation ([direct Chat Co
 
 ## Execution mandate
 
-- Execute [Responses WS sampling and HTTP fallback](../../../research/agent-cost-accounting/responses-websocket-allocation.md): exactly 18 files, target 3000 total/1050 non-test, STOP before exceeding 3300/1200 or adding a path; default OFF.
-- Preserve the separate HTTP-only mode; startup prewarm accounting is out of scope, connection reuse preserved. Chat/Corbanu and auxiliary coverage remain deferred with reasons in the allocation.
+- Execute [direct Chat Completions sampling](../../../research/agent-cost-accounting/chat-dispatch-allocation.md): exactly 19 files, 38 named tests, target 3000 total/1150 non-test, STOP before exceeding 3300/1300 or adding a path; default OFF.
+- Direct OpenAI API-key Chat wire only. The Corbanu plan gateway and its economics, startup prewarm, auxiliary collection and both disclosed non-blocking P3s remain deferred with reasons in the allocation. The Responses HTTP and WebSocket units are consumed history; preserve their modes and tests unchanged.
 - Existing exclusions remain: no public activation, price/catalog changes, historical rebilling, prompt collection, Plan-allowance restoration or allowance-to-cash conversion.
 
 ## Plan linkage
