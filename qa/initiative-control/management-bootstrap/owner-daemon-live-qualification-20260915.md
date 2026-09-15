@@ -196,6 +196,14 @@ not verified or accepted. Full tables and process provenance are retained in
 
 ## Four live safety demonstrations
 
+> **Concurrency disclosure (independent review, September 15).** The 301-second
+> SDK suite ran from 08:18:14Z to 08:23:15Z, overlapping every live tick
+> (08:18:15Z–08:21:40Z) including the real, unmocked five-second lease deadline.
+> The suite used a separate `Q/suite-home` and PYTHONPATH and nothing observed is
+> invalidated — the expiry case was expected to expire — but a receipt that leans
+> on a real 5 s deadline should record that the host was simultaneously running a
+> full test suite. Future timing-sensitive lanes should run unloaded.
+
 1. **Prepared non-worker actions remain untouched — PASS.** Every fixture has
    security/accounting wait actions. Across healthy ACTIVE ticks, including the
    completed lifecycle, their full Coordinator records remain identical and
@@ -209,6 +217,17 @@ not verified or accepted. Full tables and process provenance are retained in
    `alive`; the expired lease is dead for dispatch purposes and never renewed.
    See `Q/expiry/summary.json` for the simultaneous alive observation and expired
    owner process record. No ACK or inference was needed for this timeout case.
+
+   **Scope of this demonstration (independent review, September 15).** This lane
+   used the unmodified adapter, so its worker was still sitting at the same
+   update/trust startup checkpoint documented for the `live` lane: the summary
+   records `ready:false` and the same generic `pane_digest` (`56442b5d…`) as the
+   never-started `uncertain` worker, with no session, thread or ack fields. What
+   is therefore proven is **"the lease deadline elapsed while the worker was
+   never ready"**, not "the lease expired on a worker that was actually running a
+   turn". The daemon behaviour observed is real and is the behaviour we want, but
+   expiry against a genuinely mid-turn worker is **not yet demonstrated** and is
+   added to the startup-fix follow-up below.
 3. **Kill after durable RETURN — PASS in provisioned lane.** At revision 7 the
    Coordinator still said `running`, while the real completed rollout already
    contained RETURN. At 08:21:27Z the harness sent SIGKILL to the identified PID
