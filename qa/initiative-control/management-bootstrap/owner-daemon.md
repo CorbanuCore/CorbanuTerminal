@@ -256,3 +256,23 @@ No isolated TMUX retry was needed. The sprint checker passed (116 current,
 environment/interpreter with `-B -m unittest test_owner_daemon
 test_owner_tmux.TmuxTests.test_daemon_records_durable_return_after_pane_is_killed`.
 Only the four allocated files listed by the final diff changed.
+
+## Receiving verification — September 15, 2026
+
+Increment C and its corrections were received together at `572356137`. The first
+verification attempt failed for two independent reasons, both resolved before
+acceptance:
+
+- A manager-side regression in `manager_cycle.briefing`. `manager_cycle_test.BriefingSizeTests`
+  encodes the contract that `evidence_omissions` enumerates every reference whose
+  body was not expanded; a filter that skipped digests already visible on the
+  retained record broke six of those cases. Reverted in `d0d93c75a`: the list
+  reports what the manager cannot read, not which strings happen to appear.
+- The receiving harness ran with the default macOS `TMPDIR` under `/var/folders`,
+  whose length exceeds the 104-byte Unix socket path limit, so 27 owner-daemon
+  lifecycle cases failed with `socket_path_too_long`. Workers always run under a
+  short private `TMPDIR`, which is why the worker observed 589 green on the same
+  code. **Receiving test commands must pin `TMPDIR=/private/tmp`.**
+
+Re-verified on the merged tree: **591 passed in 299.284s**. The daemon remains OFF
+with no activation record; live-tick qualification stays manager and Travis gated.
