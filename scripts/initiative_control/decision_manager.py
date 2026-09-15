@@ -32,8 +32,17 @@ def utc_now():
 
 
 def validate_status(value):
-    extra = [key for key in ("unacknowledged_answers", "new_thread_fallbacks") if key in value]
-    d.shape(value, "schema enabled state last_verified watermark pending " + " ".join(COUNTS + extra))
+    extra = [key for key in ("unacknowledged_answers", "new_thread_fallbacks", "fence_gap", "pending_pointers", "listener_exits") if key in value]
+    d.shape(value, "schema enabled state last_verified watermark pending " + " ".join(COUNTS + extra)
+            + (" last_listener_exit" if "last_listener_exit" in value else ""))
+    event = value.get("last_listener_exit")
+    if event is not None:
+        d.shape(event, "kind at returncode restarts fence_count ingress_count fence_gap epoch restart")
+        d.require(event["kind"] == "child-exit" and type(event["returncode"]) is int)
+        d.stamp(event["at"])
+        d.require(event["restart"] in ("pending", "held"))
+        d.require(all(type(event[k]) is int and event[k] >= 0 for k in ("restarts", "ingress_count", "epoch")))
+        d.require(all(event[k] is None or type(event[k]) is int and event[k] >= 0 for k in ("fence_count", "fence_gap")))
     d.require(type(value["schema"]) is int and value["schema"] == 1 and type(value["enabled"]) is bool)
     d.require(value["state"] in ("off", "unqualified", "held", "last-verified", "stale"))
     if value["last_verified"] is not None:
@@ -64,9 +73,20 @@ def unacknowledged_answers(ledger, alerts, alert_key=None):
     return len(outstanding)
 
 
+def project_disclosure(value, store, journal, alerts):
+    value["pending_pointers"] = len(a.pending_pointers(alerts))
+    exits = [event for event in journal.get("listener_events", []) if event["kind"] == "child-exit"]
+    value["listener_exits"] = len(exits)
+    value["last_listener_exit"] = copy.deepcopy(exits[-1]) if exits else None
+    value["fence_gap"] = s.fence_gap(store, journal)
+    if value["fence_gap"]:
+        value["state"] = "held"
+
+
 def project_status(store, now, enabled=False):
     value = dict(schema=1, enabled=enabled, state="off", last_verified=None, watermark=0, pending=0,
                  unacknowledged_answers=0, new_thread_fallbacks=0,
+                 fence_gap=0, pending_pointers=0, listener_exits=0, last_listener_exit=None,
                  **{k: 0 for k in COUNTS})
     if enabled:
         try:
@@ -79,6 +99,7 @@ def project_status(store, now, enabled=False):
                 value.update(last_verified=transport["last_verified"], watermark=transport["watermark"],
                              pending=sum(not e["drained"] for e in transport["events"].values()))
                 value["state"] = "held" if transport["hold"] else "last-verified"
+                project_disclosure(value, store, transport, alerts)
                 s.fenced(store, transport)
                 s.observe_session_locked(store, transport)
                 if any(p["receipt"] is None and not s.reconciled_never_sent(p) for p in transport["posts"].values()):
@@ -313,7 +334,7 @@ class ManagedListener:
         self.process, self.control, self.guard = None, None, None
         self.operation = threading.RLock()
 
-    def start(self, *, seconds=60, ongoing=False):
+    def start(self, *, seconds=60, ongoing=False, restart_pin=None):
         with self.operation:
             d.require(self.live and self.guard is None and (self.process is None or self.process.poll() is not None))
             d.require(type(ongoing) is bool and type(seconds) in (int, float) and 0 < seconds <= 60)
@@ -328,7 +349,10 @@ class ManagedListener:
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                 self.control, writer = writer, None
                 channel = Stdio(self.process.stdout, self.process.stdin, timeout=5)
-                channel.emit(dict(binding=self.binding, seconds=seconds, ongoing=ongoing))
+                config = dict(binding=self.binding, seconds=seconds, ongoing=ongoing)
+                if restart_pin is not None:
+                    config["restart_pin"] = restart_pin
+                channel.emit(config)
                 d.require(channel.read() == dict(type="runtime-owned"))  # Not connected/qualified/stopped.
                 return dict(state="starting")
             except BaseException:
@@ -392,7 +416,7 @@ def listener_child(root, guard, control, *, run=None):
         os.set_inheritable(control, False)
         channel = Stdio(timeout=5)
         data = channel.read()
-        d.shape(data, "binding seconds ongoing")
+        d.shape(data, "binding seconds ongoing" + (" restart_pin" if "restart_pin" in data else ""))
         d.require(type(data["ongoing"]) is bool and type(data["seconds"]) in (int, float) and 0 < data["seconds"] <= 60)
         store = a.Store(root)
         runtime = s._ChildRuntime(guard, store, a.identity(data["binding"]))
@@ -415,7 +439,8 @@ def listener_child(root, guard, control, *, run=None):
         if run is None:
             credentials = lambda: (os.environ["CORBANU_SLACK_BOT_TOKEN"], os.environ["CORBANU_SLACK_APP_TOKEN"])
             transport = s.Transport(store, data["binding"], credentials, live=True, now=utc_now)
-            transport.listen(seconds=data["seconds"], ongoing=data["ongoing"], stop=stop, runtime=runtime)
+            transport.listen(seconds=data["seconds"], ongoing=data["ongoing"], stop=stop, runtime=runtime,
+                             restart_pin=data.get("restart_pin"))
         else:
             run(runtime, stop, data)
         code = 0
@@ -425,14 +450,91 @@ def listener_child(root, guard, control, *, run=None):
         os._exit(code)
 
 
+class ListenerSupervisor:
+    """Foreground-only watchdog. Three total retries per explicit start, never a scheduler."""
+    def __init__(self, manager, transport, now, monotonic=time.monotonic):
+        self.manager, self.transport, self.now, self.clock = manager, transport, now, monotonic
+        self.options, self.deadline, self.pin = None, None, None
+        self.restarts, self.retry_at, self.pointer_at = 0, None, 0
+
+    def start(self, *, seconds, ongoing):
+        result = self.manager.start(seconds=seconds, ongoing=ongoing)
+        self.options = dict(seconds=seconds, ongoing=ongoing)
+        self.deadline = None if ongoing else self.clock() + seconds
+        self.restarts, self.retry_at, self.pin = 0, None, None
+        return result
+
+    def stop(self):
+        self.options, self.retry_at, self.pin = None, None, None
+        self.manager.stop()
+
+    def record(self, kind, returncode=None):
+        with self.manager.store.lock(), s.locked(self.manager.store) as journal:
+            try:
+                fence = s.ingress_count(self.manager.store)
+            except (OSError, ValueError):
+                fence = None
+            pin = dict(binding=copy.deepcopy(journal["binding"]), lifecycle=copy.deepcopy(journal["lifecycle"]))
+            gap = None if fence is None else abs(fence - journal["ingress"])
+            session = journal["lifecycle"]["session"]
+            safe = (gap == 0 and journal["binding"] == self.manager.binding
+                    and session is not None and session["phase"] != "stopped"
+                    and (self.pin is None or self.pin == pin) and self.restarts < 3)
+            event = dict(kind=kind, at=self.now(), returncode=returncode, restarts=self.restarts,
+                         fence_count=fence, ingress_count=journal["ingress"], fence_gap=gap,
+                         epoch=journal["lifecycle"]["epoch"], restart="pending" if safe else "held")
+            journal.setdefault("listener_events", []).append(event)
+            journal["hold"] = journal["hold"] or "listener-exited"
+            self.manager.store.write("transport", journal)
+        self.pin = pin
+        self.retry_at = self.clock() + 2 ** self.restarts if safe else None
+        if not safe:
+            self.options = None
+
+    def tick(self):
+        process = self.manager.process
+        if process is not None:
+            code = process.poll()
+            if code is not None:
+                expected = self.options is None or (code == 0 and self.deadline is not None
+                                                    and self.clock() >= self.deadline)
+                if not expected:
+                    # Capture before reaping; never discard the only observed failure.
+                    self.pin = None
+                    self.record("child-exit", code)
+                else:
+                    self.options = None
+                self.manager.stop()
+        if self.retry_at is not None and self.clock() >= self.retry_at:
+            self.retry_at = None
+            self.restarts += 1
+            try:
+                with s.locked(self.manager.store) as journal:
+                    s.restart_allowed(self.manager.store, journal, self.pin)
+                options = dict(self.options)
+                if self.deadline is not None:
+                    options["seconds"] = min(options["seconds"], self.deadline - self.clock())
+                    d.require(options["seconds"] > 0)
+                self.manager.start(**options, restart_pin=self.pin)
+            except (OSError, ValueError, KeyError, TypeError):
+                self.record("restart-refused")
+        if self.manager.process is not None and self.clock() >= self.pointer_at:
+            self.pointer_at = self.clock() + 1
+            try:
+                a.retry_pending_pointers(self.manager.store, self.transport)
+            except (OSError, ValueError, KeyError, TypeError):
+                pass  # Existing admission refusals retain pending intent and visible counts.
+
+
 def supervise_listener(store, binding, *, live=False, stdin=None, stdout=None, now):
     manager = ManagedListener(store, binding, live=live)
+    credentials = lambda: (os.environ["CORBANU_SLACK_BOT_TOKEN"], os.environ["CORBANU_SLACK_APP_TOKEN"])
+    supervisor = ListenerSupervisor(manager, s.Transport(store, binding, credentials, live=live, now=now), now)
     source, sink = stdin or sys.stdin, stdout or sys.stdout
     try:
         while True:
+            supervisor.tick()
             if not select.select([source.fileno()], [], [], 0.1)[0]:
-                if manager.process is not None and manager.process.poll() is not None:
-                    manager.stop()
                 continue  # Foreground owner waiting, not a 20-second listener lifetime or scheduler.
             channel = Stdio(source, sink)
             data = channel.read(eof_ok=True)
@@ -445,14 +547,15 @@ def supervise_listener(store, binding, *, live=False, stdin=None, stdout=None, n
             try:
                 if operation == "start":
                     d.shape(data, "operation seconds ongoing")
-                    result = manager.start(seconds=data["seconds"], ongoing=data["ongoing"])
+                    result = supervisor.start(seconds=data["seconds"], ongoing=data["ongoing"])
                 elif operation == "stop":
-                    manager.stop()
+                    supervisor.stop()
                     result = dict(state="held")
                 elif operation == "status":
                     result = project_status(store, now(), live)
                 else:
                     d.require(operation in ("inspect-fence-loss", "recover-missing-fence"))
+                    supervisor.stop()
                     with manager.quiesced() as witness:
                         result = (s.inspect_fence_loss(store, binding) if operation == "inspect-fence-loss" else
                                   s.recover_missing_fence(store, binding, expected_digest=data["case_digest"],

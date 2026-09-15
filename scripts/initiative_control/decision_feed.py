@@ -108,6 +108,7 @@ def project_slack(state, store_path, at, enabled=False):
             elif status["last_verified"] is None or not 0 <= (d.stamp(at) - d.stamp(status["last_verified"])).total_seconds() <= 900:
                 status["state"] = "stale"
             try:
+                manager.project_disclosure(status, store, journal, saved)
                 slack.fenced(store, journal)
                 slack.observe_session_locked(store, journal)
             except (OSError, ValueError):
@@ -278,7 +279,11 @@ def slack_health(snapshot, at):
     status = value["status"]
     age = (d.stamp(clock(at)) - d.stamp(value["assessed_at"])).total_seconds()
     stale = not 0 <= age <= 900 or (status["last_verified"] is not None and (d.stamp(clock(at)) - d.stamp(status["last_verified"])).total_seconds() > 900)
-    return dict(state="stale" if stale else status["state"], assessed_at=value["assessed_at"], last_verified=status["last_verified"])
+    return dict(state="held" if status.get("fence_gap", 0) else "stale" if stale else status["state"],
+                assessed_at=value["assessed_at"], last_verified=status["last_verified"],
+                fence_gap=status.get("fence_gap", 0), pending_pointers=status.get("pending_pointers", 0),
+                listener_exits=status.get("listener_exits", 0),
+                last_listener_exit=copy.deepcopy(status.get("last_listener_exit")))
 
 
 def render(snapshot, at, sprints, documents):

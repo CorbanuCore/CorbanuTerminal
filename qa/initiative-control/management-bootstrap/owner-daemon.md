@@ -308,3 +308,130 @@ combined human-test or recurrence handoff. Independent review/receiving,
 plan/sprint reconciliation, confined code-blind functional acceptance and the
 remaining integration/Slack/supervision gates still apply. Internal-stage N/A
 requires integrator acceptance; no activation approval is inferred.
+
+## Increment D — listener supervision and disclosure, September 15, 2026
+
+Allocation `owner-daemon-supervision-01`; Astra High implement worker.
+Allocation digest:
+`a9e01168b465d696444b8e8a85e04059dc12d2c2c64385628828c1b39c56266a`.
+Frozen brief SHA-256 verified before implementation:
+`1fbff736e084948ddbe9b18a988efa7749047fae79a9b9e61b9eea77f842cf05`.
+Base `68e07dc8e19e12cad4b88a81392056b55b256aaa`, branch
+`bootstrap/owner-daemon-c-20260915`, worktree
+`/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-owner-daemon-c-20260915`.
+
+Classification: bounded reliability fix restoring the already-authorized
+watchdog/disclosure contract. Product heading: **Internal delivery control —
+TO BUILD**; requirement excerpt: “durable event dispatch, acknowledgments and
+watchdog” and “Show blockers, rendered sprints, human test plans, machines, run
+logs and freshness”. Existing initiative context remains active
+initiative-delivery-control / PF-80-S01 (`in_progress`); shared plan/sprint record
+reconciliation belongs to the manager. No new posting authority is granted.
+
+### Incident and implementation
+
+At 12:22 UTC on September 15, the manager-owned listener died and remained down
+for roughly two hours. Its supervisor noticed the child exit but only stopped
+the process. The fence retained 45 callback marks against 42 journal ingresses:
+three callbacks never reached the journal. Ordinary projections did not explain
+the gap. The missing-fence inspection could not apply because the fence existed.
+
+1. **Supervision:** the foreground supervisor records each unexpected exit in
+   durable `transport.listener_events`, including return code, observation time,
+   fence and ingress counts, exact difference (or unknown when unreadable),
+   lifecycle epoch, retry count and pending/held disposition. Status and dashboard
+   health expose `listener_exits` and `last_listener_exit`. Up to three restarts
+   follow nonblocking 1/2/4-second backoff per explicit start. Reaping still uses
+   the owned process handle. A restart preserves the finite run deadline and
+   never clears a transport hold. Exhaustion, missing fence, nonzero gap, stopped
+   session or changed binding/lifecycle stops retrying visibly. The parent
+   rechecks the captured binding/lifecycle before spawn; the child rechecks under
+   the transport lock immediately before creating its new session, closing the
+   intervening stop/rebind window. Explicit stop, repair quiescence and owner EOF
+   retain their stop behavior.
+2. **Disclosure:** `project_status`, `project_slack` and dashboard health carry
+   exact `fence_gap`; a nonzero gap reports `held`, including when the cached
+   assessment is stale. Projection never changes ingress, the fence, unknown
+   arrivals or qualification. Existing optional-field status records remain
+   readable. `inspect_fence_loss` and missing-fence recovery are unchanged.
+3. **Pending pointers:** status/feed/health expose `pending_pointers`. Once a
+   supervised pass is admitted, it retries only an existing pending follow-up
+   notice with a retained request and sent parent/details. It does not create a
+   notice for a follow-up that has no retained request. The retry rechecks
+   identity/cancellation and requires the reconstructed request to equal the
+   retained request before entering the existing transport exchange. A recorded
+   receipt is reused; a recorded attempt without receipt becomes uncertain and
+   cannot produce another Slack message. Holds retain the pending request.
+
+### Discriminating regressions and mutation receipts
+
+All six new cases are in `test_decision_manager.ManagerTests`. They use private
+stores, synthetic SDK/web/socket factories and loopback fixture endpoints. The
+incident and restart-budget cases kill and reap actual dedicated listener
+children; deterministic clocks control only backoff. These are implementation
+regressions, not independent functional qualification.
+
+Mutation method: load the real module source, assert the mutation target occurs
+once, compile the modified source into that module's namespace, execute the
+named unittest, then compile the original source back into the same namespace
+and run the named unittest again with fresh fixtures. Require mutant failure
+and restored success. Dedicated SDK children remain routed through the existing
+synthetic factory. No on-disk production mutation, credential access, external
+Slack endpoint or live store is involved.
+
+| Named case (prefix `test_`) | Mutation | Broken outcome | Restored outcome |
+| --- | --- | --- | --- |
+| `listener_incident_records_exit_and_three_unknown_arrivals` | Replace `self.record("child-exit", code)` with `pass`. | ERROR: `KeyError: listener_events`; durable exit absent. | PASS; actual SIGKILL is recorded as -9, fence 45, ingress 42, gap 3; held, no restart, missing-fence inspection still refuses. |
+| `listener_restarts_with_backoff_and_exhausts_after_three` | Change retry eligibility `self.restarts < 3` to `< 0`. | FAIL: next retry is None instead of 1. | PASS; new owned sessions after 1/2/4 seconds, four distinct sessions total, then held. |
+| Same restart case | Change retry eligibility `< 3` to `< 4`. | FAIL: retry remains scheduled after the third restart. | PASS; no fourth restart. |
+| `listener_restart_rechecks_stopped_epoch_and_binding` | Skip parent `s.restart_allowed(...)`. | FAIL in all four subcases: unsafe restart attempted after stopped phase, rebind, epoch change or new gap. | PASS in all four subcases. |
+| Same restart-pin case | Skip `restart_allowed(...)` inside `Session.__init__`. | FAIL in all four subcases: expected Invalid not raised. | PASS; child-side check refuses and leaves lifecycle unchanged. |
+| `gap_projection_and_dashboard_health_preserve_exact_count` | Set projected `fence_gap` to zero. | FAIL: held/0 differs from held/3. | PASS; exact count and unchanged journal. |
+| Same gap case | Remove `project_disclosure` from `project_slack`. | FAIL: feed reports gap 0 instead of 3. | PASS; feed reports held/3. |
+| Same gap case | Replace dashboard health's gap with zero. | FAIL: health reports gap 0 instead of 3. | PASS; fresh and stale health preserve held/3. |
+| `supervised_pending_pointer_retry_is_admitted_and_exactly_once` | Set projected pending-pointer count to zero. | FAIL: 0 differs from 1. | PASS; pending count is 1 before admitted retry and 0 after. |
+| Same admitted retry case | Remove the supervised call to `retry_pending_pointers`. | FAIL: retained slot remains pending instead of sent. | PASS; hold blocks send; admitted retry reuses receipt; uncertain recorded attempt never reposts. |
+| Same admitted retry case | Disable existing transport `if attempt in value["posts"]` deduplication. | FAIL: six Slack fixture messages instead of five. | PASS; exactly five messages, including one pointer. |
+| `supervised_pointer_posts_only_retained_approved_slot` | Iterate no pending slots in the retry helper. | FAIL: retained slot remains pending instead of sent. | PASS; no request means no new notice; retained approved request sends once. |
+
+Initial focused run: **6 passed in 5.526s**. All twelve mutation variants failed
+as expected and their restored named runs passed. Retained mutation attempts:
+the first child-side mutation exposed a fixture-only leaked flock after its
+expected stopped-session assertion failure, causing three secondary lock errors.
+The fixture now releases an unexpectedly constructed session before failing;
+a fresh replay produced four clean assertion failures, then passed restored.
+The admitted retry case was extended to cover an uncertain recorded attempt and
+replayed broken/restored successfully. The incident case was replayed after
+adding latest-exit disclosure and again failed broken/passed restored.
+
+### Validation and deliberately open work
+
+Final-tree full suite: **663 tests passed in 383.406s**. Only the retained
+HTTP-fixture cleanup ResourceWarnings for synthetic 500/429 responses appeared;
+no failure or native credential prompt occurred. Plan checker passed (3/3 active,
+0 available); sprint checker passed (116 current, 126 archived).
+Final `git diff --check` passed. Six allocated files changed.
+Command (short TMPDIR is required for the Unix socket fixtures):
+
+```sh
+env -u CODEX_HOME -u CORBANU_HOME -u PFTERMINAL_HOME TMPDIR=/private/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts/initiative_control:/Volumes/CorbanuDrive/Corbanu/.codex-work/initiative-control.oGQGyA/venv/lib/python3.14/site-packages /Volumes/CorbanuDrive/Corbanu/.codex-work/slack-sdk-test.Ob3i5O/venv/bin/python -B -m unittest discover -s scripts/initiative_control -p "*test*.py"
+python3 docs/plans/check.py
+python3 docs/sprints/check.py
+git diff --check
+```
+
+Recurrence remains OFF; no activation is recorded. No live Slack message, real
+operator store access, credential read, prompt handling, push or release was
+performed. Gap repair remains deliberately open: these arrivals are unknown,
+and neither counter advancement nor fabricated intake is an acceptable repair.
+Restart after a store-stopped epoch is deliberately refused even when the
+process exit was unexpected. Hold review/requalification stays owner-controlled.
+
+This is an offline implementation return to the manager, not a human-test,
+recurrence or release handoff. Independent review/receiving and the later confined
+code-blind exact-package functional gate remain open. No true TUI, live
+TensorCash/Isometric, named-human acceptance or benchmark result is claimed;
+this internal test stage exercises Python supervision and synthetic Slack
+delivery, not a packaged product workflow. The integrator must accept this
+stage's limited evidence and arrange applicable functional qualification before
+declaring the combined operator workflow ready.

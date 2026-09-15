@@ -77,7 +77,8 @@ def supervised_child(root, guard, control, mode, endpoint):
             return mark_original(store, mark=mark)
         with (patch.object(fixtures.SocketModeClient, "connect", autospec=True, side_effect=connect),
               patch.object(s.Session, "update", renewed), patch.object(s, "ingress_count", blocked)):
-            transport.listen(seconds=data["seconds"], ongoing=data["ongoing"], stop=stop, runtime=runtime)
+            transport.listen(seconds=data["seconds"], ongoing=data["ongoing"], stop=stop, runtime=runtime,
+                             restart_pin=data.get("restart_pin"))
     m.listener_child(root, int(guard), int(control), run=run)
 
 
@@ -563,6 +564,186 @@ class ManagerTests(fixtures.LiveFixture):
             manager.start(**options)
         self.assertEqual(self.line(manager.process), dict(type="connected"))
         return manager
+
+    def watchdog(self):
+        manager = self.supervised(ongoing=True)
+        clock = [0]
+        supervisor = m.ListenerSupervisor(manager, self.transport, lambda: NOW, lambda: clock[0])
+        supervisor.options = dict(seconds=60, ongoing=True)
+        return manager, supervisor, clock
+
+    def test_listener_incident_records_exit_and_three_unknown_arrivals(self):
+        manager, supervisor, clock = self.watchdog()
+        manager.process.kill()
+        manager.process.wait(timeout=5)
+        with s.locked(self.store) as journal:
+            for _ in range(45 - s.ingress_count(self.store)):
+                s.ingress_count(self.store, mark=True)
+            journal["ingress"] = 42
+            self.store.write("transport", journal)
+        supervisor.tick()
+        journal = a.Store(self.root).read("transport")
+        event = journal["listener_events"][-1]
+        self.assertEqual((event["kind"], event["returncode"], event["fence_count"],
+                          event["ingress_count"], event["fence_gap"], event["restart"]),
+                         ("child-exit", -9, 45, 42, 3, "held"))
+        self.assertEqual(m.project_status(self.store, NOW, True)["listener_exits"], 1)
+        self.assertEqual(m.project_status(self.store, NOW, True)["last_listener_exit"], event)
+        import decision_feed as feed
+        projected = feed.project_slack(self.feed_root, self.root, NOW, True)
+        self.assertEqual(projected["status"]["last_listener_exit"], event)
+        self.assertEqual(feed.slack_health(dict(slack=projected), NOW)["last_listener_exit"], event)
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "held")
+        clock[0] = 100
+        with patch.object(manager, "start", side_effect=AssertionError("gap restart")):
+            supervisor.tick()
+        self.assertIsNone(manager.process)
+        self.assertEqual((s.ingress_count(self.store), journal["ingress"]), (45, 42))
+        with self.assertRaises(d.Invalid):
+            s.inspect_fence_loss(self.store, PIN)
+
+    def test_listener_restarts_with_backoff_and_exhausts_after_three(self):
+        manager, supervisor, clock = self.watchdog()
+        sessions = []
+        for attempt in range(4):
+            sessions.append(self.store.read("transport")["lifecycle"]["session"]["id"])
+            manager.process.kill()
+            manager.process.wait(timeout=5)
+            supervisor.tick()
+            self.assertIsNone(manager.process)
+            if attempt == 3:
+                break
+            self.assertEqual(supervisor.retry_at, clock[0] + 2 ** attempt)
+            clock[0] += 2 ** attempt - 0.01
+            supervisor.tick()
+            self.assertIsNone(manager.process)
+            clock[0] += 0.01
+            with fixture_child("connected", self.endpoint):
+                supervisor.tick()
+            self.assertEqual(self.line(manager.process), dict(type="connected"))
+        self.assertEqual(len(set(sessions)), 4)
+        self.assertEqual(supervisor.restarts, 3)
+        self.assertIsNone(supervisor.retry_at)
+        events = self.store.read("transport")["listener_events"]
+        self.assertEqual(len(events), 4)
+        self.assertEqual(events[-1]["restart"], "held")
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "held")
+        clock[0] += 100
+        with patch.object(manager, "start", side_effect=AssertionError("unbounded restart")):
+            supervisor.tick()
+
+    def test_listener_restart_rechecks_stopped_epoch_and_binding(self):
+        manager, supervisor, clock = self.watchdog()
+        manager.process.kill()
+        manager.process.wait(timeout=5)
+        supervisor.tick()
+        original = self.store.read("transport")
+        for change in ("stopped", "binding", "epoch", "gap"):
+            with self.subTest(change=change):
+                journal = copy.deepcopy(original)
+                if change == "stopped":
+                    journal["lifecycle"]["session"]["phase"] = "stopped"
+                elif change == "binding":
+                    journal["binding"] = dict(PIN, channel="GOTHER")
+                elif change == "epoch":
+                    journal["lifecycle"]["epoch"] += 1
+                else:
+                    s.ingress_count(self.store, mark=True)
+                self.store.write("transport", journal)
+                supervisor.options = dict(seconds=60, ongoing=True)
+                supervisor.pin = dict(binding=original["binding"], lifecycle=original["lifecycle"])
+                supervisor.retry_at, supervisor.restarts = 0, 0
+                with patch.object(manager, "start", side_effect=AssertionError("unsafe restart")):
+                    supervisor.tick()
+                self.assertIsNone(supervisor.retry_at)
+                self.assertEqual(self.store.read("transport")["listener_events"][-1]["kind"], "restart-refused")
+                # Also exercise the child-side atomic check, after parent admission.
+                with self.assertRaises(d.Invalid):
+                    unexpected = s.Session(self.store, restart_pin=dict(binding=original["binding"], lifecycle=original["lifecycle"]))
+                    unexpected.release()  # Mutation failures must not leak the acquired fixture flock.
+                self.assertEqual(self.store.read("transport")["lifecycle"], journal["lifecycle"])
+
+    def test_gap_projection_and_dashboard_health_preserve_exact_count(self):
+        import decision_feed as feed
+        for _ in range(3):
+            s.ingress_count(self.store, mark=True)
+        before = self.store.read("transport")
+        status = m.project_status(self.store, NOW, True)
+        projected = feed.project_slack(self.feed_root, self.root, NOW, True)
+        snapshot = dict(feed=d.load_fixture(self.feed_root, NOW), status="valid", slack=projected)
+        for value in (status, projected["status"], feed.health(snapshot, {}, NOW)["slack"],
+                      feed.slack_health(snapshot, "2026-09-12T13:00:00Z")):
+            self.assertEqual((value["state"], value["fence_gap"]), ("held", 3))
+        self.assertEqual(self.store.read("transport"), before)
+        for bad in (True, -1, "3", None):
+            with self.subTest(bad=bad), self.assertRaises(d.Invalid):
+                m.validate_status(dict(status, fence_gap=bad))
+
+    def test_supervised_pending_pointer_retry_is_admitted_and_exactly_once(self):
+        import decision_feed as feed
+        key, row = self.uncertain_follower()
+        a.reconcile(self.store, key, "details", self.transport.reconcile(row["details"]["request"]))
+        with s.locked(self.store) as journal:
+            journal["hold"] = "outage-gap"
+            self.store.write("transport", journal)
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        slot = d.digest([key, "follow-up", self.key])
+        request = copy.deepcopy(row["notices"][slot]["request"])
+        self.assertEqual(m.project_status(self.store, NOW, True)["pending_pointers"], 1)
+        self.assertEqual(feed.project_slack(self.feed_root, self.root, NOW, True)["status"]["pending_pointers"], 1)
+        # A healthy process alone grants no transport or posting authority.
+        manager = SimpleNamespace(store=self.store, process=SimpleNamespace(poll=lambda: None))
+        clock = [0]
+        supervisor = m.ListenerSupervisor(manager, self.transport, lambda: NOW, lambda: clock[0])
+        supervisor.tick()
+        self.assertEqual(len(self.messages), 4)
+        self.assertEqual(a.inspect(self.store, key)["notices"][slot]["state"], "pending")
+        self.review_gap()
+        # Another sender accepted the immutable attempt before local receipt save.
+        self.transport.exchange(request)
+        self.assertEqual(len(self.messages), 5)
+        clock[0] += 1
+        supervisor.tick()
+        retried = a.inspect(self.store, key)["notices"][slot]
+        self.assertEqual((retried["state"], retried["request"]), ("sent", request))
+        self.assertEqual(m.project_status(self.store, NOW, True)["pending_pointers"], 0)
+        clock[0] += 1
+        supervisor.tick()
+        self.assertEqual(len(self.messages), 5)
+        # Retained transport intent without receipt is uncertainty, never absence.
+        with self.store.lock(), s.locked(self.store) as journal:
+            rows = self.store.read("alerts")
+            rows[key]["notices"][slot].update(state="pending", receipt=None)
+            self.store.write("alerts", rows)
+            journal["posts"][slot]["receipt"] = None
+            self.store.write("transport", journal)
+        clock[0] += 1
+        supervisor.tick()
+        self.assertEqual(a.inspect(self.store, key)["notices"][slot]["state"], "uncertain")
+        self.assertEqual(len(self.messages), 5)
+
+    def test_supervised_pointer_posts_only_retained_approved_slot(self):
+        key, row = self.uncertain_follower()
+        a.reconcile(self.store, key, "details", self.transport.reconcile(row["details"]["request"]))
+        # A sent follow-up without a retained pointer request is not selected.
+        manager = SimpleNamespace(store=self.store, process=SimpleNamespace(poll=lambda: None))
+        clock = [0]
+        supervisor = m.ListenerSupervisor(manager, self.transport, lambda: NOW, lambda: clock[0])
+        supervisor.tick()
+        self.assertEqual(len(self.messages), 4)
+        self.assertNotIn("notices", a.inspect(self.store, key))
+        def refuse(_):
+            raise a.NotDispatched()
+        row = a.send(self.store, key, PIN, refuse)
+        slot = d.digest([key, "follow-up", self.key])
+        self.assertEqual(row["notices"][slot]["state"], "pending")
+        clock[0] += 1
+        supervisor.tick()
+        self.assertEqual(a.inspect(self.store, key)["notices"][slot]["state"], "sent")
+        self.assertEqual(len(self.messages), 5)
+        clock[0] += 1
+        supervisor.tick()
+        self.assertEqual(len(self.messages), 5)
 
     def test_supervisor_waits_for_real_executor_old_inode_despite_false_stopped_frame(self):
         self.sending()

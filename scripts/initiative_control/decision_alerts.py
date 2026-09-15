@@ -293,6 +293,36 @@ def send(store, key, current_identity, exchange, cancelled=False):
     return inspect(store, key)
 
 
+def pending_pointers(rows):
+    """Only previously attempted, refused follow-up notices; no new posting intent."""
+    result = []
+    for key in rows:
+        row = alert(rows, key)
+        threading = row.get("threading", {})
+        if (row["cancelled"] or row["reason"] is not None or threading.get("mode") != "pointer"
+                or row["parent"]["state"] != "sent" or row["details"]["state"] != "sent"):
+            continue
+        basis = threading["source_alert"]
+        slot = row.get("notices", {}).get(d.digest([key, "follow-up", basis]), {})
+        if slot.get("state") == "pending" and slot.get("request") is not None:
+            result.append((key, basis, copy.deepcopy(slot["request"])))
+    return result
+
+
+def retry_pending_pointers(store, transport):
+    transport.gate()
+    with store.lock():
+        pending = pending_pointers(store.read("alerts"))
+    for key, basis, request in pending:
+        # notice serializes against other senders and rechecks cancellation.
+        # Its reconstruction must match the already approved immutable request.
+        def exchange(candidate):
+            d.require(candidate == request)
+            return transport.exchange(candidate)
+        notice(store, key, "follow-up", basis, transport.binding, exchange)
+    return len(pending)
+
+
 def reconcile(store, key, phase, evidence):
     """Only authenticated exact retained receipt evidence can resolve uncertainty."""
     with store.lock():
