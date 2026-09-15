@@ -255,12 +255,30 @@ class CycleTests(unittest.TestCase):
         self.assertEqual("accepted", result["status"], result)
         brief = m.load_json(Path(result["artifacts"]) / "briefing.json")
         self.assertNotIn("inputs", brief["actions"]["prior"])
+        # The reference is still readable on the retained result, so it is not
+        # restated as an omitted digest; the omission entry keeps the inputs digest.
         self.assertEqual([{"source": "actions", "id": "prior", "reason": "terminal_history",
-                          "inputs_digest": f.digest(encoded({"data": ref}).encode()),
-                          "evidence_digests": [ref["evidence_digest"]]}], brief["evidence_omissions"])
+                          "inputs_digest": f.digest(encoded({"data": ref}).encode())}],
+                         brief["evidence_omissions"])
+        self.assertIn(ref["evidence_digest"], encoded(brief["actions"]["prior"]))
         claim = m.load_json(Path(result["artifacts"]) / "claim.json")
         self.assertEqual({"data": ref}, claim["actions"]["prior"]["inputs"])
         self.assertEqual({**ref, "extra": "retain unknown shape"}, brief["actions"]["prior"]["result"])
+
+    def test_unreachable_references_are_still_listed_as_omitted(self):
+        with self.c.connection() as db:
+            ref = self.c._reference(db, {"original": "full body"})
+        with self.c.mutation("fixture", {}) as (_, state):
+            # The reference lives only in the omitted inputs, not on any retained
+            # field, so the manager cannot reach it without the omission entry.
+            state["actions"]["prior"] = {"id": "prior", "workstream": "delivery", "status": "accepted",
+                                         "sequence": [0, 0], "inputs": {"allocation": "a", "data": ref}}
+        result = self.cycle()
+        self.assertEqual("accepted", result["status"], result)
+        brief = m.load_json(Path(result["artifacts"]) / "briefing.json")
+        entry = next(e for e in brief["evidence_omissions"] if e["id"] == "prior")
+        self.assertEqual([ref["evidence_digest"]], entry["evidence_digests"])
+        self.assertNotIn(ref["evidence_digest"], encoded(brief["actions"]["prior"]))
 
     def test_terminal_history_omits_allocated_scope_but_keeps_its_digest(self):
         scope = ["codex-rs/core/src/file-%02d.rs" % n for n in range(18)]

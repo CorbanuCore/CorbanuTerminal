@@ -199,8 +199,15 @@ def briefing(coordinator, packet, owner_context):
              allocated or None)
     for key, allocation in packet["allocations"].items():
         if allocation["inputs"].get("consumed") is True:
+            inputs = allocation["inputs"]
+            # A stub already reduced to its consumed marker plus the frozen
+            # original's digest hides nothing: retain it verbatim rather than
+            # replacing it with an omission entry that only restates the digest.
+            if set(inputs) <= {"consumed", "original_digest"}:
+                brief["allocations"][key] = {**allocation, "inputs": dict(inputs)}
+                continue
             brief["allocations"][key] = {**allocation, "inputs": {"consumed": True}}
-            omit("allocations", key, "consumed_allocation", allocation["inputs"], allocation["inputs"])
+            omit("allocations", key, "consumed_allocation", inputs, inputs)
 
     for action in brief["actions"].values():
         inputs = action.get("inputs")
@@ -240,7 +247,10 @@ def briefing(coordinator, packet, owner_context):
         collect({field: value for field, value in action.items()
                  if key not in compact or field not in historical_fields | {"inputs"}})
     for entry, references in omitted_references:
-        missing = sorted(references - originals.keys())
+        # A digest the manager can already read on the retained record is not
+        # an omission: listing it again only duplicates the reference.
+        retained = encoded(brief[entry["source"]].get(entry["id"], {}))
+        missing = sorted(digest for digest in references - originals.keys() if digest not in retained)
         if missing:
             entry["evidence_digests"] = missing
         if missing or "inputs_digest" in entry:
