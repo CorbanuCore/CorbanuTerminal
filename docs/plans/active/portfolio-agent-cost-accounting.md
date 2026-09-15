@@ -17,6 +17,9 @@ product_spec:
   heading: "Product measurement"
   requirement_excerpt: "No commercial performance numbers have been supplied."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-chat-20260915"
+    branch: "bootstrap/acct-chat-20260915"
+    base_commit: "155b0c1a96c2dc590cd7818e086ca2e0085e1996"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-acct-ws-20260914"
     branch: "bootstrap/acct-ws-20260914"
     base_commit: "73fc51b1a73ec6304fb51603b6fb46ee9f61b56b"

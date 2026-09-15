@@ -10,8 +10,8 @@ parallel_lane: "accounting-chat-completions"
 write_scope: "codex-rs/core/src/config/mod.rs, codex-rs/core/src/agent/role.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/client.rs, codex-rs/core/src/accounting.rs, codex-rs/core/src/accounting_chat.rs, codex-rs/core/src/accounting_chat_tests.rs, codex-rs/core/src/accounting_prices.rs, codex-rs/core/src/accounting_prices_tests.rs, codex-rs/core/src/accounting_transport.rs, codex-rs/codex-api/src/lib.rs, codex-rs/codex-api/src/endpoint/chat_completions.rs, codex-rs/codex-api/src/endpoint/chat_accounting.rs, codex-rs/codex-api/src/endpoint/chat_accounting_tests.rs, codex-rs/core/tests/suite/mod.rs, codex-rs/core/tests/suite/accounting_chat.rs, codex-rs/core/tests/suite/accounting_chat_recovery.rs, codex-rs/core/tests/suite/accounting_chat_support.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/chat-dispatch-increment.md"
 integration_gate: "Fable manager receives the exact direct Chat Completions sampling candidate: one independent Opus 5.0 High review plus necessary correction, 38 new cases and retained regressions, shared state/TaskNode-session and combined API/proxy gates on the receiving tree; actual counts and failures retained. S02 open, S03 dependent, collection OFF."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-chat-20260915"
-branch: "bootstrap/acct-ws-20260914"
-base_commit: "73fc51b1a73ec6304fb51603b6fb46ee9f61b56b"
+branch: "bootstrap/acct-chat-20260915"
+base_commit: "155b0c1a96c2dc590cd7818e086ca2e0085e1996"
 depends_on: "PF-60-S01"
 created: 2026-09-09
 updated: 2026-09-14
