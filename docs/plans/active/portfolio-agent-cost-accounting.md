@@ -198,7 +198,8 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Astra High accounting Responses-WebSocket lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-acct-ws-20260914` | `bootstrap/acct-ws-20260914` | `73fc51b1a73ec6304fb51603b6fb46ee9f61b56b` | PF-60-S02 [Responses WS sampling/fallback allocation](../../research/agent-cost-accounting/responses-websocket-allocation.md): 18 literal files, target 3000/1050, STOP 3300/1200; default OFF; HTTP e47e41870 received at d81bad635 is consumed history |
+| Astra High accounting direct-Chat lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/acct-chat-20260915` | `bootstrap/acct-chat-20260915` | `70b7cd33f9a17c1cbb219f4d0d7b00d4a6cf5acf` | PF-60-S02 [direct Chat Completions sampling allocation](../../research/agent-cost-accounting/chat-dispatch-allocation.md): 19 literal files, 38 named tests, target 3000/1150, STOP 3300/1300; default OFF; excludes Corbanu plan gateway economics, startup prewarm, auxiliary collection and both disclosed P3s. Exclusive build-target lease `acct-chat-20260915` |
+| Astra High accounting Responses-WebSocket lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-acct-ws-20260914` | `bootstrap/acct-ws-20260914` | `73fc51b1a73ec6304fb51603b6fb46ee9f61b56b` | PF-60-S02 [Responses WS sampling/fallback allocation](../../research/agent-cost-accounting/responses-websocket-allocation.md): received at `c86634e21` with both native vectors at `16c43b5fe`; consumed history |
 | Codex accounting contract-golden lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-contract-goldens-20260913` | `workstream/accounting-contract-goldens-20260913` | `81d0f90e77c1e9217a16e70fef1019ff9aa13753` | PF-60-S02 original-contract goldens f4507cb50 accepted at 855ab3382; consumed history |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
@@ -223,7 +224,8 @@ behavior stay unchanged; no blanket new activation/failure checks. Separate
 logs/memory/goals stores remain outside main-state transaction atomicity.
 Custom range/interval filtering is recorded in S03 draft, not implemented here.
 The migration/17-file store allocation above is accepted history. Travis opened the accounting resumption gate on September 14; current dispatch
-is the accepted Responses WS sampling/fallback allocation above (acct-ws-freeze-01); the HTTP unit is consumed history. Manifests/locks stay manager-owned.
+is the accepted direct Chat Completions sampling allocation above (`acct-chat-design-01`, verified September 15, digest `0736d392`). Both the HTTP unit and
+the Responses WS sampling/fallback unit are consumed history. Manifests/locks stay manager-owned.
 The worker fast-forwards to
 the reviewed receiving allocation before dispatch; its historical branch name
 does not change sprint ownership. Manager owns shared plans/integration.

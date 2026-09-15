@@ -19,7 +19,7 @@ updated: 2026-09-14
 
 # PF-60-S02 — Idempotent usage persistence and replay
 
-September 14: Fable's accepted `acct-ws-freeze-01` mandate freezes the next same-S02 unit; no running worker or build lease is claimed. Travis's accounting resumption supersedes the historical [September 13 pause](../../../plans/management-pause-2026-09-13.md); security remains with its owner. Prior two-path goldens and HTTP mandates are consumed, not current authorization.
+September 15: Fable's verified `acct-chat-design-01` allocation ([direct Chat Completions sampling](../../../research/agent-cost-accounting/chat-dispatch-allocation.md), digest `0736d392`) freezes the next same-S02 unit: worktree `/Volumes/CorbanuDrive/Corbanu/worktrees/acct-chat-20260915`, branch `bootstrap/acct-chat-20260915`, base `70b7cd33f9a17c1cbb219f4d0d7b00d4a6cf5acf`, exclusive build-target lease `acct-chat-20260915`. Travis's accounting resumption supersedes the historical [September 13 pause](../../../plans/management-pause-2026-09-13.md); security remains with its owner. Prior two-path goldens, the HTTP mandate and the `acct-ws-freeze-01` WebSocket mandate are consumed, not current authorization.
 
 ## Execution mandate
 
@@ -43,8 +43,8 @@ September 14: Fable's accepted `acct-ws-freeze-01` mandate freezes the next same
 ## Preconditions
 
 - [x] Active PF-60 plan and archived S01 retain the existing reservation and approved contract defaults; no new product/billing/live authority.
-- [ ] Manager verifies clean implementation checkout at the recorded base, current reservations and actual diffs; assigns exclusive build target and records dispatch.
-- [ ] Run governance checks before implementation handoff; reconcile plan/worktree coordinates and retain prior review usage.
+- [x] Manager verified the clean implementation checkout `acct-chat-20260915` at `70b7cd33f`, compared current reservations and actual diffs, and granted the exclusive build target `acct-chat-20260915` (`/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-chat-20260915/LEASE.json`). `acct-chat-impl-01` **correctly STOPPED** before touching code because these prerequisites were not yet recorded; its receipt-only commit `aadad2733` (143 documentation lines, no Rust changes, no Rust tests) is retained and `acct-chat-impl-02` follows.
+- [x] Governance checks run before implementation handoff; plan and worktree coordinates reconciled against actual git state and prior review usage retained.
 
 ## Done
 
