@@ -39,6 +39,12 @@ mod accounting_anthropic;
 mod accounting_anthropic_recovery;
 mod accounting_responses;
 mod accounting_responses_recovery;
+#[path = "accounting_responses_ws.rs"]
+mod accounting_responses_ws;
+#[path = "accounting_responses_ws_recovery.rs"]
+mod accounting_responses_ws_recovery;
+#[path = "accounting_responses_ws_support.rs"]
+mod accounting_responses_ws_support;
 mod additional_context;
 mod agent_execution;
 mod agent_websocket;

@@ -1,13 +1,16 @@
-//! Sampling-local lazy HTTP bootstrap. WebSocket and auxiliary routes never resolve it.
-use super::{FAILURE, Sampling};
+//! Sampling-local lazy bootstrap shared by admitted Responses transports.
+use super::FAILURE;
+use super::Sampling;
 use crate::config::AccountingMode;
 use crate::session::session::Session;
 use codex_login::CodexAuth;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::WireApi;
 use codex_protocol::error::CodexErr;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
@@ -75,7 +78,7 @@ impl DeferredResponsesSampling {
         })
     }
 
-    fn reject(&self) {
+    pub(crate) fn reject(&self) {
         self.failed.store(true, Ordering::Release);
         if let Some(sampling) = self.sampling.get() {
             sampling.reject();
@@ -87,6 +90,25 @@ impl DeferredResponsesSampling {
             return Err(CodexErr::Fatal(FAILURE.into()));
         }
         self.sampling.get().map_or(Ok(()), |value| value.check())
+    }
+
+    pub(crate) fn exclude(&self) -> Result<(), CodexErr> {
+        if self.sampling.initialized() {
+            self.reject();
+        }
+        self.check()
+    }
+
+    pub(crate) fn websocket_endpoint(&self) -> Result<Option<String>, CodexErr> {
+        self.check()?;
+        match &self.mode {
+            AccountingMode::DirectOpenAiResponses {
+                approved_endpoint, ..
+            } => super::websocket::endpoint(approved_endpoint)
+                .map(Some)
+                .inspect_err(|_| self.reject()),
+            _ => Ok(None),
+        }
     }
 
     pub(crate) async fn resolve(
@@ -103,9 +125,12 @@ impl DeferredResponsesSampling {
             }
             return Ok(None);
         }
-        let AccountingMode::DirectOpenAiResponsesHttp {
+        let (AccountingMode::DirectOpenAiResponsesHttp {
             approved_endpoint, ..
-        } = &self.mode
+        }
+        | AccountingMode::DirectOpenAiResponses {
+            approved_endpoint, ..
+        }) = &self.mode
         else {
             self.reject();
             return Err(CodexErr::Fatal(FAILURE.into()));
@@ -151,7 +176,7 @@ impl DeferredResponsesSampling {
     }
 }
 
-fn eligible(provider: &ModelProviderInfo, auth: Option<&CodexAuth>) -> bool {
+pub(super) fn eligible(provider: &ModelProviderInfo, auth: Option<&CodexAuth>) -> bool {
     provider.wire_api == WireApi::Responses
         && matches!(auth, Some(CodexAuth::ApiKey(_)))
         && provider.auth.is_none()

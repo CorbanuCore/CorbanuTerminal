@@ -46,6 +46,12 @@ use tungstenite::extensions::compression::deflate::DeflateConfig;
 use tungstenite::protocol::WebSocketConfig;
 use url::Url;
 
+#[path = "responses_websocket_accounting.rs"]
+pub(crate) mod accounting;
+#[cfg(test)]
+#[path = "responses_websocket_accounting_tests.rs"]
+mod accounting_tests;
+
 struct WsStream {
     tx_command: mpsc::Sender<WsCommand>,
     rx_message: mpsc::UnboundedReceiver<Result<Message, WsError>>,
@@ -53,6 +59,11 @@ struct WsStream {
 }
 
 enum WsCommand {
+    Accounted {
+        message: Message,
+        dispatch: accounting::Dispatch,
+        tx_result: oneshot::Sender<Result<accounting::Evidence, ApiError>>,
+    },
     Send {
         message: Message,
         tx_result: oneshot::Sender<Result<(), WsError>>,
@@ -73,6 +84,32 @@ impl WsStream {
                             break;
                         };
                         match command {
+                            WsCommand::Accounted { message, dispatch, mut tx_result } => {
+                                if tx_result.is_closed() {
+                                    continue;
+                                }
+                                let admitted = tokio::select! {
+                                    biased;
+                                    _ = tx_result.closed() => continue,
+                                    result = dispatch.admission.admit(dispatch.model, dispatch.tier) => result,
+                                };
+                                let result = match admitted {
+                                    Ok(observer) => {
+                                        if tx_result.is_closed() {
+                                            continue;
+                                        }
+                                        inner.send(message).await
+                                            .map(|()| accounting::Evidence::new(observer))
+                                            .map_err(|err| ApiError::Stream(format!("failed to send websocket request: {err}")))
+                                    }
+                                    Err(err) => Err(err),
+                                };
+                                let should_break = result.is_err();
+                                let _ = tx_result.send(result);
+                                if should_break {
+                                    break;
+                                }
+                            }
                             WsCommand::Send { message, tx_result } => {
                                 let result = inner.send(message).await;
                                 let should_break = result.is_err();
@@ -138,6 +175,25 @@ impl WsStream {
     async fn send(&self, message: Message) -> Result<(), WsError> {
         self.request(|tx_result| WsCommand::Send { message, tx_result })
             .await
+    }
+
+    async fn send_accounted(
+        &self,
+        message: Message,
+        dispatch: accounting::Dispatch,
+    ) -> Result<accounting::Evidence, ApiError> {
+        let (tx_result, rx_result) = oneshot::channel();
+        self.tx_command
+            .send(WsCommand::Accounted {
+                message,
+                dispatch,
+                tx_result,
+            })
+            .await
+            .map_err(|_| ApiError::Stream("websocket connection is closed".into()))?;
+        rx_result
+            .await
+            .map_err(|_| ApiError::Stream("websocket connection is closed".into()))?
     }
 
     async fn next(&mut self) -> Option<Result<Message, WsError>> {
@@ -225,17 +281,29 @@ impl ResponsesWebsocketConnection {
         self.stream.lock().await.is_none()
     }
 
+    pub async fn stream_request(
+        &self,
+        request: ResponsesWsRequest<'_>,
+        connection_reused: bool,
+        turn_state: Option<Arc<OnceLock<String>>>,
+    ) -> Result<ResponseStream, ApiError> {
+        self.stream_request_with_accounting(request, connection_reused, turn_state, None)
+            .await
+    }
+
+    /// Optional pump-bound admission; ordinary callers retain the legacy path.
     #[instrument(
         name = "responses_websocket.stream_request",
         level = "info",
         skip_all,
         fields(transport = "responses_websocket", api.path = "responses")
     )]
-    pub async fn stream_request(
+    pub async fn stream_request_with_accounting(
         &self,
         request: ResponsesWsRequest<'_>,
         connection_reused: bool,
         turn_state: Option<Arc<OnceLock<String>>>,
+        admission: Option<Arc<dyn accounting::ResponsesWebsocketAdmission>>,
     ) -> Result<ResponseStream, ApiError> {
         let (tx_event, rx_event) =
             mpsc::channel::<std::result::Result<ResponseEvent, ApiError>>(1600);
@@ -271,6 +339,11 @@ impl ResponsesWebsocketConnection {
             connection_reused,
         };
         let request_text = serialize_websocket_request(&request)?;
+        let dispatch = admission.map(|admission| accounting::Dispatch {
+            model: ws_request.model.to_string(),
+            tier: ws_request.service_tier.map(str::to_string),
+            admission,
+        });
 
         let current_span = Span::current();
         tokio::spawn(
@@ -290,7 +363,14 @@ impl ResponsesWebsocketConnection {
                         .send(Ok(ResponseEvent::ServerReasoningIncluded(true)))
                         .await;
                 }
-                let mut guard = stream.lock().await;
+                let accounted = dispatch.is_some();
+                let mut guard = if accounted {
+                    tokio::select! {
+                        biased;
+                        _ = tx_event.closed() => return,
+                        guard = stream.lock() => guard,
+                    }
+                } else { stream.lock().await };
                 let result = {
                     let Some(ws_stream) = guard.as_mut() else {
                         let _ = tx_event
@@ -301,7 +381,7 @@ impl ResponsesWebsocketConnection {
                         return;
                     };
 
-                    run_websocket_response_stream(
+                    let response = run_websocket_response_stream(
                         ws_stream,
                         tx_event.clone(),
                         request_text,
@@ -309,8 +389,15 @@ impl ResponsesWebsocketConnection {
                         telemetry,
                         turn_state.as_deref(),
                         &timing_log_context,
-                    )
-                    .await
+                        dispatch,
+                    );
+                    if accounted {
+                        tokio::select! {
+                            biased;
+                            _ = tx_event.closed() => Err(ApiError::Stream("response event consumer dropped".into())),
+                            result = response => result,
+                        }
+                    } else { response.await }
                 };
 
                 if let Err(err) = result {
@@ -689,17 +776,38 @@ async fn run_websocket_response_stream(
     telemetry: Option<Arc<dyn WebsocketTelemetry>>,
     turn_state: Option<&OnceLock<String>>,
     timing_log_context: &ResponsesWebsocketTimingLogContext,
+    dispatch: Option<accounting::Dispatch>,
 ) -> Result<(), ApiError> {
     let mut last_server_model: Option<String> = None;
     let mut safety_buffering_treatment = SafetyBufferingTreatment::default();
-    send_websocket_request(
-        ws_stream,
-        request_text,
-        idle_timeout,
-        telemetry.as_ref(),
-        timing_log_context.connection_reused,
-    )
-    .await?;
+    let mut evidence = if let Some(dispatch) = dispatch {
+        let start = Instant::now();
+        let result = tokio::time::timeout(
+            idle_timeout,
+            ws_stream.send_accounted(Message::Text(request_text.into()), dispatch),
+        )
+        .await
+        .map_err(|_| ApiError::Stream("idle timeout sending websocket request".into()))
+        .and_then(|result| result);
+        if let Some(t) = telemetry.as_ref() {
+            t.on_ws_request(
+                start.elapsed(),
+                result.as_ref().err(),
+                timing_log_context.connection_reused,
+            );
+        }
+        Some(result?)
+    } else {
+        send_websocket_request(
+            ws_stream,
+            request_text,
+            idle_timeout,
+            telemetry.as_ref(),
+            timing_log_context.connection_reused,
+        )
+        .await?;
+        None
+    };
 
     loop {
         let poll_start = Instant::now();
@@ -726,6 +834,9 @@ async fn run_websocket_response_stream(
 
         match message {
             Message::Text(text) => {
+                if let Some(evidence) = evidence.as_mut() {
+                    evidence.text(&text).await?;
+                }
                 if let Some(wrapped_error) = parse_wrapped_websocket_error_event(&text)
                     && let Some(error) =
                         map_wrapped_websocket_error_event(wrapped_error, text.to_string())

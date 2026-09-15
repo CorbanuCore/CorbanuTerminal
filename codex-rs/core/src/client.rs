@@ -358,6 +358,7 @@ type SharedServerConversationState = Arc<StdMutex<Option<ServerConversationState
 #[derive(Debug, Default)]
 struct WebsocketSession {
     connection: Option<ApiWebSocketConnection>,
+    provenance: Option<crate::accounting::websocket::Provenance>,
     last_request: Option<ResponsesApiRequest>,
     last_response_rx: Option<oneshot::Receiver<LastResponse>>,
     last_response_from_untraced_warmup: bool,
@@ -2360,6 +2361,7 @@ impl ModelClientSession {
 
     fn reset_websocket_session(&mut self) {
         self.websocket_session.connection = None;
+        self.websocket_session.provenance = None;
         self.websocket_session.last_request = None;
         self.websocket_session.last_response_rx = None;
         self.websocket_session.last_response_from_untraced_warmup = false;
@@ -2861,6 +2863,12 @@ impl ModelClientSession {
             client_setup.agent_identity_telemetry.clone(),
             PendingUnauthorizedRetry::default(),
         );
+        let provenance = crate::accounting::websocket::Provenance::capture(
+            self.client.state.provider.info(),
+            client_setup.auth.as_ref(),
+            &client_setup.api_provider,
+            client_setup.agent_identity_telemetry.is_some(),
+        );
         let connection = self
             .client
             .connect_websocket(
@@ -2873,6 +2881,7 @@ impl ModelClientSession {
             )
             .await?;
         self.websocket_session.connection = Some(connection);
+        self.websocket_session.provenance = Some(provenance);
         self.websocket_session
             .set_connection_reused(/*connection_reused*/ false);
         Ok(())
@@ -2895,6 +2904,7 @@ impl ModelClientSession {
         params: WebsocketConnectParams<'_>,
     ) -> std::result::Result<&ApiWebSocketConnection, ApiError> {
         let WebsocketConnectParams {
+            provenance,
             session_telemetry,
             api_provider,
             api_auth,
@@ -2932,6 +2942,7 @@ impl ModelClientSession {
                 }
             };
             self.websocket_session.connection = Some(new_conn);
+            self.websocket_session.provenance = Some(provenance);
             self.websocket_session
                 .set_connection_reused(/*connection_reused*/ false);
         } else {
@@ -3144,6 +3155,13 @@ impl ModelClientSession {
             );
             let client_setup = self.client.current_client_setup().await?;
             let sampling = match crate::accounting::responses::read(&self.responses_accounting)? {
+                Some(deferred)
+                    if deferred.websocket_endpoint()?.is_some()
+                        && client_setup.agent_identity_telemetry.is_some() =>
+                {
+                    deferred.exclude()?;
+                    None
+                }
                 Some(deferred) => {
                     deferred
                         .resolve(
@@ -3377,6 +3395,41 @@ impl ModelClientSession {
                 service_tier.clone(),
                 responses_metadata,
             )?;
+            let deferred = if warmup {
+                None
+            } else {
+                crate::accounting::responses::read(&self.responses_accounting)?
+                    .filter(|value| !matches!(value.websocket_endpoint(), Ok(None)))
+            };
+            let provenance = crate::accounting::websocket::Provenance::capture(
+                self.client.state.provider.info(),
+                client_setup.auth.as_ref(),
+                &client_setup.api_provider,
+                client_setup.agent_identity_telemetry.is_some(),
+            );
+            let sampling = if let Some(deferred) = &deferred {
+                let cached = if self.websocket_session.connection.is_some() {
+                    Some(self.websocket_session.provenance.as_ref().ok_or_else(|| {
+                        deferred.reject();
+                        CodexErr::Fatal(crate::accounting::FAILURE.into())
+                    })?)
+                } else {
+                    None
+                };
+                if provenance.validate(deferred, cached)? {
+                    deferred
+                        .resolve(
+                            self.client.state.provider.info(),
+                            client_setup.auth.as_ref(),
+                            &client_setup.api_provider.url_for_path(RESPONSES_ENDPOINT),
+                        )
+                        .await?
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             let request_session_telemetry = if warmup {
                 // `generate=false` prewarm is connection setup, not an inference request.
                 session_telemetry.clone()
@@ -3391,6 +3444,7 @@ impl ModelClientSession {
             }
             match self
                 .websocket_connection(WebsocketConnectParams {
+                    provenance,
                     session_telemetry,
                     api_provider: client_setup.api_provider,
                     api_auth: client_setup.api_auth,
@@ -3403,6 +3457,14 @@ impl ModelClientSession {
                 .await
             {
                 Ok(_) => {}
+                Err(ApiError::Transport(TransportError::Http { status, .. }))
+                    if status.is_redirection() && sampling.is_some() =>
+                {
+                    if let Some(deferred) = &deferred {
+                        deferred.reject();
+                    }
+                    return Err(CodexErr::Fatal(crate::accounting::FAILURE.into()));
+                }
                 Err(ApiError::Transport(TransportError::Http { status, .. }))
                     if status == StatusCode::UPGRADE_REQUIRED =>
                 {
@@ -3487,11 +3549,31 @@ impl ModelClientSession {
                     .await
                     .map_err(|reason| CodexErr::InvalidRequest(reason.to_string()))?;
             }
+            let admission = match (sampling, deferred.as_ref()) {
+                (Some(sampling), Some(deferred)) => {
+                    let established =
+                        self.websocket_session.provenance.clone().ok_or_else(|| {
+                            deferred.reject();
+                            CodexErr::Fatal(crate::accounting::FAILURE.into())
+                        })?;
+                    let expected = deferred.websocket_endpoint()?.ok_or_else(|| {
+                        deferred.reject();
+                        CodexErr::Fatal(crate::accounting::FAILURE.into())
+                    })?;
+                    Some(crate::accounting::websocket::Admission::new(
+                        sampling,
+                        established,
+                        expected,
+                    ))
+                }
+                _ => None,
+            };
             let stream_result = websocket_connection
-                .stream_request(
+                .stream_request_with_accounting(
                     ws_request,
                     self.websocket_session.connection_reused(),
                     Some(Arc::clone(&self.turn_state)),
+                    admission,
                 )
                 .await;
             if let Some(original_item_ids) = original_item_ids {
@@ -5400,6 +5482,7 @@ impl AuthRequestTelemetryContext {
 }
 
 struct WebsocketConnectParams<'a> {
+    provenance: crate::accounting::websocket::Provenance,
     session_telemetry: &'a SessionTelemetry,
     api_provider: codex_api::Provider,
     api_auth: SharedAuthProvider,
