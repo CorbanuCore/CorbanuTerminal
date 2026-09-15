@@ -1038,3 +1038,117 @@ all four changed files are within the five allocated writable paths.
 The commit is recorded in the worker RETURN. **HOLD: D09 and D14 remain unfixed,
 and the full suite is not green.** Their fixes and mutation proofs require
 allocation of the two source paths identified above.
+
+## Functional qualification fixes — owner-daemon-qualify-fixes-02, September 15, 2026
+
+Allocation digest:
+`5e76fad67bc52fbeb1ef90f49ba3e35078b841724b53395a0abcedf9ca316c7d`.
+Claim: `cef39218-840b-4c85-98df-c4159b562aad`.
+Worker: gpt-6-astra / high.
+Base: `791bb79cdffa47a6d4ab8b0e6f9ee4678b72d73b`.
+Branch: `bootstrap/owner-daemon-c-20260915`; worktree:
+`/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-owner-daemon-c-20260915`.
+The brief was read first after verifying SHA-256
+`b771c0342bceea46ff0261a735d3b1a0ef3f54481707cf0afec6a94d6abc0cdc`.
+
+Classification: bounded fixes restoring the existing retained-request and
+pruning-disclosure contracts. Product heading: **Internal delivery control —
+TO BUILD**; requirement excerpts: “durable event dispatch, acknowledgments and
+watchdog” and “Show blockers, rendered sprints, human test plans, machines, run
+logs and freshness”. Existing initiative-delivery-control / PF-80-S01 context
+and manager ownership of shared governance records remain unchanged.
+
+**All four defects (D03, D09, D10 and D14) came from functional qualification
+after unit tests and five review rounds had passed.** The prior allocation
+records the original 675-test result and qualification provenance. This round
+continues from its D03/D10 fixes without reimplementing them, and resolves the
+two explicitly expanded source-scope blockers. Earlier failed attempts and
+qualification results above remain intact.
+
+### Test-first reproduction and fixes
+
+Both regressions were written before implementation in the prior allocation.
+The unchanged-base replay here ran **2 tests in 2.782s**, with the same D09
+retained-bytes failure and D14 dashboard `KeyError`.
+Before editing production code, this round strengthened both cases and observed
+**2 tests in 2.789s: three D09 subcase failures and one D14 error**.
+All named cases below belong to `test_decision_manager.ManagerTests`.
+
+- **D09 — `test_refused_pointer_different_request_keeps_retained_bytes`:**
+  repeated supervisor/direct-notice/supervisor calls must preserve the complete
+  alerts file byte-for-byte, perform no store writes and invoke no exchange when
+  reconstruction differs from the retained pending request. The original code
+  rewrote the request before the exchange callback refused it. `notice` now
+  compares reconstruction with the retained request before changing state or
+  writing; mismatch returns the unchanged pending slot for manager recovery.
+  Existing request equality, admission, cancellation, identity, uncertain-send
+  and receipt fences remain enforced. Matching requests retain the existing
+  admitted-send path.
+- **D14 — `test_dashboard_discloses_cumulative_discard_count_after_reopen`:**
+  status, projected feed, persisted feed cache and dashboard must disclose four
+  discarded events, then five after another pruning pass and reopen, while the
+  total child-exit count stays 131. The original dashboard omitted the key and
+  raised `KeyError`. `slack_health` now forwards `listener_events_pruned`, using
+  zero for the legacy status shape that omits it, consistent with the existing
+  optional-counter contract. The regression checks that compatibility case too.
+  Journal pruning and cumulative accounting are unchanged.
+
+The fixed focused run passed **4 tests in 5.034s**, including both strengthened
+regressions and the existing
+`test_supervised_pending_pointer_retry_is_admitted_and_exactly_once` and
+`test_supervised_pointer_posts_only_retained_approved_slot`. These positive
+controls prove matching retained requests still send once and uncertain
+transport attempts do not repost.
+
+### Mutation proof
+
+Each mutation compiled altered module source in memory, ran its regression,
+restored the original module source in a `finally` block and ran a fresh fixture.
+No production file was mutated on disk. Raw attempts are in the tool transcript.
+
+| Defect | Mutation | Broken result | Restored result |
+| --- | --- | --- | --- |
+| D09 | Remove the retained-request comparison and early return from `notice`. | Three retained-byte subcase failures, 1.064s. | PASS, 1.063s. |
+| D14 | Remove `listener_events_pruned` from `slack_health`. | `KeyError: 'listener_events_pruned'`, 1.741s. | PASS, 1.747s. |
+
+Both mutations were detected; both restored runs passed.
+
+### Retained limits
+
+No fence was weakened and no out-of-scope change was needed. D03/D10 production
+code, transport authorization, journal retention policy and other qualification
+harness defects were left unchanged. This worker has no allocation to change
+shared governance records or perform the separate functional acceptance replay.
+
+**Recurrence stays OFF.** No live Slack message, real service activation,
+installation, live credential/profile read, native credential prompt, push,
+release or approval occurred. Python tests use disposable synthetic stores,
+private shell/TMUX fixtures and loopback SDK fixtures, with profile aliases
+unset and `TMPDIR=/private/tmp`. No Rust test campaign is in scope.
+This return provides internal regression evidence, not functional acceptance
+or an unqualified human-test handoff. Independent confined exact-package replay
+and evidence review remain manager-owned gates; no true-TUI, live-repository,
+human acceptance or release qualification is claimed.
+
+### Final validation
+
+Full suite: **683 tests passed in 432.306s**, with no failures, errors, skips,
+expected failures or full-suite retry. Known synthetic HTTP 500/429 fixture
+cleanup ResourceWarnings appeared. Retained synthetic transport evidence:
+`/private/tmp/isolated-transport-tests-lbgol48a`.
+
+Exact commands:
+
+```sh
+env -u CODEX_HOME -u CORBANU_HOME -u PFTERMINAL_HOME TMPDIR=/private/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts/initiative_control:/Volumes/CorbanuDrive/Corbanu/.codex-work/initiative-control.oGQGyA/venv/lib/python3.14/site-packages /Volumes/CorbanuDrive/Corbanu/.codex-work/slack-sdk-test.Ob3i5O/venv/bin/python -B -m unittest discover -s scripts/initiative_control -p '*test*.py'
+python3 docs/plans/check.py
+python3 docs/sprints/check.py
+git diff --check
+```
+
+Both governance checkers passed: plans **3/3 active, zero slots available**;
+sprints **116 current, 126 archived**. Final `git diff --check` passed.
+The four changed paths are within this allocation, and the prior evidence file
+contents remain byte-for-byte intact. The commit hash is in the worker RETURN.
+D09/D14's implementation-scope blockers are resolved; the functional acceptance
+and recurrence gates above remain separate and open.

@@ -384,8 +384,13 @@ def notice(store, key, kind, basis, current_identity, exchange):
             payload = dict(text=text, thread_ts=thread, mrkdwn=False, unfurl_links=False, unfurl_media=False)
             if blocks is not None:
                 payload["blocks"] = blocks
-            state.update(state="sending", request=dict(attempt=slot, identity=current_identity, payload=payload,
-                                                       payload_digest=d.digest(payload), thread_ts=thread))
+            request = dict(attempt=slot, identity=current_identity, payload=payload,
+                           payload_digest=d.digest(payload), thread_ts=thread)
+            # Refused attempts retain their approved bytes. Check reconstruction
+            # before any durable write or exchange; drift requires manager recovery.
+            if state["request"] is not None and state["request"] != request:
+                return copy.deepcopy(state)
+            state.update(state="sending", request=request)
             store.write("alerts", rows)
             try:
                 state.update(receipt=check_receipt(state["request"], exchange(copy.deepcopy(state["request"]))), state="sent")

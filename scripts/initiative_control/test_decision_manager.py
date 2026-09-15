@@ -674,10 +674,17 @@ class ManagerTests(fixtures.LiveFixture):
         request["payload_digest"] = d.digest(request["payload"])
         self.store.write("alerts", rows)
         retained = (self.root / "alerts.json").read_bytes()
-        with patch.object(self.transport, "exchange", side_effect=AssertionError("altered request posted")) as post:
-            a.retry_pending_pointers(self.store, self.transport)
-        self.assertEqual(post.call_count, 0)
-        self.assertEqual((self.root / "alerts.json").read_bytes(), retained)
+        for entry in ("supervisor", "notice", "supervisor"):
+            with self.subTest(entry=entry):
+                with (patch.object(self.transport, "exchange", side_effect=AssertionError("altered request posted")) as post,
+                      patch.object(self.store, "write", wraps=self.store.write) as write):
+                    if entry == "supervisor":
+                        a.retry_pending_pointers(self.store, self.transport)
+                    else:
+                        a.notice(self.store, key, "follow-up", self.key, PIN, self.transport.exchange)
+                self.assertEqual(post.call_count, 0)
+                self.assertEqual((self.root / "alerts.json").read_bytes(), retained)
+                self.assertEqual(write.call_count, 0)
 
     def test_dashboard_discloses_cumulative_discard_count_after_reopen(self):
         import decision_feed as feed
@@ -687,15 +694,22 @@ class ManagerTests(fixtures.LiveFixture):
         journal["listener_events"] *= 131
         self.store.write("transport", journal)
         supervisor.record("restart-refused")
-        for _ in range(2):
+        for expected in (4, 5):
             reopened = a.Store(self.root)
             status = m.project_status(reopened, NOW, True)
             projected = feed.project_slack(self.feed_root, reopened.root, NOW, True)
-            dashboard = feed.slack_health(dict(slack=projected), NOW)
-            self.assertEqual(status["listener_events_pruned"], 4)
-            self.assertEqual(projected["status"]["listener_events_pruned"], 4)
-            self.assertEqual(dashboard["listener_events_pruned"], 4)
-            self.assertEqual(dashboard["listener_exits"], 131)
+            cached = json.loads((self.feed_root / feed.SLACK_FILE).read_text())
+            for surface in (projected, cached):
+                dashboard = feed.slack_health(dict(slack=surface), NOW)
+                self.assertEqual(status["listener_events_pruned"], expected)
+                self.assertEqual(surface["status"]["listener_events_pruned"], expected)
+                self.assertEqual(dashboard["listener_events_pruned"], expected)
+                self.assertEqual(dashboard["listener_exits"], 131)
+            legacy = copy.deepcopy(projected)
+            del legacy["status"]["listener_events_pruned"]
+            self.assertEqual(feed.slack_health(dict(slack=legacy), NOW)["listener_events_pruned"], 0)
+            if expected == 4:
+                supervisor.record("restart-refused")
 
     def test_listener_incident_records_exit_and_three_unknown_arrivals(self):
         manager, supervisor, clock = self.watchdog()
