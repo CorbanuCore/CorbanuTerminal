@@ -1,5 +1,43 @@
 # Current workstream handoffs — September 12
 
+## September 15 14:40 UTC — unattended manager session
+
+Fable ran the review to receive to dispatch loop unattended on Opus 5.0 High.
+
+- **Task Node** ([PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)):
+  threaded decision answers are **received at `4c501b710`** and pushed. Two
+  designs were rejected before this one; both are retained. The accepted design
+  gives every alert its own root thread and posts one fixed-text pointer into
+  the parent thread, so ingress attribution never consults follower state. The
+  independent review found a P2 (a pre-admission gate refusal was written as a
+  terminal `uncertain` although no POST was attempted, leaving a slot that
+  `send` would not retry and `reconcile` could not resolve) and a P3 (an
+  undocumented `message_mention` field); both were corrected in `e430763bb`
+  with five regressions proven to fail against the previous commit. Disclosed
+  and open: a refused slot returns to `pending` but surfaces no signal, so only
+  an operator re-running `send` moves it.
+- **Accounting** ([PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md)):
+  the direct Chat Completions unit is frozen, published and dispatched. Three
+  workers **correctly STOPPED** before finishing and each was right: two named
+  unreconciled dispatch prerequisites (fixed in `d7cd95e16`, `155b0c1a9` and
+  `3e04c4e52`, including the exclusive lease `acct-chat-20260915`), and the
+  third stopped on a real contract conflict — the frozen design expects
+  continuation after a length finish while Core terminates without further
+  model work. **Manager disposition: production behaviour wins**; the
+  expectation is corrected and the counterexample preserved. `acct-chat-impl-04`
+  is running on that disposition plus a compile failure, four failures, two
+  LEAK markers and three owed mutation demonstrations.
+- **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
+  still **blocked on network isolation**, which is a Travis decision. The
+  preflight receipt is accepted as an honest result, not a passing gate: 2
+  proven, 173 of 175 controls UNPROVEN, all 380 verdicts `not_reached`. No case
+  will run while the guest reaches the internet.
+- **Slack**: the receiver crashed at 12:22 UTC; three inbound callbacks were
+  fenced but never recorded. It was restarted and the gap is disclosed rather
+  than papered over. A password posted in the channel is treated as exposed: it
+  was never used, never stored, and rotation was requested. Key-based access to
+  the guest already exists and is sufficient.
+
 ## September 14 correction — overnight Keychain prompts
 
 The first PF-83 verification run inherited the live Corbanu home and generated
