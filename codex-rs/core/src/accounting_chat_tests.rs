@@ -349,6 +349,110 @@ async fn accounting_chat_borrowed_binding_denies_existing_and_future_clones() ->
 }
 
 #[tokio::test]
+async fn accounting_chat_frame_guard_denies_provider_change_before_client_publication()
+-> anyhow::Result<()> {
+    use crate::memory_stage_one::{
+        StageOneMemoryBinding, StageOneMemoryClient, StageOneMemoryDenial,
+    };
+    use crate::session::session::{Session, SessionSettingsUpdate};
+    use codex_security_policy::SecurityLevel;
+    use std::sync::{Mutex, OnceLock, Weak};
+
+    type Observation = (bool, Result<(), StageOneMemoryDenial>);
+    #[derive(Default)]
+    struct FrameAtConfigChange {
+        owner: OnceLock<Weak<Session>>,
+        binding: OnceLock<Arc<StageOneMemoryBinding>>,
+        observations: Mutex<Vec<Observation>>,
+    }
+    impl codex_extension_api::ConfigContributor<crate::config::Config> for FrameAtConfigChange {
+        fn on_config_changed(
+            &self,
+            _: &codex_extension_api::ExtensionData,
+            _: &codex_extension_api::ExtensionData,
+            previous: &crate::config::Config,
+            next: &crate::config::Config,
+        ) {
+            assert_ne!(previous.model_provider, next.model_provider);
+            let owner = self.owner.get().unwrap().upgrade().unwrap();
+            let configured = owner.provider().now_or_never().unwrap();
+            // This real callback runs after configuration publication, before the old
+            // implementation replaces its ModelClient. Keep state locked during the
+            // frame check, as a concurrent session operation can do in that window.
+            let _locked = owner
+                .lock_state_for_accounting_fixture()
+                .now_or_never()
+                .expect("configuration callback must run outside the state lock");
+            self.observations.lock().unwrap().push((
+                configured == next.model_provider,
+                self.binding.get().unwrap().check_stream(),
+            ));
+        }
+    }
+
+    let mut observed = Vec::new();
+    for path in ["settings", "turn"] {
+        let (mut owner, _) = crate::session::tests::make_session_and_context().await;
+        owner.services.agent_control = owner
+            .services
+            .agent_control
+            .clone()
+            .with_effective_security_policy(
+                SecurityLevel::Permissive,
+                owner.thread_id,
+                /*inherits_from_spawn_parent*/ false,
+            )?;
+        let probe = Arc::new(FrameAtConfigChange::default());
+        let mut extensions = codex_extension_api::ExtensionRegistryBuilder::new();
+        extensions.config_contributor(probe.clone());
+        owner.services.extensions = Arc::new(extensions.build());
+        let owner = Arc::new(owner);
+        probe.owner.set(Arc::downgrade(&owner)).unwrap();
+        let memory = StageOneMemoryClient::new(
+            Arc::downgrade(&owner),
+            futures::future::pending().boxed().shared(),
+            owner.thread_id,
+            &owner.provider().await,
+        )
+        .await?;
+        probe
+            .binding
+            .set(memory.binding_for_fixture(owner.thread_id)?)
+            .unwrap();
+        probe.binding.get().unwrap().check_stream()?;
+        let updates = SessionSettingsUpdate {
+            model_provider: Some("anthropic".into()),
+            ..Default::default()
+        };
+        match path {
+            "settings" => owner.update_settings(updates).await?,
+            "turn" => {
+                owner
+                    .new_turn_with_sub_id("provider-change".into(), updates)
+                    .await?;
+            }
+            _ => unreachable!(),
+        }
+        observed.push((path, probe.observations.lock().unwrap().clone()));
+    }
+    assert_eq!(
+        observed,
+        vec![
+            (
+                "settings",
+                vec![(true, Err(StageOneMemoryDenial::ProviderChanged))]
+            ),
+            (
+                "turn",
+                vec![(true, Err(StageOneMemoryDenial::ProviderChanged))]
+            ),
+        ],
+        "each frame must reject the prior provider as soon as changed configuration is observable"
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn accounting_chat_bootstrap_cancel_scope_and_latch() -> anyhow::Result<()> {
     let (mut session, _) = crate::session::tests::make_session_and_context().await;
     session.services.state_db = None;
