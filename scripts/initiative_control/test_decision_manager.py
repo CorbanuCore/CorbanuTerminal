@@ -17,6 +17,7 @@ import decision_replies as r
 import decision_manager as m
 import slack_transport as s
 import test_slack_transport as fixtures
+import test_owner_tmux as tmux_fixtures
 from test_decisions import NOW, revision
 from test_decision_alerts import PIN, OWNER
 
@@ -798,15 +799,15 @@ class ManagerTests(fixtures.LiveFixture):
         os.close(writer)
         os.close(reader)
 
-    def queue(self):
+    def queue(self, owner=OWNER):
         self.sending()
         self.callback()
         self.assertEqual(s.drain(self.store), 1)
         manager = dict(actor="manager-fixture", answer="Five testers", scope="Synthetic pilot only", alert=self.key,
                        context_digest=a.inspect(self.store, self.key)["intent"]["context_digest"],
-                       audit=r.snapshot(self.store, self.key)["audit"], owner=OWNER, interpretation="answer")
-        key = r.interpret(self.store, self.feed_root, "Ev001", manager, OWNER, NOW)
-        self.assertEqual(r.resume(self.store, self.feed_root, key, OWNER, NOW), "queued")
+                       audit=r.snapshot(self.store, self.key)["audit"], owner=owner, interpretation="answer")
+        key = r.interpret(self.store, self.feed_root, "Ev001", manager, owner, NOW)
+        self.assertEqual(r.resume(self.store, self.feed_root, key, owner, NOW), "queued")
         return key
 
     def start(self, key, mode="normal"):
@@ -830,6 +831,84 @@ class ManagerTests(fixtures.LiveFixture):
     def write(self, process, value):
         process.stdin.write(d.canonical(value) + b"\n")
         process.stdin.flush()
+
+    def tmux_queue(self):
+        fixture = tmux_fixtures.TmuxTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        receiver = fixture.bridge_receiver(timeout=20)
+        old = d.digest(self.feed)
+        self.feed = revision(self.feed)
+        d.save_fixture(self.feed_root, self.feed, old, NOW)
+        self.key = self.enqueue(self.feed, allocation=receiver.owner)
+        return self.queue(receiver.owner), receiver, fixture
+
+    def test_tmux_handoff_end_to_end_mixed_transport_refusals_and_one_unlock(self):
+        key, receiver, fixture = self.tmux_queue()
+        deliver = receiver.deliver
+        def checked(request, ack):
+            value = deliver(request, ack)
+            outbound = dict(request=request, expected_ack=ack)
+            for wrong in (accepted(outbound), assistant(outbound)):
+                with self.assertRaises(d.Invalid):
+                    m.retain_evidence(self.store, key, wrong, transport_kind="tmux", receiver=receiver)
+                with self.assertRaises(d.Invalid):
+                    m.retain_evidence(self.store, key, wrong)
+            with self.assertRaises(d.Invalid):
+                m.retain_evidence(self.store, key, value)  # TMUX cannot enter the native path.
+            with self.assertRaises(d.Invalid):
+                m.retain_evidence(self.store, key, value, transport_kind="tmux")  # No collector.
+            return value
+        with patch.object(receiver, "deliver", side_effect=checked):
+            result = m.dispatch(self.store, self.feed_root, key, self.transport, None,
+                                lambda: receiver.owner, NOW, transport_kind="tmux", receiver=receiver)
+        self.assertTrue(result["work_ready"])
+        bridge = self.store.read("transport")["bridges"][key]
+        self.assertEqual("tmux", bridge["transport_kind"])
+        self.assertEqual(m.expected_ack(bridge["request"], bridge["receipt"]), bridge["ack"])
+        self.assertEqual("agent-acknowledged", r.snapshot(self.store, self.key)["intents"][key]["state"])
+        with self.assertRaises(d.Invalid):
+            m.retain_evidence(self.store, key, bridge["tmux_evidence"], transport_kind="tmux", receiver=receiver)
+        self.assertFalse(m.finish(self.store, self.feed_root, key, self.transport,
+                                  lambda: receiver.owner, NOW, receiver=receiver)["work_ready"])
+        with self.assertRaises(d.Invalid):
+            m.finish(self.store, self.feed_root, key, self.transport, lambda: receiver.owner, NOW)
+        with self.assertRaises(d.Invalid):
+            m.finish(self.store, self.feed_root, key, self.transport, lambda: receiver.owner, NOW,
+                     receiver=m.tmux.BridgeReceiver(fixture.worker, receiver.owner))
+        self.assertEqual(2, len(self.messages))  # Local fixture Slack posts only; no ACK notice.
+
+    def test_tmux_ingress_during_ack_preserves_native_final_fence(self):
+        key, receiver, _ = self.tmux_queue()
+        deliver = receiver.deliver
+        def edited(request, ack):
+            value = deliver(request, ack)
+            self.callback(fixtures.payload("Ev002", subtype="message_changed", event_ts="102.000001",
+                message=dict(user=PIN["human"], ts="101.000001", thread_ts="100.000001",
+                             text="Ten testers", edited={"user": PIN["human"]})))
+            return value
+        with patch.object(receiver, "deliver", side_effect=edited):
+            result = m.dispatch(self.store, self.feed_root, key, self.transport, None,
+                                lambda: receiver.owner, NOW, transport_kind="tmux", receiver=receiver)
+        self.assertFalse(result["work_ready"])
+        self.assertEqual(2, result["watermark"])
+        self.assertIsNotNone(self.store.read("transport")["bridges"][key]["ack"])
+
+    def test_native_bridge_cannot_import_tmux_evidence_or_change_kind(self):
+        key = self.queue()
+        process = self.start(key, "acceptance-crash")
+        outbound = self.line(process)
+        self.write(process, accepted(outbound))
+        process.wait(5)
+        self.assertEqual(process.returncode, 34)
+        for value in (dict(type="tmux-completed", transport="tmux", expected_ack=json.dumps(outbound["expected_ack"])),
+                      dict(assistant(outbound), transport="tmux")):
+            with self.assertRaises(d.Invalid):
+                m.retain_evidence(self.store, key, value)
+            with self.assertRaises(d.Invalid):
+                m.retain_evidence(self.store, key, value, transport_kind="tmux")
+        m.retain_evidence(self.store, key, assistant(outbound))
+        self.assertTrue(m.finish(self.store, self.feed_root, key, self.transport, lambda: OWNER, NOW)["work_ready"])
 
     def test_real_stdio_exact_tool_and_assistant_ack_one_unlock_after_restart(self):
         key = self.queue()

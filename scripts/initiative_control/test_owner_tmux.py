@@ -1,5 +1,7 @@
 """Real private TMUX + harmless shell; rollout records below are synthetic."""
 import copy
+import json
+import sys
 import os
 from pathlib import Path
 import shutil
@@ -15,6 +17,7 @@ from unittest.mock import patch
 import fable_launcher as f
 import owner_daemon as owner
 import owner_tmux as t
+import decisions as d
 
 SHELL = """#!/bin/bash
 umask 077
@@ -31,6 +34,57 @@ while IFS= read -r line; do
         *) printf '%s\\n' "$line";;
     esac
 done
+"""
+
+
+# A real pane process writes its own synthetic completed-turn log. No inference,
+# credentials or network; parent tests cannot supply evidence to BridgeReceiver.
+BRIDGE_SHELL = """#!PYTHON
+import json, os, pathlib, sys, tty
+tty.setcbreak(sys.stdin.fileno())
+home = pathlib.Path(os.environ["HOME"])
+path = home / "sessions/fixture.jsonl"
+print("\\033[?2004hREADY", flush=True)
+for line in sys.stdin:
+    line = line.replace("\\x1b[200~", "").replace("\\x1b[201~", "").rstrip("\\n")
+    if line == "/quit":
+        break
+    try:
+        prompt = json.loads(line)
+    except ValueError:
+        print(line, flush=True)
+        continue
+    ack = prompt["expected_ack"]
+    mode = (home / "mode").read_text() if (home / "mode").exists() else ""
+    if mode == "silent":
+        continue
+    if mode == "wrong-ack":
+        ack += " "
+    if mode == "noncanonical-ack":
+        ack = json.dumps(json.loads(ack), indent=1)
+    turn = prompt["nonce"]
+    def row(kind, **payload):
+        return dict(type=kind, payload=payload)
+    records = [
+        row("event_msg", type="task_started", turn_id=turn),
+        row("turn_context", turn_id=turn, cwd=os.getcwd(), model="fixture-model",
+            model_provider="fixture", effort="high", approval_policy="never",
+            sandbox_policy=dict(type="read-only")),
+        row("event_msg", type="user_message", message=line),
+        row("event_msg", type="model_response_completed", turn_id=turn,
+            model="fixture-model", model_provider_id="fixture", response_id="response-" + turn),
+        row("event_msg", type="task_complete", turn_id=turn, last_agent_message=ack)]
+    if mode == "echo-only":
+        records = records[:-2]
+    if mode == "wrong-user":
+        records[2]["payload"]["message"] += " "
+    if mode == "wrong-runtime":
+        records[1]["payload"]["model"] = "other-model"
+    print(ack, flush=True)
+    with path.open("a") as stream:
+        stream.write("".join(json.dumps(r) + "\\n" for r in records))
+        stream.flush()
+        os.fsync(stream.fileno())
 """
 
 
@@ -108,6 +162,188 @@ class TmuxTests(unittest.TestCase):
     def fixture_input(self, text):
         self.worker.tmux("send-keys", "-t", self.worker.meta["session"], "-l", "--", text)
         self.worker.tmux("send-keys", "-t", self.worker.meta["session"], "Enter")
+
+    def bridge_receiver(self, *, timeout=3):
+        f.write_file(self.binary, BRIDGE_SHELL.replace("PYTHON", sys.executable, 1), mode=0o700)
+        self.worker.config["binary_sha256"] = f.file_digest(self.binary)
+        f.write_json(self.worker.run / "worker.json", self.worker.meta)
+        self.launch()
+        self.turn("bootstrap", "ready", "bootstrap-turn")
+        owner = dict(agent=self.binding["action_id"], allocation=self.binding["allocation_digest"], running=True)
+        return t.BridgeReceiver(self.worker, owner, timeout=timeout)
+
+    def bridge_request(self, receiver, key="handoff-1"):
+        request = dict(handoff=key, owner=receiver.owner, payload=dict(answer="Five testers"))
+        request["payload_digest"] = d.digest(request["payload"])
+        ack = dict(handoff=key, agent=receiver.owner["agent"], allocation=receiver.owner["allocation"],
+                   payload_digest=request["payload_digest"], receipt_id=d.digest([key]))
+        return request, ack
+
+    def test_bridge_direct_capture_exact_completed_receiver_turn(self):
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        evidence = receiver.deliver(request, ack)
+        receiver.verify(evidence, request, ack, consume=True)
+        receiver.verify(evidence, request, ack)
+        self.assertEqual(evidence["expected_ack"].encode(), d.canonical(ack))
+        self.assertEqual(evidence["receiver"]["socket"], self.worker.meta["socket"])
+        self.assertEqual(evidence["receiver"]["pane"], self.worker.inspect()["process"]["pane"])
+        self.assertEqual(evidence["rollout"]["turn_id"], evidence["nonce"])
+        self.assertGreater(evidence["rollout"]["after_bytes"], evidence["rollout"]["before_bytes"])
+
+    def test_bridge_wrong_agent_allocation_payload_send_no_keys(self):
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        for wrong in ({**request, "owner": {**request["owner"], "agent": "other"}},
+                      {**request, "owner": {**request["owner"], "allocation": "b" * 64}},
+                      {**request, "payload_digest": "c" * 64}):
+            with self.subTest(wrong=wrong), self.assertRaises(d.Invalid):
+                receiver.deliver(wrong, ack)
+        self.assertFalse(list(self.worker.run.glob("bridge-*.json")))
+
+    def test_bridge_caller_edits_native_shape_and_reuse_are_refused(self):
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        evidence = receiver.deliver(request, ack)
+        for field, value in (("agent", "other"), ("allocation", "b" * 64),
+                             ("payload_digest", "c" * 64), ("expected_ack", evidence["expected_ack"] + " "),
+                             ("capture_digest", "d" * 64), ("nonce", "old-capture"),
+                             ("receiver", {**evidence["receiver"], "session": "other"}),
+                             ("receiver", {**evidence["receiver"], "socket": "/other/socket"})):
+            with self.subTest(field=field), self.assertRaises(d.Invalid):
+                receiver.verify({**evidence, field: value}, request, ack, consume=True)
+        with self.assertRaises(d.Invalid):
+            receiver.verify(dict(type="assistant", tool="multi_agent_v1.wait_agent",
+                                 agent=request["owner"]["agent"], text=evidence["expected_ack"]),
+                            request, ack, consume=True)
+        receiver.verify(evidence, request, ack, consume=True)
+        with self.assertRaises(d.Invalid):
+            receiver.verify(evidence, request, ack, consume=True)
+        with self.assertRaises(d.Invalid):
+            t.BridgeReceiver(self.worker, receiver.owner).verify(evidence, request, ack, consume=True)
+
+    def test_bridge_old_handoff_rollout_truncation_edit_and_pane_edit_refused(self):
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        evidence = receiver.deliver(request, ack)
+        newer, newer_ack = self.bridge_request(receiver, "handoff-2")
+        with self.assertRaises(d.Invalid):
+            receiver.verify(evidence, newer, newer_ack, consume=True)
+        path = Path(evidence["rollout"]["path"])
+        original = path.read_bytes()
+        for raw in (original[:-1], original.replace(b"ready", b"edited"), original[:evidence["rollout"]["before_bytes"]]):
+            f.write_file(path, raw)
+            with self.assertRaises(d.Invalid):
+                receiver.verify(evidence, request, ack, consume=True)
+        # Atomic replacements also invalidate the pinned rollout inode.
+        f.write_file(path, original)
+        with self.assertRaises(d.Invalid):
+            receiver.verify(evidence, request, ack, consume=True)
+
+    def test_bridge_live_pane_changes_and_stale_capture_refused(self):
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        evidence = receiver.deliver(request, ack)
+        self.fixture_input("changed pane")
+        self.wait(lambda: "changed pane" in self.worker.tmux(
+            "capture-pane", "-p", "-t", self.worker.meta["session"]).stdout)
+        with self.assertRaises(d.Invalid):
+            receiver.verify(evidence, request, ack, consume=True)
+        with patch.object(t.time, "monotonic", return_value=time.monotonic() + 30), self.assertRaises(d.Invalid):
+            receiver.verify(evidence, request, ack, consume=True)
+
+    def test_bridge_exact_one_byte_wrong_ack_and_uncompleted_echo_hold(self):
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        for mode in ("wrong-ack", "noncanonical-ack", "echo-only", "wrong-user", "wrong-runtime", "silent"):
+            with self.subTest(mode=mode):
+                f.write_file(self.worker.run / "home/mode", mode)
+                # Fresh completed baseline per attempt; failed attempts are never
+                # retried, and each uses a different durable handoff intent.
+                self.turn("bootstrap", "ready", "baseline-" + mode)
+                request, ack = self.bridge_request(receiver, mode)
+                reason = {"wrong-ack": "wrong_ack", "noncanonical-ack": "wrong_ack",
+                          "wrong-user": "wrong_submission", "wrong-runtime": "wrong_runtime"}.get(mode)
+                receiver.timeout = 3 if reason else 0.5
+                expectation = (self.assertRaisesRegex(f.LaunchError, reason) if reason
+                               else self.assertRaises(d.Invalid))
+                with expectation:
+                    receiver.deliver(request, ack)
+                self.assertFalse(receiver.issued)
+        with self.assertRaises((d.Invalid, f.LaunchError)):
+            receiver.deliver(request, ack)
+
+    def test_bridge_prior_capture_replay_and_different_socket_receiver_refused(self):
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        evidence = receiver.deliver(request, ack)
+        receiver.verify(evidence, request, ack, consume=True)
+        old_screen = receiver.capture().decode()
+        request2, ack2 = self.bridge_request(receiver, "handoff-2")
+        original = self.worker.tmux
+        def replay(*args, **kwargs):
+            result = original(*args, **kwargs)
+            if args[0] == "capture-pane":
+                result.stdout = old_screen
+            return result
+        with patch.object(self.worker, "tmux", side_effect=replay), self.assertRaises(d.Invalid):
+            receiver.deliver(request2, ack2)
+        self.assertNotIn("handoff-2", [v[0]["handoff"] for v in receiver.issued.values()])
+        other = TmuxTests()
+        other.setUp()
+        self.addCleanup(other.doCleanups)
+        second = other.bridge_receiver()
+        evidence2 = second.deliver(request, ack)
+        self.assertNotEqual(evidence["receiver"]["socket"], evidence2["receiver"]["socket"])
+        self.assertNotEqual(evidence["receiver"]["session"], evidence2["receiver"]["session"])
+        with self.assertRaises(d.Invalid):
+            receiver.verify(evidence2, request, ack, consume=True)
+        with self.assertRaises(d.Invalid):
+            second.verify(evidence, request, ack, consume=True)
+
+    def test_bridge_uncertain_enter_never_resends_after_receiver_reload(self):
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        original = self.worker.tmux
+        def uncertain(*args, **kwargs):
+            if args[0] == "send-keys":
+                raise subprocess.TimeoutExpired("fixture enter", 3)
+            return original(*args, **kwargs)
+        with patch.object(self.worker, "tmux", side_effect=uncertain), self.assertRaises(subprocess.TimeoutExpired):
+            receiver.deliver(request, ack)
+        reloaded = t.BridgeReceiver(t.Worker(self.worker.run), receiver.owner)
+        with patch.object(reloaded.worker, "tmux", wraps=reloaded.worker.tmux) as calls:
+            with self.assertRaisesRegex(f.LaunchError, "effect_uncertain"):
+                reloaded.deliver(request, ack)
+        self.assertFalse(any(c.args[0] in ("load-buffer", "paste-buffer", "send-keys") for c in calls.call_args_list))
+        self.assertEqual({}, receiver.issued)
+
+    def test_bridge_visible_credential_prompt_sends_no_keys(self):
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        self.fixture_input("Sign in")
+        self.wait(lambda: "Sign in" in self.worker.tmux(
+            "capture-pane", "-p", "-t", self.worker.meta["session"]).stdout)
+        with self.assertRaises(d.Invalid):
+            receiver.deliver(request, ack)
+        self.assertFalse(list(self.worker.run.glob("bridge-*.json")))
+
+    def test_bridge_preexisting_exact_ack_sends_no_keys(self):
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        self.fixture_input("existing " + d.canonical(ack).decode())
+        self.wait(lambda: d.canonical(ack) in receiver.capture())
+        with self.assertRaises(d.Invalid):
+            receiver.deliver(request, ack)
+        self.assertFalse(list(self.worker.run.glob("bridge-*.json")))
+
+    def test_bridge_receiver_identity_drift_refuses_real_other_session(self):
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        evidence = receiver.deliver(request, ack)
+        self.worker.tmux("rename-session", "-t", self.worker.meta["session"], "renamed")
+        with self.assertRaises((d.Invalid, f.LaunchError)):
+            receiver.verify(evidence, request, ack, consume=True)
 
     def test_private_home_environment_socket_and_pinned_argv(self):
         with patch.dict(os.environ, {"CORBANU_HOME": "/never/use/live", "SOME_API_KEY": "synthetic"}):
