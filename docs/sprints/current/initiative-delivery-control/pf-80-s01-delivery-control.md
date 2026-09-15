@@ -36,7 +36,6 @@ Port/preparation/engine/adapter/reconciliation are reviewed and integrated local
 - [Main migration/handoff](../../../plans/main-workstreams-2026-09-11.md); [historical QA](../../../../qa/initiative-control/2026-09-11/verification.md).
 
 ## Code boundaries
-
 - Existing native contracts: `codex-rs/cli/src/tasknode_cmd.rs`, native Campaign Tracker and tasknode-session/profile behavior, read-only for kickoff.
 - Port: `scripts/initiative_control/` from the recovery source; audit every file, no state/auth/credential directories.
 - Planned contract and tests: `docs/research/tasknode-integration/`, `qa/initiative-control/pf-80-s01/`, focused tests beside the ported scripts.
