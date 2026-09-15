@@ -250,3 +250,174 @@ native Mac support, live-repository acceptance, package/release readiness,
 benchmarks, broader Rust-test success, security-review closure or named-human
 acceptance. No plan/sprint/product code, live profile, running application,
 launcher or installation was changed. No push was performed.
+
+## Revision 02 — independent-review corrections
+
+Action `pf83-harness-impl-02`; Astra High revise worker under Fable.
+Allocation digest `b67221290d77e4eb185240ec426e3a1967e245563110709d07667d9be788c4cb`;
+claim `3b92736c-f57f-4b59-9bdb-6e7c34cc41bd`.
+The brief SHA-256 matched
+`ccaaf98e9e99786e6c12cf21538e93f40da0151eb990240ba5f7d236f3a68faf`.
+The independent review was read before implementation; its retained source is
+`/private/tmp/fmgr.Q1SIYZ/pf83h-review.json`, SHA-256
+`cbc07f17999ee82632eee1404052f6ae133b02d811b49532b84aafd62cc7d71a`.
+It reported four nonblocking P3 findings and overall “patch is correct.”
+This revision does not imply a new independent review or approval.
+
+Revision base: `3526c54a5d66563cfc62e9c0fecf08bc4637605a`, branch
+`bootstrap/pf83-harness-20260915`, in the same recorded worktree.
+Classification remains **routine QA infrastructure** under the product heading
+and requirement excerpts in “Outcome and authority.” Product behavior and the
+seven remaining native-execution prerequisites above are unchanged.
+Internal-infrastructure functional-design N/A remains the worker's assessment;
+integrator acceptance has not been invented.
+
+The earlier sections preserve increment-1 history. This correction section
+supersedes their reserve, loopback-enforcement, tail-dispatch and final-tree
+claims. Original attempts, reports, normalized packets and pinned dependencies
+were preserved. Revision artifacts live under the private harness root's
+`revision-02/`; pre-edit harness bytes are in `revision-02/before/`.
+
+### Per-finding disposition
+
+1. **Finalization reserve — corrected.** Routine command JSON/stdout/stderr
+   records now use the ordinary evidence cap. Only six named, write-once,
+   size-bounded terminal records may use the 1 MiB reserve. Their combined slots
+   total 864 KiB, leaving 160 KiB for sealing overhead. `Evidence` and
+   `Exhausted` moved to `fixtures.py` to keep every authored file below its
+   frozen ceiling. Finalization attempts each requested terminal record, records
+   errors, and calls sealing from `finally`; a terminal-record error produces
+   a nonzero exit with sealed partial evidence. Cleanup commands can still run
+   when their routine logs overflow; any overflow forces a blocked harness
+   outcome, including overflow first reached during cleanup.
+
+   The regression drives a **scaled cap of 1 MiB + 8 bytes** to its exact ordinary
+   boundary with a real synthetic Python command, retains the eight-byte command
+   prefix, checks cleanup-command execution, then exercises the coordinator's
+   actual exception/finalization path. Complete receipt, isolation and all
+   380 blocked results are present and sealed: nine files, 125,274 total bytes.
+   A separate oversized-terminal-record regression proves that other terminal
+   files and an error record are still written and sealed before failure is
+   reported. These are cap-accounting tests, not a physical 256 MiB storage
+   stress test. Disk/permission failures can still prevent storage or sealing;
+   they are never represented as successful finalization.
+
+2. **Invalid loopback controls — excluded; dimension UNPROVEN.** The two
+   dead-port TCP probes were removed from parent/child probe sets and therefore
+   cannot contribute to `passed`. File, live Unix-socket and ptrace controls
+   remain. Parent, child, isolation and receipt evidence explicitly identify
+   loopback as unproven. Actual diagnostic `isolation.json` now records:
+
+   ```json
+   {
+     "enforcement": "partial-os-enforced; loopback UNPROVEN",
+     "loopback": "UNPROVEN: no live owned TCP peer with paired positive controls"
+   }
+   ```
+
+   The native refusal records `"enforcement": "unverified; loopback UNPROVEN"`.
+   Receipts record `"loopback": "UNPROVEN"`. This is the brief's permitted
+   fallback, not proof of TCP denial. Provisioning and testing live owned TCP
+   peers with paired positives remains required before claiming that dimension.
+
+3. **Reserved-tail dispatch — wired and exercised.** On ordinary budget
+   exhaustion, the coordinator enters `Budget.take(recovery=True)`, applies
+   `validate(..., tail=True)`, and sends seven observations followed by a
+   blocked finish through the same confined guest/PTY. The final call-exhaustion
+   replay has executed sequences **57–63: observe; 64: finish**, 64 calls total,
+   zero calls remaining, and `recovery_tail_dispatched: true`. Guest finish,
+   identity checks, PTY cleanup and owned-container reconciliation completed.
+   Outcome remains `blocked: budget_exhausted`, with functional verdict
+   `not_reached`. Native actor/transport recovery is still unqualified.
+
+4. **Importable checks — corrected.** Test storage is initialized by
+   `Checks.setUpClass`; tests no longer depend on an `AREA` created only in
+   `__main__`. Both direct invocation and `python3 -B -m unittest checks`
+   passed all **11 tests** on the final harness tree.
+
+### Final authored deltas
+
+Deltas compare the retained pre-revision bytes with the final files; copied
+dependencies and generated evidence are excluded. Current authored inventory:
+**1,229 lines / 1,156 nonblank**, seven files, all within frozen ceilings.
+
+| Changed harness file | Added | Deleted | Final lines | Final nonblank |
+| --- | ---: | ---: | ---: | ---: |
+| `run_pf83.py` | 44 | 48 | 428 | 410 |
+| `native_guest.py` | 2 | 7 | 206 | 193 |
+| `fixtures.py` | 56 | 2 | 285 | 263 |
+| `checks.py` | 42 | 13 | 190 | 173 |
+| `README.md` | 12 | 5 | 84 | 81 |
+
+`fixtures.py` also stamps the current allocation and claim on new attempts.
+The frozen normalized manifests retain their historical metadata and bytes.
+
+### Exact re-run commands and results
+
+The exact executed shell commands, working directories and exit codes are in
+`revision-02/commands.json`, SHA-256
+`7449753930df1154f2db70b27f6eca32d141f6435fc097179a66ea2ad57f19dc`.
+Every final command ran from the private harness root with the following literal
+environment prefix, followed by the invocation shown below and stdout/stderr
+redirection to the correspondingly named `revision-02/*-final.stdout/.stderr`:
+
+```sh
+env -i PATH=/opt/homebrew/bin:/usr/bin:/bin HOME=/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/revision-02 CODEX_HOME=/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/revision-02 CORBANU_HOME=/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/revision-02 PFTERMINAL_HOME=/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/revision-02 CORBANU_TEST_NO_NATIVE_KEYRING=1
+```
+
+```sh
+python3 -B /Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/checks.py
+python3 -B -m unittest checks
+python3 -B /Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/run_pf83.py dry G01--macos-arm64--fresh--tensorcash --docker-endpoint unix:///Users/Neo/.docker/run/docker.sock
+python3 -B /Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/run_pf83.py dry G01--macos-arm64--fresh--tensorcash --scenario call-exhaustion --docker-endpoint unix:///Users/Neo/.docker/run/docker.sock
+python3 -B /Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/run_pf83.py dry G01--macos-arm64--fresh--tensorcash --scenario invalid-action --docker-endpoint unix:///Users/Neo/.docker/run/docker.sock
+python3 -B /Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/run_pf83.py native G01--macos-arm64--fresh--tensorcash --docker-endpoint unix:///Users/Neo/.docker/run/docker.sock
+```
+
+| Command/log stem | Exit | Final-tree result |
+| --- | ---: | --- |
+| `checks-direct-final` | 0 | 11 passed; `checks/attempt-sziue6sx/report.json` |
+| `checks-module-final` | 0 | 11 passed; raw unittest stderr retained |
+| `dry-smoke-final` | 0 | `attempt-7ysi9ulr`; offline_checks_completed; 4 calls; 82 sealed files |
+| `call-exhaustion-final` | 1 | `attempt-pzgmt0eu`; budget_exhausted; 64 calls including 8 tail actions; 144 sealed files |
+| `invalid-action-final` | 1 | `attempt-tb4lkf5p`; printable text only; 1 charged rejected request; 77 sealed files |
+| `native-final` | 1 | `attempt-8asosrej`; package/environment/seams and actor absent; zero dispatch; 13 sealed files |
+
+All four attempts retain all 380 outcomes as `blocked/not_reached`, report
+`reconciled: true`, and match the final authored hashes. Native refusal emitted
+no Docker command records. No live-profile read, native credential prompt,
+inference, product launch, Rust test or push occurred.
+
+The final stdlib readback command is also preserved in `commands.json`
+(`verification`, exit 0). It checked every final artifact hash and seal digest,
+receipt references, authored hashes/ceilings, all outcomes, absent loopback
+controls, native zero-dispatch and the eight executed tail actions.
+Its exact output is `revision-02/verification.stdout`, SHA-256
+`13e19f2769d3345b145e032a6eb7be0508fa588c9ea186e8dd17b183e49bdfc6`.
+This is worker verification, not independent evidence acceptance.
+
+Final seal digests:
+
+- Smoke: `27723af5a4bce569d4f25b2ef4fc9c59552f2b165abc5faa9be85d6032277e3b`.
+- Exhaustion: `a41ce58a2c4b65c43a3b551c8434f12d7adccaac7b075d30bda7296b9484089a`.
+- Invalid input: `0883bd7e915b2aaba80e319ca56ec934eeb532b23b9748c56bf92a87862e7f06`.
+- Native refusal: `6968060b673d43f6ba4fdaa72be24aaaf1e15b5c1bdd4910989feda97f880085`.
+
+The direct-check report SHA-256 is
+`d706e851b91cd9206f724566653ea5169afe8e2be962ed6f69d942d817862ced`.
+Its cap regression is `checks/attempt-sziue6sx/check-3g7v185y`, seal
+`826d89781c54931f3efd7d39721e4f5d606e5166dc19da9b86072a0674382ffe`.
+Its terminal-error regression is `checks/attempt-sziue6sx/check-vqhvb4dr`,
+three sealed files with seal
+`d89386990a5de81cf23b61a325da9a0fc4abcda2591e8d7b789d99dd3b26cbf2`.
+
+Initial revision checks and replays `attempt-cu01owou` and `attempt-uas1wq3w`
+remain intact and are marked `final_tree: false` in the command ledger.
+The subsequent cleanup-overflow outcome correction required fresh final runs;
+earlier evidence was not overwritten.
+
+**Remaining unproven:** live-peer TCP/loopback denial; actual native package and
+macOS service isolation; native actor/transport recovery; all original remaining
+items 1–7, including independent code-blind execution, both live repositories,
+platform/profile/model-route coverage, schema-2 handoff, independent evidence
+approval and human acceptance. No functional result or readiness is claimed.
