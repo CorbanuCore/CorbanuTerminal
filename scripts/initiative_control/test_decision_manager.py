@@ -878,6 +878,29 @@ class ManagerTests(fixtures.LiveFixture):
                      receiver=m.tmux.BridgeReceiver(fixture.worker, receiver.owner))
         self.assertEqual(2, len(self.messages))  # Local fixture Slack posts only; no ACK notice.
 
+    def test_tmux_slow_model_turn_keeps_fresh_witness_and_unlocks(self):
+        key, receiver, _ = self.tmux_queue()
+        receiver.handoff_timeout = 300
+        real_time = tmux_fixtures.time
+        elapsed = [0]
+        rollout = receiver.rollout
+        reads = []
+        def slow_rollout():
+            value = rollout()
+            reads.append(value)
+            if len(reads) > 1:
+                elapsed[0] = 60  # Model time passes before the ACK capture.
+            return value
+        clock = SimpleNamespace(monotonic=lambda: real_time.monotonic() + elapsed[0],
+                                sleep=real_time.sleep)
+        with patch.object(m.tmux, "time", clock), patch.object(receiver, "rollout", side_effect=slow_rollout):
+            result = m.dispatch(self.store, self.feed_root, key, self.transport, None,
+                                lambda: receiver.owner, NOW, transport_kind="tmux", receiver=receiver)
+        self.assertEqual(60, elapsed[0])
+        self.assertTrue(result["work_ready"])
+        self.assertTrue(self.store.read("transport")["bridges"][key]["unlocked"])
+        self.assertEqual("agent-acknowledged", r.snapshot(self.store, self.key)["intents"][key]["state"])
+
     def test_tmux_ingress_during_ack_preserves_native_final_fence(self):
         key, receiver, _ = self.tmux_queue()
         deliver = receiver.deliver

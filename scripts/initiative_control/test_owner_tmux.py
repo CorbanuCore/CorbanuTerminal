@@ -12,6 +12,7 @@ import time
 import tomllib
 import unittest
 import uuid
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import fable_launcher as f
@@ -40,7 +41,7 @@ done
 # A real pane process writes its own synthetic completed-turn log. No inference,
 # credentials or network; parent tests cannot supply evidence to BridgeReceiver.
 BRIDGE_SHELL = """#!PYTHON
-import json, os, pathlib, sys, tty
+import json, os, pathlib, sys, time, tty
 tty.setcbreak(sys.stdin.fileno())
 home = pathlib.Path(os.environ["HOME"])
 path = home / "sessions/fixture.jsonl"
@@ -82,7 +83,15 @@ for line in sys.stdin:
         records[1]["payload"]["model"] = "other-model"
     print(ack, flush=True)
     with path.open("a") as stream:
-        stream.write("".join(json.dumps(r) + "\\n" for r in records))
+        raw = "".join(json.dumps(r) + "\\n" for r in records)
+        if mode == "mid-append":
+            stream.write(raw[:-1])
+            stream.flush()
+            while not (home / "complete-append").exists():
+                time.sleep(0.01)
+            stream.write(raw[-1:])
+        else:
+            stream.write(raw)
         stream.flush()
         os.fsync(stream.fileno())
 """
@@ -170,7 +179,7 @@ class TmuxTests(unittest.TestCase):
         self.launch()
         self.turn("bootstrap", "ready", "bootstrap-turn")
         owner = dict(agent=self.binding["action_id"], allocation=self.binding["allocation_digest"], running=True)
-        return t.BridgeReceiver(self.worker, owner, timeout=timeout)
+        return t.BridgeReceiver(self.worker, owner, timeout=timeout, handoff_timeout=3)
 
     def bridge_request(self, receiver, key="handoff-1"):
         request = dict(handoff=key, owner=receiver.owner, payload=dict(answer="Five testers"))
@@ -244,13 +253,92 @@ class TmuxTests(unittest.TestCase):
         receiver = self.bridge_receiver()
         request, ack = self.bridge_request(receiver)
         evidence = receiver.deliver(request, ack)
+        # Otherwise-valid evidence must fail solely because its capture is old.
+        with patch.object(t, "time", SimpleNamespace(monotonic=lambda: time.monotonic() + 30)), self.assertRaises(d.Invalid):
+            receiver.verify(evidence, request, ack, consume=True)
+        receiver.verify(evidence, request, ack, consume=True)
         self.fixture_input("changed pane")
         self.wait(lambda: "changed pane" in self.worker.tmux(
             "capture-pane", "-p", "-t", self.worker.meta["session"]).stdout)
         with self.assertRaises(d.Invalid):
+            receiver.verify(evidence, request, ack)
+
+    def test_bridge_mid_append_rollout_repolls_before_issuing_evidence(self):
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        f.write_file(self.worker.run / "home/mode", "mid-append")
+        read_file = f.read_file
+        partial_reads = []
+        def read(path, *args, **kwargs):
+            raw = read_file(path, *args, **kwargs)
+            if Path(path).suffix == ".jsonl" and not raw.endswith(b"\n"):
+                self.assertFalse(receiver.issued)
+                partial_reads.append(raw)
+                f.write_file(self.worker.run / "home/complete-append", "")
+            return raw
+        with patch.object(f, "read_file", side_effect=read):
+            evidence = receiver.deliver(request, ack)
+        self.assertTrue(partial_reads, "must observe an actual incomplete rollout read")
+        self.assertTrue(receiver.issued[evidence["nonce"]][1].endswith(b"\n"))
+        receiver.verify(evidence, request, ack, consume=True)
+
+    def test_bridge_incomplete_and_malformed_rollouts_never_issue_evidence(self):
+        receiver = self.bridge_receiver()
+        read_file = f.read_file
+        for mode in ("partial", "malformed"):
+            with self.subTest(mode=mode):
+                self.turn("bootstrap", "ready", "baseline-" + mode)
+                request, ack = self.bridge_request(receiver, mode)
+                baseline = receiver.rollout()[0]
+                reads = []
+                def read(path, *args, **kwargs):
+                    raw = read_file(path, *args, **kwargs)
+                    if Path(path).suffix == ".jsonl" and raw != baseline:
+                        reads.append(raw)
+                        return raw[:-1] if mode == "partial" else raw + b"malformed\n"
+                    return raw
+                receiver.handoff_timeout = 0.7
+                expectation = (self.assertRaises(d.Invalid) if mode == "partial"
+                               else self.assertRaisesRegex(f.LaunchError, "invalid_json"))
+                with patch.object(f, "read_file", side_effect=read), expectation:
+                    receiver.deliver(request, ack)
+                self.assertFalse(receiver.issued)
+                self.assertGreater(len(reads), 1 if mode == "partial" else 0)
+                self.assertTrue((self.worker.run / ("bridge-" + d.digest(mode) + ".json")).exists())
+
+    def test_bridge_ack_after_collection_deadline_never_issues_witness(self):
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        elapsed = [0]
+        capture = receiver.capture
+        captures = []
+        def slow_capture():
+            screen = capture()
+            captures.append(screen)
+            if len(captures) > 1:
+                elapsed[0] = 301
+            return screen
+        clock = SimpleNamespace(monotonic=lambda: time.monotonic() + elapsed[0], sleep=time.sleep)
+        with (patch.object(t, "time", clock), patch.object(receiver, "capture", side_effect=slow_capture),
+              self.assertRaises(d.Invalid)):
+            receiver.deliver(request, ack)
+        self.assertEqual(2, len(captures))
+        self.assertFalse(receiver.issued)
+
+    def test_bridge_witness_expiring_during_verification_is_refused(self):
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        evidence = receiver.deliver(request, ack)
+        elapsed = [0]
+        capture = receiver.capture
+        def slow_capture():
+            screen = capture()
+            elapsed[0] = 30
+            return screen
+        with (patch.object(t, "time", SimpleNamespace(monotonic=lambda: time.monotonic() + elapsed[0])),
+              patch.object(receiver, "capture", side_effect=slow_capture), self.assertRaises(d.Invalid)):
             receiver.verify(evidence, request, ack, consume=True)
-        with patch.object(t.time, "monotonic", return_value=time.monotonic() + 30), self.assertRaises(d.Invalid):
-            receiver.verify(evidence, request, ack, consume=True)
+        self.assertFalse(receiver.used)
 
     def test_bridge_exact_one_byte_wrong_ack_and_uncompleted_echo_hold(self):
         receiver = self.bridge_receiver()
@@ -264,7 +352,7 @@ class TmuxTests(unittest.TestCase):
                 request, ack = self.bridge_request(receiver, mode)
                 reason = {"wrong-ack": "wrong_ack", "noncanonical-ack": "wrong_ack",
                           "wrong-user": "wrong_submission", "wrong-runtime": "wrong_runtime"}.get(mode)
-                receiver.timeout = 3 if reason else 0.5
+                receiver.handoff_timeout = 3 if reason else 0.5
                 expectation = (self.assertRaisesRegex(f.LaunchError, reason) if reason
                                else self.assertRaises(d.Invalid))
                 with expectation:

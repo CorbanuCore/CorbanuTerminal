@@ -118,6 +118,10 @@ def provenance(records, binding, prompts, ack):
     return result
 
 
+class RolloutPending(d.Invalid):
+    """An append has not yet yielded a complete, stable rollout snapshot."""
+
+
 class BridgeReceiver:
     """Owner-created capability, never reconstructed from supplied capture JSON.
 
@@ -125,9 +129,10 @@ class BridgeReceiver:
     pipe. This is provenance/correlation, not a sandbox or a hostile-owner proof.
     A lost collector requires reconciliation; no capture import or resend API.
     """
-    def __init__(self, worker, owner, *, timeout=20):
-        d.require(type(worker) is Worker and 0 < timeout <= 20)
+    def __init__(self, worker, owner, *, timeout=20, handoff_timeout=300):
+        d.require(type(worker) is Worker and 0 < timeout <= 20 and 0 < handoff_timeout <= 300)
         self.worker, self.owner, self.timeout = worker, a.owner(owner), timeout
+        self.handoff_timeout = handoff_timeout
         self.meta = copy.deepcopy(worker.meta)
         self.check_owner(owner)
         self.tmux_digest = f.file_digest(f.no_links(worker.config["tmux"]))
@@ -171,9 +176,12 @@ class BridgeReceiver:
         before = path.stat()
         raw = f.read_file(path, f.RECORD_LIMIT, private=True)
         after = path.stat()
-        d.require((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) ==
-                  (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
-                  and raw and raw.endswith(b"\n"))
+        d.require((before.st_dev, before.st_ino) == (after.st_dev, after.st_ino))
+        if ((before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns)
+                or not raw or not raw.endswith(b"\n")):
+            raise RolloutPending()
+        # Parse only complete stable snapshots. Malformed complete records are
+        # terminal; neither a partial record nor its valid prefix is evidence.
         records = [f.strict_json(line) for line in raw.splitlines()]
         d.require(records[0]["type"] == "session_meta")
         session = provenance(records[:1], self.worker.binding, [], "")
@@ -220,13 +228,18 @@ class BridgeReceiver:
         finally:
             w.tmux("delete-buffer", "-b", buffer, check=False)
         while True:
-            d.require(time.monotonic() - started <= self.timeout)
-            raw, current, pin = self.rollout()
+            d.require(time.monotonic() - started <= self.handoff_timeout)
+            try:
+                raw, current, pin = self.rollout()
+            except RolloutPending:
+                time.sleep(0.05)
+                continue
             d.require(pin == rollout and raw.startswith(before))
             result = provenance(records[:1] + current[len(records):], w.binding, [prompt], text)
             if result["ack"]:
+                captured = time.monotonic()
                 screen = self.capture()
-                d.require(text.encode() in screen)
+                d.require(text.encode() in screen and time.monotonic() - started <= self.handoff_timeout)
                 evidence = dict(type="tmux-completed", transport="tmux", nonce=nonce,
                                 handoff=request["handoff"], agent=request["owner"]["agent"],
                                 allocation=request["owner"]["allocation"],
@@ -238,7 +251,9 @@ class BridgeReceiver:
                                     turn_id=result["turn_id"]))
                 # Keep exact bytes privately in memory; caller mutation or a saved
                 # capture can never replace this freshly collected witness.
-                self.issued[nonce] = (copy.deepcopy(evidence), raw, screen, started)
+                # Model latency spends the collection budget, never witness age.
+                # Timestamp before capture, so capture/identity checks count too.
+                self.issued[nonce] = (copy.deepcopy(evidence), raw, screen, captured)
                 return copy.deepcopy(evidence)
             time.sleep(0.05)
 
@@ -247,15 +262,16 @@ class BridgeReceiver:
                   and evidence.get("transport") == "tmux")
         issued = self.issued.get(evidence.get("nonce"))
         d.require(issued is not None and evidence == issued[0])
-        _, raw, screen, started = issued
+        _, raw, screen, captured = issued
         self.check_owner(request["owner"])
         d.require(evidence["request_digest"] == d.digest(request)
                   and evidence["expected_ack"].encode() == d.canonical(ack)
-                  and time.monotonic() - started <= self.timeout
+                  and 0 <= time.monotonic() - captured <= self.timeout
                   and self.observe() == self.identity)
         current, _, pin = self.rollout()
         d.require(current == raw and all(evidence["rollout"][k] == v for k, v in pin.items())
                   and self.capture() == screen)
+        d.require(0 <= time.monotonic() - captured <= self.timeout)
         if consume:
             d.require(evidence["nonce"] not in self.used)
             self.used.add(evidence["nonce"])

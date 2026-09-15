@@ -63,11 +63,24 @@ appear in a fresh direct capture of the pinned pane. Pane text by itself, includ
 an echoed prompt, cannot qualify.
 
 The collector keeps the exact issued record, rollout bytes, capture bytes, and
-monotonic start time in memory. Retention compares the complete supplied record
+monotonic capture time in memory. Retention compares the complete supplied record
 against that issued witness, re-reads the same rollout inode and exact bytes,
-recaptures the live pane byte for byte, and consumes the nonce once. The maximum
-evidence age is 20 seconds from send preparation (a smaller owner timeout is
-allowed). Final eligibility revalidates the same consumed witness. A timeout,
+recaptures the live pane byte for byte, and consumes the nonce once. After the
+`owner-daemon-bridge-02` revision, ACK collection has an independent
+`handoff_timeout` (default and maximum 300 seconds, measured from send preparation).
+The maximum witness age remains `timeout` (default and maximum 20 seconds), now
+measured from immediately before its ACK pane capture. Verification checks that
+age both before and after its live identity/rollout/pane checks. Final eligibility
+revalidates the same consumed witness; no refresh, import or resend is added.
+A slow model can therefore spend 60 seconds producing the ACK and still leave
+20 seconds for retention/unlock. Delaying unlock beyond the capture's freshness
+bound still refuses; this is not an indefinite authorization lease.
+
+Only while polling for the ACK, an incomplete trailing rollout record or a
+snapshot changing during an append is retried within the collection deadline.
+No prefix or partial record is accepted as evidence. Stable newline-terminated
+records still require strict JSON and full provenance; malformed complete records
+remain terminal. Baseline and verification reads remain strict. A timeout,
 uncertain key send, missing/malformed/truncated/edited rollout, changed pane,
 identity drift, reused nonce or collector restart leaves the handoff held.
 A new collector cannot import old evidence or resend the durable attempt.
@@ -199,6 +212,100 @@ python3 docs/plans/check.py
 python3 docs/sprints/check.py
 git diff --check
 ```
+
+## Revision — owner-daemon-bridge-02
+
+- Action: `owner-daemon-bridge-02`; allocation digest:
+  `93992203a4e962d82305ba7aef9bd1619edb8e15eb89e7de2446e25985d8b851`.
+- Claim: `10b596dc-33ae-4644-a34b-2d5a7225ba55`.
+- Base: `3ede7d18836ec02e31cd128b5b5c4c57968e2a93`; same worktree,
+  branch and Astra High runtime as above.
+- Frozen brief: `/private/tmp/fmgr.Q1SIYZ/briefs/owner-daemon-bridge-02.json`;
+  `shasum -a 256` matched
+  `e5e879c228b103b86e13ae77698a3503f4b367db5e53d2295d6e0bd96ab07a18`.
+- Read independent review `/private/tmp/fmgr.Q1SIYZ/dbridge-review.json`
+  before implementation. Both findings were P3; original verdict was
+  “patch is correct.” This worker corrects both findings, without adding an
+  independent review or claiming reviewer acceptance.
+- Classification: bounded reliability fix to the existing internal transport,
+  within the product authority **Internal delivery control — TO BUILD**,
+  “durable event dispatch, acknowledgments and watchdog” and
+  “actual Slack reply/decision/agent acknowledgment.” PF-80-S01 remains
+  `in_progress`; allocation/plan reconciliation and all later qualification
+  gates remain manager-owned as recorded above.
+
+### Finding dispositions and discriminating proof
+
+**P3 freshness test gap: corrected.** The stale-clock assertion now runs before
+any pane changes or nonce consumption. Restoring the real clock accepts and
+consumes that same witness, then changing the pane independently fails
+verification. No production change was needed to demonstrate this finding.
+
+The three-case pre-fix run below used unchanged production code from the base
+commit with the new tests. Result: **3 tests in 4.390s, 1 error, 1 failure**;
+the corrected freshness case passed. The actual mid-append receiver failed in
+`rollout()` with `decisions.Invalid`; the 60-second simulated model turn
+returned `work_ready=False`.
+
+```sh
+env -u CODEX_HOME -u CORBANU_HOME -u PFTERMINAL_HOME TMPDIR=/private/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts/initiative_control:/Volumes/CorbanuDrive/Corbanu/.codex-work/initiative-control.oGQGyA/venv/lib/python3.14/site-packages /Volumes/CorbanuDrive/Corbanu/.codex-work/slack-sdk-test.Ob3i5O/venv/bin/python -B -m unittest -v test_owner_tmux.TmuxTests.test_bridge_mid_append_rollout_repolls_before_issuing_evidence test_decision_manager.ManagerTests.test_tmux_slow_model_turn_keeps_fresh_witness_and_unlocks test_owner_tmux.TmuxTests.test_bridge_live_pane_changes_and_stale_capture_refused
+```
+
+Using the structured edit tool, temporarily deleted exactly
+`and time.monotonic() - started <= self.timeout` from the pre-fix
+`BridgeReceiver.verify`. Ran:
+
+```sh
+env -u CODEX_HOME -u CORBANU_HOME -u PFTERMINAL_HOME TMPDIR=/private/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts/initiative_control /Volumes/CorbanuDrive/Corbanu/.codex-work/slack-sdk-test.Ob3i5O/venv/bin/python -B -m unittest -v test_owner_tmux.TmuxTests.test_bridge_live_pane_changes_and_stale_capture_refused
+```
+
+With the predicate deleted: **1 test, failed in 1.218s**, specifically
+`AssertionError: Invalid not raised` at the stale-clock assertion. Restored
+the exact predicate with the structured edit tool and reran that same command:
+**1 test passed in 1.628s**. The mutation was restored before implementing the
+separate collection/capture clocks.
+
+**P3 benign-read/model-latency hold: corrected.** A private real TMUX receiver
+writes its completed turn without the final newline and waits. The parent
+observes those actual partial bytes, confirms no evidence is issued, and signals
+the child to finish appending. Delivery re-polls, accepts only the completed
+snapshot, and verifies it. The end-to-end manager regression advances only the
+transport's monotonic clock by 60 seconds before ACK capture; the real fixture
+pane and rollout still supply evidence. It proves retention, acknowledged state
+and final unlock, without sleeping 60 seconds or claiming live inference.
+
+Additional cases prove permanently incomplete data expires without evidence,
+malformed complete JSON refuses without retry acceptance, an ACK capture past
+the collection deadline issues no witness, and a witness expiring during live
+verification is refused before nonce consumption. Existing replay, imported
+capture, edited rollout, identity, cross-transport and native-path refusals
+remain unchanged. The intentional liveness changes are bounded re-polling and
+measuring witness freshness from capture; no partial/malformed evidence,
+stale witness, new owner, replay or resend becomes valid.
+
+The five-case corrected focused run passed **5 tests in 8.577s** (mid-append,
+slow model, independent stale/pane, permanent partial/malformed, and expiry
+during verification). The collection-deadline case was then added before the
+full final suite. All runs use disposable fixture profiles and local SDK HTTP
+servers. No Rust tests, credentials, Slack messages, push or release.
+
+First revision full SDK run: **612 tests in 365.457s, 3 failures**, exit 1.
+All failures were existing shell-fixture startup waits: blank pane instead of
+initial `READY`, before ACK/bridge operations, in
+`test_duplicate_launch_prompt_and_start_are_never_retried`,
+`test_exit_at_pane_query_uses_a_post_exit_process_snapshot`, and
+`test_exit_between_pane_query_and_snapshot_is_reobserved_by_close`.
+Focused replay of those three exact tests, using the SDK environment above and
+`-m unittest -v test_owner_tmux.TmuxTests.<method>` for each: **3 passed in
+2.187s**, with no intervening code changes. This supports a transient startup
+failure but does not erase the failed full run. Full fresh replay with the exact
+SDK command above: **612 tests passed in 382.283s**, exit 0, no reported skips.
+There were no intervening production or test code changes. Both runs emitted the
+existing synthetic HTTP 500/429 ResourceWarnings. The final suite includes five
+new regression methods; the strengthened existing freshness case is also covered.
+Governance passed: **3/3 active plans, 116 current / 126 archived sprints**.
+Final `git diff --check` passes. Production `decision_manager.py` is unchanged;
+its native retention and final unlock gates have not been altered.
 
 ## What this does not establish
 
