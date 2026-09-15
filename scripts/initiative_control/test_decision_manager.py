@@ -651,17 +651,113 @@ class ManagerTests(fixtures.LiveFixture):
                     s.ingress_count(self.store, mark=True)
                 self.store.write("transport", journal)
                 supervisor.options = dict(seconds=60, ongoing=True)
-                supervisor.pin = dict(binding=original["binding"], lifecycle=original["lifecycle"])
+                supervisor.pin = s.restart_identity(original)
                 supervisor.retry_at, supervisor.restarts = 0, 0
                 with patch.object(manager, "start", side_effect=AssertionError("unsafe restart")):
                     supervisor.tick()
                 self.assertIsNone(supervisor.retry_at)
-                self.assertEqual(self.store.read("transport")["listener_events"][-1]["kind"], "restart-refused")
+                event = self.store.read("transport")["listener_events"][-1]
+                self.assertEqual((event["kind"], event["restart"]), ("restart-refused", "held"))
+                self.assert_listener_disclosure(event)
                 # Also exercise the child-side atomic check, after parent admission.
                 with self.assertRaises(d.Invalid):
-                    unexpected = s.Session(self.store, restart_pin=dict(binding=original["binding"], lifecycle=original["lifecycle"]))
+                    unexpected = s.Session(self.store, restart_pin=s.restart_identity(original))
                     unexpected.release()  # Mutation failures must not leak the acquired fixture flock.
                 self.assertEqual(self.store.read("transport")["lifecycle"], journal["lifecycle"])
+
+    def assert_listener_disclosure(self, event):
+        import decision_feed as feed
+        status = m.project_status(self.store, NOW, True)
+        projected = feed.project_slack(self.feed_root, self.root, NOW, True)
+        for value in (status, projected["status"], feed.slack_health(dict(slack=projected), NOW)):
+            self.assertEqual(value["last_listener_exit"], event)
+            self.assertEqual(value["listener_exits"], 1)
+
+    def test_listener_record_failures_retry_observation_and_reap_once(self):
+        manager, supervisor, clock = self.watchdog()
+        process = manager.process
+        process.kill()
+        process.wait(timeout=5)
+        # Real fail-fast transport flock, then a store timeout, then a disk error.
+        with s.locked(self.store):
+            supervisor.tick()
+        with patch.object(self.store, "lock", side_effect=d.Invalid()):
+            supervisor.tick()
+        with patch.object(self.store, "write", side_effect=OSError("fixture disk")):
+            supervisor.tick()
+        self.assertIs(manager.process, process)
+        self.assertNotIn("listener_events", self.store.read("transport"))
+        with patch.object(manager, "stop", side_effect=subprocess.TimeoutExpired("fixture reap", 2)):
+            supervisor.tick()
+        supervisor.tick()
+        events = self.store.read("transport")["listener_events"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["returncode"], -9)
+        self.assertIsNone(manager.process)
+        self.assertEqual(supervisor.retry_at, 1)
+
+    def test_listener_restart_timeout_retries_refusal_write_then_stays_held(self):
+        manager, supervisor, clock = self.watchdog()
+        manager.process.kill()
+        manager.process.wait(timeout=5)
+        supervisor.tick()
+        clock[0] = 1
+        with (patch.object(manager, "start", side_effect=subprocess.TimeoutExpired("fixture start", 2)) as start,
+              patch.object(self.store, "write", side_effect=OSError("fixture disk"))):
+            supervisor.tick()
+        self.assertEqual(start.call_count, 1)
+        self.assertEqual(self.store.read("transport")["listener_events"][-1]["restart"], "pending")
+        supervisor.tick()
+        event = self.store.read("transport")["listener_events"][-1]
+        self.assertEqual((event["kind"], event["restart"]), ("restart-refused", "held"))
+        self.assert_listener_disclosure(event)
+        clock[0] = 100
+        with patch.object(manager, "start", side_effect=AssertionError("refusal must stay down")):
+            supervisor.tick()
+        self.assertEqual(len(self.store.read("transport")["listener_events"]), 2)
+
+    def test_idle_pointer_watch_does_not_acquire_callback_lock_or_rescan(self):
+        manager = SimpleNamespace(store=self.store, process=SimpleNamespace(poll=lambda: None))
+        clock = [0]
+        supervisor = m.ListenerSupervisor(manager, self.transport, lambda: NOW, lambda: clock[0])
+        with (patch.object(self.transport, "gate", wraps=self.transport.gate) as gate,
+              patch.object(a, "retry_pending_pointers", wraps=a.retry_pending_pointers) as retry):
+            # Busy callback lock must not even be attempted by idle supervision.
+            with s.locked(self.store):
+                self.assertEqual(a.retry_pending_pointers(self.store, self.transport), 0)
+                supervisor.tick()
+            for second in range(1, 20):
+                clock[0] = second
+                supervisor.tick()
+            self.assertEqual(gate.call_count, 0)
+            self.assertEqual(retry.call_count, 2)  # One direct call, one changed-file scan.
+            self.store.write("alerts", self.store.read("alerts"))
+            clock[0] += 1
+            supervisor.tick()
+            self.assertEqual(retry.call_count, 3)
+            self.assertEqual(gate.call_count, 0)
+
+    def test_listener_aged_history_restarts_through_bounded_control_frame(self):
+        manager, supervisor, clock = self.watchdog()
+        manager.process.kill()
+        manager.process.wait(timeout=5)
+        with s.locked(self.store) as journal:
+            life = journal["lifecycle"]
+            life["history"] = [dict(life["session"], epoch=n) for n in range(200)]
+            self.store.write("transport", journal)
+        self.assertGreater(len(d.canonical(journal["lifecycle"])), 16384)
+        supervisor.tick()
+        # A history edit still invalidates the digest; no pruning weakens the pin.
+        changed = copy.deepcopy(journal)
+        changed["lifecycle"]["history"][0]["epoch"] += 1
+        with self.assertRaises(d.Invalid):
+            s.restart_allowed(self.store, changed, supervisor.pin)
+        clock[0] = 1
+        with fixture_child("connected", self.endpoint):
+            supervisor.tick()
+        self.assertIsNotNone(manager.process)
+        self.assertEqual(self.line(manager.process), dict(type="connected"))
+        self.assertEqual(len(self.store.read("transport")["lifecycle"]["history"]), 201)
 
     def test_gap_projection_and_dashboard_health_preserve_exact_count(self):
         import decision_feed as feed

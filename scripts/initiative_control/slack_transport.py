@@ -100,9 +100,14 @@ def fence_gap(store, value):
     return abs(ingress_count(store) - value["ingress"])
 
 
+def restart_identity(journal):
+    """Bound the control frame without pruning or weakening lifecycle equality."""
+    return dict(binding=copy.deepcopy(journal["binding"]), lifecycle_digest=d.digest(journal["lifecycle"]))
+
+
 def restart_allowed(store, journal, pin):
     """Recheck under the transport lock immediately before creating a session."""
-    d.require(journal["binding"] == pin["binding"] and journal["lifecycle"] == pin["lifecycle"])
+    d.require(restart_identity(journal) == pin)
     session = journal["lifecycle"]["session"]
     d.require(session is not None and session["phase"] != "stopped")
     fenced(store, journal)

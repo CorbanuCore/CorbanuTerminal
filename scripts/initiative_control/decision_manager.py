@@ -38,7 +38,9 @@ def validate_status(value):
     event = value.get("last_listener_exit")
     if event is not None:
         d.shape(event, "kind at returncode restarts fence_count ingress_count fence_gap epoch restart")
-        d.require(event["kind"] == "child-exit" and type(event["returncode"]) is int)
+        d.require((event["kind"] == "child-exit" and type(event["returncode"]) is int)
+                  or (event["kind"] == "restart-refused" and event["returncode"] is None
+                      and event["restart"] == "held"))
         d.stamp(event["at"])
         d.require(event["restart"] in ("pending", "held"))
         d.require(all(type(event[k]) is int and event[k] >= 0 for k in ("restarts", "ingress_count", "epoch")))
@@ -77,7 +79,8 @@ def project_disclosure(value, store, journal, alerts):
     value["pending_pointers"] = len(a.pending_pointers(alerts))
     exits = [event for event in journal.get("listener_events", []) if event["kind"] == "child-exit"]
     value["listener_exits"] = len(exits)
-    value["last_listener_exit"] = copy.deepcopy(exits[-1]) if exits else None
+    events = journal.get("listener_events", [])
+    value["last_listener_exit"] = copy.deepcopy(events[-1]) if events else None
     value["fence_gap"] = s.fence_gap(store, journal)
     if value["fence_gap"]:
         value["state"] = "held"
@@ -456,8 +459,11 @@ class ListenerSupervisor:
         self.manager, self.transport, self.now, self.clock = manager, transport, now, monotonic
         self.options, self.deadline, self.pin = None, None, None
         self.restarts, self.retry_at, self.pointer_at = 0, None, 0
+        self.pending_event, self.exited_process = None, None
+        self.pointer_version, self.pointers_pending = None, False
 
     def start(self, *, seconds, ongoing):
+        self.flush_event()
         result = self.manager.start(seconds=seconds, ongoing=ongoing)
         self.options = dict(seconds=seconds, ongoing=ongoing)
         self.deadline = None if ongoing else self.clock() + seconds
@@ -474,10 +480,11 @@ class ListenerSupervisor:
                 fence = s.ingress_count(self.manager.store)
             except (OSError, ValueError):
                 fence = None
-            pin = dict(binding=copy.deepcopy(journal["binding"]), lifecycle=copy.deepcopy(journal["lifecycle"]))
+            pin = s.restart_identity(journal)
             gap = None if fence is None else abs(fence - journal["ingress"])
             session = journal["lifecycle"]["session"]
-            safe = (gap == 0 and journal["binding"] == self.manager.binding
+            safe = (kind == "child-exit" and self.options is not None
+                    and gap == 0 and journal["binding"] == self.manager.binding
                     and session is not None and session["phase"] != "stopped"
                     and (self.pin is None or self.pin == pin) and self.restarts < 3)
             event = dict(kind=kind, at=self.now(), returncode=returncode, restarts=self.restarts,
@@ -491,18 +498,32 @@ class ListenerSupervisor:
         if not safe:
             self.options = None
 
+    def flush_event(self):
+        if self.pending_event is not None:
+            self.record(*self.pending_event)
+            self.pending_event = None  # Clear only after durable recording succeeds.
+
     def tick(self):
+        try:
+            self._tick()
+        except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
+            pass  # Retain event/process/retry state for the next foreground tick.
+
+    def _tick(self):
+        self.flush_event()
         process = self.manager.process
         if process is not None:
             code = process.poll()
             if code is not None:
                 expected = self.options is None or (code == 0 and self.deadline is not None
                                                     and self.clock() >= self.deadline)
-                if not expected:
-                    # Capture before reaping; never discard the only observed failure.
+                if not expected and self.exited_process is not process:
+                    # Retain the observation even if journal locks/writes fail.
                     self.pin = None
-                    self.record("child-exit", code)
-                else:
+                    self.pending_event = ("child-exit", code)
+                    self.exited_process = process
+                    self.flush_event()
+                elif expected:
                     self.options = None
                 self.manager.stop()
         if self.retry_at is not None and self.clock() >= self.retry_at:
@@ -516,14 +537,16 @@ class ListenerSupervisor:
                     options["seconds"] = min(options["seconds"], self.deadline - self.clock())
                     d.require(options["seconds"] > 0)
                 self.manager.start(**options, restart_pin=self.pin)
-            except (OSError, ValueError, KeyError, TypeError):
-                self.record("restart-refused")
+            except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
+                self.pending_event = ("restart-refused", None)
+                self.flush_event()
         if self.manager.process is not None and self.clock() >= self.pointer_at:
             self.pointer_at = self.clock() + 1
-            try:
-                a.retry_pending_pointers(self.manager.store, self.transport)
-            except (OSError, ValueError, KeyError, TypeError):
-                pass  # Existing admission refusals retain pending intent and visible counts.
+            info = (self.manager.store.root / "alerts.json").stat()
+            version = (info.st_ino, info.st_mtime_ns, info.st_size)
+            if version != self.pointer_version or self.pointers_pending:
+                self.pointers_pending = bool(a.retry_pending_pointers(self.manager.store, self.transport))
+                self.pointer_version = version
 
 
 def supervise_listener(store, binding, *, live=False, stdin=None, stdout=None, now):

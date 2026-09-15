@@ -435,3 +435,132 @@ this internal test stage exercises Python supervision and synthetic Slack
 delivery, not a packaged product workflow. The integrator must accept this
 stage's limited evidence and arrange applicable functional qualification before
 declaring the combined operator workflow ready.
+
+## Increment D review correction — owner-daemon-supervision-02, September 15, 2026
+
+This round preserves the original increment D record above. Its candidate
+`c9bb3f3ea4e82368e5f674d49b17e8bfc6e58e90` received an independent Opus 5.0 High
+review with overall confidence 0.60 and verdict “patch is incorrect”: two P2
+blockers and two P3 findings. The worker read the complete frozen review at
+`/private/tmp/fmgr.Q1SIYZ/odsup-review.json` before editing.
+
+Allocation digest:
+`02e228a24f440c1cabe51a766a1f00f840d6f3f9b16aa71c25d213700abba66f`.
+Claim: `465d86ff-492a-4341-8805-2999573e0932`.
+Brief SHA-256 verified with `shasum -a 256`:
+`f71e7e9ce19f0fc9929667c1593ff60e35ef02f76f5304668354af3b7ca291a5`.
+Worker: gpt-6-astra / high. Branch and worktree remain
+`bootstrap/owner-daemon-c-20260915` and
+`/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-owner-daemon-c-20260915`.
+
+Classification: bounded reliability correction to the existing increment D
+contract. Product heading: **Internal delivery control — TO BUILD**; excerpts:
+“durable event dispatch, acknowledgments and watchdog” and “Show blockers,
+rendered sprints, human test plans, machines, run logs and freshness”.
+Existing initiative context: active initiative-delivery-control / PF-80-S01
+(`in_progress`); shared plan/sprint reconciliation stays with the manager.
+
+### Per-finding corrections
+
+- **P2-1 — watchdog exception escape:** `tick` catches operational store/lock,
+  validation and subprocess timeout failures. An observed death stays in
+  `pending_event` until its write succeeds, before the handle is reaped.
+  The observed handle is retained separately so a reap timeout cannot append
+  another exit on the next tick. Restart failure stores a pending refusal
+  before trying to write it; a failed write retries on the next tick. Explicit
+  start first flushes retained evidence. Errors remain sanitized; no raw SDK or
+  process exception is published.
+- **P2-2 — stale pending disclosure:** the latest listener event is published
+  even when it is a refusal; `listener_exits` still counts actual child exits.
+  Validation accepts a refusal only with a null return code and held restart.
+  Every refusal now ends retry eligibility, including a start failure with an
+  otherwise unchanged binding and lifecycle. Status, feed and health are
+  checked for stopped session, rebind, epoch change, new fence gap and start
+  timeout.
+- **P3-1 — idle contention:** the helper reads the atomic alerts file before
+  taking any lock. An empty approved-pending set returns immediately. A nonempty
+  hint is rechecked under the store lock before transport admission. The
+  supervisor compares the alerts file's inode, nanosecond mtime and size:
+  unchanged idle stores get no repeated scans or transport admission calls.
+  Existing pending work retains bounded retry polling and existing notice/
+  transport checks. No callback locking or financial/posting authority changes.
+- **P3-2 — growing restart frame:** the pin contains binding plus the digest of
+  the complete lifecycle. Parent and child compare that same bounded identity.
+  No history is pruned; a history edit still invalidates the pin. A real child
+  restart with 200 retained historical sessions crosses the existing bounded
+  Stdio channel successfully and leaves 201 history entries.
+
+A permanently unavailable journal cannot record evidence; the foreground
+supervisor retains its observation in memory and keeps retrying. This does not
+claim crash durability for evidence whose first write has never succeeded.
+
+### Fresh regressions and mutation evidence
+
+Four new cases extend `test_decision_manager.ManagerTests`; the existing
+restart-pin case now also checks all three disclosure consumers. Focused run:
+**8 passed in 8.149s**. Each mutation below was compiled into the real module
+namespace in a separate fixture test process; its unique source target was
+checked before replacement. The named case ran broken, the original source was
+restored in memory, and a fresh instance of the named case ran again. Production
+source was never mutated on disk. All fixtures use private stores and synthetic
+Slack endpoints; dedicated children use the existing injected fixture launcher.
+
+Case names below have the `test_` prefix and `ManagerTests` owner.
+
+| Mutation | Named case | Broken result | Restored |
+| --- | --- | --- | --- |
+| Re-raise the operational exception at the tick boundary. | `listener_record_failures_retry_observation_and_reap_once` | ERROR: Invalid from real transport-lock contention. | PASS |
+| Remove the already-observed-process check. | Same record/reap case | FAIL: 3 exit records instead of 1 after the failed reap. | PASS |
+| Remove TimeoutExpired from restart's inner catch. | `listener_restart_timeout_retries_refusal_write_then_stays_held` | FAIL: last event remains child-exit/pending. | PASS |
+| Record restart refusal directly without retaining pending intent. | Same timeout/refusal case | FAIL: failed disk write loses refusal; child-exit/pending remains. | PASS |
+| Permit a refusal to satisfy restart eligibility. | Same timeout/refusal case | FAIL: restart-refused/pending instead of restart-refused/held. | PASS |
+| Project the latest child-exit instead of the latest listener event. | `listener_restart_rechecks_stopped_epoch_and_binding` | Four FAILs: stale pending event for stopped, binding, epoch and gap cases. | PASS |
+| Call gate before the empty-pointer hint. | `idle_pointer_watch_does_not_acquire_callback_lock_or_rescan` | ERROR: BlockingIOError on the actual held callback lock. | PASS |
+| Unconditionally rescan at each pointer interval. | Same idle case | FAIL: 21 helper calls instead of 2 (including direct probe). | PASS |
+| Replace lifecycle digest with the full lifecycle in the shared pin builder. | `listener_aged_history_restarts_through_bounded_control_frame` | FAIL: no restarted process; oversized frame refused. | PASS |
+| **Replacement 1:** suppress the actual ingress fence append (`os.write`). | `gap_projection_and_dashboard_health_preserve_exact_count` | FAIL: last-verified/0 instead of held/3 after three real mark requests. | PASS |
+| **Replacement 2:** route stale health ahead of the held-gap state. | Same gap/health case | FAIL: stale/3 instead of held/3; count remains intact. | PASS |
+| **Replacement 3:** select sent notice slots instead of pending slots for retry. | `supervised_pointer_posts_only_retained_approved_slot` | FAIL: approved retained notice remains pending instead of sent. This case does not assert a projected count. | PASS |
+| Suppress retaining the unexpected child exit. | `listener_incident_records_exit_and_three_unknown_arrivals` | ERROR: missing listener_events after actual killed child. | PASS |
+| Change retry budget from <3 to <0. | `listener_restarts_with_backoff_and_exhausts_after_three` | FAIL: retry_at None instead of 1. | PASS |
+| Change retry budget from <3 to <4. | Same restart-budget case | FAIL: retry_at 15.0 instead of None after three retries. | PASS |
+| Skip parent restart_allowed. | `listener_restart_rechecks_stopped_epoch_and_binding` | Four FAILs: unsafe start attempted. | PASS |
+| Skip child Session restart_allowed. | Same restart-pin case | Four FAILs: Invalid not raised; fixture releases unexpected session. | PASS |
+
+The three bold replacement rows supersede the earlier “set projected value to
+zero” mutations as discriminating evidence. The earlier receipts remain above
+as historical attempts. Incident, both budget boundaries, parent and child
+restart checks were retained and rerun. The four other earlier mutations are
+also replayed in this round:
+
+| Retained mutation | Named case | Broken result | Restored |
+| --- | --- | --- | --- |
+| Remove feed's project_disclosure call. | `gap_projection_and_dashboard_health_preserve_exact_count` | FAIL: held/0 instead of held/3. | PASS |
+| Suppress the supervisor's retry helper call. | `supervised_pending_pointer_retry_is_admitted_and_exactly_once` | FAIL: retained slot remains pending. | PASS |
+| Disable the transport's existing-attempt deduplication. | Same admitted retry case | FAIL: 6 fixture Slack messages instead of 5. | PASS |
+| Iterate no pending slots. | `supervised_pointer_posts_only_retained_approved_slot` | FAIL: retained slot remains pending. | PASS |
+
+**21/21 mutants failed as intended; all 21 fresh restored runs passed.**
+The full mutated and restored unittest outputs were retained in this allocation's
+tool transcript. No mutant survived, no unexpected fixture failure required a
+retry, and no native credential prompt occurred. After correcting a comment
+escape, the three pointer cases passed again: **3 tests in 2.779s**.
+
+### Validation and remaining gates
+
+Full suite: **667 tests passed in 391.447s**, using the exact pinned
+`TMPDIR=/private/tmp`, profile-alias-unset SDK command recorded for increment D
+above. Only the known synthetic HTTP 500/429 cleanup ResourceWarnings appeared;
+there were no suite failures, retries or native credential prompts.
+Both governance checks passed: plans **3/3 active, 0 slots available**; sprints
+**116 current, 126 archived**. Final `git diff --check` passed. Only five allocated
+files changed: decision_manager, decision_alerts, slack_transport, the manager
+tests and this evidence record.
+
+Recurrence stays OFF. This allocation adds no activation,
+service installation, live Slack message, real-store/credential read, push,
+release or approval. It is an offline implementation return for manager
+review/receiving. Gap repair, shared plan/sprint reconciliation, integrator
+acceptance of internal-stage N/A, and later confined code-blind exact-package
+functional acceptance remain open. No combined human-test readiness, true-TUI,
+live TensorCash/Isometric, named-human acceptance or benchmark pass is claimed.

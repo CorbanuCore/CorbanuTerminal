@@ -310,9 +310,15 @@ def pending_pointers(rows):
 
 
 def retry_pending_pointers(store, transport):
-    transport.gate()
+    # Atomic store reads are a cheap hint; idle supervision must not take the
+    # callback's fail-fast transport lock. Recheck actual intent before admission.
+    if not pending_pointers(store.read("alerts")):
+        return 0
     with store.lock():
         pending = pending_pointers(store.read("alerts"))
+    if not pending:
+        return 0
+    transport.gate()
     for key, basis, request in pending:
         # notice serializes against other senders and rechecks cancellation.
         # Its reconstruction must match the already approved immutable request.
