@@ -1,5 +1,39 @@
 # Current workstream handoffs — September 12
 
+## September 15 19:40 UTC — isolation executed, two units received
+
+- **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
+  the network blocker is **closed**. Travis supplied an administrator credential
+  through the vault and the manager executed the isolation directly: Tailscale
+  logged out and disconnected, default-deny `pf` leaving only inbound SSH from
+  the host and its reply path, DHCP and host ICMP, restored at boot by a
+  LaunchDaemon. Verified after a reboot with 839 packets proven dropped by the
+  block rule, because `pflog0` does not exist on this build and a counter proves
+  more than a timeout. The mediated pinhole is **deliberately absent**: it was
+  opened on 8111 and Docker already held that port on the host, so the rule
+  pointed the guest at an unrelated published port. Sealed is correct until a
+  real mediator exists. [Receipt](../management-bootstrap/pf83-isolation-executed-20260915.md).
+  Decision `pf83-network-isolation-20260915` is **resolved**; the dashboard is
+  down to one open question. No case has run and all 380 verdicts stay
+  `not_reached` until the preflight re-run and a separate execution decision.
+- **Accounting** ([PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md)):
+  direct Chat received at `82f9dde0e`, cleanup at `533a16077`, ledgers
+  reconciled, and an authoritative receiving disposition now names every
+  attempt and whose fault each stop was — four of the six stops were the
+  manager's. The [closure assessment](../../../docs/research/agent-cost-accounting/s02-closure-assessment-20260915.md)
+  recommends closing bounded S02 rather than adding another collector; closure
+  itself is a separate decision that has not been taken.
+- **Task Node** ([PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)):
+  owner-daemon increment D received at `aba3707b0` after five review rounds.
+  Its [functional case design](../management-bootstrap/owner-daemon-functional-design-20260915.md)
+  is frozen with 18 offline cases; the harness has 6 built and 12 correctly
+  refused for lack of working negative controls, which is being finished now.
+- **Known gap:** the evidenced Slack alert path is still refused because the
+  transport verification window expired, and re-qualification needs owner UI
+  evidence plus a gap review for three uncovered ingress marks. See
+  [the request](../management-bootstrap/slack-requalification-20260915.md).
+  Reaching Travis is not blocked; only the receipted path is.
+
 ## September 15 14:40 UTC — unattended manager session
 
 Fable ran the review to receive to dispatch loop unattended on Opus 5.0 High.
