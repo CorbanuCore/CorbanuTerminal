@@ -9,7 +9,7 @@
 
 - **Verified — assignment provenance:** allocation digest `494b82f6a4ff307ae23e6af688ec29dd96ff929fbcfd44fa570ab3dbffbbfd30`; claim `56994dcd-d9de-4d7e-af5c-9c83c90dfc0c`; brief SHA-256 independently matched with `shasum -a 256`: `faf2dd67245a1d6ff2791440222283e5db9834e3a0764b70a08ea713e909c4cc`.
 - **Verified — source snapshot:** this record starts from `1fdb3fc1d85fdfaa041577146da0f0de0c1c3704`, branch `bootstrap/tasknode-record-sec-20260914`. Read-only Git inspection on September 14, with the follow-up check at `2026-09-14T23:13:36Z`, also sampled other local refs. Those observations are not a fresh fetch or integration acceptance.
-- **Gated — requirement completion:** the requested pasted human approval is absent. The frozen brief explicitly requires a placeholder for Travis rather than fabricated approval. This packet remains awaiting that note even after its documentation commit.
+- **Verified — requirement completion (updated 2026-09-15):** the pasted human approval is now present in the "Human review and approval" table below (Travis Good, "approve all", Slack thread reply Ev0C1N8EPLQ3, 2026-09-15 ~00:27 UTC; recorded by the manager in commit fbcc39e40). At the original documentation commit ccac81090 it was absent by design (placeholder, no fabricated approval).
 
 ## Product contract and accountable owner
 
