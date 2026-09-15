@@ -133,3 +133,61 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts/initiative_control:/Volumes/Corbanu
 Default-repository TUI acceptance, named-human acceptance and due benchmark/
 release evidence are not claimed. No release is requested. The manager owns
 applicability and later qualification in TensorCash and Isometric Game.
+
+## Follow-up — tasknode-flush-guard-01
+
+- Class: bounded fix to existing single-event duplicate-delivery protection.
+  Product citation: **Internal delivery control — TO BUILD**:
+  “Task Node receives only explicitly mapped, supported progress; no automatic
+  reward, signing, financial action or task-completion claim is implied.”
+- Allocation digest: `f8174d6fddd8f1d0b60be2e0d09aec7ab031f78a6e39039a1be4f72d33f80a70`.
+  Claim: `cc14d17e-d169-46ba-98c1-c9e4aca8691b`.
+  Model/effort: gpt-6-astra / high, dispatched by Fable manager.
+- Frozen brief SHA-256 verified:
+  `5a6ac257d6bc0f436cbeea0dc9bdd14b3597cce56ca23787c8e5482cbe439677`.
+  Base: `e3bd579bf4e0c7c58ad863af2a9c6098e2297f98`.
+  Branch: `bootstrap/tasknode-flush-guard-20260915`.
+  Worktree: `/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-tasknode-flush-guard-20260915`.
+- `flush` now skips any visited outbox record with a corresponding
+  `send-receipts/<event-id>.intent.json`, without changing that record. This
+  covers completed sends and uncertain intent-only attempts. The returned
+  integer-compatible delivered count exposes a `single_sent` list of skipped
+  IDs; CLI output includes that list as JSON when nonempty. Intent presence
+  does not assert successful delivery. The integer contract preserves existing
+  callers and their delivered-count serialization.
+- Added a regression exercising production
+  `send(..., live=True, transport=None)` with patched `tasknode.post`. It
+  asserts exactly one call to `/events` with the exact prepared payload,
+  synthetic credentials and immutable event ID as `idempotency_key`.
+  The flush regression checks completed and intent-only skips, record/receipt
+  immutability, another eligible event's delivery, and OFF refusal.
+- No gate relaxed; no outbox/index/config/enrollment format changed. Posting
+  stays OFF and `tasknode.enabled` stays false outside disposable synthetic
+  fixtures. No live state, real credentials, activation, native identity read,
+  Rust changes/tests, deployment or push is part of this follow-up.
+- Internal transport regression only: TUI and code-blind functional execution
+  are N/A for this scoped implementation return; integrator acceptance of that
+  disposition and the later live/user functional gates above remain outstanding.
+  No human-test readiness, release or live qualification is claimed.
+
+Verification command (profile aliases removed; synthetic/mocked suite only):
+
+```sh
+env -u CODEX_HOME -u CORBANU_HOME -u PFTERMINAL_HOME PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts/initiative_control:/Volumes/CorbanuDrive/Corbanu/.codex-work/initiative-control.oGQGyA/venv/lib/python3.14/site-packages /Volumes/CorbanuDrive/Corbanu/.codex-work/slack-sdk-test.Ob3i5O/venv/bin/python -B -m unittest discover -s scripts/initiative_control -p "*test*.py"
+```
+
+Verification results:
+
+- Full suite: **562 tests, 561 passed, 1 failed**, 291.590s, exit 1.
+  `test_decision_feed.FeedTests.test_chain_history_links_notices_facilities_and_repeat_assessment`
+  fails at `test_decision_feed.py:190`: expects “7 registered interfaces” while
+  the facilities page reports 8. The assigned base already contains both this
+  assertion and `facilities.py:102`'s “8 registered interfaces”; neither file
+  changed in this allocation. The required green full-suite gate remains blocked
+  by this out-of-scope mismatch; no test was skipped or expectation relaxed.
+- Focused Task Node suite: **18 tests passed**, 0.096s, exit 0. Exact command:
+  the same command above with `-p test_tasknode.py` instead of `-p "*test*.py"`.
+- `git diff --check`: passed. Only the four authorized files changed.
+- Full-suite output included synthetic HTTPError 500/429 cleanup ResourceWarnings.
+  No native credential prompt occurred. All mocked activation/publication output
+  came from test fixtures; no live publication or posting was performed.

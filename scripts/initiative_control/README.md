@@ -60,7 +60,9 @@ requires local enrollment, a pending fresh observation, elapsed backoff, and
 matching current workspace/mapping. It never calls flush, enqueue or retry and
 never changes the outbox/index/config/enrollment. Exactly one request goes to
 the fixed production events endpoint, with the immutable event ID as its
-idempotency key. The inherited batch transport is unchanged.
+idempotency key. A regression test patches `tasknode.post` while exercising
+`send(..., live=True, transport=None)` and checks exactly one call with the
+`/events` endpoint, exact prepared payload and immutable event-ID idempotency key.
 
 The activation file must be a regular file owned by the executing OS user with
 no group/other permissions. The manager supplies this exact schema:
@@ -100,6 +102,15 @@ Raw responses, error bodies and credentials are never recorded. Receipts are
 owner-only, append-only by this adapter; this is not protection against the OS
 owner modifying files. Do not delete them, copy them across account scopes, or
 enable batch delivery over these retained queue records.
+
+As a defensive guard, `flush` skips records with an existing single-send intent,
+including uncertain attempts without a result, and leaves those outbox records
+unchanged. Its integer-compatible delivered-count result exposes `single_sent`,
+a list of skipped immutable event IDs; the CLI also prints that list as JSON
+when nonempty. This list records intent presence, not confirmed delivery.
+Synthetic regression coverage checks both completed and intent-only skips,
+unchanged records, continued delivery of another eligible event, and OFF refusal.
+All existing enablement, enrollment, mapping and validation gates still apply.
 
 A retry revalidates gates and returns the prior receipt without another POST.
 A missing result, timeout, rejection, malformed response or crash stays uncertain

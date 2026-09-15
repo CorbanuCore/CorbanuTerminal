@@ -86,6 +86,43 @@ class SendTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 tasknode.immutable_json(path, {})
 
+    def test_live_default_transport_posts_exact_prepared_request_once(self):
+        payload = tasknode.prepare(self.state, self.event_id)["payload"]
+        with patch.object(tasknode, "post", return_value=(200, {"ok": True, "id": self.event_id})) as post:
+            result = tasknode.send(self.state, self.event_id, live=True, transport=None,
+                                   activation_file=self.activation_file,
+                                   credentials_file=self.auth_file)
+        self.assertEqual(result["outcome"], "delivered")
+        post.assert_called_once_with(
+            "/events", payload, {"terminal_session": "fixture-session", "api_key": "fixture-key"},
+            idempotency_key=self.event_id)
+
+    def test_flush_reports_single_send_intents_without_reposting_or_mutating(self):
+        self.live()
+        other_id = tasknode.enqueue(self.state, {**run(), "run_id": "fixture-other"})
+        before_queue = self.record_path.read_bytes()
+        self.assertEqual(json.loads(before_queue)["status"], "pending")
+        batch = Mock(return_value=(200, {"ok": True, "id": other_id}))
+        with self.assertRaises(ValueError):
+            tasknode.flush(self.state, {}, batch)
+        batch.assert_not_called()
+        control.atomic_json(self.state / "control.json",
+                            {"tasknode": {**self.config["tasknode"], "enabled": True}})
+        for intent_only in (False, True):
+            with self.subTest(intent_only=intent_only):
+                if intent_only:
+                    (self.state / "send-receipts" / (self.event_id + ".result.json")).unlink()
+                before = self.snapshot()
+                result = tasknode.flush(self.state, {}, batch)
+                self.assertEqual(result, 0 if intent_only else 1)
+                self.assertEqual(result.single_sent, [self.event_id])
+                self.assertEqual(self.record_path.read_bytes(), before_queue)
+                for path, contents in before.items():
+                    if not path.startswith("outbox/"):
+                        self.assertEqual((self.state / path).read_bytes(), contents)
+        other_event = control.read_json(self.state / "outbox" / (other_id + ".json"), self.state)["event"]
+        batch.assert_called_once_with("/events", {"event": other_event}, {})
+
     def test_each_activation_gate_and_binding_fails_closed(self):
         changes = {"schema": True, "owner": "", "enabled": False, "event_id": "cc-" + "0" * 64,
                    "request_digest": "0" * 64, "workspace_id": "wrong", "task_ids": ["wrong"],
