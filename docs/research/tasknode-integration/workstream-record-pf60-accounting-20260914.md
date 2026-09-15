@@ -115,15 +115,15 @@
 
 **Gated — human approval pending:** Reserved for Travis to fill. Neither the author nor an agent review supplies this approval. Historical S01 policy approval is recorded above; runtime and this record's approval remain separate.
 
-**Planned — Travis's review fields (intentionally blank):**
+**Verified — human approval recorded (manager paste, 2026-09-15):** Travis replied "approve all" to the three-record approval question; pasted verbatim below. The reviewer P3 about row 29 ("stale" is an author disposition, not receipt-verified) was disclosed in the question and accepted as-is.
 
-- Reviewed document commit / candidate:
-- Decision (approve / revise / hold):
-- Accepted scope and explicit limitations:
-- Remaining prerequisites / requested changes:
-- Name:
-- Date:
-- Approval reference:
+- Reviewed document commit / candidate: 2de349bcd (received at 56410b5aa)
+- Decision (approve / revise / hold): approve — verbatim reply: "approve all"
+- Accepted scope and explicit limitations: Approves the record as written for one guarded dry-run and one live progress-only evidence submission for its task. No completion, reward, signing, payment, release or implementation claim.
+- Remaining prerequisites / requested changes: none requested; S02 remains open, collection OFF
+- Name: Travis Good
+- Date: 2026-09-15 ~00:27 UTC
+- Approval reference: Decision feed corbanu-manager-decisions rev 40, decision tasknode-record-approval-20260914 revision 2 (resolved); receiver ACK handoff e158229d51a4e6a9940e94ae4e1347aa630fe71fbc26b25f22ac8c7947baf7ce; also confirmed by Travis in the manager chat session
 
 ## Record verification
 

@@ -72,16 +72,16 @@
 
 ## Human review and approval
 
-**Gated — Travis to fill:** leave the fields below empty until the human supplies the actual note. The task's approval requirement remains unsatisfied; no approval is implied by committing this document.
+**Verified — human approval recorded (manager paste, 2026-09-15):** Travis approved all three records with the reply below; the manager pasted it verbatim. Approval covers this record and one progress-only evidence submission; it does not close any sprint or claim implementation completion.
 
 | Field | Human entry |
 | --- | --- |
-| Reviewer | |
-| Review date/time | |
-| Exact packet commit/version reviewed | |
-| Pasted verbatim human review and approval note | |
-| Accepted limitations / required corrections | |
-| Source reference for the human note | |
+| Reviewer | Travis Good (Slack U0758QY0MEZ), reply Ev0C1N8EPLQ3 in thread 1789431199.064679, 2026-09-15 ~00:27 UTC |
+| Review date/time | 2026-09-15 ~00:27 UTC |
+| Exact packet commit/version reviewed | ccac81090 (received at 08a5b105b) |
+| Pasted verbatim human review and approval note | "approve all" |
+| Accepted limitations / required corrections | Approves the record as written for one guarded dry-run and one live progress-only evidence submission for its task. No completion, reward, signing, payment, release or implementation claim. |
+| Source reference for the human note | Decision feed corbanu-manager-decisions rev 40, decision tasknode-record-approval-20260914 revision 2 (resolved); receiver ACK handoff e158229d51a4e6a9940e94ae4e1347aa630fe71fbc26b25f22ac8c7947baf7ce; also confirmed by Travis in the manager chat session |
 
 ## Document validation
 
