@@ -83,7 +83,7 @@ class Store:
             raise d.Invalid() from None
 
     def read(self, name):
-        d.require(name in ("alerts", "replies", "transport"))
+        d.require(name in ("alerts", "replies", "transport", "supervisor"))
         fd = os.open(self.root / (name + ".json"), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         with os.fdopen(fd, "rb") as stream:
             d.owner_only(os.fstat(stream.fileno()))
@@ -100,7 +100,7 @@ class Store:
         return value["body"]
 
     def write(self, name, body):
-        d.require(name in ("alerts", "replies", "transport"))
+        d.require(name in ("alerts", "replies", "transport", "supervisor"))
         raw = d.canonical(dict(schema=2, body=body, digest=d.digest(body)))
         d.require(len(raw) <= d.MAX_BYTES and not d.SECRET.search(raw.decode("utf-8")))
         destination = self.root / (name + ".json")
@@ -291,6 +291,42 @@ def send(store, key, current_identity, exchange, cancelled=False):
     if sent and threading.get("mode") == "pointer":
         notice(store, key, "follow-up", threading["source_alert"], current_identity, exchange)
     return inspect(store, key)
+
+
+def pending_pointers(rows):
+    """Only previously attempted, refused follow-up notices; no new posting intent."""
+    result = []
+    for key in rows:
+        row = alert(rows, key)
+        threading = row.get("threading", {})
+        if (row["cancelled"] or row["reason"] is not None or threading.get("mode") != "pointer"
+                or row["parent"]["state"] != "sent" or row["details"]["state"] != "sent"):
+            continue
+        basis = threading["source_alert"]
+        slot = row.get("notices", {}).get(d.digest([key, "follow-up", basis]), {})
+        if slot.get("state") == "pending" and slot.get("request") is not None:
+            result.append((key, basis, copy.deepcopy(slot["request"])))
+    return result
+
+
+def retry_pending_pointers(store, transport):
+    # Atomic store reads are a cheap hint; idle supervision must not take the
+    # callback's fail-fast transport lock. Recheck actual intent before admission.
+    if not pending_pointers(store.read("alerts")):
+        return 0
+    with store.lock():
+        pending = pending_pointers(store.read("alerts"))
+    if not pending:
+        return 0
+    transport.gate()
+    for key, basis, request in pending:
+        # notice serializes against other senders and rechecks cancellation.
+        # Its reconstruction must match the already approved immutable request.
+        def exchange(candidate):
+            d.require(candidate == request)
+            return transport.exchange(candidate)
+        notice(store, key, "follow-up", basis, transport.binding, exchange)
+    return len(pending)
 
 
 def reconcile(store, key, phase, evidence):

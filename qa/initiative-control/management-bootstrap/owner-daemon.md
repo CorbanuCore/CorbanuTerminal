@@ -308,3 +308,612 @@ combined human-test or recurrence handoff. Independent review/receiving,
 plan/sprint reconciliation, confined code-blind functional acceptance and the
 remaining integration/Slack/supervision gates still apply. Internal-stage N/A
 requires integrator acceptance; no activation approval is inferred.
+
+## Increment D — listener supervision and disclosure, September 15, 2026
+
+Allocation `owner-daemon-supervision-01`; Astra High implement worker.
+Allocation digest:
+`a9e01168b465d696444b8e8a85e04059dc12d2c2c64385628828c1b39c56266a`.
+Frozen brief SHA-256 verified before implementation:
+`1fbff736e084948ddbe9b18a988efa7749047fae79a9b9e61b9eea77f842cf05`.
+Base `68e07dc8e19e12cad4b88a81392056b55b256aaa`, branch
+`bootstrap/owner-daemon-c-20260915`, worktree
+`/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-owner-daemon-c-20260915`.
+
+Classification: bounded reliability fix restoring the already-authorized
+watchdog/disclosure contract. Product heading: **Internal delivery control —
+TO BUILD**; requirement excerpt: “durable event dispatch, acknowledgments and
+watchdog” and “Show blockers, rendered sprints, human test plans, machines, run
+logs and freshness”. Existing initiative context remains active
+initiative-delivery-control / PF-80-S01 (`in_progress`); shared plan/sprint record
+reconciliation belongs to the manager. No new posting authority is granted.
+
+### Incident and implementation
+
+At 12:22 UTC on September 15, the manager-owned listener died and remained down
+for roughly two hours. Its supervisor noticed the child exit but only stopped
+the process. The fence retained 45 callback marks against 42 journal ingresses:
+three callbacks never reached the journal. Ordinary projections did not explain
+the gap. The missing-fence inspection could not apply because the fence existed.
+
+1. **Supervision:** the foreground supervisor records each unexpected exit in
+   durable `transport.listener_events`, including return code, observation time,
+   fence and ingress counts, exact difference (or unknown when unreadable),
+   lifecycle epoch, retry count and pending/held disposition. Status and dashboard
+   health expose `listener_exits` and `last_listener_exit`. Up to three restarts
+   follow nonblocking 1/2/4-second backoff per explicit start. Reaping still uses
+   the owned process handle. A restart preserves the finite run deadline and
+   never clears a transport hold. Exhaustion, missing fence, nonzero gap, stopped
+   session or changed binding/lifecycle stops retrying visibly. The parent
+   rechecks the captured binding/lifecycle before spawn; the child rechecks under
+   the transport lock immediately before creating its new session, closing the
+   intervening stop/rebind window. Explicit stop, repair quiescence and owner EOF
+   retain their stop behavior.
+2. **Disclosure:** `project_status`, `project_slack` and dashboard health carry
+   exact `fence_gap`; a nonzero gap reports `held`, including when the cached
+   assessment is stale. Projection never changes ingress, the fence, unknown
+   arrivals or qualification. Existing optional-field status records remain
+   readable. `inspect_fence_loss` and missing-fence recovery are unchanged.
+3. **Pending pointers:** status/feed/health expose `pending_pointers`. Once a
+   supervised pass is admitted, it retries only an existing pending follow-up
+   notice with a retained request and sent parent/details. It does not create a
+   notice for a follow-up that has no retained request. The retry rechecks
+   identity/cancellation and requires the reconstructed request to equal the
+   retained request before entering the existing transport exchange. A recorded
+   receipt is reused; a recorded attempt without receipt becomes uncertain and
+   cannot produce another Slack message. Holds retain the pending request.
+
+### Discriminating regressions and mutation receipts
+
+All six new cases are in `test_decision_manager.ManagerTests`. They use private
+stores, synthetic SDK/web/socket factories and loopback fixture endpoints. The
+incident and restart-budget cases kill and reap actual dedicated listener
+children; deterministic clocks control only backoff. These are implementation
+regressions, not independent functional qualification.
+
+Mutation method: load the real module source, assert the mutation target occurs
+once, compile the modified source into that module's namespace, execute the
+named unittest, then compile the original source back into the same namespace
+and run the named unittest again with fresh fixtures. Require mutant failure
+and restored success. Dedicated SDK children remain routed through the existing
+synthetic factory. No on-disk production mutation, credential access, external
+Slack endpoint or live store is involved.
+
+| Named case (prefix `test_`) | Mutation | Broken outcome | Restored outcome |
+| --- | --- | --- | --- |
+| `listener_incident_records_exit_and_three_unknown_arrivals` | Replace `self.record("child-exit", code)` with `pass`. | ERROR: `KeyError: listener_events`; durable exit absent. | PASS; actual SIGKILL is recorded as -9, fence 45, ingress 42, gap 3; held, no restart, missing-fence inspection still refuses. |
+| `listener_restarts_with_backoff_and_exhausts_after_three` | Change retry eligibility `self.restarts < 3` to `< 0`. | FAIL: next retry is None instead of 1. | PASS; new owned sessions after 1/2/4 seconds, four distinct sessions total, then held. |
+| Same restart case | Change retry eligibility `< 3` to `< 4`. | FAIL: retry remains scheduled after the third restart. | PASS; no fourth restart. |
+| `listener_restart_rechecks_stopped_epoch_and_binding` | Skip parent `s.restart_allowed(...)`. | FAIL in all four subcases: unsafe restart attempted after stopped phase, rebind, epoch change or new gap. | PASS in all four subcases. |
+| Same restart-pin case | Skip `restart_allowed(...)` inside `Session.__init__`. | FAIL in all four subcases: expected Invalid not raised. | PASS; child-side check refuses and leaves lifecycle unchanged. |
+| `gap_projection_and_dashboard_health_preserve_exact_count` | Set projected `fence_gap` to zero. | FAIL: held/0 differs from held/3. | PASS; exact count and unchanged journal. |
+| Same gap case | Remove `project_disclosure` from `project_slack`. | FAIL: feed reports gap 0 instead of 3. | PASS; feed reports held/3. |
+| Same gap case | Replace dashboard health's gap with zero. | FAIL: health reports gap 0 instead of 3. | PASS; fresh and stale health preserve held/3. |
+| `supervised_pending_pointer_retry_is_admitted_and_exactly_once` | Set projected pending-pointer count to zero. | FAIL: 0 differs from 1. | PASS; pending count is 1 before admitted retry and 0 after. |
+| Same admitted retry case | Remove the supervised call to `retry_pending_pointers`. | FAIL: retained slot remains pending instead of sent. | PASS; hold blocks send; admitted retry reuses receipt; uncertain recorded attempt never reposts. |
+| Same admitted retry case | Disable existing transport `if attempt in value["posts"]` deduplication. | FAIL: six Slack fixture messages instead of five. | PASS; exactly five messages, including one pointer. |
+| `supervised_pointer_posts_only_retained_approved_slot` | Iterate no pending slots in the retry helper. | FAIL: retained slot remains pending instead of sent. | PASS; no request means no new notice; retained approved request sends once. |
+
+Initial focused run: **6 passed in 5.526s**. All twelve mutation variants failed
+as expected and their restored named runs passed. Retained mutation attempts:
+the first child-side mutation exposed a fixture-only leaked flock after its
+expected stopped-session assertion failure, causing three secondary lock errors.
+The fixture now releases an unexpectedly constructed session before failing;
+a fresh replay produced four clean assertion failures, then passed restored.
+The admitted retry case was extended to cover an uncertain recorded attempt and
+replayed broken/restored successfully. The incident case was replayed after
+adding latest-exit disclosure and again failed broken/passed restored.
+
+### Validation and deliberately open work
+
+Final-tree full suite: **663 tests passed in 383.406s**. Only the retained
+HTTP-fixture cleanup ResourceWarnings for synthetic 500/429 responses appeared;
+no failure or native credential prompt occurred. Plan checker passed (3/3 active,
+0 available); sprint checker passed (116 current, 126 archived).
+Final `git diff --check` passed. Six allocated files changed.
+Command (short TMPDIR is required for the Unix socket fixtures):
+
+```sh
+env -u CODEX_HOME -u CORBANU_HOME -u PFTERMINAL_HOME TMPDIR=/private/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts/initiative_control:/Volumes/CorbanuDrive/Corbanu/.codex-work/initiative-control.oGQGyA/venv/lib/python3.14/site-packages /Volumes/CorbanuDrive/Corbanu/.codex-work/slack-sdk-test.Ob3i5O/venv/bin/python -B -m unittest discover -s scripts/initiative_control -p "*test*.py"
+python3 docs/plans/check.py
+python3 docs/sprints/check.py
+git diff --check
+```
+
+Recurrence remains OFF; no activation is recorded. No live Slack message, real
+operator store access, credential read, prompt handling, push or release was
+performed. Gap repair remains deliberately open: these arrivals are unknown,
+and neither counter advancement nor fabricated intake is an acceptable repair.
+Restart after a store-stopped epoch is deliberately refused even when the
+process exit was unexpected. Hold review/requalification stays owner-controlled.
+
+This is an offline implementation return to the manager, not a human-test,
+recurrence or release handoff. Independent review/receiving and the later confined
+code-blind exact-package functional gate remain open. No true TUI, live
+TensorCash/Isometric, named-human acceptance or benchmark result is claimed;
+this internal test stage exercises Python supervision and synthetic Slack
+delivery, not a packaged product workflow. The integrator must accept this
+stage's limited evidence and arrange applicable functional qualification before
+declaring the combined operator workflow ready.
+
+## Increment D review correction — owner-daemon-supervision-02, September 15, 2026
+
+This round preserves the original increment D record above. Its candidate
+`c9bb3f3ea4e82368e5f674d49b17e8bfc6e58e90` received an independent Opus 5.0 High
+review with overall confidence 0.60 and verdict “patch is incorrect”: two P2
+blockers and two P3 findings. The worker read the complete frozen review at
+`/private/tmp/fmgr.Q1SIYZ/odsup-review.json` before editing.
+
+Allocation digest:
+`02e228a24f440c1cabe51a766a1f00f840d6f3f9b16aa71c25d213700abba66f`.
+Claim: `465d86ff-492a-4341-8805-2999573e0932`.
+Brief SHA-256 verified with `shasum -a 256`:
+`f71e7e9ce19f0fc9929667c1593ff60e35ef02f76f5304668354af3b7ca291a5`.
+Worker: gpt-6-astra / high. Branch and worktree remain
+`bootstrap/owner-daemon-c-20260915` and
+`/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-owner-daemon-c-20260915`.
+
+Classification: bounded reliability correction to the existing increment D
+contract. Product heading: **Internal delivery control — TO BUILD**; excerpts:
+“durable event dispatch, acknowledgments and watchdog” and “Show blockers,
+rendered sprints, human test plans, machines, run logs and freshness”.
+Existing initiative context: active initiative-delivery-control / PF-80-S01
+(`in_progress`); shared plan/sprint reconciliation stays with the manager.
+
+### Per-finding corrections
+
+- **P2-1 — watchdog exception escape:** `tick` catches operational store/lock,
+  validation and subprocess timeout failures. An observed death stays in
+  `pending_event` until its write succeeds, before the handle is reaped.
+  The observed handle is retained separately so a reap timeout cannot append
+  another exit on the next tick. Restart failure stores a pending refusal
+  before trying to write it; a failed write retries on the next tick. Explicit
+  start first flushes retained evidence. Errors remain sanitized; no raw SDK or
+  process exception is published.
+- **P2-2 — stale pending disclosure:** the latest listener event is published
+  even when it is a refusal; `listener_exits` still counts actual child exits.
+  Validation accepts a refusal only with a null return code and held restart.
+  Every refusal now ends retry eligibility, including a start failure with an
+  otherwise unchanged binding and lifecycle. Status, feed and health are
+  checked for stopped session, rebind, epoch change, new fence gap and start
+  timeout.
+- **P3-1 — idle contention:** the helper reads the atomic alerts file before
+  taking any lock. An empty approved-pending set returns immediately. A nonempty
+  hint is rechecked under the store lock before transport admission. The
+  supervisor compares the alerts file's inode, nanosecond mtime and size:
+  unchanged idle stores get no repeated scans or transport admission calls.
+  Existing pending work retains bounded retry polling and existing notice/
+  transport checks. No callback locking or financial/posting authority changes.
+- **P3-2 — growing restart frame:** the pin contains binding plus the digest of
+  the complete lifecycle. Parent and child compare that same bounded identity.
+  No history is pruned; a history edit still invalidates the pin. A real child
+  restart with 200 retained historical sessions crosses the existing bounded
+  Stdio channel successfully and leaves 201 history entries.
+
+A permanently unavailable journal cannot record evidence; the foreground
+supervisor retains its observation in memory and keeps retrying. This does not
+claim crash durability for evidence whose first write has never succeeded.
+
+### Fresh regressions and mutation evidence
+
+Four new cases extend `test_decision_manager.ManagerTests`; the existing
+restart-pin case now also checks all three disclosure consumers. Focused run:
+**8 passed in 8.149s**. Each mutation below was compiled into the real module
+namespace in a separate fixture test process; its unique source target was
+checked before replacement. The named case ran broken, the original source was
+restored in memory, and a fresh instance of the named case ran again. Production
+source was never mutated on disk. All fixtures use private stores and synthetic
+Slack endpoints; dedicated children use the existing injected fixture launcher.
+
+Case names below have the `test_` prefix and `ManagerTests` owner.
+
+| Mutation | Named case | Broken result | Restored |
+| --- | --- | --- | --- |
+| Re-raise the operational exception at the tick boundary. | `listener_record_failures_retry_observation_and_reap_once` | ERROR: Invalid from real transport-lock contention. | PASS |
+| Remove the already-observed-process check. | Same record/reap case | FAIL: 3 exit records instead of 1 after the failed reap. | PASS |
+| Remove TimeoutExpired from restart's inner catch. | `listener_restart_timeout_retries_refusal_write_then_stays_held` | FAIL: last event remains child-exit/pending. | PASS |
+| Record restart refusal directly without retaining pending intent. | Same timeout/refusal case | FAIL: failed disk write loses refusal; child-exit/pending remains. | PASS |
+| Permit a refusal to satisfy restart eligibility. | Same timeout/refusal case | FAIL: restart-refused/pending instead of restart-refused/held. | PASS |
+| Project the latest child-exit instead of the latest listener event. | `listener_restart_rechecks_stopped_epoch_and_binding` | Four FAILs: stale pending event for stopped, binding, epoch and gap cases. | PASS |
+| Call gate before the empty-pointer hint. | `idle_pointer_watch_does_not_acquire_callback_lock_or_rescan` | ERROR: BlockingIOError on the actual held callback lock. | PASS |
+| Unconditionally rescan at each pointer interval. | Same idle case | FAIL: 21 helper calls instead of 2 (including direct probe). | PASS |
+| Replace lifecycle digest with the full lifecycle in the shared pin builder. | `listener_aged_history_restarts_through_bounded_control_frame` | FAIL: no restarted process; oversized frame refused. | PASS |
+| **Replacement 1:** suppress the actual ingress fence append (`os.write`). | `gap_projection_and_dashboard_health_preserve_exact_count` | FAIL: last-verified/0 instead of held/3 after three real mark requests. | PASS |
+| **Replacement 2:** route stale health ahead of the held-gap state. | Same gap/health case | FAIL: stale/3 instead of held/3; count remains intact. | PASS |
+| **Replacement 3:** select sent notice slots instead of pending slots for retry. | `supervised_pointer_posts_only_retained_approved_slot` | FAIL: approved retained notice remains pending instead of sent. This case does not assert a projected count. | PASS |
+| Suppress retaining the unexpected child exit. | `listener_incident_records_exit_and_three_unknown_arrivals` | ERROR: missing listener_events after actual killed child. | PASS |
+| Change retry budget from <3 to <0. | `listener_restarts_with_backoff_and_exhausts_after_three` | FAIL: retry_at None instead of 1. | PASS |
+| Change retry budget from <3 to <4. | Same restart-budget case | FAIL: retry_at 15.0 instead of None after three retries. | PASS |
+| Skip parent restart_allowed. | `listener_restart_rechecks_stopped_epoch_and_binding` | Four FAILs: unsafe start attempted. | PASS |
+| Skip child Session restart_allowed. | Same restart-pin case | Four FAILs: Invalid not raised; fixture releases unexpected session. | PASS |
+
+The three bold replacement rows supersede the earlier “set projected value to
+zero” mutations as discriminating evidence. The earlier receipts remain above
+as historical attempts. Incident, both budget boundaries, parent and child
+restart checks were retained and rerun. The four other earlier mutations are
+also replayed in this round:
+
+| Retained mutation | Named case | Broken result | Restored |
+| --- | --- | --- | --- |
+| Remove feed's project_disclosure call. | `gap_projection_and_dashboard_health_preserve_exact_count` | FAIL: held/0 instead of held/3. | PASS |
+| Suppress the supervisor's retry helper call. | `supervised_pending_pointer_retry_is_admitted_and_exactly_once` | FAIL: retained slot remains pending. | PASS |
+| Disable the transport's existing-attempt deduplication. | Same admitted retry case | FAIL: 6 fixture Slack messages instead of 5. | PASS |
+| Iterate no pending slots. | `supervised_pointer_posts_only_retained_approved_slot` | FAIL: retained slot remains pending. | PASS |
+
+**21/21 mutants failed as intended; all 21 fresh restored runs passed.**
+The full mutated and restored unittest outputs were retained in this allocation's
+tool transcript. No mutant survived, no unexpected fixture failure required a
+retry, and no native credential prompt occurred. After correcting a comment
+escape, the three pointer cases passed again: **3 tests in 2.779s**.
+
+### Validation and remaining gates
+
+Full suite: **667 tests passed in 391.447s**, using the exact pinned
+`TMPDIR=/private/tmp`, profile-alias-unset SDK command recorded for increment D
+above. Only the known synthetic HTTP 500/429 cleanup ResourceWarnings appeared;
+there were no suite failures, retries or native credential prompts.
+Both governance checks passed: plans **3/3 active, 0 slots available**; sprints
+**116 current, 126 archived**. Final `git diff --check` passed. Only five allocated
+files changed: decision_manager, decision_alerts, slack_transport, the manager
+tests and this evidence record.
+
+Recurrence stays OFF. This allocation adds no activation,
+service installation, live Slack message, real-store/credential read, push,
+release or approval. It is an offline implementation return for manager
+review/receiving. Gap repair, shared plan/sprint reconciliation, integrator
+acceptance of internal-stage N/A, and later confined code-blind exact-package
+functional acceptance remain open. No combined human-test readiness, true-TUI,
+live TensorCash/Isometric, named-human acceptance or benchmark pass is claimed.
+
+## Increment D final bounded correction — owner-daemon-supervision-03, September 15, 2026
+
+The two earlier supervision rounds above remain historical evidence. This round
+addresses only P3-1 and P3-2 from the independent Opus 5.0 High review of
+`2335d1eb95c3b639399226a58bccf5b038cf9f06`: verdict “patch is correct”,
+confidence 0.72, no blocking findings. Frozen review:
+`/private/tmp/fmgr.Q1SIYZ/odsup2-review.json`.
+
+Allocation digest:
+`43620288609c27c48b4448dbd843f160da3fd523d8abd2fc6807944196a6d531`.
+Claim: `f82499fe-bf01-48fb-83bf-b3ce904deb91`.
+Brief SHA-256, verified before other reads:
+`11abf9ca7652da384d2a454ac72cc397bffa1bdcb41f9a148d3ec5b1bed2d8fa`.
+Worker: gpt-6-astra / high. Branch:
+`bootstrap/owner-daemon-c-20260915`. Worktree:
+`/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-owner-daemon-c-20260915`.
+
+Classification: bounded reliability correction to the authorized increment D
+watchdog. Product heading: **Internal delivery control — TO BUILD**; excerpts:
+“durable event dispatch, acknowledgments and watchdog” and “Show blockers,
+rendered sprints, human test plans, machines, run logs and freshness”.
+The manager's frozen brief explicitly requests the health disclosure and bounded
+retention correction. Existing context remains active
+initiative-delivery-control / PF-80-S01 (`in_progress`); shared governance
+records stay with the manager.
+
+### Finding dispositions and retention contract
+
+- **P3-1 addressed:** operational failure inside an event flush increments a
+  consecutive-failure counter and returns to the tick. Reaping continues despite
+  persistent disk/lock/validation failures, and a running listener's pointer
+  checks continue. Automatic and explicit starts wait for the pending event's
+  successful write, so a restart refusal cannot overwrite unrecorded evidence.
+  Once storage recovers, recording and the existing bounded restart sequence
+  resume. A successful flush clears the counter.
+- The foreground `status` response includes `supervisor_health`: explicit
+  `healthy`/`unhealthy`, `event_flush_failures`, and `pending_events`.
+  Any failed flush reports unhealthy immediately; enabled status is held.
+  This is live process observation, not a claim that an unavailable journal
+  recorded it. Separate file-only status/feed consumers cannot observe an
+  unwritten failure; the foreground status command can. The pending observation
+  remains volatile until the write succeeds, as disclosed in prior rounds.
+- `listener_events` retains at most **128 newest records**, pruning more oldest
+  records if needed to fit the Store envelope within `MAX_BYTES`. Pruning and
+  appending share one atomic journal write. The newest record is never pruned.
+  Other journal sections are untouched; if even the newest event and summary
+  cannot fit, the flush stays pending and unhealthy.
+- Pruning deliberately discards each removed event's individual kind, timestamp,
+  return code, restart count, fence/ingress/gap counts, epoch and restart state.
+  A durable cumulative `listener_events_pruned` summary retains the number of
+  discarded events, number of discarded child exits, and timestamp of the most
+  recently discarded record. Status exposes the discarded-event count, and
+  `listener_exits` includes discarded child exits, so pruning cannot hide their
+  occurrence. Full details survive only for retained events.
+- **P3-2 addressed:** projection normalizes the known legacy
+  `restart-refused/pending` event to `restart-refused/held` in a copy. The
+  unreleased predecessor could write that contradictory shape; a refusal must
+  not imply restart eligibility. The journal is not rewritten and the validator
+  remains strict for current records. Regression covers status, feed and health.
+
+### Regressions and mutation receipts
+
+Five new cases belong to `test_decision_manager.ManagerTests`; case names below
+omit the `test_` prefix. The original record/reap regression now explicitly
+injects reap timeouts while journal operations fail, preserving its once-only
+exit assertion while permitting successful reaping when storage is unavailable.
+
+Initial focused run: **7 passed in 10.341s**, including the two prior error-path
+cases. The persistent-failure case was then extended through the real foreground
+pipe command loop, and the pointer case through explicit-start refusal.
+Every mutation runs compiled production source in memory, then restores that
+source and runs a fresh fixture. No production file is mutated on disk.
+Dedicated SDK children use the existing synthetic launcher and private stores.
+
+| Mutation | Named case | Broken outcome | Restored |
+| --- | --- | --- | --- |
+| Re-raise the event flush error. | `persistent_flush_failure_reaps_reports_and_recovers_restart` | FAIL: killed child handle remains instead of being reaped. | PASS |
+| Suppress the failure counter increment. | Same persistent/reap case | FAIL: healthy/0 instead of unhealthy/1. | PASS |
+| Route foreground status directly to file-only projection. | Same persistent/reap case | ERROR: missing `supervisor_health` in the actual pipe response. | PASS |
+| Return from the tick when flush fails. | `persistent_flush_failure_still_checks_pointers_without_overwriting_event` | FAIL: zero pointer helper calls instead of one. | PASS |
+| Remove the pending-evidence automatic-restart guard. | Same pointer case | FAIL: retry budget consumed while evidence is still pending. | PASS |
+| Remove the explicit-start successful-flush requirement. | Same pointer case | FAIL: attempts manager.start before durable evidence. | PASS |
+| Raise retention limit from 128 to 100000. | `listener_event_pruning_keeps_newest_and_accounts_for_discarded_exits` | FAIL: four extra old events retained instead of newest 128. | PASS |
+| Suppress discarded child-exit accounting. | Same retention case | FAIL: zero discarded exits instead of two. | PASS |
+| Disable byte-budget pruning. | `listener_event_pruning_makes_room_at_store_byte_limit` | ERROR: actual Store.write rejects the oversized envelope. | PASS |
+| Disable legacy refusal normalization. | `legacy_pending_restart_refusal_is_normalized_without_rewriting_journal` | ERROR: validate_status rejects legacy pending refusal. | PASS |
+
+**Ten distinct mutation variants failed and their fresh restored runs passed.**
+Raw broken/restored unittest output is retained in this allocation's tool
+transcript. The first retention mutation also enlarged the fixture because it
+used the mutated constant, failing in fixture setup at Store.write; that attempt
+is retained but excluded as discriminating proof. The fixture now independently
+creates 131 records. Fresh replay failed on the retained-event assertion and
+passed restored; discarded-exit accounting was also replayed on the fixed
+fixture. No native credential prompt occurred.
+
+### Validation and remaining gates
+
+Full final-tree suite: **672 tests passed in 397.039s**, with the exact
+profile-alias-unset SDK command recorded for increment D above, including
+`TMPDIR=/private/tmp` and `PYTHONDONTWRITEBYTECODE=1`. Only the known
+synthetic HTTP 500/429 cleanup ResourceWarnings appeared; there were no suite
+failures, retries or native credential prompts. The suite retained synthetic
+transport evidence at `/private/tmp/isolated-transport-tests-mta9ki7k`.
+Both governance checkers passed: plans **3/3 active, 0 slots available**;
+sprints **116 current, 126 archived**. Final `git diff --check` passed.
+Exactly four allocated files changed: decision_manager, slack_transport,
+test_decision_manager and this evidence record.
+
+Recurrence remains OFF. No activation, installation, live Slack message,
+real-store/credential access, push, release or approval is performed or claimed.
+This is an internal implementation return for manager review, not a combined
+operator human-test handoff. Integrator acceptance of this stage's internal-only
+N/A and the later confined code-blind exact-package functional gate remain open,
+along with prior gap repair and shared plan/sprint reconciliation. This stage
+changes Python supervision/error reporting and uses synthetic Slack fixtures;
+it does not qualify a packaged interactive workflow. No true-TUI,
+TensorCash/Isometric, named-human acceptance or benchmark pass is claimed.
+
+## Increment D file-reader and exit-observation correction — owner-daemon-supervision-04, September 15, 2026
+
+All three earlier supervision rounds remain historical evidence. This round
+addresses only findings A/B in the frozen brief and
+`/private/tmp/fmgr.Q1SIYZ/odsup3-review.json`.
+Base: `04a1670e8bc26775a3e28b2fc70a21eb354c0b44`; branch/worktree unchanged.
+Allocation digest:
+`358a91c3d4652c3baa776fba8c80fc6750b6247c2a25b6541e921008247f2011`.
+Claim: `354cb989-ddf0-483e-ad12-7d5c0ca1472b`.
+Brief SHA-256 verified before other reads:
+`efb8484944e616f9aa5ad3ed8051383b9c7ad0b3e46e738eaf392bfb00e65ef7`.
+Worker: gpt-6-astra / high.
+
+Classification: bounded fixes restoring the authorized increment D supervision
+and disclosure contract. Product heading: **Internal delivery control — TO BUILD**;
+excerpt: “durable event dispatch, acknowledgments and watchdog”.
+Existing initiative-delivery-control / PF-80-S01 context and manager ownership of
+shared governance records remain unchanged.
+
+### A — supervision health reaches file-only readers
+
+The supervisor writes a separate private, checksummed `supervisor.json`
+observation using the existing Store atomic replacement and fsync path. This
+small file has its own write path and is independent of the transport journal's
+lock, validation and size failures. It binds the observation to the Slack
+identity and includes `observed_at`, health state, pending-event count,
+consecutive flush failures and a fixed reason. It contains no credentials or
+raw exception text. Pending evidence is published before the journal attempt;
+a failed attempt publishes `event-flush-failed`, and successful flushing
+publishes healthy with zero pending events.
+
+`project_disclosure` reads that observation; both `project_status` and
+`decision_feed.project_slack` include it. The latter writes the existing
+`decision-slack-status.json` cache, and `decision_feed.slack_health` carries
+the observation into the dashboard health payload. Unhealthy observation holds
+the projected status without inventing a journal hold or exit record.
+
+The regression uses a separate Python interpreter for status, then reads the
+actual projected cache and dashboard health. During the first failed flush all
+surfaces report unhealthy / event-flush-failed / one pending event while durable
+`listener_exits` remains zero, `last_listener_exit` remains null and the
+transport journal remains unchanged from its synthetic no-hold baseline.
+
+Missing, invalid or mismatched observations report unknown. A healthy observation
+older than five seconds becomes unknown when projected; an observed failure is
+not aged into apparent health. This is an observation cache, not restart
+authority or a second durable event journal. A whole-filesystem outage can also
+prevent its write: then a prior healthy observation becomes unknown on its next
+projection after the five-second freshness window. Already published dashboard
+snapshots still require the existing projection/publication cycle. Unavailable
+storage cannot preserve new evidence, and file consumers cannot see an
+unpublished observation instantly.
+
+### B — retain the failed-start survivor's exit
+
+A retry that fails after spawning retains the exact surviving process handle as
+an unexpected-exit candidate, even if a successfully recorded refusal later
+disables normal restart options. One additional pending-exit slot preserves
+that child's observation behind the earlier pending refusal. Starts remain
+blocked while either event awaits recording. After recovery the refusal is
+followed by the child exit; the two facts never overwrite each other. Handle
+identity prevents repeated observations. Reaping proceeds during storage failure.
+
+The regression runs a real harmless Python child through ManagedListener.start,
+injects handshake failure and all cleanup wait timeouts while suppressing fixture
+terminate/kill effects, then restores real process methods, kills and reaps the
+owned child. It covers storage recovery both before the child's exit and while
+the refusal is still unflushed at exit. Both cases preserve exactly one refusal
+and one subsequent child-exit record with return code -9 and fence/ingress
+counts, keep restart held and consume no additional restart attempt.
+
+### Regression and mutation evidence
+
+New cases are in `test_decision_manager.ManagerTests`; names below omit
+`test_`. Each mutation compiled altered production source in memory, ran the
+named case, restored the original source and ran a fresh fixture. Production
+files were never mutated on disk. Raw broken/restored outputs are retained in
+this allocation's tool transcript.
+
+| Production mutation | Named case | Broken outcome | Restored |
+| --- | --- | --- | --- |
+| Suppress independent observation publication. | `first_unflushed_exit_reaches_file_only_status_and_dashboard` | FAIL: unknown/zero instead of unhealthy/one. | PASS |
+| Suppress disclosure's observation read. | Same file-reader case | ERROR: projected cache lacks supervisor_health. | PASS |
+| Drop supervision health from dashboard payload. | Same file-reader case | FAIL: null observation. | PASS |
+| Disable healthy-observation expiry. | `supervisor_observation_missing_stale_or_unwritable_is_not_healthy` | FAIL: healthy instead of unknown after both write paths fail. | PASS |
+| Reinstate the pending-event guard on exit observation. | `failed_start_survivor_exit_is_recorded_after_pending_refusal` | FAIL: surviving child's handle never observed while refusal is pending. | PASS |
+| Forget the failed-start process handle. | Same survivor case | FAIL: exit lost after refusal disables options. | PASS |
+| Discard the queued child exit after recording refusal. | Same survivor case | FAIL: only two journal events instead of three. | PASS |
+
+**Seven mutations failed as intended; all seven fresh restored runs passed.**
+The initial five-case focused run passed four cases and failed the file-reader
+fixture's no-hold precondition: existing fixture startup already records
+outage-gap. The test now explicitly establishes a synthetic no-hold baseline
+before injecting the first failed exit write. The corrected case passed, as did
+all its later restored runs. No native credential prompt occurred.
+
+### Final validation and retained limits
+
+Initial full run: **675 tests in 401.149s, three errors**, all from existing
+pointer fixtures whose stand-in managers omitted the binding present on real
+ManagedListener instances. Those three fixtures now supply the synthetic PIN;
+the focused replay passed **3 tests in 2.727s**. Initial run retained evidence:
+`/private/tmp/isolated-transport-tests-mrs3epbg`.
+Final full-suite replay: **675 tests passed in 401.610s**. Only the known
+synthetic HTTP 500/429 cleanup ResourceWarnings appeared; there were no errors,
+failures or native credential prompts. Final retained synthetic evidence:
+`/private/tmp/isolated-transport-tests-uelaxaed`.
+Both governance checkers passed: plans
+**3/3 active, 0 slots available**; sprints **116 current, 126 archived**.
+The full suite uses the existing SDK command above with profile aliases unset,
+`TMPDIR=/private/tmp` pinned and bytecode writes disabled. Final `git diff --check`
+passed. The commit is recorded in the worker RETURN.
+
+Recurrence stays OFF. This allocation performs no activation, service install,
+live Slack message, credential/profile read, push, release or approval.
+This is an internal implementation return to the Fable manager. Integrator
+acceptance of the internal-stage N/A and the later confined code-blind
+exact-package functional gate remain open; no packaged operator workflow,
+true-TUI, live-repository, human-test, benchmark or release qualification is
+claimed. Only the five allocated implementation/test/evidence files are changed.
+
+## Increment D heartbeat and publication correction — owner-daemon-supervision-05, September 15, 2026
+
+All four earlier supervision rounds remain unchanged as historical evidence.
+This round addresses only P2/P3 from the frozen brief and
+`/private/tmp/fmgr.Q1SIYZ/odsup4-review.json`.
+Base: `d02b460296e57c12fd4686f4f8587c59d99a4656`.
+Branch: `bootstrap/owner-daemon-c-20260915`; worktree:
+`/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-owner-daemon-c-20260915`.
+Allocation digest:
+`97422a45854ee7edc49297786f3493fb6ff7ff50f658a1ee628258341a22cb53`.
+Claim: `f15949d2-9824-4b08-b1f9-b99b95ee2555`.
+Brief SHA-256 verified before other reads:
+`c0fb2c798407a5a77b57df9ca6522cfa49629884a29b736f691dd263fa0b6e26`.
+Worker: gpt-6-astra / high.
+
+Classification: bounded fixes restoring the existing supervision/disclosure
+contract. Product heading: **Internal delivery control — TO BUILD**;
+requirement excerpts: “durable event dispatch, acknowledgments and watchdog”
+and “Show blockers, rendered sprints, human test plans, machines, run logs
+and freshness”. Existing initiative-delivery-control / PF-80-S01 context
+and manager ownership of shared governance records remain unchanged.
+
+### Finding dispositions
+
+- **P2 addressed:** remember the last successfully published observation and
+  skip an identical payload. The second-resolution timestamp still advances
+  the heartbeat every second; health, pending-count and failure-count changes
+  publish immediately within the same second. Failed writes do not advance
+  the remembered observation, allowing a same-second recovery retry.
+- **P3 addressed:** projection and `slack_health` publication now share
+  `assess_supervisor_health`. Publication independently rechecks the original
+  observation timestamp: healthy through age five seconds, then
+  unknown / observation-stale. The Slack cache's separate 900-second rule is
+  unchanged. Missing/future observation times cannot become healthy, observed
+  failures remain unhealthy, and reading does not rewrite the cached snapshot.
+
+### Bounded-write and mutation proof
+
+Focused run: **3 tests passed in 7.122s**, including the existing
+missing/stale/unwritable observation regression.
+
+New P2 case:
+`test_decision_manager.ManagerTests.test_idle_supervisor_bounds_durable_writes_and_keeps_fresh_transitions`.
+With no listener ever started, 300 real supervisor ticks at a simulated 10Hz
+across 30 seconds perform **30 actual Store writes and 60 actual fsync calls**
+(one file and one directory fsync per write). Every tick reads the independent
+observation and verifies healthy state with the current second's timestamp.
+Pending, failed and recovered observations then add three immediate writes
+within the same second. An identical tick adds zero writes. A failed heartbeat
+is retried successfully at the same timestamp; a further duplicate adds zero.
+After six seconds without a heartbeat, the reader reports observation-stale.
+The bound applies to unchanged idle health; changing failure evidence still
+publishes immediately.
+
+New P3 case:
+`test_decision_feed.FeedTests.test_published_supervisor_health_expires_before_slack_cache`.
+A synthetic cached observation is exported, activated with service calls
+mocked, and passed through actual local publication into `health.json`.
+Ages 0 and 5 remain healthy; ages 6, 899 and 901 become unknown/stale.
+The outer cache remains off through 899 seconds and becomes stale at 901.
+The case also verifies unchanged input, missing/future timestamp rejection
+and retained unhealthy observations.
+
+Each mutation compiled changed production source in memory, ran its named
+case, restored the original source and ran a fresh fixture. No production file
+was mutated on disk. Raw attempts remain in this allocation's tool transcript.
+
+| Mutation | Named case | Broken outcome | Restored |
+| --- | --- | --- | --- |
+| Remove identical-observation suppression. | New P2 case above | FAIL: 300 writes instead of 30. | PASS |
+| Freeze the heartbeat timestamp at its first publication. | New P2 case above | FAIL: observed timestamp stays at second 0 when second 1 is expected. | PASS |
+| Suppress all same-second observations, including transitions. | New P2 case above | FAIL: 30 writes instead of 32 after pending/failure transitions. | PASS |
+| Remember the observation before its write succeeds. | New P2 case above | FAIL: 34 calls instead of 35; same-second retry skipped. | PASS |
+| Copy cached health without publication reassessment. | New P3 case above | FAIL: healthy at ages 6, 899 and 901; missing timestamp also stays healthy. | PASS |
+| Widen shared healthy validity from five to 900 seconds. | New P3 case above | FAIL: healthy at ages 6 and 899. | PASS |
+
+**Six mutations failed as intended; all six fresh restored runs passed.**
+
+### Final validation and retained limits
+
+Initial full suite: **677 tests in 419.934s, one failure** in the existing
+`test_fable_launcher.RealTmux.test_normal_management_vocabulary_round_trip`.
+Its synthetic launcher returned `launcher_failure` with `launched: false`
+after approximately five seconds; this is consistent with the existing
+five-second binary-version probe timeout, but the receipt does not establish
+the precise cause. No allocated production module is involved in that launch.
+The unchanged focused replay **passed in 3.711s**. No launcher/test code was
+changed. Initial suite evidence:
+`/private/tmp/isolated-transport-tests-wjqsmcvo`.
+Final complete unchanged-code replay: **677 tests passed in 408.776s**.
+Known synthetic HTTP 500/429 fixture cleanup ResourceWarnings appeared;
+there were no failures, errors or native credential prompts in the replay.
+Final retained synthetic evidence:
+`/private/tmp/isolated-transport-tests-pn5u8bz6`.
+Both suite runs used the exact SDK command recorded above with profile aliases
+unset, `TMPDIR=/private/tmp` pinned and bytecode writes disabled.
+Both governance checkers passed: plans **3/3 active, 0 slots available**;
+sprints **116 current, 126 archived**. Final `git diff --check` passed.
+The evidence file's entire pre-round contents were verified byte-for-byte
+against the base commit; this round only appends to the four earlier rounds.
+
+Recurrence stays OFF. This allocation performs no activation of real services,
+installation, live Slack message, credential/profile read, push, release or
+approval. The activation exercised above belongs only to disposable test
+fixtures with service subprocess calls mocked.
+This is an internal implementation return to the Fable manager. Integrator
+acceptance of the internal-stage N/A and the later confined code-blind
+exact-package functional gate remain open. Python heartbeat I/O and cached
+health publication are the scope of this correction; no packaged operator
+workflow, true-TUI, live-repository, human-test, benchmark or release
+qualification is claimed. Five allocated implementation/test/evidence files
+are changed; the commit is recorded in the worker RETURN.

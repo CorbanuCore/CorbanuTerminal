@@ -25,6 +25,7 @@ import slack_transport as s
 import owner_tmux as tmux
 
 COUNTS = "received needs_clarification recorded queued delivered agent_acknowledged".split()
+LISTENER_EVENT_LIMIT = 128
 
 
 def utc_now():
@@ -32,8 +33,23 @@ def utc_now():
 
 
 def validate_status(value):
-    extra = [key for key in ("unacknowledged_answers", "new_thread_fallbacks") if key in value]
-    d.shape(value, "schema enabled state last_verified watermark pending " + " ".join(COUNTS + extra))
+    extra = [key for key in ("unacknowledged_answers", "new_thread_fallbacks", "fence_gap", "pending_pointers", "listener_exits", "listener_events_pruned") if key in value]
+    d.shape(value, "schema enabled state last_verified watermark pending " + " ".join(COUNTS + extra)
+            + (" last_listener_exit" if "last_listener_exit" in value else "")
+            + (" supervisor_health" if "supervisor_health" in value else ""))
+    if "supervisor_health" in value:
+        health = value["supervisor_health"]
+        validate_supervisor_health(health)
+    event = value.get("last_listener_exit")
+    if event is not None:
+        d.shape(event, "kind at returncode restarts fence_count ingress_count fence_gap epoch restart")
+        d.require((event["kind"] == "child-exit" and type(event["returncode"]) is int)
+                  or (event["kind"] == "restart-refused" and event["returncode"] is None
+                      and event["restart"] == "held"))
+        d.stamp(event["at"])
+        d.require(event["restart"] in ("pending", "held"))
+        d.require(all(type(event[k]) is int and event[k] >= 0 for k in ("restarts", "ingress_count", "epoch")))
+        d.require(all(event[k] is None or type(event[k]) is int and event[k] >= 0 for k in ("fence_count", "fence_gap")))
     d.require(type(value["schema"]) is int and value["schema"] == 1 and type(value["enabled"]) is bool)
     d.require(value["state"] in ("off", "unqualified", "held", "last-verified", "stale"))
     if value["last_verified"] is not None:
@@ -64,9 +80,69 @@ def unacknowledged_answers(ledger, alerts, alert_key=None):
     return len(outstanding)
 
 
+def validate_supervisor_health(health):
+    extra = [key for key in ("observed_at", "reason") if key in health]
+    d.shape(health, ["state", "event_flush_failures", "pending_events"] + extra)
+    d.require(type(health["event_flush_failures"]) is int and health["event_flush_failures"] >= 0)
+    d.require(type(health["pending_events"]) is int and 0 <= health["pending_events"] <= 2)
+    d.require(health["state"] in ("healthy", "unhealthy", "unknown"))
+    if health["state"] != "unknown":
+        d.require(health["state"] == ("unhealthy" if health["event_flush_failures"] or health["pending_events"] else "healthy"))
+    if health.get("observed_at") is not None:
+        d.stamp(health["observed_at"])
+    if "reason" in health:
+        d.require(health["reason"] in ("event-flush-failed", "event-unflushed", "observation-unavailable", "observation-stale", None))
+
+
+def assess_supervisor_health(health, now):
+    """Apply the same observation validity at projection and publication."""
+    unknown = dict(state="unknown", event_flush_failures=0, pending_events=0,
+                   observed_at=None, reason="observation-unavailable")
+    try:
+        validate_supervisor_health(health)
+        age = (d.stamp(now) - d.stamp(health["observed_at"])).total_seconds()
+        d.require(age >= 0)
+        # Never age an observed failure back into apparent health.
+        if age > 5 and health["state"] == "healthy":
+            return dict(unknown, observed_at=health["observed_at"], reason="observation-stale")
+        return copy.deepcopy(health)
+    except (OSError, ValueError, KeyError, TypeError):
+        return unknown
+
+
+def read_supervisor_health(store, now, binding):
+    """Independent observation cache; journal counts remain durable facts."""
+    try:
+        observation = store.read("supervisor")
+        d.shape(observation, "binding health")
+        d.require(observation["binding"] == binding)
+        return assess_supervisor_health(observation["health"], now)
+    except (OSError, ValueError, KeyError, TypeError):
+        return assess_supervisor_health(None, now)
+
+
+def project_disclosure(value, store, journal, alerts, now=None):
+    value["supervisor_health"] = read_supervisor_health(store, now or utc_now(), journal["binding"])
+    value["pending_pointers"] = len(a.pending_pointers(alerts))
+    exits = [event for event in journal.get("listener_events", []) if event["kind"] == "child-exit"]
+    pruned = journal.get("listener_events_pruned", {})
+    value["listener_exits"] = len(exits) + pruned.get("child_exits", 0)
+    value["listener_events_pruned"] = pruned.get("events", 0)
+    events = journal.get("listener_events", [])
+    event = copy.deepcopy(events[-1]) if events else None
+    # An unreleased predecessor wrote pending refusals. A refusal never grants a restart.
+    if event is not None and event["kind"] == "restart-refused" and event["restart"] == "pending":
+        event["restart"] = "held"
+    value["last_listener_exit"] = event
+    value["fence_gap"] = s.fence_gap(store, journal)
+    if value["fence_gap"]:
+        value["state"] = "held"
+
+
 def project_status(store, now, enabled=False):
     value = dict(schema=1, enabled=enabled, state="off", last_verified=None, watermark=0, pending=0,
                  unacknowledged_answers=0, new_thread_fallbacks=0,
+                 fence_gap=0, pending_pointers=0, listener_exits=0, last_listener_exit=None,
                  **{k: 0 for k in COUNTS})
     if enabled:
         try:
@@ -79,6 +155,7 @@ def project_status(store, now, enabled=False):
                 value.update(last_verified=transport["last_verified"], watermark=transport["watermark"],
                              pending=sum(not e["drained"] for e in transport["events"].values()))
                 value["state"] = "held" if transport["hold"] else "last-verified"
+                project_disclosure(value, store, transport, alerts, now)
                 s.fenced(store, transport)
                 s.observe_session_locked(store, transport)
                 if any(p["receipt"] is None and not s.reconciled_never_sent(p) for p in transport["posts"].values()):
@@ -93,6 +170,8 @@ def project_status(store, now, enabled=False):
                         value[state] += 1
         except (OSError, ValueError, KeyError, TypeError):
             value["state"] = "held"
+    if enabled and value.get("supervisor_health", {}).get("state") == "unhealthy":
+        value["state"] = "held"
     return validate_status(value)
 
 
@@ -313,7 +392,7 @@ class ManagedListener:
         self.process, self.control, self.guard = None, None, None
         self.operation = threading.RLock()
 
-    def start(self, *, seconds=60, ongoing=False):
+    def start(self, *, seconds=60, ongoing=False, restart_pin=None):
         with self.operation:
             d.require(self.live and self.guard is None and (self.process is None or self.process.poll() is not None))
             d.require(type(ongoing) is bool and type(seconds) in (int, float) and 0 < seconds <= 60)
@@ -328,7 +407,10 @@ class ManagedListener:
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
                 self.control, writer = writer, None
                 channel = Stdio(self.process.stdout, self.process.stdin, timeout=5)
-                channel.emit(dict(binding=self.binding, seconds=seconds, ongoing=ongoing))
+                config = dict(binding=self.binding, seconds=seconds, ongoing=ongoing)
+                if restart_pin is not None:
+                    config["restart_pin"] = restart_pin
+                channel.emit(config)
                 d.require(channel.read() == dict(type="runtime-owned"))  # Not connected/qualified/stopped.
                 return dict(state="starting")
             except BaseException:
@@ -392,7 +474,7 @@ def listener_child(root, guard, control, *, run=None):
         os.set_inheritable(control, False)
         channel = Stdio(timeout=5)
         data = channel.read()
-        d.shape(data, "binding seconds ongoing")
+        d.shape(data, "binding seconds ongoing" + (" restart_pin" if "restart_pin" in data else ""))
         d.require(type(data["ongoing"]) is bool and type(data["seconds"]) in (int, float) and 0 < data["seconds"] <= 60)
         store = a.Store(root)
         runtime = s._ChildRuntime(guard, store, a.identity(data["binding"]))
@@ -415,7 +497,8 @@ def listener_child(root, guard, control, *, run=None):
         if run is None:
             credentials = lambda: (os.environ["CORBANU_SLACK_BOT_TOKEN"], os.environ["CORBANU_SLACK_APP_TOKEN"])
             transport = s.Transport(store, data["binding"], credentials, live=True, now=utc_now)
-            transport.listen(seconds=data["seconds"], ongoing=data["ongoing"], stop=stop, runtime=runtime)
+            transport.listen(seconds=data["seconds"], ongoing=data["ongoing"], stop=stop, runtime=runtime,
+                             restart_pin=data.get("restart_pin"))
         else:
             run(runtime, stop, data)
         code = 0
@@ -425,14 +508,183 @@ def listener_child(root, guard, control, *, run=None):
         os._exit(code)
 
 
+def prune_listener_events(journal):
+    """Keep newest evidence, accounting for every discarded record in the same write."""
+    events = journal["listener_events"]
+    discarded = events[:-LISTENER_EVENT_LIMIT]
+    del events[:-LISTENER_EVENT_LIMIT]
+    def account(rows):
+        if rows:
+            summary = journal.setdefault("listener_events_pruned", dict(events=0, child_exits=0, last_at=None))
+            summary["events"] += len(rows)
+            summary["child_exits"] += sum(row["kind"] == "child-exit" for row in rows)
+            summary["last_at"] = rows[-1]["at"]
+    account(discarded)
+    # Include the Store envelope; other journal data can consume the remaining space.
+    while len(events) > 1 and len(d.canonical(dict(schema=2, body=journal, digest=d.digest(journal)))) > d.MAX_BYTES:
+        account([events.pop(0)])
+    # Never discard the newest event. If even it cannot fit, flush remains unhealthy.
+
+
+class ListenerSupervisor:
+    """Foreground-only watchdog. Three total retries per explicit start, never a scheduler."""
+    def __init__(self, manager, transport, now, monotonic=time.monotonic):
+        self.manager, self.transport, self.now, self.clock = manager, transport, now, monotonic
+        self.options, self.deadline, self.pin = None, None, None
+        self.restarts, self.retry_at, self.pointer_at = 0, None, 0
+        self.pending_event, self.exited_process = None, None
+        self.pending_exit, self.failed_start_process = None, None
+        self.event_flush_failures = 0
+        self.published_observation = None
+        self.pointer_version, self.pointers_pending = None, False
+
+    def start(self, *, seconds, ongoing):
+        d.require(self.flush_event())
+        result = self.manager.start(seconds=seconds, ongoing=ongoing)
+        self.options = dict(seconds=seconds, ongoing=ongoing)
+        self.deadline = None if ongoing else self.clock() + seconds
+        self.restarts, self.retry_at, self.pin = 0, None, None
+        return result
+
+    def stop(self):
+        self.options, self.retry_at, self.pin = None, None, None
+        self.manager.stop()
+
+    def record(self, kind, returncode=None):
+        with self.manager.store.lock(), s.locked(self.manager.store) as journal:
+            try:
+                fence = s.ingress_count(self.manager.store)
+            except (OSError, ValueError):
+                fence = None
+            pin = s.restart_identity(journal)
+            gap = None if fence is None else abs(fence - journal["ingress"])
+            session = journal["lifecycle"]["session"]
+            safe = (kind == "child-exit" and self.options is not None
+                    and gap == 0 and journal["binding"] == self.manager.binding
+                    and session is not None and session["phase"] != "stopped"
+                    and (self.pin is None or self.pin == pin) and self.restarts < 3)
+            event = dict(kind=kind, at=self.now(), returncode=returncode, restarts=self.restarts,
+                         fence_count=fence, ingress_count=journal["ingress"], fence_gap=gap,
+                         epoch=journal["lifecycle"]["epoch"], restart="pending" if safe else "held")
+            journal.setdefault("listener_events", []).append(event)
+            journal["hold"] = journal["hold"] or "listener-exited"
+            prune_listener_events(journal)
+            self.manager.store.write("transport", journal)
+        self.pin = pin
+        self.retry_at = self.clock() + 2 ** self.restarts if safe else None
+        if not safe:
+            self.options = None
+
+    def health(self):
+        pending = int(self.pending_event is not None) + int(self.pending_exit is not None)
+        return dict(state="unhealthy" if self.event_flush_failures or pending else "healthy",
+                    event_flush_failures=self.event_flush_failures, pending_events=pending)
+
+    def publish_health(self):
+        # Independent file/write path: transport lock, size or validation failures
+        # cannot suppress this observation. Whole-filesystem failures still can.
+        health = dict(self.health(), observed_at=self.now(),
+                      reason="event-flush-failed" if self.event_flush_failures else
+                             "event-unflushed" if self.pending_event is not None else None)
+        observation = dict(binding=self.manager.binding, health=health)
+        # Second-resolution heartbeats stay fresh without rewriting identical
+        # observations on every 100ms tick. State transitions publish immediately.
+        if observation == self.published_observation:
+            return
+        try:
+            a.Store(self.manager.store.root).write("supervisor", observation)
+            self.published_observation = copy.deepcopy(observation)
+        except (OSError, ValueError, KeyError, TypeError):
+            pass  # File readers treat missing/stale observations as unknown.
+
+    def flush_event(self):
+        while self.pending_event is not None:
+            self.publish_health()  # Expose pending evidence before attempting the journal.
+            try:
+                self.record(*self.pending_event)
+            except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
+                self.event_flush_failures += 1
+                self.publish_health()
+                return False  # A broken journal must not prevent reaping or pointer checks.
+            # At most one surviving failed-start child can wait behind a refusal;
+            # starts stay blocked until both observations have been recorded.
+            self.pending_event, self.pending_exit = self.pending_exit, None
+            self.event_flush_failures = 0
+        self.publish_health()
+        return True
+
+    def status(self, enabled):
+        value = project_status(self.manager.store, self.now(), enabled)
+        value["supervisor_health"] = self.health()
+        if enabled and value["supervisor_health"]["state"] == "unhealthy":
+            value["state"] = "held"
+        return validate_status(value)
+
+    def tick(self):
+        try:
+            self._tick()
+        except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
+            pass  # Retain event/process/retry state for the next foreground tick.
+
+    def _tick(self):
+        self.flush_event()
+        process = self.manager.process
+        if process is not None:
+            code = process.poll()
+            if code is not None:
+                expected = process is not self.failed_start_process and (
+                    self.options is None or (code == 0 and self.deadline is not None
+                                             and self.clock() >= self.deadline))
+                if not expected and self.exited_process is not process:
+                    # Attribute each observed exit to its handle before reaping.
+                    # Never replace a different process's pending observation.
+                    self.pin = None
+                    event = ("child-exit", code)
+                    if self.pending_event is None:
+                        self.pending_event = event
+                    else:
+                        d.require(self.pending_exit is None)
+                        self.pending_exit = event
+                    self.exited_process = process
+                    self.failed_start_process = None
+                    self.flush_event()
+                elif expected:
+                    self.options = None
+                self.manager.stop()
+        # Reaping and pointer checks proceed, but never replace unwritten evidence with a refusal.
+        if self.pending_event is None and self.retry_at is not None and self.clock() >= self.retry_at:
+            self.retry_at = None
+            self.restarts += 1
+            try:
+                with s.locked(self.manager.store) as journal:
+                    s.restart_allowed(self.manager.store, journal, self.pin)
+                options = dict(self.options)
+                if self.deadline is not None:
+                    options["seconds"] = min(options["seconds"], self.deadline - self.clock())
+                    d.require(options["seconds"] > 0)
+                self.manager.start(**options, restart_pin=self.pin)
+            except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
+                self.failed_start_process = self.manager.process
+                self.pending_event = ("restart-refused", None)
+                self.flush_event()
+        if self.manager.process is not None and self.clock() >= self.pointer_at:
+            self.pointer_at = self.clock() + 1
+            info = (self.manager.store.root / "alerts.json").stat()
+            version = (info.st_ino, info.st_mtime_ns, info.st_size)
+            if version != self.pointer_version or self.pointers_pending:
+                self.pointers_pending = bool(a.retry_pending_pointers(self.manager.store, self.transport))
+                self.pointer_version = version
+
+
 def supervise_listener(store, binding, *, live=False, stdin=None, stdout=None, now):
     manager = ManagedListener(store, binding, live=live)
+    credentials = lambda: (os.environ["CORBANU_SLACK_BOT_TOKEN"], os.environ["CORBANU_SLACK_APP_TOKEN"])
+    supervisor = ListenerSupervisor(manager, s.Transport(store, binding, credentials, live=live, now=now), now)
     source, sink = stdin or sys.stdin, stdout or sys.stdout
     try:
         while True:
+            supervisor.tick()
             if not select.select([source.fileno()], [], [], 0.1)[0]:
-                if manager.process is not None and manager.process.poll() is not None:
-                    manager.stop()
                 continue  # Foreground owner waiting, not a 20-second listener lifetime or scheduler.
             channel = Stdio(source, sink)
             data = channel.read(eof_ok=True)
@@ -445,14 +697,15 @@ def supervise_listener(store, binding, *, live=False, stdin=None, stdout=None, n
             try:
                 if operation == "start":
                     d.shape(data, "operation seconds ongoing")
-                    result = manager.start(seconds=data["seconds"], ongoing=data["ongoing"])
+                    result = supervisor.start(seconds=data["seconds"], ongoing=data["ongoing"])
                 elif operation == "stop":
-                    manager.stop()
+                    supervisor.stop()
                     result = dict(state="held")
                 elif operation == "status":
-                    result = project_status(store, now(), live)
+                    result = supervisor.status(live)
                 else:
                     d.require(operation in ("inspect-fence-loss", "recover-missing-fence"))
+                    supervisor.stop()
                     with manager.quiesced() as witness:
                         result = (s.inspect_fence_loss(store, binding) if operation == "inspect-fence-loss" else
                                   s.recover_missing_fence(store, binding, expected_digest=data["case_digest"],

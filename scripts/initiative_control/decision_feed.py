@@ -108,6 +108,7 @@ def project_slack(state, store_path, at, enabled=False):
             elif status["last_verified"] is None or not 0 <= (d.stamp(at) - d.stamp(status["last_verified"])).total_seconds() <= 900:
                 status["state"] = "stale"
             try:
+                manager.project_disclosure(status, store, journal, saved, at)
                 slack.fenced(store, journal)
                 slack.observe_session_locked(store, journal)
             except (OSError, ValueError):
@@ -117,6 +118,8 @@ def project_slack(state, store_path, at, enabled=False):
             # status at held forever.
             if any(post["receipt"] is None and not slack.reconciled_never_sent(post)
                    for post in journal["posts"].values()):
+                status["state"] = "held"
+            if status.get("supervisor_health", {}).get("state") == "unhealthy":
                 status["state"] = "held"
             for event in events.values():
                 name = event["state"].replace("-", "_")
@@ -275,10 +278,18 @@ def slack_health(snapshot, at):
     value = snapshot.get("slack")
     if value is None:
         return dict(state="unknown" if snapshot.get("slack_status") == "invalid" else "unrecorded", assessed_at=None, last_verified=None)
+    from decision_manager import assess_supervisor_health
     status = value["status"]
+    supervisor_health = (assess_supervisor_health(status["supervisor_health"], clock(at))
+                         if "supervisor_health" in status else None)
     age = (d.stamp(clock(at)) - d.stamp(value["assessed_at"])).total_seconds()
     stale = not 0 <= age <= 900 or (status["last_verified"] is not None and (d.stamp(clock(at)) - d.stamp(status["last_verified"])).total_seconds() > 900)
-    return dict(state="stale" if stale else status["state"], assessed_at=value["assessed_at"], last_verified=status["last_verified"])
+    return dict(state="held" if status.get("fence_gap", 0) or status.get("supervisor_health", {}).get("state") == "unhealthy" else "stale" if stale else status["state"],
+                supervisor_health=supervisor_health,
+                assessed_at=value["assessed_at"], last_verified=status["last_verified"],
+                fence_gap=status.get("fence_gap", 0), pending_pointers=status.get("pending_pointers", 0),
+                listener_exits=status.get("listener_exits", 0),
+                last_listener_exit=copy.deepcopy(status.get("last_listener_exit")))
 
 
 def render(snapshot, at, sprints, documents):

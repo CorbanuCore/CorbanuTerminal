@@ -95,6 +95,24 @@ def ingress_count(store, mark=False):
         return os.fstat(stream.fileno()).st_size
 
 
+def fence_gap(store, value):
+    """Observation only: never advance ingress or infer the missing arrivals."""
+    return abs(ingress_count(store) - value["ingress"])
+
+
+def restart_identity(journal):
+    """Bound the control frame without pruning or weakening lifecycle equality."""
+    return dict(binding=copy.deepcopy(journal["binding"]), lifecycle_digest=d.digest(journal["lifecycle"]))
+
+
+def restart_allowed(store, journal, pin):
+    """Recheck under the transport lock immediately before creating a session."""
+    d.require(restart_identity(journal) == pin)
+    session = journal["lifecycle"]["session"]
+    d.require(session is not None and session["phase"] != "stopped")
+    fenced(store, journal)
+
+
 def fenced(store, value):
     try:
         d.require(ingress_count(store) == value["ingress"])
@@ -113,7 +131,15 @@ def locked(store):
         fields = "binding last_verified hold watermark events posts routes bridges gap_reviews ingress ui_evidence"
         d.shape(value, fields + (" schema lifecycle" if "schema" in value else "")
                 + (" fence_losses" if "fence_losses" in value else "")
-                + (" runtime_guard" if "runtime_guard" in value else ""))
+                + (" runtime_guard" if "runtime_guard" in value else "")
+                + (" listener_events" if "listener_events" in value else "")
+                + (" listener_events_pruned" if "listener_events_pruned" in value else ""))
+        if "listener_events_pruned" in value:
+            summary = value["listener_events_pruned"]
+            d.shape(summary, "events child_exits last_at")
+            d.require(type(summary["events"]) is int and type(summary["child_exits"]) is int
+                      and 0 <= summary["child_exits"] <= summary["events"] and summary["events"] > 0)
+            d.stamp(summary["last_at"])
         d.require(type(value["watermark"]) is int and value["watermark"] >= 0)
         losses(value)
         yield value
@@ -326,11 +352,13 @@ class Session:
     Failed durable lifecycle writes release ownership even if a hold cannot persist.
     Reconnect/renewal cannot clear a gap; expired renewal starts another held epoch.
     """
-    def __init__(self, store):
+    def __init__(self, store, *, restart_pin=None):
         self.store, self.fd, self.id = store, None, uuid.uuid4().hex
         try:
             with locked(store) as journal:
                 loss_ready(journal)
+                if restart_pin is not None:
+                    restart_allowed(store, journal, restart_pin)
                 self.fd = owner_file(store, journal)
                 fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 life = journal["lifecycle"]
@@ -667,7 +695,7 @@ class Transport:
             except Exception:
                 pass  # The independent uncovered/missing fence already denies work after restart.
 
-    def listen(self, seconds=60, stop=None, ongoing=False, *, runtime=None):
+    def listen(self, seconds=60, stop=None, ongoing=False, *, runtime=None, restart_pin=None):
         d.require(self.live)
         d.require(type(runtime) is _ChildRuntime)
         runtime.check(self.store, self.binding)  # Before even the SDK constructor can start threads.
@@ -694,7 +722,7 @@ class Transport:
         self.socket.on_close_listeners.append(disconnected)
         self.socket.on_error_listeners.append(disconnected)
         try:
-            owner = Session(self.store)
+            owner = Session(self.store, restart_pin=restart_pin)
         except BaseException:
             self.socket.close()
             raise

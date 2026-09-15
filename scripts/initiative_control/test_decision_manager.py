@@ -1,5 +1,5 @@
 import copy
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 import io
 import json
 import multiprocessing
@@ -77,7 +77,8 @@ def supervised_child(root, guard, control, mode, endpoint):
             return mark_original(store, mark=mark)
         with (patch.object(fixtures.SocketModeClient, "connect", autospec=True, side_effect=connect),
               patch.object(s.Session, "update", renewed), patch.object(s, "ingress_count", blocked)):
-            transport.listen(seconds=data["seconds"], ongoing=data["ongoing"], stop=stop, runtime=runtime)
+            transport.listen(seconds=data["seconds"], ongoing=data["ongoing"], stop=stop, runtime=runtime,
+                             restart_pin=data.get("restart_pin"))
     m.listener_child(root, int(guard), int(control), run=run)
 
 
@@ -563,6 +564,550 @@ class ManagerTests(fixtures.LiveFixture):
             manager.start(**options)
         self.assertEqual(self.line(manager.process), dict(type="connected"))
         return manager
+
+    def watchdog(self):
+        manager = self.supervised(ongoing=True)
+        clock = [0]
+        supervisor = m.ListenerSupervisor(manager, self.transport, lambda: NOW, lambda: clock[0])
+        supervisor.options = dict(seconds=60, ongoing=True)
+        return manager, supervisor, clock
+
+    def test_listener_incident_records_exit_and_three_unknown_arrivals(self):
+        manager, supervisor, clock = self.watchdog()
+        manager.process.kill()
+        manager.process.wait(timeout=5)
+        with s.locked(self.store) as journal:
+            for _ in range(45 - s.ingress_count(self.store)):
+                s.ingress_count(self.store, mark=True)
+            journal["ingress"] = 42
+            self.store.write("transport", journal)
+        supervisor.tick()
+        journal = a.Store(self.root).read("transport")
+        event = journal["listener_events"][-1]
+        self.assertEqual((event["kind"], event["returncode"], event["fence_count"],
+                          event["ingress_count"], event["fence_gap"], event["restart"]),
+                         ("child-exit", -9, 45, 42, 3, "held"))
+        self.assertEqual(m.project_status(self.store, NOW, True)["listener_exits"], 1)
+        self.assertEqual(m.project_status(self.store, NOW, True)["last_listener_exit"], event)
+        import decision_feed as feed
+        projected = feed.project_slack(self.feed_root, self.root, NOW, True)
+        self.assertEqual(projected["status"]["last_listener_exit"], event)
+        self.assertEqual(feed.slack_health(dict(slack=projected), NOW)["last_listener_exit"], event)
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "held")
+        clock[0] = 100
+        with patch.object(manager, "start", side_effect=AssertionError("gap restart")):
+            supervisor.tick()
+        self.assertIsNone(manager.process)
+        self.assertEqual((s.ingress_count(self.store), journal["ingress"]), (45, 42))
+        with self.assertRaises(d.Invalid):
+            s.inspect_fence_loss(self.store, PIN)
+
+    def test_listener_restarts_with_backoff_and_exhausts_after_three(self):
+        manager, supervisor, clock = self.watchdog()
+        sessions = []
+        for attempt in range(4):
+            sessions.append(self.store.read("transport")["lifecycle"]["session"]["id"])
+            manager.process.kill()
+            manager.process.wait(timeout=5)
+            supervisor.tick()
+            self.assertIsNone(manager.process)
+            if attempt == 3:
+                break
+            self.assertEqual(supervisor.retry_at, clock[0] + 2 ** attempt)
+            clock[0] += 2 ** attempt - 0.01
+            supervisor.tick()
+            self.assertIsNone(manager.process)
+            clock[0] += 0.01
+            with fixture_child("connected", self.endpoint):
+                supervisor.tick()
+            self.assertEqual(self.line(manager.process), dict(type="connected"))
+        self.assertEqual(len(set(sessions)), 4)
+        self.assertEqual(supervisor.restarts, 3)
+        self.assertIsNone(supervisor.retry_at)
+        events = self.store.read("transport")["listener_events"]
+        self.assertEqual(len(events), 4)
+        self.assertEqual(events[-1]["restart"], "held")
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "held")
+        clock[0] += 100
+        with patch.object(manager, "start", side_effect=AssertionError("unbounded restart")):
+            supervisor.tick()
+
+    def test_listener_restart_rechecks_stopped_epoch_and_binding(self):
+        manager, supervisor, clock = self.watchdog()
+        manager.process.kill()
+        manager.process.wait(timeout=5)
+        supervisor.tick()
+        original = self.store.read("transport")
+        for change in ("stopped", "binding", "epoch", "gap"):
+            with self.subTest(change=change):
+                journal = copy.deepcopy(original)
+                if change == "stopped":
+                    journal["lifecycle"]["session"]["phase"] = "stopped"
+                elif change == "binding":
+                    journal["binding"] = dict(PIN, channel="GOTHER")
+                elif change == "epoch":
+                    journal["lifecycle"]["epoch"] += 1
+                else:
+                    s.ingress_count(self.store, mark=True)
+                self.store.write("transport", journal)
+                supervisor.options = dict(seconds=60, ongoing=True)
+                supervisor.pin = s.restart_identity(original)
+                supervisor.retry_at, supervisor.restarts = 0, 0
+                with patch.object(manager, "start", side_effect=AssertionError("unsafe restart")):
+                    supervisor.tick()
+                self.assertIsNone(supervisor.retry_at)
+                event = self.store.read("transport")["listener_events"][-1]
+                self.assertEqual((event["kind"], event["restart"]), ("restart-refused", "held"))
+                self.assert_listener_disclosure(event)
+                # Also exercise the child-side atomic check, after parent admission.
+                with self.assertRaises(d.Invalid):
+                    unexpected = s.Session(self.store, restart_pin=s.restart_identity(original))
+                    unexpected.release()  # Mutation failures must not leak the acquired fixture flock.
+                self.assertEqual(self.store.read("transport")["lifecycle"], journal["lifecycle"])
+
+    def assert_listener_disclosure(self, event):
+        import decision_feed as feed
+        status = m.project_status(self.store, NOW, True)
+        projected = feed.project_slack(self.feed_root, self.root, NOW, True)
+        for value in (status, projected["status"], feed.slack_health(dict(slack=projected), NOW)):
+            self.assertEqual(value["last_listener_exit"], event)
+            self.assertEqual(value["listener_exits"], 1)
+
+    def test_listener_record_failures_retry_observation_and_reap_once(self):
+        manager, supervisor, clock = self.watchdog()
+        process = manager.process
+        process.kill()
+        process.wait(timeout=5)
+        # Real fail-fast transport flock, then a store timeout, then a disk error.
+        with patch.object(manager, "stop", side_effect=subprocess.TimeoutExpired("fixture reap", 2)):
+            with s.locked(self.store):
+                supervisor.tick()
+            with patch.object(self.store, "lock", side_effect=d.Invalid()):
+                supervisor.tick()
+            with patch.object(self.store, "write", side_effect=OSError("fixture disk")):
+                supervisor.tick()
+            self.assertIs(manager.process, process)
+            self.assertNotIn("listener_events", self.store.read("transport"))
+            supervisor.tick()
+        supervisor.tick()
+        events = self.store.read("transport")["listener_events"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["returncode"], -9)
+        self.assertIsNone(manager.process)
+        self.assertEqual(supervisor.retry_at, 1)
+
+    def test_persistent_flush_failure_reaps_reports_and_recovers_restart(self):
+        manager, supervisor, clock = self.watchdog()
+        manager.process.kill()
+        manager.process.wait(timeout=5)
+        with patch.object(self.store, "write", side_effect=OSError("fixture disk")):
+            for second in range(5):
+                clock[0] = second
+                supervisor.tick()
+                self.assertIsNone(manager.process)
+                status = supervisor.status(True)
+                self.assertEqual(status["state"], "held")
+                self.assertEqual(status["supervisor_health"],
+                    dict(state="unhealthy", event_flush_failures=second + 1, pending_events=1))
+                self.assertEqual(supervisor.pending_event, ("child-exit", -9))
+            incoming, writer = os.pipe()
+            reader, outgoing = os.pipe()
+            try:
+                with os.fdopen(incoming, "rb") as source, os.fdopen(outgoing, "wb") as sink:
+                    os.write(writer, b'{"operation":"status"}\n{"operation":"exit"}\n')
+                    os.close(writer)
+                    writer = None
+                    with (patch.object(m, "ManagedListener", return_value=manager),
+                          patch.object(m, "ListenerSupervisor", return_value=supervisor)):
+                        m.supervise_listener(self.store, PIN, live=True, stdin=source, stdout=sink, now=lambda: NOW)
+                status = json.loads(os.read(reader, 16384).splitlines()[0])["result"]
+                self.assertEqual(status["supervisor_health"],
+                                 dict(state="unhealthy", event_flush_failures=6, pending_events=1))
+            finally:
+                if writer is not None:
+                    os.close(writer)
+                os.close(reader)
+        self.assertNotIn("listener_events", self.store.read("transport"))
+        supervisor.tick()
+        self.assertEqual(supervisor.status(True)["supervisor_health"],
+                         dict(state="healthy", event_flush_failures=0, pending_events=0))
+        self.assertEqual(len(self.store.read("transport")["listener_events"]), 1)
+        clock[0] += 1
+        with fixture_child("connected", self.endpoint):
+            supervisor.tick()
+        self.assertEqual(self.line(manager.process), dict(type="connected"))
+        self.assertEqual(supervisor.restarts, 1)
+
+    def test_persistent_flush_failure_still_checks_pointers_without_overwriting_event(self):
+        manager, supervisor, clock = self.watchdog()
+        supervisor.pending_event = ("restart-refused", None)
+        supervisor.retry_at = 0
+        with (patch.object(self.store, "write", side_effect=OSError("fixture disk")),
+              patch.object(manager, "start", side_effect=AssertionError("restart before durable evidence")),
+              patch.object(a, "retry_pending_pointers", return_value=1) as retry):
+            for second in range(5):
+                clock[0] = second
+                supervisor.tick()
+                self.assertEqual(retry.call_count, second + 1)
+                self.assertEqual(supervisor.pending_event, ("restart-refused", None))
+                self.assertEqual(supervisor.restarts, 0)
+                self.assertEqual(supervisor.status(True)["supervisor_health"]["event_flush_failures"], second + 1)
+            with self.assertRaises(d.Invalid):
+                supervisor.start(seconds=60, ongoing=True)
+        supervisor.tick()
+        self.assertIsNone(supervisor.retry_at)
+        self.assertEqual(self.store.read("transport")["listener_events"][-1]["restart"], "held")
+
+    def test_first_unflushed_exit_reaches_file_only_status_and_dashboard(self):
+        import decision_feed as f
+        manager, supervisor, clock = self.watchdog()
+        manager.process.kill()
+        manager.process.wait(timeout=5)
+        original = self.store.read("transport")
+        original["hold"] = None  # Synthetic qualified baseline without a prior outage hold.
+        self.store.write("transport", original)
+        self.assertIsNone(original["hold"])
+        with patch.object(self.store, "write", side_effect=OSError("fixture journal disk")):
+            supervisor.tick()
+            # Separate interpreter: no foreground pipe or supervisor object.
+            command = [sys.executable, "-B", "-c",
+                       "import decision_manager as m, decision_alerts as a, json, sys; "
+                       "print(json.dumps(m.project_status(a.Store(sys.argv[1]), sys.argv[2], True)))",
+                       str(self.root), NOW]
+            status = json.loads(subprocess.check_output(command))
+            projected = f.project_slack(self.feed_root, self.root, NOW, True)
+            valid, cached, _ = f.read_slack(self.feed_root, d.load_fixture(self.feed_root, NOW), NOW)
+            self.assertEqual(valid, "valid")
+            health = f.slack_health(dict(schema=2, slack=cached), NOW)
+            for value in (status, projected["status"], cached["status"], health):
+                self.assertEqual(value["state"], "held")
+                self.assertEqual(value["listener_exits"], 0)
+                self.assertIsNone(value["last_listener_exit"])
+                self.assertEqual(value["supervisor_health"], dict(
+                    state="unhealthy", event_flush_failures=1, pending_events=1,
+                    observed_at=NOW, reason="event-flush-failed"))
+            self.assertEqual(self.store.read("transport"), original)
+        supervisor.tick()
+        recovered = f.project_slack(self.feed_root, self.root, NOW, True)["status"]
+        self.assertEqual(recovered["supervisor_health"]["state"], "healthy")
+        self.assertEqual(recovered["listener_exits"], 1)
+
+    def test_idle_supervisor_bounds_durable_writes_and_keeps_fresh_transitions(self):
+        # No listener has ever started: exercise the real tick and durable Store path.
+        second = [0]
+        now = lambda: (d.stamp(NOW) + m.dt.timedelta(seconds=second[0])).strftime("%Y-%m-%dT%H:%M:%SZ")
+        manager = SimpleNamespace(store=self.store, binding=PIN, process=None)
+        supervisor = m.ListenerSupervisor(manager, self.transport, now)
+        self.assertEqual(m.read_supervisor_health(self.store, now(), PIN)["state"], "unknown")
+        write = a.Store.write
+        with (patch.object(a.Store, "write", autospec=True, side_effect=write) as writes,
+              patch.object(os, "fsync", wraps=os.fsync) as fsync):
+            for tick in range(300):
+                second[0] = tick // 10  # Thirty seconds at the foreground loop's 10Hz rate.
+                supervisor.tick()
+                observed = m.read_supervisor_health(self.store, now(), PIN)
+                self.assertEqual(observed["state"], "healthy")
+                self.assertEqual(observed["observed_at"], now())
+            self.assertEqual(writes.call_count, 30)
+            self.assertTrue(all(call.args[1] == "supervisor" for call in writes.call_args_list))
+            self.assertEqual(fsync.call_count, 60)  # One file and one directory fsync per second.
+
+            # Pending, failed and recovered evidence all publish within that same second.
+            supervisor.pending_event = ("restart-refused", None)
+            with patch.object(supervisor, "record", side_effect=OSError("fixture journal")):
+                self.assertFalse(supervisor.flush_event())
+            self.assertEqual(writes.call_count, 32)
+            pending, failed = [call.args[2]["health"] for call in writes.call_args_list[-2:]]
+            self.assertEqual((pending["reason"], failed["reason"]),
+                             ("event-unflushed", "event-flush-failed"))
+            with patch.object(supervisor, "record"):
+                self.assertTrue(supervisor.flush_event())
+            self.assertEqual(writes.call_count, 33)
+            self.assertEqual(m.read_supervisor_health(self.store, now(), PIN)["state"], "healthy")
+            supervisor.tick()
+            self.assertEqual(writes.call_count, 33)
+
+            # A failed heartbeat is retried, even at the same observed_at.
+            second[0] += 1
+            writes.side_effect = OSError("fixture filesystem")
+            supervisor.tick()
+            self.assertEqual(writes.call_count, 34)
+            writes.side_effect = write
+            supervisor.tick()
+            self.assertEqual(writes.call_count, 35)
+            self.assertEqual(m.read_supervisor_health(self.store, now(), PIN)["observed_at"], now())
+            supervisor.tick()
+            self.assertEqual(writes.call_count, 35)
+        second[0] += 6
+        self.assertEqual(m.read_supervisor_health(self.store, now(), PIN)["reason"], "observation-stale")
+
+    def test_supervisor_observation_missing_stale_or_unwritable_is_not_healthy(self):
+        manager, supervisor, _ = self.watchdog()
+        self.assertEqual(m.project_status(self.store, NOW, True)["supervisor_health"]["state"], "unknown")
+        supervisor.tick()
+        self.assertEqual(m.project_status(self.store, NOW, True)["supervisor_health"]["state"], "healthy")
+        later = (d.stamp(NOW) + m.dt.timedelta(seconds=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        # Simulate loss of both journal and independent observation writes.
+        manager.process.kill()
+        manager.process.wait(timeout=5)
+        with patch.object(a.Store, "write", side_effect=OSError("fixture filesystem")):
+            supervisor.tick()
+        status = m.project_status(self.store, later, True)
+        self.assertEqual(status["supervisor_health"]["state"], "unknown")
+        self.assertEqual(status["supervisor_health"]["reason"], "observation-stale")
+        path = self.root / "supervisor.json"
+        path.write_text("{}")
+        self.assertEqual(m.project_status(self.store, NOW, True)["supervisor_health"]["state"], "unknown")
+
+    def test_failed_start_survivor_exit_is_recorded_after_pending_refusal(self):
+        for recover_before_exit in (False, True):
+            with self.subTest(recover_before_exit=recover_before_exit):
+                manager, supervisor, clock = self.watchdog()
+                first = manager.process
+                first.kill()
+                first.wait(timeout=5)
+                supervisor.tick()
+                baseline = len(self.store.read("transport")["listener_events"])
+                clock[0] = 1
+                popen = subprocess.Popen
+                write = self.store.write
+                def fail_refusal(name, value):
+                    if name == "transport" and value.get("listener_events", [{}])[-1]["kind"] == "restart-refused":
+                        raise OSError("fixture refusal write")
+                    return write(name, value)
+                with ExitStack() as cleanup:
+                    def spawn(command, **kwargs):
+                        child = popen([sys.executable, "-B", "-c", "import time; time.sleep(60)"], **kwargs)
+                        cleanup.enter_context(patch.object(child, "wait", side_effect=subprocess.TimeoutExpired("fixture kill", 2)))
+                        cleanup.enter_context(patch.object(child, "terminate"))
+                        cleanup.enter_context(patch.object(child, "kill"))
+                        return child
+                    with (patch.object(m.subprocess, "Popen", side_effect=spawn),
+                          patch.object(m.Stdio, "read", side_effect=OSError("fixture handshake")),
+                          patch.object(self.store, "write", side_effect=fail_refusal)):
+                        supervisor.tick()
+                    survivor = manager.process
+                    self.assertIsNotNone(survivor)
+                    self.assertIsNone(survivor.poll())
+                    self.assertEqual(supervisor.pending_event, ("restart-refused", None))
+                if recover_before_exit:
+                    supervisor.tick()  # Durable refusal disables ordinary restart options.
+                    self.assertIsNone(supervisor.options)
+                survivor.kill()
+                survivor.wait(timeout=5)
+                with patch.object(self.store, "write", side_effect=OSError("fixture journal")):
+                    supervisor.tick()
+                    self.assertIsNone(manager.process)
+                    self.assertIs(supervisor.exited_process, survivor)
+                    expected_pending = 1 if recover_before_exit else 2
+                    self.assertEqual(supervisor.health()["pending_events"], expected_pending)
+                supervisor.tick()
+                supervisor.tick()
+                events = self.store.read("transport")["listener_events"]
+                self.assertEqual(len(events), baseline + 2)
+                self.assertEqual([(row["kind"], row["returncode"]) for row in events[-2:]],
+                                 [("restart-refused", None), ("child-exit", -9)])
+                self.assertTrue(all(row["restart"] == "held" for row in events[-2:]))
+                self.assertTrue(all(row["fence_count"] == row["ingress_count"] for row in events[-2:]))
+                self.assertIsNone(supervisor.retry_at)
+                self.assertEqual(supervisor.restarts, 1)
+
+    def test_listener_event_pruning_keeps_newest_and_accounts_for_discarded_exits(self):
+        _, supervisor, _ = self.watchdog()
+        supervisor.record("child-exit", -9)
+        journal = self.store.read("transport")
+        event = journal["listener_events"][0]
+        journal["listener_events"] = [
+            dict(event, kind="child-exit" if n % 2 == 0 else "restart-refused",
+                 returncode=-n if n % 2 == 0 else None, restart="held")
+            for n in range(131)]  # Exercise the 128-record retention contract independently.
+        before = copy.deepcopy(journal["listener_events"])
+        self.store.write("transport", journal)
+        supervisor.record("child-exit", -999)
+        saved = self.store.read("transport")
+        self.assertEqual(saved["listener_events"][:-1], before[4:])
+        self.assertEqual(saved["listener_events"][-1]["returncode"], -999)
+        self.assertEqual(saved["listener_events_pruned"], dict(events=4, child_exits=2, last_at=NOW))
+        supervisor.record("restart-refused")
+        saved = self.store.read("transport")
+        self.assertEqual(saved["listener_events_pruned"], dict(events=5, child_exits=3, last_at=NOW))
+        self.assertEqual(saved["listener_events"][0], before[5])
+        self.assertEqual(saved["listener_events"][-1]["kind"], "restart-refused")
+        status = m.project_status(self.store, NOW, True)
+        self.assertEqual(status["listener_exits"], sum(e["kind"] == "child-exit" for e in before) + 1)
+        self.assertEqual(status["listener_events_pruned"], 5)
+
+    def test_listener_event_pruning_makes_room_at_store_byte_limit(self):
+        _, supervisor, _ = self.watchdog()
+        supervisor.record("child-exit", -9)
+        journal = self.store.read("transport")
+        journal["listener_events"] *= 10
+        self.store.write("transport", journal)
+        byte_limit = (self.root / "transport.json").stat().st_size + 10
+        with patch.object(d, "MAX_BYTES", byte_limit):
+            supervisor.record("child-exit", -999)
+            saved = self.store.read("transport")
+        self.assertEqual(saved["listener_events"][-1]["returncode"], -999)
+        self.assertLess((self.root / "transport.json").stat().st_size, byte_limit)
+        self.assertEqual(len(saved["listener_events"]) + saved["listener_events_pruned"]["events"], 11)
+        self.assertEqual(m.project_status(self.store, NOW, True)["listener_exits"], 11)
+
+    def test_legacy_pending_restart_refusal_is_normalized_without_rewriting_journal(self):
+        _, supervisor, _ = self.watchdog()
+        supervisor.record("child-exit", -9)
+        supervisor.record("restart-refused")
+        journal = self.store.read("transport")
+        journal["listener_events"][-1]["restart"] = "pending"
+        self.store.write("transport", journal)
+        before = (self.root / "transport.json").read_bytes()
+        expected = dict(journal["listener_events"][-1], restart="held")
+        self.assert_listener_disclosure(expected)
+        self.assertEqual((self.root / "transport.json").read_bytes(), before)
+
+    def test_listener_restart_timeout_retries_refusal_write_then_stays_held(self):
+        manager, supervisor, clock = self.watchdog()
+        manager.process.kill()
+        manager.process.wait(timeout=5)
+        supervisor.tick()
+        clock[0] = 1
+        with (patch.object(manager, "start", side_effect=subprocess.TimeoutExpired("fixture start", 2)) as start,
+              patch.object(self.store, "write", side_effect=OSError("fixture disk"))):
+            supervisor.tick()
+        self.assertEqual(start.call_count, 1)
+        self.assertEqual(self.store.read("transport")["listener_events"][-1]["restart"], "pending")
+        supervisor.tick()
+        event = self.store.read("transport")["listener_events"][-1]
+        self.assertEqual((event["kind"], event["restart"]), ("restart-refused", "held"))
+        self.assert_listener_disclosure(event)
+        clock[0] = 100
+        with patch.object(manager, "start", side_effect=AssertionError("refusal must stay down")):
+            supervisor.tick()
+        self.assertEqual(len(self.store.read("transport")["listener_events"]), 2)
+
+    def test_idle_pointer_watch_does_not_acquire_callback_lock_or_rescan(self):
+        manager = SimpleNamespace(store=self.store, binding=PIN, process=SimpleNamespace(poll=lambda: None))
+        clock = [0]
+        supervisor = m.ListenerSupervisor(manager, self.transport, lambda: NOW, lambda: clock[0])
+        with (patch.object(self.transport, "gate", wraps=self.transport.gate) as gate,
+              patch.object(a, "retry_pending_pointers", wraps=a.retry_pending_pointers) as retry):
+            # Busy callback lock must not even be attempted by idle supervision.
+            with s.locked(self.store):
+                self.assertEqual(a.retry_pending_pointers(self.store, self.transport), 0)
+                supervisor.tick()
+            for second in range(1, 20):
+                clock[0] = second
+                supervisor.tick()
+            self.assertEqual(gate.call_count, 0)
+            self.assertEqual(retry.call_count, 2)  # One direct call, one changed-file scan.
+            self.store.write("alerts", self.store.read("alerts"))
+            clock[0] += 1
+            supervisor.tick()
+            self.assertEqual(retry.call_count, 3)
+            self.assertEqual(gate.call_count, 0)
+
+    def test_listener_aged_history_restarts_through_bounded_control_frame(self):
+        manager, supervisor, clock = self.watchdog()
+        manager.process.kill()
+        manager.process.wait(timeout=5)
+        with s.locked(self.store) as journal:
+            life = journal["lifecycle"]
+            life["history"] = [dict(life["session"], epoch=n) for n in range(200)]
+            self.store.write("transport", journal)
+        self.assertGreater(len(d.canonical(journal["lifecycle"])), 16384)
+        supervisor.tick()
+        # A history edit still invalidates the digest; no pruning weakens the pin.
+        changed = copy.deepcopy(journal)
+        changed["lifecycle"]["history"][0]["epoch"] += 1
+        with self.assertRaises(d.Invalid):
+            s.restart_allowed(self.store, changed, supervisor.pin)
+        clock[0] = 1
+        with fixture_child("connected", self.endpoint):
+            supervisor.tick()
+        self.assertIsNotNone(manager.process)
+        self.assertEqual(self.line(manager.process), dict(type="connected"))
+        self.assertEqual(len(self.store.read("transport")["lifecycle"]["history"]), 201)
+
+    def test_gap_projection_and_dashboard_health_preserve_exact_count(self):
+        import decision_feed as feed
+        for _ in range(3):
+            s.ingress_count(self.store, mark=True)
+        before = self.store.read("transport")
+        status = m.project_status(self.store, NOW, True)
+        projected = feed.project_slack(self.feed_root, self.root, NOW, True)
+        snapshot = dict(feed=d.load_fixture(self.feed_root, NOW), status="valid", slack=projected)
+        for value in (status, projected["status"], feed.health(snapshot, {}, NOW)["slack"],
+                      feed.slack_health(snapshot, "2026-09-12T13:00:00Z")):
+            self.assertEqual((value["state"], value["fence_gap"]), ("held", 3))
+        self.assertEqual(self.store.read("transport"), before)
+        for bad in (True, -1, "3", None):
+            with self.subTest(bad=bad), self.assertRaises(d.Invalid):
+                m.validate_status(dict(status, fence_gap=bad))
+
+    def test_supervised_pending_pointer_retry_is_admitted_and_exactly_once(self):
+        import decision_feed as feed
+        key, row = self.uncertain_follower()
+        a.reconcile(self.store, key, "details", self.transport.reconcile(row["details"]["request"]))
+        with s.locked(self.store) as journal:
+            journal["hold"] = "outage-gap"
+            self.store.write("transport", journal)
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        slot = d.digest([key, "follow-up", self.key])
+        request = copy.deepcopy(row["notices"][slot]["request"])
+        self.assertEqual(m.project_status(self.store, NOW, True)["pending_pointers"], 1)
+        self.assertEqual(feed.project_slack(self.feed_root, self.root, NOW, True)["status"]["pending_pointers"], 1)
+        # A healthy process alone grants no transport or posting authority.
+        manager = SimpleNamespace(store=self.store, binding=PIN, process=SimpleNamespace(poll=lambda: None))
+        clock = [0]
+        supervisor = m.ListenerSupervisor(manager, self.transport, lambda: NOW, lambda: clock[0])
+        supervisor.tick()
+        self.assertEqual(len(self.messages), 4)
+        self.assertEqual(a.inspect(self.store, key)["notices"][slot]["state"], "pending")
+        self.review_gap()
+        # Another sender accepted the immutable attempt before local receipt save.
+        self.transport.exchange(request)
+        self.assertEqual(len(self.messages), 5)
+        clock[0] += 1
+        supervisor.tick()
+        retried = a.inspect(self.store, key)["notices"][slot]
+        self.assertEqual((retried["state"], retried["request"]), ("sent", request))
+        self.assertEqual(m.project_status(self.store, NOW, True)["pending_pointers"], 0)
+        clock[0] += 1
+        supervisor.tick()
+        self.assertEqual(len(self.messages), 5)
+        # Retained transport intent without receipt is uncertainty, never absence.
+        with self.store.lock(), s.locked(self.store) as journal:
+            rows = self.store.read("alerts")
+            rows[key]["notices"][slot].update(state="pending", receipt=None)
+            self.store.write("alerts", rows)
+            journal["posts"][slot]["receipt"] = None
+            self.store.write("transport", journal)
+        clock[0] += 1
+        supervisor.tick()
+        self.assertEqual(a.inspect(self.store, key)["notices"][slot]["state"], "uncertain")
+        self.assertEqual(len(self.messages), 5)
+
+    def test_supervised_pointer_posts_only_retained_approved_slot(self):
+        key, row = self.uncertain_follower()
+        a.reconcile(self.store, key, "details", self.transport.reconcile(row["details"]["request"]))
+        # A sent follow-up without a retained pointer request is not selected.
+        manager = SimpleNamespace(store=self.store, binding=PIN, process=SimpleNamespace(poll=lambda: None))
+        clock = [0]
+        supervisor = m.ListenerSupervisor(manager, self.transport, lambda: NOW, lambda: clock[0])
+        supervisor.tick()
+        self.assertEqual(len(self.messages), 4)
+        self.assertNotIn("notices", a.inspect(self.store, key))
+        def refuse(_):
+            raise a.NotDispatched()
+        row = a.send(self.store, key, PIN, refuse)
+        slot = d.digest([key, "follow-up", self.key])
+        self.assertEqual(row["notices"][slot]["state"], "pending")
+        clock[0] += 1
+        supervisor.tick()
+        self.assertEqual(a.inspect(self.store, key)["notices"][slot]["state"], "sent")
+        self.assertEqual(len(self.messages), 5)
+        clock[0] += 1
+        supervisor.tick()
+        self.assertEqual(len(self.messages), 5)
 
     def test_supervisor_waits_for_real_executor_old_inode_despite_false_stopped_frame(self):
         self.sending()
