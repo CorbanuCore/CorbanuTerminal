@@ -5,13 +5,13 @@ status: draft
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 3
-owner: "Jim Ricketts (proposed)"
-parallel_lane: "UNALLOCATED"
-write_scope: "UNALLOCATED"
-integration_gate: "UNALLOCATED"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "Astra High accounting inspection lane; Fable receives and integrates; Travis remains product acceptance authority"
+parallel_lane: "accounting-pf60-s03-inspection"
+write_scope: "codex-rs/state/src/runtime/accounting_store.rs, codex-rs/state/src/runtime/accounting_estimates.rs, codex-rs/state/src/runtime/accounting_lifecycle.rs, codex-rs/state/src/runtime/accounting_pricing.rs, codex-rs/state/src/runtime/accounting_store_tests.rs, codex-rs/state/tests/accounting_store.rs, codex-rs/tui/src/chatwidget/usage.rs, codex-rs/tui/src/chatwidget/tokens.rs, codex-rs/tui/src/chatwidget/tokens_tests.rs, codex-rs/tui/src/chatwidget.rs, codex-rs/tui/src/chatwidget/constructor.rs, codex-rs/tui/src/chatwidget/slash_dispatch.rs, codex-rs/tui/src/chatwidget/tests/usage.rs, codex-rs/tui/src/chatwidget/tests/slash_commands.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app/tests.rs, codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu.snap, codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_without_resets.snap, codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_before_reset_refresh.snap, codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_with_invalid_view_reports_usage.snap"
+integration_gate: "Fable receives onto integrate/management-workstreams-20260911 after S02 archival and an explicit PF-83 overlap handoff on the three shared TUI paths; audits literal scope and size against the frozen allocation, takes one independent Opus 5.0 High review plus necessary scoped correction, and reruns the combined state, TUI and accounting gates on the receiving tree. True-TUI proof and independent code-blind design and execution are owed by this sprint and are not deferred silently."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915"
+branch: "bootstrap/acct-inspect-20260915"
+base_commit: "frozen at launch from the post-archival receiving tip; not yet created"
 depends_on: "PF-60-S02"
 created: 2026-09-09
 updated: 2026-09-11
