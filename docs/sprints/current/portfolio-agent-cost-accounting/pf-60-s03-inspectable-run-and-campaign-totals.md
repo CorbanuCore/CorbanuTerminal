@@ -11,7 +11,7 @@ write_scope: "codex-rs/state/src/runtime/accounting_store.rs, codex-rs/state/src
 integration_gate: "Fable receives onto integrate/management-workstreams-20260911 after S02 archival and an explicit PF-83 overlap handoff on the three shared TUI paths; audits literal scope and size against the frozen allocation, takes one independent Opus 5.0 High review plus necessary scoped correction, and reruns the combined state, TUI and accounting gates on the receiving tree. True-TUI proof and independent code-blind design and execution are owed by this sprint and are not deferred silently."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915"
 branch: "bootstrap/acct-inspect-20260915"
-base_commit: "frozen at launch from the post-archival receiving tip; not yet created"
+base_commit: "124c3d68d14ddef34c1bffac157cbcd8e5074158"
 depends_on: "PF-60-S02"
 created: 2026-09-09
 updated: 2026-09-11
