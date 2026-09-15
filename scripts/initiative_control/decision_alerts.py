@@ -139,6 +139,8 @@ def prepare(raw, decision_id, remote, pinned_identity, allocation, now):
     binding = dict(feed_id=feed["feed_id"], feed_revision=feed["revision"], feed_digest=d.digest(feed),
                    decision_id=decision_id, record=record, context_digest=d.digest(record), kind=kind,
                    identity=identity(pinned_identity), owner=owner(allocation), remote=remote)
+    if "follows" in matches[0]:
+        binding["follows"] = matches[0]["follows"]
     suffix = "?feed=" + feed["feed_id"] + "&decision=" + decision_id + "&revision=" + str(record["revision"]) + "&context=" + d.digest(record)
     clean = lambda value: html.escape(str(value), quote=False).replace("@", "＠")
     detail = [clean(record["question"])]
@@ -154,6 +156,8 @@ def prepare(raw, decision_id, remote, pinned_identity, allocation, now):
         detail.extend(clean(key + ": " + record["resolution"][key]) for key in ("actor", "answer", "scope"))
     payloads = {"parent": kind.upper() + ": " + clean(record["summary"]) + "\n" + remote + "/index.html" + suffix + "#decision-" + decision_id,
                 "details": "\n".join(detail)}
+    if "follows" in binding:
+        payloads["details"] = "Follows decision: " + binding["follows"] + "\n" + payloads["details"]
     d.require(all(len(value.encode()) <= 12000 for value in payloads.values()))
     binding["payloads"] = {key: dict(text=value, mrkdwn=False, unfurl_links=False, unfurl_media=False) for key, value in payloads.items()}
     return binding
@@ -178,6 +182,21 @@ def enqueue(store, raw, decision_id, remote, pinned_identity, allocation, now):
             rows[key] = dict(intent=copy.deepcopy(intent), intent_digest=d.digest(intent), cancelled=False, reason=None,
                              parent=dict(state="pending", request=None, receipt=None),
                              details=dict(state="pending", request=None, receipt=None))
+            if "follows" in intent:
+                candidates = [(parent_key, alert(rows, parent_key)) for parent_key in rows
+                              if rows[parent_key]["intent"]["feed_id"] == intent["feed_id"]
+                              and rows[parent_key]["intent"]["decision_id"] == intent["follows"]
+                              and rows[parent_key]["intent"]["identity"] == intent["identity"]
+                              and not rows[parent_key]["cancelled"]
+                              and rows[parent_key]["parent"]["state"] == rows[parent_key]["details"]["state"] == "sent"]
+                if candidates:
+                    parent_key, _ = max(candidates, key=lambda pair: pair[1]["intent"]["record"]["revision"])
+                    # Every question creates its own root. Only a fixed pointer
+                    # notice may target the followed question's thread.
+                    rows[key]["threading"] = dict(mode="pointer", source_alert=parent_key, reason=None)
+                else:
+                    rows[key]["threading"] = dict(mode="new-thread", source_alert=None,
+                                                  reason="followed-decision-has-no-eligible-slack-parent")
             store.write("alerts", rows)
     return key
 
@@ -185,6 +204,9 @@ def enqueue(store, raw, decision_id, remote, pinned_identity, allocation, now):
 def alert(rows, key):
     row = rows[key]
     d.require(alert_key(row["intent"]) == key and d.digest(row["intent"]) == row["intent_digest"])
+    # Rejected shared-root candidates require explicit manager recovery, never replay.
+    if row["parent"]["request"] is not None:
+        d.require(row["parent"]["request"] == request_for(key, row, "parent"))
     return row
 
 
@@ -219,6 +241,10 @@ def check_receipt(request, evidence):
     return copy.deepcopy(evidence)
 
 
+class NotDispatched(d.Invalid):
+    """Transport proved no durable POST attempt exists; admission may be retried."""
+
+
 class Rejected(Exception):
     """Injected transport guarantees this attempt was NOT accepted remotely."""
 
@@ -250,6 +276,8 @@ def send(store, key, current_identity, exchange, cancelled=False):
                 try:
                     state["receipt"] = check_receipt(state["request"], exchange(copy.deepcopy(state["request"])))
                     state["state"] = "sent"
+                except NotDispatched:
+                    state["state"] = "pending"
                 except Rejected:
                     state["state"] = "failed"
                 except Exception:
@@ -258,7 +286,11 @@ def send(store, key, current_identity, exchange, cancelled=False):
                 if state["state"] != "sent":
                     break
         store.write("alerts", rows)
-        return copy.deepcopy(row)
+        sent = row["details"]["state"] == "sent" and row["reason"] is None
+        threading = row.get("threading", {})
+    if sent and threading.get("mode") == "pointer":
+        notice(store, key, "follow-up", threading["source_alert"], current_identity, exchange)
+    return inspect(store, key)
 
 
 def reconcile(store, key, phase, evidence):
@@ -276,28 +308,53 @@ def reconcile(store, key, phase, evidence):
 
 
 def notice(store, key, kind, basis, current_identity, exchange):
-    """One fixed-text same-thread notice per audited transition; never echo answers."""
+    """One fixed notice per transition; follow-up pointers contain no question or answer."""
     texts = {"clarification": "Reply logged. Manager clarification is required; no work unlocked.",
-             "acknowledged": "Answer recorded and acknowledged by the assigned agent. Execution remains manager-controlled."}
+             "acknowledged": "Answer recorded and acknowledged by the assigned agent. Execution remains manager-controlled.",
+             "follow-up": "A follow-up decision has been raised. Find it in its own thread: "}
     d.require(kind in texts and re.fullmatch(r"[a-f0-9]{64}", basis))
     with store.lock():
         rows = store.read("alerts")
         row = alert(rows, key)
         d.require(not row["cancelled"] and identity(current_identity) == row["intent"]["identity"])
         d.require(row["parent"]["state"] == row["details"]["state"] == "sent")
+        thread = row["parent"]["receipt"]["ts"]
+        text = texts[kind]
+        blocks = None
+        target = row
+        if kind == "follow-up":
+            d.require(row.get("threading", {}).get("mode") == "pointer"
+                      and basis == row["threading"]["source_alert"])
+            target = alert(rows, basis)
+            d.require(target["intent"]["feed_id"] == row["intent"]["feed_id"]
+                      and target["intent"]["decision_id"] == row["intent"]["follows"]
+                      and target["intent"]["identity"] == row["intent"]["identity"])
+            # Slack resolves this native reference; no guessed workspace URL or
+            # additional API/transport is needed. Every text field is fixed.
+            blocks = [dict(type="rich_text", elements=[dict(type="rich_text_section", elements=[
+                dict(type="text", text=text),
+                dict(type="message_mention", channel_id=row["intent"]["identity"]["channel"],
+                     message_ts=slack_ts(thread))])])]
+            text += "Open follow-up thread."
+            thread = target["parent"]["receipt"]["ts"]
         slot = d.digest([key, kind, basis])
         notices = row.setdefault("notices", {})
         state = notices.setdefault(slot, dict(state="pending", request=None, receipt=None))
         if state["state"] == "sending":
             state["state"] = "uncertain"
+        if state["state"] == "pending" and target["cancelled"]:
+            state.update(state="failed", reason="followed-alert-cancelled")
         if state["state"] == "pending":
-            thread = row["parent"]["receipt"]["ts"]
-            payload = dict(text=texts[kind], thread_ts=thread, mrkdwn=False, unfurl_links=False, unfurl_media=False)
+            payload = dict(text=text, thread_ts=thread, mrkdwn=False, unfurl_links=False, unfurl_media=False)
+            if blocks is not None:
+                payload["blocks"] = blocks
             state.update(state="sending", request=dict(attempt=slot, identity=current_identity, payload=payload,
                                                        payload_digest=d.digest(payload), thread_ts=thread))
             store.write("alerts", rows)
             try:
                 state.update(receipt=check_receipt(state["request"], exchange(copy.deepcopy(state["request"]))), state="sent")
+            except NotDispatched:
+                state["state"] = "pending"
             except Rejected:
                 state["state"] = "failed"
             except Exception:

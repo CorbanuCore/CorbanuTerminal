@@ -24,6 +24,31 @@ SPRINT = "docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-co
 
 
 class FeedTests(unittest.TestCase):
+    def test_follows_and_outstanding_projection_survive_pinned_transfer(self):
+        follower = copy.deepcopy(self.value["decisions"][0])
+        follower.update(id="choice-2", follows="choice-1")
+        self.value["decisions"].append(follower)
+        self.save(self.value)
+        cache = transport.project_slack(self.state, None, NOW)
+        self.assertEqual(cache["status"]["unacknowledged_answers"], 0)
+        target, pin = self.bundle()
+        self.activate(target)
+        _, _, health = self.publish()
+        self.assertEqual(health["decision_feed"]["open_count"], 2)
+        snapshot = transport.read_snapshot(target / "source", pin, NOW)
+        self.assertEqual(snapshot["feed"]["decisions"][1]["follows"], "choice-1")
+        self.assertEqual(snapshot["slack"]["status"]["unacknowledged_answers"], 0)
+        legacy = copy.deepcopy(cache)
+        del legacy["status"]["unacknowledged_answers"]
+        for row in legacy["decisions"]:
+            del row["replies"]["unacknowledged_answers"]
+        self.assertEqual(transport.validate_slack(legacy, self.value, NOW), legacy)
+        for bad in (-1, True, "1", None):
+            changed = copy.deepcopy(cache)
+            changed["decisions"][0]["replies"]["unacknowledged_answers"] = bad
+            with self.assertRaises(d.Invalid):
+                transport.validate_slack(changed, self.value, NOW)
+
     def test_slack_off_projection_cli_and_registered_off_without_sdk(self):
         self.save(self.value)
         original = (self.state / "decisions.fixture.json").read_bytes()

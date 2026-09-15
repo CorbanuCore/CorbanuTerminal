@@ -52,6 +52,61 @@ def compete(root, value, expected, barrier, results):
 
 
 class DecisionTests(unittest.TestCase):
+    def test_follows_graph_validation_and_legacy_shape(self):
+        first = fixture()
+        value = copy.deepcopy(first)
+        value["decisions"].append(dict(id="choice-2", follows="choice-1",
+                                      revisions=copy.deepcopy(first["decisions"][0]["revisions"])))
+        self.assertEqual(d.validate(value, NOW), value)
+        self.assertEqual(d.validate(first, NOW), first)
+        for parent in ("choice-2", "missing", None, "", True, [], "../choice-1"):
+            bad = copy.deepcopy(value)
+            bad["decisions"][1]["follows"] = parent
+            with self.subTest(parent=parent), self.assertRaises(d.Invalid):
+                d.validate(bad, NOW)
+        cyclic = copy.deepcopy(value)
+        cyclic["decisions"][0]["follows"] = "choice-2"
+        with self.assertRaises(d.Invalid):
+            d.validate(cyclic, NOW)
+        value["decisions"].append(dict(id="choice-3", follows="choice-2",
+                                      revisions=copy.deepcopy(first["decisions"][0]["revisions"])))
+        self.assertEqual(d.validate(value, NOW), value)
+        value["decisions"][0]["follows"] = "choice-3"
+        with self.assertRaises(d.Invalid):
+            d.validate(value, NOW)
+
+    def test_follower_save_cannot_change_parent_or_relationship(self):
+        with tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve()) as root:
+            first = fixture()
+            token = d.save_fixture(root, first, None, NOW)
+            value = copy.deepcopy(first)
+            value["revision"] += 1
+            value["decisions"].append(dict(id="choice-2", follows="choice-1",
+                                          revisions=copy.deepcopy(first["decisions"][0]["revisions"])))
+            for mutation in ("rewrite", "append"):
+                bad = copy.deepcopy(value)
+                if mutation == "rewrite":
+                    bad["decisions"][0]["revisions"][0]["question"] = "Changed parent?"
+                else:
+                    bad["decisions"][0]["revisions"] = revision(first)["decisions"][0]["revisions"]
+                with self.subTest(mutation=mutation), self.assertRaises(d.Invalid):
+                    d.save_fixture(root, bad, token, NOW)
+                self.assertEqual(d.load_fixture(root, NOW), first)
+            token = d.save_fixture(root, value, token, NOW)
+            self.assertEqual(d.load_fixture(root, NOW)["decisions"][0], first["decisions"][0])
+            for mutation in ("remove", "retarget"):
+                bad = copy.deepcopy(value)
+                bad["revision"] += 1
+                if mutation == "remove":
+                    del bad["decisions"][1]["follows"]
+                else:
+                    bad["decisions"].append(dict(id="choice-3",
+                                                revisions=copy.deepcopy(first["decisions"][0]["revisions"])))
+                    bad["decisions"][1]["follows"] = "choice-3"
+                with self.subTest(mutation=mutation), self.assertRaises(d.Invalid):
+                    d.save_fixture(root, bad, token, NOW)
+                self.assertEqual(d.load_fixture(root, NOW), value)
+
     def test_complete_roundtrip_and_canonical_digest(self):
         value = fixture()
         self.assertEqual(d.validate(json.dumps(value).encode(), NOW), value)

@@ -40,7 +40,8 @@ def validate_slack(value, feed, at):
         seen.add(key)
         d.require(row["delivery"] in DELIVERY)
         d.require(type(row["pending"]) is int and 0 <= row["pending"] <= 100)
-        d.shape(row["replies"], manager.COUNTS)
+        extra = [key for key in ("unacknowledged_answers", "new_thread_fallbacks") if key in row["replies"]]
+        d.shape(row["replies"], manager.COUNTS + extra)
         d.require(all(type(n) is int and 0 <= n <= 1000000 for n in row["replies"].values()))
         if not value["status"]["enabled"]:
             d.require(row["delivery"] == "off" and row["pending"] == 0 and not any(row["replies"].values()))
@@ -58,7 +59,8 @@ def project_slack(state, store_path, at, enabled=False):
     status = manager.project_status(None, at, False)
     rows = []
 
-    def collect(feed, saved, events, binding, ingress):
+    def collect(feed, saved, ledger, binding, ingress):
+        events = ledger["events"]
         for item in feed["decisions"]:
             for record in item["revisions"]:
                 matching = [(key, alerts.alert(saved, key)) for key in saved
@@ -69,9 +71,13 @@ def project_slack(state, store_path, at, enabled=False):
                 d.require(len(matching) <= 1)
                 delivery = "off" if not enabled else "unknown" if binding is None else "not-requested"
                 counts = {key: 0 for key in manager.COUNTS}
+                counts["unacknowledged_answers"] = 0
+                counts["new_thread_fallbacks"] = 0
                 pending = 0
                 if matching:
                     key, row = matching[0]
+                    counts["unacknowledged_answers"] = manager.unacknowledged_answers(ledger, saved, key)
+                    counts["new_thread_fallbacks"] = int(row.get("threading", {}).get("mode") == "new-thread")
                     pending = sum(event["alert"] == key and not event["drained"] for event in ingress.values())
                     delivery = "cancelled" if row["cancelled"] else row["parent"]["state"] if row["parent"]["state"] != "sent" else row["details"]["state"]
                     # A retained sending reservation is not proof of nonacceptance.
@@ -89,7 +95,11 @@ def project_slack(state, store_path, at, enabled=False):
         with store.lock(), replies.feed_lock(state), slack.locked(store) as journal:
             feed = d.load_fixture(state, at)
             d.require(feed is not None)
-            saved, events = store.read("alerts"), store.read("replies")["events"]
+            saved, ledger = store.read("alerts"), store.read("replies")
+            events = ledger["events"]
+            status["unacknowledged_answers"] = manager.unacknowledged_answers(ledger, saved)
+            status["new_thread_fallbacks"] = sum(row.get("threading", {}).get("mode") == "new-thread"
+                                                 for row in saved.values())
             status.update(enabled=True, state="held" if journal["hold"] else "last-verified",
                           last_verified=journal["last_verified"], watermark=journal["watermark"],
                           pending=sum(not event["drained"] for event in journal["events"].values()))
@@ -112,12 +122,12 @@ def project_slack(state, store_path, at, enabled=False):
                 name = event["state"].replace("-", "_")
                 d.require(name in manager.COUNTS)
                 status[name] += 1
-            collect(feed, saved, events, journal["binding"], journal["events"])
+            collect(feed, saved, ledger, journal["binding"], journal["events"])
     else:
         with replies.feed_lock(state):
             feed = d.load_fixture(state, at)
             d.require(feed is not None)
-            collect(feed, {}, {}, None, {})
+            collect(feed, {}, {"events": {}, "intents": {}}, None, {})
     result = validate_slack(dict(schema=1, assessed_at=at, feed_digest=d.digest(feed), status=status, decisions=rows), feed, at)
     # Cache only. A later feed change invalidates the pin rather than being merged.
     atomic_json(state / SLACK_FILE, result)

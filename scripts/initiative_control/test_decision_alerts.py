@@ -61,6 +61,108 @@ class SlackFixture(unittest.TestCase):
 
 
 class AlertTests(SlackFixture):
+    def follower(self, parent="choice-1", decision_id="choice-2"):
+        feed = copy.deepcopy(self.feed)
+        feed["revision"] += 1
+        feed["decisions"].append(dict(id=decision_id, follows=parent,
+                                     revisions=copy.deepcopy(self.feed["decisions"][0]["revisions"])))
+        return feed, a.enqueue(self.store, feed, decision_id, REMOTE, PIN, OWNER, NOW)
+
+    def test_follower_owns_thread_and_posts_one_fixed_pointer_without_parent_mutation(self):
+        original = self.send()
+        feed_bytes = (self.feed_root / "decisions.fixture.json").read_bytes()
+        parent_bytes = d.canonical(original)
+        feed, key = self.follower()
+        calls = []
+        def exchange(request):
+            calls.append(request)
+            return dict(receipt(request), ts=f"200.{len(calls):06d}")
+        sent = a.send(self.store, key, PIN, exchange)
+        self.assertEqual([call["thread_ts"] for call in calls], [None, "200.000001", "100.000001"])
+        self.assertIn("decision=choice-2", calls[0]["payload"]["text"])
+        self.assertIn("Follows decision: choice-1", calls[1]["payload"]["text"])
+        fixed = "A follow-up decision has been raised. Find it in its own thread: "
+        self.assertEqual(calls[2]["payload"], dict(
+            text=fixed + "Open follow-up thread.",
+            thread_ts="100.000001", mrkdwn=False, unfurl_links=False, unfurl_media=False,
+            blocks=[dict(type="rich_text", elements=[dict(type="rich_text_section", elements=[
+                dict(type="text", text=fixed),
+                dict(type="message_mention", channel_id="CTEST", message_ts="200.000001")])])]))
+        self.assertEqual(sent["threading"], dict(mode="pointer", source_alert=self.key, reason=None))
+        self.assertNotEqual(sent["parent"], original["parent"])
+        self.assertEqual(list(sent["notices"]), [d.digest([key, "follow-up", self.key])])
+        self.assertEqual(d.canonical(a.inspect(self.store, self.key)), parent_bytes)
+        self.assertEqual((self.feed_root / "decisions.fixture.json").read_bytes(), feed_bytes)
+        self.assertEqual(feed["decisions"][0], self.feed["decisions"][0])
+        self.assertEqual(a.enqueue(a.Store(self.root), feed, "choice-2", REMOTE, PIN, OWNER, NOW), key)
+        a.send(a.Store(self.root), key, PIN, lambda _: self.fail("duplicate follower or pointer"))
+        a.notice(self.store, key, "clarification", d.digest(["fixture"]), PIN,
+                 lambda request: (self.assertEqual(request["thread_ts"], "200.000001"), receipt(request))[1])
+        self.assertEqual(d.canonical(a.inspect(self.store, self.key)), parent_bytes)
+        for kind, basis in (("arbitrary text", self.key), ("follow-up", key), ("follow-up", d.digest(["other"]))):
+            with self.subTest(kind=kind, basis=basis), self.assertRaises(d.Invalid):
+                a.notice(self.store, key, kind, basis, PIN, lambda _: self.fail("unbound notice"))
+
+    def test_follower_without_parent_thread_falls_back_and_pins_choice(self):
+        feed, key = self.follower()
+        row = a.inspect(self.store, key)
+        self.assertEqual(row["threading"], dict(mode="new-thread", source_alert=None,
+                          reason="followed-decision-has-no-eligible-slack-parent"))
+        self.send()  # A later parent receipt cannot reroute an already queued alert.
+        self.assertEqual(a.enqueue(self.store, feed, "choice-2", REMOTE, PIN, OWNER, NOW), key)
+        calls = []
+        a.send(self.store, key, PIN, lambda request: (calls.append(request), receipt(request))[1])
+        self.assertEqual([request["thread_ts"] for request in calls], [None, "100.000001"])
+
+    def test_follower_chain_keeps_own_roots_and_preserves_send_refusals(self):
+        self.send()
+        self.feed, key = self.follower()
+        calls = []
+        def exchange(request):
+            calls.append(request)
+            return dict(receipt(request), ts=f"200.{len(calls):06d}")
+        a.send(self.store, key, PIN, exchange)
+        _, leaf = self.follower("choice-2", "choice-3")
+        row = a.inspect(self.store, leaf)
+        self.assertIsNone(row["parent"]["receipt"])
+        self.assertEqual(row["threading"]["source_alert"], key)
+        refused = a.send(self.store, leaf, dict(PIN, generation="other"),
+                         lambda _: self.fail("changed identity posted"))
+        self.assertEqual(refused["reason"], "identity-changed")
+        attempts = []
+        def uncertain(request):
+            attempts.append(request)
+            raise TimeoutError()
+        self.assertEqual(a.send(self.store, leaf, PIN, uncertain)["parent"]["state"], "uncertain")
+        a.send(a.Store(self.root), leaf, PIN, lambda _: self.fail("uncertain follower retried"))
+        self.assertEqual(len(attempts), 1)
+        a.reconcile(self.store, leaf, "parent", dict(receipt(attempts[0]), ts="300.000001"))
+        completed = a.send(self.store, leaf, PIN, exchange)
+        self.assertEqual(completed["details"]["receipt"]["thread_ts"], "300.000001")
+        self.assertEqual(calls[-1]["thread_ts"], "200.000001")
+        self.assertEqual(calls[-1]["payload"]["blocks"][0]["elements"][0]["elements"][1]["message_ts"], "300.000001")
+
+    def test_rejected_shared_root_candidate_cannot_be_replayed(self):
+        original = self.send()
+        _, key = self.follower()
+        rows = self.store.read("alerts")
+        rows[key]["parent"] = copy.deepcopy(original["parent"])
+        rows[key]["threading"]["mode"] = "followed"
+        self.store.write("alerts", rows)
+        with self.assertRaises(d.Invalid):
+            a.send(self.store, key, PIN, lambda _: self.fail("old shared root replayed"))
+
+    def test_follower_never_targets_cancelled_or_different_identity_parent(self):
+        self.send()
+        a.send(self.store, self.key, PIN, receipt, cancelled=True)
+        _, key = self.follower()
+        self.assertEqual(a.inspect(self.store, key)["threading"]["mode"], "new-thread")
+        feed = copy.deepcopy(self.feed)
+        feed["decisions"].append(dict(id="choice-3", follows="choice-1",
+                                     revisions=copy.deepcopy(self.feed["decisions"][0]["revisions"])))
+        key = a.enqueue(self.store, feed, "choice-3", REMOTE, dict(PIN, generation="other"), OWNER, NOW)
+        self.assertEqual(a.inspect(self.store, key)["threading"]["mode"], "new-thread")
+
     def test_same_thread_notice_restart_and_uncertainty_reconciliation(self):
         self.send()
         calls = []

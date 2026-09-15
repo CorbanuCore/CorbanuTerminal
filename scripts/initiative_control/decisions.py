@@ -92,7 +92,10 @@ def validate(raw, now):
         require(type(feed["decisions"]) is list)
         ids = set()
         for decision in feed["decisions"]:
-            shape(decision, "id revisions")
+            shape(decision, "id revisions follows" if "follows" in decision else "id revisions")
+            if "follows" in decision:
+                text(decision["follows"])
+                require(re.fullmatch(ID, decision["follows"]) and decision["follows"] != decision["id"])
             text(decision["id"])
             require(re.fullmatch(ID, decision["id"]) and decision["id"] not in ids)
             ids.add(decision["id"])
@@ -158,6 +161,16 @@ def validate(raw, now):
                         require(all(record[k] == previous[k] for k in FIELDS - {"revision", "updated_at", "status", "resolution"}))
                 else:
                     require(record["status"] == "open")
+        parents = {item["id"]: item.get("follows") for item in feed["decisions"]}
+        require(all(parent is None or parent in ids for parent in parents.values()))
+        checked = set()
+        for decision_id in parents:
+            visiting = set()
+            while decision_id is not None and decision_id not in checked:
+                require(decision_id not in visiting)
+                visiting.add(decision_id)
+                decision_id = parents[decision_id]
+            checked.update(visiting)
         return feed
     except (ValueError, TypeError, KeyError, OverflowError, RecursionError, UnicodeError):
         raise Invalid() from None
@@ -176,10 +189,19 @@ def project(raw, now):
 def advance(old, new):
     require(new["feed_id"] == old["feed_id"] and new["revision"] == old["revision"] + 1)
     require(stamp(new["assessed_at"]) >= stamp(old["assessed_at"]))
-    latest = {d["id"]: d["revisions"] for d in new["decisions"]}
+    latest = {d["id"]: d for d in new["decisions"]}
     for decision in old["decisions"]:
         history = decision["revisions"]
-        require(latest.get(decision["id"], [])[:len(history)] == history)
+        current = latest.get(decision["id"])
+        require(current is not None and current.get("follows") == decision.get("follows"))
+        require(current["revisions"][:len(history)] == history)
+    # Adding a follower is not permission to revise its existing parent, even
+    # by appending an otherwise valid open revision in the same transaction.
+    previous = {d["id"]: d for d in old["decisions"]}
+    for decision in new["decisions"]:
+        parent = decision.get("follows")
+        if decision["id"] not in previous and parent in previous:
+            require(latest[parent] == previous[parent])
 
 
 def owner_only(info, directory=False):

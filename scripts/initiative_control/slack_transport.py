@@ -516,20 +516,28 @@ class Transport:
         d.require(type(attempt) is str and re.fullmatch(r"[0-9a-f]{64}", attempt) is not None)
         client_msg_id = legacy_client_msg_id(attempt)
         d.require(client_msg_id is not None)  # Before any durable record or credential/HTTP access.
-        admitted = self.gate()["lifecycle"]
-        d.require(request["identity"] == self.binding and request["payload_digest"] == d.digest(request["payload"]))
-        with locked(self.store) as value:
-            d.require(observe_session_locked(self.store, value) == (admitted["session"]["id"], admitted["epoch"]))
-            fenced(self.store, value)
-            d.require(value["hold"] is None)
-            if attempt in value["posts"]:
-                saved = value["posts"][attempt]
-                d.require(saved["request"] == request and saved["receipt"] is not None)
-                return copy.deepcopy(saved["receipt"])
-            value["posts"][attempt] = dict(request=copy.deepcopy(request), receipt=None, retry_after=None)
-            self.store.write("transport", value)
-            d.require(observe_session_locked(self.store, self.store.read("transport")) == (admitted["session"]["id"], admitted["epoch"]))
-            fenced(self.store, value)  # A slow durable request write cannot authorize a later stale POST.
+        try:
+            admitted = self.gate()["lifecycle"]
+            d.require(request["identity"] == self.binding and request["payload_digest"] == d.digest(request["payload"]))
+            with locked(self.store) as value:
+                d.require(observe_session_locked(self.store, value) == (admitted["session"]["id"], admitted["epoch"]))
+                fenced(self.store, value)
+                d.require(value["hold"] is None)
+                if attempt in value["posts"]:
+                    saved = value["posts"][attempt]
+                    d.require(saved["request"] == request and saved["receipt"] is not None)
+                    return copy.deepcopy(saved["receipt"])
+                value["posts"][attempt] = dict(request=copy.deepcopy(request), receipt=None, retry_after=None)
+                self.store.write("transport", value)
+                d.require(observe_session_locked(self.store, self.store.read("transport")) == (admitted["session"]["id"], admitted["epoch"]))
+                fenced(self.store, value)  # A slow durable request write cannot authorize a later stale POST.
+        except Exception:
+            # Only positive absence permits retry. Existing attempts or an unreadable
+            # journal retain uncertainty, including a failed post-write fence check.
+            with locked(self.store) as value:
+                if attempt not in value["posts"]:
+                    raise a.NotDispatched() from None
+            raise
         try:
             response = self.web().chat_postMessage(channel=self.binding["channel"],
                 client_msg_id=client_msg_id, **request["payload"])
@@ -617,8 +625,12 @@ class Transport:
 
     def bind_alert(self, key, row):
         d.require(row["intent"]["identity"] == self.binding and row["parent"]["state"] == row["details"]["state"] == "sent")
+        a.check_receipt(a.request_for(key, row, "parent"), row["parent"]["receipt"])
         with locked(self.store) as value:
-            value["routes"][row["parent"]["receipt"]["ts"]] = dict(alert=key, details=row["details"]["receipt"]["ts"])
+            thread = row["parent"]["receipt"]["ts"]
+            route = dict(alert=key, details=row["details"]["receipt"]["ts"])
+            d.require(value["routes"].get(thread) in (None, route))
+            value["routes"][thread] = route
             self.store.write("transport", value)
 
     def callback(self, client, request):

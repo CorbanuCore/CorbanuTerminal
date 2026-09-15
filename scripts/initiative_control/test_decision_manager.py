@@ -8,6 +8,7 @@ from pathlib import Path
 import select
 import subprocess
 import sys
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -168,6 +169,392 @@ def cli_child(root, feed, endpoint):
 
 
 class ManagerTests(fixtures.LiveFixture):
+    def test_unacknowledged_answer_projects_until_real_ack_and_sent_notice(self):
+        import decision_feed
+        from test_decision_replies import receive
+        key = self.queue()
+        saved = d.load_fixture(self.feed_root, NOW)
+        self.assertEqual(saved["decisions"][0]["revisions"][-1]["status"], "resolved")
+        calls = len(self.calls)
+        before = {name: (self.root / (name + ".json")).read_bytes() for name in ("alerts", "replies")}
+        with patch.object(s.Transport, "web", side_effect=AssertionError("projection posted")):
+            status = m.project_status(self.store, NOW, True)
+            self.assertEqual(status["unacknowledged_answers"], 1)
+            output = io.StringIO()
+            cli = m.main(["project-status", "--store", str(self.root), "--live"],
+                         now=lambda: NOW, stdout=output)
+            self.assertEqual(json.loads(output.getvalue()), cli)
+            self.assertEqual(cli["unacknowledged_answers"], 1)
+            projected = decision_feed.project_slack(self.feed_root, self.root, NOW, True)
+        self.assertEqual(projected["status"]["unacknowledged_answers"], 1)
+        self.assertEqual(projected["decisions"][0]["replies"]["unacknowledged_answers"], 1)
+        snapshot = dict(schema=2, status="valid", feed=saved, slack_status="valid", slack=projected)
+        page = decision_feed.render(snapshot, NOW, [], {})
+        self.assertIn("unacknowledged answers: 1", page)
+        self.assertEqual(len(self.calls), calls)
+        for name, raw in before.items():
+            self.assertEqual((self.root / (name + ".json")).read_bytes(), raw)
+        intent = r.dispatch(self.store, self.feed_root, key, OWNER, receive, NOW)
+        self.assertEqual(m.project_status(self.store, NOW, True)["unacknowledged_answers"], 1)
+        ack = dict(handoff=key, agent=OWNER["agent"], allocation=OWNER["allocation"],
+                   payload_digest=intent["request"]["payload_digest"], receipt_id=intent["receipt"]["receipt_id"])
+        with self.assertRaises(d.Invalid):
+            r.reconcile_handoff(self.store, key, intent["receipt"], dict(ack, allocation="wrong"))
+        self.assertEqual(m.project_status(self.store, NOW, True)["unacknowledged_answers"], 1)
+        r.reconcile_handoff(self.store, key, intent["receipt"], ack)
+        self.assertEqual(m.project_status(self.store, NOW, True)["unacknowledged_answers"], 1)
+        requests = []
+        def timeout(request):
+            requests.append(request)
+            raise TimeoutError()
+        notice = a.notice(self.store, self.key, "acknowledged", d.digest(ack), PIN, timeout)
+        self.assertEqual(m.project_status(self.store, NOW, True)["unacknowledged_answers"], 1)
+        evidence = dict(attempt=requests[0]["attempt"], identity=PIN,
+                        payload_digest=requests[0]["payload_digest"], thread_ts=requests[0]["thread_ts"], ts="109.000001")
+        a.reconcile(self.store, self.key, notice["request"]["attempt"], evidence)
+        self.assertEqual(m.project_status(self.store, NOW, True)["unacknowledged_answers"], 0)
+        self.assertEqual(decision_feed.project_slack(self.feed_root, self.root, NOW, True)
+                         ["decisions"][0]["replies"]["unacknowledged_answers"], 0)
+        self.assertEqual(d.load_fixture(self.feed_root, NOW), saved)
+
+    def test_recorded_resolution_crash_and_held_transport_keep_outstanding_count(self):
+        key = self.queue()
+        # Recreate the durable crash boundary: resolution saved, queue write lost.
+        ledger = self.store.read("replies")
+        ledger["intents"][key]["state"] = "recorded"
+        ledger["events"]["Ev001"]["state"] = "recorded"
+        self.store.write("replies", ledger)
+        self.assertEqual(m.project_status(self.store, NOW, True)["unacknowledged_answers"], 1)
+        self.owner.release()
+        status = m.project_status(self.store, NOW, True)
+        self.assertEqual(status["state"], "held")
+        self.assertEqual(status["unacknowledged_answers"], 1)
+        legacy = m.project_status(None, NOW)
+        del legacy["unacknowledged_answers"]
+        self.assertEqual(m.validate_status(legacy), legacy)
+        for bad in (True, -1, "1", None):
+            with self.assertRaises(d.Invalid):
+                m.validate_status(dict(legacy, unacknowledged_answers=bad))
+
+    def follower(self, *, parent=True):
+        if parent:
+            self.sending()
+        feed = copy.deepcopy(self.feed)
+        feed["revision"] += 1
+        child = copy.deepcopy(feed["decisions"][0])
+        child.update(id="choice-2", follows="choice-1")
+        feed["decisions"].append(child)
+        d.save_fixture(self.feed_root, feed, d.digest(self.feed), NOW)
+        return a.enqueue(self.store, feed, "choice-2", fixtures.REMOTE, PIN, OWNER, NOW)
+
+    def assert_parent_answerable(self, *, already_received=False):
+        if not already_received:
+            self.callback(fixtures.payload("EvParent"))
+        self.assertTrue(self.transport.active)
+        self.assertEqual(self.acks, ["envelope-1"])
+        self.assertIsNone(self.store.read("transport")["hold"])
+        self.assertEqual(self.store.read("transport")["events"]["EvParent"]["alert"], self.key)
+        self.assertEqual(s.drain(self.store), 1)
+        self.assertEqual(self.store.read("replies")["events"]["EvParent"]["alert"], self.key)
+        row = a.inspect(self.store, self.key)
+        manager = dict(actor="manager-fixture", answer="Five testers", scope="Synthetic parent only", alert=self.key,
+                       context_digest=row["intent"]["context_digest"], audit=r.snapshot(self.store, self.key)["audit"],
+                       owner=OWNER, interpretation="answer")
+        guarded = m.ResolutionStore(self.transport)
+        handoff = r.interpret(guarded, self.feed_root, "EvParent", manager, OWNER, NOW)
+        self.assertIsNotNone(handoff)
+        self.assertEqual(r.resume(guarded, self.feed_root, handoff, OWNER, NOW), "queued")
+        self.assertEqual(d.load_fixture(self.feed_root, NOW)["decisions"][0]["revisions"][-1]["status"], "resolved")
+
+    def test_follower_sdk_each_thread_attributes_only_its_own_question(self):
+        key = self.follower()
+        original = copy.deepcopy(self.store.read("alerts")[self.key])
+        calls = len(self.calls)
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        self.transport.bind_alert(key, row)
+        self.assertNotEqual(row["parent"]["receipt"]["ts"], original["parent"]["receipt"]["ts"])
+        self.assertEqual(len(self.calls), calls + 3)
+        self.assertEqual(row["details"]["receipt"]["thread_ts"], row["parent"]["receipt"]["ts"])
+        pointer = row["notices"][d.digest([key, "follow-up", self.key])]
+        self.assertEqual(pointer["receipt"]["thread_ts"], original["parent"]["receipt"]["ts"])
+        self.assertEqual(pointer["request"]["payload"]["text"],
+            "A follow-up decision has been raised. Find it in its own thread: Open follow-up thread.")
+        mention = pointer["request"]["payload"]["blocks"][0]["elements"][0]["elements"][1]
+        self.assertEqual(mention, dict(type="message_mention", channel_id="CTEST", message_ts="100.000003"))
+        self.assertEqual(self.calls[-1][1]["blocks"], pointer["request"]["payload"]["blocks"])
+        self.assertEqual(self.store.read("alerts")[self.key], original)
+        a.send(a.Store(self.root), key, PIN, lambda _: self.fail("duplicate pointer"))
+        self.callback(fixtures.payload("EvFollower", thread_ts=row["parent"]["receipt"]["ts"], ts="102.000001"))
+        self.assertEqual(s.drain(self.store), 1)
+        self.assertEqual(self.store.read("replies")["events"]["EvFollower"]["alert"], key)
+        manager = dict(actor="manager-fixture", answer="Five testers", scope="Synthetic follower only", alert=key,
+                       context_digest=row["intent"]["context_digest"], audit=r.snapshot(self.store, key)["audit"],
+                       owner=OWNER, interpretation="answer")
+        handoff = r.interpret(self.store, self.feed_root, "EvFollower", manager, OWNER, NOW)
+        self.assertEqual(r.resume(self.store, self.feed_root, handoff, OWNER, NOW), "queued")
+        self.assertEqual(d.load_fixture(self.feed_root, NOW)["decisions"][0], self.feed["decisions"][0])
+        self.acks.clear()
+        self.assert_parent_answerable()
+
+    def test_pending_follower_leaves_parent_answerable(self):
+        self.follower()
+        self.assert_parent_answerable()
+
+    def test_sent_unbound_follower_leaves_parent_answerable(self):
+        key = self.follower()
+        a.send(self.store, key, PIN, self.transport.exchange)
+        self.assert_parent_answerable()
+
+    def test_follower_post_in_progress_leaves_parent_answerable(self):
+        key = self.follower()
+        exchange = self.transport.exchange
+        def post(request):
+            evidence = exchange(request)
+            if request["thread_ts"] is None:
+                self.callback(fixtures.payload("EvParent"))
+            return evidence
+        a.send(self.store, key, PIN, post)
+        self.assert_parent_answerable(already_received=True)
+
+    def uncertain_follower(self):
+        key = self.follower()
+        # Lose only the follower details response, after its own root receipt.
+        self.reply = lambda method, result: ((None, 200, {})
+            if method == "chat.postMessage" and result["ts"] == "100.000004" else (result, 200, {}))
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        self.assertEqual(row["details"]["state"], "uncertain")
+        self.reply = None
+        return key, row
+
+    def test_uncertain_follower_leaves_parent_answerable(self):
+        self.uncertain_follower()
+        self.assert_parent_answerable()
+
+    def test_failed_follower_leaves_parent_answerable(self):
+        key = self.follower()
+        self.reply = lambda method, result: ((dict(ok=False, error="ratelimited"), 429, {"Retry-After": "1"})
+            if method == "chat.postMessage" and result["ts"] == "100.000004" else (result, 200, {}))
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        self.assertEqual(row["details"]["state"], "failed")
+        self.assertEqual(row.get("notices", {}), {})
+        a.send(self.store, key, PIN, lambda _: self.fail("terminal failure retried"))
+        self.assert_parent_answerable()
+
+    def test_reconciled_unbound_follower_leaves_parent_answerable(self):
+        key, row = self.uncertain_follower()
+        a.reconcile(self.store, key, "details", self.transport.reconcile(row["details"]["request"]))
+        self.assert_parent_answerable()
+
+    def test_unbound_follower_reply_is_never_attributed_to_parent(self):
+        key, row = self.uncertain_follower()
+        self.callback(fixtures.payload("EvUnbound", thread_ts=row["parent"]["receipt"]["ts"]))
+        self.assertFalse(self.transport.active)
+        self.assertEqual(self.acks, [])
+        self.assertEqual(self.store.read("transport")["events"], {})
+        self.assertEqual(self.store.read("replies")["events"], {})
+
+    def test_failed_pointer_leaves_parent_answerable(self):
+        key = self.follower()
+        self.reply = lambda method, result: ((dict(ok=False, error="ratelimited"), 429, {"Retry-After": "1"})
+            if method == "chat.postMessage" and result["ts"] == "100.000005" else (result, 200, {}))
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        self.assertEqual(row["details"]["state"], "sent")
+        self.assertEqual(row["notices"][d.digest([key, "follow-up", self.key])]["state"], "failed")
+        self.transport.bind_alert(key, row)
+        a.send(self.store, key, PIN, lambda _: self.fail("failed pointer retried"))
+        self.assert_parent_answerable()
+
+    def test_uncertain_pointer_leaves_parent_answerable_and_reconciles_without_reposting(self):
+        key = self.follower()
+        self.reply = lambda method, result: ((None, 200, {})
+            if method == "chat.postMessage" and result["ts"] == "100.000005" else (result, 200, {}))
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        slot = d.digest([key, "follow-up", self.key])
+        self.assertEqual(row["notices"][slot]["state"], "uncertain")
+        self.transport.bind_alert(key, row)
+        self.reply = None
+        self.assert_parent_answerable()
+        a.send(a.Store(self.root), key, PIN, lambda _: self.fail("uncertain pointer retried"))
+        a.reconcile(self.store, key, slot, self.transport.reconcile(row["notices"][slot]["request"]))
+        a.send(a.Store(self.root), key, PIN, lambda _: self.fail("reconciled pointer reposted"))
+        self.assertEqual(a.inspect(self.store, key)["notices"][slot]["state"], "sent")
+        self.assertEqual(self.store.read("transport")["routes"]["100.000001"]["alert"], self.key)
+
+    def test_refused_pointer_leaves_parent_answerable(self):
+        key, row = self.uncertain_follower()
+        a.reconcile(self.store, key, "details", self.transport.reconcile(row["details"]["request"]))
+        with self.assertRaises(d.Invalid):
+            a.notice(self.store, key, "follow-up", self.key, dict(PIN, generation="wrong"),
+                     lambda _: self.fail("refused pointer posted"))
+        self.assertEqual(a.inspect(self.store, key).get("notices", {}), {})
+        self.assert_parent_answerable()
+
+    def test_old_parent_answer_edit_stays_with_parent_after_follower(self):
+        handoff = self.retained_ack()
+        feed = d.load_fixture(self.feed_root, NOW)
+        child = copy.deepcopy(self.feed["decisions"][0])
+        child.update(id="choice-2", follows="choice-1")
+        changed = copy.deepcopy(feed)
+        changed["revision"] += 1
+        changed["decisions"].append(child)
+        d.save_fixture(self.feed_root, changed, d.digest(feed), NOW)
+        key = a.enqueue(self.store, changed, "choice-2", fixtures.REMOTE, PIN, OWNER, NOW)
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        self.transport.bind_alert(key, row)
+        self.callback(fixtures.payload("EvPriorEdit", subtype="message_changed",
+            message=dict(user=PIN["human"], thread_ts="100.000001",
+                         ts="101.000001", text="Ten testers", edited=dict(user=PIN["human"])),
+            previous_message=dict(user=PIN["human"]), event_ts="105.000001"))
+        self.assertTrue(self.transport.active)
+        self.assertEqual(self.store.read("transport")["events"]["EvPriorEdit"]["alert"], self.key)
+        self.assertEqual(s.drain(self.store), 1)
+        self.assertFalse(m.finish(self.store, self.feed_root, handoff, self.transport, lambda: OWNER, NOW)["work_ready"])
+        self.assertEqual(d.load_fixture(self.feed_root, NOW)["decisions"][0], feed["decisions"][0])
+
+    def assert_reconcile_defers_pointer(self, *, held, sessionless):
+        key, row = self.uncertain_follower()
+        original = copy.deepcopy(self.store.read("alerts")[self.key])
+        if sessionless:
+            self.owner.close()
+        with s.locked(self.store) as journal:
+            if sessionless:
+                journal["lifecycle"]["session"] = None  # Synthetic sessionless recovery fixture.
+            journal["hold"] = "outage-gap" if held else None
+            self.store.write("transport", journal)
+        posts = copy.deepcopy(self.store.read("transport")["posts"])
+        with (tempfile.TemporaryFile(mode="w+") as source,
+              tempfile.TemporaryFile(mode="w+") as sink,
+              patch("slack_sdk.WebClient", side_effect=lambda **kw: fixtures.WebClient(base_url=self.endpoint, **kw))):
+            source.write(json.dumps(dict(binding=PIN, key=key, phase="details")) + "\n")
+            source.seek(0)
+            result = m.main(["reconcile", "--store", str(self.root), "--live"],
+                            stdin=source, stdout=sink, credentials=lambda: ("fixture-bot", "fixture-app"), now=lambda: NOW)
+        self.assertEqual(result, dict(reconciled=True))
+        slot = d.digest([key, "follow-up", self.key])
+        pointer = a.inspect(self.store, key)["notices"][slot]
+        self.assertEqual(pointer["state"], "pending")
+        self.assertIsNone(pointer["receipt"])
+        self.assertNotIn(slot, self.store.read("transport")["posts"])
+        self.assertEqual(set(self.store.read("transport")["posts"]), set(posts))
+        self.assertEqual(len(self.messages), 4)
+        self.assertEqual(self.store.read("transport")["routes"][row["parent"]["receipt"]["ts"]]["alert"], key)
+        self.assertEqual(self.store.read("alerts")[self.key], original)
+        if sessionless:
+            self.owner = s.Session(self.store)
+            self.addCleanup(self.owner.release)
+            self.owner.update("connected")
+        self.review_gap()
+        sent = a.send(a.Store(self.root), key, PIN, self.transport.exchange)
+        self.assertEqual(sent["notices"][slot]["state"], "sent")
+        self.assertEqual(sent["notices"][slot]["request"], pointer["request"])
+        a.send(a.Store(self.root), key, PIN, lambda _: self.fail("duplicate deferred pointer"))
+        self.assertEqual(len(self.messages), 5)
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "last-verified")
+        self.assertEqual(self.store.read("alerts")[self.key], original)
+
+    def test_cli_reconcile_under_hold_leaves_pointer_pending_until_admitted_send(self):
+        self.assert_reconcile_defers_pointer(held=True, sessionless=False)
+
+    def test_cli_reconcile_without_session_leaves_pointer_pending_until_admitted_send(self):
+        self.assert_reconcile_defers_pointer(held=False, sessionless=True)
+
+    def test_cli_reconcile_held_and_sessionless_leaves_pointer_pending_until_admitted_send(self):
+        self.assert_reconcile_defers_pointer(held=True, sessionless=True)
+
+    def test_pointer_pre_admission_refusal_never_writes_uncertain(self):
+        key, row = self.uncertain_follower()
+        a.reconcile(self.store, key, "details", self.transport.reconcile(row["details"]["request"]))
+        slot = d.digest([key, "follow-up", self.key])
+        gate = self.transport.gate
+        def hold_after_gate():
+            admitted = gate()
+            with s.locked(self.store) as journal:
+                journal["hold"] = "outage-gap"
+                self.store.write("transport", journal)
+            return admitted
+        writes = []
+        write = self.store.write
+        def capture(name, value):
+            if name == "alerts" and slot in value[key].get("notices", {}):
+                writes.append(value[key]["notices"][slot]["state"])
+            write(name, value)
+        with patch.object(self.transport, "gate", side_effect=hold_after_gate), patch.object(self.store, "write", side_effect=capture):
+            row = a.send(self.store, key, PIN, self.transport.exchange)
+        self.assertNotIn("uncertain", writes)
+        self.assertEqual(row["notices"][slot]["state"], "pending")
+        self.assertNotIn(slot, self.store.read("transport")["posts"])
+        self.assertEqual(len(self.messages), 4)
+        self.review_gap()
+        self.assertEqual(a.send(self.store, key, PIN, self.transport.exchange)["notices"][slot]["state"], "sent")
+        a.send(self.store, key, PIN, lambda _: self.fail("duplicate pointer"))
+        self.assertEqual(len(self.messages), 5)
+
+    def test_pointer_message_mention_contains_only_documented_fields(self):
+        key = self.follower()
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        mention = self.calls[-1][1]["blocks"][0]["elements"][0]["elements"][1]
+        self.assertEqual(mention, dict(type="message_mention", channel_id="CTEST",
+                                      message_ts=row["parent"]["receipt"]["ts"]))
+
+    def test_cli_reconcile_binds_own_thread_posts_pointer_and_cannot_repoint_parent(self):
+        key, row = self.uncertain_follower()
+        original = copy.deepcopy(self.store.read("alerts")[self.key])
+        with (tempfile.TemporaryFile(mode="w+") as source,
+              tempfile.TemporaryFile(mode="w+") as sink,
+              patch("slack_sdk.WebClient", side_effect=lambda **kw: fixtures.WebClient(base_url=self.endpoint, **kw))):
+            source.write(json.dumps(dict(binding=PIN, key=key, phase="details")) + "\n")
+            source.seek(0)
+            result = m.main(["reconcile", "--store", str(self.root), "--live"],
+                            stdin=source, stdout=sink, credentials=lambda: ("fixture-bot", "fixture-app"), now=lambda: NOW)
+        self.assertEqual(result, dict(reconciled=True))
+        pointer = a.inspect(self.store, key)["notices"][d.digest([key, "follow-up", self.key])]
+        self.assertEqual(pointer["receipt"]["thread_ts"], "100.000001")
+        self.transport.bind_alert(self.key, original)  # Old reconciliation cannot change the follower route.
+        self.callback(fixtures.payload("EvReconciledFollower", thread_ts=row["parent"]["receipt"]["ts"]))
+        self.assertEqual(s.drain(self.store), 1)
+        self.assertEqual(self.store.read("replies")["events"]["EvReconciledFollower"]["alert"], key)
+        self.assertEqual(self.store.read("alerts")[self.key], original)
+        self.acks.clear()
+        self.assert_parent_answerable()
+
+    def test_route_binding_refuses_another_alert_on_an_existing_thread(self):
+        key = self.follower()
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        before = self.store.read("transport")
+        collision = copy.deepcopy(row)
+        collision["parent"]["receipt"]["ts"] = "100.000001"
+        with self.assertRaises(d.Invalid):
+            self.transport.bind_alert(key, collision)
+        self.assertEqual(self.store.read("transport"), before)
+        self.assert_parent_answerable()
+
+    def test_fallback_surfaces_without_mutating_legacy_alerts(self):
+        import decision_feed as f
+        key = self.follower(parent=False)
+        before = [(self.root / (name + ".json")).read_bytes() for name in ("alerts", "replies")]
+        with patch.object(s.Transport, "web", side_effect=AssertionError("projection posted")):
+            self.assertEqual(m.project_status(self.store, NOW, True)["new_thread_fallbacks"], 1)
+            projected = f.project_slack(self.feed_root, self.root, NOW, True)
+        self.assertEqual(projected["status"]["new_thread_fallbacks"], 1)
+        rows = {row["id"]: row for row in projected["decisions"]}
+        self.assertEqual(rows["choice-1"]["replies"]["new_thread_fallbacks"], 0)
+        self.assertEqual(rows["choice-2"]["replies"]["new_thread_fallbacks"], 1)
+        snapshot = dict(schema=2, status="valid", feed=d.load_fixture(self.feed_root, NOW), slack_status="valid", slack=projected)
+        self.assertIn("new thread fallbacks: 1", f.render(snapshot, NOW, [], {}))
+        self.assertEqual([(self.root / (name + ".json")).read_bytes() for name in ("alerts", "replies")], before)
+        legacy = copy.deepcopy(projected)
+        del legacy["status"]["new_thread_fallbacks"]
+        for row in legacy["decisions"]:
+            del row["replies"]["new_thread_fallbacks"]
+        f.validate_slack(legacy, d.load_fixture(self.feed_root, NOW), NOW)
+        for bad in (True, -1, "1", None):
+            with self.subTest(bad=bad), self.assertRaises(d.Invalid):
+                m.validate_status(dict(projected["status"], new_thread_fallbacks=bad))
+            changed = copy.deepcopy(projected)
+            changed["decisions"][1]["replies"]["new_thread_fallbacks"] = bad
+            with self.subTest(bad=bad), self.assertRaises(d.Invalid):
+                f.validate_slack(changed, d.load_fixture(self.feed_root, NOW), NOW)
+
     def supervised(self, mode="connected", **options):
         self.quiesce()
         manager = m.ManagedListener(self.store, PIN, live=True)
