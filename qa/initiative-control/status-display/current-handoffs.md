@@ -174,6 +174,54 @@ move to **Opus 5.0 High** (`claude-opus-5-plan`, provider `claude-plan`, effort
 - Dispatch defect fixed: worker START must be re-sent until the pane shows
   `Working (`; the dispatch helper now verifies that.
 
+### Update — September 15 12:50 UTC: PF-83 preflight ran; Bridge bypass closed; two designs rejected on review
+
+- **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
+  the gate is now real machinery running against a real guest. Travis provisioned
+  a macOS 26.2 arm64 VM and then a clean `agent` account (uid 503, not in
+  `admin`, no sudo, empty home) after the first account was **refused** for
+  carrying live agent credentials. `BoundaryWire` now runs over key-authenticated
+  SSH with its framing and checks unchanged, the package is pinned by the proven
+  cargo lane (`corbanu 0.1.42`, binary SHA-256 `3e99a6cb…`, mismatched manifest
+  refused), and `tmux 3.7c` passed the PTY probe. **The authoritative preflight
+  ran: 2 proven, 173 of 175 controls UNPROVEN.** Both the bridge and its child
+  reached github.com and the host on port 22, so network denial is unenforced and
+  no case may run. All 380 verdicts remain `not_reached`. Open decision
+  `pf83-network-isolation-20260915`. Two manager-owned blockers were cleared
+  along the way: the build lane was wrong (`just build-for-release` is a
+  six-platform Bazel filegroup) and two `~/.cache` Bazel symlinks on this host
+  were broken, failing every Bazel invocation at startup.
+- **Task Node** ([PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)):
+  the **Slack Bridge evidence bypass is closed and received at `2ca10a43e`**. A
+  TMUX receiver is now a first-class evidenced transport requiring its original
+  in-memory witness, unchanged rollout and capture bytes, matching identity, an
+  unconsumed nonce and bounded freshness — the manual pane-reading I had been
+  relying on for real handoffs is no longer how this works. Three review rounds
+  were needed: the transport itself, then real-world brickability (an ordinary
+  mid-append rollout read or a slow model turn permanently bricked a handoff),
+  then a budget-reserve gap that could start a durable attempt with no room left
+  to collect the ACK.
+- **Slack status** was wedged at `held` all session by an unreconcilable post
+  record — the residue of a malformed attempt id I created. The guard now
+  validates attempts before any durable write, the live orphan was reconciled as
+  never-sent against read-only inspection evidence, and a **second copy of the
+  same predicate** in the published projection (which is what the dashboard
+  actually reads) had to be fixed too. The status is finally clear.
+
+**Two designs were rejected on review rather than patched:**
+
+- Shared-thread Slack posting failed twice — first silently misattributing a
+  human reply to the wrong decision, then making a terminally failed follower
+  deadlock the entire thread so even the parent question became unanswerable.
+  After the second failure the approach was abandoned rather than iterated:
+  every decision keeps its own thread, and a follow-up posts a fixed-text
+  pointer notice into the thread it answers.
+- The briefing ceiling was being met by hand-trimming context, which made
+  briefings worse to make them smaller. Travis granted 10 KiB; the real cost was
+  found instead (65 spent allocation stubs repeating placeholder objects,
+  14.5 KB), collapsed into a digest index for a 10.7 KB saving, and **the grant
+  was handed back the same day**.
+
 ### Update — September 15 10:10 UTC: accounting vectors closed, daemon qualified unassisted, security waiting on Travis
 
 - **Accounting** ([PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md)):
