@@ -121,7 +121,12 @@ impl DeferredChatSampling {
             self.reject();
             return Err(CodexErr::Fatal(FAILURE.into()));
         };
-        if endpoint != format!("{}/chat/completions", approved_endpoint.trim_end_matches('/')) {
+        if endpoint
+            != format!(
+                "{}/chat/completions",
+                approved_endpoint.trim_end_matches('/')
+            )
+        {
             self.reject();
             return Err(CodexErr::Fatal(FAILURE.into()));
         }
@@ -162,7 +167,11 @@ impl DeferredChatSampling {
     }
 }
 
-pub(super) fn eligible(provider: &ModelProviderInfo, auth: Option<&CodexAuth>, request: &codex_api::ChatCompletionsRequest) -> bool {
+pub(super) fn eligible(
+    provider: &ModelProviderInfo,
+    auth: Option<&CodexAuth>,
+    request: &codex_api::ChatCompletionsRequest,
+) -> bool {
     provider.wire_api == WireApi::Chat
         && provider.is_openai()
         && provider.requires_openai_auth

@@ -41,8 +41,11 @@ fn field(value: Option<&Value>) -> Result<ChatTokenPresence, InvalidChatUsage> {
     match value {
         None => Ok(ChatTokenPresence::Missing),
         Some(Value::Null) => Ok(ChatTokenPresence::Null),
-        Some(value) => value.as_i64().filter(|n| *n >= 0)
-            .map(ChatTokenPresence::Number).ok_or(InvalidChatUsage),
+        Some(value) => value
+            .as_i64()
+            .filter(|n| *n >= 0)
+            .map(ChatTokenPresence::Number)
+            .ok_or(InvalidChatUsage),
     }
 }
 

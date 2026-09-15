@@ -5,40 +5,98 @@ use pretty_assertions::assert_eq;
 fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
     let scope = Uuid::new_v4();
     let source = "openai-chat-api-key-bundled-v1";
-    let first = chat_original("gpt-5.6-sol",scope,1000)?.remove(0);
-    let tuple = serde_json::to_vec(&(source,"openai","gpt-5.6-sol","api_key","default",
-        "USD/million",5000,30000,Some(500)))?;
-    assert_eq!(first.source_reference, Uuid::new_v5(&Uuid::NAMESPACE_OID,&tuple));
-    assert_eq!(first.rates, Rates {noncached:Some(rate(5000)?),output:Some(rate(30000)?),
-        read:Some(rate(500)?),write:None});
-    assert_eq!((first.observed_at_ms,first.approved_at_ms,first.effective_from_ms,
-        first.effective_end_ms),(1000.try_into()?,1000.try_into()?,1000.try_into()?,None));
-    let second = chat_original("gpt-5.6-sol",scope,2000)?.remove(0);
-    assert_ne!(first.id,second.id);
-    assert_eq!(first.source_reference,second.source_reference);
-    for model in ["gpt-6-astra","remote-only","Gpt-5.6-sol","openai/gpt-5.6-sol","claude-opus-5"] {
-        assert!(chat_original(model,scope,1000)?.is_empty());
+    let first = chat_original("gpt-5.6-sol", scope, 1000)?.remove(0);
+    let tuple = serde_json::to_vec(&(
+        source,
+        "openai",
+        "gpt-5.6-sol",
+        "api_key",
+        "default",
+        "USD/million",
+        5000,
+        30000,
+        Some(500),
+    ))?;
+    assert_eq!(
+        first.source_reference,
+        Uuid::new_v5(&Uuid::NAMESPACE_OID, &tuple)
+    );
+    assert_eq!(
+        first.rates,
+        Rates {
+            noncached: Some(rate(5000)?),
+            output: Some(rate(30000)?),
+            read: Some(rate(500)?),
+            write: None
+        }
+    );
+    assert_eq!(
+        (
+            first.observed_at_ms,
+            first.approved_at_ms,
+            first.effective_from_ms,
+            first.effective_end_ms
+        ),
+        (1000.try_into()?, 1000.try_into()?, 1000.try_into()?, None)
+    );
+    let second = chat_original("gpt-5.6-sol", scope, 2000)?.remove(0);
+    assert_ne!(first.id, second.id);
+    assert_eq!(first.source_reference, second.source_reference);
+    for model in [
+        "gpt-6-astra",
+        "remote-only",
+        "Gpt-5.6-sol",
+        "openai/gpt-5.6-sol",
+        "claude-opus-5",
+    ] {
+        assert!(chat_original(model, scope, 1000)?.is_empty());
     }
     let catalog = codex_models_manager::bundled_models_response()?;
-    let row = catalog.models.iter().find(|r| r.slug == "gpt-5.6-sol").unwrap().clone();
-    assert_eq!(openai_rows(&[row.clone(),row.clone()],&row.slug,scope,1000,source)?,vec![]);
+    let row = catalog
+        .models
+        .iter()
+        .find(|r| r.slug == "gpt-5.6-sol")
+        .unwrap()
+        .clone();
+    assert_eq!(
+        openai_rows(&[row.clone(), row.clone()], &row.slug, scope, 1000, source)?,
+        vec![]
+    );
     let mut disabled = row.clone();
     disabled.orchestration = Some(ModelOrchestrationMetadata::Disabled {
-        provider_id:"openai".into(), capability:codex_protocol::openai_models::ModelCapabilityTier::Frontier,
-        reason:"fixture".into(),
+        provider_id: "openai".into(),
+        capability: codex_protocol::openai_models::ModelCapabilityTier::Frontier,
+        reason: "fixture".into(),
     });
-    assert!(openai_rows(&[disabled],&row.slug,scope,1000,source)?.is_empty());
-    for billing in [ModelBilling::Local,ModelBilling::Plan {relative_burn_millis:1000},
-        ModelBilling::PlanSchedule {off_peak_relative_burn_millis:1000,peak_relative_burn_millis:2000,
-            peak_start_utc_hour:6,peak_end_utc_hour:10,peak_weekdays:None,
-            promotional_off_peak_relative_burn_millis:None,promotion_valid_through_utc:None}] {
-        assert!(openai_project("fixture",scope,&billing,1000,source)?.is_empty());
+    assert!(openai_rows(&[disabled], &row.slug, scope, 1000, source)?.is_empty());
+    for billing in [
+        ModelBilling::Local,
+        ModelBilling::Plan {
+            relative_burn_millis: 1000,
+        },
+        ModelBilling::PlanSchedule {
+            off_peak_relative_burn_millis: 1000,
+            peak_relative_burn_millis: 2000,
+            peak_start_utc_hour: 6,
+            peak_end_utc_hour: 10,
+            peak_weekdays: None,
+            promotional_off_peak_relative_burn_millis: None,
+            promotion_valid_through_utc: None,
+        },
+    ] {
+        assert!(openai_project("fixture", scope, &billing, 1000, source)?.is_empty());
     }
-    for read in [None,Some(0)] {
-        let billing = ModelBilling::Metered {input_milli_usd_per_million_tokens:1,
-            output_milli_usd_per_million_tokens:2,cached_input_milli_usd_per_million_tokens:read};
-        let projected = openai_project("fixture",scope,&billing,1000,source)?.remove(0);
-        assert_eq!((projected.rates.read,projected.rates.write),(read.map(rate).transpose()?,None));
+    for read in [None, Some(0)] {
+        let billing = ModelBilling::Metered {
+            input_milli_usd_per_million_tokens: 1,
+            output_milli_usd_per_million_tokens: 2,
+            cached_input_milli_usd_per_million_tokens: read,
+        };
+        let projected = openai_project("fixture", scope, &billing, 1000, source)?.remove(0);
+        assert_eq!(
+            (projected.rates.read, projected.rates.write),
+            (read.map(rate).transpose()?, None)
+        );
     }
     // Preserve the literal Responses and Anthropic source byte regressions.
     accounting_responses_prices_exact_and_unknown();

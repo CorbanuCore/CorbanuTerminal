@@ -343,3 +343,175 @@ live-provider, release qualification or push is claimed.
 Size at stopped handoff, including this receipt and sprint: raw 2411 total / 667 non-test;
 formatted preview 3041 / 751; conservative per-file max(raw, formatted) 3046 / 756.
 This exceeds the 3000 total target by 46, remains below STOP 3300/1300, and is not final formatted evidence.
+
+## Fourth attempt — acct-chat-impl-04 (2026-09-15)
+
+Worker `gpt-6-astra / high`; receiving owner Fable manager. Clean launch/commit
+`7b486e2d37bdf73c2b6dfc3674ff49bc9fa536c4`, same branch/worktree above.
+Allocation `2a22884dfee9de20161082fd8f6fa951eb7e5ce7602d7b2de3ec51bf9346e27c`;
+claim `4dace49d-0c55-44f9-9e01-3ba73b823960`. Brief SHA-256
+`28cb691da77941421b4c2fad45f53e79adab3467cac2a2165f48c381ecf4508f`;
+design SHA-256 `0736d39224191dab79f1215b286d3939f4109cde55c0fc4c00a93679f1f5268b`.
+Both verified before work with `shasum -a 256`, exit 0. Frozen continuation explicitly
+reconciles prior dispatch prerequisites and authorizes this target; stale lease text is historical.
+Existing PF-60 initiative / **Measurement targets** citation above still governs S02.
+Collection remains OFF; no activation, gateway economics, prewarm/auxiliary collection or P3 repair.
+
+### Corrected contracts and prior failures
+
+- Length: frozen expectation “length continuation then stop two distinct sampling requests”.
+  Actual `session/turn.rs`: `Some(codex_api::CompletionFinishReason::Length) =>` returns
+  `CodexErr::InvalidRequest`, “was stopped without executing further model work”.
+  Manager explicitly dispositioned this in favour of production. The corrected same named
+  case asserts that error, exactly one attempt and its retained observation; no successor invented.
+- Auxiliary: replace length with a real safe shell call plus stop; both sampling UUIDs differ
+  within one turn. Assert successful `ExecCommandEnd` exit 0 in both tool cases.
+  Frozen “Native manual/local compaction uses its separate session” meets another production
+  counterexample: `supports_remote_compaction()` is `self.is_openai() || is_azure_responses_provider(...)`.
+  `tasks/compact.rs` selects remote even for direct Chat. Following the manager's production-wins
+  disposition, the fixture accepts one unary `/v1/responses/compact` POST; it adds no accounting
+  rows. Do not label that a local Chat compaction or a collected/free auxiliary operation.
+- Spawn: the first fixture searched only for `spawn_agent`, which was namespaced and omitted
+  by the existing Chat converter. Use the already-exposed `spawn_agent_plaintext` alias.
+  Five physical sampling POSTs, three native owners, two spawn edges, the role-only retry
+  and fork/no-copy assertions now execute. No namespace converter/handler change.
+- OFF/cross-wire: Anthropic failed before sending because fixture model gpt-5.6-sol had no
+  catalogued maximum output limit. Supply synthetic 1024 in that cross-wire fixture's local
+  catalogue; both cross-wire vectors now send once with no accounting installation.
+- Prior C1 compilation: explicit `map_err(anyhow::Error::msg)` was already in the launch
+  candidate; final `--lib` now compiles and runs all eight new unit cases.
+- A1's three cases (raw_before_lossy_chunk_conversion, positions_and_cumulative_patches,
+  observation_barrier_and_rejection) failed their completion-count assertions on both initial
+  and automatic retry attempts. Their fixtures omitted assistant content, which native
+  `ChatStreamState::complete` requires. A2 added content before [DONE]. It was a fixture
+  correction, not `--retries 0` making unchanged code pass. Final API executes all three
+  without retries. No post-correction flake observed; original failed runs remain above.
+- Fourth-attempt diagnostic D: 26/28 passed; only cross-wire and auxiliary fixtures still
+  failed. After those corrections, M1 ran 27/28, failing only the deliberate mutation.
+- N0 below failed compilation (DayTotals lacks Serialize) while adding numeric evidence
+  output; no tests executed and no matching JUnit. Changed only the fixture print to Debug.
+
+### Resource investigation — not resolved by a passing rerun
+
+The prior two LEAK cases used SQLite pools whose error path returned before awaited close,
+and the held-socket fixture spawned detached connection tasks. Close read pools on both query
+outcomes, explicitly close both cancellation-fixture runtimes and deletion runtimes, drop the
+held deletion sender, and own socket children in a JoinSet. These are concrete cleanup changes,
+not proof that those resources caused nextest's historical output-handle markers.
+Final L has no LEAK; final N has a new LEAK on cumulative_and_separate_usage. L/N process
+sampling (40ms nominal interval; command names/ancestry, no credentials) ended with no sampled
+descendants. Dedicated serial P re-executes the two historical cases plus the new case:
+3/3, no LEAK, no sampled children of those three named test PIDs.
+Short-lived processes can evade sampling. We have not identified the historical/concurrent
+output-handle owner or proved a runner false positive. **Leak attribution remains unresolved**;
+N is assertion-green but not leak-clean. P does not overwrite or waive N or prior C2.
+Fable owns disposition/further bounded diagnosis; no unsupported claim of an inherent runner bug.
+
+### Commands, run IDs and counts
+
+All commands start with
+`CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-chat-20260915`
+and run this checkout's guarded `just test`. Every run used `--locked --offline --retries 0`.
+No live profile/native credential prompt or raw test runner was used.
+Rust toolchain 1.95.0-aarch64-apple-darwin; rustfmt 1.9.0-stable (59807616e1).
+Manual scoped fixes and `rustfmt --edition 2024 --config skip_children=true <18 allocated Rust files>`
+precede final affected tests; the last fixture-print correction was formatted before N.
+Stable rustfmt warns imports_granularity is nightly-only. No broad formatter or unguarded
+`just fix`/Clippy build was run under the frozen guarded-test-only build restriction.
+Final API/library source bytes were unchanged by subsequent native-fixture-only corrections.
+
+Artifact root is the exact target above. Each stem below has raw `.log` and matching `.xml`
+copied before the next run; N0 has only a log. L/N/P also have `-processes.json`.
+Suffix commands below include their package/selector; append the common flags above.
+Counts are passed/failed/filtered; JUnit execution skips are 0 for every executed run.
+
+| ID / artifact stem (prefix impl04-) | Command after just test | UUID | Exit; counts |
+| --- | --- | --- | --- |
+| D / core-diagnostic | -p codex-core -E 'test(accounting_chat_)' | ce42f488-5152-41fe-94cf-4d5f2bdfa711 | 100; 26/2/3622 |
+| M1- / m1-broken | -p codex-core -E 'test(accounting_chat_)' | c9d7b5a4-fa11-46ac-9bb4-1ff4b2b3f4e0 | 100; 27/1/3622 |
+| M1+ / m1-restored | -p codex-core -E 'test(accounting_chat_native_top_level_error_retains_usage)' | 9e20856d-d8d7-47f3-87f6-9b69f547805f | 0; 1/0/3649 |
+| M2- / m2-broken | -p codex-core -E 'test(accounting_chat_native_literal_partial_and_zero_goldens)' | 5cc66b2c-c07d-4d45-b97c-33563202638d | 100; 0/1/3649 |
+| M2-C4- / m2-c4-broken | same M2 command; C4 temporarily first | 93c055dc-aa3c-4f45-ae84-a84d854813ae | 100; 0/1/3649 |
+| M2+ / m2-restored | same M2 command; original vector order restored | 81e6ce93-0652-482c-b4f1-9a92bded7ac2 | 0; 1/0/3649 |
+| M3-old / m3-original-broken | -p codex-core -E 'test(accounting_chat_native_invalid_evidence_no_repair)' | 7dfdce81-1c26-4c2e-9e8a-20631f55cf9d | 0; 1/0/3649; nondiscriminating |
+| M3- / m3-strengthened-broken | same M3 command; strengthened assertion | 8fa0609a-d48c-48e1-a9b3-2b30fd710887 | 100; 0/1/3649 |
+| A / final-api-transport | -p codex-api -p codex-login -p codex-http-client | 53117b3e-7350-4ae8-a96f-00c25f6c1841 | 0; 499/0/0 |
+| L / final-core-lib | -p codex-core --lib -E 'test(accounting) \| test(session_startup_prewarm) \| test(incremental) \| test(agent::role::) \| test(stage_one) \| test(chat_completions)' | 56d02d3c-a861-4b08-b1f3-d96f033e0231 | 0; 86/0/2382 |
+| N0 / final-core-native | same N command | no run UUID; compilation failed | 101; 0/0/unknown |
+| N / final-core-native-2 | -p codex-core --test all -E 'test(accounting_) \| test(prewarm) \| test(incremental) \| test(chat_completions)' --success-output final | 47a8f9a2-2209-43f3-ae46-dd9b6d42d795 | 0; 97/0/1081; 1 LEAK, 1 slow |
+| P / leak-probe | -p codex-core -E 'test(accounting_chat_bootstrap_cancel_scope_and_latch) \| test(accounting_chat_native_delete_rejects_late_usage) \| test(accounting_chat_native_cumulative_and_separate_usage)' --test-threads 1 | d65acf99-c88f-44f2-ba58-134720226ff5 | 0; 3/0/3647 |
+
+M1 bypassed the pre-error observer: persisted observation count failed 0 versus 1, then restored passed.
+M2 mapped write Missing to Number(0): C1 incorrectly became 0.00161/full-known and C4 lost
+unknown populations; both failed, then restored C1/C2/C4 passed.
+M3 removed only the outer Chat check. Original case still passed because resolve's independent
+latch prevented a second POST. Preserve that counterexample: the frozen “no-repair POST assertion”
+alone cannot distinguish this layer. Added no-StreamError/reconnect assertion; mutation then failed.
+Restored M3 passes in N, preserving the no-second-POST assertions and all five bad-evidence vectors.
+No mutation remains in the candidate; no extra test function or production retry behavior was added.
+
+### Complete final 38-case map
+
+Prefixes unchanged: A = chat_accounting_; U = accounting_chat_; N = accounting_chat_native_.
+Run IDs refer to the table. Each row is an executed named function, not an added table-vector count.
+N's raw success output preserves CHAT_POSTS/CHAT_HELD_POST, independent CHAT_ATTEMPTS /
+CHAT_OBSERVATIONS, literal CHAT_PRICES and complete CHAT_TOTALS. Raw native telemetry is synthetic.
+All 38 named assertions pass; cumulative's concurrent LEAK remains explicitly unqualified.
+
+| Prefix / suffix | Run and asserted evidence |
+| --- | --- |
+| A presence_matrix | A; five fields null/zero/positive/max and malformed scalar/detail vectors |
+| A top_level_containers_only | A; absent/null/empty, sibling error, ignored nested/vendor evidence |
+| A raw_before_lossy_chunk_conversion | A; raw partial/null observation before typed conversion |
+| A error_envelope_usage_precedes_error | A; held write blocks error; sibling/prior usage retained |
+| A done_and_finish_reason_are_not_usage | A; stop/length/tool/content_filter/error/unknown parity |
+| A positions_and_cumulative_patches | A; positions 1/3/5, repeated/null/missing patches, comments |
+| A observation_barrier_and_rejection | A; held completion, release and rejection |
+| A invalid_evidence_stops_before_done | A; malformed JSON/count, bounded error, no completion |
+| A consumer_cancel_and_interruption | A; closed consumer/held observer, EOF/idle/activity timeout |
+| A none_preserves_legacy | A; legacy corpus and ordinary wrapper event equality |
+| U bootstrap_is_lazy_once_and_mode_local | L; deferred UUID, no installation before resolve, once |
+| U direct_auth_and_gateway_eligibility | L; typed direct positive, override/gateway/routing negatives |
+| U exact_final_endpoint_binding | L; complete URL vectors and actual post-auth mutation denial |
+| U auth_and_guard_before_admission | L; auth rejection and live stage-one guard, zero sends/rows |
+| U bootstrap_cancel_scope_and_latch | L/P; missing state/cancel/write rejection/RAII; old LEAK retained |
+| U response_local_attempt_identity | L; reversed observer order, immutable attempt/source association |
+| U role_inheritance_reserved_id_parity | L; instruction reload/complete mode; reserved override rejected |
+| U prices_exact_source_and_unknown | L; literal tuple/time/rates, unsupported rows, retained sources |
+| N off_and_mode_isolation | N; five Chat modes/state vectors plus Responses/Anthropic cross-wire |
+| N literal_partial_and_zero_goldens | N/M2+; C1/C2/C4, seven populations, unknown write/full price |
+| N cumulative_and_separate_usage | N assertions PASS + LEAK; P PASS; one subtotal, positions 1/3/5 |
+| N top_level_error_retains_usage | N/M1+; one persisted prefix with/without sibling usage |
+| N http_retry_policy | N; 503 two linked attempts; direct 429 one unknown intent |
+| N outer_retry_prefix_and_ids | N; prefix/EOF then success, two sources, C3 0.00242/null |
+| N api_key_401_no_invented_refresh | N; one unknown attempt, no manufactured refresh |
+| N redirects_no_follow_or_repair | N; all five ON 3xx target-zero; OFF 307/308 follow controls |
+| N mismatched_endpoint_never_sends | N; wrong approved endpoint variants, zero installation/POST |
+| N admission_barrier_and_failure | N; real writer lock stops POST; trigger prevents second admission |
+| N observation_failure_no_repair | N; trigger preserves prior rows, one attempt/no repair |
+| N invalid_evidence_no_repair | N/M3 restored; five invalid vectors, prefix, no reconnect/repair |
+| N cancellation_and_two_reopens | N; pre-admission/unknown/prefix cancel, two reopens, fresh request |
+| N spawned_role_children_and_fork | N; 5 POSTs/3 owners/2 edges, role retry only, fork adds no rows |
+| N delete_rejects_late_usage | N/P; public delete/late denial, other owner, OFF deletion; old LEAK retained |
+| N immutable_prices_and_unpriced_rows | N; eligible/Astra/remote, priority absent on wire, two reopens |
+| N sampling_auxiliary_scope | N; two same-turn sampling IDs via successful tool; remote compact excluded |
+| N gateway_exclusion_and_header_parity | N; gateway success/released retry, header rotation/no rows |
+| N missing_usage_and_correlation | N; absent/null/EOF, independent requests with reused provider ID |
+| N finish_reason_and_tool_parity | N; one stop/length/error attempt; successful tool then second sampling |
+
+### Qualification and remaining handoff
+
+Final affected suites: 682 passing assertions (499 A + 86 L + 97 N), no failed tests or runner
+execution skips; N has one unresolved LEAK. P is additional diagnostic evidence, not replacement.
+The exact new manifest is 10 API + 8 Core unit + 20 native = 38, reconciled against JUnit.
+Governance checkers pass (plans 3/3, current sprints 116/archive126); final whitespace check passes.
+Per-file manifest, SHA-256s and conservative size accounting are in the worker RETURN.
+Independent Fable review, receiving state/TaskNode-session and combined API/proxy gates remain
+manager-owned and unexecuted here. No Clippy pass, leak-clean qualification or acceptance claimed.
+Internal-only TUI/code-blind N/A remains proposed for inaccessible activation/OFF; integrator
+acceptance and later S03/S04 confined execution/independent review/live repositories remain required.
+No human-test readiness, human sign-off, benchmark, release or push. S02 open; S03 dependent.
+
+Final size against implementation start 57cbefabb: 3232 additions+deletions / 917 non-test;
+conservative per-file max with the unformatted launch candidate: 3237 / 922. Target overrun
+237 total; STOP margin 63 total / 378 non-test. No size-ceiling extension is inferred.

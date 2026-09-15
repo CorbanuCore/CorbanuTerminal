@@ -1688,11 +1688,16 @@ async fn run_sampling_request(
         crate::config::AccountingMode::DirectOpenAiChat { .. }
     ) && turn_context.config.model_provider_id == "openai"
         && turn_context.provider.info().wire_api == codex_model_provider_info::WireApi::Chat)
-        .then(|| crate::accounting::chat::DeferredChatSampling::new(
-            Arc::clone(&sess), turn_context.sub_id.clone(), turn_context.config.accounting.clone(),
-        ));
+        .then(|| {
+            crate::accounting::chat::DeferredChatSampling::new(
+                Arc::clone(&sess),
+                turn_context.sub_id.clone(),
+                turn_context.config.accounting.clone(),
+            )
+        });
     let _chat_scope = crate::accounting::chat::Scope::attach(
-        Arc::clone(&client_session.chat_accounting), chat_accounting.clone(),
+        Arc::clone(&client_session.chat_accounting),
+        chat_accounting.clone(),
     )?;
     let base_instructions = sess.get_base_instructions().await;
     trace_turn_timing("after_get_base_instructions", sampling_started_at);

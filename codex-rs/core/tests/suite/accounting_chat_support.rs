@@ -7,9 +7,17 @@ use codex_login::CodexAuth;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_state::accounting::*;
 use core_test_support::test_codex::{TestCodexBuilder, test_codex};
-pub use existing::{
-    attempts, connection, observations, payloads, stop, submit, terminal, wait_observations,
-};
+pub use existing::{connection, payloads, stop, submit, terminal, wait_observations};
+pub async fn attempts(db: &codex_state::StateRuntime) -> anyhow::Result<Vec<Attempt>> {
+    let rows = existing::attempts(db).await?;
+    eprintln!("CHAT_ATTEMPTS {}", serde_json::to_string(&rows)?);
+    Ok(rows)
+}
+pub async fn observations(db: &codex_state::StateRuntime) -> anyhow::Result<Vec<Observation>> {
+    let rows = existing::observations(db).await?;
+    eprintln!("CHAT_OBSERVATIONS {}", serde_json::to_string(&rows)?);
+    Ok(rows)
+}
 use serde_json::{Value, json};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -38,8 +46,7 @@ pub fn builder(endpoint: String, mode: AccountingMode) -> TestCodexBuilder {
             };
             config.accounting = mode;
             config.model_catalog = Some(
-                codex_models_manager::bundled_models_response()
-                    .expect("synthetic Chat fixture"),
+                codex_models_manager::bundled_models_response().expect("synthetic Chat fixture"),
             );
             config
                 .features
@@ -51,23 +58,35 @@ pub fn usage() -> Value {
     json!({"prompt_tokens":100,"prompt_tokens_details":{"cached_tokens":20},
         "completion_tokens":40,"completion_tokens_details":{"reasoning_tokens":10},"total_tokens":140})
 }
-pub fn data(value: Value) -> String { format!("data: {value}\n\n") }
-pub fn event(usage: Value) -> String { data(json!({"id":"reused-provider-id","choices":[],"usage":usage})) }
+pub fn data(value: Value) -> String {
+    format!("data: {value}\n\n")
+}
+pub fn event(usage: Value) -> String {
+    data(json!({"id":"reused-provider-id","choices":[],"usage":usage}))
+}
 pub fn ending(reason: &str) -> String {
     data(json!({"id":"reused-provider-id","choices":[{"index":0,
         "delta":{"role":"assistant","content":"fixture complete"},"finish_reason":reason}]}))
         + "data: [DONE]\n\n"
 }
-pub fn success(usage: Value) -> String { event(usage) + &ending("stop") }
+pub fn success(usage: Value) -> String {
+    event(usage) + &ending("stop")
+}
 pub async fn mount(server: &wiremock::MockServer, payload: String) {
     wiremock::Mock::given(wiremock::matchers::method("POST"))
         .and(wiremock::matchers::path("/v1/chat/completions"))
-        .respond_with(wiremock::ResponseTemplate::new(200).set_body_raw(payload, "text/event-stream"))
-        .mount(server).await;
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_raw(payload, "text/event-stream"),
+        )
+        .mount(server)
+        .await;
 }
 pub async fn posts(server: &wiremock::MockServer, expected: usize) {
     let requests = server.received_requests().await.unwrap();
     assert_eq!(requests.len(), expected);
+    eprintln!(
+        "CHAT_POSTS {expected} POST /v1/chat/completions model=gpt-5.6-sol include_usage=true"
+    );
     for request in requests {
         assert_eq!(request.method.as_str(), "POST");
         assert_eq!(request.url.path(), "/v1/chat/completions");
@@ -78,16 +97,31 @@ pub async fn posts(server: &wiremock::MockServer, expected: usize) {
     }
 }
 pub fn golden(cached: bool, zero: bool, count: i64) -> anyhow::Result<DayTotals> {
-    let values = if zero { [0;7] } else { [100,0,if cached {20} else {0},0,40,10,140] };
+    let values = if zero {
+        [0; 7]
+    } else {
+        [100, 0, if cached { 20 } else { 0 }, 0, 40, 10, 140]
+    };
     Ok(DayTotals {
         measured: std::array::from_fn(|i| Metric {
-            known: values[i] * count, unknown: if i == 1 || i == 3 || (i == 2 && !cached) {count} else {0},
+            known: values[i] * count,
+            unknown: if i == 1 || i == 3 || (i == 2 && !cached) {
+                count
+            } else {
+                0
+            },
         }),
         known_usd: match (zero, cached, count) {
-            (true,_,_) => "0", (false,true,1) => "0.00121",
-            (false,true,2) => "0.00242", (false,false,1) => "0.0012", _ => unreachable!(),
-        }.to_string().try_into()?,
-        unknown_estimates: count, attempts: count,
+            (true, _, _) => "0",
+            (false, true, 1) => "0.00121",
+            (false, true, 2) => "0.00242",
+            (false, false, 1) => "0.0012",
+            _ => unreachable!(),
+        }
+        .to_string()
+        .try_into()?,
+        unknown_estimates: count,
+        attempts: count,
     })
 }
 pub async fn absent(db: &codex_state::StateRuntime) -> anyhow::Result<()> {
@@ -120,6 +154,7 @@ pub async fn totals(
     else {
         anyhow::bail!("unavailable fixture day")
     };
+    eprintln!("CHAT_TOTALS {totals:?}");
     Ok(totals)
 }
 
@@ -139,9 +174,10 @@ impl Gate {
         let endpoint = format!("http://{}/v1", listener.local_addr()?);
         let (tx, incoming) = mpsc::channel(8);
         let task = tokio::spawn(async move {
+            let mut connections = tokio::task::JoinSet::new();
             while let Ok((mut socket, _)) = listener.accept().await {
                 let tx = tx.clone();
-                tokio::spawn(async move {
+                connections.spawn(async move {
                     let mut bytes = Vec::new();
                     let end = loop {
                         let mut buf = [0; 4096];
@@ -159,7 +195,8 @@ impl Gate {
                     };
                     let headers = String::from_utf8(bytes[..end].to_vec())
                         .expect("synthetic Chat fixture");
-                    assert!(headers.starts_with("POST /v1/chat/completions "));
+                    let compact = headers.starts_with("POST /v1/responses/compact ");
+                    assert!(compact || headers.starts_with("POST /v1/chat/completions "));
                     let length: usize = headers
                         .lines()
                         .find_map(|line| {
@@ -179,10 +216,15 @@ impl Gate {
                         }
                         bytes.extend_from_slice(&buf[..n]);
                     }
+                    eprintln!("CHAT_HELD_POST compact={compact}");
                     let body = serde_json::from_slice(&bytes[end..end + length])
                         .expect("synthetic Chat fixture");
                     let (chunks, mut rx) = mpsc::channel::<String>(8);
                     if tx.send(Held { body, headers, chunks }).await.is_err() {
+                        return;
+                    }
+                    if compact {
+                        let _ = socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 13\r\nConnection: close\r\n\r\n{\"output\":[]}").await;
                         return;
                     }
                     if socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n").await.is_err() { return; }

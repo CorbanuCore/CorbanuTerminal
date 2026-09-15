@@ -17,11 +17,11 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use uuid::Uuid;
 
+#[path = "accounting_chat.rs"]
+pub(crate) mod chat;
 #[cfg(test)]
 #[path = "accounting_policy_tests.rs"]
 mod policy_tests;
-#[path = "accounting_chat.rs"]
-pub(crate) mod chat;
 #[path = "accounting_prices.rs"]
 mod prices;
 #[path = "accounting_responses.rs"]
@@ -165,8 +165,15 @@ impl Sampling {
                 Dialect::Inclusive,
                 "responses",
             ),
-            AccountingMode::DirectOpenAiChat { scope, approved_endpoint } => (
-                scope, approved_endpoint, "openai", Dialect::Inclusive, "chat/completions",
+            AccountingMode::DirectOpenAiChat {
+                scope,
+                approved_endpoint,
+            } => (
+                scope,
+                approved_endpoint,
+                "openai",
+                Dialect::Inclusive,
+                "chat/completions",
             ),
             AccountingMode::Disabled => return Err(CodexErr::Fatal(FAILURE.into())),
         };
@@ -260,7 +267,9 @@ impl Sampling {
         };
         let prices = match self.pricing {
             Pricing::Anthropic => prices::original(model, self.scope, dispatched_at)?,
-            Pricing::Responses => prices::responses_original(model, self.scope, dispatched_at, tier)?,
+            Pricing::Responses => {
+                prices::responses_original(model, self.scope, dispatched_at, tier)?
+            }
             Pricing::Chat => prices::chat_original(model, self.scope, dispatched_at)?,
         };
         store.admit(self.owner, &attempt, &prices, now()).await?;

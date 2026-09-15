@@ -22,8 +22,7 @@ async fn accounting_chat_native_http_retry_policy() -> anyhow::Result<()> {
         Mock::given(method("POST"))
             .and(path("/v1/chat/completions"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_raw(success(usage()), "text/event-stream"),
+                ResponseTemplate::new(200).set_body_raw(success(usage()), "text/event-stream"),
             )
             .with_priority(2)
             .mount(&server)
@@ -44,7 +43,10 @@ async fn accounting_chat_native_http_retry_policy() -> anyhow::Result<()> {
             assert_eq!(records[1].retry_of, Some(records[0].attempt_id));
             assert_eq!(records[1].request_id, records[0].request_id);
         }
-        assert_eq!(totals(&db, &records[0]).await?.unknown_estimates, expected as i64);
+        assert_eq!(
+            totals(&db, &records[0]).await?.unknown_estimates,
+            expected as i64
+        );
         stop(&test).await;
     }
     Ok(())
@@ -80,7 +82,9 @@ async fn accounting_chat_native_api_key_401_no_invented_refresh() -> anyhow::Res
 async fn accounting_chat_native_redirects_no_follow_or_repair() -> anyhow::Result<()> {
     for status in [301, 302, 303, 307, 308] {
         for on in [true, false] {
-            if !on && !matches!(status, 307 | 308) { continue; }
+            if !on && !matches!(status, 307 | 308) {
+                continue;
+            }
             let origin = MockServer::start().await;
             let target = MockServer::start().await;
             Mock::given(method("POST"))
@@ -92,8 +96,7 @@ async fn accounting_chat_native_redirects_no_follow_or_repair() -> anyhow::Resul
                 .await;
             Mock::given(path("/v1/chat/completions"))
                 .respond_with(
-                    ResponseTemplate::new(200)
-                        .set_body_raw(success(usage()), "text/event-stream"),
+                    ResponseTemplate::new(200).set_body_raw(success(usage()), "text/event-stream"),
                 )
                 .mount(&target)
                 .await;
@@ -105,7 +108,8 @@ async fn accounting_chat_native_redirects_no_follow_or_repair() -> anyhow::Resul
             };
             let test = builder(endpoint, mode)
                 .with_config(|config| config.model_provider.stream_max_retries = Some(1))
-                .build_with_auto_env(&origin).await?;
+                .build_with_auto_env(&origin)
+                .await?;
             submit(&test).await?;
             terminal(&test).await?;
             assert_eq!(origin.received_requests().await.unwrap().len(), 1);
@@ -136,10 +140,7 @@ async fn accounting_chat_native_outer_retry_prefix_and_ids() -> anyhow::Result<(
         .await?;
     submit(&test).await?;
     let first = gate.next().await?;
-    first
-        .chunks
-        .send(event(usage()))
-        .await?;
+    first.chunks.send(event(usage())).await?;
     let db = test.codex.state_db().unwrap();
     wait_observations(&db, 1).await?;
     drop(first);
@@ -176,9 +177,7 @@ async fn accounting_chat_native_observation_failure_no_repair() -> anyhow::Resul
     submit(&test).await?;
     let held = gate.next().await?;
     let db = test.codex.state_db().unwrap();
-    held.chunks
-        .send(event(usage()))
-        .await?;
+    held.chunks.send(event(usage())).await?;
     wait_observations(&db, 1).await?;
     let before = observations(&db).await?;
     sqlx::query("CREATE TRIGGER reject_responses_observation BEFORE INSERT ON draft_accounting_observations BEGIN SELECT RAISE(ABORT, 'fixture'); END")
@@ -237,12 +236,18 @@ async fn accounting_chat_native_admission_barrier_and_failure() -> anyhow::Resul
 async fn accounting_chat_native_cancellation_and_two_reopens() -> anyhow::Result<()> {
     let server = MockServer::start().await;
     let mut gate = Gate::start().await?;
-    let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint)).build_with_auto_env(&server).await?;
+    let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
+        .build_with_auto_env(&server)
+        .await?;
     let db = test.codex.state_db().unwrap();
     let mut lock = connection(&db).await?;
     sqlx::query("BEGIN IMMEDIATE").execute(&mut lock).await?;
     submit(&test).await?;
-    assert!(tokio::time::timeout(Duration::from_millis(100), gate.next()).await.is_err());
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), gate.next())
+            .await
+            .is_err()
+    );
     test.codex.submit(Op::Interrupt).await?;
     terminal(&test).await?;
     sqlx::query("ROLLBACK").execute(&mut lock).await?;
@@ -261,9 +266,7 @@ async fn accounting_chat_native_cancellation_and_two_reopens() -> anyhow::Result
         let held = gate.next().await?;
         let db = test.codex.state_db().unwrap();
         if prefix {
-            held.chunks
-                .send(event(usage()))
-                .await?;
+            held.chunks.send(event(usage())).await?;
             wait_observations(&db, 1).await?;
         }
         test.codex.submit(Op::Interrupt).await?;
@@ -296,11 +299,7 @@ async fn accounting_chat_native_cancellation_and_two_reopens() -> anyhow::Result
             gate.no_pending();
             if index == 1 {
                 submit(&reopened).await?;
-                gate.next()
-                    .await?
-                    .chunks
-                    .send(success(usage()))
-                    .await?;
+                gate.next().await?.chunks.send(success(usage())).await?;
                 terminal(&reopened).await?;
                 let fresh = attempts(&db).await?;
                 assert_ne!(fresh[1].request_id, records[0].request_id);
@@ -327,20 +326,25 @@ async fn accounting_chat_native_delete_rejects_late_usage() -> anyhow::Result<()
     let db = test.codex.state_db().unwrap();
     assert_eq!(attempts(&db).await?.len(), 1);
     let other = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
-        .build_with_auto_env(&server).await?;
+        .build_with_auto_env(&server)
+        .await?;
     submit(&other).await?;
     gate.next().await?.chunks.send(success(usage())).await?;
     terminal(&other).await?;
     let other_db = other.codex.state_db().unwrap();
     let other_rows = attempts(&other_db).await?;
-    let other_prices: Vec<Snapshot> = payloads(&other_db, "draft_accounting_price_snapshots").await?;
+    let other_prices: Vec<Snapshot> =
+        payloads(&other_db, "draft_accounting_price_snapshots").await?;
     db.delete_thread(test.session_configured.thread_id).await?;
     held.chunks.send(success(usage())).await?;
     terminal(&test).await?;
     assert!(attempts(&db).await?.is_empty());
     assert!(observations(&db).await?.is_empty());
     assert_eq!(attempts(&other_db).await?, other_rows);
-    assert_eq!(payloads::<Snapshot>(&other_db, "draft_accounting_price_snapshots").await?, other_prices);
+    assert_eq!(
+        payloads::<Snapshot>(&other_db, "draft_accounting_price_snapshots").await?,
+        other_prices
+    );
     let home = other.home.clone();
     let rollout = other.codex.rollout_path().unwrap();
     let owner = other.session_configured.thread_id;
@@ -348,13 +352,17 @@ async fn accounting_chat_native_delete_rejects_late_usage() -> anyhow::Result<()
     drop(other);
     other_db.close().await;
     let off = builder(gate.endpoint.clone(), AccountingMode::Disabled)
-        .resume(&server,home,rollout).await?;
+        .resume(&server, home, rollout)
+        .await?;
     let off_db = off.codex.state_db().unwrap();
     off_db.delete_thread(owner).await?;
     assert!(attempts(&off_db).await?.is_empty());
     gate.no_pending();
     stop(&off).await;
     stop(&test).await;
+    drop(held);
+    off_db.close().await;
+    db.close().await;
     Ok(())
 }
 
@@ -401,8 +409,15 @@ async fn accounting_chat_native_spawned_role_children_and_fork() -> anyhow::Resu
         .await?;
     submit(&test).await?;
     let root = gate.next().await?;
-    let tool = root.body["tools"].as_array().unwrap().iter()
-        .find_map(|item| item["function"]["name"].as_str().filter(|n| n.ends_with("spawn_agent")))
+    let tool = root.body["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find_map(|item| {
+            item["function"]["name"]
+                .as_str()
+                .filter(|n| *n == "spawn_agent_plaintext")
+        })
         .expect("native Chat spawn tool");
     let calls: Vec<_> = ["default", "fixture"].iter().enumerate().map(|(index, role)| {
         let arguments = json!({"task_name":format!("child_{index}"),"message":"fixture","agent_type":role,"fork_turns":"none"}).to_string();
@@ -489,7 +504,9 @@ async fn accounting_chat_native_invalid_evidence_no_repair() -> anyhow::Result<(
         wait_observations(&db, 1).await?;
         let before = observations(&db).await?;
         held.chunks.send(format!("data: {bad}\n\ndata: [DONE]\n\n")).await?;
-        assert!(terminal(&test).await?.iter().any(|e| matches!(e, EventMsg::Error(_))));
+        let events = terminal(&test).await?;
+        assert!(events.iter().any(|e| matches!(e, EventMsg::Error(_))));
+        assert!(!events.iter().any(|e| matches!(e, EventMsg::StreamError(_))), "accounting failure must bypass reconnect handling");
         assert_eq!(observations(&db).await?, before);
         assert_eq!(attempts(&db).await?.len(), 1);
         gate.no_pending();

@@ -103,12 +103,7 @@ impl codex_api::ChatUsageObserver for ResponseEvidence {
                 let attempt = self.attempt.get().ok_or_else(|| anyhow::anyhow!(FAILURE))?;
                 let usage = usage.map_err(|_| anyhow::anyhow!(FAILURE))?;
                 self.sampling
-                    .observe_patch(
-                        attempt,
-                        self.source,
-                        position,
-                        super::chat::patch(usage)?,
-                    )
+                    .observe_patch(attempt, self.source, position, super::chat::patch(usage)?)
                     .await
             }
             .await;

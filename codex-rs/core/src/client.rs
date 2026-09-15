@@ -3051,31 +3051,44 @@ impl ModelClientSession {
                     deferred.exclude()?;
                     None
                 }
-                Some(deferred) => deferred.resolve(
-                    self.client.state.provider.info(),
-                    client_setup.auth.as_ref(),
-                    &client_setup.api_provider.url_for_path(CHAT_COMPLETIONS_ENDPOINT),
-                    &request,
-                ).await?,
+                Some(deferred) => {
+                    deferred
+                        .resolve(
+                            self.client.state.provider.info(),
+                            client_setup.auth.as_ref(),
+                            &client_setup
+                                .api_provider
+                                .url_for_path(CHAT_COMPLETIONS_ENDPOINT),
+                            &request,
+                        )
+                        .await?
+                }
                 None => None,
             };
             let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
             let transport = if evidence.is_some() {
-                let client = codex_login::default_client::create_client_for_route_without_redirects(
-                    &self.client.http_client_factory,
-                    &client_setup.api_provider.url_for_path(CHAT_COMPLETIONS_ENDPOINT),
-                    ClientRouteClass::Api,
-                ).map_err(std::io::Error::from)?;
+                let client =
+                    codex_login::default_client::create_client_for_route_without_redirects(
+                        &self.client.http_client_factory,
+                        &client_setup
+                            .api_provider
+                            .url_for_path(CHAT_COMPLETIONS_ENDPOINT),
+                        ClientRouteClass::Api,
+                    )
+                    .map_err(std::io::Error::from)?;
                 crate::memory_stage_one::StageOneGuardedTransport::new(
                     ReqwestTransport::from_http_client(client),
                     self.client.stage_one_memory_binding.get().cloned(),
                 )
             } else {
-                self.client.build_api_transport(&client_setup.api_provider, CHAT_COMPLETIONS_ENDPOINT)?
+                self.client
+                    .build_api_transport(&client_setup.api_provider, CHAT_COMPLETIONS_ENDPOINT)?
             };
             let transport = transport.map_inner(|inner| {
                 crate::accounting::transport::AccountingTransport::new(
-                    inner, evidence.clone(), request.model.clone(),
+                    inner,
+                    evidence.clone(),
+                    request.model.clone(),
                 )
             });
             let inference_trace_attempt = inference_trace.start_attempt();
@@ -3088,7 +3101,9 @@ impl ModelClientSession {
                 client_setup.api_auth,
             )
             .with_telemetry(Some(request_telemetry), Some(sse_telemetry))
-            .with_usage_observer(evidence.map(|value| value as Arc<dyn codex_api::ChatUsageObserver>));
+            .with_usage_observer(
+                evidence.map(|value| value as Arc<dyn codex_api::ChatUsageObserver>),
+            );
             trace_stream_timing(
                 "chat_http_before_stream_request",
                 provider_request_started_at,

@@ -94,7 +94,10 @@ impl<T: HttpTransport> ChatCompletionsClient<T> {
         }
     }
 
-    pub fn with_usage_observer(mut self, observer: Option<Arc<dyn accounting::ChatUsageObserver>>) -> Self {
+    pub fn with_usage_observer(
+        mut self,
+        observer: Option<Arc<dyn accounting::ChatUsageObserver>>,
+    ) -> Self {
         self.usage_observer = observer;
         self
     }
@@ -1142,8 +1145,17 @@ async fn process_chat_sse(
     response_id_hint: Option<String>,
     metrics: Option<ChatCallMetrics>,
 ) {
-    process_chat_sse_observed(stream, tx_event, idle_timeout, actionable_silence_timeout,
-        telemetry, response_id_hint, metrics, None).await;
+    process_chat_sse_observed(
+        stream,
+        tx_event,
+        idle_timeout,
+        actionable_silence_timeout,
+        telemetry,
+        response_id_hint,
+        metrics,
+        None,
+    )
+    .await;
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1248,7 +1260,11 @@ async fn process_chat_sse_observed(
             let patch = match next {
                 Some(next) => {
                     position = next;
-                    if sse.data.trim() == "[DONE]" { Ok(None) } else { accounting::decode(&sse.data) }
+                    if sse.data.trim() == "[DONE]" {
+                        Ok(None)
+                    } else {
+                        accounting::decode(&sse.data)
+                    }
                 }
                 None => Err(accounting::InvalidChatUsage),
             };
@@ -1261,9 +1277,11 @@ async fn process_chat_sse_observed(
                     result = observer.observe(position, usage) => result,
                 };
                 if invalid || result.is_err() {
-                    let _ = tx_event.send(Err(ApiError::Stream(
-                        "Chat accounting evidence rejected".into(),
-                    ))).await;
+                    let _ = tx_event
+                        .send(Err(ApiError::Stream(
+                            "Chat accounting evidence rejected".into(),
+                        )))
+                        .await;
                     return;
                 }
             }

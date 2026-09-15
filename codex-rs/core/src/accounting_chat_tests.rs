@@ -18,7 +18,10 @@ fn mode() -> AccountingMode {
     }
 }
 fn provider() -> ModelProviderInfo {
-    ModelProviderInfo { wire_api: WireApi::Chat, ..ModelProviderInfo::create_openai_provider(Some(ENDPOINT.into())) }
+    ModelProviderInfo {
+        wire_api: WireApi::Chat,
+        ..ModelProviderInfo::create_openai_provider(Some(ENDPOINT.into()))
+    }
 }
 fn auth() -> CodexAuth {
     CodexAuth::from_api_key("synthetic-accounting-test")
@@ -58,7 +61,12 @@ impl Fixture {
     async fn resolve(&self) -> anyhow::Result<Arc<Sampling>> {
         Ok(self
             .deferred
-            .resolve(&provider(), Some(&auth()), &format!("{ENDPOINT}/chat/completions"), &body())
+            .resolve(
+                &provider(),
+                Some(&auth()),
+                &format!("{ENDPOINT}/chat/completions"),
+                &body(),
+            )
             .await?
             .unwrap())
     }
@@ -71,9 +79,11 @@ impl Fixture {
             .sqlite()
             .open_read_only_pool(&self.db.sqlite().state_db_path())
             .await?;
-        let values: Vec<String> = sqlx::query_scalar(query).fetch_all(&pool).await?;
+        let values = sqlx::query_scalar::<_, String>(query)
+            .fetch_all(&pool)
+            .await;
         pool.close().await;
-        values
+        values?
             .into_iter()
             .map(|value| Ok(serde_json::from_str(&value)?))
             .collect()
@@ -128,16 +138,32 @@ async fn accounting_chat_direct_auth_and_gateway_eligibility() -> anyhow::Result
             5 => request.provider_options = Some(serde_json::json!({})),
             6 => request.plugins = Some(vec![]),
             7 => route.env_key = Some("ANTHROPIC_API_KEY".into()),
-            8 => route.auth = Some(serde_json::from_value(serde_json::json!({"command":"never-execute-fixture"}))?),
-            9 => route.http_headers = Some([("API-KEY".into(),"unread".into())].into()),
-            10 => route.env_http_headers = Some([("Api-Key".into(),"UNREAD_FIXTURE".into())].into()),
+            8 => {
+                route.auth = Some(serde_json::from_value(
+                    serde_json::json!({"command":"never-execute-fixture"}),
+                )?)
+            }
+            9 => route.http_headers = Some([("API-KEY".into(), "unread".into())].into()),
+            10 => {
+                route.env_http_headers = Some([("Api-Key".into(), "UNREAD_FIXTURE".into())].into())
+            }
             _ => unreachable!(),
         }
         route.base_url = Some(ENDPOINT.into());
         assert!(!eligible(&route, Some(&auth()), &request));
         let fixture = Fixture::new().await?;
-        assert!(fixture.deferred.resolve(&route, Some(&auth()),
-            &format!("{ENDPOINT}/chat/completions"), &request).await?.is_none());
+        assert!(
+            fixture
+                .deferred
+                .resolve(
+                    &route,
+                    Some(&auth()),
+                    &format!("{ENDPOINT}/chat/completions"),
+                    &request
+                )
+                .await?
+                .is_none()
+        );
         assert!(!fixture.deferred.sampling.initialized());
     }
     let fixture = Fixture::new().await?;
@@ -145,7 +171,12 @@ async fn accounting_chat_direct_auth_and_gateway_eligibility() -> anyhow::Result
     assert!(
         fixture
             .deferred
-            .resolve(&provider(), None, &format!("{ENDPOINT}/chat/completions"), &body())
+            .resolve(
+                &provider(),
+                None,
+                &format!("{ENDPOINT}/chat/completions"),
+                &body()
+            )
             .await
             .is_err()
     );
@@ -218,25 +249,46 @@ async fn accounting_chat_auth_and_guard_before_admission() -> anyhow::Result<()>
         (0, 0)
     );
     let (mut owner, _) = crate::session::tests::make_session_and_context().await;
-    owner.services.agent_control = owner.services.agent_control.clone()
-        .with_effective_security_policy(codex_security_policy::SecurityLevel::Permissive,
-            owner.thread_id, false)?;
+    owner.services.agent_control = owner
+        .services
+        .agent_control
+        .clone()
+        .with_effective_security_policy(
+            codex_security_policy::SecurityLevel::Permissive,
+            owner.thread_id,
+            false,
+        )?;
     let owner = Arc::new(owner);
     let memory = crate::memory_stage_one::StageOneMemoryClient::new(
-        Arc::downgrade(&owner), futures::future::pending().boxed().shared(),
-        owner.thread_id, &owner.provider().await,
-    ).await?;
+        Arc::downgrade(&owner),
+        futures::future::pending().boxed().shared(),
+        owner.thread_id,
+        &owner.provider().await,
+    )
+    .await?;
     let guard = crate::memory_stage_one::StageOneGuardedTransport::new(
         AccountingTransport::new(Probe(sends.clone()), Some(evidence), "gpt-5.6-sol".into()),
         Some(memory.binding_for_fixture(owner.thread_id)?),
     );
     // The actual guard checks the live owner before invoking admitted stream().
-    let controller = owner.services.agent_control.trusted_security_controller().unwrap();
-    let change = controller.confirm_level_change(codex_security_policy::SecurityLevel::Moderate,
-        codex_security_policy::RevocationState::new())?;
+    let controller = owner
+        .services
+        .agent_control
+        .trusted_security_controller()
+        .unwrap();
+    let change = controller.confirm_level_change(
+        codex_security_policy::SecurityLevel::Moderate,
+        codex_security_policy::RevocationState::new(),
+    )?;
     controller.apply_confirmed_change(change)?;
     assert!(guard.stream(request()).await.is_err());
-    assert_eq!((sends.load(Ordering::SeqCst), fixture.rows::<Attempt>(ATTEMPTS).await?.len()), (0,0));
+    assert_eq!(
+        (
+            sends.load(Ordering::SeqCst),
+            fixture.rows::<Attempt>(ATTEMPTS).await?.len()
+        ),
+        (0, 0)
+    );
     Ok(())
 }
 
@@ -244,11 +296,15 @@ async fn accounting_chat_auth_and_guard_before_admission() -> anyhow::Result<()>
 async fn accounting_chat_bootstrap_cancel_scope_and_latch() -> anyhow::Result<()> {
     let (mut session, _) = crate::session::tests::make_session_and_context().await;
     session.services.state_db = None;
-    let deferred =
-        DeferredChatSampling::new(Arc::new(session), "missing-state".into(), mode());
+    let deferred = DeferredChatSampling::new(Arc::new(session), "missing-state".into(), mode());
     assert!(
         deferred
-            .resolve(&provider(), Some(&auth()), &format!("{ENDPOINT}/chat/completions"), &body())
+            .resolve(
+                &provider(),
+                Some(&auth()),
+                &format!("{ENDPOINT}/chat/completions"),
+                &body()
+            )
             .await
             .is_err()
     );
@@ -262,6 +318,7 @@ async fn accounting_chat_bootstrap_cancel_scope_and_latch() -> anyhow::Result<()
     assert!(fixture.deferred.check().is_err());
     assert!(!fixture.deferred.sampling.initialized());
     assert!(fixture.rows::<Attempt>(ATTEMPTS).await.is_err());
+    fixture.db.close().await;
     let fixture = Fixture::new().await?;
     let slot = Slot::default();
     let scope = Scope::attach(slot.clone(), Some(fixture.deferred.clone()))?;
@@ -276,6 +333,7 @@ async fn accounting_chat_bootstrap_cancel_scope_and_latch() -> anyhow::Result<()
     assert!(fixture.deferred.check().is_err());
     drop(scope);
     assert!(read(&slot)?.is_none());
+    fixture.db.close().await;
     Ok(())
 }
 
@@ -314,13 +372,31 @@ async fn accounting_chat_response_local_attempt_identity() -> anyhow::Result<()>
     assert_eq!(attempts[1].request_id, fixture.deferred.request);
     assert_ne!(observations[0].source, observations[1].source);
     assert_eq!(sends.load(Ordering::SeqCst), 2);
-    let pool = fixture.db.sqlite().open_read_only_pool(&fixture.db.sqlite().state_db_path()).await?;
-    let bound: Vec<String> = sqlx::query_scalar("SELECT attempt_id FROM draft_accounting_observations ORDER BY rowid")
-        .fetch_all(&pool).await?;
+    let pool = fixture
+        .db
+        .sqlite()
+        .open_read_only_pool(&fixture.db.sqlite().state_db_path())
+        .await?;
+    let bound: Vec<String> =
+        sqlx::query_scalar("SELECT attempt_id FROM draft_accounting_observations ORDER BY rowid")
+            .fetch_all(&pool)
+            .await?;
     pool.close().await;
-    assert_eq!(bound, vec![attempts[1].attempt_id.to_string(),attempts[0].attempt_id.to_string()]);
-    assert_eq!(observations[0].patch.input, codex_state::accounting::Presence::Number(7.try_into()?));
-    assert_eq!(observations[1].patch.input, codex_state::accounting::Presence::Number(3.try_into()?));
+    assert_eq!(
+        bound,
+        vec![
+            attempts[1].attempt_id.to_string(),
+            attempts[0].attempt_id.to_string()
+        ]
+    );
+    assert_eq!(
+        observations[0].patch.input,
+        codex_state::accounting::Presence::Number(7.try_into()?)
+    );
+    assert_eq!(
+        observations[1].patch.input,
+        codex_state::accounting::Presence::Number(3.try_into()?)
+    );
     Ok(())
 }
 
@@ -346,8 +422,13 @@ async fn accounting_chat_role_inheritance_reserved_id_parity() -> anyhow::Result
             nickname_candidates: None,
         },
     );
-    std::fs::write(&role, "developer_instructions = \"synthetic instruction role\"\n")?;
-    crate::agent::role::apply_role_to_config(&mut config, Some("fixture")).await.map_err(anyhow::Error::msg)?;
+    std::fs::write(
+        &role,
+        "developer_instructions = \"synthetic instruction role\"\n",
+    )?;
+    crate::agent::role::apply_role_to_config(&mut config, Some("fixture"))
+        .await
+        .map_err(anyhow::Error::msg)?;
     assert_eq!(config.model_provider, provider());
     assert_eq!(config.accounting, fixture.deferred.mode);
     std::fs::write(&role, "[model_providers.openai]\nname = \"fixture role\"\n")?;
@@ -388,10 +469,22 @@ async fn accounting_chat_role_inheritance_reserved_id_parity() -> anyhow::Result
 
 fn body() -> codex_api::ChatCompletionsRequest {
     codex_api::ChatCompletionsRequest {
-        model: "gpt-5.6-sol".into(), messages: vec![], stream: true,
-        stream_options: None, tools: vec![], tool_choice: None, parallel_tool_calls: None,
-        prompt_cache_key: None, response_format: None, emit_usage: None, enable_thinking: None,
-        reasoning_effort: None, reasoning: None, provider: None, plugins: None, provider_options: None,
+        model: "gpt-5.6-sol".into(),
+        messages: vec![],
+        stream: true,
+        stream_options: None,
+        tools: vec![],
+        tool_choice: None,
+        parallel_tool_calls: None,
+        prompt_cache_key: None,
+        response_format: None,
+        emit_usage: None,
+        enable_thinking: None,
+        reasoning_effort: None,
+        reasoning: None,
+        provider: None,
+        plugins: None,
+        provider_options: None,
     }
 }
 
@@ -409,19 +502,39 @@ impl codex_api::AuthProvider for Mutate {
 
 #[tokio::test]
 async fn accounting_chat_exact_final_endpoint_binding() -> anyhow::Result<()> {
-    for endpoint in ["https://127.0.0.1:1/v1/chat/completions", "http://localhost:1/v1/chat/completions",
-        "http://127.0.0.1:2/v1/chat/completions", "http://127.0.0.1:1/v1/responses",
-        "http://127.0.0.1:1/v1/chat/completions?q=1", "http://user@127.0.0.1:1/v1/chat/completions",
-        "http://127.0.0.1:1/v1/chat/completions#fragment"] {
+    for endpoint in [
+        "https://127.0.0.1:1/v1/chat/completions",
+        "http://localhost:1/v1/chat/completions",
+        "http://127.0.0.1:2/v1/chat/completions",
+        "http://127.0.0.1:1/v1/responses",
+        "http://127.0.0.1:1/v1/chat/completions?q=1",
+        "http://user@127.0.0.1:1/v1/chat/completions",
+        "http://127.0.0.1:1/v1/chat/completions#fragment",
+    ] {
         let fixture = Fixture::new().await?;
         let sends = Arc::new(AtomicUsize::new(0));
-        let transport = AccountingTransport::new(Probe(sends.clone()),
-            Some(ResponseEvidence::new(fixture.resolve().await?)), "gpt-5.6-sol".into());
-        let api = codex_api::ChatCompletionsClient::new(transport,
+        let transport = AccountingTransport::new(
+            Probe(sends.clone()),
+            Some(ResponseEvidence::new(fixture.resolve().await?)),
+            "gpt-5.6-sol".into(),
+        );
+        let api = codex_api::ChatCompletionsClient::new(
+            transport,
             provider().to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?,
-            Arc::new(Mutate(endpoint)));
-        assert!(api.stream_request(body(), Default::default()).await.is_err());
-        assert_eq!((sends.load(Ordering::SeqCst), fixture.rows::<Attempt>(ATTEMPTS).await?.len()), (0,0));
+            Arc::new(Mutate(endpoint)),
+        );
+        assert!(
+            api.stream_request(body(), Default::default())
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            (
+                sends.load(Ordering::SeqCst),
+                fixture.rows::<Attempt>(ATTEMPTS).await?.len()
+            ),
+            (0, 0)
+        );
         assert!(fixture.deferred.check().is_err());
     }
     Ok(())
