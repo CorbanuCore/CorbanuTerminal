@@ -554,3 +554,343 @@ N/A for this round. Existing S03/S04 functional gates and manager receiving rema
 S02 remains in_progress. No human acceptance, benchmark, release, public activation or push claimed.
 Size against 57cbefabb: 3286 total / 956 non-test; prior conservative formatting allowance yields
 3291 / 961 (STOP margin 9 / 339). No size extension or scope expansion claimed.
+
+## Cleanup preflight — acct-cleanup-01 (2026-09-15)
+
+Status: **BLOCKED BEFORE RUST EDITS OR TESTS: writable-scope mismatch**.
+Worker gpt-6-astra / high; receiving owner Fable manager; same branch/worktree above.
+Launch/base `390098a46e298f69e2453e79ed7ec1e373acffc5`, verified clean.
+Allocation digest `88f856b4ef3a61a7d05112f6fe142ab6a138f16dd3ff1e95af560499d02c9dd9`;
+claim `c4529d75-187f-4711-985c-fba3bb98fb42`.
+Brief `/private/tmp/fmgr.Q1SIYZ/briefs/acct-cleanup-01.json` verified with
+`shasum -a 256`, exit 0, SHA-256
+`7a25dba783686783d35c94c419989390999b9406ece5de5c276769861f4fc4ce`.
+This receipt is routine process evidence for the existing PF-60-S02 cleanup;
+**Measurement targets** and its requirement excerpt above remain the product linkage.
+
+The frozen twelve-path write scope excludes the implementation/fixture owners needed
+for all three requested items. Read-only inspection established:
+
+1. Policy fixtures `accounting_policy_wait_cancellation_and_post_wait_failure_have_no_effect`
+   and `accounting_policy_observe_wait_cancel_and_start_cancel_publish_nothing` live in
+   `codex-rs/core/src/accounting_policy_tests.rs`, not the allowed `accounting.rs`.
+   Their local `Fixture::two_reopens` already awaits database close; remaining held
+   sampling/runtime references need investigation in that fixture. No attribution of
+   their historical LEAK markers is established. Allowed Anthropic/Chat fixtures have
+   omitted stop/drop/awaited-close cleanup, but this blocked unit changes none of them.
+2. The actual per-frame comparison is `StageOneMemoryBinding::check_stream` in
+   excluded `codex-rs/core/src/memory_stage_one.rs`: it reads
+   `owner.services.model_client().provider_info()`. It cannot be corrected at its
+   owner within the allocation. A lag-window behavioral regression also needs an
+   explicitly allocated test location; no new shape assertion or mutation is claimed.
+3. The consuming builder in allowed `client.rs` has a production consumer in excluded
+   `memory_stage_one.rs`: `StageOneMemoryClient::new` assigns the chained return to
+   its `client` field. The premise that both call sites discard the return is false
+   on the exact launch tree. Another production/debug call is in excluded
+   `codex_thread.rs`; two test calls are in excluded `accounting_websocket_tests.rs`.
+   Returning unit would require adapting the production consumer to keep compilation.
+
+Manager must reconcile the allocation with these exact owners before redispatch;
+no scope extension, resource-drop workaround in production, suppression, or provider
+policy change is inferred. All three items remain open. No new production defect
+is diagnosed beyond the already-disclosed provider window; this is an allocation
+finding, not evidence that any LEAK is a production issue. Test isolation guidance
+was read. Rust tests/mutations: **not run**, zero executed cases, no leak-clean claim.
+Collection remains OFF; S02 in_progress, S03 dependent. Internal-only preflight has
+no interactive change; later S03/S04 functional gates remain. No acceptance or push.
+
+Initial `python3 docs/sprints/check.py` exited 1: adding the receipt link made the
+sprint 102 lines, above its 100-line limit. Removed two blank lines, preserving all
+ledger text, before the final replay.
+Final documentation checks: `git diff --check`, `python3 docs/plans/check.py`, and
+`python3 docs/sprints/check.py`, each exit 0; plans 3/3 active, sprints 116 current /
+126 archived. Only this receipt and the S02 Remaining ledger changed.
+
+## Cleanup revision — acct-cleanup-03 (2026-09-15)
+
+**Partial return: fixture teardown and borrowed binding API corrected; provider lag
+remains blocked by the frozen writable scope, and three broader-run LEAK markers
+remain unresolved (including the new binding regression).** This is routine internal cleanup
+within PF-60-S02, not new collection/authorization behavior. Product linkage:
+**Measurement targets** — “No commercial performance numbers have been supplied.
+The following metrics must be instrumented, with targets set through the decision
+rights defined above.” Collection remains OFF; S02 remains in_progress.
+
+Worker gpt-6-astra / high; receiving owner Fable manager.
+Base `82841b9cdb4452535982cd898efc634a9dec2a33`, branch
+`bootstrap/acct-chat-20260915`, worktree as above; clean base verified.
+Allocation `764325a671d962074f9009d753eb5af38d8d48646f6f8a65da0ef606a7617a0d`;
+claim `c96c1e9f-ed8e-4961-ad71-39a6e5063ed0`.
+The assigned brief is intentionally named `acct-cleanup-02.json`; its verified
+SHA-256 is `cbc6fbc3ba43ced406d359ab3f30a781aed7a002de5a2207971d47e482de07ff`.
+`shasum -a 256` exited 0 before implementation.
+
+### Item dispositions
+
+1. **Fixture teardown corrected; historical causality not established.**
+   Policy teardown releases the held Sampling/runtime before both database reopens;
+   the completed OFF start future and fresh Sampling are explicitly dropped.
+   Anthropic presence/resumes, OFF deletion, and role fixtures stop/drop the owned
+   test sessions and await StateRuntime close. The OFF/schema and role/edge probes
+   now explicitly close their detached SQLite connections. Chat mismatched-endpoint
+   iterations retain the database handle, stop/drop the fixture, and await close.
+   GateServer still uses its existing Drop/abort behavior; no joined-socket claim.
+   Baseline targeted replay already passed without LEAK, so these changes identify
+   teardown omissions, not a proven owner of every historical output-handle marker.
+   No suppression, serial override, filtering-out of named cases, or production
+   resource-drop workaround was introduced. No new production leak was diagnosed.
+2. **Provider lag not fixed; no mutation proof claimed.**
+   `StageOneMemoryBinding::check_stream` remains unchanged. The two publication
+   windows are `core/src/session/mod.rs` (configuration assignment at 1650,
+   client replacement at 1666) and `core/src/session/turn_context.rs` (869/914).
+   Both are outside this allocation. The retained case
+   `accounting_responses_ws_stream_guard_checks_live_policy_with_session_state_locked`
+   explicitly requires successful frame checks while the state mutex is held;
+   switching to await/try-lock-denial would regress that behavior. Falling back to
+   the published client would retain the race. Fable should allocate both update
+   sites plus a deterministic lag-window regression so provider publication can be
+   synchronized with the configuration transition without blocking frame checks.
+   No state-lock workaround or new provider/security policy was substituted.
+3. **Consuming signature corrected, with behavioral mutation evidence.**
+   `with_stage_one_memory_binding` now borrows `&self` and returns `Result<()>`.
+   Its shared OnceLock effect and method name remain stable; the memory constructor
+   retains its ModelClient explicitly. Excluded callers continue compiling unchanged.
+   The brief's original “both call sites discard the return” premise remains false:
+   the memory constructor consumed it on the base tree. The new case
+   `accounting_chat_borrowed_binding_denies_existing_and_future_clones` installs
+   through a borrowed client and verifies actual guarded transport denial on a
+   pre-existing clone and a subsequent clone, zero sends, and duplicate rejection.
+   Mutation replaced shared-slot installation with `OnceLock::new().set(binding)`.
+   It compiled and failed at “binding installed through a borrowed client must deny
+   dispatch on every clone”; restoring shared installation passed.
+
+### Commands and evidence
+
+Every Rust command uses this checkout's guarded `just test`, disposable profiles,
+`CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-chat-20260915`,
+and `--locked --offline --retries 0`. No native credential prompt occurred.
+Artifact stems below live in that target; paired .log/.xml files preserve each run.
+The baseline was captured in execution session 2922, not copied to a .log/.xml pair.
+
+The exact leak selectors supplied in the brief expand to **seven cases**, because
+`accounting_anthropic_role_disables_actua` matches both request and stream retry:
+
+```text
+test(accounting_policy_observe_wait_cancel_and_start_) |
+test(accounting_policy_wait_cancellation_and_post_wait_) |
+test(accounting_anthropic_default_off_does_not_) |
+test(accounting_anthropic_native_presence_pri) |
+test(accounting_anthropic_role_disables_actua) |
+test(accounting_chat_native_mismatched_endpoint_)
+```
+
+Baseline command: `just test -p codex-core -E '<the six selectors above>'` with
+the common environment/options. Run `d4ac63d5-9611-4948-bfdb-8a611204a81f`,
+exit 0: 7 passed, 0 failed, 0 LEAK, 3643 filtered skips, 1.346s.
+Final focused command adds
+`| test(accounting_chat_borrowed_binding_denies_existing_and_future_clones)`
+to that same expression. Run `c3635a9b-0249-441e-ac06-c8e71e2e20ba`,
+exit 0: 8 passed, 0 failed, 0 LEAK, 3643 filtered skips, 0.974s.
+Artifact stem: `cleanup03-final-focused`. Its seven exact fixture markers:
+
+```text
+PASS accounting::policy_tests::accounting_policy_observe_wait_cancel_and_start_cancel_publish_nothing
+PASS accounting::policy_tests::accounting_policy_wait_cancellation_and_post_wait_failure_have_no_effect
+PASS suite::accounting_anthropic::accounting_anthropic_default_off_does_not_install_and_installed_off_deletion_cleans
+PASS suite::accounting_anthropic::accounting_anthropic_native_presence_prices_and_two_reopens
+PASS suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_request_retry
+PASS suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_stream_retry
+PASS suite::accounting_chat::accounting_chat_native_mismatched_endpoint_never_sends
+```
+
+Binding-only command: `just test -p codex-core --lib -E 'test(accounting_chat_borrowed_binding_denies_existing_and_future_clones)'`, common options:
+
+| State / artifact stem | Nextest UUID | Exit; counts |
+| --- | --- | --- |
+| Initial / cleanup03-binding-restored-initial | 54229a9a-af35-4abd-b452-ea220e68961e | 0; 1 passed, 0 failed, 2468 filtered |
+| Mutation / cleanup03-binding-mutated | 2ef9400d-4729-49a2-889e-96d4ef337187 | 100; 0 passed, 1 failed, 2468 filtered |
+| Restored / cleanup03-final-focused | c3635a9b-0249-441e-ac06-c8e71e2e20ba | 0; named case passed within 8/8 |
+
+Final compatibility command (common environment/options):
+`just test -p codex-core -E 'test(accounting_) | test(pf_30_s04_) | test(prewarm) | test(incremental) | test(chat_completions)'`.
+Artifact stem `cleanup03-final-regressions`; UUID
+`e118a4b6-da99-4cab-bdc0-2c58a3623a78`, exit 0:
+**154 passed, 0 failed, 3 LEAK, 1 slow, 3497 filtered skips, 48.837s**.
+All seven requested fixture cases and the existing state-lock guard case passed
+without LEAK in this broader run. The three literal markers were:
+
+```text
+LEAK accounting::prices::tests::accounting_responses_prices_exact_and_unknown
+LEAK accounting::chat::tests::accounting_chat_borrowed_binding_denies_existing_and_future_clones
+LEAK accounting::policy_tests::accounting_policy_serial_retry_identity_and_time_sample_after_gate
+```
+
+These markers remain unresolved, not waived by exit 0 or the focused pass.
+The new binding fixture uses the existing session helper with `state_db: None`,
+disabled shell snapshots, no submission loop, and a synthetic transport; an
+awaited SQLite close cannot explain its marker. The price case is synchronous
+price projection. No output-handle/process ownership was established, and no
+sleep, retry-until-green, test removal or speculative production change was used.
+The policy serial case uses the same revised reopen helper. This is additional
+leak evidence requiring scoped diagnosis; no production leak is asserted.
+All four copied JUnit files match the recorded UUID and test/failure totals,
+with zero execution skips. Historical failed/mutated/leaky attempts remain intact.
+
+Formatting used `rustfmt --edition 2024 --config skip_children=true` on exactly
+the six changed Rust files; exit 0, then the same command with `--check`, exit 0.
+This scoped formatter respects the frozen writable boundary; the broad repository
+formatter and Clippy build were not run. Stable rustfmt's existing
+`imports_granularity` warning remains. Final affected tests ran after restoration
+and formatting; no Rust edits followed them.
+
+Internal API/fixture cleanup adds no user workflow. TUI, code-blind package
+execution, and live-repository qualification are N/A for this worker correction;
+named-integrator acceptance of that internal-only disposition remains pending.
+Later S03/S04 functional gates, shared receiving gates, and provider repair remain
+open. No human acceptance, benchmark, S02 completion, release or push is claimed.
+Final documentation checks: `git diff --check`, `python3 docs/plans/check.py`,
+`python3 docs/sprints/check.py` each exited 0; 3/3 active plans, 116 current /
+126 archived sprints. Eight changed paths remain inside the frozen allocation;
+this cleanup is below both the 600-line target and the 800-line stop threshold.
+
+## Provider publication revision — acct-cleanup-04 (2026-09-15)
+
+**Provider lag fixed with pre-fix failure proof. The three assigned selectors
+pass without LEAK in all new runs, but historical output-handle ownership is
+still unresolved; no fixture or production lifetime defect was established.**
+No speculative teardown change or production resource-drop workaround is included.
+This is a correction within the existing PF-60 product initiative / in-progress
+PF-60-S02, with routine fixture diagnosis. Product heading **Measurement targets**:
+“No commercial performance numbers have been supplied. The following metrics must
+be instrumented, with targets set through the decision rights defined above.”
+
+Worker gpt-6-astra/high; Fable manager receiving. Clean base verified:
+`bcca366365b332fbf969a4c8ab71e15d5d2fd733`, branch
+`bootstrap/acct-chat-20260915`, worktree
+`/Volumes/CorbanuDrive/Corbanu/worktrees/acct-chat-20260915`.
+Allocation `7db66da9c880709bd096811c2956bbb8054cc1e3e9f5a1d89303fa45f4e01b02`;
+claim `e14a413f-115b-44a3-a259-54b0da7654b6`.
+Frozen brief `/private/tmp/fmgr.Q1SIYZ/briefs/acct-cleanup-04.json` was read
+after `shasum -a 256` verified
+`bbc77b2c71f4d8ab4e30680a319fdca01f4e0afcd6884e483a63c751423769d5`.
+The current explicit allocation includes both publication owners; prior scope
+stops and all prior failures/LEAK markers above remain historical evidence.
+
+### Provider-window correction and counterexample
+
+Both `update_settings` and `new_turn_with_sub_id` now build and publish their
+replacement ModelClient while holding the session-state writer lock, before
+publishing the new session configuration. Concurrent updates cannot reorder
+client publication. The synchronous per-frame guard continues reading the
+published client without taking the session-state lock; its provider cannot lag
+a configuration another operation can observe. No new provider or denial policy.
+
+The new case
+`accounting_chat_frame_guard_denies_provider_change_before_client_publication`
+uses an actual ConfigContributor callback on each real update path. It first
+checks that the old binding permits frames, switches to the built-in Anthropic
+provider, observes the new provider through the session API, takes the real state
+mutex, and checks a frame while retaining that mutex. It compares behavior, not
+client pointer identity or implementation shape. No test-only production hook
+was added. Existing locked-state live-policy regression remains passing.
+
+Before production edits, nextest run
+`91d8618a-06a6-45c9-b12d-963c73795dc8` compiled and failed, exit 100:
+both “settings” and “turn” observations were `(true, Ok(()))`, where
+`(true, Err(ProviderChanged))` was required. This proves both real lag windows,
+not a synthesized state mutation. After the correction, the unchanged assertion
+passes for both paths.
+
+### Per-marker lifetime classification
+
+Nextest 0.9.143's [LEAK definition](https://nexte.st/docs/features/leaky-tests/)
+is incomplete stdout/stderr closure after the test process exits (default 100ms).
+It does not inspect Rust references, database pools or heap allocations. The
+[versioned detector](https://github.com/nextest-rs/nextest/blob/cargo-nextest-0.9.143/nextest-runner/src/runner/executor.rs)
+waits on captured child descriptors after obtaining process exit. Consequently,
+a marker alone cannot identify a surviving Session or SQLite runtime.
+
+| Assigned case | What the fixture holds and releases | Classification / remaining uncertainty |
+| --- | --- | --- |
+| `accounting_responses_prices_exact_and_unknown` | Synchronous owned catalogs, snapshots, serialized tuples and UUIDs. Bundled catalog loading is `serde_json::from_str(include_str!(...))`; no runtime, pool, session, process spawn or asynchronous teardown. Values drop on return. | No fixture teardown omission or production lifetime defect found. Historical marker says captured stdout/stderr had not finished closing; the actual historical holder was not captured. It is not evidence of a retained pricing object. |
+| `accounting_chat_borrowed_binding_denies_existing_and_future_clones` | Local Arc<Session>, memory client, ModelClient handles/clones, policy controller, synthetic Probe. Binding owns only Weak<Session>; no owner cycle. Session helper has `state_db: None`, disabled shell snapshots, no submission loop, test-local environment with no startup task or remote client. All local owners drop on return. | The predecessor's fixture does not omit a SQLite close because it has no database. No concrete cleanup defect or production lifetime defect found. Diagnostic PID 45308 exited, with no descendant observed; historical captured-pipe owner remains unknown. |
+| `accounting_policy_serial_retry_identity_and_time_sample_after_gate` | Sampling owns the state runtime during admission. Both joined admission futures finish; the semaphore permit is dropped. `two_reopens` drops Sampling, awaits runtime close and drops it; each reopened runtime/pool and the detached query connection is explicitly closed. | No remaining fixture teardown omission or production lifetime defect found. Diagnostic PID 45330 exited, with no descendant observed. Neither a held Sampling nor an unclosed database was established as the historical pipe holder. |
+
+No additional fixture changes were justified by this inspection. This is not a
+definitive fixture-versus-production attribution of the original three markers:
+**that part of item 2 remains unresolved**. A clean replay does not prove historical
+causality. No production lifetime finding triggered the brief's stop condition.
+
+### Test commands and preserved evidence
+
+Every Rust run used this checkout's guarded `just test`, disposable profiles,
+`CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-chat-20260915`,
+and `--locked --offline --retries 0`. No raw Cargo test/nextest run, live profile,
+native credential prompt, new external inference or credential inspection.
+Artifact stems below are under that target, with matching .log/.xml pairs.
+Nextest emits its original JUnit at `codex-rs/target/nextest/local/junit.xml`;
+copied UUIDs/totals were verified. Baseline was retained in tool session 34462,
+not as a copied .log/.xml pair.
+
+- Baseline: `just test -p codex-core --lib -E '<the three assigned exact selectors>' --success-output final`.
+  Run `ded389c1-16ea-4264-bf7e-a49e613e5d2d`, exit 0:
+  3 passed / 0 failed / 0 LEAK, 2466 filtered, 0.381s.
+- Pre-fix: same command selecting only the new provider-window case.
+  Stem `cleanup04-provider-before`, UUID above; 0 passed / 1 failed,
+  2469 filtered, 0.216s. The assertion diff is preserved in log and JUnit.
+- Final focused: three assigned selectors, new provider-window case and
+  `accounting_responses_ws_stream_guard_checks_live_policy_with_session_state_locked`.
+  Stem `cleanup04-final-focused`, run `7d29f893-9c27-447b-a8ac-6dec6333346f`,
+  exit 0: 5 passed / 0 failed / 0 LEAK, 2465 filtered, 0.247s.
+
+Both broader runs used `just test -p codex-core --success-output final` plus:
+
+```text
+-E 'test(accounting_) | test(pf_30_s04_) | test(prewarm) |
+test(incremental) | test(chat_completions) |
+test(session_update_settings_model_provider_rebuilds_model_client) |
+test(session_new_turn_refreshes_runtime_gpu_provider_endpoint_without_reselection) |
+test(config_change_contributor_observes_effective_config_changes)'
+```
+
+| Run / artifact stem | UUID | Result |
+| --- | --- | --- |
+| Process diagnostic / `cleanup04-final-regressions` | `a8d7d788-c133-4779-b1f7-f2aa6fc46e17` | exit 0; 158 passed, 0 failed, 1 slow, **1 LEAK**, 3494 filtered, 50.330s |
+| Final uninstrumented / `cleanup04-final-uninstrumented` | `ea0e14f3-4f0a-4461-8b97-4676c022b421` | exit 0; **158 passed, 0 failed, 0 LEAK**, 1 slow, 3494 filtered, 50.429s |
+
+All three assigned cases emit PASS in both broader runs. The diagnostic run
+additionally marked the new provider-window regression LEAK. It remains preserved,
+not waived by the subsequent pass. `cleanup04-process-probe.jsonl` sampled only
+the guarded run's descendants using PID/parent/process-group/command names and
+stdout/stderr pipe descriptors; exact args were collected only for known test
+binaries in the leased target. It observed PID 45323 for the new case, then its
+absence, with no descendants observed. This periodic probe misses short-lived
+processes between samples, does not inspect all inherited descriptors or identify
+historical holders, and itself adds scheduling load. It cannot prove a runner
+false positive. The final replay removes that probe without changing code,
+selector, concurrency, retries or timeout configuration. No retry-until-green loop.
+
+All four copied JUnit reports have zero execution skips, and matching UUID/counts.
+The three final Rust SHA-256s are:
+
+```text
+75df5d852bc7a947aaa48925a40ee935fcc5d54bac538695a7a17562873d3ce2  core/src/accounting_chat_tests.rs
+eeba5a414719048d45abe77031d7962324332b6719dbd5045355c5d7c90719d2  core/src/session/mod.rs
+0e33a2e7303f46ec3847c9c6c17f0057d7a57526ce4e5386e1207b1ba893a68b  core/src/session/turn_context.rs
+```
+
+Scoped `rustfmt --edition 2024 --config skip_children=true` ran on those three
+files before final tests; subsequent `--check` passed. Scope prevents a broad
+formatter; stable-toolchain imports_granularity warnings remain. No Clippy or
+whole-workspace build claimed. Final whitespace/plan/sprint check results are
+recorded below. No Rust changes followed the final affected tests.
+
+Collection remains OFF, S02 in_progress, S03 dependent. This is an implementation
+return, not functional or human-test readiness. Named-integrator internal-stage
+N/A acceptance, later S03/S04 isolated functional/true-TUI/live-repository gates
+and manager receiving remain outstanding. No new design/review agent, human
+acceptance, benchmark qualification, release or push claimed.
+
+Final checks: `git diff --check`, `python3 docs/plans/check.py`, and
+`python3 docs/sprints/check.py` each exited 0 (3/3 active plans; 116 current /
+126 archived sprints). Five changed paths are within the frozen writable scope.

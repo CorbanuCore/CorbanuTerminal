@@ -852,7 +852,12 @@ impl Session {
                         .model_provider_id
                         != next.original_config_do_not_use.model_provider_id
                         || state.session_configuration.provider != next.provider;
-                    let model_client_configuration = model_provider_changed.then(|| next.clone());
+                    if model_provider_changed {
+                        // Match update_settings: frame guards must see this provider
+                        // before its configuration is published, under the same writer lock.
+                        self.services
+                            .replace_model_client(self.build_model_client_for_configuration(&next));
+                    }
                     let stale_startup_prewarm = if model_provider_changed {
                         state.take_session_startup_prewarm()
                     } else {
@@ -873,7 +878,6 @@ impl Session {
                         permission_profile_changed,
                         previous_config,
                         new_config,
-                        model_client_configuration,
                         stale_startup_prewarm,
                     ))
                 }
@@ -887,7 +891,6 @@ impl Session {
             permission_profile_changed,
             previous_config,
             new_config,
-            model_client_configuration,
             stale_startup_prewarm,
         ) = match update_result {
             Ok(update) => update,
@@ -909,10 +912,6 @@ impl Session {
             self.schedule_mcp_prewarm();
         }
 
-        if let Some(configuration) = model_client_configuration {
-            self.services
-                .replace_model_client(self.build_model_client_for_configuration(&configuration));
-        }
         if let Some(startup_prewarm) = stale_startup_prewarm {
             startup_prewarm.abort().await;
         }

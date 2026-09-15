@@ -66,17 +66,36 @@ impl Fixture {
             .collect()
     }
 
-    async fn two_reopens(mut self, expected: Vec<Attempt>) -> Result<()> {
-        self.db.close().await;
+    async fn two_reopens(self, expected: Vec<Attempt>) -> Result<()> {
+        // Release the sampling owner before shutting down its SQLite workers.
+        let Self { home, db, sampling } = self;
+        drop(sampling);
+        db.close().await;
+        drop(db);
         for _ in 0..2 {
-            self.db = StateRuntime::init(
-                SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(self.home.path())?),
+            let db = StateRuntime::init(
+                SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path())?),
                 "anthropic".into(),
             )
             .await?;
-            AccountingStore::open(&self.db, now()).await?;
-            assert_eq!(self.attempts().await?, expected);
-            self.db.close().await;
+            AccountingStore::open(&db, now()).await?;
+            let pool = db
+                .sqlite()
+                .open_read_only_pool(&db.sqlite().state_db_path())
+                .await?;
+            let rows = sqlx::query_scalar::<_, String>(
+                "SELECT payload FROM draft_accounting_attempts ORDER BY rowid",
+            )
+            .fetch_all(&pool)
+            .await;
+            pool.close().await;
+            let actual: Vec<Attempt> = rows?
+                .into_iter()
+                .map(|row| serde_json::from_str(&row))
+                .collect::<Result<_, _>>()?;
+            assert_eq!(actual, expected);
+            db.close().await;
+            drop(db);
         }
         Ok(())
     }
@@ -115,6 +134,7 @@ async fn accounting_policy_wait_cancellation_and_post_wait_failure_have_no_effec
     ));
     // OFF fails before the gate; a valid start waits and can be dropped without a Slot.
     assert!(start.as_mut().await.is_err());
+    drop(start);
     let enabled = mode();
     let mut start = Box::pin(Sampling::start(
         fixture.db.clone(),
@@ -139,6 +159,7 @@ async fn accounting_policy_wait_cancellation_and_post_wait_failure_have_no_effec
     .await?;
     let attempt = fresh.admit(MODEL, ENDPOINT).await?;
     assert_eq!(attempt.retry_of, None);
+    drop(fresh);
     fixture.two_reopens(vec![attempt]).await
 }
 

@@ -202,8 +202,11 @@ async fn accounting_chat_native_mismatched_endpoint_never_sends() -> anyhow::Res
                 .any(|e| matches!(e, EventMsg::Error(_)))
         );
         assert!(server.received_requests().await.unwrap().is_empty());
-        absent(&test.codex.state_db().unwrap()).await?;
+        let db = test.codex.state_db().unwrap();
+        absent(&db).await?;
         stop(&test).await;
+        drop(test);
+        db.close().await;
     }
     Ok(())
 }

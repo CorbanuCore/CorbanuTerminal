@@ -1609,7 +1609,6 @@ impl Session {
             new_config,
             permission_profile_changed,
             mcp_inputs_changed,
-            model_client_configuration,
             stale_startup_prewarm,
         ) = {
             let mut state = self.state.lock().await;
@@ -1636,7 +1635,12 @@ impl Session {
                 .model_provider_id
                 != updated.original_config_do_not_use.model_provider_id
                 || state.session_configuration.provider != updated.provider;
-            let model_client_configuration = model_provider_changed.then(|| updated.clone());
+            if model_provider_changed {
+                // Publish while updates are serialized, before the new configuration
+                // becomes observable. Frame guards read this client without state locks.
+                self.services
+                    .replace_model_client(self.build_model_client_for_configuration(&updated));
+            }
             let stale_startup_prewarm = if model_provider_changed {
                 state.take_session_startup_prewarm()
             } else {
@@ -1656,15 +1660,10 @@ impl Session {
                 new_config,
                 permission_profile_changed,
                 mcp_inputs_changed,
-                model_client_configuration,
                 stale_startup_prewarm,
             )
         };
         self.emit_config_changed_contributors(previous_config.as_ref(), new_config.as_ref());
-        if let Some(configuration) = model_client_configuration {
-            self.services
-                .replace_model_client(self.build_model_client_for_configuration(&configuration));
-        }
         if let Some(startup_prewarm) = stale_startup_prewarm {
             startup_prewarm.abort().await;
         }
