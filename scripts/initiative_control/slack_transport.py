@@ -22,6 +22,11 @@ QUIET = logging.Logger("corbanu-slack-private", level=logging.CRITICAL + 1)
 QUIET.addHandler(logging.NullHandler())
 QUIET.propagate = False
 LEASE_NS = 5_000_000_000
+RESTART_REFUSED_EXIT = 73
+
+
+class RestartRefused(d.Invalid):
+    """A restart was denied before session admission; not a running listener exit."""
 
 
 def legacy_client_msg_id(attempt):
@@ -107,10 +112,13 @@ def restart_identity(journal):
 
 def restart_allowed(store, journal, pin):
     """Recheck under the transport lock immediately before creating a session."""
-    d.require(restart_identity(journal) == pin)
-    session = journal["lifecycle"]["session"]
-    d.require(session is not None and session["phase"] != "stopped")
-    fenced(store, journal)
+    try:
+        d.require(restart_identity(journal) == pin)
+        session = journal["lifecycle"]["session"]
+        d.require(session is not None and session["phase"] != "stopped")
+        fenced(store, journal)
+    except (OSError, ValueError, KeyError, TypeError):
+        raise RestartRefused() from None
 
 
 def fenced(store, value):
@@ -698,8 +706,13 @@ class Transport:
     def listen(self, seconds=60, stop=None, ongoing=False, *, runtime=None, restart_pin=None):
         d.require(self.live)
         d.require(type(runtime) is _ChildRuntime)
-        runtime.check(self.store, self.binding)  # Before even the SDK constructor can start threads.
-        self.gate(local=True)  # Connectivity recovery is not fresh send/work qualification.
+        try:
+            runtime.check(self.store, self.binding)  # Before even the SDK constructor can start threads.
+            self.gate(local=True)  # Connectivity recovery is not fresh send/work qualification.
+        except (OSError, ValueError, KeyError, TypeError):
+            if restart_pin is not None:
+                raise RestartRefused() from None
+            raise
         d.require(type(ongoing) is bool and 0 < seconds <= 60)
         stop = stop or threading.Event()
         deadline = None if ongoing else time.monotonic() + seconds

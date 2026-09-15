@@ -39,6 +39,21 @@ def supervised_child(root, guard, control, mode, endpoint):
     if mode == "ignore-term":
         fixtures.signal.signal(fixtures.signal.SIGTERM, fixtures.signal.SIG_IGN)
     def run(runtime, stop, data):
+        if mode.startswith("refuse-"):
+            store = a.Store(root)
+            with s.locked(store) as journal:
+                hazard = mode.removeprefix("refuse-")
+                if hazard == "stopped":
+                    journal["lifecycle"]["session"]["phase"] = "stopped"
+                elif hazard == "binding":
+                    journal["binding"] = dict(PIN, channel="GOTHER")
+                elif hazard == "epoch":
+                    journal["lifecycle"]["epoch"] += 1
+                elif hazard == "gap":
+                    s.ingress_count(store, mark=True)
+                elif hazard == "missing-fence":
+                    (store.root / ".ingress.fence").unlink()
+                store.write("transport", journal)
         assert not os.get_inheritable(runtime.fd)
         try:
             subprocess.Popen([sys.executable, "-c", "pass"], pass_fds=(runtime.fd,))
@@ -572,6 +587,130 @@ class ManagerTests(fixtures.LiveFixture):
         supervisor.options = dict(seconds=60, ongoing=True)
         return manager, supervisor, clock
 
+    def test_missing_fence_discloses_unknown_on_every_projection(self):
+        import decision_feed as feed
+        (self.root / ".ingress.fence").unlink()
+        before = self.store.read("transport")
+        status = m.project_status(self.store, NOW, True)
+        projected = feed.project_slack(self.feed_root, self.root, NOW, True)
+        cached = json.loads((self.feed_root / feed.SLACK_FILE).read_text())
+        for surface, value in (("status", status), ("feed", projected["status"]),
+                               ("cache", cached["status"]),
+                               ("dashboard", feed.slack_health(dict(slack=projected), NOW))):
+            with self.subTest(surface=surface):
+                self.assertIsNone(value["fence_gap"])
+                self.assertEqual(value["state"], "held")
+        self.assertEqual(self.store.read("transport"), before)
+        self.assertFalse((self.root / ".ingress.fence").exists())
+
+    def test_child_admission_refusal_is_not_an_exit_or_another_retry(self):
+        for hazard in ("stopped", "binding", "epoch", "gap", "missing-fence"):
+            with self.subTest(hazard=hazard):
+                manager, supervisor, clock = self.watchdog()
+                baseline = self.store.read("transport")
+                fence = (self.root / ".ingress.fence").read_bytes()
+                try:
+                    manager.process.kill()
+                    manager.process.wait(timeout=5)
+                    supervisor.tick()
+                    original_exits = m.project_status(self.store, NOW, True)["listener_exits"]
+                    clock[0] = 1
+                    with fixture_child("refuse-" + hazard, self.endpoint):
+                        supervisor.tick()
+                    child = manager.process
+                    self.assertIsNotNone(child)
+                    child.wait(timeout=5)
+                    supervisor.tick()
+                    journal = self.store.read("transport")
+                    event = journal["listener_events"][-1]
+                    with self.subTest(check="refusal"):
+                        self.assertEqual((event["kind"], event["returncode"], event["restart"]),
+                                         ("restart-refused", None, "held"))
+                    with self.subTest(check="exit-count"):
+                        self.assertEqual(m.project_status(self.store, NOW, True)["listener_exits"],
+                                         original_exits)
+                    clock[0] = 100
+                    with patch.object(manager, "start", side_effect=AssertionError("extra restart")):
+                        supervisor.tick()
+                    self.assertEqual(supervisor.restarts, 1)
+                    self.assertIsNone(supervisor.retry_at)
+                    self.assertIsNone(manager.process)
+                finally:
+                    manager.stop()
+                    self.store.write("transport", baseline)
+                    path = self.root / ".ingress.fence"
+                    path.write_bytes(fence)
+                    path.chmod(0o600)
+
+    def test_exit_timestamp_survives_delayed_journal_flush(self):
+        manager, supervisor, clock = self.watchdog()
+        moment = [NOW]
+        supervisor.now = lambda: moment[0]
+        manager.process.kill()
+        manager.process.wait(timeout=5)
+        with patch.object(self.store, "write", side_effect=OSError("fixture disk")):
+            supervisor.tick()
+            moment[0] = (d.stamp(NOW) + m.dt.timedelta(seconds=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            clock[0] = 10
+            supervisor.tick()
+            self.assertIsNone(manager.process)
+        supervisor.tick()
+        events = self.store.read("transport")["listener_events"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["at"], NOW)
+        self.assertEqual(events[0]["returncode"], -9)
+        self.assertEqual(supervisor.retry_at, 11)
+
+    def test_refused_pointer_different_request_keeps_retained_bytes(self):
+        key, row = self.uncertain_follower()
+        a.reconcile(self.store, key, "details", self.transport.reconcile(row["details"]["request"]))
+        def refuse(_):
+            raise a.NotDispatched()
+        a.send(self.store, key, PIN, refuse)
+        slot = d.digest([key, "follow-up", self.key])
+        rows = self.store.read("alerts")
+        request = rows[key]["notices"][slot]["request"]
+        request["payload"]["text"] += " retained different request"
+        request["payload_digest"] = d.digest(request["payload"])
+        self.store.write("alerts", rows)
+        retained = (self.root / "alerts.json").read_bytes()
+        for entry in ("supervisor", "notice", "supervisor"):
+            with self.subTest(entry=entry):
+                with (patch.object(self.transport, "exchange", side_effect=AssertionError("altered request posted")) as post,
+                      patch.object(self.store, "write", wraps=self.store.write) as write):
+                    if entry == "supervisor":
+                        a.retry_pending_pointers(self.store, self.transport)
+                    else:
+                        a.notice(self.store, key, "follow-up", self.key, PIN, self.transport.exchange)
+                self.assertEqual(post.call_count, 0)
+                self.assertEqual((self.root / "alerts.json").read_bytes(), retained)
+                self.assertEqual(write.call_count, 0)
+
+    def test_dashboard_discloses_cumulative_discard_count_after_reopen(self):
+        import decision_feed as feed
+        _, supervisor, _ = self.watchdog()
+        supervisor.record("child-exit", -9)
+        journal = self.store.read("transport")
+        journal["listener_events"] *= 131
+        self.store.write("transport", journal)
+        supervisor.record("restart-refused")
+        for expected in (4, 5):
+            reopened = a.Store(self.root)
+            status = m.project_status(reopened, NOW, True)
+            projected = feed.project_slack(self.feed_root, reopened.root, NOW, True)
+            cached = json.loads((self.feed_root / feed.SLACK_FILE).read_text())
+            for surface in (projected, cached):
+                dashboard = feed.slack_health(dict(slack=surface), NOW)
+                self.assertEqual(status["listener_events_pruned"], expected)
+                self.assertEqual(surface["status"]["listener_events_pruned"], expected)
+                self.assertEqual(dashboard["listener_events_pruned"], expected)
+                self.assertEqual(dashboard["listener_exits"], 131)
+            legacy = copy.deepcopy(projected)
+            del legacy["status"]["listener_events_pruned"]
+            self.assertEqual(feed.slack_health(dict(slack=legacy), NOW)["listener_events_pruned"], 0)
+            if expected == 4:
+                supervisor.record("restart-refused")
+
     def test_listener_incident_records_exit_and_three_unknown_arrivals(self):
         manager, supervisor, clock = self.watchdog()
         manager.process.kill()
@@ -765,7 +904,7 @@ class ManagerTests(fixtures.LiveFixture):
                 self.assertEqual(status["state"], "held")
                 self.assertEqual(status["supervisor_health"],
                     dict(state="unhealthy", event_flush_failures=second + 1, pending_events=1))
-                self.assertEqual(supervisor.pending_event, ("child-exit", -9))
+                self.assertEqual(supervisor.pending_event, ("child-exit", -9, NOW))
             incoming, writer = os.pipe()
             reader, outgoing = os.pipe()
             try:
@@ -945,7 +1084,7 @@ class ManagerTests(fixtures.LiveFixture):
                     survivor = manager.process
                     self.assertIsNotNone(survivor)
                     self.assertIsNone(survivor.poll())
-                    self.assertEqual(supervisor.pending_event, ("restart-refused", None))
+                    self.assertEqual(supervisor.pending_event, ("restart-refused", None, NOW))
                 if recover_before_exit:
                     supervisor.tick()  # Durable refusal disables ordinary restart options.
                     self.assertIsNone(supervisor.options)
@@ -1095,7 +1234,7 @@ class ManagerTests(fixtures.LiveFixture):
                       feed.slack_health(snapshot, "2026-09-12T13:00:00Z")):
             self.assertEqual((value["state"], value["fence_gap"]), ("held", 3))
         self.assertEqual(self.store.read("transport"), before)
-        for bad in (True, -1, "3", None):
+        for bad in (True, -1, "3"):
             with self.subTest(bad=bad), self.assertRaises(d.Invalid):
                 m.validate_status(dict(status, fence_gap=bad))
 
