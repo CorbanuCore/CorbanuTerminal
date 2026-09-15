@@ -8,6 +8,7 @@ from pathlib import Path
 import select
 import subprocess
 import sys
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -252,8 +253,11 @@ class ManagerTests(fixtures.LiveFixture):
             message=dict(user=PIN["human"], thread_ts=row["parent"]["receipt"]["ts"],
                          ts="101.000001", text="Ten testers", edited=dict(user=PIN["human"])),
             previous_message=dict(user=PIN["human"]), event_ts="105.000001"))
-        self.assertEqual(s.drain(self.store), 1)
-        self.assertFalse(m.finish(self.store, self.feed_root, key, self.transport, lambda: OWNER, NOW)["work_ready"])
+        self.assertFalse(self.transport.active)
+        self.assertNotIn("EvPriorEdit", self.store.read("transport")["events"])
+        self.assertEqual(s.drain(self.store), 0)
+        with self.assertRaises(d.Invalid):
+            m.finish(self.store, self.feed_root, key, self.transport, lambda: OWNER, NOW)
         self.assertEqual(d.load_fixture(self.feed_root, NOW)["decisions"][0], original)
 
     def test_follower_sdk_thread_routes_reply_to_new_question_only(self):
@@ -283,6 +287,116 @@ class ManagerTests(fixtures.LiveFixture):
         self.assertEqual(r.resume(self.store, self.feed_root, handoff, OWNER, NOW), "queued")
         self.assertEqual(d.load_fixture(self.feed_root, NOW)["decisions"][0], self.feed["decisions"][0])
         self.assertEqual(self.store.read("alerts")[self.key], original_row)
+
+    def follower(self, *, parent=True):
+        if parent:
+            self.sending()
+        feed = copy.deepcopy(self.feed)
+        feed["revision"] += 1
+        child = copy.deepcopy(feed["decisions"][0])
+        child.update(id="choice-2", follows="choice-1")
+        feed["decisions"].append(child)
+        d.save_fixture(self.feed_root, feed, d.digest(self.feed), NOW)
+        return a.enqueue(self.store, feed, "choice-2", fixtures.REMOTE, PIN, OWNER, NOW)
+
+    def assert_follower_held(self, *, already_received=False):
+        before = (self.store.root / "replies.json").read_bytes()
+        if not already_received:
+            self.callback(fixtures.payload("EvUnboundFollower"))
+        self.assertFalse(self.transport.active)
+        self.assertEqual(self.acks, [])
+        self.assertEqual(self.store.read("transport")["hold"], "ingress-held")
+        self.assertEqual(self.store.read("transport")["events"], {})
+        self.assertEqual((self.store.root / "replies.json").read_bytes(), before)
+
+    def test_shared_thread_unbound_follower_holds_during_post(self):
+        key = self.follower()
+        exchange = self.transport.exchange
+        def post(request):
+            receipt = exchange(request)
+            # Slack accepted the question, but alerts still says sending.
+            self.callback(fixtures.payload("EvUnboundFollower"))
+            return receipt
+        row = a.send(self.store, key, PIN, post)
+        self.assertEqual(row["details"]["state"], "sent")
+        self.assert_follower_held(already_received=True)
+
+    def test_shared_thread_pending_follower_holds(self):
+        self.follower()
+        self.assert_follower_held()
+
+    def test_shared_thread_sent_unbound_follower_holds(self):
+        key = self.follower()
+        self.assertEqual(a.send(self.store, key, PIN, self.transport.exchange)["details"]["state"], "sent")
+        self.assert_follower_held()
+
+    def test_shared_thread_uncertain_follower_holds(self):
+        self.uncertain_follower()
+        self.assert_follower_held()
+
+    def test_shared_thread_bound_follower_holds_delayed_old_reply(self):
+        key = self.follower()
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        self.transport.bind_alert(key, row)
+        self.callback(fixtures.payload("EvDelayedParent", ts="100.000002", event_ts="105.000001"))
+        self.assert_follower_held(already_received=True)
+
+    def uncertain_follower(self):
+        key = self.follower()
+        self.reply = lambda method, result: (None, 200, {}) if method == "chat.postMessage" else (result, 200, {})
+        row = a.send(self.store, key, PIN, self.transport.exchange)
+        self.assertEqual(row["details"]["state"], "uncertain")
+        self.reply = None
+        return key, row
+
+    def test_shared_thread_reconciled_but_unbound_follower_holds(self):
+        key, row = self.uncertain_follower()
+        a.reconcile(self.store, key, "details", self.transport.reconcile(row["details"]["request"]))
+        self.assertEqual(a.inspect(self.store, key)["details"]["state"], "sent")
+        self.assert_follower_held()
+
+    def test_cli_reconcile_binds_follower_and_attributes_reply(self):
+        key, row = self.uncertain_follower()
+        original = copy.deepcopy(self.store.read("alerts")[self.key])
+        with (tempfile.TemporaryFile(mode="w+") as source,
+              tempfile.TemporaryFile(mode="w+") as sink,
+              patch("slack_sdk.WebClient", side_effect=lambda **kw: fixtures.WebClient(base_url=self.endpoint, **kw))):
+            source.write(json.dumps(dict(binding=PIN, key=key, phase="details")) + "\n")
+            source.seek(0)
+            result = m.main(["reconcile", "--store", str(self.root), "--live"],
+                            stdin=source, stdout=sink, credentials=lambda: ("fixture-bot", "fixture-app"), now=lambda: NOW)
+        self.assertEqual(result, dict(reconciled=True))
+        self.callback(fixtures.payload("EvReconciledFollower"))
+        self.assertEqual(s.drain(self.store), 1)
+        self.assertEqual(self.store.read("replies")["events"]["EvReconciledFollower"]["alert"], key)
+        self.assertEqual(self.store.read("alerts")[self.key], original)
+
+    def test_fallback_surfaces_without_mutating_legacy_alerts(self):
+        import decision_feed as f
+        key = self.follower(parent=False)
+        before = [(self.root / (name + ".json")).read_bytes() for name in ("alerts", "replies")]
+        with patch.object(s.Transport, "web", side_effect=AssertionError("projection posted")):
+            self.assertEqual(m.project_status(self.store, NOW, True)["new_thread_fallbacks"], 1)
+            projected = f.project_slack(self.feed_root, self.root, NOW, True)
+        self.assertEqual(projected["status"]["new_thread_fallbacks"], 1)
+        rows = {row["id"]: row for row in projected["decisions"]}
+        self.assertEqual(rows["choice-1"]["replies"]["new_thread_fallbacks"], 0)
+        self.assertEqual(rows["choice-2"]["replies"]["new_thread_fallbacks"], 1)
+        snapshot = dict(schema=2, status="valid", feed=d.load_fixture(self.feed_root, NOW), slack_status="valid", slack=projected)
+        self.assertIn("new thread fallbacks: 1", f.render(snapshot, NOW, [], {}))
+        self.assertEqual([(self.root / (name + ".json")).read_bytes() for name in ("alerts", "replies")], before)
+        legacy = copy.deepcopy(projected)
+        del legacy["status"]["new_thread_fallbacks"]
+        for row in legacy["decisions"]:
+            del row["replies"]["new_thread_fallbacks"]
+        f.validate_slack(legacy, d.load_fixture(self.feed_root, NOW), NOW)
+        for bad in (True, -1, "1", None):
+            with self.subTest(bad=bad), self.assertRaises(d.Invalid):
+                m.validate_status(dict(projected["status"], new_thread_fallbacks=bad))
+            changed = copy.deepcopy(projected)
+            changed["decisions"][1]["replies"]["new_thread_fallbacks"] = bad
+            with self.subTest(bad=bad), self.assertRaises(d.Invalid):
+                f.validate_slack(changed, d.load_fixture(self.feed_root, NOW), NOW)
 
     def supervised(self, mode="connected", **options):
         self.quiesce()

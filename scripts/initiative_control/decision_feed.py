@@ -40,7 +40,7 @@ def validate_slack(value, feed, at):
         seen.add(key)
         d.require(row["delivery"] in DELIVERY)
         d.require(type(row["pending"]) is int and 0 <= row["pending"] <= 100)
-        extra = ["unacknowledged_answers"] if "unacknowledged_answers" in row["replies"] else []
+        extra = [key for key in ("unacknowledged_answers", "new_thread_fallbacks") if key in row["replies"]]
         d.shape(row["replies"], manager.COUNTS + extra)
         d.require(all(type(n) is int and 0 <= n <= 1000000 for n in row["replies"].values()))
         if not value["status"]["enabled"]:
@@ -72,10 +72,12 @@ def project_slack(state, store_path, at, enabled=False):
                 delivery = "off" if not enabled else "unknown" if binding is None else "not-requested"
                 counts = {key: 0 for key in manager.COUNTS}
                 counts["unacknowledged_answers"] = 0
+                counts["new_thread_fallbacks"] = 0
                 pending = 0
                 if matching:
                     key, row = matching[0]
                     counts["unacknowledged_answers"] = manager.unacknowledged_answers(ledger, saved, key)
+                    counts["new_thread_fallbacks"] = int(row.get("threading", {}).get("mode") == "new-thread")
                     pending = sum(event["alert"] == key and not event["drained"] for event in ingress.values())
                     delivery = "cancelled" if row["cancelled"] else row["parent"]["state"] if row["parent"]["state"] != "sent" else row["details"]["state"]
                     # A retained sending reservation is not proof of nonacceptance.
@@ -96,6 +98,8 @@ def project_slack(state, store_path, at, enabled=False):
             saved, ledger = store.read("alerts"), store.read("replies")
             events = ledger["events"]
             status["unacknowledged_answers"] = manager.unacknowledged_answers(ledger, saved)
+            status["new_thread_fallbacks"] = sum(row.get("threading", {}).get("mode") == "new-thread"
+                                                 for row in saved.values())
             status.update(enabled=True, state="held" if journal["hold"] else "last-verified",
                           last_verified=journal["last_verified"], watermark=journal["watermark"],
                           pending=sum(not event["drained"] for event in journal["events"].values()))

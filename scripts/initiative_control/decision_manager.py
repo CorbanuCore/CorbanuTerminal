@@ -30,7 +30,7 @@ def utc_now():
 
 
 def validate_status(value):
-    extra = ["unacknowledged_answers"] if "unacknowledged_answers" in value else []
+    extra = [key for key in ("unacknowledged_answers", "new_thread_fallbacks") if key in value]
     d.shape(value, "schema enabled state last_verified watermark pending " + " ".join(COUNTS + extra))
     d.require(type(value["schema"]) is int and value["schema"] == 1 and type(value["enabled"]) is bool)
     d.require(value["state"] in ("off", "unqualified", "held", "last-verified", "stale"))
@@ -64,13 +64,16 @@ def unacknowledged_answers(ledger, alerts, alert_key=None):
 
 def project_status(store, now, enabled=False):
     value = dict(schema=1, enabled=enabled, state="off", last_verified=None, watermark=0, pending=0,
-                 unacknowledged_answers=0,
+                 unacknowledged_answers=0, new_thread_fallbacks=0,
                  **{k: 0 for k in COUNTS})
     if enabled:
         try:
             with store.lock(), s.locked(store) as transport:
                 ledger = store.read("replies")
-                value["unacknowledged_answers"] = unacknowledged_answers(ledger, store.read("alerts"))
+                alerts = store.read("alerts")
+                value["unacknowledged_answers"] = unacknowledged_answers(ledger, alerts)
+                value["new_thread_fallbacks"] = sum(row.get("threading", {}).get("mode") == "new-thread"
+                                                    for row in alerts.values())
                 value.update(last_verified=transport["last_verified"], watermark=transport["watermark"],
                              pending=sum(not e["drained"] for e in transport["events"].values()))
                 value["state"] = "held" if transport["hold"] else "last-verified"
@@ -502,6 +505,9 @@ def main(argv=None, *, credentials=None, observe_owner=None, stdin=None, stdout=
             phase = data["phase"]
             state = row[phase] if phase in ("parent", "details") else row["notices"][phase]
             a.reconcile(store, key, phase, transport.reconcile(state["request"]))
+            row = a.inspect(store, key)
+            if phase == "details" and row["parent"]["state"] == row["details"]["state"] == "sent":
+                transport.bind_alert(key, row)
             result = dict(reconciled=True)
         else:
             retain_evidence(store, key, data["evidence"])

@@ -164,3 +164,130 @@ before an unqualified human-test handoff. Live execution is explicitly excluded
 by this allocation. No acceptance, N/A approval, recurrence or release approval
 is inferred. TensorCash/Isometric release qualification and benchmarks were not
 run; this is not a release candidate.
+
+# RETURN — decision-threading-02 revision
+
+Status: offline revision for manager review/integration; no live or human-test
+qualification claim. This section supersedes the earlier claim that no ingress
+refusal was relaxed: independent review found a real shared-thread attribution
+gap in candidate `182818493ebca3fdf5aa3457be2bb6756b8b684d`.
+
+## Allocation and reviewed findings
+
+- Action: `decision-threading-02`; worker: gpt-6-astra, high.
+- Allocation digest: `880a736fb4cd80f5611166b806e199cd9d0d90cea0315163ecdfd816208d8814`.
+- Claim: `6c216406-8b85-4b49-86d0-e741b68dd228`.
+- Frozen brief: `/private/tmp/fmgr.Q1SIYZ/briefs/decision-threading-02.json`.
+  SHA-256 verified before review/code reads:
+  `c71d6e3ba66b5debba7b7f5839eff7a6237161827a6c11ef1f13f948dccc186e`.
+- Review read first after the brief:
+  `/private/tmp/fmgr.Q1SIYZ/P1BuxK-review.json`, overall “patch is incorrect”.
+  P2: shared-thread ingress could name the parent before follower binding,
+  including after reconciliation. P3: fallback provenance was not projected.
+- Verified branch/worktree remain those above; starting HEAD exactly
+  `182818493ebca3fdf5aa3457be2bb6756b8b684d`.
+- Classification remains a revision within the approved product initiative,
+  active `initiative-delivery-control`, PF-80, PF-80-S01 `in_progress`.
+  Product citation: **Internal delivery control — TO BUILD**, “actual Slack
+  reply/decision/agent acknowledgment”. Manager still owns shared allocation
+  ledger reconciliation; this worker has no write scope for plan/sprint records.
+
+## P2: ingress admission closes every send/bind gap
+
+The SDK callback now checks retained alerts under the transport lock before it
+records a shared-thread event. It reads atomic alert snapshots without taking
+the offline store lock: send holds that lock across the network call, so taking
+it in the callback would block ingress. The transport lock also serializes
+outbound request reservations. Enqueue durably records a follower before its
+send can post; send durably records `sending` before exchange. Thus a callback
+before either reservation cannot observe a posted follower, and a callback
+during/after its POST sees the follower even if receipt persistence or route
+binding has not completed.
+
+For multiple alerts sharing the root and identity, admission requires every
+details phase to be confirmed sent, and the route to exactly name the alert
+with the latest confirmed details timestamp. Pending, sending, uncertain,
+failed and current sent-but-unbound questions hold ingress through the existing
+durable `ingress-held` fence. No event is acknowledged or inserted against the
+parent as a guess. This also covers direct/offline reconciliation and restart:
+the fence depends on retained rows, not on remembering to call a send wrapper.
+Cancelled attempts are not assumed unseen.
+
+The CLI details-reconciliation branch binds the confirmed alert, allowing
+subsequent new replies to reach the follower. The interval before that route
+write remains protected by the same callback check. Reconciliation of notices
+does not repoint the active question. A reply predating the newest details post,
+or an edit/deletion of a retained answer belonging to an older alert, holds
+instead of becoming a follower answer. Existing prior-work fences remain;
+the old-answer edit test now requires an ingress hold as well.
+
+A hold is conservative and durable: binding later does not silently clear it
+or replay a lost event. Existing owner recovery/gap-review requirements remain.
+No retry loop, free-form posting, fabricated receipt/ACK, parent-row mutation,
+or change to `follows` validation was introduced.
+
+## P3: operator-visible fallback
+
+`decision_manager.project_status` (including the status CLI) now exposes the
+aggregate `new_thread_fallbacks` count. `decision_feed.project_slack` publishes
+that count under `status` and a per-question indicator under
+`decisions[].replies.new_thread_fallbacks`. The existing dashboard displays
+**new thread fallbacks: 1** on the affected decision. The exact fixed fallback
+reason remains in its retained alert provenance.
+
+All reads use `row.get("threading", {}).get("mode")`, so older and unrelated
+alert rows remain readable. Older schema-1 status/projections may omit the new
+field; new values must be nonnegative integers, with the existing per-question
+bound. Projection only writes its own cache; it does not post or alter alerts,
+replies, receiver ACKs or notices.
+
+## Discriminative regression evidence
+
+Eight new methods in `test_decision_manager.ManagerTests`:
+
+| Test suffix | Pre-fix result | Revised expected result |
+| --- | --- | --- |
+| `shared_thread_unbound_follower_holds_during_post` | FAIL: listener stayed active | Hold while accepted POST still has `sending` alert state |
+| `shared_thread_pending_follower_holds` | FAIL: listener stayed active | Hold before follower send |
+| `shared_thread_sent_unbound_follower_holds` | FAIL: listener stayed active | Hold between receipt persistence and route write |
+| `shared_thread_uncertain_follower_holds` | FAIL: listener stayed active | Hold after synthetic socket drop following acceptance |
+| `shared_thread_bound_follower_holds_delayed_old_reply` | FAIL: listener stayed active | Hold delayed reply predating follower details |
+| `shared_thread_reconciled_but_unbound_follower_holds` | FAIL: listener stayed active | Hold after positive history reconciliation without binding |
+| `cli_reconcile_binds_follower_and_attributes_reply` | FAIL: reply alert was parent key | CLI reconciliation binds; callback/drain names follower; parent unchanged |
+| `fallback_surfaces_without_mutating_legacy_alerts` | ERROR: missing `new_thread_fallbacks` | Status/projection/render visible; legacy accepted; invalid counts rejected; no posts/journal mutation |
+
+Initial four-case red run against unchanged production code: **4 tests in
+3.715s; 3 failures, 1 error**. Its during-post assertion initially ran inside the
+exchange callback and was caught as uncertainty by send. The assertion was
+moved outside that callback before the definitive red replay below.
+
+Definitive red replay: current eight tests with production definitions loaded
+from `git show 182818493ebca3fdf5aa3457be2bb6756b8b684d:scripts/initiative_control/<module>.py`
+for `slack_transport`, `decision_manager` and `decision_feed`, executed into
+their imported module namespaces in the test process. No tracked files were
+reverted. **8 tests in 8.330s; 7 failures, 1 error**, each as listed above.
+
+Initial focused revised run: **26 tests in 38.787s, all passed** (four initial
+regressions, existing successful follower routing, full feed module). Final
+focused revised run: **9 tests in 9.565s, all passed** (all eight new methods
+plus strengthened prior-answer edit/work fence).
+
+Read `docs/development/test-isolation.md` before tests. The exact SDK command
+and isolated environment are the same as recorded above, including
+`TMPDIR=/private/tmp`. Only private synthetic stores, synthetic credentials
+and loopback SDK HTTP fixtures are used. No live profile, native credential
+prompt, Slack message, Rust test, push or release operation occurred.
+
+Final full SDK result: **612 tests passed in 317.362s**, exit 0. This includes
+all eight new regressions and the strengthened old-answer edit test. Synthetic
+HTTP 500/429 cleanup ResourceWarnings were retained; no failures or errors.
+`git diff --check` passed on the final tree. Only the QA result was updated
+after the full run; production and test files were unchanged.
+Governance: **3/3 active plans; 116 current and 126 archived sprints**, both
+checkers passed before the full suite. These validate the existing manager
+records, not pending reconciliation of this worker's exact allocation.
+
+Manager-owned independent review and functional/live qualification remain
+open as recorded above. This return does not mark the sprint complete or
+claim a human-test-ready candidate, human acceptance, benchmark results or
+release qualification.
