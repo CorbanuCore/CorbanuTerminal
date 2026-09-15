@@ -83,6 +83,37 @@ block drop log quick on en0 all   [ Evaluations: 839  Packets: 839  Bytes: 84981
 839 packets were actually matched and dropped by that rule. A timeout proves a
 connection did not complete; a counter proves the filter is what stopped it.
 
+## Amendment, same evening: resolver latency, and two rejected variants
+
+The first preflight against the sealed guest failed with `TimeoutError: SSH
+boundary read`, 0 proven and 175 UNPROVEN. The denial was not the problem; the
+**latency of denial** was. On a sealed guest macOS `getaddrinfo` waits out its
+own retry schedule before failing, measured at exactly **30.0 seconds** per
+lookup, and the preflight performs several. It exceeded its 120-second deadline
+while the filter was working perfectly.
+
+Fixed at the resolver rather than at the boundary. A loopback responder
+(`/usr/local/bin/pf83-dnsrefuse.py`, LaunchDaemon `com.corbanu.dnsrefuse`)
+answers **REFUSED** immediately on `127.0.0.1:53`, and the guest resolver points
+there. DNS still resolves nothing, ever — the denial is unchanged — but it now
+fails in **0.0 seconds**. Measured before and after.
+
+Two attempts to make denied **TCP** fail fast were tried and **rejected**. Both
+are recorded in the anchor's comments rather than quietly dropped:
+
+- A blanket `set block-policy return` with `block return`: the guest SSH session
+  driving the harness died partway through outbound probes. Reverted.
+- A scoped `block return-rst` on outbound TCP: the rule matched, 72 packets,
+  but `connect()` still timed out rather than being refused. Apple's `pf`
+  accepts the keyword without delivering an RST to the local sender, so it
+  bought nothing and its comment would have claimed a benefit that did not
+  exist. Reverted to a single `block drop`.
+
+Outbound TCP to a denied destination therefore still costs roughly 8 to 30
+seconds per attempt. If that remains the limiting factor for the preflight, the
+budget is a manager decision to take explicitly, not something to be raised
+quietly until a run goes green.
+
 ## What this does and does not establish
 
 Established: the guest cannot reach the internet, cannot reach the host except
