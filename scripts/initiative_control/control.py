@@ -454,7 +454,21 @@ def publish(repo, state, output):
             raise
 
 
-def serve(output, port):
+def allowed_host(value):
+    """One exact extra DNS name; no wildcard, port, scheme, IP literal or suffix match."""
+    name = value.strip().lower()
+    if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+", name) or len(name) > 253:
+        raise ValueError("allowed host must be one exact lowercase DNS name")
+    if name.rpartition(".")[2].isdigit():
+        raise ValueError("allowed host must be a DNS name, not an address literal")
+    return name
+
+
+def serve(output, port, extra_hosts=()):
+    # Loopback names always work; each additional name is an explicit operator
+    # opt-in (a private tailnet hostname), never a wildcard or suffix match.
+    hosts = {"localhost", "127.0.0.1"} | {allowed_host(name) for name in extra_hosts}
+
     class Handler(BaseHTTPRequestHandler):
         def do_HEAD(self):
             self.do_GET()  # Same validation and headers, without a response body.
@@ -464,7 +478,7 @@ def serve(output, port):
                 host = urlsplit("//" + self.headers.get("Host", "")).hostname
             except ValueError:
                 host = None
-            if host not in {"localhost", "127.0.0.1"}:
+            if host is None or host.lower() not in hosts:
                 self.send_error(403)
                 return  # DNS-rebinding protection for a private loopback service.
             path = unquote(urlsplit(self.path).path).lstrip("/") or "index.html"
@@ -509,6 +523,8 @@ def main():
     server = commands.add_parser("serve")
     server.add_argument("--output", type=Path, required=True)
     server.add_argument("--port", type=int, default=8768)
+    server.add_argument("--allow-host", action="append", default=[], metavar="NAME",
+                        help="Additional exact Host name to accept (repeatable); loopback is always accepted")
     slack_cmd = commands.add_parser("decision-slack", help="Explicit manager-only Slack operations; never started by publication")
     slack_cmd.add_argument("--publish-state", type=Path, help="Write a redacted local projection; only with project-status")
     slack_cmd.add_argument("args", nargs=argparse.REMAINDER)
@@ -535,7 +551,7 @@ def main():
     elif args.command == "report":
         print(report(args.state.resolve(), read_json(args.file, args.file.parent)))
     else:
-        serve(args.output.resolve(), args.port)
+        serve(args.output.resolve(), args.port, args.allow_host)
 
 
 if __name__ == "__main__":

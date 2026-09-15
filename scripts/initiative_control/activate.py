@@ -11,7 +11,7 @@ import sys
 import time
 import uuid
 
-from control import atomic_json, checked_run, locked, now, read_file, read_json, report
+from control import allowed_host, atomic_json, checked_run, locked, now, read_file, read_json, report
 import decision_feed
 
 
@@ -42,10 +42,16 @@ def activate(root, incoming, units):
         (root / "private").mkdir(exist_ok=True, mode=0o700)
         units.mkdir(parents=True, exist_ok=True)
         common = "[Unit]\nDescription=Corbanu private initiative control\n\n[Service]\nUMask=0077\nNoNewPrivileges=true\n"
+        # Optional operator opt-in: exact extra Host names the read-only web
+        # service accepts (a private tailnet name). Loopback is always accepted.
+        names = config.get("web_allowed_hosts", [])
+        if not isinstance(names, list) or len(names) > 4:
+            raise ValueError("web_allowed_hosts must be a short list of exact DNS names")
+        web_hosts = "".join(f" --allow-host {allowed_host(name)}" for name in names)
         contents = {
             "corbanu-control-publish.service": common + f'Type=oneshot\nExecStart=/usr/bin/flock {root}/.sync.lock "{sys.executable}" {root}/source/scripts/initiative_control/tick.py --root {root}\nTimeoutStartSec=10min\n',
             "corbanu-control-publish.timer": "[Unit]\nDescription=Refresh Corbanu initiative dashboard every 30 minutes\n[Timer]\nOnBootSec=2min\nOnUnitActiveSec=30min\nPersistent=true\n[Install]\nWantedBy=timers.target\n",
-            "corbanu-control-web.service": common + f'Type=simple\nExecStart="{sys.executable}" {root}/source/scripts/initiative_control/control.py serve --output {root}/site --port 8768\nRestart=on-failure\nRestartSec=5\n[Install]\nWantedBy=default.target\n',
+            "corbanu-control-web.service": common + f'Type=simple\nExecStart="{sys.executable}" {root}/source/scripts/initiative_control/control.py serve --output {root}/site --port 8768{web_hosts}\nRestart=on-failure\nRestartSec=5\n[Install]\nWantedBy=default.target\n',
         }
         for name, content in contents.items():
             path = units / name

@@ -377,6 +377,64 @@ class RefreshTests(unittest.TestCase):
             self.assertEqual(control.read_json(root / "state/control.json", root), {"old": True})
             self.assertEqual((root / "source").resolve(), original)
 
+    def test_allowed_host_rejects_wildcards_ports_and_ip_literals(self):
+        for value in ("tailnet.example.net", "Productionrpc.Taila4ec45.TS.net "):
+            self.assertEqual(control.allowed_host(value), value.strip().lower())
+        for value in ("", "localhost", "*.example.net", "example.net:8768", "127.0.0.1",
+                      "http://example.net", "-bad.example.net", "example.net/", "a." + "b" * 300):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                control.allowed_host(value)
+
+    def test_explicit_allow_host_is_accepted_and_no_other_host_is(self):
+        allowed = "productionrpc.taila4ec45.ts.net"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "current").mkdir()
+            (root / "current/index.html").write_text("<h1>Synthetic fixture</h1>")
+            control.atomic_json(root / "health.json", {"ok": True})
+            with socket.socket() as sock:
+                sock.bind(("127.0.0.1", 0))
+                port = sock.getsockname()[1]
+            process = subprocess.Popen([sys.executable, str(control.HERE / "control.py"), "serve",
+                                        "--output", str(root), "--port", str(port), "--allow-host", allowed],
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                base = f"http://127.0.0.1:{port}"
+                for _ in range(100):
+                    try:
+                        urllib.request.urlopen(base, timeout=1).close()
+                        break
+                    except urllib.error.URLError:
+                        time.sleep(0.02)
+                else:
+                    self.fail("server did not start")
+                # The opt-in name is accepted with and without a port, in any case.
+                for host in (allowed, allowed + ":443", allowed.upper()):
+                    request = urllib.request.Request(base, headers={"Host": host})
+                    with urllib.request.urlopen(request, timeout=1) as response:
+                        self.assertEqual(response.status, 200)
+                        self.assertEqual(response.headers["X-Corbanu-Control"], "1")
+                # Loopback still works; nothing else does, including near misses.
+                for host in ("127.0.0.1", "localhost"):
+                    request = urllib.request.Request(base, headers={"Host": host})
+                    with urllib.request.urlopen(request, timeout=1) as response:
+                        self.assertEqual(response.status, 200)
+                for host in ("evil.invalid", "evil." + allowed, allowed + ".evil.invalid",
+                             "taila4ec45.ts.net", ""):
+                    request = urllib.request.Request(base, headers={"Host": host})
+                    with self.subTest(host=host), self.assertRaises(urllib.error.HTTPError) as caught:
+                        urllib.request.urlopen(request, timeout=1)
+                    self.assertEqual(caught.exception.code, 403)
+                    caught.exception.close()
+                # A rejected name never starts the server at all.
+                bad = subprocess.run([sys.executable, str(control.HERE / "control.py"), "serve",
+                                      "--output", str(root), "--port", str(port), "--allow-host", "*.ts.net"],
+                                     capture_output=True, timeout=30)
+                self.assertNotEqual(bad.returncode, 0)
+            finally:
+                process.terminate()
+                process.wait(timeout=10)
+
     def test_real_http_server_is_read_only_and_rejects_untrusted_hosts_and_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

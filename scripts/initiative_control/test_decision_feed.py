@@ -126,6 +126,31 @@ class FeedTests(unittest.TestCase):
         self.assertIn("decision-slack", result.stdout)
         self.assertNotIn("Traceback", result.stderr)
 
+    def test_activate_renders_only_validated_extra_web_hosts(self):
+        unit = self.root / "units/corbanu-control-web.service"
+        self.save(self.value)
+        target, _ = self.bundle()
+        self.activate(target)
+        self.assertNotIn("--allow-host", unit.read_text())
+
+        control.atomic_json(self.state / "control.json",
+                            {"human_tests": [], "tasknode": {"enabled": False},
+                             "web_allowed_hosts": ["productionrpc.taila4ec45.ts.net"]})
+        target, _ = self.bundle(LATER)
+        self.activate(target, LATER)
+        line = next(l for l in unit.read_text().splitlines() if l.startswith("ExecStart="))
+        self.assertTrue(line.endswith(" --allow-host productionrpc.taila4ec45.ts.net"), line)
+        self.assertEqual(line.count("--allow-host"), 1)
+
+        control.atomic_json(self.state / "control.json",
+                            {"human_tests": [], "tasknode": {"enabled": False},
+                             "web_allowed_hosts": ["*.ts.net"]})
+        target, _ = self.bundle(LATER)
+        with patch.object(activate, "now", return_value=LATER), \
+             patch.object(activate.subprocess, "run"), self.assertRaises(ValueError):
+            activate.activate(self.install, target, self.root / "units")
+        self.assertIn("productionrpc.taila4ec45.ts.net", unit.read_text())
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve())
         self.addCleanup(self.tmp.cleanup)
