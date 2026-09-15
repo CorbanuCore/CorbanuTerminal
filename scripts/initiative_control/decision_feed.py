@@ -102,7 +102,11 @@ def project_slack(state, store_path, at, enabled=False):
                 slack.observe_session_locked(store, journal)
             except (OSError, ValueError):
                 status["state"] = "held"
-            if any(post["receipt"] is None for post in journal["posts"].values()):
+            # Mirror decision_manager.project_status: an owner-reconciled
+            # never-sent post is resolved and must not wedge the published
+            # status at held forever.
+            if any(post["receipt"] is None and not slack.reconciled_never_sent(post)
+                   for post in journal["posts"].values()):
                 status["state"] = "held"
             for event in events.values():
                 name = event["state"].replace("-", "_")

@@ -581,6 +581,24 @@ class SlackProjectionTests(LiveFixture):
             self.assertEqual(transport.project_slack(self.feed_root, self.root, NOW, True)["status"]["state"], "held")
         self.assertEqual(journals, {name: (self.root / name).read_bytes() for name in journals})
 
+    def test_published_projection_clears_once_an_orphan_is_owner_reconciled(self):
+        # The dashboard reads this projection, not project_status, so the two
+        # must agree: an unresolvable post wedges it, a reconciled one does not.
+        import slack_transport as slack
+        self.sending()
+        with slack.locked(self.store) as journal:
+            request = dict(attempt="pf83-style-bad-id", identity=journal["binding"],
+                           payload={"text": "x"}, thread_ts=None)
+            request["payload_digest"] = d.digest(request["payload"])
+            journal["posts"][request["attempt"]] = dict(request=request, receipt=None, retry_after=None)
+            self.store.write("transport", journal)
+        with patch("slack_sdk.WebClient", side_effect=AssertionError("no network")):
+            self.assertEqual("held", transport.project_slack(self.feed_root, self.root, NOW, True)["status"]["state"])
+            self.transport.reconcile_orphan(request["attempt"], request_digest=d.digest(request),
+                                            evidence="orphan-inspection")
+            self.assertEqual("last-verified",
+                             transport.project_slack(self.feed_root, self.root, NOW, True)["status"]["state"])
+
     def test_actual_ingress_two_questions_revision_mapping_and_no_network_projection(self):
         import decision_alerts as alerts
         import slack_transport as slack

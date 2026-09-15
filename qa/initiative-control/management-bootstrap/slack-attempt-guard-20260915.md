@@ -153,3 +153,25 @@ Rust is untouched; no Rust tests were run.
 The manager must perform and record the live orphan reconciliation afterwards.
 This worker did not mutate live Slack state, send Slack messages, push or claim
 that the live projected status is already repaired.
+
+## Parity gap found while clearing the live orphan — September 15, 2026
+
+The guard and the owner reconciliation worked: the live orphan
+`pf83-vm-key-20260915T103614Z` was reconciled as `never-sent` against retained
+read-only inspection evidence, and `decision_manager.project_status` correctly
+returned `last-verified` afterwards.
+
+The **dashboard did not clear**, because it does not read `project_status`. The
+published projection is `decision_feed.project_slack`, which carries its own copy
+of the same check and still read `post["receipt"] is None` without the
+`reconciled_never_sent` exemption. So a reconciled orphan kept the operator
+surface wedged at `held` even though the state was resolved.
+
+Fixed by mirroring the manager check. A regression
+(`test_published_projection_clears_once_an_orphan_is_owner_reconciled`) asserts
+`held` before reconciliation and `last-verified` after; with the exemption removed
+it fails `'last-verified' != 'held'`, so it discriminates.
+
+Worth noting for future duplicated predicates: the review verified the manager
+path, the tests covered the manager path, and the second copy went unnoticed
+until the live state was actually exercised.
