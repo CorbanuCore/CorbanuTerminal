@@ -140,3 +140,59 @@ historical/full provenance, settlement, retention limits and complete applicatio
 coverage retain their prior unresolved status. S02 stays open; S03 stays dependent.
 No independent review, internal-only integrator acceptance, functional handoff,
 human acceptance, benchmark or release readiness is claimed.
+
+## Second attempt — acct-chat-impl-02, 2026-09-15
+
+Status: **STOPPED BEFORE IMPLEMENTATION** under the brief's explicit prerequisite
+contradiction rule. The first attempt above remains historical evidence.
+
+- Worker: gpt-6-astra / high; receiving owner: Fable manager.
+- Allocation digest: `b37998ec13a52f0826742841199b6435a5a3bfca049b069f466f0c339ac9b726`.
+- Claim: `d36b38d1-c6eb-4b4d-9718-3d0a7070655a`.
+- Brief: `/private/tmp/fmgr.Q1SIYZ/briefs/acct-chat-impl-02.json`.
+- Verified brief SHA-256: `ef969c8c56555d9ec31dfbd5fb04273a36a571ed8b41bbfa2958176c81200597`.
+- Design SHA-256 verified again: `0736d39224191dab79f1215b286d3939f4109cde55c0fc4c00a93679f1f5268b`.
+- Actual clean launch/base: `74a663e6e029a0d9b7846277605a7d8f0d6028a5`.
+- Branch/worktree: `bootstrap/acct-chat-20260915` at `/Volumes/CorbanuDrive/Corbanu/worktrees/acct-chat-20260915`.
+- Read the granted exclusive lease at `/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-chat-20260915/LEASE.json`; its action, branch, worktree and base match this dispatch. No build used the lease or any target.
+
+### Exact surviving contradiction
+
+At the assigned base, S02's file
+`docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md`
+still has the WS owner/lane/scope/gate on lines 8–11 and WS worktree/branch/base on
+lines 12–14. Its execution mandate on lines 26–27 requires the 18-file WS unit
+and defers Chat. Its code boundaries on lines 38–40 require WS's 36 tests and
+exclude price work. The new Chat introduction on line 22 and checked preconditions
+on lines 46–47 coexist with those consumed executable instructions; they did not
+replace them. The active plan's Chat row at
+`docs/plans/active/portfolio-agent-cost-accounting.md:201` records base
+`70b7cd33f9a17c1cbb219f4d0d7b00d4a6cf5acf`, unlike the actual/assigned/leased base
+`74a663e6e029a0d9b7846277605a7d8f0d6028a5`.
+
+The brief says to name the exact contradicting file/line and stop if a prerequisite
+is still missing. Fable manager owns reconciling the executable S02 fields/mandate
+and the plan's base before redispatch. The lease and published Chat allocation
+now exist; their absence is no longer a blocker. No scope renegotiation or human
+permission is requested. No manager approval or fix is inferred from commit prose.
+
+### Second-attempt commands, manifest and case disposition
+
+Both `shasum -a 256` commands (this attempt's brief and the same design) exited 0
+with the digests above. Launch `git status --short` was empty; branch and HEAD
+matched the dispatch. `python3 docs/plans/check.py` exited 0 (active 3/3), and
+`python3 docs/sprints/check.py` exited 0 (current 116, archived 126). These validate
+declared records, not agreement with this dispatch. Final checks are in RETURN.
+
+Only this receipt and the S02 Remaining ledger change; all additions and deletions
+count as non-test against 3000/1150 target and 3300/1300 STOP. Exact manifest,
+lengths, SHA-256s, additions/deletions and commit are returned from the final tree.
+No runtime path is changed. The explicit brief authorizes the Remaining update.
+
+Rust test commands: **none**. Pass 0, fail 0, runner skips 0; all 38 names in the
+case-to-evidence map above have the same **NOT RUN — blocked preflight** disposition
+for this second attempt. Every associated vector, C1–C4 and all three mutations
+remain unimplemented/unexecuted. No run UUID, JUnit, POST/frame or SQL evidence
+exists for this action. No Rust build/fix/format, provider call, credential access,
+TUI, live-repository run or independent review occurred. The preserved limitations
+above apply unchanged; S02 remains open and S03 dependent.
