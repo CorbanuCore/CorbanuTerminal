@@ -247,10 +247,10 @@ def briefing(coordinator, packet, owner_context):
         collect({field: value for field, value in action.items()
                  if key not in compact or field not in historical_fields | {"inputs"}})
     for entry, references in omitted_references:
-        # A digest the manager can already read on the retained record is not
-        # an omission: listing it again only duplicates the reference.
-        retained = encoded(brief[entry["source"]].get(entry["id"], {}))
-        missing = sorted(digest for digest in references - originals.keys() if digest not in retained)
+        # Every reference whose body was not expanded is listed, even when the
+        # digest is visible on a retained record: the contract reports what the
+        # manager cannot read, not which strings happen to appear.
+        missing = sorted(references - originals.keys())
         if missing:
             entry["evidence_digests"] = missing
         if missing or "inputs_digest" in entry:

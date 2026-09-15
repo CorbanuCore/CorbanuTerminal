@@ -377,20 +377,18 @@ Two further redundancies were removed in the same pass:
 - A consumed allocation stub already reduced to `{consumed, original_digest}`
   hides nothing, so it is retained verbatim instead of being replaced by an
   omission entry that only restates the same digest.
-- An omitted reference whose digest is already readable on the retained record
-  is no longer restated in `evidence_digests`. Every digest listed there is now
-  genuinely unreachable from the brief; on the live state all 36 previously
-  listed action digests were visible on their own retained records.
+`evidence_digests` is deliberately left alone. A first attempt filtered out
+digests that were already visible on the retained record; that was wrong and is
+reverted. The list reports which evidence **bodies** the manager cannot read, not
+which digest strings happen to appear, and `manager_cycle_test.BriefingSizeTests`
+encodes exactly that contract. The saving was not worth weakening the meaning.
 
 Measured on the live state (12 actions, 45 consumed allocations): 67,843 →
-63,738 bytes at one selected event, restoring headroom without touching the
+65,043 bytes at one selected event, restoring headroom without touching the
 limit. `BRIEF_LIMIT` remains **65536**; no ceiling was bypassed. The adaptive
 prefix search still selects the largest fitting batch, so a wider event batch
 holds and defers rather than truncating silently.
 
 Regression tests: `test_terminal_history_omits_allocated_scope_but_keeps_its_digest`
 proves the omission, the digest, and that the claim still carries the manifest;
-`test_running_actions_keep_their_scope` proves non-terminal actions are untouched;
-`test_unreachable_references_are_still_listed_as_omitted` proves a reference that
-is genuinely unreachable is still reported, so the reachability filter cannot
-hide evidence.
+`test_running_actions_keep_their_scope` proves non-terminal actions are untouched.
