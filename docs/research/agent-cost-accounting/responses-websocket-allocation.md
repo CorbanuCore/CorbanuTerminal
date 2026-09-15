@@ -440,6 +440,8 @@ independent evidence review and true-TUI gates. No human-test readiness, complet
 
 ## Worker return contract
 
+*Manager-authored; not part of the frozen proposal transcript above.*
+
 Return the following to the Fable receiving manager; do not push:
 
 1. Exact source base, candidate commit, branch/worktree, 18-file changed manifest,

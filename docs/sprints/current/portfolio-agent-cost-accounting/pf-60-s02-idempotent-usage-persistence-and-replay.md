@@ -85,7 +85,8 @@ September 14: Fable's accepted `acct-ws-freeze-01` mandate freezes the next same
 - [ ] Scope-constrained fix/format precedes final affected tests; record nonzero names, counts, run IDs, matching JUnit, raw frame/POST/readback evidence and all failures.
 - [ ] Receiving manager reruns shared state/TaskNode-session and combined API/proxy gates; discover current counts instead of copying historical 634/63 results.
 - [ ] Run `python3 docs/plans/check.py`, `python3 docs/sprints/check.py` and `git diff --check` on the final tree.
-- [ ] Implementation's internal-only N/A requires named-integrator acceptance; later S03/S04 need [isolated functional execution](../../../../qa/code-blind-functional/isolated-execution.md), independent evidence review and true-TUI keys on the final package. This documentation freeze changes no interactive behavior.
+- [ ] Resolve TUI applicability for the WS sampling unit against the plan (expected N/A: internal mode, default OFF, no public config/CLI/TUI activation); record the reason or actual-key success, failure/cancel and recovery evidence for every affected interactive path. The documentation freeze itself changed no interactive behavior.
+- [ ] Implementation's internal-only N/A requires named-integrator acceptance; later S03/S04 need [isolated functional execution](../../../../qa/code-blind-functional/isolated-execution.md), independent evidence review and true-TUI keys on the final package.
 
 ## Exit evidence
 
