@@ -12,6 +12,11 @@ use std::sync::Arc;
 /// Cancellation may have committed an unknown intent; implementations must fail
 /// closed rather than guess a predecessor on a later dispatch.
 pub trait ResponsesWebsocketAdmission: Send + Sync {
+    /// Rechecks denial-only host guards before processing each in-flight text event.
+    fn check(&self) -> Pin<Box<dyn Future<Output = Result<(), ApiError>> + Send + '_>> {
+        Box::pin(async { Ok(()) })
+    }
+
     fn admit(
         &self,
         model: String,

@@ -152,6 +152,56 @@ impl StageOneMemoryBinding {
         result
     }
 
+    /// Stream-time validation uses the published runtime provider and live policy view.
+    /// The configured security floor was captured at construction and is session-static;
+    /// runtime config refresh does not change it. No session-state lock or Config copy.
+    pub(crate) fn check_stream(&self) -> Result<(), StageOneMemoryDenial> {
+        let mut denial = self
+            .denial
+            .lock()
+            .map_err(|_| StageOneMemoryDenial::PolicyUnavailable)?;
+        if let Some(reason) = *denial {
+            return Err(reason);
+        }
+        let result = (|| {
+            if self.termination.clone().now_or_never().is_some() {
+                return Err(StageOneMemoryDenial::OwnerTerminated);
+            }
+            let owner = self
+                .owner
+                .upgrade()
+                .ok_or(StageOneMemoryDenial::OwnerTerminated)?;
+            if owner.thread_id() != self.owner_id {
+                return Err(StageOneMemoryDenial::OwnerMismatch);
+            }
+            if owner.services.model_client().provider_info() != &self.provider {
+                return Err(StageOneMemoryDenial::ProviderChanged);
+            }
+            let policy = owner
+                .services
+                .agent_control
+                .effective_security_policy()
+                .snapshot_for_agent(self.owner_id)
+                .map_err(|_| StageOneMemoryDenial::PolicyUnavailable)?;
+            if policy.runtime_nonce != self.runtime_nonce
+                || policy.session_id.as_str() != self.session_id
+            {
+                return Err(StageOneMemoryDenial::OwnerMismatch);
+            }
+            if policy.kill_switch_active {
+                return Err(StageOneMemoryDenial::KillSwitchActive);
+            }
+            if self.floor.max(policy.level) != SecurityLevel::Permissive {
+                return Err(StageOneMemoryDenial::ProtectedInputUnavailable);
+            }
+            Ok(())
+        })();
+        if let Err(reason) = result {
+            *denial = Some(reason);
+        }
+        result
+    }
+
     fn request_error(&self, error: CodexErr) -> StageOneMemoryError {
         match self.denial.lock() {
             Ok(reason) => reason.map_or(
@@ -164,6 +214,17 @@ impl StageOneMemoryBinding {
 }
 
 impl StageOneMemoryClient {
+    #[cfg(debug_assertions)]
+    pub(crate) fn binding_for_fixture(
+        &self,
+        owner: ThreadId,
+    ) -> Result<Arc<StageOneMemoryBinding>, StageOneMemoryDenial> {
+        if self.binding.owner_id != owner {
+            return Err(StageOneMemoryDenial::OwnerMismatch);
+        }
+        Ok(Arc::clone(&self.binding))
+    }
+
     pub(crate) async fn new(
         owner: Weak<Session>,
         termination: SessionLoopTermination,
@@ -204,7 +265,7 @@ impl StageOneMemoryClient {
             /*attestation_provider*/ None,
             config.http_client_factory(),
         )
-        .with_stage_one_memory_binding(Arc::clone(&binding));
+        .with_stage_one_memory_binding(Arc::clone(&binding))?;
         Ok(Self { client, binding })
     }
 

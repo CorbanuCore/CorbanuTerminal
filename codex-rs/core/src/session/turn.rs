@@ -3895,5 +3895,12 @@ pub(crate) fn get_last_assistant_message_from_turn(responses: &[ResponseItem]) -
 }
 
 #[cfg(test)]
+impl Session {
+    pub(crate) async fn lock_state_for_accounting_fixture(&self) -> impl Drop + '_ {
+        self.state.lock().await
+    }
+}
+
+#[cfg(test)]
 #[path = "turn_tests.rs"]
 mod tests;

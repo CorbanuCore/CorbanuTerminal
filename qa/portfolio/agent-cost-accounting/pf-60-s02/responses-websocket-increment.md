@@ -565,3 +565,310 @@ revision. The later S03/S04 functional gates and all previously disclosed
 qualification limits remain pending; no new acceptance or readiness is claimed.
 Cumulative size from `59260f56e0f201fdadef9f73f25ab68a791041e5`: **2831 total / 841 non-test**,
 including receipt and mixed glue; below targets 3000/1050 and STOP 3300/1200.
+
+## acct-ws-vectors-01 — STOP: live stage-one injection needs additional scope
+
+Routine inspection/evidence continuation of the received PF-60-S02 unit; no Rust
+source changed. Product heading **Measurement targets**; excerpt: “No commercial
+performance numbers have been supplied. The following metrics must be instrumented,
+with targets set through the decision rights defined above.” S02 remains in_progress.
+
+- Action `acct-ws-vectors-01`; worker `gpt-6-astra` / `high`.
+- Allocation digest `4a580987f9e9065388b1fd56054338da96efe4622e19742f6ee745aee9766da4`;
+  claim `aa63b013-4eba-42b3-a3ca-e77ecbcdac14`.
+- Brief `/private/tmp/fmgr.Q1SIYZ/briefs/acct-ws-vectors-01.json`; verified first with
+  `shasum -a 256`: `34dd4586723da9c252a74f5fb3e6593ccaeea3b2a6aa48a499ebf19aa40bff35`.
+- Clean starting HEAD matched dispatched `a7682bc5c01e8196457932b19668fda6bd7bb7e4`;
+  worktree and branch match the assignment. The recorded plan/sprint base is an
+  older receiving ancestor; this dispatch explicitly extends the received unit.
+- Assigned target `/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-ws-20260915`
+  was not used. No Rust build/test, live profile, credential read/prompt, provider
+  inference, subagent or push occurred.
+
+### Concrete boundary and smallest proposed extension
+
+`core/src/client.rs` stores `stage_one_memory_binding` as a private optional Arc.
+Its consuming `with_stage_one_memory_binding` constructor is crate-private; its
+only production caller is `StageOneMemoryClient::new` in `memory_stage_one.rs`.
+That module owns the binding's private fields and the opaque memory client's
+private client/binding. `CodexThread::stage_one_memory_client` in `codex_thread.rs`
+returns that separate memory client, not a handle to UserInput's sampling client.
+Cloning/replacing a ModelClient does not update an existing session's optional
+binding. The WS check at `client.rs:3546` runs before stream dispatch; the live
+WS response loop has no stage-one check. Memory extraction's completion checks
+belong to the separate opaque memory client and do not wrap UserInput sampling.
+
+The required real binding cannot be constructed/extracted by the allocated native
+integration fixture. A fabricated accounting error, fresh wrong-owner factory call,
+client replacement or stream cancellation would not prove mid-dispatch binding.
+No synthetic substitute, unsafe private-field access or new production policy
+setter was introduced to claim this vector passed.
+
+Fable manager should add exactly `codex-rs/core/src/memory_stage_one.rs` and
+`codex-rs/core/src/codex_thread.rs` to a revised allocation: the former for a narrow
+host-owned binding fixture seam, the latter for native-thread attachment to the
+same running sampling client. Shared binding/stream checks and native cases can
+remain in the already allocated client/turn/accounting/test paths. The revised
+mandate must specify the attachment boundary and in-flight denial result with the
+existing security owner: the frozen allocation specifies pre-dispatch guards and
+zero frames on denial, whereas this brief additionally requires applying a newly
+arriving binding after dispatch and preserving a committed prefix. An integration
+fixture seam must not create a public production policy setter; its availability
+in the integration-test library build needs explicit design in that allocation.
+
+### Vector and experiment disposition
+
+The brief says STOP if either vector needs an additional path. That condition was
+found before edits, so neither `accounting_responses_ws_native_admission_and_guard_barriers`
+nor `accounting_responses_ws_native_auxiliary_scope_and_event_parity` was extended.
+Both mutation experiments: **not run**; commands/run IDs/failure output: **none**.
+The metadata matrix appears reachable through the existing Gate but was not
+implemented after the required STOP. Both previously disclosed gaps remain open.
+No new pass, independent acceptance, human-test handoff or release readiness is claimed.
+
+Read `docs/development/test-isolation.md` before checks. Pre-edit sprint checker
+passed (current 116, archived 126). Final plan/sprint/whitespace results and exact
+size are supplied in RETURN. Rust formatting is N/A because no Rust file changed.
+Only this receipt is committed; manager-owned plan/sprint records remain untouched.
+
+## acct-ws-vectors-02 — live binding and metadata vectors
+
+PF-60 product initiative continuation; PF-60-S02 remains `in_progress`.
+Product heading **Measurement targets**; excerpt: “No commercial performance numbers
+have been supplied. The following metrics must be instrumented, with targets set
+through the decision rights defined above.” This is internal default-OFF work.
+
+- Worker `gpt-6-astra` / `high`; action `acct-ws-vectors-02`.
+- Allocation digest `30d235a0983d6b776294b9dc747cc55033fded410c5f263284530b7b4906b3e0`;
+  claim `045eb075-60d9-43ec-8dbb-217b6d6a615d`.
+- Brief `/private/tmp/fmgr.Q1SIYZ/briefs/acct-ws-vectors-02.json`; first-read
+  `shasum -a 256` matched `d4e2663e591c2be535d791e9f9d30427a915034f319053a20b44fe94c1258858`.
+- Clean dispatched base `3d42704d4d20cc6f3f461f3dcd1562adb76050c8`; branch/worktree
+  match the frozen assignment. Manager explicitly widened ownership to 20 paths;
+  nine are changed here. No third additional path, manifests, locks or policy files changed.
+- Assigned target `/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-ws-20260915`.
+  Test isolation read before execution; guarded disposable debug profiles throughout.
+  No live profile, credential read/prompt, external inference, subagent or push.
+- Toolchain: rustc 1.95.0, rustfmt 1.9.0-stable. Scope-constrained rustfmt with
+  `--edition 2024 --config skip_children=true` ran on all eight changed Rust files
+  before final tests; its unsupported nightly import-setting warnings are retained.
+
+### Case-to-evidence map
+
+1. `accounting_responses_ws_native_admission_and_guard_barriers`: original
+   pre-dispatch/storage assertions retained. Two new held-stream variants start
+   real UserInput sampling and independently read the admitted attempt, optionally
+   commit usage at position 1, then attach the real same-owner stage-one binding.
+   Native ThreadSettings changes to another synthetic provider while that original
+   dispatch is running. Its actual binding reports ProviderChanged. The next text
+   must produce the exact fatal accounting error and no ModelResponseCompleted.
+   With stream retries set to 2, counts remain (handshake, warmup, WS, POST) =
+   (1,1,1,0); attempts, observations and totals stay byte/value identical.
+   The no-prefix attempt remains unknown; the prefix remains 0.00161 USD.
+2. `accounting_responses_ws_native_auxiliary_scope_and_event_parity`: original
+   auxiliary/compaction assertions retained. All 72 distinct cases execute:
+   eight presence combinations of model verification, moderation and safety;
+   missing/null/full usage; completed/failed/incomplete terminal events.
+   Ordered metadata payloads and all seven token metrics, price totals and unknown
+   counts are compared. Metadata-bearing terminals never manufacture usage.
+   Completed/failed: one attempt, counts (1,1,1,0). Incomplete retains native HTTP
+   fallback: two chained attempts, counts (1,1,1,1); its synthetic failing HTTP
+   reply adds one unknown attempt without changing the WS usage prefix.
+   The restored raw log contains exactly 72 unique successful matrix rows.
+
+### Mutations, exact commands and preserved attempts
+
+All command rows below start with
+`CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-ws-20260915`.
+Logs and matching UUID-checked JUnit copies live in
+`/private/tmp/acct-ws-vectors-02-evidence/`; log stems are listed below.
+
+| Key | Exact command after the prefix |
+| --- | --- |
+| G | `just test -p codex-core --test all -E 'test(accounting_responses_ws_native_admission_and_guard_barriers)' --locked --offline` |
+| M | `just test -p codex-core --test all -E 'test(accounting_responses_ws_native_admission_and_guard_barriers) \| test(accounting_responses_ws_native_auxiliary_scope_and_event_parity)' --locked --offline` |
+| R | M with `--success-output final` immediately before `--locked` |
+| A | `just test -p codex-api -p codex-core -E 'test(accounting) \| test(pf_30_s04) \| test(websocket_safety_buffering)' --locked --offline` |
+| L | `just test -p codex-api -j 1 -E 'test(responses_accounting_separate_usage_containers) \| test(anthropic_accounting_source_positions_precede_completion_and_survive_provider_error) \| test(websocket_safety_buffering_event_controls_visibility_when_header_disables_it) \| test(responses_websocket_accounting_queued_cancel_and_send_failure)' --locked --offline` |
+
+Shell capture: `set -o pipefail`, then each command with
+`2>&1 | tee /private/tmp/acct-ws-vectors-02-evidence/<stem>.log`.
+First G used tool output and preserved JUnit instead of tee.
+
+| Command / log stem | Run UUID | Result |
+| --- | --- | --- |
+| G / fixture-defect | a6fda13a-c400-4921-aa4d-5fd2b589d90b | Exit 100; 1 failed twice: refresh_runtime_config does not change security level; not mutation evidence |
+| G / controller-build-defect | none | Exit 101; E0599: trusted_security_controller is cfg(test), unavailable to integration library; attempt removed without widening scope |
+| G / guard-mutation | e0a70f04-51e3-4662-a3cc-4a31de3fdf41 | Exit 100; live-denial assertion fails with guard bypassed, 1 failed twice |
+| M / metadata-mutation-guard-restored | 0a6fea2b-55a9-4e12-a381-7b70716aba3a | Exit 100; metadata mutation fails; guard expectation omitted native “Fatal error:” prefix, 2 failed twice |
+| M / both-mutations | 3abf10e0-a55c-4d58-ac7a-1ae84b40d528 | Exit 100; corrected assertions fail specifically for both mutations, 2 failed twice |
+| R / restored-fixture-timeout | e06a45b2-4665-4f99-bb91-92b6d782f745 | Exit 100; guard passes; matrix times out twice at incomplete because fixture did not answer existing HTTP fallback |
+| R / restored | ee92b826-1de9-41be-a8e0-1656d8f389af | Exit 0; 2/2 pass, 31.014s, 1 slow; 1155 filtered, no execution skips/flakes/leaks |
+| A / regressions | 448baee3-76d1-48ed-8022-776ef79c0e4e | Exit 0; 124/124 assertions pass, 44.557s, 1 slow, 4 leaky; 3720 filtered |
+| L / leak-replay | a442694e-ee05-4a2c-a841-c3399df8dd37 | Exit 0; all four leaky cases replay 4/4 clean serially, 0.861s; 220 filtered |
+
+Guard mutation: append `&& false` to Admission::check's real binding-denial
+condition. Metadata mutation: before Evidence::text's `Ok(None) => Ok(())`,
+match completed text containing metadata and observe a decoded synthetic
+completed usage object with all six numeric fields set to zero.
+Both mutations were installed before the new assertions ran and are fully removed.
+Exact failure messages in run `3abf10e0`:
+
+```text
+live stage-one denial must stop the already-admitted sampling request
+assertion failed: `(left == right)`: metadata terminal must not fabricate usage evidence: mask=0, usage=0, kind=response.completed
+Diff < left / right > :
+<1
+>0
+```
+
+### Extra-path line justification and limits
+
+`memory_stage_one.rs:167–177` adds only 11 lines: 167 excludes optimized production
+builds; 168 names the crate-only seam; 169 borrows the opaque client; 170 accepts
+the expected owner; 171 specifies the typed clone/error result; 172 compares
+actual ownership; 173 rejects mismatch; 174 closes that check; 175 clones the
+real private binding; 176 closes the method; 177 separates existing code.
+`codex_thread.rs:266–281` adds only 16 lines: 266 documents fixture-only intent;
+267 excludes optimized builds; 268 hides API docs; 269 names the integration seam;
+270 borrows the thread; 271 takes an opaque existing client; 272 returns typed
+failure; 273 validates owner before mutation; 274 selects this session; 275 its
+services; 276 its actual ModelClient; 277 its shared slot; 278 sets it once;
+279 rejects replacement; 280 closes the method; 281 separates existing code.
+Neither path exposes a production policy setter or fabricates a binding.
+
+The ModelClient binding slot is shared with already-running accounted WS requests.
+Existing pre-dispatch checks retain their logic (only slot access changes).
+The new in-flight check precedes numeric decoding and metadata/completion handling;
+denial latches accounting failure. It runs on incoming text, not an idle wake-up.
+Metadata fallback correction changes fixture handling only; no retry policy changed.
+Four regression leak labels remain preserved; clean serial replay does not establish
+their root cause or baseline attribution. Manager receiving/evidence review remains.
+Internal-only functional N/A still needs integrator acceptance; later S03/S04 isolated
+code-blind execution, independent evidence review, true-TUI and live-repository gates
+remain. No full-S02, human-test, benchmark or release readiness is claimed.
+Final plan/sprint/whitespace checks pass. Cumulative size from `59260f56e0f201fdadef9f73f25ab68a791041e5`:
+**3267 total / 1087 non-test** (receipt and mixed glue counted): above target
+3000/1050 by 267/37; below STOP 3300/1200 by 33/113. Candidate commit/diff are in RETURN.
+
+## acct-ws-vectors-03 — size STOP before revision
+
+Routine evidence-only return; the assigned PF-60-S02 product-initiative revision remains undone.
+Product heading **Measurement targets**; excerpt: “No commercial performance numbers have been supplied.”
+Action `acct-ws-vectors-03`; worker `gpt-6-astra` / `high`; claim `69e15902-e9eb-41ce-8779-714e00976403`.
+Allocation digest `02b26dc49f932d61ae87e410a17d4e4a399389b6117059a7a26eb5e450918792`.
+First read `/private/tmp/fmgr.Q1SIYZ/briefs/acct-ws-vectors-03.json`; `shasum -a 256` matched
+`c77fbc10393d03e87fe224efdf80eadc81739fff38c5344e642ea8098016678b`; then read `/private/tmp/fmgr.Q1SIYZ/acctv2-review.json`.
+Clean dispatch HEAD `85e4952ad747c5c857ab4cd72640a6bd6fc5e111`; allocated branch/worktree match.
+The allocation's **Exact proposed worker ownership** says “STOP before exceeding 3300 / 1200”
+and “do not compress or drop tests to fit.” The new brief requests size reporting but supplies no increased ceiling.
+Verified literal 20-path `git diff --numstat 59260f56e0f201fdadef9f73f25ab68a791041e5 HEAD`:
+3267 total / **1093 non-test**, conservatively including the six mixed suite-registration lines.
+This corrects the previous receipt's 1087 non-test subtotal; only 33 total lines remain before this receipt.
+Both fixes plus a new regression and complete mutation/evidence receipt need an increased allocation or staged receiving base.
+Finding 1 remains open: `with_stage_one_memory_binding` replaces the shared Arc; use shared-slot `set`,
+explicitly handle a second binding, and exercise the production setter through a clone after native dispatch starts.
+Finding 2 remains open: each text calls Admission::check -> binding.check -> memory_stage_one_configuration,
+which takes the session mutex and clones Config. Caching only the initially empty slot would lose late-binding enforcement;
+checking only the denial latch would rely on another caller to refresh policy. Neither shortcut was implemented.
+No Rust changes, new regression, mutation experiment, test command/run ID or per-frame performance proof exists for this action.
+Test-isolation guidance was read. No Rust test/build, live profile, credentials, native prompt, inference, subagent or push.
+Assigned target `acct-ws-20260915` unused. Prior vector tests/evidence remain unchanged; both P3 findings need correction.
+Manager action: reallocate cumulative size or receive/stage the prior unit with an explicit new baseline and correction allowance.
+This receipt adds 27 lines: final 3294 total / 1120 non-test; target excess 294/70; STOP headroom 6/80.
+Plan/sprint and whitespace checks are recorded in RETURN. No new review, acceptance, functional or release readiness is claimed.
+
+## acct-ws-vectors-04 — shared-slot and frame-check corrections
+
+PF-60-S02 product-initiative continuation; active plan and sprint remain open.
+Product heading **Measurement targets**; excerpt: “No commercial performance numbers
+have been supplied. The following metrics must be instrumented, with targets set
+through the decision rights defined above.”
+Action `acct-ws-vectors-04`; worker `gpt-6-astra` / `high`;
+claim `b0caca5d-7b06-4799-aed7-5800aab90287`.
+Allocation digest `9625a456ad759071e4228b7594e656daa63bdbd881a88d3a978190ed119dbe85`.
+First-read brief `/private/tmp/fmgr.Q1SIYZ/briefs/acct-ws-vectors-04.json`;
+`shasum -a 256` matched `ffeadd15dc5242979ad5505c8ee367340a7f1f1fc5dafa1dccbc8c20908f0752`.
+Read review `/private/tmp/fmgr.Q1SIYZ/acctv2-review.json` and predecessor receipt.
+Clean HEAD matched dispatched `208d521025ccb12544e3c270ccd49a5a0b1d3344`;
+branch/worktree match the frozen assignment. Plan/sprint record the receiving ancestor.
+The frozen manager brief expressly extends the cumulative ceiling to **3700 total /
+1350 non-test**, solely for these two findings and their proofs. Original targets
+remain **3000/1050**; predecessor STOP and all earlier evidence remain preserved.
+
+### Finding dispositions and proof design
+
+1. Shared slot: `with_stage_one_memory_binding` sets the existing OnceLock and returns
+   a typed error on any second binding. The debug, same-owner attachment seam now
+   clones the actual sampling client and invokes that production setter.
+   New `accounting_responses_ws_native_late_clone_binding_stops_running_dispatch`
+   starts native sampling before attachment and changes provider afterward, with
+   both empty and committed-usage prefixes. It never primes the binding denial latch.
+   The original vector retains its prior priming and all original assertions.
+   Both variants require the exact fatal error, no completion/retry/repair send,
+   unchanged attempts/observations/totals, and counts (1,1,1,0).
+2. Frame cost: `Admission::check -> StageOneMemoryBinding::check_stream` uses the
+   binding's captured session-static security floor, owner/termination, current
+   published ModelClient provider (SessionServices ArcSwap), and live effective
+   policy snapshot (identity, security level and kill switch). Denial stays sticky.
+   Neither this call path nor those accessors calls `memory_stage_one_configuration`,
+   accesses session state, or clones Config. Effective policy uses its own RwLock;
+   this is not a claim that the guard has no synchronization or allocation at all.
+   Full pre-dispatch and memory-completion checks remain unchanged. Provider changes
+   publish a new runtime client in both update_settings and new_turn_with_sub_id;
+   refresh_runtime_config preserves the configured security floor.
+   New `accounting_responses_ws_stream_guard_checks_live_policy_with_session_state_locked`
+   admits a request, attaches through a clone, rejects replacement, holds the actual
+   session mutex, and requires 64 allowed checks plus an independently changed live
+   policy denial to finish on their first poll. The seven-line cfg(test) helper in
+   session/turn.rs only holds that mutex; it adds no production access.
+   These are internal default-OFF corrections, with no newly exposed user workflow.
+   Named-integrator internal-only N/A acceptance and later S03/S04 isolated code-blind,
+   independent evidence, true-TUI and live-repository gates remain outstanding.
+
+### Guarded execution and preserved evidence
+
+All Rust commands use this checkout's guarded `just test`, assigned
+`CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-ws-20260915`,
+`--retries 0 --success-output immediate --locked --offline`.
+Logs and copied JUnit reports: `/private/tmp/acct-ws-vectors-04-evidence/`.
+Test isolation was read before execution. No live profile, credential reads/prompts,
+raw cargo/nextest invocation, external inference, subagent or push occurred.
+The first build (`initial.log`, exit 101, no run UUID) found an existing local Result
+alias collision in the new signature (E0107/E0277/E0308); fixed with std::result::Result.
+The identical focused command then passed both new cases in run
+`cd88a456-8c62-4eee-96ff-d467e095ae6d` (`initial-fixed.log/xml`): 2 passed,
+3620 filtered, 1.283s. Command: `just test -p codex-core -E 'test(accounting_responses_ws_native_late_clone_binding_stops_running_dispatch) | test(accounting_responses_ws_stream_guard_checks_live_policy_with_session_state_locked)'`
+plus the prefix/options above.
+
+Mutation commands use the same target prefix and options above:
+- G: `just test -p codex-core --test all -E 'test(accounting_responses_ws_native_admission_and_guard_barriers) | test(accounting_responses_ws_native_late_clone_binding_stops_running_dispatch)'`
+- S: `just test -p codex-core --test all -E 'test(accounting_responses_ws_native_late_clone_binding_stops_running_dispatch)'`
+- F: `just test -p codex-api -p codex-core -E 'test(accounting) | test(pf_30_s04) | test(websocket_safety_buffering)'`
+
+| Command / log and XML stem | Run UUID | Actual result |
+| --- | --- | --- |
+| G / guard-mutation | b530eb42-192e-4f56-bf3d-fa82c2a37d82 | Exit 100; 0 passed, 2 failed, 1156 filtered; 1.640s |
+| S / slot-mutation | 5578019c-bb5a-49e4-849e-b7105c03ce3c | Exit 100; 0 passed, 1 failed, 1157 filtered; 0.750s |
+
+G appends `&& false` to Admission::check's binding-denial condition. S restores the
+old `Arc::new(OnceLock::from(binding))` assignment, keeping the new Result signature.
+Both fail at precisely `live stage-one denial must stop the already-admitted sampling request`.
+Both mutations are removed. Each command redirected stdout/stderr into its listed
+`.log`; JUnit was copied before the next run and UUID-checked. No retries were used.
+F / `final-regressions.log/xml`: run `894e4249-4636-4784-b846-7f4a1d1fafa4`,
+exit 0; **126/126 passed**, 3720 filtered, zero execution skips/flakes/leaks,
+45.872s, one slow metadata-matrix case. Original vector and metadata cases are retained.
+After argument-comment-only cleanup and formatting, the identical two-new-case
+command above passed again: `final-focused.log/xml`, run
+`b339f361-fad3-41b8-b5f4-a53f9e8a4d51`, exit 0; 2/2 passed, 3620 filtered, 1.259s.
+All report UUIDs match their raw logs. Scoped rustfmt and --check passed; stable
+rustfmt retains its existing nightly-only imports warning. No global fix/format
+was run outside the literal writable scope. Final plan checker (active 3/3), sprint
+checker (current 116, archived 126), and git diff --check passed.
+Eight changed paths are within the authorized 20; no policy/manifest/lock edits.
+Cumulative additions plus deletions from `59260f56e0f201fdadef9f73f25ab68a791041e5`,
+including receipt, mixed suite-registration and cfg(test) glue conservatively:
+**3545 total / 1284 non-test**; original targets 3000/1050 exceeded by
+**545/234**; extended 3700/1350 headroom **155/66**.
+Commit and exact per-file diff --stat are supplied in RETURN. No push or qualification claim.
