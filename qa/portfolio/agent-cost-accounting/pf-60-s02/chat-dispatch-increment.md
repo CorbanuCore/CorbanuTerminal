@@ -894,3 +894,41 @@ acceptance, benchmark qualification, release or push claimed.
 Final checks: `git diff --check`, `python3 docs/plans/check.py`, and
 `python3 docs/sprints/check.py` each exited 0 (3/3 active plans; 116 current /
 126 archived sprints). Five changed paths are within the frozen writable scope.
+
+## Manager receiving disposition — Fable, 2026-09-15
+
+The worker sections above are implementation returns and correctly said manager
+receiving was outstanding at the time they were written. It no longer is, and
+this section is the authoritative disposition so no reader has to infer it from
+git history. Source inclusion in the integration branch proves inclusion, not
+acceptance; acceptance is recorded here and in the coordinator.
+
+| Action | Outcome | Evidence |
+| --- | --- | --- |
+| `acct-chat-impl-01` | Correct stop before touching code | Plan and S02 still named the consumed WebSocket allocation; no implementation checkout or build lease existed. Manager fault. Receipt-only commit `aadad2733` retained |
+| `acct-chat-impl-02` | Correct stop before touching code | Sprint front matter and mandate still assigned the WebSocket scope, and the plan duplicated a stale base hash. Manager fault. Commit `a1c580c84` retained |
+| `acct-chat-impl-03` | Correct stop on a real contract conflict | The frozen design expected continuation after a length finish; Core terminates without further model work. Manager dispositioned in favour of production; the counterexample is preserved above. Commit `7b486e2d3` retained |
+| `acct-chat-impl-04` | **Accepted** | All 38 frozen cases, four mutation demonstrations with paired run IDs, one disclosed nondiscriminating mutation strengthened |
+| `acct-chat-impl-05` | **Accepted and received at `82f9dde0e`** | Both review P3s closed; concurrent rerun 97 passed with zero LEAK |
+| `acct-cleanup-01`, `-02` | Correct stops | Manager omitted the real file paths from the frozen scope, then left `brief_file` pointing at a superseded brief while updating its digest. Manager fault both times |
+| `acct-cleanup-03` | Partial, superseded | Fixture teardown and the builder signature closed; provider lag blocked by the same manager scope error |
+| `acct-cleanup-04` | **Accepted and received at `533a16077`** | Provider publication corrected on both real update paths with a genuine pre-fix failure; all eight receiving gates exit 0 |
+
+Independent reviews: `claude-opus-5-plan` high, confidence 0.72 on the Chat unit
+with two P3s closed before receiving, and confidence 0.78 on the cleanup unit
+with one P3 disclosed and left open — its provider regression pins ordering
+against contributor emission rather than against the state lock, so it proves
+publication before emission rather than publication under the guard.
+
+Receiving gate counts on the merged trees were API 234, Core lib accounting 44,
+Core all accounting/prewarm/incremental/chat 97, shared state and TaskNode 390,
+and responses proxy 28. **These overlap and must never be summed into a unique
+test total.**
+
+Still open and not closed by this disposition: six leaky markers across the
+accounting suite, of which the three diagnosed in `acct-cleanup-04` showed no
+concrete fixture defect and were deliberately left alone rather than given
+speculative cleanup; the disclosed review P3 above; and everything the S02
+closure assessment lists as out of bounds — Corbanu plan gateway economics,
+startup prewarm, auxiliary collection, legacy evidence acquisition and complete
+application coverage. Collection stays OFF.
