@@ -679,15 +679,15 @@ class ManagerTests(fixtures.LiveFixture):
         process.kill()
         process.wait(timeout=5)
         # Real fail-fast transport flock, then a store timeout, then a disk error.
-        with s.locked(self.store):
-            supervisor.tick()
-        with patch.object(self.store, "lock", side_effect=d.Invalid()):
-            supervisor.tick()
-        with patch.object(self.store, "write", side_effect=OSError("fixture disk")):
-            supervisor.tick()
-        self.assertIs(manager.process, process)
-        self.assertNotIn("listener_events", self.store.read("transport"))
         with patch.object(manager, "stop", side_effect=subprocess.TimeoutExpired("fixture reap", 2)):
+            with s.locked(self.store):
+                supervisor.tick()
+            with patch.object(self.store, "lock", side_effect=d.Invalid()):
+                supervisor.tick()
+            with patch.object(self.store, "write", side_effect=OSError("fixture disk")):
+                supervisor.tick()
+            self.assertIs(manager.process, process)
+            self.assertNotIn("listener_events", self.store.read("transport"))
             supervisor.tick()
         supervisor.tick()
         events = self.store.read("transport")["listener_events"]
@@ -695,6 +695,120 @@ class ManagerTests(fixtures.LiveFixture):
         self.assertEqual(events[0]["returncode"], -9)
         self.assertIsNone(manager.process)
         self.assertEqual(supervisor.retry_at, 1)
+
+    def test_persistent_flush_failure_reaps_reports_and_recovers_restart(self):
+        manager, supervisor, clock = self.watchdog()
+        manager.process.kill()
+        manager.process.wait(timeout=5)
+        with patch.object(self.store, "write", side_effect=OSError("fixture disk")):
+            for second in range(5):
+                clock[0] = second
+                supervisor.tick()
+                self.assertIsNone(manager.process)
+                status = supervisor.status(True)
+                self.assertEqual(status["state"], "held")
+                self.assertEqual(status["supervisor_health"],
+                    dict(state="unhealthy", event_flush_failures=second + 1, pending_events=1))
+                self.assertEqual(supervisor.pending_event, ("child-exit", -9))
+            incoming, writer = os.pipe()
+            reader, outgoing = os.pipe()
+            try:
+                with os.fdopen(incoming, "rb") as source, os.fdopen(outgoing, "wb") as sink:
+                    os.write(writer, b'{"operation":"status"}\n{"operation":"exit"}\n')
+                    os.close(writer)
+                    writer = None
+                    with (patch.object(m, "ManagedListener", return_value=manager),
+                          patch.object(m, "ListenerSupervisor", return_value=supervisor)):
+                        m.supervise_listener(self.store, PIN, live=True, stdin=source, stdout=sink, now=lambda: NOW)
+                status = json.loads(os.read(reader, 16384).splitlines()[0])["result"]
+                self.assertEqual(status["supervisor_health"],
+                                 dict(state="unhealthy", event_flush_failures=6, pending_events=1))
+            finally:
+                if writer is not None:
+                    os.close(writer)
+                os.close(reader)
+        self.assertNotIn("listener_events", self.store.read("transport"))
+        supervisor.tick()
+        self.assertEqual(supervisor.status(True)["supervisor_health"],
+                         dict(state="healthy", event_flush_failures=0, pending_events=0))
+        self.assertEqual(len(self.store.read("transport")["listener_events"]), 1)
+        clock[0] += 1
+        with fixture_child("connected", self.endpoint):
+            supervisor.tick()
+        self.assertEqual(self.line(manager.process), dict(type="connected"))
+        self.assertEqual(supervisor.restarts, 1)
+
+    def test_persistent_flush_failure_still_checks_pointers_without_overwriting_event(self):
+        manager, supervisor, clock = self.watchdog()
+        supervisor.pending_event = ("restart-refused", None)
+        supervisor.retry_at = 0
+        with (patch.object(self.store, "write", side_effect=OSError("fixture disk")),
+              patch.object(manager, "start", side_effect=AssertionError("restart before durable evidence")),
+              patch.object(a, "retry_pending_pointers", return_value=1) as retry):
+            for second in range(5):
+                clock[0] = second
+                supervisor.tick()
+                self.assertEqual(retry.call_count, second + 1)
+                self.assertEqual(supervisor.pending_event, ("restart-refused", None))
+                self.assertEqual(supervisor.restarts, 0)
+                self.assertEqual(supervisor.status(True)["supervisor_health"]["event_flush_failures"], second + 1)
+            with self.assertRaises(d.Invalid):
+                supervisor.start(seconds=60, ongoing=True)
+        supervisor.tick()
+        self.assertIsNone(supervisor.retry_at)
+        self.assertEqual(self.store.read("transport")["listener_events"][-1]["restart"], "held")
+
+    def test_listener_event_pruning_keeps_newest_and_accounts_for_discarded_exits(self):
+        _, supervisor, _ = self.watchdog()
+        supervisor.record("child-exit", -9)
+        journal = self.store.read("transport")
+        event = journal["listener_events"][0]
+        journal["listener_events"] = [
+            dict(event, kind="child-exit" if n % 2 == 0 else "restart-refused",
+                 returncode=-n if n % 2 == 0 else None, restart="held")
+            for n in range(131)]  # Exercise the 128-record retention contract independently.
+        before = copy.deepcopy(journal["listener_events"])
+        self.store.write("transport", journal)
+        supervisor.record("child-exit", -999)
+        saved = self.store.read("transport")
+        self.assertEqual(saved["listener_events"][:-1], before[4:])
+        self.assertEqual(saved["listener_events"][-1]["returncode"], -999)
+        self.assertEqual(saved["listener_events_pruned"], dict(events=4, child_exits=2, last_at=NOW))
+        supervisor.record("restart-refused")
+        saved = self.store.read("transport")
+        self.assertEqual(saved["listener_events_pruned"], dict(events=5, child_exits=3, last_at=NOW))
+        self.assertEqual(saved["listener_events"][0], before[5])
+        self.assertEqual(saved["listener_events"][-1]["kind"], "restart-refused")
+        status = m.project_status(self.store, NOW, True)
+        self.assertEqual(status["listener_exits"], sum(e["kind"] == "child-exit" for e in before) + 1)
+        self.assertEqual(status["listener_events_pruned"], 5)
+
+    def test_listener_event_pruning_makes_room_at_store_byte_limit(self):
+        _, supervisor, _ = self.watchdog()
+        supervisor.record("child-exit", -9)
+        journal = self.store.read("transport")
+        journal["listener_events"] *= 10
+        self.store.write("transport", journal)
+        byte_limit = (self.root / "transport.json").stat().st_size + 10
+        with patch.object(d, "MAX_BYTES", byte_limit):
+            supervisor.record("child-exit", -999)
+            saved = self.store.read("transport")
+        self.assertEqual(saved["listener_events"][-1]["returncode"], -999)
+        self.assertLess((self.root / "transport.json").stat().st_size, byte_limit)
+        self.assertEqual(len(saved["listener_events"]) + saved["listener_events_pruned"]["events"], 11)
+        self.assertEqual(m.project_status(self.store, NOW, True)["listener_exits"], 11)
+
+    def test_legacy_pending_restart_refusal_is_normalized_without_rewriting_journal(self):
+        _, supervisor, _ = self.watchdog()
+        supervisor.record("child-exit", -9)
+        supervisor.record("restart-refused")
+        journal = self.store.read("transport")
+        journal["listener_events"][-1]["restart"] = "pending"
+        self.store.write("transport", journal)
+        before = (self.root / "transport.json").read_bytes()
+        expected = dict(journal["listener_events"][-1], restart="held")
+        self.assert_listener_disclosure(expected)
+        self.assertEqual((self.root / "transport.json").read_bytes(), before)
 
     def test_listener_restart_timeout_retries_refusal_write_then_stays_held(self):
         manager, supervisor, clock = self.watchdog()

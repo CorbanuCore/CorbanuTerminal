@@ -564,3 +564,122 @@ review/receiving. Gap repair, shared plan/sprint reconciliation, integrator
 acceptance of internal-stage N/A, and later confined code-blind exact-package
 functional acceptance remain open. No combined human-test readiness, true-TUI,
 live TensorCash/Isometric, named-human acceptance or benchmark pass is claimed.
+
+## Increment D final bounded correction — owner-daemon-supervision-03, September 15, 2026
+
+The two earlier supervision rounds above remain historical evidence. This round
+addresses only P3-1 and P3-2 from the independent Opus 5.0 High review of
+`2335d1eb95c3b639399226a58bccf5b038cf9f06`: verdict “patch is correct”,
+confidence 0.72, no blocking findings. Frozen review:
+`/private/tmp/fmgr.Q1SIYZ/odsup2-review.json`.
+
+Allocation digest:
+`43620288609c27c48b4448dbd843f160da3fd523d8abd2fc6807944196a6d531`.
+Claim: `f82499fe-bf01-48fb-83bf-b3ce904deb91`.
+Brief SHA-256, verified before other reads:
+`11abf9ca7652da384d2a454ac72cc397bffa1bdcb41f9a148d3ec5b1bed2d8fa`.
+Worker: gpt-6-astra / high. Branch:
+`bootstrap/owner-daemon-c-20260915`. Worktree:
+`/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-owner-daemon-c-20260915`.
+
+Classification: bounded reliability correction to the authorized increment D
+watchdog. Product heading: **Internal delivery control — TO BUILD**; excerpts:
+“durable event dispatch, acknowledgments and watchdog” and “Show blockers,
+rendered sprints, human test plans, machines, run logs and freshness”.
+The manager's frozen brief explicitly requests the health disclosure and bounded
+retention correction. Existing context remains active
+initiative-delivery-control / PF-80-S01 (`in_progress`); shared governance
+records stay with the manager.
+
+### Finding dispositions and retention contract
+
+- **P3-1 addressed:** operational failure inside an event flush increments a
+  consecutive-failure counter and returns to the tick. Reaping continues despite
+  persistent disk/lock/validation failures, and a running listener's pointer
+  checks continue. Automatic and explicit starts wait for the pending event's
+  successful write, so a restart refusal cannot overwrite unrecorded evidence.
+  Once storage recovers, recording and the existing bounded restart sequence
+  resume. A successful flush clears the counter.
+- The foreground `status` response includes `supervisor_health`: explicit
+  `healthy`/`unhealthy`, `event_flush_failures`, and `pending_events`.
+  Any failed flush reports unhealthy immediately; enabled status is held.
+  This is live process observation, not a claim that an unavailable journal
+  recorded it. Separate file-only status/feed consumers cannot observe an
+  unwritten failure; the foreground status command can. The pending observation
+  remains volatile until the write succeeds, as disclosed in prior rounds.
+- `listener_events` retains at most **128 newest records**, pruning more oldest
+  records if needed to fit the Store envelope within `MAX_BYTES`. Pruning and
+  appending share one atomic journal write. The newest record is never pruned.
+  Other journal sections are untouched; if even the newest event and summary
+  cannot fit, the flush stays pending and unhealthy.
+- Pruning deliberately discards each removed event's individual kind, timestamp,
+  return code, restart count, fence/ingress/gap counts, epoch and restart state.
+  A durable cumulative `listener_events_pruned` summary retains the number of
+  discarded events, number of discarded child exits, and timestamp of the most
+  recently discarded record. Status exposes the discarded-event count, and
+  `listener_exits` includes discarded child exits, so pruning cannot hide their
+  occurrence. Full details survive only for retained events.
+- **P3-2 addressed:** projection normalizes the known legacy
+  `restart-refused/pending` event to `restart-refused/held` in a copy. The
+  unreleased predecessor could write that contradictory shape; a refusal must
+  not imply restart eligibility. The journal is not rewritten and the validator
+  remains strict for current records. Regression covers status, feed and health.
+
+### Regressions and mutation receipts
+
+Five new cases belong to `test_decision_manager.ManagerTests`; case names below
+omit the `test_` prefix. The original record/reap regression now explicitly
+injects reap timeouts while journal operations fail, preserving its once-only
+exit assertion while permitting successful reaping when storage is unavailable.
+
+Initial focused run: **7 passed in 10.341s**, including the two prior error-path
+cases. The persistent-failure case was then extended through the real foreground
+pipe command loop, and the pointer case through explicit-start refusal.
+Every mutation runs compiled production source in memory, then restores that
+source and runs a fresh fixture. No production file is mutated on disk.
+Dedicated SDK children use the existing synthetic launcher and private stores.
+
+| Mutation | Named case | Broken outcome | Restored |
+| --- | --- | --- | --- |
+| Re-raise the event flush error. | `persistent_flush_failure_reaps_reports_and_recovers_restart` | FAIL: killed child handle remains instead of being reaped. | PASS |
+| Suppress the failure counter increment. | Same persistent/reap case | FAIL: healthy/0 instead of unhealthy/1. | PASS |
+| Route foreground status directly to file-only projection. | Same persistent/reap case | ERROR: missing `supervisor_health` in the actual pipe response. | PASS |
+| Return from the tick when flush fails. | `persistent_flush_failure_still_checks_pointers_without_overwriting_event` | FAIL: zero pointer helper calls instead of one. | PASS |
+| Remove the pending-evidence automatic-restart guard. | Same pointer case | FAIL: retry budget consumed while evidence is still pending. | PASS |
+| Remove the explicit-start successful-flush requirement. | Same pointer case | FAIL: attempts manager.start before durable evidence. | PASS |
+| Raise retention limit from 128 to 100000. | `listener_event_pruning_keeps_newest_and_accounts_for_discarded_exits` | FAIL: four extra old events retained instead of newest 128. | PASS |
+| Suppress discarded child-exit accounting. | Same retention case | FAIL: zero discarded exits instead of two. | PASS |
+| Disable byte-budget pruning. | `listener_event_pruning_makes_room_at_store_byte_limit` | ERROR: actual Store.write rejects the oversized envelope. | PASS |
+| Disable legacy refusal normalization. | `legacy_pending_restart_refusal_is_normalized_without_rewriting_journal` | ERROR: validate_status rejects legacy pending refusal. | PASS |
+
+**Ten distinct mutation variants failed and their fresh restored runs passed.**
+Raw broken/restored unittest output is retained in this allocation's tool
+transcript. The first retention mutation also enlarged the fixture because it
+used the mutated constant, failing in fixture setup at Store.write; that attempt
+is retained but excluded as discriminating proof. The fixture now independently
+creates 131 records. Fresh replay failed on the retained-event assertion and
+passed restored; discarded-exit accounting was also replayed on the fixed
+fixture. No native credential prompt occurred.
+
+### Validation and remaining gates
+
+Full final-tree suite: **672 tests passed in 397.039s**, with the exact
+profile-alias-unset SDK command recorded for increment D above, including
+`TMPDIR=/private/tmp` and `PYTHONDONTWRITEBYTECODE=1`. Only the known
+synthetic HTTP 500/429 cleanup ResourceWarnings appeared; there were no suite
+failures, retries or native credential prompts. The suite retained synthetic
+transport evidence at `/private/tmp/isolated-transport-tests-mta9ki7k`.
+Both governance checkers passed: plans **3/3 active, 0 slots available**;
+sprints **116 current, 126 archived**. Final `git diff --check` passed.
+Exactly four allocated files changed: decision_manager, slack_transport,
+test_decision_manager and this evidence record.
+
+Recurrence remains OFF. No activation, installation, live Slack message,
+real-store/credential access, push, release or approval is performed or claimed.
+This is an internal implementation return for manager review, not a combined
+operator human-test handoff. Integrator acceptance of this stage's internal-only
+N/A and the later confined code-blind exact-package functional gate remain open,
+along with prior gap repair and shared plan/sprint reconciliation. This stage
+changes Python supervision/error reporting and uses synthetic Slack fixtures;
+it does not qualify a packaged interactive workflow. No true-TUI,
+TensorCash/Isometric, named-human acceptance or benchmark pass is claimed.

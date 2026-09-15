@@ -25,6 +25,7 @@ import slack_transport as s
 import owner_tmux as tmux
 
 COUNTS = "received needs_clarification recorded queued delivered agent_acknowledged".split()
+LISTENER_EVENT_LIMIT = 128
 
 
 def utc_now():
@@ -32,9 +33,16 @@ def utc_now():
 
 
 def validate_status(value):
-    extra = [key for key in ("unacknowledged_answers", "new_thread_fallbacks", "fence_gap", "pending_pointers", "listener_exits") if key in value]
+    extra = [key for key in ("unacknowledged_answers", "new_thread_fallbacks", "fence_gap", "pending_pointers", "listener_exits", "listener_events_pruned") if key in value]
     d.shape(value, "schema enabled state last_verified watermark pending " + " ".join(COUNTS + extra)
-            + (" last_listener_exit" if "last_listener_exit" in value else ""))
+            + (" last_listener_exit" if "last_listener_exit" in value else "")
+            + (" supervisor_health" if "supervisor_health" in value else ""))
+    if "supervisor_health" in value:
+        health = value["supervisor_health"]
+        d.shape(health, "state event_flush_failures pending_events")
+        d.require(type(health["event_flush_failures"]) is int and health["event_flush_failures"] >= 0)
+        d.require(type(health["pending_events"]) is int and health["pending_events"] in (0, 1))
+        d.require(health["state"] == ("unhealthy" if health["event_flush_failures"] else "healthy"))
     event = value.get("last_listener_exit")
     if event is not None:
         d.shape(event, "kind at returncode restarts fence_count ingress_count fence_gap epoch restart")
@@ -78,9 +86,15 @@ def unacknowledged_answers(ledger, alerts, alert_key=None):
 def project_disclosure(value, store, journal, alerts):
     value["pending_pointers"] = len(a.pending_pointers(alerts))
     exits = [event for event in journal.get("listener_events", []) if event["kind"] == "child-exit"]
-    value["listener_exits"] = len(exits)
+    pruned = journal.get("listener_events_pruned", {})
+    value["listener_exits"] = len(exits) + pruned.get("child_exits", 0)
+    value["listener_events_pruned"] = pruned.get("events", 0)
     events = journal.get("listener_events", [])
-    value["last_listener_exit"] = copy.deepcopy(events[-1]) if events else None
+    event = copy.deepcopy(events[-1]) if events else None
+    # An unreleased predecessor wrote pending refusals. A refusal never grants a restart.
+    if event is not None and event["kind"] == "restart-refused" and event["restart"] == "pending":
+        event["restart"] = "held"
+    value["last_listener_exit"] = event
     value["fence_gap"] = s.fence_gap(store, journal)
     if value["fence_gap"]:
         value["state"] = "held"
@@ -453,6 +467,24 @@ def listener_child(root, guard, control, *, run=None):
         os._exit(code)
 
 
+def prune_listener_events(journal):
+    """Keep newest evidence, accounting for every discarded record in the same write."""
+    events = journal["listener_events"]
+    discarded = events[:-LISTENER_EVENT_LIMIT]
+    del events[:-LISTENER_EVENT_LIMIT]
+    def account(rows):
+        if rows:
+            summary = journal.setdefault("listener_events_pruned", dict(events=0, child_exits=0, last_at=None))
+            summary["events"] += len(rows)
+            summary["child_exits"] += sum(row["kind"] == "child-exit" for row in rows)
+            summary["last_at"] = rows[-1]["at"]
+    account(discarded)
+    # Include the Store envelope; other journal data can consume the remaining space.
+    while len(events) > 1 and len(d.canonical(dict(schema=2, body=journal, digest=d.digest(journal)))) > d.MAX_BYTES:
+        account([events.pop(0)])
+    # Never discard the newest event. If even it cannot fit, flush remains unhealthy.
+
+
 class ListenerSupervisor:
     """Foreground-only watchdog. Three total retries per explicit start, never a scheduler."""
     def __init__(self, manager, transport, now, monotonic=time.monotonic):
@@ -460,10 +492,11 @@ class ListenerSupervisor:
         self.options, self.deadline, self.pin = None, None, None
         self.restarts, self.retry_at, self.pointer_at = 0, None, 0
         self.pending_event, self.exited_process = None, None
+        self.event_flush_failures = 0
         self.pointer_version, self.pointers_pending = None, False
 
     def start(self, *, seconds, ongoing):
-        self.flush_event()
+        d.require(self.flush_event())
         result = self.manager.start(seconds=seconds, ongoing=ongoing)
         self.options = dict(seconds=seconds, ongoing=ongoing)
         self.deadline = None if ongoing else self.clock() + seconds
@@ -492,6 +525,7 @@ class ListenerSupervisor:
                          epoch=journal["lifecycle"]["epoch"], restart="pending" if safe else "held")
             journal.setdefault("listener_events", []).append(event)
             journal["hold"] = journal["hold"] or "listener-exited"
+            prune_listener_events(journal)
             self.manager.store.write("transport", journal)
         self.pin = pin
         self.retry_at = self.clock() + 2 ** self.restarts if safe else None
@@ -500,8 +534,22 @@ class ListenerSupervisor:
 
     def flush_event(self):
         if self.pending_event is not None:
-            self.record(*self.pending_event)
+            try:
+                self.record(*self.pending_event)
+            except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
+                self.event_flush_failures += 1
+                return False  # A broken journal must not prevent reaping or pointer checks.
             self.pending_event = None  # Clear only after durable recording succeeds.
+            self.event_flush_failures = 0
+        return True
+
+    def status(self, enabled):
+        value = project_status(self.manager.store, self.now(), enabled)
+        value["supervisor_health"] = dict(state="unhealthy" if self.event_flush_failures else "healthy",
+            event_flush_failures=self.event_flush_failures, pending_events=int(self.pending_event is not None))
+        if enabled and self.event_flush_failures:
+            value["state"] = "held"
+        return validate_status(value)
 
     def tick(self):
         try:
@@ -517,7 +565,7 @@ class ListenerSupervisor:
             if code is not None:
                 expected = self.options is None or (code == 0 and self.deadline is not None
                                                     and self.clock() >= self.deadline)
-                if not expected and self.exited_process is not process:
+                if not expected and self.exited_process is not process and self.pending_event is None:
                     # Retain the observation even if journal locks/writes fail.
                     self.pin = None
                     self.pending_event = ("child-exit", code)
@@ -526,7 +574,8 @@ class ListenerSupervisor:
                 elif expected:
                     self.options = None
                 self.manager.stop()
-        if self.retry_at is not None and self.clock() >= self.retry_at:
+        # Reaping and pointer checks proceed, but never replace unwritten evidence with a refusal.
+        if self.pending_event is None and self.retry_at is not None and self.clock() >= self.retry_at:
             self.retry_at = None
             self.restarts += 1
             try:
@@ -575,7 +624,7 @@ def supervise_listener(store, binding, *, live=False, stdin=None, stdout=None, n
                     supervisor.stop()
                     result = dict(state="held")
                 elif operation == "status":
-                    result = project_status(store, now(), live)
+                    result = supervisor.status(live)
                 else:
                     d.require(operation in ("inspect-fence-loss", "recover-missing-fence"))
                     supervisor.stop()

@@ -132,7 +132,14 @@ def locked(store):
         d.shape(value, fields + (" schema lifecycle" if "schema" in value else "")
                 + (" fence_losses" if "fence_losses" in value else "")
                 + (" runtime_guard" if "runtime_guard" in value else "")
-                + (" listener_events" if "listener_events" in value else ""))
+                + (" listener_events" if "listener_events" in value else "")
+                + (" listener_events_pruned" if "listener_events_pruned" in value else ""))
+        if "listener_events_pruned" in value:
+            summary = value["listener_events_pruned"]
+            d.shape(summary, "events child_exits last_at")
+            d.require(type(summary["events"]) is int and type(summary["child_exits"]) is int
+                      and 0 <= summary["child_exits"] <= summary["events"] and summary["events"] > 0)
+            d.stamp(summary["last_at"])
         d.require(type(value["watermark"]) is int and value["watermark"] >= 0)
         losses(value)
         yield value
