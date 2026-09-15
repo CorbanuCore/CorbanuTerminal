@@ -602,6 +602,62 @@ class ManagerTests(fixtures.LiveFixture):
         with self.assertRaises(d.Invalid):
             s.inspect_fence_loss(self.store, PIN)
 
+    def test_listener_exit_hold_recovers_via_restart_and_explicit_qualification(self):
+        manager, supervisor, clock = self.watchdog()
+        self.review_gap()
+        before = self.transport.gate()["lifecycle"]
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "last-verified")
+
+        exited = manager.process
+        exited.kill()
+        exited.wait(timeout=5)
+        supervisor.tick()
+        journal = self.store.read("transport")
+        self.assertIsNone(manager.process)
+        self.assertEqual(journal["lifecycle"], before)
+        self.assertEqual(journal["lifecycle"]["session"]["phase"], "connected")
+        self.assertEqual(journal["hold"], "listener-exited")
+        self.assertEqual(journal["listener_events"][-1]["returncode"], -9)
+        self.assertEqual(journal["listener_events"][-1]["restart"], "pending")
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "held")
+        with s.locked(self.store) as current:
+            s.restart_allowed(self.store, current, supervisor.pin)
+
+        self.assertEqual(supervisor.retry_at, 1)
+        clock[0] = 0.99
+        supervisor.tick()
+        self.assertIsNone(manager.process)
+        clock[0] = 1
+        with fixture_child("connected", self.endpoint):
+            supervisor.tick()
+        self.assertEqual(self.line(manager.process), dict(type="connected"))
+        restarted = self.store.read("transport")
+        self.assertIsNot(manager.process, exited)
+        self.assertEqual(exited.returncode, -9)
+        self.assertEqual(supervisor.restarts, 1)
+        self.assertNotEqual(restarted["lifecycle"]["session"]["id"], before["session"]["id"])
+        self.assertGreater(restarted["lifecycle"]["epoch"], before["epoch"])
+        self.assertEqual(restarted["hold"], "outage-gap")
+        with self.assertRaises(d.Invalid):
+            self.transport.gate()
+        self.review_gap()
+        self.assertIsNone(self.transport.gate()["hold"])
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "last-verified")
+
+        supervisor.stop()
+        stopped = self.store.read("transport")
+        self.assertEqual(stopped["lifecycle"]["session"]["phase"], "stopped")
+        with self.assertRaises(d.Invalid):
+            s.restart_allowed(self.store, stopped, s.restart_identity(stopped))
+        with fixture_child("connected", self.endpoint):
+            supervisor.start(seconds=60, ongoing=True)
+        self.assertEqual(self.line(manager.process), dict(type="connected"))
+        self.assertGreater(self.store.read("transport")["lifecycle"]["epoch"], stopped["lifecycle"]["epoch"])
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "held")
+        self.review_gap()
+        self.assertIsNone(self.transport.gate()["hold"])
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "last-verified")
+
     def test_listener_restarts_with_backoff_and_exhausts_after_three(self):
         manager, supervisor, clock = self.watchdog()
         sessions = []
