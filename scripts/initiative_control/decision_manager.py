@@ -51,7 +51,7 @@ def project_status(store, now, enabled=False):
                 value["state"] = "held" if transport["hold"] else "last-verified"
                 s.fenced(store, transport)
                 s.observe_session_locked(store, transport)
-                if any(p["receipt"] is None for p in transport["posts"].values()):
+                if any(p["receipt"] is None and not s.reconciled_never_sent(p) for p in transport["posts"].values()):
                     value["state"] = "held"
                 if transport["binding"] is None:
                     value["state"] = "unqualified"
@@ -402,7 +402,7 @@ def supervise_listener(store, binding, *, live=False, stdin=None, stdout=None, n
 def main(argv=None, *, credentials=None, observe_owner=None, stdin=None, stdout=None, now=None, quiesce_listener=None):
     clock = now or utc_now
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices="status init-transport qualify send listen drain interpret resume dispatch reconcile project-status inspect-fence-loss recover-missing-fence supervise-listener".split())
+    parser.add_argument("operation", choices="status init-transport qualify send listen drain interpret resume dispatch reconcile reconcile-orphan project-status inspect-fence-loss recover-missing-fence supervise-listener".split())
     parser.add_argument("--store", required=True)
     parser.add_argument("--feed")
     parser.add_argument("--live", action="store_true")
@@ -445,7 +445,9 @@ def main(argv=None, *, credentials=None, observe_owner=None, stdin=None, stdout=
     owner = observe_owner or channel.owner
     credentials = credentials or (lambda: (os.environ["CORBANU_SLACK_BOT_TOKEN"], os.environ["CORBANU_SLACK_APP_TOKEN"]))
     transport = s.Transport(store, data["binding"], credentials, live=args.live, now=clock)
-    if args.operation == "qualify":
+    if args.operation == "reconcile-orphan":
+        result = transport.reconcile_orphan(data["attempt"], request_digest=data["request_digest"], evidence=data["evidence"])
+    elif args.operation == "qualify":
         result = transport.qualify(data["ui_evidence"], data.get("gap_review"))
     else:
         transport.gate(allow_hold=args.operation in ("drain", "reconcile", "listen"), local=args.operation in ("drain", "listen"))

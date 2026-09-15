@@ -963,6 +963,37 @@ class ManagerTests(fixtures.LiveFixture):
         with self.assertRaises(d.Invalid):
             m.finish(self.store, self.feed_root, key, self.transport, lambda: OWNER, NOW)
 
+    def test_orphan_reconciliation_clears_only_its_status_hold(self):
+        request = self.orphan()
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "held")
+        outcome = self.transport.reconcile_orphan(request["attempt"], request_digest=d.digest(request), evidence="inspected")
+        self.assertEqual(outcome["state"], "never-sent")
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "last-verified")
+        self.orphan("a" * 64)
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "held")
+        with s.locked(self.store) as value:
+            value["posts"]["a" * 64]["reconciliation"] = copy.deepcopy(value["posts"][request["attempt"]]["reconciliation"])
+            self.store.write("transport", value)
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "held")
+
+    def test_owner_orphan_cli_records_exact_request_without_credentials_or_http(self):
+        request = self.orphan()
+        data = dict(binding=PIN, attempt=request["attempt"], request_digest=d.digest(request), evidence="inspection-receipt")
+        incoming, writer = os.pipe()
+        reader, outgoing = os.pipe()
+        with os.fdopen(incoming, "rb") as source, os.fdopen(outgoing, "wb") as sink:
+            with os.fdopen(writer, "wb") as writer_stream:
+                writer_stream.write(d.canonical(data) + b"\n")
+            with patch.object(s.Transport, "web", side_effect=AssertionError("HTTP accessed")):
+                result = m.main(["reconcile-orphan", "--store", str(self.root), "--live"], stdin=source, stdout=sink,
+                                credentials=lambda: self.fail("credentials accessed"), now=lambda: NOW)
+        with os.fdopen(reader, "rb") as response:
+            self.assertEqual(json.loads(response.read()), dict(type="result", result=result))
+        self.assertEqual(result["state"], "never-sent")
+        post = self.store.read("transport")["posts"][request["attempt"]]
+        self.assertEqual(post["reconciliation"]["evidence"], data["evidence"])
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "last-verified")
+
     def test_off_status_needs_no_files_sdk_credentials_or_tools_and_redacts(self):
         output = io.StringIO()
         with patch.object(s.Transport, "web", side_effect=AssertionError("SDK accessed")):

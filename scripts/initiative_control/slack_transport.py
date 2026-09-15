@@ -5,6 +5,7 @@ import fcntl
 import hashlib
 import logging
 import os
+import re
 import stat
 import tempfile
 import threading
@@ -21,6 +22,33 @@ QUIET = logging.Logger("corbanu-slack-private", level=logging.CRITICAL + 1)
 QUIET.addHandler(logging.NullHandler())
 QUIET.propagate = False
 LEASE_NS = 5_000_000_000
+
+
+def legacy_client_msg_id(attempt):
+    """Use the exact pre-guard conversion: a newly rejected ID may have been sent."""
+    if type(attempt) is not str:
+        return None
+    try:
+        return str(uuid.UUID(attempt[:32]))
+    except ValueError:
+        return None
+
+
+def never_sent(request):
+    d.require(legacy_client_msg_id(request["attempt"]) is None)
+    return dict(state="never-sent", reason="invalid-client-msg-id",
+                attempt=request["attempt"], request_digest=d.digest(request))
+
+
+def reconciled_never_sent(post):
+    record = post.get("reconciliation")
+    if record is None:
+        return False
+    d.shape(record, "outcome evidence at")
+    d.require(post["receipt"] is None and record["outcome"] == never_sent(post["request"]))
+    a.token(record["evidence"])
+    d.stamp(record["at"])
+    return True
 
 
 def initialize(store):
@@ -484,9 +512,12 @@ class Transport:
         return pin
 
     def exchange(self, request):
+        attempt = request["attempt"]
+        d.require(type(attempt) is str and re.fullmatch(r"[0-9a-f]{64}", attempt) is not None)
+        client_msg_id = legacy_client_msg_id(attempt)
+        d.require(client_msg_id is not None)  # Before any durable record or credential/HTTP access.
         admitted = self.gate()["lifecycle"]
         d.require(request["identity"] == self.binding and request["payload_digest"] == d.digest(request["payload"]))
-        attempt = request["attempt"]
         with locked(self.store) as value:
             d.require(observe_session_locked(self.store, value) == (admitted["session"]["id"], admitted["epoch"]))
             fenced(self.store, value)
@@ -501,7 +532,7 @@ class Transport:
             fenced(self.store, value)  # A slow durable request write cannot authorize a later stale POST.
         try:
             response = self.web().chat_postMessage(channel=self.binding["channel"],
-                client_msg_id=str(uuid.UUID(attempt[:32])), **request["payload"])
+                client_msg_id=client_msg_id, **request["payload"])
             d.require(response["ok"] is True and response["channel"] == self.binding["channel"])
             evidence = a.check_receipt(request, dict(attempt=attempt, identity=self.binding,
                 payload_digest=request["payload_digest"], thread_ts=request["thread_ts"], ts=response["ts"]))
@@ -522,13 +553,16 @@ class Transport:
             raise d.Invalid() from None
 
     def reconcile(self, request):
-        """Positive association only; missing/ambiguous history is never nonsend."""
+        """Classify impossible legacy IDs locally; valid IDs require positive association."""
         value = self.gate(allow_hold=True)
         saved = value["posts"][request["attempt"]]
         d.require(saved["request"] == request)
         d.require(request["identity"] == self.binding and request["payload_digest"] == d.digest(request["payload"]))
         if saved["receipt"] is not None:
             return a.check_receipt(request, saved["receipt"])
+        client_msg_id = legacy_client_msg_id(request["attempt"])
+        if client_msg_id is None:
+            return never_sent(request)  # Classification only; owner evidence is required to clear the hold.
         found, cursor = [], None
         for _ in range(3):
             args = dict(channel=self.binding["channel"], limit=15, cursor=cursor)
@@ -537,7 +571,7 @@ class Transport:
             for message in result["messages"]:
                 # Unique durable attempt + authenticated pinned conversation/identity/thread proves acceptance.
                 # Slack rewrites URLs/emoji; rendered text is not a payload-integrity or comprehension receipt.
-                if (message.get("client_msg_id") == str(uuid.UUID(request["attempt"][:32]))
+                if (message.get("client_msg_id") == client_msg_id
                         and message.get("bot_id") == self.binding["bot"] and message.get("app_id") == self.binding["app"]
                         and message.get("channel", self.binding["channel"]) == self.binding["channel"]
                         and (message.get("thread_ts") in (None, message.get("ts")) if request["thread_ts"] is None
@@ -553,6 +587,33 @@ class Transport:
             value["posts"][request["attempt"]]["receipt"] = evidence
             self.store.write("transport", value)
         return evidence
+
+    def reconcile_orphan(self, attempt, *, request_digest, evidence):
+        """Owner-only explicit local repair; never clear an attempt the old sender could encode."""
+        a.token(evidence)
+        now = self.now()
+        d.stamp(now)
+        # Owner input arrives straight off the pipe: refuse a non-string the same
+        # way every other owner path does, rather than letting it reach the posts
+        # index and surface as TypeError.
+        d.require(isinstance(attempt, str) and legacy_client_msg_id(attempt) is None)
+        admitted = self.gate(allow_hold=True)
+        with locked(self.store) as value:
+            d.require(value["binding"] == self.binding and value["lifecycle"] == admitted["lifecycle"])
+            fenced(self.store, value)
+            observe_session_locked(self.store, value)
+            saved = value["posts"][attempt]
+            request = saved["request"]
+            d.require(request["attempt"] == attempt and d.digest(request) == request_digest)
+            d.require(request["identity"] == self.binding and request["payload_digest"] == d.digest(request["payload"]))
+            d.require(saved["receipt"] is None)
+            outcome = never_sent(request)
+            if reconciled_never_sent(saved):
+                d.require(saved["reconciliation"]["evidence"] == evidence)
+            else:
+                saved["reconciliation"] = dict(outcome=outcome, evidence=evidence, at=now)
+                self.store.write("transport", value)
+            return copy.deepcopy(outcome)
 
     def bind_alert(self, key, row):
         d.require(row["intent"]["identity"] == self.binding and row["parent"]["state"] == row["details"]["state"] == "sent")

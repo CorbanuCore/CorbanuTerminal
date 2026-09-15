@@ -294,6 +294,13 @@ class LiveFixture(SlackFixture):
         self.owner.update("connected")  # Genuine lifetime owner, never a patched gate or fabricated lease.
         self.addCleanup(self.owner.release)
 
+    def orphan(self, attempt="pf83-vm-key-20260915T103614Z"):
+        request = dict(a.request_for(self.key, a.inspect(self.store, self.key), "parent"), attempt=attempt)
+        with s.locked(self.store) as value:
+            value["posts"][attempt] = dict(request=copy.deepcopy(request), receipt=None, retry_after=None)
+            self.store.write("transport", value)
+        return request
+
     def sending(self):
         row = a.send(self.store, self.key, PIN, self.transport.exchange)
         self.transport.bind_alert(self.key, row)
@@ -1155,6 +1162,101 @@ class TransportTests(LiveFixture):
         with s.locked(self.store) as value:
             self.assertEqual(value["gap_reviews"], [dict(review, at=NOW)])
             self.assertIsNone(value["hold"])
+
+    def test_attempt_validation_precedes_all_writes_and_http(self):
+        request = a.request_for(self.key, a.inspect(self.store, self.key), "parent")
+        for attempt in ("pf83-vm-key-20260915T103614Z", "", "a" * 31, "a" * 32, "a" * 63,
+                        "a" * 65, "A" * 64, "g" * 64, "a" * 64 + "\n", None, 3, []):
+            with self.subTest(attempt=attempt):
+                before = (self.root / "transport.json").read_bytes()
+                calls = len(self.calls)
+                with patch.object(self.store, "write", side_effect=AssertionError("state written")), \
+                        patch.object(self.transport, "gate", side_effect=AssertionError("gate reached")), \
+                        self.assertRaises(d.Invalid):
+                    self.transport.exchange(dict(request, attempt=attempt))
+                self.assertEqual((self.root / "transport.json").read_bytes(), before)
+                self.assertEqual(len(self.calls), calls)
+
+    def test_digest_attempt_retains_uuid_receipt_and_duplicate_semantics(self):
+        request = a.request_for(self.key, a.inspect(self.store, self.key), "parent")
+        receipt = self.transport.exchange(request)
+        self.assertEqual(self.messages[0]["client_msg_id"], str(s.uuid.UUID(request["attempt"][:32])))
+        self.assertEqual(self.transport.exchange(request), receipt)
+        self.assertEqual(self.transport.reconcile(request), receipt)
+        self.assertEqual(len(self.messages), 1)
+
+    def test_reconcile_orphan_refuses_non_string_attempt(self):
+        # Owner input off the pipe must refuse like every other owner path.
+        for attempt in ([], {}, 7, None):
+            with self.subTest(attempt=attempt), self.assertRaises(d.Invalid):
+                self.transport.reconcile_orphan(attempt, request_digest="a" * 64, evidence="inspection")
+
+    def test_malformed_orphan_classifies_without_http_and_owner_retains_evidence(self):
+        request = self.orphan()
+        before = self.store.read("transport")
+        with patch.object(self.transport, "web", side_effect=AssertionError("HTTP accessed")):
+            outcome = self.transport.reconcile(request)
+            self.assertEqual(outcome["state"], "never-sent")
+            self.assertEqual(self.store.read("transport"), before)
+            result = self.transport.reconcile_orphan(request["attempt"], request_digest=d.digest(request),
+                                                     evidence="owner-inspection-sha256-" + "a" * 64)
+        self.assertEqual(result, outcome)
+        post = self.store.read("transport")["posts"][request["attempt"]]
+        self.assertEqual({k: post[k] for k in before["posts"][request["attempt"]]}, before["posts"][request["attempt"]])
+        self.assertEqual(post["reconciliation"], dict(outcome=outcome, at=NOW,
+                         evidence="owner-inspection-sha256-" + "a" * 64))
+        self.assertTrue(s.reconciled_never_sent(post))
+        raw = (self.root / "transport.json").read_bytes()
+        reopened = s.Transport(a.Store(self.root), PIN, lambda: self.fail("credentials"), live=True, now=lambda: NOW)
+        self.assertEqual(reopened.reconcile_orphan(request["attempt"], request_digest=d.digest(request),
+                         evidence=post["reconciliation"]["evidence"]), outcome)
+        self.assertEqual((self.root / "transport.json").read_bytes(), raw)
+        with self.assertRaises(d.Invalid):
+            reopened.reconcile_orphan(request["attempt"], request_digest=d.digest(request), evidence="different")
+        self.assertEqual((self.root / "transport.json").read_bytes(), raw)
+
+    def test_orphan_repair_requires_exact_evidence_request_and_uncertain_receipt(self):
+        request = self.orphan()
+        for digest, evidence in ((d.digest(request), ""), ("0" * 64, "inspected"), (d.digest(request), None)):
+            before = (self.root / "transport.json").read_bytes()
+            with self.assertRaises(d.Invalid):
+                self.transport.reconcile_orphan(request["attempt"], request_digest=digest, evidence=evidence)
+            self.assertEqual((self.root / "transport.json").read_bytes(), before)
+        with s.locked(self.store) as value:
+            value["posts"][request["attempt"]]["receipt"] = {"retained": True}
+            self.store.write("transport", value)
+        before = (self.root / "transport.json").read_bytes()
+        with self.assertRaises(d.Invalid):
+            self.transport.reconcile_orphan(request["attempt"], request_digest=d.digest(request), evidence="inspected")
+        self.assertEqual((self.root / "transport.json").read_bytes(), before)
+
+    def test_owner_cannot_clear_any_legacy_encodable_attempt_or_missing_history(self):
+        for attempt in ("a" * 64, "a" * 32, "A" * 64, "a" * 32 + "-legacy-suffix"):
+            with self.subTest(attempt=attempt):
+                request = self.orphan(attempt)
+                before = (self.root / "transport.json").read_bytes()
+                with self.assertRaises(d.Invalid):
+                    self.transport.reconcile_orphan(attempt, request_digest=d.digest(request), evidence="inspected")
+                with self.assertRaises(d.Invalid):
+                    self.transport.reconcile(request)  # Empty complete history is still uncertainty.
+                self.assertEqual((self.root / "transport.json").read_bytes(), before)
+        self.assertEqual(len(self.messages), 0)
+
+    def test_orphan_repair_preserves_fence_and_session_refusals(self):
+        request = self.orphan()
+        self.owner.close()
+        before = (self.root / "transport.json").read_bytes()
+        with self.assertRaises(d.Invalid):
+            self.transport.reconcile_orphan(request["attempt"], request_digest=d.digest(request), evidence="inspected")
+        self.assertEqual((self.root / "transport.json").read_bytes(), before)
+        self.owner = s.Session(self.store)
+        self.owner.update("connected")
+        self.addCleanup(self.owner.release)
+        s.ingress_count(self.store, mark=True)
+        before = (self.root / "transport.json").read_bytes()
+        with self.assertRaises(d.Invalid):
+            self.transport.reconcile_orphan(request["attempt"], request_digest=d.digest(request), evidence="inspected")
+        self.assertEqual((self.root / "transport.json").read_bytes(), before)
 
     def test_real_sdk_qualification_posts_and_restart_receipts(self):
         row = self.sending()
