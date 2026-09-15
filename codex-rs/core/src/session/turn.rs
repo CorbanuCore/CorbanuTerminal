@@ -1669,6 +1669,7 @@ async fn run_sampling_request(
     let responses_accounting = (matches!(
         turn_context.config.accounting,
         crate::config::AccountingMode::DirectOpenAiResponsesHttp { .. }
+            | crate::config::AccountingMode::DirectOpenAiResponses { .. }
     ) && turn_context.config.model_provider_id == "openai"
         && turn_context.provider.info().wire_api == codex_model_provider_info::WireApi::Responses)
         .then(|| {

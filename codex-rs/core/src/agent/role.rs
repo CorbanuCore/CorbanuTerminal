@@ -295,6 +295,7 @@ mod reload {
                 Some(codex_model_provider_info::WireApi::Anthropic)
             }
             crate::config::AccountingMode::DirectOpenAiResponsesHttp { .. }
+            | crate::config::AccountingMode::DirectOpenAiResponses { .. }
                 if config.model_provider_id == "openai" =>
             {
                 Some(codex_model_provider_info::WireApi::Responses)

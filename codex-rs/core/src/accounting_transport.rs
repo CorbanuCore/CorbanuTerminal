@@ -24,6 +24,14 @@ pub(crate) struct ResponseEvidence {
 }
 
 impl ResponseEvidence {
+    pub(super) fn admitted(sampling: Arc<Sampling>, attempt: Attempt) -> Arc<Self> {
+        Arc::new(Self {
+            sampling,
+            attempt: OnceLock::from(attempt),
+            source: Uuid::new_v4(),
+        })
+    }
+
     pub(crate) fn new(sampling: Arc<Sampling>) -> Arc<Self> {
         Arc::new(Self {
             sampling,

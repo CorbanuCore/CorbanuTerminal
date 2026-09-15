@@ -650,6 +650,11 @@ pub enum AccountingMode {
         scope: uuid::Uuid,
         approved_endpoint: String,
     },
+    /// Internal sampling-only Responses accounting across WebSocket and HTTP.
+    DirectOpenAiResponses {
+        scope: uuid::Uuid,
+        approved_endpoint: String,
+    },
 }
 
 /// Application configuration loaded from disk and merged with overrides.

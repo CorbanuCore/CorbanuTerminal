@@ -26,6 +26,8 @@ mod prices;
 pub(crate) mod responses;
 #[path = "accounting_transport.rs"]
 pub(crate) mod transport;
+#[path = "accounting_websocket.rs"]
+pub(crate) mod websocket;
 
 pub(crate) const FAILURE: &str =
     "Native Anthropic accounting failed; request stopped without a repair send";
@@ -141,6 +143,10 @@ impl Sampling {
                 "messages",
             ),
             AccountingMode::DirectOpenAiResponsesHttp {
+                scope,
+                approved_endpoint,
+            }
+            | AccountingMode::DirectOpenAiResponses {
                 scope,
                 approved_endpoint,
             } => (

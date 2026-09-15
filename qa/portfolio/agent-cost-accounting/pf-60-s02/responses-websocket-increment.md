@@ -212,3 +212,250 @@ cancellation and two-reopen proof remain without new evidence for the same reaso
 Only this receipt changed; the 17 allocated Rust paths remain unchanged. Independent
 review and receiving gates are absent. Deferred coverage and later functional gates
 remain exactly as disclosed above; no implementation or readiness claim is made.
+
+## acct-ws-impl-03 — implementation and worker evidence
+
+This continuation preserves both blocked dispatches above as history. This attempt
+implements the allocated runtime and 36 named test functions. It does not complete
+S02, activate S03, supply independent review, or qualify a human-test/release handoff.
+
+- Action: `acct-ws-impl-03`; worker: `gpt-6-astra`, effort `high`.
+- Allocation digest: `59e0c45038e7efd589e9dd3ac90a3d9957ce02b52eb8c3ed9b01b117cc597e65`.
+- Claim: `e6576b49-2b96-4787-b31e-db459eb7e161`.
+- Brief: `/private/tmp/fmgr.Q1SIYZ/briefs/acct-ws-impl-03.json`;
+  SHA-256 `a2098ced27d8e36fa81ca8121f0036c8129047975a6453f53f6cc0aaf571b4b5`.
+- Assigned and actual clean base: `59260f56e0f201fdadef9f73f25ab68a791041e5`.
+  Worktree and branch remain the literal allocated coordinates above.
+- Lease file and verified SHA-256 remain
+  `b537e887800e87bec2ae4156afb1e834978a16176cd1e7a4a3e8f6a1afa94e2d`.
+  The current brief explicitly grants its reuse for this corrected dispatch;
+  predecessor action/base fields in the lease are historical, not silently edited.
+- Every build used
+  `CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-ws-20260915`.
+  Nextest's configured report store is separately `codex-rs/target/nextest/local/`;
+  that report location is not a Rust build target.
+- Classification: existing PF-60 product initiative, PF-60-S02 `in_progress`.
+  Product heading **Measurement targets**; excerpt: “No commercial performance
+  numbers have been supplied. The following metrics must be instrumented, with
+  targets set through the decision rights defined above.”
+- Toolchain: rustc 1.95.0 (59807616e 2026-04-14), rustfmt 1.9.0-stable,
+  just 1.58.0; macOS aarch64. Test isolation was read before execution.
+  Every Rust test used the checkout's guarded `just test`; no live profile,
+  native credential prompt, provider inference, push or review subagent occurred.
+
+### Implemented contract
+
+The separate internal combined mode shares one deferred request identity with HTTP
+fallback. The HTTP-only mode, its existing tests and default Disabled configuration
+remain intact. WS frames receive durable intent and original-price binding in the
+socket pump immediately before send, after serialization and the existing guard.
+Queue/consumer cancellation closes the result channel; the pump checks it before
+admission and send. A committed admission with an uncertain or cancelled send
+remains unknown: this is the dispatch crash window, not proof of free inference.
+
+Established connections carry nonsecret endpoint/API-key provenance captured from
+existing resolved setup, including preconnect/prewarm. Current and cached routes
+must agree before accounted sampling; the pump retains the immutable binding.
+Handshake redirects latch accounting failure and cannot become repair HTTP sends.
+HTTP fallback retains the existing no-redirect client and final-URL admission.
+
+WS text uses the existing Responses decoder before wrapped errors and typed event
+conversion. Each response retains its own observer/source and checked text position;
+writes are awaited before completion. Missing/null fields do not manufacture zero.
+Failure/cancellation latches and existing connection invalidation remain effective.
+Original pricing reuses `responses_original` unchanged, including its exact
+`openai-responses-api-key-bundled-v1` source tuple and null unsupported economics.
+
+### Commands and attempt ledger
+
+All commands below have the exact CARGO_TARGET_DIR prefix above, run from this
+checkout, and end in `--locked --offline`. Shell log capture uses `set -o pipefail`
+and `2>&1 | tee /private/tmp/acct-ws-impl-03-evidence/<log>`.
+The suffixes and selectors below are literal, not suggested future commands.
+
+| Key | Guarded command after the prefix |
+| --- | --- |
+| A | `just test -p codex-api -E 'test(responses_websocket_accounting)' --locked --offline` |
+| C | `just test -p codex-core --lib -E 'test(accounting_responses_ws)' --locked --offline` |
+| N | `just test -p codex-core --test all -E 'test(accounting_responses_ws_native)' --locked --offline` |
+| R | `just test -p codex-core -E 'test(accounting) \| test(websocket) \| test(prewarm) \| test(incremental) \| test(stage_one) \| test(agent::role)' --locked --offline` |
+| T | `just test -p codex-api -p codex-websocket-client -p codex-http-client -p codex-login -E 'package(codex-api) \| package(codex-websocket-client) \| (package(codex-http-client) & (test(redirect) \| test(custom_ca))) \| (package(codex-login) & (test(redirect) \| test(custom_ca)))' --locked --offline` |
+
+Markdown escapes in the table display literal shell `|` operators inside the
+single-quoted selector. They are not backslashes to pass to the shell.
+
+| Attempt | Run ID | Exit; result; filtered out |
+| --- | --- | --- |
+| A1 | `3032d42c-c16f-4149-b481-28ff6cfefc8c` | 100; 2 pass, 6 fail (each tried twice); 216 filtered |
+| A2 | `bb864a39-356d-493e-b8ef-37b68766107b` | 100; 6 pass, 2 fail (each tried twice); 216 filtered |
+| C1 | No run ID: compilation failed | 101; zero tests executed |
+| C2, `core-unit-02.log` | `ca4d9672-52bc-4a71-b640-66e963187c1e` | 0; 8 pass; 2451 filtered |
+| N1, `native-01.log` | `39ca17cb-a8e3-42a0-a126-1292c8b18ebf` | 0; 20 pass, 1 leaky; 1137 filtered |
+| A3, `api-03.log` | `d34c5c65-ec23-4a5c-a8bb-4ede48675bf4` | 0; 8 pass; 216 filtered |
+| N2, `native-02.log` | `5d28c06e-0f65-4e2e-9153-b0fd62b45e8f` | 0; 20 pass; 1137 filtered |
+| R1, `core-regression-01.log` | `da31f485-5669-4ae6-81b3-c3a755f44fe9` | 0; 200 pass, 2 leaky; 3420 filtered |
+| T1, `api-transport-regression-01.log` | `d5bb49a9-41e0-4890-9fc4-f78e5c4c8e9d` | 0; 262 pass; 239 filtered |
+
+A1's six socket cases failed before dispatch because the new fixture did not
+negotiate the compression extension used by the retained production connector.
+A2 corrected handshake configuration; its terminal-container and observation-barrier
+fixtures still omitted typed display-usage fields. Complete synthetic usage fixed
+those fixtures without changing the decoder or production terminal semantics.
+C1 rejected dynamic SQL under SQLx's audited-string API and a String-to-anyhow
+conversion; literal fixture queries and explicit error conversion fixed both.
+
+N1's leaky case was `fallback_http_transport_retry`. R1's leaky cases were
+`accounting_price_projection_retains_absent_read_and_write_and_exact_milli` and
+`accounting_responses_ws_cached_connection_provenance`. Later clean passes do not
+erase these attempts. No flaky pass was reported in the completed runs above;
+execution skips were zero, distinct from the reported selector exclusions.
+Existing dead-code warnings in state/protected-state/Core support remain disclosed.
+
+Artifacts live at `/private/tmp/acct-ws-impl-03-evidence/`. Preserved JUnit files
+are named by their actual XML `uuid`, matching the run IDs above. A1's JUnit was
+overwritten before preservation; A1/A2/C1 raw output remains in the dispatch tool
+transcript, not a fabricated standalone log. A2's matching JUnit is preserved.
+Final run results and artifact hashes are appended below.
+
+### Case map and vectors
+
+Prefixes: API rows use `responses_websocket_accounting_`; Core rows use
+`accounting_responses_ws_`; native rows use `accounting_responses_ws_native_`.
+Each suffix is the exact corresponding name in the preserved 36-case table.
+Passing names alone are not an independent review of assertion completeness.
+
+| Suite / suffix | Assertions and evidence |
+| --- | --- |
+| API / none_preserves_legacy | Ordinary frame/model, legacy invalid numeric tolerance and normal completion |
+| API / pump_admission_barrier | Real peer receives no frame while admission held; release sends once; denial sends none |
+| API / queued_cancel_and_send_failure | Consumer cancellation while waiting for stream ownership/admission; peer failure after admission retains no invented usage |
+| API / positions_and_replacement | Intervening text advances positions; repeated values, missing and null remain distinct |
+| API / usage_and_terminal_containers | Completed/failed/incomplete plus both usage locations; conflicting dual containers reject |
+| API / invalid_evidence_stops | All six fields: negative, fraction, string, boolean, overflow; malformed JSON/container/detail; no completion |
+| API / observation_barrier | Held numeric persistence blocks completion; rejection terminates |
+| API / response_local_binding | Separate observers, positions and counts through independent real connections |
+| Core / mode_scope_and_lazy_bootstrap | Disabled, HTTP-only and combined distinction; no early table installation; one resolved Sampling |
+| Core / auth_route_eligibility | API key positive; command/bearer/header/env-header/Chat/subscription/agent identity/missing-auth negatives; initialized exclusion latches |
+| Core / exact_endpoint_binding | HTTP/HTTPS scheme mapping; userinfo/query/fragment/scheme rejection; host/path/port mismatch |
+| Core / cached_connection_provenance | Matching reuse; stale endpoint, unknown provenance and unsupported original route reject |
+| Core / fallback_keeps_request_and_predecessor | Shared WS/HTTP request UUID, distinct linked attempts, late response-local observation |
+| Core / original_price_binding | Literal source UUID tuple and 5/30/0.5 rates; Astra/alias/remote/tier nulls; previous snapshot retained |
+| Core / failure_and_cancellation_latch | Pre-permit cancellation; bootstrap cancellation/missing DB; observation rejection and scope cleanup |
+| Core / role_inheritance_preserves_reserved_provider_rule | Instruction-only role inherits mode; reserved openai provider override rejects |
+| Native / off_and_http_only_compatibility | One handshake, one warmup and one sampling frame; no accounting tables |
+| Native / complete_and_partial_goldens | One admitted sampling frame per write-present/absent vector; separate typed SQLite reads and exact totals |
+| Native / prewarm_preconnect_and_cached_reuse | One connection; warmup reports 999/999 and remains unobserved; incremental sampling retains only its own counts |
+| Native / incremental_sampling_and_turn_identity | Real shell tool continuation; incremental input/output; two distinct request IDs in one turn |
+| Native / upgrade_required_http_fallback | One 426 handshake, zero WS frames, one HTTP POST and admitted attempt |
+| Native / ws_prefix_then_http_fallback | One WS prefix plus one HTTP POST; linked attempts/source IDs, exact 0.00322 total |
+| Native / connection_limit_reconnect | Two handshakes, one warmup, two linked sampling attempts; first unknown |
+| Native / previous_response_missing_full_retry | Native incremental rejection then full request without previous_response_id; two linked attempts |
+| Native / fallback_http_transport_retry | One WS frame then HTTP 503/success; three linked attempts, two unknown estimates |
+| Native / handshake_and_postdispatch_errors | Handshake 401 creates no intent; actual post-frame 400 leaves one unknown intent; no repair POST |
+| Native / redirects_never_escape_binding | Five WS redirects and five 426-to-HTTP redirect vectors; no target request; no repair |
+| Native / endpoint_and_cached_auth_mismatch | New endpoint mismatch; held subscription-auth warmup followed by current API key fails without sampling frame/table |
+| Native / admission_and_guard_barriers | SQLite BEGIN IMMEDIATE blocks frames; trigger denial admits none; actual native wrong-owner stage-one factory denial |
+| Native / observation_failure_no_repair | One committed prefix, failed next write, no extra frame/POST and unchanged committed observations |
+| Native / cancel_before_and_after_dispatch | Held database before dispatch and real dispatched socket cancellation; no late frame; unknown intent retained |
+| Native / two_reopens_and_original_prices | Unknown/priced-prefix/null-price vectors; two native resumes preserve IDs, positions, snapshots and totals; fresh request differs |
+| Native / spawned_role_children_and_fork | Real root plus two children, role reload, held concurrent frames, child retry ownership/edges, uncharged native fork |
+| Native / delete_rejects_late_usage | Held owner deletion fences late usage; unrelated owner survives; installed-but-OFF resume deletion cleans its rows |
+| Native / unknown_prices_and_no_usage | Astra nonzero usage has null price; successful absent usage remains unknown |
+| Native / auxiliary_scope_and_event_parity | Native compaction POST leaves sampling attempts/observations unchanged; normal completion preserved |
+
+The native support reuses existing readback helpers without editing them. It logs
+synthetic attempt/observation rows from separate SQLite connections; all admissions
+come from actual native UserInput dispatch, never seeded accounting attempts.
+The four literal numerical expectations are now executable assertions: full
+0.00161 with noncached 80, omitted-write subtotal 0.00121/full unknown, two attempts
+0.00322, and repeated cumulative evidence within one attempt 0.00161.
+
+### Qualification limits and receiving work
+
+Sampling only: startup generate=false, handshake-only preconnect, Chat/Corbanu,
+auxiliary collection and complete application/economic coverage remain deferred.
+Prewarm token evidence is deliberately excluded, not attributed later or called free.
+
+The new native guard test proves a real owner-factory denial, not an injected
+stage-one denial at an already-running accounted WS frame. Existing guard regression
+tests supply supporting evidence; a stronger combined-path assertion remains an
+explicit receiving-review question. Safety/model-verification/moderation event
+parity is covered by retained API tests and unchanged downstream processing;
+the new native auxiliary case asserts compaction/completion, not every metadata
+variant. Those two frozen native vectors remain only partially proven: the current
+native harness does not inject a stage-one binding into UserInput sampling, and the
+new auxiliary test does not emit the full metadata matrix. Manager disposition or
+further scoped fixture work is required before claiming every vector complete.
+These narrower assertions are not approved as equivalent to every frozen vector.
+
+The manager still owns independent Fable material review, review allowance,
+receiving-tree shared state/TaskNode and combined API/proxy gates, and plan/sprint
+bookkeeping. None is asserted performed by this worker. Internal-only functional
+N/A requires named-integrator acceptance; later S03/S04 isolated code-blind execution,
+independent evidence review, true-TUI and applicable live-repository qualification
+remain required. No TensorCash/Isometric, live-provider, benchmark, cross-platform
+or release qualification is claimed.
+
+Only the 18 allocated repository paths are changed. Excluded support, decoder,
+price/catalog, auth/transport-policy, manifests, locks and BUILD files are untouched.
+Manual corrections and file-scoped rustfmt precede final Rust tests. Whole-crate
+automatic fix/global format was not used because its writes could exceed this
+literal allocation; the lease's guarded-test-only execution restriction is retained.
+Stable rustfmt reports that imports_granularity is nightly-only; formatting itself
+exits 0. Final checks, exact diff counts, hashes and candidate commit are returned.
+
+### Final formatted-tree verification
+
+| Command key / log | Run ID | Exit; result; filtered |
+| --- | --- | --- |
+| A / `api-final.log` | `28acbd12-4329-440c-81e2-f205aaad23e6` | 0; 8 passed; 216 filtered |
+| C / `core-unit-final.log` | `b48bb343-ceec-41cd-8f48-ba7767e8e8eb` | 0; 8 passed; 2451 filtered |
+| N plus `--success-output immediate` / `native-final.log` | `64dd17f5-8042-40f7-85bf-4c1814befcb3` | 0; 20 passed; 1137 filtered |
+| R / `core-regression-final.log` | `64afca8e-d250-4e09-b1e7-ef14b3fe2d0f` | 0; 200 passed; 3420 filtered |
+| T / `api-transport-regression-final.log` | `c494fd6a-d666-44cf-a045-facf86ea75a3` | 0; 262 passed; 239 filtered |
+
+The final native command inserts `--success-output immediate` immediately before
+`--locked --offline`; it preserves successful raw fixture and SQLite output.
+All five final runs report no failed, execution-skipped, flaky or leaky tests.
+Explicit path attributes were then added to the two native suite registrations;
+the subsequent final Core regression run verifies those final registrations.
+
+Raw native counts (handshakes, warmups, sampling frames, HTTP POSTs):
+successful/partial/OFF/HTTP-only sampling `(1,1,1,0)`; incremental tool continuation
+`(1,1,2,0)`; connection-limit and previous-response recovery `(2,1,2,0)`;
+prefix fallback `(1,1,1,1)`; HTTP retry `(1,1,1,2)`; cached subscription mismatch
+`(1,1,0,0)`. Compaction adds one auxiliary POST without an accounting attempt.
+For each of 301/302/303/307/308, direct WS rejection produced two handshakes
+(prewarm and sampling), zero frames/POSTs/target requests. Each 426-to-HTTP
+redirect vector produced one handshake, zero frames, one POST/attempt and zero
+target requests. This is observed output, not a substituted retry policy.
+
+The final native log contains separate-connection attempt and observation JSON
+for all native scenarios, including linked request/attempt IDs, owner IDs, source
+positions and absence-preserving patches. Numerical assertions and the two-reopen
+case verify the four literal goldens and unchanged original/null snapshots.
+
+Structural checks before this receipt's final bookkeeping: plan checker exit 0,
+active 3/3; sprint checker exit 0, current 116/archived 126; whitespace exit 0.
+Final repetitions are included in RETURN. No size STOP, scope reallocation,
+new product decision, independent material review or receiving acceptance occurred.
+
+Final log SHA-256 values (under `/private/tmp/acct-ws-impl-03-evidence/`):
+
+| Log | SHA-256 |
+| --- | --- |
+| `api-final.log` | `f5d2c2fd96dcb1e63fbf87d4100a4144211fe852fc1b49bc0e392441b7dc0bc1` |
+| `core-unit-final.log` | `2aba7fbea0663e1c1f8fcc9f9fcab1d200ca7543e6da120fb44445de10ac5d10` |
+| `native-final.log` | `0d9986268d21137ab72df75b19743c60c1f36f06651be85a080d3f4da79bfb80` |
+| `core-regression-final.log` | `b5f6a46efce392ce347689d2f18bb89f68698789fb0e52b5c53d9be6e897b368` |
+| `api-transport-regression-final.log` | `71ee92c3d624f172292d79286fb8570e4db1c0934b1fc96cb1b1052c8b4283d0` |
+
+Saved JUnit files use their actual run UUID as basename. The final Core and transport
+JUnit hashes are `809dec1878b570351230361c23995ef319e5e13dc055b6234825004e77577c0d`
+and `57e64f780e8256009225177dcb647ff4295226de276a3eedf6f13519dd62d2df`.
+Generated `candidate.patch` and `SHA256SUMS` in that evidence directory accompany
+RETURN; the manifest covers allocated files, saved XML, logs and the full patch.
+Final file-scoped rustfmt check exits 0; no `.snap.new` exists in Core/API.
+Final conservative size: 2707 changed lines, 735 non-test; all 18 allocated paths.
+Targets 3000/1050 and STOP 3300/1200 are respected. Candidate commit is supplied
+in RETURN, avoiding a self-referential commit hash in this committed receipt.
