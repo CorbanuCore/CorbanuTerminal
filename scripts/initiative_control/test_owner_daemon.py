@@ -13,6 +13,7 @@ from unittest.mock import patch
 from coordinator import Coordinator, digest
 import fable_launcher as f
 import owner_daemon as owner
+import owner_tmux as tmux
 from test_coordinator import seed
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -315,6 +316,362 @@ class OwnerDaemonTests(unittest.TestCase):
         with self.assertRaisesRegex(f.LaunchError, "owner_off"):
             self.tick()
         self.assertEqual([], self.sql("SELECT * FROM operations"))
+
+
+class FakeWorker(tmux.Worker):
+    """Durable harmless launcher seam; no tmux process, model or credential reads."""
+    modes = {}
+    events = []
+    fail = None
+
+    def effect(self, name):
+        action = self.binding["action_id"]
+        self.events.append((action, name))
+        if self.fail == (action, name):
+            raise OSError("synthetic effect failure")
+        self.once("fake-" + name, {"effect": name})
+        if self.modes.get(action) == "crash-" + name:
+            raise SystemExit(73)
+        return self.inspect() if name == "launch" else None
+
+    def launch(self):
+        return self.effect("launch")
+
+    def prompt(self):
+        return self.effect("prompt")
+
+    def start(self):
+        return self.effect("start")
+
+    def inspect(self, deadline=None):
+        action = self.binding["action_id"]
+        mode = self.modes.get(action)
+        if mode == "inspect-error":
+            raise ValueError("synthetic corrupt observation")
+        ack = (self.run / "fake-prompt.json").exists() and mode != "missing-ack"
+        submitted = (self.run / "fake-start.json").exists() and mode != "idle-start"
+        return {"ready": mode != "not-ready", "identity_valid": mode != "invalid",
+                "liveness": "crashed" if mode == "dead" else "alive",
+                "process": {"pid": 12345, "pgid": 12345, "pane": "%0", "start": "synthetic"},
+                "at": f.now(), "ack": ack, "ack_line": self.meta["ack"] if mode != "wrong-ack" else
+                self.meta["ack"].replace(self.binding["allocation_digest"], "b" * 64),
+                "submitted": submitted, "session_id": "fixture-session", "thread_id": "fixture-thread",
+                "turn_id": "work-turn" if submitted else "ack-turn",
+                "returned": "RETURN\nfixture work" if submitted and mode != "working" else None}
+
+
+class WorkerLifecycleTests(unittest.TestCase):
+    setUp = OwnerDaemonTests.setUp
+    tearDown = OwnerDaemonTests.tearDown
+    sql = OwnerDaemonTests.sql
+    arm = OwnerDaemonTests.arm
+    child = OwnerDaemonTests.child
+
+    def configure(self):
+        self.config["transport"] = {"kind": "tmux", "binary": str(Path("/bin/echo").resolve()),
+                                    "binary_sha256": f.file_digest(Path("/bin/echo").resolve()),
+                                    "tmux": str(Path("/bin/echo").resolve()), "runs_dir": str(self.root),
+                                    "auth_link": str(self.root / "unused/auth.json")}
+        f.write_json(self.config_path, self.config)
+        self.sql("UPDATE meta SET config_digest=?", (digest(self.config),))
+        self.authority.update(scope="tmux-workers", config_digest=digest(self.config))
+        self.arm()
+        FakeWorker.modes, FakeWorker.events, FakeWorker.fail = {}, [], None
+        self.fake = patch.object(tmux, "Worker", FakeWorker)
+        self.fake.start()
+        self.addCleanup(self.fake.stop)
+
+    def prepared(self, key="one", **runtime_changes):
+        allocation = seed()[2]["bootstrap"]
+        allocation["resources"] = [key]
+        allocation["inputs"]["worker"] = {
+            "model": "fixture-model", "provider": "fixture", "effort": "high",
+            "worktree": str(self.root), "policy": "--yolo", **runtime_changes}
+        self.c.put_allocation(key, allocation, False, self.c.snapshot()["revision"], {"fixture": True})
+        self.c.event({"id": "prepare-" + key})
+        packet = self.c.begin_manager()
+        action = {"id": key, "kind": "repair", "workstream": "delivery", "sprint": "PF80",
+                  "rationale": "fixture", "inputs": {"allocation": key, **allocation["inputs"]},
+                  "expected_revision": packet["state_revision"], "timeout_seconds": 60}
+        self.c.accept_decision(packet["manager_run"], {
+            "state_revision": packet["state_revision"], "actions": [action]}, {"fixture": True})
+
+    def tick(self):
+        return owner.Kernel(self.config_path).tick()
+
+    def test_full_lifecycle_one_tick_and_restart_are_idempotent(self):
+        self.configure()
+        self.prepared()
+        self.assertEqual("returned", self.tick()["actions"]["one"])
+        self.assertEqual([("one", "launch"), ("one", "prompt"), ("one", "start")], FakeWorker.events)
+        self.assertEqual("returned", self.c.snapshot()["actions"]["one"]["status"])
+        revision = self.c.snapshot()["revision"]
+        self.assertEqual("returned", self.tick()["actions"]["one"])
+        self.assertEqual(revision, self.c.snapshot()["revision"])
+        self.assertEqual(3, len(FakeWorker.events))
+        effects = dict(self.sql("SELECT effect,phase FROM operations"))
+        self.assertEqual({"claim", "prepare", "launch", "prompt", "ack", "dispatched",
+                          "acknowledged", "start", "working", "return_observed", "returned"}, set(effects))
+        self.assertEqual({"applied"}, set(effects.values()))
+        self.assertEqual([("work-turn",)], self.sql("SELECT active_turn_id FROM processes"))
+
+    def test_wrong_ack_is_hard_hold_and_never_retried(self):
+        self.configure()
+        self.prepared()
+        FakeWorker.modes["one"] = "wrong-ack"
+        self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        self.assertIn(("wrong_ack",), self.sql("SELECT reason_code FROM holds"))
+        self.assertEqual("dispatching", self.c.snapshot()["actions"]["one"]["status"])
+        FakeWorker.modes.clear()
+        self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        self.assertNotIn(("one", "start"), FakeWorker.events)
+
+    def test_missing_ack_waits_then_holds_at_fixed_lease(self):
+        self.configure()
+        self.prepared()
+        FakeWorker.modes["one"] = "missing-ack"
+        self.assertEqual("awaiting_ack", self.tick()["actions"]["one"])
+        deadline = self.c.snapshot()["actions"]["one"]["deadline"]
+        with patch.object(owner.time, "time", return_value=deadline + 1):
+            self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        self.assertIn(("missing_ack",), self.sql("SELECT reason_code FROM holds"))
+        self.assertNotIn(("one", "start"), FakeWorker.events)
+        self.assertEqual(1, FakeWorker.events.count(("one", "prompt")))
+
+    def test_start_keys_without_working_turn_never_counts_as_started(self):
+        self.configure()
+        self.prepared()
+        FakeWorker.modes["one"] = "idle-start"
+        self.assertEqual("awaiting_working", self.tick()["actions"]["one"])
+        self.assertEqual([], self.sql("SELECT * FROM operations WHERE effect='working'"))
+        self.assertEqual("awaiting_working", self.tick()["actions"]["one"])
+        deadline = self.c.snapshot()["actions"]["one"]["deadline"]
+        with patch.object(owner.time, "time", return_value=deadline + 1):
+            self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        self.assertIn(("start_not_working",), self.sql("SELECT reason_code FROM holds"))
+        self.assertEqual(1, FakeWorker.events.count(("one", "start")))
+
+    def test_expired_lease_with_surviving_pid_is_dead_and_never_relaunched(self):
+        self.configure()
+        self.prepared()
+        FakeWorker.modes["one"] = "working"
+        self.assertEqual("working", self.tick()["actions"]["one"])
+        deadline = self.c.snapshot()["actions"]["one"]["deadline"]
+        with patch.object(owner.time, "time", return_value=deadline + 1):
+            self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        self.assertEqual([(12345, "lease_expired")],
+                         self.sql("SELECT actual_pid,terminal_status FROM processes"))
+        self.assertIn(("lease_expired",), self.sql("SELECT reason_code FROM holds"))
+        self.assertEqual(1, FakeWorker.events.count(("one", "launch")))
+
+    def test_crash_between_each_transport_effect_and_receipt_holds_on_reload(self):
+        self.configure()
+        for effect in ("launch", "prompt", "start"):
+            with self.subTest(effect=effect):
+                self.prepared(effect)
+                FakeWorker.modes[effect] = "crash-" + effect
+                with self.assertRaises(SystemExit):
+                    self.tick()
+                FakeWorker.modes.clear()
+                events = list(FakeWorker.events)
+                self.assertEqual("HOLD", self.tick()["actions"][effect])
+                self.assertEqual(events, FakeWorker.events)
+        self.assertEqual(3, len(self.sql("SELECT * FROM holds WHERE reason_code='effect_uncertain'")))
+
+    def test_one_failing_action_does_not_abort_another(self):
+        self.configure()
+        self.prepared("one")
+        self.prepared("two")
+        FakeWorker.fail = ("one", "launch")
+        self.assertEqual({"one": "HOLD", "two": "returned"}, self.tick()["actions"])
+        self.assertEqual("returned", self.c.snapshot()["actions"]["two"]["status"])
+        self.assertNotIn(("one", "prompt"), FakeWorker.events)
+
+    def test_launch_receipt_persistence_failure_never_repeats_effect(self):
+        self.configure()
+        self.prepared()
+        original = owner.artifact
+        launch = digest(["tmux", "one", "launch"])
+        def fail(root, relative, value):
+            if relative == "runs/" + launch + "/receipt.json":
+                raise OSError("synthetic disk full")
+            return original(root, relative, value)
+        with patch.object(owner, "artifact", side_effect=fail):
+            self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        self.assertEqual([("one", "launch")], FakeWorker.events)
+
+    def test_claim_commit_gap_holds_without_adopting_or_launching(self):
+        self.configure()
+        self.prepared()
+        original = owner.ExistingCoordinator.claim
+        def crash(c, action):
+            original(c, action)
+            raise SystemExit(75)
+        with patch.object(owner.ExistingCoordinator, "claim", crash):
+            with self.assertRaises(SystemExit):
+                self.tick()
+        self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        self.assertEqual([], FakeWorker.events)
+
+    def test_receipt_after_domain_commit_gap_holds_without_duplicate_mutation(self):
+        self.configure()
+        self.prepared()
+        original = owner.ExistingCoordinator.returned
+        def crash(c, *args):
+            original(c, *args)
+            raise SystemExit(75)
+        with patch.object(owner.ExistingCoordinator, "returned", crash):
+            with self.assertRaises(SystemExit):
+                self.tick()
+        revision = self.c.snapshot()["revision"]
+        self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        self.assertEqual(revision, self.c.snapshot()["revision"])
+        self.assertEqual("returned", self.c.snapshot()["actions"]["one"]["status"])
+
+    def test_paused_owned_wrong_policy_worktree_and_activation_refuse(self):
+        self.configure()
+        self.prepared()
+        self.c.set_enabled(False, {"fixture": True})
+        result = self.tick()
+        self.assertEqual(("READY", "deferred"), (result["state"], result["actions"]["one"]))
+        self.c.set_enabled(True, {"fixture": True})
+        self.c.event({"id": "own-manager"})
+        run = self.c.begin_manager()
+        result = self.tick()
+        self.assertEqual(("READY", "deferred"), (result["state"], result["actions"]["one"]))
+        self.c.fail_manager(run["manager_run"], "fixture")
+        for scope in ("fixture-only", "live"):
+            self.authority["scope"] = scope
+            self.arm()
+            with self.assertRaisesRegex(f.LaunchError, "activation_authority_required"):
+                self.tick()
+        self.authority["scope"] = "tmux-workers"
+        self.arm()
+        self.prepared("bad-policy", policy="approve-everything")
+        self.prepared("bad-worktree", worktree="/")
+        result = self.tick()["actions"]
+        self.assertEqual("HOLD", result["bad-policy"])
+        self.assertEqual("HOLD", result["bad-worktree"])
+        self.assertNotIn(("bad-policy", "launch"), FakeWorker.events)
+        self.assertNotIn(("bad-worktree", "launch"), FakeWorker.events)
+
+    def test_prior_activation_holds_inflight_worker(self):
+        self.configure()
+        self.prepared()
+        FakeWorker.modes["one"] = "working"
+        self.tick()
+        self.authority["generation"] = 2
+        self.arm()
+        self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        self.assertIn(("prior_activation",), self.sql("SELECT reason_code FROM holds"))
+        self.assertEqual(3, len(FakeWorker.events))
+
+    def test_startup_wait_is_resumable_without_duplicate_launch(self):
+        self.configure()
+        self.prepared()
+        FakeWorker.modes["one"] = "not-ready"
+        self.assertEqual("awaiting_ready", self.tick()["actions"]["one"])
+        self.assertEqual([("one", "launch")], FakeWorker.events)
+        FakeWorker.modes.clear()
+        self.assertEqual("returned", self.tick()["actions"]["one"])
+        self.assertEqual(1, FakeWorker.events.count(("one", "launch")))
+
+    def test_invalid_or_dead_worker_and_inspection_error_isolate_actions(self):
+        self.configure()
+        for mode in ("invalid", "dead", "inspect-error"):
+            self.prepared(mode)
+            FakeWorker.modes[mode] = mode
+        self.prepared("good")
+        outcomes = self.tick()["actions"]
+        self.assertEqual("returned", outcomes.pop("good"))
+        self.assertEqual({"invalid": "HOLD", "dead": "HOLD", "inspect-error": "HOLD"}, outcomes)
+        self.assertEqual([], [event for event in FakeWorker.events
+                              if event[0] != "good" and event[1] == "start"])
+
+    def test_receipt_before_owner_commit_resumes_without_relaunch(self):
+        self.configure()
+        self.prepared()
+        original = owner.artifact
+        launch = digest(["tmux", "one", "launch"])
+        def crash(root, relative, value):
+            result = original(root, relative, value)
+            if relative == "runs/" + launch + "/receipt.json":
+                raise SystemExit(73)
+            return result
+        with patch.object(owner, "artifact", side_effect=crash):
+            with self.assertRaises(SystemExit):
+                self.tick()
+        self.assertEqual("returned", self.tick()["actions"]["one"])
+        self.assertEqual(1, FakeWorker.events.count(("one", "launch")))
+
+    def test_tampered_receipt_request_binding_and_claim_hold(self):
+        self.configure()
+        for key, kind in (("receipt", "receipt"), ("request", "request"),
+                          ("binding", "binding"), ("claim", "claim")):
+            self.prepared(key)
+            FakeWorker.modes[key] = "working"
+            self.tick()
+            if kind in {"receipt", "request"}:
+                relative = self.sql("SELECT " + kind + "_artifact FROM operations "
+                                    "WHERE action_id=? AND effect='launch'", (key,))[0][0]
+                path = self.root / relative
+                f.write_json(path, {**owner.load(path), "tampered": True})
+            elif kind == "binding":
+                run = self.sql("SELECT private_run_root FROM processes WHERE op_id=?",
+                               (digest(["tmux", key, "launch"]),))[0][0]
+                path = Path(run) / "worker.json"
+                meta = owner.load(path)
+                meta["binding"]["effort"] = "low"
+                f.write_json(path, meta)
+            else:
+                with self.c.mutation("fixture-claim-change", {}) as (_, state):
+                    state["actions"][key]["claim"] = "wrong"
+            self.assertEqual("HOLD", self.tick()["actions"][key])
+
+    def test_authority_rechecked_after_intent_before_launch(self):
+        self.configure()
+        self.prepared()
+        original = owner.artifact
+        launch = digest(["tmux", "one", "launch"])
+        def pause(root, relative, value):
+            result = original(root, relative, value)
+            if relative == "runs/" + launch + "/request.json":
+                self.c.set_enabled(False, {"fixture": True})
+            return result
+        with patch.object(owner, "artifact", side_effect=pause):
+            self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        self.assertEqual([], FakeWorker.events)
+        self.assertIn(("dispatch_paused_or_owned",), self.sql("SELECT reason_code FROM holds"))
+
+    def test_unowned_claim_and_expired_paused_worker_hold(self):
+        self.configure()
+        self.prepared("unowned")
+        self.c.claim("unowned")
+        self.assertEqual("HOLD", self.tick()["actions"]["unowned"])
+        self.prepared()
+        FakeWorker.modes["one"] = "working"
+        self.tick()
+        self.c.set_enabled(False, {"fixture": True})
+        deadline = self.c.snapshot()["actions"]["one"]["deadline"]
+        with patch.object(owner.time, "time", return_value=deadline + 1):
+            self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        self.assertEqual([("lease_expired",)], self.sql("SELECT terminal_status FROM processes"))
+
+    def test_real_process_exit_after_launch_intent_preserves_uncertainty(self):
+        self.configure()
+        self.prepared()
+        result = self.child(
+            "import os,sys,owner_daemon as o,owner_tmux as t\n"
+            "from test_owner_daemon import FakeWorker\n"
+            "def launch(self):\n self.once('fake-launch', {'created':True})\n os._exit(73)\n"
+            "FakeWorker.launch=launch\n"
+            "t.Worker=FakeWorker\n"
+            "o.Kernel(sys.argv[1]).tick()")
+        self.assertEqual(73, result.returncode, result.stderr)
+        self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        self.assertEqual(1, len(list(self.root.glob("w-*/fake-launch.json"))))
+        self.assertEqual([], FakeWorker.events)
 
 
 if __name__ == "__main__":

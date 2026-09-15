@@ -1,4 +1,4 @@
-"""Default-OFF one-tick kernel; explicit TMUX transport, lifecycle routing deferred."""
+"""Default-OFF one-tick owner; admitted, journaled TMUX worker lifecycle."""
 import argparse
 from contextlib import closing, contextmanager
 import fcntl
@@ -159,7 +159,7 @@ class Kernel:
                                     "generation", "config_digest", "package_digest"},
                   "invalid_activation")
         f.require(isinstance(authority["authority"], str) and bool(authority["authority"].strip())
-                  and authority["scope"] == "fixture-only"
+                  and authority["scope"] == ("tmux-workers" if "transport" in self.config else "fixture-only")
                   and type(authority["revision"]) is int and authority["revision"] > 0
                   and type(authority["generation"]) is int and authority["generation"] > 0
                   and bool(authority["decision_id"]), "activation_authority_required")
@@ -233,14 +233,202 @@ class Kernel:
         self.db.commit()
         self.replay(self.db.execute("SELECT * FROM operations WHERE op_id=?", (op_id,)).fetchone())
 
+    def worker_gate(self, action):
+        meta = self.admit()
+        state = self.c.snapshot()
+        current = state["actions"][action["id"]]
+        f.require(state["enabled"] and state["manager"] is None, "dispatch_paused_or_owned")
+        f.require(current["allocation_digest"] == action["allocation_digest"]
+                  == digest(state["allocations"].get(action["inputs"]["allocation"]))
+                  and current["inputs"] == action["inputs"], "allocation_drift")
+        f.require(current.get("claim") == action.get("claim"), "claim_drift")
+        self.c._executable(state, current)
+        self.c._resources_available(state, current)
+        f.require("deadline" not in current or time.time() < current["deadline"], "lease_expired")
+        return meta
+
+    def step(self, action, effect, request, perform):
+        """Receipts permit continuation; a missing effect receipt never permits retry."""
+        op_id = digest(["tmux", action["id"], effect])
+        meta = self.admit()
+        row = self.db.execute("SELECT * FROM operations WHERE op_id=?", (op_id,)).fetchone()
+        if row:
+            f.require(row["phase"] != "held", "operation_held")
+            f.require((row["config_generation"], row["authority_digest"]) ==
+                      (meta["control_generation"], meta["activation_digest"]), "prior_activation")
+            f.require(row["request_digest"] == digest(request)
+                      and load(self.root / row["request_artifact"]) == request, "request_drift")
+            relative = "runs/" + op_id + "/receipt.json"
+            f.require((self.root / relative).exists(), "effect_uncertain")
+            receipt = load(self.root / relative)
+            f.require(receipt["request_digest"] == digest(request)
+                      and row["receipt_digest"] in (None, digest(receipt)), "receipt_drift")
+        else:
+            self.worker_gate(action)
+            relative = artifact(self.root, "runs/" + op_id + "/request.json", request)
+            now = time.time()
+            self.db.execute("INSERT INTO operations VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (op_id, "tmux", action["id"], action.get("claim"),
+                             action["allocation_digest"], effect, 0, self.c.snapshot()["revision"],
+                             meta["control_generation"], meta["activation_digest"], digest(request),
+                             relative, "intent", None, None, None, now, now))
+            self.db.commit()
+            self.worker_gate(action)
+            receipt = {"request_digest": digest(request), "result": perform()}
+            relative = artifact(self.root, "runs/" + op_id + "/receipt.json", receipt)
+        self.db.execute("UPDATE operations SET phase='applied',receipt_digest=?,receipt_artifact=?,"
+                        "updated_at=? WHERE op_id=?", (digest(receipt), relative, time.time(), op_id))
+        self.db.commit()
+        return receipt["result"]
+
+    def worker_observation(self, worker, action, launch_id):
+        state = worker.inspect(deadline=action["deadline"])
+        relative = artifact(self.root, "runs/" + launch_id + "/observations/" +
+                            str(uuid.uuid4()) + ".json", state)
+        self.db.execute("INSERT INTO observations VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (str(uuid.uuid4()), launch_id, f.now(), self.boot,
+                         time.monotonic() - self.started, "tmux", state.get("rollout_digest"),
+                         digest(state), relative, int(state["identity_valid"]),
+                         state["liveness"], "working" if state.get("submitted") else "poll"))
+        proc, b = state.get("process", {}), worker.binding
+        self.db.execute("INSERT OR REPLACE INTO processes VALUES(" + ",".join(["?"] * 19) + ")",
+                        (launch_id, "worker", worker.meta["boot_id"], proc.get("pid"), proc.get("pgid"),
+                         proc.get("start"), worker.meta["socket"], worker.meta["session"],
+                         proc.get("pane"), state.get("session_id"), state.get("thread_id"),
+                         state.get("turn_id"), b["model"], b["provider"], b["effort"],
+                         worker.config["binary_sha256"], b["worktree"], str(worker.run),
+                         "lease_expired" if time.time() >= action["deadline"] else state["liveness"]))
+        self.db.commit()
+        f.require(state["identity_valid"], state.get("evidence_reason", "inspection_uncertain"))
+        f.require(state["liveness"] == "alive", "worker_dead")
+        return state
+
+    def worker_action(self, adapter, action):
+        from owner_tmux import Worker
+        f.require(action["kind"] in {"implement", "revise", "review", "design", "functional_test",
+                                    "evidence_review", "repair", "reconcile"}, "unsupported_worker_kind")
+        inputs = action["inputs"]
+        runtime = inputs["worker"]
+        f.require(set(runtime) == {"model", "provider", "effort", "worktree", "policy"}
+                  and runtime["policy"] == "--yolo", "recorded_yolo_required")
+        f.require(runtime["worktree"] in self.config["worktrees"], "unallocated_worktree")
+        # Freeze the same action assignment used by NativeOwner, including scope.
+        assignment = encoded({k: action[k] for k in
+                              ("kind", "workstream", "sprint", "scope", "inputs", "timeout_seconds")})
+        claim_request = {"action_id": action["id"], "allocation_digest": action["allocation_digest"]}
+        action = self.step(action, "claim", claim_request, lambda: self.c.claim(action["id"]))
+        f.require(self.c.snapshot()["actions"][action["id"]].get("claim") == action["claim"], "claim_drift")
+        binding = {k: runtime[k] for k in ("model", "provider", "effort", "worktree")}
+        binding.update(action_id=action["id"], claim=action["claim"],
+                       allocation_digest=action["allocation_digest"],
+                       sandbox="danger-full-access", approval="never")
+        assignment += ("\nOwner constraints: never push, send Slack, change owner daemon/transport source, "
+                       "access live profiles or credential stores, or approve additional permissions. "
+                       "Use only the recorded --yolo policy and allocated scope.")
+        prepare = {"binding": binding, "assignment": assignment}
+        run = self.step(action, "prepare", prepare, lambda: str(adapter.prepare(binding, assignment).run))
+        f.require(Path(run).parent == Path(adapter.config["runs_dir"]), "run_root_drift")
+        worker = Worker(run)
+        f.require(worker.binding == binding and worker.config == adapter.config, "worker_binding_drift")
+        launch_id = digest(["tmux", action["id"], "launch"])
+        request = {"run": run, "binding": binding}
+        self.step(action, "launch", request, worker.launch)
+        state = self.worker_observation(worker, action, launch_id)
+        if time.time() >= action["deadline"]:
+            # This is a lease failure even if a zombie or frozen child still has a PID.
+            pending = self.db.execute("SELECT effect FROM operations WHERE action_id=?",
+                                      (action["id"],)).fetchall()
+            effects = {row[0] for row in pending}
+            reason = ("start_not_working" if "start" in effects and "working" not in effects else
+                      "missing_ack" if "prompt" in effects and "ack" not in effects else "lease_expired")
+            raise f.LaunchError(reason)
+        prompted = self.db.execute("SELECT 1 FROM operations WHERE action_id=? AND effect='prompt'",
+                                   (action["id"],)).fetchone()
+        if not prompted and not state.get("ready"):
+            return "awaiting_ready"
+        self.step(action, "prompt", request, worker.prompt)
+        state = self.worker_observation(worker, action, launch_id)
+        if not state.get("ack"):
+            return "awaiting_ack"
+        f.require(state.get("ack_line") == worker.meta["ack"], "wrong_ack")
+        agent = worker.meta["session"]
+        ack = self.step(action, "ack", request, lambda: state)
+        self.step(action, "dispatched", request,
+                  lambda: self.c.dispatched(action["id"], action["claim"], agent, ack))
+        self.step(action, "acknowledged", request,
+                  lambda: self.c.acknowledge(action["id"], agent, action["allocation_digest"], ack))
+        self.step(action, "start", request, worker.start)
+        state = self.worker_observation(worker, action, launch_id)
+        if not state.get("submitted"):
+            return "awaiting_working"
+        # send-keys alone is never a working receipt: require correlated START turn.
+        self.step(action, "working", request, lambda: state)
+        if state.get("returned") is None:
+            return "working"
+        result = self.step(action, "return_observed", request, lambda: state)
+        self.step(action, "returned", request,
+                  lambda: self.c.returned(action["id"], agent, result))
+        return "returned"
+
+    def workers(self, adapter):
+        """One bounded pass. An operation failure holds only its owning action."""
+        outcomes = {}
+        for action in self.c.snapshot()["actions"].values():
+            rows = self.db.execute("SELECT * FROM operations WHERE domain='tmux' AND action_id=?",
+                                   (action["id"],)).fetchall()
+            if not rows and action["status"] not in {"prepared", "dispatching", "dispatch_uncertain",
+                                                     "dispatched", "running"}:
+                continue
+            try:
+                f.require(not self.db.execute("SELECT 1 FROM holds WHERE op_id=? AND resolved_at IS NULL",
+                          (digest(["tmux", action["id"], "claim"]),)).fetchone(), "operation_held")
+                for row in rows:
+                    f.require(row["phase"] != "held", "operation_held")
+                    f.require((row["config_generation"], row["authority_digest"]) ==
+                              (self.admit()["control_generation"], self.admit()["activation_digest"]),
+                              "prior_activation")
+                    f.require(row["phase"] != "intent" or
+                              (self.root / ("runs/" + row["op_id"] + "/receipt.json")).exists(),
+                              "effect_uncertain")
+                if any(row["effect"] == "returned" and row["phase"] == "applied" for row in rows):
+                    outcomes[action["id"]] = "returned"
+                    continue
+                if self.c.readiness() in {"paused", "owned"}:
+                    if rows and time.time() >= action.get("deadline", float("inf")):
+                        self.db.execute("UPDATE processes SET terminal_status='lease_expired' WHERE op_id=?",
+                                        (digest(["tmux", action["id"], "launch"]),))
+                        self.db.commit()
+                        raise f.LaunchError("lease_expired")
+                    outcomes[action["id"]] = "deferred"
+                    continue
+                # Unreceipted claims are not adopted; only our recorded claim can resume.
+                f.require(bool(rows) or action["status"] == "prepared", "unowned_claim")
+                outcomes[action["id"]] = self.worker_action(adapter, action)
+            except Exception as exc:
+                self.db.rollback()
+                reason = str(exc) if isinstance(exc, f.LaunchError) else type(exc).__name__
+                op_id = digest(["tmux", action["id"], "claim"])
+                self.hold(op_id, reason)
+                # Fence all existing steps, including pending external effects.
+                self.db.execute("UPDATE operations SET phase='held',hold_reason=? "
+                                "WHERE domain='tmux' AND action_id=?", (reason, action["id"]))
+                self.db.commit()
+                outcomes[action["id"]] = "HOLD"
+        watchdog = self.c.watchdog()
+        now = time.time()
+        self.db.execute("INSERT OR REPLACE INTO health VALUES(?,?,?,?,?,?,?)",
+                        ("watchdog", now, now, 0, None, "ok", digest(watchdog)))
+        self.db.commit()
+        held = self.db.execute("SELECT 1 FROM holds WHERE resolved_at IS NULL").fetchone()
+        readiness = self.c.readiness()
+        return {"state": "HOLD" if held else "READY" if readiness in {"paused", "owned"} else "ACTIVE",
+                "actions": outcomes, "routing": "tmux-workers", "fixture_only": False}
+
     def tick(self, adapter=None):
         adapter = configured_adapter(self.config) if adapter is None else adapter
         from owner_tmux import TmuxAdapter
         f.require(type(adapter) is FixedTestAdapter or (type(adapter) is TmuxAdapter
                   and adapter.config == self.config.get("transport")), "live_adapter_unavailable")
-        # Increment C must supply admitted action/claim routing before any live effect.
-        if type(adapter) is TmuxAdapter:
-            return {"state": "HOLD", "reason": "tmux_lifecycle_routing_unavailable", "fixture_only": False}
         path = private_file(self.root / "owner.sqlite3")
         f.require(not any(Path(str(path) + suffix).exists() for suffix in ("-journal", "-wal", "-shm")),
                   "owner_recovery_required")
@@ -266,6 +454,8 @@ class Kernel:
                                     (boot, meta["control_generation"], host, os.getpid(), start,
                                      package_digest(), time.time(), None, None))
                     self.db.commit()
+                    if type(adapter) is TmuxAdapter:
+                        return self.workers(adapter)
                     states = ["RECOVERING"]
                     if self.c.readiness() != "owned":
                         for row in self.db.execute("SELECT * FROM operations WHERE phase IN ('intent','observed')").fetchall():

@@ -489,13 +489,43 @@ class TmuxTests(unittest.TestCase):
         self.assertTrue(all(call.args and call.args[0] for call in samples.call_args_list))
         self.assertEqual(0, writes.call_count)
 
+    def test_zombie_pid_cannot_qualify_as_alive(self):
+        self.launch()
+        pid = self.worker.inspect()["process"]["pid"]
+        sample = t.processes
+        def zombie(*args, **kwargs):
+            table = sample(*args, **kwargs)
+            parent, group, _, start = table[pid]
+            table[pid] = (parent, group, "Z", start)
+            return table
+        with patch.object(t, "processes", side_effect=zombie):
+            state = self.worker.inspect(deadline=time.time() - 1)
+        self.assertFalse(state["identity_valid"])
+        self.assertNotEqual("alive", state["liveness"])
+        self.assertNotIn(pid, state["survivors"])
+
+    def test_startup_readiness_requires_loaded_matching_model_and_effort(self):
+        self.launch()
+        original = self.worker.tmux
+        for text, ready in (("loading Corbanu Terminal model: fixture-model high", False),
+                            ("Corbanu Terminal model: wrong-model high", False),
+                            ("Corbanu Terminal model: fixture-model low", False),
+                            ("Corbanu Terminal model: fixture-model high", True)):
+            def pane(*args, **kwargs):
+                result = original(*args, **kwargs)
+                if args[0] == "capture-pane":
+                    result.stdout = text
+                return result
+            with self.subTest(text=text), patch.object(self.worker, "tmux", side_effect=pane):
+                self.assertEqual(ready, self.worker.inspect()["ready"])
+
     def test_explicit_config_selection_never_dispatches_a_fixture_as_live(self):
         self.assertIs(type(owner.configured_adapter({})), owner.FixedTestAdapter)
         adapter = owner.configured_adapter({"transport": self.config})
         self.assertIs(type(adapter), t.TmuxAdapter)
-        kernel = object.__new__(owner.Kernel)
-        kernel.config = {"transport": self.config}
-        self.assertEqual("tmux_lifecycle_routing_unavailable", kernel.tick()["reason"])
+        # Selection grants no authority; the kernel must still admit private activation.
+        with self.assertRaises(FileNotFoundError):
+            owner.Kernel(self.root / "missing-config.json")
         self.assertFalse((self.worker.run / "launch-intent.json").exists())
 
 
