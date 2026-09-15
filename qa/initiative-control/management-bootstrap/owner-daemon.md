@@ -276,3 +276,35 @@ acceptance:
 
 Re-verified on the merged tree: **591 passed in 299.284s**. The daemon remains OFF
 with no activation record; live-tick qualification stays manager and Travis gated.
+
+## Startup determinism follow-up — owner-daemon-impl-06, September 15, 2026
+
+Product initiative revision within the existing PF-80-S01 (in_progress), active
+initiative-delivery-control plan. Product heading: **Internal delivery control —
+TO BUILD**; excerpt: “durable event dispatch, acknowledgments and watchdog” and
+“initialize and rehearse all three workstreams before enabling recurring
+operation.” Exact assignment base: `1e33bb7bfa4a74d9081e96a5e65ed4d40014d995`;
+branch/worktree remain `bootstrap/owner-daemon-c-20260915` as recorded above.
+Manager owns reconciliation of these assigned coordinates into the shared
+plan/sprint ledgers; this revision does not edit them.
+
+The real transport now provisions mode-0600 `home/config.toml` before launch,
+disabling startup updates, TUI animations and analytics and trusting only the
+exact binding worktree. TOML quoting preserves spaces, dots, quotes, backslashes
+and Unicode without adding project entries. Launch passes the manager's three
+matching `-c` startup overrides. Sandbox and approval arguments still come
+unchanged from the binding; the existing auth link and prompt refusal remain.
+No credential/authentication/permission prompt is answered or suppressed.
+
+The dated follow-up in
+[the live qualification receipt](owner-daemon-live-qualification-20260915.md#follow-up--september-15-2026-owner-daemon-impl-06)
+records the exact source/package pins, unassisted ACK/START/working/RETURN,
+natural fixed-lease expiry during an actual running tool, preserved PID and
+HOLD/no-relaunch evidence, separate final-tree SDK run and fixture cleanup.
+The original startup failure and narrower expiry demonstration remain intact.
+
+This is internal implementation and code-aware live qualification, not a
+combined human-test or recurrence handoff. Independent review/receiving,
+plan/sprint reconciliation, confined code-blind functional acceptance and the
+remaining integration/Slack/supervision gates still apply. Internal-stage N/A
+requires integrator acceptance; no activation approval is inferred.

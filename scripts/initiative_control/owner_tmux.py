@@ -1,4 +1,5 @@
 """Increment B: explicit, journaled TMUX worker transport; no lifecycle authority."""
+import json
 import os
 from pathlib import Path
 import re
@@ -135,6 +136,11 @@ class TmuxAdapter:
         f.require(len(str(run / "s").encode()) < 100, "socket_path_too_long")
         (run / "home").mkdir(mode=0o700)
         (run / "home/auth.json").symlink_to(self.config["auth_link"])
+        # Trust only the allocated worktree, as in the manager dispatch profile.
+        project = json.dumps(binding["worktree"], ensure_ascii=False)
+        f.write_file(run / "home/config.toml",
+                     'check_for_update_on_startup = false\n[tui]\nanimations = false\n'
+                     '[analytics]\nenabled = false\n[projects.' + project + ']\ntrust_level = "trusted"\n')
         ack = "ACK {action_id} {allocation_digest} {model} {effort}".format(**binding)
         prompt = (f"Action ID: {binding['action_id']}. Claim: {binding['claim']}.\n"
                   f"First reply with exactly this line and nothing else:\n{ack}\n"
@@ -177,6 +183,8 @@ class Worker:
         argv = [self.config["binary"], "--no-alt-screen", "-C", b["worktree"], "--model", b["model"],
                 "-c", 'model_provider="' + b["provider"] + '"', "-c",
                 'model_reasoning_effort="' + b["effort"] + '"',
+                "-c", "check_for_update_on_startup=false", "-c", "tui.animations=false",
+                "-c", "analytics.enabled=false",
                 "--sandbox", b["sandbox"], "--ask-for-approval", b["approval"]]
         # Install remain-on-exit before the worker can run, including an immediate exit.
         config_path = self.run / "tmux.conf"
