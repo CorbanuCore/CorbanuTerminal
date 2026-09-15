@@ -54,3 +54,23 @@ does not match" without depending on the Bazel external toolchain.
 
 Bazel cross-platform release artifacts remain a separate concern and the
 `compiler-rt` fetch should still be repaired, but it does not block the gate.
+
+## Verified on this host — September 15, 2026
+
+The Cargo lane was run end to end by the manager to prove it works before the
+next increment depends on it:
+
+- Command: `cargo build --release -p codex-cli --bin corbanu`, run from
+  `codex-rs/` with `CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf83-gate-20260915`
+  and `TMPDIR=/private/tmp`, home variables unset.
+- Result: `Finished release profile [optimized + debuginfo] in 10m 27s`, exit 0.
+- Source commit: `28fde97c447a4aebf0ea4a6affbd2cc9a2ed9bd0`.
+- Toolchain: `rustc 1.95.0 (59807616e 2026-04-14)`, `cargo 1.95.0 (f2d3ce0bd 2026-03-21)`.
+- Binary: `…/targets/pf83-gate-20260915/release/corbanu`, 322,912,296 bytes,
+  reporting `corbanu 0.1.42`.
+- SHA-256: `5ac84344bb74053fd8242fe42348a5dfd0615e813552e5028928ea349adfb0c6`.
+
+This is a manager proof that the lane builds, not the frozen executor package:
+the package must be rebuilt at whatever commit the gate pins, and its hash
+recorded then. The harness already refuses any package whose manifest hash does
+not match.
