@@ -108,6 +108,80 @@ impl Fixture {
     }
 }
 #[tokio::test]
+async fn accounting_responses_ws_stream_guard_checks_live_policy_with_session_state_locked()
+-> anyhow::Result<()> {
+    use crate::memory_stage_one::StageOneMemoryClient;
+    use codex_security_policy::SecurityLevel;
+    use futures::FutureExt;
+
+    let (mut owner, _) = crate::session::tests::make_session_and_context().await;
+    owner.services.agent_control = owner
+        .services
+        .agent_control
+        .clone()
+        .with_effective_security_policy(
+            SecurityLevel::Permissive,
+            owner.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )?;
+    let owner = Arc::new(owner);
+    let memory = StageOneMemoryClient::new(
+        Arc::downgrade(&owner),
+        futures::future::pending().boxed().shared(),
+        owner.thread_id,
+        &owner.provider().await,
+    )
+    .await?;
+    let fixture = Fixture::new(mode()).await?;
+    let client = owner.services.model_client();
+    let admission = Admission::new(
+        fixture.resolve().await?,
+        provenance(),
+        endpoint(BASE)?,
+        client.stage_one_memory_binding.clone(),
+    );
+    admission.admit("gpt-5.6-sol".into(), /*tier*/ None).await?;
+    client
+        .as_ref()
+        .clone()
+        .with_stage_one_memory_binding(memory.binding_for_fixture(owner.thread_id)?)?;
+    assert!(
+        client
+            .as_ref()
+            .clone()
+            .with_stage_one_memory_binding(memory.binding_for_fixture(owner.thread_id)?)
+            .is_err()
+    );
+    // Hold the actual session state mutex: every frame check must finish immediately.
+    let _locked = owner.lock_state_for_accounting_fixture().await;
+    for _ in 0..64 {
+        admission
+            .check()
+            .now_or_never()
+            .expect("frame guard must not wait on session state")?;
+    }
+    let controller = owner
+        .services
+        .agent_control
+        .trusted_security_controller()
+        .unwrap();
+    let change = controller.confirm_level_change(
+        SecurityLevel::Moderate,
+        codex_security_policy::RevocationState::new(),
+    )?;
+    controller.apply_confirmed_change(change)?;
+    assert!(
+        admission
+            .check()
+            .now_or_never()
+            .expect("live denial must not wait on session state")
+            .is_err()
+    );
+    assert!(fixture.deferred.check().is_err());
+    Ok(())
+}
+
+#[tokio::test]
 async fn accounting_responses_ws_mode_scope_and_lazy_bootstrap() -> anyhow::Result<()> {
     for mode in [
         AccountingMode::Disabled,

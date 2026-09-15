@@ -44,6 +44,17 @@ async fn accounting_responses_ws_native_admission_and_guard_barriers() -> anyhow
     assert!(guard.is_err());
     gate.no_pending().await;
     stop(&test).await;
+    live_binding_denial(/*prime_denial*/ true).await
+}
+
+#[tokio::test]
+async fn accounting_responses_ws_native_late_clone_binding_stops_running_dispatch()
+-> anyhow::Result<()> {
+    live_binding_denial(/*prime_denial*/ false).await
+}
+
+async fn live_binding_denial(prime_denial: bool) -> anyhow::Result<()> {
+    let server = MockServer::start().await;
     for prefix in [false, true] {
         let mut gate = Gate::start().await?;
         let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
@@ -91,12 +102,14 @@ async fn accounting_responses_ws_native_admission_and_guard_barriers() -> anyhow
             }
         })
         .await?;
-        assert!(matches!(
-            memory.check_completion().await,
-            Err(codex_core::memory_stage_one::StageOneMemoryError::Denied(
-                codex_core::memory_stage_one::StageOneMemoryDenial::ProviderChanged
-            ))
-        ));
+        if prime_denial {
+            assert!(matches!(
+                memory.check_completion().await,
+                Err(codex_core::memory_stage_one::StageOneMemoryError::Denied(
+                    codex_core::memory_stage_one::StageOneMemoryDenial::ProviderChanged
+                ))
+            ));
+        }
         held.complete().await?;
         let events = terminal(&test).await?;
         assert!(events.iter().any(|event| matches!(event, EventMsg::Error(error)

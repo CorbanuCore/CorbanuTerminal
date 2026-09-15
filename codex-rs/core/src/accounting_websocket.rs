@@ -105,7 +105,7 @@ impl ResponsesWebsocketAdmission for Admission {
     fn check(&self) -> Pin<Box<dyn Future<Output = Result<(), ApiError>> + Send + '_>> {
         Box::pin(async move {
             if let Some(binding) = self.binding.get()
-                && binding.check().await.is_err()
+                && binding.check_stream().is_err()
             {
                 self.sampling.reject();
                 return Err(ApiError::Stream(FAILURE.into()));

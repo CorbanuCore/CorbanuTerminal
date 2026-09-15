@@ -274,9 +274,10 @@ impl CodexThread {
         self.session
             .services
             .model_client()
-            .stage_one_memory_binding
-            .set(binding)
-            .map_err(|_| crate::memory_stage_one::StageOneMemoryDenial::PolicyUnavailable)
+            .as_ref()
+            .clone()
+            .with_stage_one_memory_binding(binding)
+            .map(|_| ())
     }
 
     /// Returns the session telemetry handle for thread-scoped production instrumentation.

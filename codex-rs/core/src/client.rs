@@ -775,11 +775,13 @@ impl ModelClient {
     }
 
     pub(crate) fn with_stage_one_memory_binding(
-        mut self,
+        self,
         binding: Arc<crate::memory_stage_one::StageOneMemoryBinding>,
-    ) -> Self {
-        self.stage_one_memory_binding = Arc::new(OnceLock::from(binding));
-        self
+    ) -> std::result::Result<Self, crate::memory_stage_one::StageOneMemoryDenial> {
+        self.stage_one_memory_binding
+            .set(binding)
+            .map_err(|_| crate::memory_stage_one::StageOneMemoryDenial::PolicyUnavailable)?;
+        Ok(self)
     }
 
     #[cfg(test)]
@@ -1040,7 +1042,6 @@ impl ModelClient {
         self.state.provider.auth_manager()
     }
 
-    #[cfg(test)]
     pub(crate) fn provider_info(&self) -> &ModelProviderInfo {
         self.state.provider.info()
     }

@@ -777,3 +777,98 @@ Assigned target `acct-ws-20260915` unused. Prior vector tests/evidence remain un
 Manager action: reallocate cumulative size or receive/stage the prior unit with an explicit new baseline and correction allowance.
 This receipt adds 27 lines: final 3294 total / 1120 non-test; target excess 294/70; STOP headroom 6/80.
 Plan/sprint and whitespace checks are recorded in RETURN. No new review, acceptance, functional or release readiness is claimed.
+
+## acct-ws-vectors-04 — shared-slot and frame-check corrections
+
+PF-60-S02 product-initiative continuation; active plan and sprint remain open.
+Product heading **Measurement targets**; excerpt: “No commercial performance numbers
+have been supplied. The following metrics must be instrumented, with targets set
+through the decision rights defined above.”
+Action `acct-ws-vectors-04`; worker `gpt-6-astra` / `high`;
+claim `b0caca5d-7b06-4799-aed7-5800aab90287`.
+Allocation digest `9625a456ad759071e4228b7594e656daa63bdbd881a88d3a978190ed119dbe85`.
+First-read brief `/private/tmp/fmgr.Q1SIYZ/briefs/acct-ws-vectors-04.json`;
+`shasum -a 256` matched `ffeadd15dc5242979ad5505c8ee367340a7f1f1fc5dafa1dccbc8c20908f0752`.
+Read review `/private/tmp/fmgr.Q1SIYZ/acctv2-review.json` and predecessor receipt.
+Clean HEAD matched dispatched `208d521025ccb12544e3c270ccd49a5a0b1d3344`;
+branch/worktree match the frozen assignment. Plan/sprint record the receiving ancestor.
+The frozen manager brief expressly extends the cumulative ceiling to **3700 total /
+1350 non-test**, solely for these two findings and their proofs. Original targets
+remain **3000/1050**; predecessor STOP and all earlier evidence remain preserved.
+
+### Finding dispositions and proof design
+
+1. Shared slot: `with_stage_one_memory_binding` sets the existing OnceLock and returns
+   a typed error on any second binding. The debug, same-owner attachment seam now
+   clones the actual sampling client and invokes that production setter.
+   New `accounting_responses_ws_native_late_clone_binding_stops_running_dispatch`
+   starts native sampling before attachment and changes provider afterward, with
+   both empty and committed-usage prefixes. It never primes the binding denial latch.
+   The original vector retains its prior priming and all original assertions.
+   Both variants require the exact fatal error, no completion/retry/repair send,
+   unchanged attempts/observations/totals, and counts (1,1,1,0).
+2. Frame cost: `Admission::check -> StageOneMemoryBinding::check_stream` uses the
+   binding's captured session-static security floor, owner/termination, current
+   published ModelClient provider (SessionServices ArcSwap), and live effective
+   policy snapshot (identity, security level and kill switch). Denial stays sticky.
+   Neither this call path nor those accessors calls `memory_stage_one_configuration`,
+   accesses session state, or clones Config. Effective policy uses its own RwLock;
+   this is not a claim that the guard has no synchronization or allocation at all.
+   Full pre-dispatch and memory-completion checks remain unchanged. Provider changes
+   publish a new runtime client in both update_settings and new_turn_with_sub_id;
+   refresh_runtime_config preserves the configured security floor.
+   New `accounting_responses_ws_stream_guard_checks_live_policy_with_session_state_locked`
+   admits a request, attaches through a clone, rejects replacement, holds the actual
+   session mutex, and requires 64 allowed checks plus an independently changed live
+   policy denial to finish on their first poll. The seven-line cfg(test) helper in
+   session/turn.rs only holds that mutex; it adds no production access.
+   These are internal default-OFF corrections, with no newly exposed user workflow.
+   Named-integrator internal-only N/A acceptance and later S03/S04 isolated code-blind,
+   independent evidence, true-TUI and live-repository gates remain outstanding.
+
+### Guarded execution and preserved evidence
+
+All Rust commands use this checkout's guarded `just test`, assigned
+`CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-ws-20260915`,
+`--retries 0 --success-output immediate --locked --offline`.
+Logs and copied JUnit reports: `/private/tmp/acct-ws-vectors-04-evidence/`.
+Test isolation was read before execution. No live profile, credential reads/prompts,
+raw cargo/nextest invocation, external inference, subagent or push occurred.
+The first build (`initial.log`, exit 101, no run UUID) found an existing local Result
+alias collision in the new signature (E0107/E0277/E0308); fixed with std::result::Result.
+The identical focused command then passed both new cases in run
+`cd88a456-8c62-4eee-96ff-d467e095ae6d` (`initial-fixed.log/xml`): 2 passed,
+3620 filtered, 1.283s. Command: `just test -p codex-core -E 'test(accounting_responses_ws_native_late_clone_binding_stops_running_dispatch) | test(accounting_responses_ws_stream_guard_checks_live_policy_with_session_state_locked)'`
+plus the prefix/options above.
+
+Mutation commands use the same target prefix and options above:
+- G: `just test -p codex-core --test all -E 'test(accounting_responses_ws_native_admission_and_guard_barriers) | test(accounting_responses_ws_native_late_clone_binding_stops_running_dispatch)'`
+- S: `just test -p codex-core --test all -E 'test(accounting_responses_ws_native_late_clone_binding_stops_running_dispatch)'`
+- F: `just test -p codex-api -p codex-core -E 'test(accounting) | test(pf_30_s04) | test(websocket_safety_buffering)'`
+
+| Command / log and XML stem | Run UUID | Actual result |
+| --- | --- | --- |
+| G / guard-mutation | b530eb42-192e-4f56-bf3d-fa82c2a37d82 | Exit 100; 0 passed, 2 failed, 1156 filtered; 1.640s |
+| S / slot-mutation | 5578019c-bb5a-49e4-849e-b7105c03ce3c | Exit 100; 0 passed, 1 failed, 1157 filtered; 0.750s |
+
+G appends `&& false` to Admission::check's binding-denial condition. S restores the
+old `Arc::new(OnceLock::from(binding))` assignment, keeping the new Result signature.
+Both fail at precisely `live stage-one denial must stop the already-admitted sampling request`.
+Both mutations are removed. Each command redirected stdout/stderr into its listed
+`.log`; JUnit was copied before the next run and UUID-checked. No retries were used.
+F / `final-regressions.log/xml`: run `894e4249-4636-4784-b846-7f4a1d1fafa4`,
+exit 0; **126/126 passed**, 3720 filtered, zero execution skips/flakes/leaks,
+45.872s, one slow metadata-matrix case. Original vector and metadata cases are retained.
+After argument-comment-only cleanup and formatting, the identical two-new-case
+command above passed again: `final-focused.log/xml`, run
+`b339f361-fad3-41b8-b5f4-a53f9e8a4d51`, exit 0; 2/2 passed, 3620 filtered, 1.259s.
+All report UUIDs match their raw logs. Scoped rustfmt and --check passed; stable
+rustfmt retains its existing nightly-only imports warning. No global fix/format
+was run outside the literal writable scope. Final plan checker (active 3/3), sprint
+checker (current 116, archived 126), and git diff --check passed.
+Eight changed paths are within the authorized 20; no policy/manifest/lock edits.
+Cumulative additions plus deletions from `59260f56e0f201fdadef9f73f25ab68a791041e5`,
+including receipt, mixed suite-registration and cfg(test) glue conservatively:
+**3545 total / 1284 non-test**; original targets 3000/1050 exceeded by
+**545/234**; extended 3700/1350 headroom **155/66**.
+Commit and exact per-file diff --stat are supplied in RETURN. No push or qualification claim.
