@@ -91,7 +91,7 @@ class TmuxTests(unittest.TestCase):
             record("event_msg", type="task_started", turn_id=turn),
             record("turn_context", turn_id=turn, cwd=str(self.root), model="fixture-model",
                    model_provider="fixture", effort="high", approval_policy="never",
-                   sandbox_policy={"type": "read-only"}),
+                   sandbox_policy={"type": self.worker.binding["sandbox"]}),
             record("event_msg", type="user_message", message=text),
             record("event_msg", type="model_response_completed", turn_id=turn,
                    model="fixture-model", model_provider_id="fixture", response_id="response-" + turn),
@@ -154,6 +154,59 @@ class TmuxTests(unittest.TestCase):
         self.assertTrue(receipt["clean"], receipt)
         self.assertFalse(receipt["forced"])
         self.assertNotEqual(0, self.worker.tmux("list-sessions", check=False).returncode)
+
+    def test_daemon_records_durable_return_after_pane_is_killed(self):
+        from coordinator import digest
+        from test_owner_daemon import WorkerLifecycleTests
+        case = WorkerLifecycleTests()
+        case.setUp()
+        self.addCleanup(case.tearDown)
+        self.addCleanup(case.doCleanups)
+        original_worker = self.worker
+        def cleanup():
+            try:
+                self.cleanup_worker()
+            finally:
+                self.worker = original_worker
+        self.addCleanup(cleanup)
+        case.configure()
+        case.fake.stop()
+        f.write_file(self.binary, SHELL.replace("READY", "Corbanu Terminal model: fixture-model high READY"),
+                     mode=0o700)
+        case.config["transport"] = {**self.config, "binary_sha256": f.file_digest(self.binary)}
+        f.write_json(case.config_path, case.config)
+        case.sql("UPDATE meta SET config_digest=?", (digest(case.config),))
+        case.authority["config_digest"] = digest(case.config)
+        case.arm()
+        case.prepared()
+        self.root = case.root
+        self.records[0]["payload"]["cwd"] = str(self.root)
+        prepare = t.TmuxAdapter.prepare
+        def capture(adapter, binding, assignment):
+            self.worker = prepare(adapter, binding, assignment)
+            return self.worker
+        with patch.object(t.TmuxAdapter, "prepare", capture):
+            result = case.tick()["actions"]["one"]
+        self.assertIn(result, ("awaiting_ready", "awaiting_ack"))
+        self.wait(lambda: self.worker.inspect().get("ready"))
+        self.assertEqual("awaiting_ack", case.tick()["actions"]["one"])
+        self.turn(self.worker.meta["prompt"], self.worker.meta["ack"], "ack-turn")
+        self.assertEqual("awaiting_working", case.tick()["actions"]["one"])
+        self.turn("START", "RETURN\nfixture result", "work-turn")
+        proc = self.worker.inspect()["process"]
+        os.kill(proc["pid"], signal.SIGKILL)
+        self.wait(lambda: self.worker.inspect()["liveness"] == "crashed")
+        with patch.object(t.Worker, "send", side_effect=AssertionError("unexpected key delivery")):
+            for _ in range(2):
+                result = case.tick()
+                self.assertEqual(("ACTIVE", "returned"), (result["state"], result["actions"]["one"]))
+        self.assertEqual("returned", case.c.snapshot()["actions"]["one"]["status"])
+        self.assertEqual([], case.sql("SELECT * FROM holds"))
+        self.assertEqual([("work-turn", "crashed")], case.sql(
+            "SELECT active_turn_id,terminal_status FROM processes"))
+        with self.assertRaisesRegex(f.LaunchError, "worker_not_alive"):
+            self.worker.send("quit", "/quit")
+        self.assertFalse((self.worker.run / "quit-intent.json").exists())
 
     def test_wrong_digest_model_effort_claim_prompt_or_turn_cannot_ack(self):
         self.ack()

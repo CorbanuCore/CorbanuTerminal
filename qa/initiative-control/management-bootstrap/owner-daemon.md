@@ -176,15 +176,83 @@ named-human acceptance, benchmarks and release evidence remain separate work.
 No actual model, live credential, Slack, launchd, TensorCash/Isometric, human-test,
 recurrence-readiness or release qualification is claimed.
 
-Final-tree full SDK: **586 tests passed in 298.911s**, with only the retained
+Increment C initial final-tree full SDK: **586 tests passed in 298.911s**, with only the retained
 HTTP-fixture cleanup ResourceWarnings and no failures or native credential prompt.
 Requested isolated TMUX replay: **27 tests passed in 19.788s**; actual class is
 `test_owner_tmux.TmuxTests`. Its command uses the identical environment/interpreter
 below with `-B -m unittest test_owner_tmux.TmuxTests`. No TMUX flake reproduced.
 Final governance: plan checker 3/3 active; sprint checker 116 current/126 archived;
 `git diff --check` passed. Only the five dispatched paths changed.
-Exact full SDK command:
+Exact full SDK command (also used for the review corrections below):
 
 ```sh
 env -u CODEX_HOME -u CORBANU_HOME -u PFTERMINAL_HOME PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts/initiative_control:/Volumes/CorbanuDrive/Corbanu/.codex-work/initiative-control.oGQGyA/venv/lib/python3.14/site-packages /Volumes/CorbanuDrive/Corbanu/.codex-work/slack-sdk-test.Ob3i5O/venv/bin/python -B -m unittest discover -s scripts/initiative_control -p "*test*.py"
 ```
+
+## Increment C review corrections (owner-daemon-impl-05)
+
+Classification: bounded fixes to the existing increment C contract, under product
+heading **Internal delivery control — TO BUILD**; requirement excerpt: “durable
+event dispatch, acknowledgments and watchdog”. Existing initiative/sprint context
+and manager-owned record reconciliation remain as recorded above. Frozen base:
+`ef0091cb0c6432f5d88eab64a39da7cca6d4792b`; branch/worktree unchanged.
+Allocation digest: `17469381469a636d37bbe1501d584e23456df91a5e7e90dc279b64bcb9835d5f`.
+Verified brief SHA-256:
+`d0b61cd7b994c61e69f67c5dd113e4cb4ce71664a43150ea88cadf182ea681f7`.
+
+- **Finding 1, P2, corrected:** selection uses the same explicit worker-kind set
+  as dispatch validation. Prepared waits and other manager-owned action kinds
+  remain untouched and unclaimed; they create no daemon hold or operation.
+  `test_non_worker_actions_remain_unclaimed_across_healthy_ticks` covers all
+  eight excluded kinds alongside a supported worker action across two healthy ticks.
+- **Finding 2, P3, corrected:** a pause or manager takeover observed by the gate
+  after intent commit records a `deferred` phase before unwinding. This phase
+  means the external effect was never attempted. On resumption it revalidates
+  authority/request bindings, commits intent again, and checks the gate before
+  performing. Existing launched workers retain their process/operation records;
+  resumption continues without launching or sending a completed delivery again.
+  `test_pre_effect_pause_or_manager_ownership_defers_and_resumes_without_relaunch`
+  covers launch, prompt and START windows for both pause and manager takeover.
+  `test_deferred_retry_crash_restores_uncertain_intent_and_never_relaunches`
+  verifies a crash during the resumed effect remains an uncertain, fenced intent.
+  A crash before the deferral commit also retains the existing uncertain-intent
+  refusal; no general missing-receipt retry or hold-resolution path was added.
+- **Finding 3, P3, corrected:** a valid correlated durable RETURN permits result
+  bookkeeping after pane death; missing/invalid RETURN still requires an alive
+  worker. `test_daemon_records_durable_return_after_pane_is_killed` writes a
+  synthetic completed rollout in a private shell fixture, kills that actual pane,
+  and proves two daemon ticks record/preserve `returned` without sending keys.
+  Further key delivery to the dead pane remains refused. Identity, ACK, START
+  correlation, receipts and the fixed claim lease retain their existing checks.
+
+No existing safety refusal is weakened: default OFF and recorded activation
+remain required; no ACK, START, RETURN or verification is inferred; uncertain
+effects, binding drift, dead workers without RETURN and expired leases still
+hold. No live profile, native credential access, live tick, activation outside
+fixtures, push, Slack, service installation or release was performed.
+The transport implementation needed no change.
+
+This is internal regression evidence. The later combined code-blind functional
+and exact-package/live-tick gates above remain open; internal-only N/A still
+requires integrator acceptance. No human-test or release readiness is claimed.
+
+Validation attempts are retained separately: the first focused run executed 39
+cases in 7.343s with two fixture errors (missing completion-allocation metadata
+and cleanup ordering). The durable RETURN assertions passed before cleanup
+failed. The test-owned private TMUX server was identified by its exact fixture
+worktree and stopped; its process exit was confirmed. After repairing both
+fixtures, the same 39-case command passed in 7.511s. The retry-crash regression
+was then added before the final full SDK run.
+
+Current per-file counts: owner_daemon.py **531/660**, test_owner_daemon.py
+**745/780**, owner_tmux.py **362** (unchanged), test_owner_tmux.py **586**.
+No separate transport/test ceiling was specified.
+
+Final full SDK run: **589 tests passed in 301.548s**, using the exact command
+above. Only the existing HTTP-fixture cleanup ResourceWarnings (500/429) appeared;
+there were no failures, TMUX load flakes, or native credential prompts.
+No isolated TMUX retry was needed. The sprint checker passed (116 current,
+126 archived), and `git diff --check` passed. The focused command used the same
+environment/interpreter with `-B -m unittest test_owner_daemon
+test_owner_tmux.TmuxTests.test_daemon_records_durable_return_after_pane_is_killed`.
+Only the four allocated files listed by the final diff changed.

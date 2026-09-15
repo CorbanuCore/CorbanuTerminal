@@ -381,8 +381,12 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.fake.start()
         self.addCleanup(self.fake.stop)
 
-    def prepared(self, key="one", **runtime_changes):
+    def prepared(self, key="one", kind="repair", **runtime_changes):
         allocation = seed()[2]["bootstrap"]
+        allocation["kinds"] = [kind]
+        if kind == "complete_sprint":
+            allocation["inputs"].update(receiving_action="fixture-receiver", receiving_commit="a" * 40,
+                                        mandatory_gates=["fixture-gate"])
         allocation["resources"] = [key]
         allocation["inputs"]["worker"] = {
             "model": "fixture-model", "provider": "fixture", "effort": "high",
@@ -390,7 +394,7 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.c.put_allocation(key, allocation, False, self.c.snapshot()["revision"], {"fixture": True})
         self.c.event({"id": "prepare-" + key})
         packet = self.c.begin_manager()
-        action = {"id": key, "kind": "repair", "workstream": "delivery", "sprint": "PF80",
+        action = {"id": key, "kind": kind, "workstream": "delivery", "sprint": "PF80",
                   "rationale": "fixture", "inputs": {"allocation": key, **allocation["inputs"]},
                   "expected_revision": packet["state_revision"], "timeout_seconds": 60}
         self.c.accept_decision(packet["manager_run"], {
@@ -414,6 +418,22 @@ class WorkerLifecycleTests(unittest.TestCase):
                           "acknowledged", "start", "working", "return_observed", "returned"}, set(effects))
         self.assertEqual({"applied"}, set(effects.values()))
         self.assertEqual([("work-turn",)], self.sql("SELECT active_turn_id FROM processes"))
+
+    def test_non_worker_actions_remain_unclaimed_across_healthy_ticks(self):
+        self.configure()
+        for kind in ("wait", "ask_human", "integrate", "complete_sprint",
+                     "prepare_successor", "verify_integration", "pause", "cancel"):
+            self.prepared(kind, kind=kind)
+        untouched = self.c.snapshot()["actions"]
+        self.prepared()
+        for _ in range(2):
+            result = self.tick()
+            self.assertEqual(("ACTIVE", {"one": "returned"}), (result["state"], result["actions"]))
+            current = self.c.snapshot()["actions"]
+            self.assertEqual(untouched, {key: current[key] for key in untouched})
+            self.assertEqual([("one",)], self.sql("SELECT DISTINCT action_id FROM operations"))
+            self.assertEqual([], self.sql("SELECT * FROM holds"))
+        self.assertEqual([("one", "launch"), ("one", "prompt"), ("one", "start")], FakeWorker.events)
 
     def test_wrong_ack_is_hard_hold_and_never_retried(self):
         self.configure()
@@ -629,20 +649,67 @@ class WorkerLifecycleTests(unittest.TestCase):
                     state["actions"][key]["claim"] = "wrong"
             self.assertEqual("HOLD", self.tick()["actions"][key])
 
-    def test_authority_rechecked_after_intent_before_launch(self):
+    def test_pre_effect_pause_or_manager_ownership_defers_and_resumes_without_relaunch(self):
+        self.configure()
+        original = owner.artifact
+        for mode in ("pause", "owned"):
+            for effect in ("launch", "prompt", "start"):
+                with self.subTest(mode=mode, effect=effect):
+                    key = mode + "-" + effect
+                    self.prepared(key)
+                    op_id = digest(["tmux", key, effect])
+                    manager = []
+                    def defer(root, relative, value):
+                        result = original(root, relative, value)
+                        if relative == "runs/" + op_id + "/request.json":
+                            if mode == "pause":
+                                self.c.set_enabled(False, {"fixture": True})
+                            else:
+                                self.c.event({"id": "own-" + key})
+                                manager.append(self.c.begin_manager()["manager_run"])
+                        return result
+                    with patch.object(owner, "artifact", side_effect=defer):
+                        result = self.tick()
+                    self.assertEqual(("READY", "deferred"), (result["state"], result["actions"][key]))
+                    events = [event for event in FakeWorker.events if event[0] == key]
+                    self.assertEqual([(key, name) for name in ("launch", "prompt", "start")
+                                      [:("launch", "prompt", "start").index(effect)]], events)
+                    self.assertEqual([("deferred",)], self.sql(
+                        "SELECT phase FROM operations WHERE op_id=?", (op_id,)))
+                    self.assertEqual("deferred", self.tick()["actions"][key])
+                    self.assertEqual(events, [e for e in FakeWorker.events if e[0] == key])
+                    self.assertEqual([], self.sql("SELECT * FROM holds"))
+                    if manager:
+                        self.c.fail_manager(manager[0], "fixture release")
+                    else:
+                        self.c.set_enabled(True, {"fixture": True})
+                    self.assertEqual("returned", self.tick()["actions"][key])
+                    self.assertEqual([(key, name) for name in ("launch", "prompt", "start")],
+                                     [e for e in FakeWorker.events if e[0] == key])
+                    self.assertEqual([("applied",)], self.sql(
+                        "SELECT DISTINCT phase FROM operations WHERE action_id=?", (key,)))
+
+    def test_deferred_retry_crash_restores_uncertain_intent_and_never_relaunches(self):
         self.configure()
         self.prepared()
-        original = owner.artifact
-        launch = digest(["tmux", "one", "launch"])
-        def pause(root, relative, value):
-            result = original(root, relative, value)
-            if relative == "runs/" + launch + "/request.json":
+        original = owner.Kernel.worker_gate
+        def pause(kernel, action):
+            if kernel.db.execute("SELECT 1 FROM operations WHERE effect='launch' "
+                                 "AND phase='intent'").fetchone():
                 self.c.set_enabled(False, {"fixture": True})
-            return result
-        with patch.object(owner, "artifact", side_effect=pause):
-            self.assertEqual("HOLD", self.tick()["actions"]["one"])
+            return original(kernel, action)
+        with patch.object(owner.Kernel, "worker_gate", pause):
+            self.assertEqual("deferred", self.tick()["actions"]["one"])
         self.assertEqual([], FakeWorker.events)
-        self.assertIn(("dispatch_paused_or_owned",), self.sql("SELECT reason_code FROM holds"))
+        self.c.set_enabled(True, {"fixture": True})
+        FakeWorker.modes["one"] = "crash-launch"
+        with self.assertRaises(SystemExit):
+            self.tick()
+        self.assertEqual([("intent",)], self.sql("SELECT phase FROM operations WHERE effect='launch'"))
+        FakeWorker.modes.clear()
+        self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        self.assertEqual([("one", "launch")], FakeWorker.events)
+        self.assertIn(("effect_uncertain",), self.sql("SELECT reason_code FROM holds"))
 
     def test_unowned_claim_and_expired_paused_worker_hold(self):
         self.configure()

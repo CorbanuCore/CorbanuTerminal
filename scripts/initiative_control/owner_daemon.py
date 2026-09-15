@@ -15,6 +15,14 @@ import fable_launcher as f
 from coordinator import digest, encoded
 from manager_cycle import ExistingCoordinator
 
+WORKER_KINDS = frozenset({"implement", "revise", "review", "design", "functional_test",
+                          "evidence_review", "repair", "reconcile"})
+
+
+class DispatchDeferred(Exception):
+    """Authority currently defers dispatch; no external effect was attempted."""
+
+
 SCHEMA = {
     "meta": "singleton INTEGER PRIMARY KEY CHECK(singleton=1), schema_version INTEGER, config_digest TEXT, package_digest TEXT, control_generation INTEGER, requested_mode TEXT, activation_decision_id TEXT, activation_revision INTEGER, activation_digest TEXT",
     "boots": "boot_id TEXT, owner_epoch INTEGER, host_boot_id TEXT, pid INTEGER, process_start TEXT, package_digest TEXT, started_at REAL, stopped_at REAL, stop_reason TEXT, PRIMARY KEY(boot_id,owner_epoch)",
@@ -237,7 +245,8 @@ class Kernel:
         meta = self.admit()
         state = self.c.snapshot()
         current = state["actions"][action["id"]]
-        f.require(state["enabled"] and state["manager"] is None, "dispatch_paused_or_owned")
+        if not state["enabled"] or state["manager"] is not None:
+            raise DispatchDeferred("dispatch_paused_or_owned")
         f.require(current["allocation_digest"] == action["allocation_digest"]
                   == digest(state["allocations"].get(action["inputs"]["allocation"]))
                   and current["inputs"] == action["inputs"], "allocation_drift")
@@ -258,22 +267,32 @@ class Kernel:
                       (meta["control_generation"], meta["activation_digest"]), "prior_activation")
             f.require(row["request_digest"] == digest(request)
                       and load(self.root / row["request_artifact"]) == request, "request_drift")
-            relative = "runs/" + op_id + "/receipt.json"
+        relative = "runs/" + op_id + "/receipt.json"
+        if row and row["phase"] != "deferred":
             f.require((self.root / relative).exists(), "effect_uncertain")
             receipt = load(self.root / relative)
             f.require(receipt["request_digest"] == digest(request)
                       and row["receipt_digest"] in (None, digest(receipt)), "receipt_drift")
         else:
+            f.require(not (self.root / relative).exists(), "unexpected_deferred_receipt")
             self.worker_gate(action)
             relative = artifact(self.root, "runs/" + op_id + "/request.json", request)
             now = time.time()
-            self.db.execute("INSERT INTO operations VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            self.db.execute("INSERT OR REPLACE INTO operations VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                             (op_id, "tmux", action["id"], action.get("claim"),
                              action["allocation_digest"], effect, 0, self.c.snapshot()["revision"],
                              meta["control_generation"], meta["activation_digest"], digest(request),
                              relative, "intent", None, None, None, now, now))
             self.db.commit()
-            self.worker_gate(action)
+            try:
+                self.worker_gate(action)
+            except DispatchDeferred:
+                # Only this pre-effect gate proves no effect occurred. A crash
+                # before this commit still leaves an uncertain intent, never a retry.
+                self.db.execute("UPDATE operations SET phase='deferred',updated_at=? WHERE op_id=?",
+                                (time.time(), op_id))
+                self.db.commit()
+                raise
             receipt = {"request_digest": digest(request), "result": perform()}
             relative = artifact(self.root, "runs/" + op_id + "/receipt.json", receipt)
         self.db.execute("UPDATE operations SET phase='applied',receipt_digest=?,receipt_artifact=?,"
@@ -300,13 +319,14 @@ class Kernel:
                          "lease_expired" if time.time() >= action["deadline"] else state["liveness"]))
         self.db.commit()
         f.require(state["identity_valid"], state.get("evidence_reason", "inspection_uncertain"))
-        f.require(state["liveness"] == "alive", "worker_dead")
+        # A correlated durable RETURN survives pane death. Worker.send still
+        # requires liveness before any further key delivery.
+        f.require(state.get("returned") is not None or state["liveness"] == "alive", "worker_dead")
         return state
 
     def worker_action(self, adapter, action):
         from owner_tmux import Worker
-        f.require(action["kind"] in {"implement", "revise", "review", "design", "functional_test",
-                                    "evidence_review", "repair", "reconcile"}, "unsupported_worker_kind")
+        f.require(action["kind"] in WORKER_KINDS, "unsupported_worker_kind")
         inputs = action["inputs"]
         runtime = inputs["worker"]
         f.require(set(runtime) == {"model", "provider", "effort", "worktree", "policy"}
@@ -374,6 +394,8 @@ class Kernel:
         """One bounded pass. An operation failure holds only its owning action."""
         outcomes = {}
         for action in self.c.snapshot()["actions"].values():
+            if action["kind"] not in WORKER_KINDS:
+                continue
             rows = self.db.execute("SELECT * FROM operations WHERE domain='tmux' AND action_id=?",
                                    (action["id"],)).fetchall()
             if not rows and action["status"] not in {"prepared", "dispatching", "dispatch_uncertain",
@@ -404,6 +426,8 @@ class Kernel:
                 # Unreceipted claims are not adopted; only our recorded claim can resume.
                 f.require(bool(rows) or action["status"] == "prepared", "unowned_claim")
                 outcomes[action["id"]] = self.worker_action(adapter, action)
+            except DispatchDeferred:
+                outcomes[action["id"]] = "deferred"
             except Exception as exc:
                 self.db.rollback()
                 reason = str(exc) if isinstance(exc, f.LaunchError) else type(exc).__name__
