@@ -792,6 +792,55 @@ class ManagerTests(fixtures.LiveFixture):
         self.assertEqual(recovered["supervisor_health"]["state"], "healthy")
         self.assertEqual(recovered["listener_exits"], 1)
 
+    def test_idle_supervisor_bounds_durable_writes_and_keeps_fresh_transitions(self):
+        # No listener has ever started: exercise the real tick and durable Store path.
+        second = [0]
+        now = lambda: (d.stamp(NOW) + m.dt.timedelta(seconds=second[0])).strftime("%Y-%m-%dT%H:%M:%SZ")
+        manager = SimpleNamespace(store=self.store, binding=PIN, process=None)
+        supervisor = m.ListenerSupervisor(manager, self.transport, now)
+        self.assertEqual(m.read_supervisor_health(self.store, now(), PIN)["state"], "unknown")
+        write = a.Store.write
+        with (patch.object(a.Store, "write", autospec=True, side_effect=write) as writes,
+              patch.object(os, "fsync", wraps=os.fsync) as fsync):
+            for tick in range(300):
+                second[0] = tick // 10  # Thirty seconds at the foreground loop's 10Hz rate.
+                supervisor.tick()
+                observed = m.read_supervisor_health(self.store, now(), PIN)
+                self.assertEqual(observed["state"], "healthy")
+                self.assertEqual(observed["observed_at"], now())
+            self.assertEqual(writes.call_count, 30)
+            self.assertTrue(all(call.args[1] == "supervisor" for call in writes.call_args_list))
+            self.assertEqual(fsync.call_count, 60)  # One file and one directory fsync per second.
+
+            # Pending, failed and recovered evidence all publish within that same second.
+            supervisor.pending_event = ("restart-refused", None)
+            with patch.object(supervisor, "record", side_effect=OSError("fixture journal")):
+                self.assertFalse(supervisor.flush_event())
+            self.assertEqual(writes.call_count, 32)
+            pending, failed = [call.args[2]["health"] for call in writes.call_args_list[-2:]]
+            self.assertEqual((pending["reason"], failed["reason"]),
+                             ("event-unflushed", "event-flush-failed"))
+            with patch.object(supervisor, "record"):
+                self.assertTrue(supervisor.flush_event())
+            self.assertEqual(writes.call_count, 33)
+            self.assertEqual(m.read_supervisor_health(self.store, now(), PIN)["state"], "healthy")
+            supervisor.tick()
+            self.assertEqual(writes.call_count, 33)
+
+            # A failed heartbeat is retried, even at the same observed_at.
+            second[0] += 1
+            writes.side_effect = OSError("fixture filesystem")
+            supervisor.tick()
+            self.assertEqual(writes.call_count, 34)
+            writes.side_effect = write
+            supervisor.tick()
+            self.assertEqual(writes.call_count, 35)
+            self.assertEqual(m.read_supervisor_health(self.store, now(), PIN)["observed_at"], now())
+            supervisor.tick()
+            self.assertEqual(writes.call_count, 35)
+        second[0] += 6
+        self.assertEqual(m.read_supervisor_health(self.store, now(), PIN)["reason"], "observation-stale")
+
     def test_supervisor_observation_missing_stale_or_unwritable_is_not_healthy(self):
         manager, supervisor, _ = self.watchdog()
         self.assertEqual(m.project_status(self.store, NOW, True)["supervisor_health"]["state"], "unknown")

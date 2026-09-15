@@ -804,3 +804,116 @@ acceptance of the internal-stage N/A and the later confined code-blind
 exact-package functional gate remain open; no packaged operator workflow,
 true-TUI, live-repository, human-test, benchmark or release qualification is
 claimed. Only the five allocated implementation/test/evidence files are changed.
+
+## Increment D heartbeat and publication correction — owner-daemon-supervision-05, September 15, 2026
+
+All four earlier supervision rounds remain unchanged as historical evidence.
+This round addresses only P2/P3 from the frozen brief and
+`/private/tmp/fmgr.Q1SIYZ/odsup4-review.json`.
+Base: `d02b460296e57c12fd4686f4f8587c59d99a4656`.
+Branch: `bootstrap/owner-daemon-c-20260915`; worktree:
+`/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-owner-daemon-c-20260915`.
+Allocation digest:
+`97422a45854ee7edc49297786f3493fb6ff7ff50f658a1ee628258341a22cb53`.
+Claim: `f15949d2-9824-4b08-b1f9-b99b95ee2555`.
+Brief SHA-256 verified before other reads:
+`c0fb2c798407a5a77b57df9ca6522cfa49629884a29b736f691dd263fa0b6e26`.
+Worker: gpt-6-astra / high.
+
+Classification: bounded fixes restoring the existing supervision/disclosure
+contract. Product heading: **Internal delivery control — TO BUILD**;
+requirement excerpts: “durable event dispatch, acknowledgments and watchdog”
+and “Show blockers, rendered sprints, human test plans, machines, run logs
+and freshness”. Existing initiative-delivery-control / PF-80-S01 context
+and manager ownership of shared governance records remain unchanged.
+
+### Finding dispositions
+
+- **P2 addressed:** remember the last successfully published observation and
+  skip an identical payload. The second-resolution timestamp still advances
+  the heartbeat every second; health, pending-count and failure-count changes
+  publish immediately within the same second. Failed writes do not advance
+  the remembered observation, allowing a same-second recovery retry.
+- **P3 addressed:** projection and `slack_health` publication now share
+  `assess_supervisor_health`. Publication independently rechecks the original
+  observation timestamp: healthy through age five seconds, then
+  unknown / observation-stale. The Slack cache's separate 900-second rule is
+  unchanged. Missing/future observation times cannot become healthy, observed
+  failures remain unhealthy, and reading does not rewrite the cached snapshot.
+
+### Bounded-write and mutation proof
+
+Focused run: **3 tests passed in 7.122s**, including the existing
+missing/stale/unwritable observation regression.
+
+New P2 case:
+`test_decision_manager.ManagerTests.test_idle_supervisor_bounds_durable_writes_and_keeps_fresh_transitions`.
+With no listener ever started, 300 real supervisor ticks at a simulated 10Hz
+across 30 seconds perform **30 actual Store writes and 60 actual fsync calls**
+(one file and one directory fsync per write). Every tick reads the independent
+observation and verifies healthy state with the current second's timestamp.
+Pending, failed and recovered observations then add three immediate writes
+within the same second. An identical tick adds zero writes. A failed heartbeat
+is retried successfully at the same timestamp; a further duplicate adds zero.
+After six seconds without a heartbeat, the reader reports observation-stale.
+The bound applies to unchanged idle health; changing failure evidence still
+publishes immediately.
+
+New P3 case:
+`test_decision_feed.FeedTests.test_published_supervisor_health_expires_before_slack_cache`.
+A synthetic cached observation is exported, activated with service calls
+mocked, and passed through actual local publication into `health.json`.
+Ages 0 and 5 remain healthy; ages 6, 899 and 901 become unknown/stale.
+The outer cache remains off through 899 seconds and becomes stale at 901.
+The case also verifies unchanged input, missing/future timestamp rejection
+and retained unhealthy observations.
+
+Each mutation compiled changed production source in memory, ran its named
+case, restored the original source and ran a fresh fixture. No production file
+was mutated on disk. Raw attempts remain in this allocation's tool transcript.
+
+| Mutation | Named case | Broken outcome | Restored |
+| --- | --- | --- | --- |
+| Remove identical-observation suppression. | New P2 case above | FAIL: 300 writes instead of 30. | PASS |
+| Freeze the heartbeat timestamp at its first publication. | New P2 case above | FAIL: observed timestamp stays at second 0 when second 1 is expected. | PASS |
+| Suppress all same-second observations, including transitions. | New P2 case above | FAIL: 30 writes instead of 32 after pending/failure transitions. | PASS |
+| Remember the observation before its write succeeds. | New P2 case above | FAIL: 34 calls instead of 35; same-second retry skipped. | PASS |
+| Copy cached health without publication reassessment. | New P3 case above | FAIL: healthy at ages 6, 899 and 901; missing timestamp also stays healthy. | PASS |
+| Widen shared healthy validity from five to 900 seconds. | New P3 case above | FAIL: healthy at ages 6 and 899. | PASS |
+
+**Six mutations failed as intended; all six fresh restored runs passed.**
+
+### Final validation and retained limits
+
+Initial full suite: **677 tests in 419.934s, one failure** in the existing
+`test_fable_launcher.RealTmux.test_normal_management_vocabulary_round_trip`.
+Its synthetic launcher returned `launcher_failure` with `launched: false`
+after approximately five seconds; this is consistent with the existing
+five-second binary-version probe timeout, but the receipt does not establish
+the precise cause. No allocated production module is involved in that launch.
+The unchanged focused replay **passed in 3.711s**. No launcher/test code was
+changed. Initial suite evidence:
+`/private/tmp/isolated-transport-tests-wjqsmcvo`.
+Final complete unchanged-code replay: **677 tests passed in 408.776s**.
+Known synthetic HTTP 500/429 fixture cleanup ResourceWarnings appeared;
+there were no failures, errors or native credential prompts in the replay.
+Final retained synthetic evidence:
+`/private/tmp/isolated-transport-tests-pn5u8bz6`.
+Both suite runs used the exact SDK command recorded above with profile aliases
+unset, `TMPDIR=/private/tmp` pinned and bytecode writes disabled.
+Both governance checkers passed: plans **3/3 active, 0 slots available**;
+sprints **116 current, 126 archived**. Final `git diff --check` passed.
+The evidence file's entire pre-round contents were verified byte-for-byte
+against the base commit; this round only appends to the four earlier rounds.
+
+Recurrence stays OFF. This allocation performs no activation of real services,
+installation, live Slack message, credential/profile read, push, release or
+approval. The activation exercised above belongs only to disposable test
+fixtures with service subprocess calls mocked.
+This is an internal implementation return to the Fable manager. Integrator
+acceptance of the internal-stage N/A and the later confined code-blind
+exact-package functional gate remain open. Python heartbeat I/O and cached
+health publication are the scope of this correction; no packaged operator
+workflow, true-TUI, live-repository, human-test, benchmark or release
+qualification is claimed. Five allocated implementation/test/evidence files
+are changed; the commit is recorded in the worker RETURN.

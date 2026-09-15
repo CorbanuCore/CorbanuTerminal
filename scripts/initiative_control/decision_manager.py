@@ -94,15 +94,11 @@ def validate_supervisor_health(health):
         d.require(health["reason"] in ("event-flush-failed", "event-unflushed", "observation-unavailable", "observation-stale", None))
 
 
-def read_supervisor_health(store, now, binding):
-    """Independent observation cache; journal counts remain durable facts."""
+def assess_supervisor_health(health, now):
+    """Apply the same observation validity at projection and publication."""
     unknown = dict(state="unknown", event_flush_failures=0, pending_events=0,
                    observed_at=None, reason="observation-unavailable")
     try:
-        observation = store.read("supervisor")
-        d.shape(observation, "binding health")
-        d.require(observation["binding"] == binding)
-        health = observation["health"]
         validate_supervisor_health(health)
         age = (d.stamp(now) - d.stamp(health["observed_at"])).total_seconds()
         d.require(age >= 0)
@@ -112,6 +108,17 @@ def read_supervisor_health(store, now, binding):
         return copy.deepcopy(health)
     except (OSError, ValueError, KeyError, TypeError):
         return unknown
+
+
+def read_supervisor_health(store, now, binding):
+    """Independent observation cache; journal counts remain durable facts."""
+    try:
+        observation = store.read("supervisor")
+        d.shape(observation, "binding health")
+        d.require(observation["binding"] == binding)
+        return assess_supervisor_health(observation["health"], now)
+    except (OSError, ValueError, KeyError, TypeError):
+        return assess_supervisor_health(None, now)
 
 
 def project_disclosure(value, store, journal, alerts, now=None):
@@ -528,6 +535,7 @@ class ListenerSupervisor:
         self.pending_event, self.exited_process = None, None
         self.pending_exit, self.failed_start_process = None, None
         self.event_flush_failures = 0
+        self.published_observation = None
         self.pointer_version, self.pointers_pending = None, False
 
     def start(self, *, seconds, ongoing):
@@ -578,8 +586,14 @@ class ListenerSupervisor:
         health = dict(self.health(), observed_at=self.now(),
                       reason="event-flush-failed" if self.event_flush_failures else
                              "event-unflushed" if self.pending_event is not None else None)
+        observation = dict(binding=self.manager.binding, health=health)
+        # Second-resolution heartbeats stay fresh without rewriting identical
+        # observations on every 100ms tick. State transitions publish immediately.
+        if observation == self.published_observation:
+            return
         try:
-            a.Store(self.manager.store.root).write("supervisor", dict(binding=self.manager.binding, health=health))
+            a.Store(self.manager.store.root).write("supervisor", observation)
+            self.published_observation = copy.deepcopy(observation)
         except (OSError, ValueError, KeyError, TypeError):
             pass  # File readers treat missing/stale observations as unknown.
 

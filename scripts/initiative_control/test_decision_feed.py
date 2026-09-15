@@ -99,6 +99,41 @@ class FeedTests(unittest.TestCase):
         _, _, rolled = self.publish(LATER)
         self.assertEqual(rolled["decision_feed"]["slack"]["assessed_at"], NOW)
 
+    def test_published_supervisor_health_expires_before_slack_cache(self):
+        self.save(self.value)
+        cache = transport.project_slack(self.state, None, NOW)
+        observation = dict(state="healthy", event_flush_failures=0, pending_events=0,
+                           observed_at=NOW, reason=None)
+        cache["status"]["supervisor_health"] = observation
+        control.atomic_json(self.state / transport.SLACK_FILE, cache)
+        target, pin = self.bundle()
+        self.activate(target)
+        snapshot = transport.read_snapshot(target / "source", pin, NOW)
+        original = copy.deepcopy(snapshot)
+        for seconds in (0, 5, 6, 899, 901):
+            at = (d.stamp(NOW) + transport.dt.timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            with self.subTest(seconds=seconds):
+                _, _, health = self.publish(at)
+                slack = health["decision_feed"]["slack"]
+                self.assertEqual(slack["state"], "off" if seconds <= 900 else "stale")
+                observed = slack["supervisor_health"]
+                self.assertEqual(observed["state"], "healthy" if seconds <= 5 else "unknown")
+                self.assertEqual(observed["reason"], None if seconds <= 5 else "observation-stale")
+                self.assertEqual(observed["observed_at"], NOW)
+                self.assertEqual(transport.slack_health(snapshot, at)["supervisor_health"], observed)
+        self.assertEqual(snapshot, original)
+        self.assertEqual(json.loads((self.state / transport.SLACK_FILE).read_text()), cache)
+        for observed_at in (None, "2099-01-01T00:00:00Z"):
+            snapshot["slack"]["status"]["supervisor_health"]["observed_at"] = observed_at
+            observed = transport.slack_health(snapshot, NOW)["supervisor_health"]
+            self.assertEqual((observed["state"], observed["reason"]), ("unknown", "observation-unavailable"))
+        snapshot["slack"]["status"]["supervisor_health"] = dict(
+            observation, state="unhealthy", event_flush_failures=1, pending_events=1,
+            reason="event-flush-failed")
+        observed = transport.slack_health(snapshot, LATER)["supervisor_health"]
+        self.assertEqual((observed["state"], observed["reason"]), ("unhealthy", "event-flush-failed"))
+        self.assertEqual(transport.slack_health(snapshot, LATER)["state"], "held")
+
     def test_bad_slack_input_never_discards_valid_decision_context(self):
         self.save(self.value)
         original = transport.project_slack(self.state, None, NOW)

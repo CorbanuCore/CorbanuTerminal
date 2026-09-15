@@ -278,11 +278,14 @@ def slack_health(snapshot, at):
     value = snapshot.get("slack")
     if value is None:
         return dict(state="unknown" if snapshot.get("slack_status") == "invalid" else "unrecorded", assessed_at=None, last_verified=None)
+    from decision_manager import assess_supervisor_health
     status = value["status"]
+    supervisor_health = (assess_supervisor_health(status["supervisor_health"], clock(at))
+                         if "supervisor_health" in status else None)
     age = (d.stamp(clock(at)) - d.stamp(value["assessed_at"])).total_seconds()
     stale = not 0 <= age <= 900 or (status["last_verified"] is not None and (d.stamp(clock(at)) - d.stamp(status["last_verified"])).total_seconds() > 900)
     return dict(state="held" if status.get("fence_gap", 0) or status.get("supervisor_health", {}).get("state") == "unhealthy" else "stale" if stale else status["state"],
-                supervisor_health=copy.deepcopy(status.get("supervisor_health")),
+                supervisor_health=supervisor_health,
                 assessed_at=value["assessed_at"], last_verified=status["last_verified"],
                 fence_gap=status.get("fence_gap", 0), pending_pointers=status.get("pending_pointers", 0),
                 listener_exits=status.get("listener_exits", 0),
