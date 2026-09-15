@@ -19,7 +19,7 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-acct-ws-20260914"
     branch: "bootstrap/acct-ws-20260914"
-    base_commit: "e3bd579bf4e0c7c58ad863af2a9c6098e2297f98"
+    base_commit: "73fc51b1a73ec6304fb51603b6fb46ee9f61b56b"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-contract-goldens-20260913"
     branch: "workstream/accounting-contract-goldens-20260913"
     base_commit: "81d0f90e77c1e9217a16e70fef1019ff9aa13753"
@@ -198,7 +198,7 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Astra High accounting Responses-WebSocket lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-acct-ws-20260914` | `bootstrap/acct-ws-20260914` | `e3bd579bf4e0c7c58ad863af2a9c6098e2297f98` | PF-60-S02 [Responses WS sampling/fallback allocation](../../research/agent-cost-accounting/responses-websocket-allocation.md): 18 literal files, target 3000/1050, STOP 3300/1200; default OFF; HTTP e47e41870 received at d81bad635 is consumed history |
+| Astra High accounting Responses-WebSocket lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-acct-ws-20260914` | `bootstrap/acct-ws-20260914` | `73fc51b1a73ec6304fb51603b6fb46ee9f61b56b` | PF-60-S02 [Responses WS sampling/fallback allocation](../../research/agent-cost-accounting/responses-websocket-allocation.md): 18 literal files, target 3000/1050, STOP 3300/1200; default OFF; HTTP e47e41870 received at d81bad635 is consumed history |
 | Codex accounting contract-golden lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-contract-goldens-20260913` | `workstream/accounting-contract-goldens-20260913` | `81d0f90e77c1e9217a16e70fef1019ff9aa13753` | PF-60-S02 original-contract goldens f4507cb50 accepted at 855ab3382; consumed history |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 

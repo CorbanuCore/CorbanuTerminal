@@ -11,7 +11,7 @@ write_scope: "codex-rs/core/src/config/mod.rs, codex-rs/core/src/agent/role.rs, 
 integration_gate: "Fable manager receives exact Responses WS sampling/fallback candidate: one independent Fable review plus necessary correction, 36 new cases and retained regressions, shared state/TaskNode-session and combined API/proxy gates on receiving tree; actual counts and failures retained. S02 open, S03 dependent, collection OFF."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-acct-ws-20260914"
 branch: "bootstrap/acct-ws-20260914"
-base_commit: "e3bd579bf4e0c7c58ad863af2a9c6098e2297f98"
+base_commit: "73fc51b1a73ec6304fb51603b6fb46ee9f61b56b"
 depends_on: "PF-60-S01"
 created: 2026-09-09
 updated: 2026-09-14
