@@ -84,13 +84,18 @@ pub async fn mount(server: &wiremock::MockServer, payload: String) {
 pub async fn posts(server: &wiremock::MockServer, expected: usize) {
     let requests = server.received_requests().await.unwrap();
     assert_eq!(requests.len(), expected);
-    eprintln!(
-        "CHAT_POSTS {expected} POST /v1/chat/completions model=gpt-5.6-sol include_usage=true"
-    );
+    let count = requests.len();
     for request in requests {
         assert_eq!(request.method.as_str(), "POST");
         assert_eq!(request.url.path(), "/v1/chat/completions");
         let body: Value = serde_json::from_slice(&request.body).unwrap();
+        eprintln!(
+            "CHAT_POSTS {count} {} {} model={} include_usage={}",
+            request.method,
+            request.url.path(),
+            body["model"].as_str().unwrap(),
+            body["stream_options"]["include_usage"],
+        );
         assert_eq!(body["stream_options"]["include_usage"], true);
         assert_eq!(body["model"], "gpt-5.6-sol");
         assert!(request.headers.get("x-pfterminal-request-id").is_none());
@@ -163,13 +168,18 @@ pub struct Held {
     pub headers: String,
     pub chunks: mpsc::Sender<String>,
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum GateRoutes {
+    ChatOnly,
+    ChatAndCompact,
+}
 pub struct Gate {
     pub endpoint: String,
     incoming: mpsc::Receiver<Held>,
     task: tokio::task::JoinHandle<()>,
 }
 impl Gate {
-    pub async fn start() -> anyhow::Result<Self> {
+    pub async fn start(routes: GateRoutes) -> anyhow::Result<Self> {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let endpoint = format!("http://{}/v1", listener.local_addr()?);
         let (tx, incoming) = mpsc::channel(8);
@@ -196,7 +206,10 @@ impl Gate {
                     let headers = String::from_utf8(bytes[..end].to_vec())
                         .expect("synthetic Chat fixture");
                     let compact = headers.starts_with("POST /v1/responses/compact ");
-                    assert!(compact || headers.starts_with("POST /v1/chat/completions "));
+                    assert!(
+                        headers.starts_with("POST /v1/chat/completions ")
+                            || (compact && routes == GateRoutes::ChatAndCompact)
+                    );
                     let length: usize = headers
                         .lines()
                         .find_map(|line| {

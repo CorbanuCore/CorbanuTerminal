@@ -133,7 +133,7 @@ async fn accounting_chat_native_redirects_no_follow_or_repair() -> anyhow::Resul
 #[tokio::test]
 async fn accounting_chat_native_outer_retry_prefix_and_ids() -> anyhow::Result<()> {
     let server = MockServer::start().await;
-    let mut gate = Gate::start().await?;
+    let mut gate = Gate::start(GateRoutes::ChatOnly).await?;
     let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
         .with_config(|config| config.model_provider.stream_max_retries = Some(1))
         .build_with_auto_env(&server)
@@ -169,7 +169,7 @@ async fn accounting_chat_native_outer_retry_prefix_and_ids() -> anyhow::Result<(
 #[tokio::test]
 async fn accounting_chat_native_observation_failure_no_repair() -> anyhow::Result<()> {
     let server = MockServer::start().await;
-    let mut gate = Gate::start().await?;
+    let mut gate = Gate::start(GateRoutes::ChatOnly).await?;
     let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
         .with_config(|config| config.model_provider.stream_max_retries = Some(1))
         .build_with_auto_env(&server)
@@ -199,7 +199,7 @@ async fn accounting_chat_native_observation_failure_no_repair() -> anyhow::Resul
 #[tokio::test]
 async fn accounting_chat_native_admission_barrier_and_failure() -> anyhow::Result<()> {
     let server = MockServer::start().await;
-    let mut gate = Gate::start().await?;
+    let mut gate = Gate::start(GateRoutes::ChatOnly).await?;
     let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
         .with_config(|config| config.model_provider.stream_max_retries = Some(1))
         .build_with_auto_env(&server)
@@ -235,7 +235,7 @@ async fn accounting_chat_native_admission_barrier_and_failure() -> anyhow::Resul
 #[tokio::test]
 async fn accounting_chat_native_cancellation_and_two_reopens() -> anyhow::Result<()> {
     let server = MockServer::start().await;
-    let mut gate = Gate::start().await?;
+    let mut gate = Gate::start(GateRoutes::ChatOnly).await?;
     let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
         .build_with_auto_env(&server)
         .await?;
@@ -256,7 +256,7 @@ async fn accounting_chat_native_cancellation_and_two_reopens() -> anyhow::Result
     stop(&test).await;
     for prefix in [false, true] {
         let server = MockServer::start().await;
-        let mut gate = Gate::start().await?;
+        let mut gate = Gate::start(GateRoutes::ChatOnly).await?;
         let endpoint = gate.endpoint.clone();
         let mode = enabled(&endpoint);
         let test = builder(endpoint.clone(), mode.clone())
@@ -316,7 +316,7 @@ async fn accounting_chat_native_cancellation_and_two_reopens() -> anyhow::Result
 #[tokio::test]
 async fn accounting_chat_native_delete_rejects_late_usage() -> anyhow::Result<()> {
     let server = MockServer::start().await;
-    let mut gate = Gate::start().await?;
+    let mut gate = Gate::start(GateRoutes::ChatOnly).await?;
     let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
         .with_config(|config| config.model_provider.stream_max_retries = Some(1))
         .build_with_auto_env(&server)
@@ -369,7 +369,7 @@ async fn accounting_chat_native_delete_rejects_late_usage() -> anyhow::Result<()
 #[tokio::test]
 async fn accounting_chat_native_spawned_role_children_and_fork() -> anyhow::Result<()> {
     let server = MockServer::start().await;
-    let mut gate = Gate::start().await?;
+    let mut gate = Gate::start(GateRoutes::ChatOnly).await?;
     let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
         .with_config(|config| {
             for feature in [
@@ -493,7 +493,7 @@ async fn accounting_chat_native_invalid_evidence_no_repair() -> anyhow::Result<(
         json!({"usage":{"completion_tokens":40,"completion_tokens_details":{"reasoning_tokens":41}}}).to_string(),
         json!({"usage":{"prompt_tokens":100,"completion_tokens":40,"total_tokens":139}}).to_string()] {
         let server = MockServer::start().await;
-        let mut gate = Gate::start().await?;
+        let mut gate = Gate::start(GateRoutes::ChatOnly).await?;
         let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
             .with_config(|c| c.model_provider.stream_max_retries = Some(1))
             .build_with_auto_env(&server).await?;

@@ -515,3 +515,42 @@ No human-test readiness, human sign-off, benchmark, release or push. S02 open; S
 Final size against implementation start 57cbefabb: 3232 additions+deletions / 917 non-test;
 conservative per-file max with the unformatted launch candidate: 3237 / 922. Target overrun
 237 total; STOP margin 63 total / 378 non-test. No size-ceiling extension is inferred.
+
+## Fifth attempt — acct-chat-impl-05 (2026-09-15)
+
+Routine fixture/evidence correction dispatched by Fable; worker gpt-6-astra/high, base
+`1585a89c25a43d26672eaa9a88fc75ab20193bba`, same branch/worktree and PF-60/S02 linkage above.
+Allocation `e4e43bea9a7e3176fcca6d290cf58b00121ccd32ae72bf666bab6d0f708b7231`;
+claim `76cacab2-d973-47dc-a86e-4bd2263873de`. Brief hash verified with `shasum -a 256`, exit 0:
+`2965c02743fad0f69e809446c161fb95ef267dcefdb2affc2f2536298eed6b93`.
+The supplied Opus review accepted substance (confidence 0.72) with these two P3 findings:
+
+- **LEAK cleanup:** cumulative_and_separate_usage now stops/drops the fixture and awaits
+  `db.close()`, matching sibling cleanup. The original concurrent selector now passes cleanly.
+  This closes the omitted teardown; no claim that historical output-handle ownership was proven.
+- **Literal wire evidence:** `posts()` prints captured request count, method, `request.url.path()`,
+  `body["model"]` and `body["stream_options"]["include_usage"]` for each observed request.
+  Gate previously admitted/answered compaction in every fixture. Explicit `GateRoutes::ChatOnly`
+  now rejects that route; only sampling_auxiliary_scope selects `ChatAndCompact`, retaining its
+  existing exact compact-path assertion and no-added-accounting checks. No new cases or production edits.
+
+Final command from this checkout (default concurrent local profile; no serial override):
+`CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-chat-20260915 just test -p codex-core --test all -E 'test(accounting_) | test(prewarm) | test(incremental) | test(chat_completions)' --success-output final --locked --offline --retries 0`
+Run `25cff5a7-fe7e-453a-b841-ad8543d7d33e`: exit 0; **97 passed, 0 failed, 0 LEAK**, 1 slow,
+1081 filtered skips, 0 JUnit execution skips, 46.585s. All 20 Chat cases executed.
+Raw `.log` and matching `.xml`: target above, stem `impl05-final-core-native`; JUnit UUID verified.
+Observed 17 CHAT_POSTS lines (one per request, count is the captured batch size), including:
+`CHAT_POSTS 1 POST /v1/chat/completions model=gpt-5.6-sol include_usage=true`
+Exactly one `CHAT_HELD_POST compact=true`. The unchanged API/library selectors retain impl04 evidence.
+
+Before tests, from `codex-rs`: `rustfmt --edition 2024 --config skip_children=true core/tests/suite/accounting_chat.rs core/tests/suite/accounting_chat_recovery.rs core/tests/suite/accounting_chat_support.rs`, exit 0.
+Same command with `--check`, exit 0 (3 files); stable-toolchain imports_granularity warning persists.
+Scoped formatting preserves the writable boundary; no broad formatter or unguarded build.
+Final `git diff --check`, `python3 docs/plans/check.py`, `python3 docs/sprints/check.py`: exit 0 each;
+plans 3/3 active, sprints 116 current / 126 archived. Guarded disposable profiles only; no native prompt.
+Earlier LEAKs, failures, length disposition and nondiscriminating M3 history above remain unchanged.
+This internal test-only correction adds no user workflow; TUI/code-blind/live-repo qualification is
+N/A for this round. Existing S03/S04 functional gates and manager receiving remain outstanding;
+S02 remains in_progress. No human acceptance, benchmark, release, public activation or push claimed.
+Size against 57cbefabb: 3286 total / 956 non-test; prior conservative formatting allowance yields
+3291 / 961 (STOP margin 9 / 339). No size extension or scope expansion claimed.
