@@ -44,6 +44,81 @@ async fn accounting_responses_ws_native_admission_and_guard_barriers() -> anyhow
     assert!(guard.is_err());
     gate.no_pending().await;
     stop(&test).await;
+    for prefix in [false, true] {
+        let mut gate = Gate::start().await?;
+        let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
+            .with_config(|config| {
+                config.security_level = codex_security_policy::SecurityLevel::Permissive;
+                config.model_provider.stream_max_retries = Some(2);
+                let mut changed = config.model_provider.clone();
+                changed.name = "changed fixture".into();
+                config
+                    .model_providers
+                    .insert("changed-fixture".into(), changed);
+            })
+            .build_with_auto_env(&server)
+            .await?;
+        let memory = test
+            .codex
+            .stage_one_memory_client(
+                test.session_configured.thread_id,
+                &test.config.model_provider,
+            )
+            .await?;
+        submit(&test).await?;
+        let held = gate.next().await?;
+        let db = test.codex.state_db().unwrap();
+        if prefix {
+            held.send(vec![event("response.usage", usage(Some(0)))])
+                .await?;
+            wait_observations(&db, 1).await?;
+        }
+        let records = attempts(&db).await?;
+        let before = observations(&db).await?;
+        let total = totals(&db, &records[0]).await?;
+        test.codex.attach_stage_one_binding_for_fixture(&memory)?;
+        test.codex
+            .submit(Op::ThreadSettings {
+                thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                    model_provider: Some("changed-fixture".into()),
+                    ..Default::default()
+                },
+            })
+            .await?;
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while test.codex.config_snapshot().await.model_provider_id != "changed-fixture" {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await?;
+        assert!(matches!(
+            memory.check_completion().await,
+            Err(codex_core::memory_stage_one::StageOneMemoryError::Denied(
+                codex_core::memory_stage_one::StageOneMemoryDenial::ProviderChanged
+            ))
+        ));
+        held.complete().await?;
+        let events = terminal(&test).await?;
+        assert!(events.iter().any(|event| matches!(event, EventMsg::Error(error)
+            if error.message == "Fatal error: Native Anthropic accounting failed; request stopped without a repair send")),
+            "live stage-one denial must stop the already-admitted sampling request");
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, EventMsg::ModelResponseCompleted(_)))
+        );
+        gate.no_pending().await;
+        assert_eq!(attempts(&db).await?, records);
+        assert_eq!(
+            observations(&db).await?,
+            before,
+            "live denial must preserve only committed usage"
+        );
+        assert_eq!(totals(&db, &records[0]).await?, total);
+        assert_eq!(total.unknown_estimates, i64::from(!prefix));
+        counts(&gate, (1, 1, 1, 0));
+        stop(&test).await;
+    }
     Ok(())
 }
 #[tokio::test]
@@ -458,5 +533,113 @@ async fn accounting_responses_ws_native_auxiliary_scope_and_event_parity() -> an
     assert_eq!(observations(&db).await?.len(), 1);
     counts(&gate, (1, 1, 1, 1));
     stop(&test).await;
+    for mask in 0..8 {
+        for usage_kind in 0..3 {
+            for kind in [
+                "response.completed",
+                "response.failed",
+                "response.incomplete",
+            ] {
+                let mut gate = Gate::start().await?;
+                let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
+                    .build_with_auto_env(&server)
+                    .await?;
+                let mut metadata = json!({});
+                let mut expected = Vec::new();
+                if mask & 1 != 0 {
+                    metadata["openai_verification_recommendation"] =
+                        json!(["trusted_access_for_cyber"]);
+                    expected.push(json!({"type":"model_verification","verifications":["trusted_access_for_cyber"]}));
+                }
+                if mask & 2 != 0 {
+                    metadata["openai_chatgpt_moderation_metadata"] =
+                        json!({"presentation":"inline"});
+                    expected.push(json!({"type":"turn_moderation_metadata","metadata":{"presentation":"inline"}}));
+                }
+                let mut end = json!({"type":kind,"response":{"id":"same","error":{"code":"invalid_prompt","message":"fixture terminal"},"incomplete_details":{"reason":"max_output_tokens"}},"metadata":metadata});
+                if mask & 4 != 0 {
+                    end["safety_buffering"] = json!({"use_cases":["cyber"],"reasons":["user_risk"],"retry_model":"gpt-fast-wire"});
+                    expected.push(json!({"type":"safety_buffering","model":"gpt-5.6-sol","use_cases":["cyber"],"reasons":["user_risk"],"show_buffering_ui":true,"faster_model":"gpt-fast-wire"}));
+                }
+                if usage_kind != 0 {
+                    end["response"]["usage"] = if usage_kind == 2 {
+                        usage(Some(0))
+                    } else {
+                        serde_json::Value::Null
+                    };
+                }
+                submit(&test).await?;
+                gate.next()
+                    .await?
+                    .send(vec![
+                        responses::ev_response_created("same"),
+                        json!({"type":"response.metadata","metadata":metadata}),
+                        end,
+                    ])
+                    .await?;
+                let fallback = kind == "response.incomplete";
+                if fallback {
+                    let retry = gate.next().await?;
+                    assert!(
+                        retry.http,
+                        "incomplete response retains native HTTP fallback"
+                    );
+                    retry.send(vec![json!({"type":"response.failed","response":{"error":{"code":"invalid_prompt","message":"fixture fallback"}}})]).await?;
+                }
+                let events = terminal(&test).await?;
+                let actual: Vec<_> = events
+                    .iter()
+                    .filter(|event| {
+                        matches!(
+                            event,
+                            EventMsg::ModelVerification(_)
+                                | EventMsg::TurnModerationMetadata(_)
+                                | EventMsg::SafetyBuffering(_)
+                        )
+                    })
+                    .map(serde_json::to_value)
+                    .collect::<Result<_, _>>()?;
+                assert_eq!(
+                    actual, expected,
+                    "metadata parity: mask={mask}, usage={usage_kind}, kind={kind}"
+                );
+                assert_eq!(
+                    events.iter().any(|e| matches!(e, EventMsg::Error(_))),
+                    kind != "response.completed"
+                );
+                let db = test.codex.state_db().unwrap();
+                let records = attempts(&db).await?;
+                assert_eq!(records.len(), 1 + usize::from(fallback));
+                chain(&records);
+                assert_eq!(
+                    observations(&db).await?.len(),
+                    usize::from(usage_kind == 2),
+                    "metadata terminal must not fabricate usage evidence: mask={mask}, usage={usage_kind}, kind={kind}"
+                );
+                assert_eq!(
+                    totals(&db, &records[0]).await?,
+                    DayTotals {
+                        measured: std::array::from_fn(|i| Metric {
+                            known: if usage_kind == 2 {
+                                [100, 80, 20, 0, 40, 10, 140][i]
+                            } else {
+                                0
+                            },
+                            unknown: i64::from(usage_kind != 2) + i64::from(fallback),
+                        }),
+                        known_usd: if usage_kind == 2 { "0.00161" } else { "0" }
+                            .to_string()
+                            .try_into()?,
+                        unknown_estimates: i64::from(usage_kind != 2) + i64::from(fallback),
+                        attempts: 1 + i64::from(fallback),
+                    }
+                );
+                eprintln!("metadata matrix passed: mask={mask}, usage={usage_kind}, kind={kind}");
+                gate.no_pending().await;
+                counts(&gate, (1, 1, 1, usize::from(fallback)));
+                stop(&test).await;
+            }
+        }
+    }
     Ok(())
 }

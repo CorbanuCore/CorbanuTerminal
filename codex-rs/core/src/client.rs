@@ -306,7 +306,8 @@ pub struct ModelClient {
     // Restrictive configured intent, not an assertion of protected readiness.
     ingress_level: codex_security_policy::SecurityLevel,
     ingress_policy: Option<crate::security::ingress::BoundIngressPolicy>,
-    stage_one_memory_binding: Option<Arc<crate::memory_stage_one::StageOneMemoryBinding>>,
+    pub(crate) stage_one_memory_binding:
+        Arc<OnceLock<Arc<crate::memory_stage_one::StageOneMemoryBinding>>>,
     ingress_items: Arc<StdMutex<crate::security::ingress::NativeIngress>>,
 }
 
@@ -766,7 +767,7 @@ impl ModelClient {
             http_client_factory,
             ingress_level: codex_security_policy::SecurityLevel::Permissive,
             ingress_policy: None,
-            stage_one_memory_binding: None,
+            stage_one_memory_binding: Arc::new(OnceLock::new()),
             ingress_items: Arc::new(StdMutex::new(
                 crate::security::ingress::NativeIngress::default(),
             )),
@@ -777,7 +778,7 @@ impl ModelClient {
         mut self,
         binding: Arc<crate::memory_stage_one::StageOneMemoryBinding>,
     ) -> Self {
-        self.stage_one_memory_binding = Some(binding);
+        self.stage_one_memory_binding = Arc::new(OnceLock::from(binding));
         self
     }
 
@@ -2149,7 +2150,7 @@ impl ModelClient {
         .map_err(std::io::Error::from)?;
         Ok(crate::memory_stage_one::StageOneGuardedTransport::new(
             ReqwestTransport::from_http_client(client),
-            self.stage_one_memory_binding.clone(),
+            self.stage_one_memory_binding.get().cloned(),
         ))
     }
 
@@ -2522,7 +2523,7 @@ impl ModelClientSession {
                     .map_err(std::io::Error::from)?;
                 crate::memory_stage_one::StageOneGuardedTransport::new(
                     ReqwestTransport::from_http_client(client),
-                    self.client.stage_one_memory_binding.clone(),
+                    self.client.stage_one_memory_binding.get().cloned(),
                 )
             } else {
                 self.client
@@ -3184,7 +3185,7 @@ impl ModelClientSession {
                     .map_err(std::io::Error::from)?;
                 crate::memory_stage_one::StageOneGuardedTransport::new(
                     ReqwestTransport::from_http_client(client),
-                    self.client.stage_one_memory_binding.clone(),
+                    self.client.stage_one_memory_binding.get().cloned(),
                 )
             } else {
                 self.client
@@ -3543,7 +3544,7 @@ impl ModelClientSession {
                         "websocket connection is unavailable".to_string(),
                     ))
                 })?;
-            if let Some(binding) = &self.client.stage_one_memory_binding {
+            if let Some(binding) = self.client.stage_one_memory_binding.get() {
                 binding
                     .check()
                     .await
@@ -3564,6 +3565,7 @@ impl ModelClientSession {
                         sampling,
                         established,
                         expected,
+                        self.client.stage_one_memory_binding.clone(),
                     ))
                 }
                 _ => None,

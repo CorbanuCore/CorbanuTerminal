@@ -82,6 +82,7 @@ pub(crate) struct Admission {
     sampling: Arc<Sampling>,
     established: Provenance,
     expected: String,
+    binding: Arc<std::sync::OnceLock<Arc<crate::memory_stage_one::StageOneMemoryBinding>>>,
 }
 
 impl Admission {
@@ -89,16 +90,30 @@ impl Admission {
         sampling: Arc<Sampling>,
         established: Provenance,
         expected: String,
+        binding: Arc<std::sync::OnceLock<Arc<crate::memory_stage_one::StageOneMemoryBinding>>>,
     ) -> Arc<dyn ResponsesWebsocketAdmission> {
         Arc::new(Self {
             sampling,
             established,
             expected,
+            binding,
         })
     }
 }
 
 impl ResponsesWebsocketAdmission for Admission {
+    fn check(&self) -> Pin<Box<dyn Future<Output = Result<(), ApiError>> + Send + '_>> {
+        Box::pin(async move {
+            if let Some(binding) = self.binding.get()
+                && binding.check().await.is_err()
+            {
+                self.sampling.reject();
+                return Err(ApiError::Stream(FAILURE.into()));
+            }
+            Ok(())
+        })
+    }
+
     fn admit(
         &self,
         model: String,

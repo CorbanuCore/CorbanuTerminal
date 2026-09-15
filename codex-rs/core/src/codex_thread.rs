@@ -263,6 +263,22 @@ impl CodexThread {
         .await
     }
 
+    /// Debug fixture: attach an existing, same-owner denial-only binding to live sampling.
+    #[cfg(debug_assertions)]
+    #[doc(hidden)]
+    pub fn attach_stage_one_binding_for_fixture(
+        &self,
+        client: &crate::memory_stage_one::StageOneMemoryClient,
+    ) -> Result<(), crate::memory_stage_one::StageOneMemoryDenial> {
+        let binding = client.binding_for_fixture(self.session.thread_id())?;
+        self.session
+            .services
+            .model_client()
+            .stage_one_memory_binding
+            .set(binding)
+            .map_err(|_| crate::memory_stage_one::StageOneMemoryDenial::PolicyUnavailable)
+    }
+
     /// Returns the session telemetry handle for thread-scoped production instrumentation.
     pub fn session_telemetry(&self) -> SessionTelemetry {
         self.session.services.session_telemetry.clone()

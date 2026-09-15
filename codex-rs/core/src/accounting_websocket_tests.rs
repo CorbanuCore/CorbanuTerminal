@@ -103,6 +103,7 @@ impl Fixture {
             self.resolve().await?,
             provenance(),
             endpoint(BASE)?,
+            Default::default(),
         ))
     }
 }

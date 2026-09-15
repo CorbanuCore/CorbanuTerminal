@@ -164,6 +164,17 @@ impl StageOneMemoryBinding {
 }
 
 impl StageOneMemoryClient {
+    #[cfg(debug_assertions)]
+    pub(crate) fn binding_for_fixture(
+        &self,
+        owner: ThreadId,
+    ) -> Result<Arc<StageOneMemoryBinding>, StageOneMemoryDenial> {
+        if self.binding.owner_id != owner {
+            return Err(StageOneMemoryDenial::OwnerMismatch);
+        }
+        Ok(Arc::clone(&self.binding))
+    }
+
     pub(crate) async fn new(
         owner: Weak<Session>,
         termination: SessionLoopTermination,

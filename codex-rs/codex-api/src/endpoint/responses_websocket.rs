@@ -780,6 +780,7 @@ async fn run_websocket_response_stream(
 ) -> Result<(), ApiError> {
     let mut last_server_model: Option<String> = None;
     let mut safety_buffering_treatment = SafetyBufferingTreatment::default();
+    let guard = dispatch.as_ref().map(|dispatch| dispatch.admission.clone());
     let mut evidence = if let Some(dispatch) = dispatch {
         let start = Instant::now();
         let result = tokio::time::timeout(
@@ -834,6 +835,9 @@ async fn run_websocket_response_stream(
 
         match message {
             Message::Text(text) => {
+                if let Some(guard) = &guard {
+                    guard.check().await?;
+                }
                 if let Some(evidence) = evidence.as_mut() {
                     evidence.text(&text).await?;
                 }
