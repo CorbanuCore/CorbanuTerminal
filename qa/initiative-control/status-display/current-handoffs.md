@@ -174,6 +174,59 @@ move to **Opus 5.0 High** (`claude-opus-5-plan`, provider `claude-plan`, effort
 - Dispatch defect fixed: worker START must be re-sent until the pane shows
   `Working (`; the dispatch helper now verifies that.
 
+### Update — September 15 08:05 UTC: WS accounting, owner daemon C and the PF-83 harness all received
+
+Three units landed in one goal-mode session, each reviewed by Opus 5.0 High and
+corrected before receiving.
+
+- **Accounting** ([PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md)):
+  the Responses **WebSocket sampling unit is received at `c86634e21`** — 18 files,
+  2831 total / 841 non-test lines (target 3000/1050), all 36 named cases. Review
+  found one real gap: the redirect-latch case passed identically with the latch
+  arm deleted, so it proved nothing. Closed in `50382ef13` by a mutation
+  experiment — arm removed, case fails with the exact expected message (run
+  `d4d6c364`, exit 100); arm restored, passes across all ten vectors (run
+  `cccb60ec`). Receiving gates on the merged tree: codex-api 224/224, WS native
+  20/20, Core accounting 35/35, state + TaskNode-session 390/390, responses proxy
+  28/28. Two native vectors remain honestly disclosed as partially proven.
+  Collection stays **OFF**. Two earlier attempts stopped correctly before
+  touching code (missing build lease; base divergence) and both receipts are kept.
+- **Task Node** ([PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)):
+  **owner daemon increment C received at `95b4d339a`** — a tick now carries
+  prepared work through the real worker lifecycle (claim → TMUX launch → exact
+  ACK digest compare → START with mandatory working verification → RETURN → record).
+  Review caught a P2 that would have wedged the daemon permanently: any
+  non-worker action kind (a prepared `wait`, `integrate`, `complete_sprint` …)
+  hit `unsupported_worker_kind` and left an unresolvable hold, so every later
+  tick returned HOLD forever. Corrected with named regressions, plus two P3s
+  (pause before any effect now defers instead of fencing; a worker that dies
+  right after emitting RETURN still has its durable evidence recorded). Suite
+  591 green. The daemon stays **OFF** with no activation record.
+- **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
+  functional-gate **harness increment 1 received at `4b85ffd98`** (harness lives
+  outside the repo at `.codex-work/functional-pf83.20260915`). The design manifest
+  is normalized to the expanded ID set so the schema-2 handoff checker can pass,
+  with the original F01–F11 bytes preserved. Review found the loopback denial
+  probes were invalid controls (a refused connection to a port with no listener)
+  yet were feeding an `os-enforced` claim; they are removed and loopback is now
+  recorded as explicitly **UNPROVEN**. The reserved 8-call tail is wired and
+  proven end to end. Every functional verdict is still `not_reached`.
+
+Two manager-side defects were found and fixed rather than worked around:
+
+- Manager cycles were failing `briefing_size_hold` on every attempt. Compacted
+  terminal actions still inlined their frozen 18-path manifests; those are now
+  omitted with their digest retained (`8f3381ca3`). A second change that filtered
+  "already visible" digests out of `evidence_omissions` was **reverted**
+  (`d0d93c75a`) — `manager_cycle_test.BriefingSizeTests` encodes that the list
+  reports what the manager *cannot read*, and the ~2.5 KB saving was not worth
+  weakening that meaning.
+- Receiving verification ran under the default macOS `TMPDIR`, exceeding the
+  104-byte Unix socket limit and failing 27 daemon cases with
+  `socket_path_too_long` on code the worker had seen green. Receiving commands
+  now pin `TMPDIR=/private/tmp`; the failed gate was explicitly reconciled rather
+  than retried silently, and its original receipt is retained.
+
 ### Update — September 15 06:00 UTC: three parallel workers; goal-mode operation
 
 Travis placed the manager in goal mode (poll subagents on an interval, advance
