@@ -263,6 +263,73 @@ class TmuxTests(unittest.TestCase):
         with self.assertRaises(d.Invalid):
             receiver.verify(evidence, request, ack)
 
+    def test_bridge_baseline_mid_append_repolls_before_attempt_or_keys(self):
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        path = self.worker.run / "home/sessions/fixture.jsonl"
+        baseline = path.read_bytes()
+        with path.open("r+b") as stream:
+            stream.truncate(len(baseline) - 1)
+        read_file = f.read_file
+        partial_reads = []
+        with (patch.object(self.worker, "once", wraps=self.worker.once) as once,
+              patch.object(self.worker, "tmux", wraps=self.worker.tmux) as tmux):
+            def read(candidate, *args, **kwargs):
+                raw = read_file(candidate, *args, **kwargs)
+                if Path(candidate) == path and not raw.endswith(b"\n"):
+                    self.assertEqual(raw, baseline[:-1])
+                    self.assertFalse(receiver.issued)
+                    once.assert_not_called()
+                    self.assertFalse(list(self.worker.run.glob("bridge-*.json")))
+                    self.assertFalse(any(call.args[0] in ("load-buffer", "paste-buffer", "send-keys")
+                                         for call in tmux.call_args_list))
+                    partial_reads.append(raw)
+                    # Finish the actual baseline append on the same inode.
+                    with path.open("ab") as stream:
+                        stream.write(b"\n")
+                return raw
+            with patch.object(f, "read_file", side_effect=read):
+                evidence = receiver.deliver(request, ack)
+            once.assert_called_once()
+            self.assertEqual(1, sum(call.args[0] == "paste-buffer" for call in tmux.call_args_list))
+            self.assertEqual(1, sum(call.args[0] == "send-keys" for call in tmux.call_args_list))
+        self.assertEqual(1, len(partial_reads), "must read the actual incomplete baseline")
+        self.assertEqual(evidence["rollout"]["before_digest"], f.digest(baseline))
+        receiver.verify(evidence, request, ack, consume=True)
+
+    def test_bridge_baseline_partial_deadline_and_malformed_send_no_keys(self):
+        receiver = self.bridge_receiver()
+        request, ack = self.bridge_request(receiver)
+        path = self.worker.run / "home/sessions/fixture.jsonl"
+        baseline = path.read_bytes()
+        for mode in ("partial", "malformed"):
+            with self.subTest(mode=mode):
+                path.write_bytes(baseline[:-1] if mode == "partial" else baseline + b"malformed\n")
+                reads = []
+                read_rollout = receiver.rollout
+                elapsed = [0]
+                def read():
+                    reads.append(True)
+                    elapsed[0] += 1
+                    return read_rollout()
+                clock = SimpleNamespace(monotonic=lambda: elapsed[0], sleep=lambda _: None)
+                expectation = (self.assertRaises(d.Invalid) if mode == "partial"
+                               else self.assertRaisesRegex(f.LaunchError, "invalid_json"))
+                with (patch.object(t, "time", clock),
+                      patch.object(receiver, "rollout", side_effect=read),
+                      patch.object(self.worker, "once", wraps=self.worker.once) as once,
+                      patch.object(self.worker, "tmux", wraps=self.worker.tmux) as tmux,
+                      expectation):
+                    receiver.deliver(request, ack)
+                if mode == "partial":
+                    self.assertGreater(len(reads), 1)
+                else:
+                    self.assertEqual(1, len(reads))
+                self.assertFalse(receiver.issued)
+                once.assert_not_called()
+                tmux.assert_not_called()
+                self.assertFalse(list(self.worker.run.glob("bridge-*.json")))
+
     def test_bridge_mid_append_rollout_repolls_before_issuing_evidence(self):
         receiver = self.bridge_receiver()
         request, ack = self.bridge_request(receiver)

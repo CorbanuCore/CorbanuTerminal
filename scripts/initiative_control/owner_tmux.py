@@ -198,7 +198,15 @@ class BridgeReceiver:
     def deliver(self, request, ack):
         self.check_owner(request["owner"])
         d.require(request["payload_digest"] == d.digest(request["payload"]))
-        before, records, rollout = self.rollout()
+        started = time.monotonic()
+        while True:
+            d.require(time.monotonic() - started <= self.handoff_timeout)
+            try:
+                before, records, rollout = self.rollout()
+                break
+            except RolloutPending:
+                # No durable attempt or keys yet: re-reading cannot duplicate a send.
+                time.sleep(0.05)
         d.require(records[-1]["type"] == "event_msg"
                   and records[-1]["payload"]["type"] in ("task_complete", "turn_complete"))
         text = d.canonical(ack).decode("utf-8")
@@ -212,12 +220,12 @@ class BridgeReceiver:
                                  "Acknowledge only; do not execute or forward work. "
                                  "Reply with exactly expected_ack, without fences or extra bytes.")).decode()
         d.require(len(prompt.encode()) <= 16384 and not d.SECRET.search(prompt))
+        d.require(time.monotonic() - started <= self.handoff_timeout)
         # Durable intent precedes any keys. An interrupted attempt cannot be retried,
         # including with a newly constructed receiver on this same worker.
         self.worker.once("bridge-" + d.digest(request["handoff"]), dict(
             request_digest=d.digest(request), nonce=nonce, receiver=self.identity,
             prompt_digest=f.digest(prompt.encode()), before_digest=f.digest(before), at=f.now()))
-        started = time.monotonic()
         w, buffer = self.worker, "bridge-" + nonce
         w.tmux("load-buffer", "-b", buffer, "-", input=prompt)
         try:

@@ -67,7 +67,9 @@ monotonic capture time in memory. Retention compares the complete supplied recor
 against that issued witness, re-reads the same rollout inode and exact bytes,
 recaptures the live pane byte for byte, and consumes the nonce once. After the
 `owner-daemon-bridge-02` revision, ACK collection has an independent
-`handoff_timeout` (default and maximum 300 seconds, measured from send preparation).
+`handoff_timeout` (default and maximum 300 seconds). The
+`owner-daemon-bridge-03` revision measures this shared deadline from baseline
+preparation, including baseline retries and subsequent ACK collection.
 The maximum witness age remains `timeout` (default and maximum 20 seconds), now
 measured from immediately before its ACK pane capture. Verification checks that
 age both before and after its live identity/rollout/pane checks. Final eligibility
@@ -76,11 +78,12 @@ A slow model can therefore spend 60 seconds producing the ACK and still leave
 20 seconds for retention/unlock. Delaying unlock beyond the capture's freshness
 bound still refuses; this is not an indefinite authorization lease.
 
-Only while polling for the ACK, an incomplete trailing rollout record or a
-snapshot changing during an append is retried within the collection deadline.
-No prefix or partial record is accepted as evidence. Stable newline-terminated
-records still require strict JSON and full provenance; malformed complete records
-remain terminal. Baseline and verification reads remain strict. A timeout,
+During baseline preparation and ACK polling, an incomplete trailing rollout
+record or a snapshot changing during an append is retried within the shared
+collection deadline. No prefix or partial record is accepted as evidence. Stable
+newline-terminated records still require strict JSON and full provenance;
+malformed complete records remain terminal. Verification reads remain strict
+and do not retry. A timeout,
 uncertain key send, missing/malformed/truncated/edited rollout, changed pane,
 identity drift, reused nonce or collector restart leaves the handoff held.
 A new collector cannot import old evidence or resend the durable attempt.
@@ -306,6 +309,102 @@ new regression methods; the strengthened existing freshness case is also covered
 Governance passed: **3/3 active plans, 116 current / 126 archived sprints**.
 Final `git diff --check` passes. Production `decision_manager.py` is unchanged;
 its native retention and final unlock gates have not been altered.
+
+## Revision — owner-daemon-bridge-03
+
+- Action: `owner-daemon-bridge-03`; allocation digest:
+  `0f744b2d5dc9cde72f065536619ab04ad011cb51f8ea59e7b50fcab4fb100a91`.
+- Claim: `c4125294-bb65-4d59-962f-92186fe99c47`.
+- Base: `e800a3db1147443db2f5822bdacae467bde5dd21`; same worktree,
+  branch and Astra High runtime as above.
+- Frozen brief `/private/tmp/fmgr.Q1SIYZ/briefs/owner-daemon-bridge-03.json`:
+  `shasum -a 256` matched
+  `005ab4b5e2bf310d217afa1e1c88e730f3b5fd01847d1c67764bbc8aa91e6c1e`.
+- Read independent review `/private/tmp/fmgr.Q1SIYZ/JrsRzA-review.json` first.
+  Original verdict: “patch is correct,” with two P3 findings. This revision
+  addresses those findings; it does not claim a new independent approval.
+- Classification: bounded reliability fix under **Internal delivery control —
+  TO BUILD**, “durable event dispatch, acknowledgments and watchdog” and
+  “actual Slack reply/decision/agent acknowledgment.” PF-80-S01 remains
+  `in_progress`; manager-owned allocation reconciliation and later functional
+  qualification remain open as above.
+
+### Baseline retry and duplicate-effect reasoning
+
+The pre-send baseline read now retries only `RolloutPending` within the same
+`handoff_timeout` used for ACK collection. The clock starts before the baseline
+read and is not reset after it; another deadline check before `worker.once()`
+prevents a baseline/capture that finishes late from starting a durable attempt.
+All these baseline retries precede `once()` and any buffer/key operation, so they
+cannot duplicate a durable attempt or send. After the one durable attempt,
+existing anti-resend behavior is unchanged. Partial evidence is never accepted;
+complete malformed JSON and identity/provenance failures remain terminal.
+A permanently pending baseline still times out and leaves dispatch uncertain;
+this revision recovers transient appends, not timed-out deliveries.
+
+`test_bridge_baseline_mid_append_repolls_before_attempt_or_keys` removes the
+last newline from actual baseline rollout bytes, observes that incomplete read,
+asserts no durable attempt, buffer/key operation or witness exists, then finishes
+the append on the same inode. Delivery must retry and use the full baseline,
+perform exactly one `once`, paste and Enter, and produce verifiable evidence
+from the real private TMUX receiver. The second new test,
+`test_bridge_baseline_partial_deadline_and_malformed_send_no_keys`, proves that
+permanent partial bytes receive bounded retries and complete malformed JSON is
+terminal after one read; neither path creates an attempt or sends keys.
+
+Pre-fix discrimination used both new tests against unchanged production code
+at the base commit: **2 tests in 0.956s, 1 error and 1 failure**, exit 1.
+The mid-append test raised `owner_tmux.RolloutPending` at the baseline read in
+`deliver`; the permanent-partial case failed because it observed only one read.
+The malformed subcase passed. Exact command (using the SDK interpreter from the
+full-suite command above):
+
+```sh
+env -u CODEX_HOME -u CORBANU_HOME -u PFTERMINAL_HOME TMPDIR=/private/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts/initiative_control /Volumes/CorbanuDrive/Corbanu/.codex-work/slack-sdk-test.Ob3i5O/venv/bin/python -B -m unittest -v test_owner_tmux.TmuxTests.test_bridge_baseline_mid_append_repolls_before_attempt_or_keys test_owner_tmux.TmuxTests.test_bridge_baseline_partial_deadline_and_malformed_send_no_keys
+```
+
+Corrected focused run: **6 tests passed in 8.310s**, exit 0. It includes both
+new baseline cases, the existing ACK mid-append and partial/malformed cases,
+collection deadline refusal, and the manager's simulated 60-second model turn.
+
+### Handoff timeout and lock cost
+
+**Decision: retain the default/max `handoff_timeout=300` seconds.** This preserves
+the existing allowance for a real model turn, including the simulated 60-second
+case; that regression proves clock handling, not real inference latency.
+The baseline and ACK phases share this budget rather than adding two waits.
+Witness freshness remains at most 20 seconds from ACK capture.
+
+The operational cost is explicit: `decision_replies.dispatch` holds both the
+process-global store and feed exclusive locks across its receive callback,
+including baseline preparation and ACK collection. The collection allowance
+therefore extends their potential hold from roughly 20 seconds to roughly
+**five minutes**, plus surrounding I/O/processing; the polling deadline is not
+an OS-enforced wall-clock interrupt. Contending `lock_timeout=5` callers
+(including `ResolutionStore`, the manager CLI and decision-feed operations)
+can time out more often, and `decisions.save_fixture` uses an unbounded feed
+`flock`, so it can block for minutes. This revision accepts and discloses that
+cost to preserve model-turn headroom within the frozen scope; lock ownership
+and the dispatch protocol are unchanged.
+
+### Final validation
+
+After the code/test edits and `git diff --check`, the full SDK command recorded
+above, with `TMPDIR=/private/tmp`, passed **614 tests in 336.610s**, exit 0,
+with no reported skips or failures. This includes the two new baseline tests
+and all existing partial/malformed, stale, replayed, imported/edited witness,
+identity-drift, cross-transport, anti-resend and native regressions. The run
+emitted the existing synthetic HTTP 500/429 cleanup ResourceWarnings. No retry
+of this full-suite run was needed; the pre-fix failures remain recorded above.
+
+Both governance commands passed: **3/3 active plans** and **116 current /
+126 archived sprints**. `git diff --check` passed. Only `owner_tmux.py`,
+`test_owner_tmux.py` and this note changed; `decision_manager.py` and its tests
+are unchanged. Safe test-isolation guidance was read before testing. Tests used
+disposable synthetic profiles, private TMUX sockets and local SDK HTTP fixtures;
+no live profile, native credential prompt, Rust test, Slack message, push or
+release was involved. Existing internal-only qualification limitations below
+remain open for the manager; this commit is a review handoff.
 
 ## What this does not establish
 
