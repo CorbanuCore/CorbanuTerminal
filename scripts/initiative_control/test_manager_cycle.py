@@ -262,6 +262,44 @@ class CycleTests(unittest.TestCase):
         self.assertEqual({"data": ref}, claim["actions"]["prior"]["inputs"])
         self.assertEqual({**ref, "extra": "retain unknown shape"}, brief["actions"]["prior"]["result"])
 
+    def test_terminal_history_omits_allocated_scope_but_keeps_its_digest(self):
+        scope = ["codex-rs/core/src/file-%02d.rs" % n for n in range(18)]
+        resources = ["bootstrap-worktree"]
+        with self.c.mutation("fixture", {}) as (_, state):
+            state["actions"]["prior"] = {"id": "prior", "workstream": "delivery", "status": "accepted",
+                                         "sequence": [0, 0], "inputs": {"allocation": "alloc-1"},
+                                         "scope": list(scope), "resources": list(resources),
+                                         "result": {"commit": "abc1234"}}
+        result = self.cycle()
+        self.assertEqual("accepted", result["status"], result)
+        brief = m.load_json(Path(result["artifacts"]) / "briefing.json")
+        action = brief["actions"]["prior"]
+        # The manifest is a frozen allocation copy, not an outcome: it is omitted,
+        # the allocation that names it is retained, and the outcome survives.
+        self.assertNotIn("scope", action)
+        self.assertNotIn("resources", action)
+        self.assertEqual("alloc-1", action["allocation"])
+        self.assertEqual({"commit": "abc1234"}, action["result"])
+        entry = next(e for e in brief["evidence_omissions"] if e["id"] == "prior")
+        self.assertEqual(f.digest(encoded({"scope": scope, "resources": resources}).encode()),
+                         entry["allocated_digest"])
+        # Nothing is silently dropped: the claim still carries the exact manifest.
+        claim = m.load_json(Path(result["artifacts"]) / "claim.json")
+        self.assertEqual(scope, claim["actions"]["prior"]["scope"])
+        self.assertEqual(resources, claim["actions"]["prior"]["resources"])
+
+    def test_running_actions_keep_their_scope(self):
+        scope = ["codex-rs/core/src/only.rs"]
+        with self.c.mutation("fixture", {}) as (_, state):
+            state["actions"]["live"] = {"id": "live", "workstream": "delivery", "status": "running",
+                                        "sequence": [0, 0], "inputs": {"allocation": "alloc-1"},
+                                        "scope": list(scope), "resources": ["r"]}
+        result = self.cycle()
+        self.assertEqual("accepted", result["status"], result)
+        brief = m.load_json(Path(result["artifacts"]) / "briefing.json")
+        self.assertEqual(scope, brief["actions"]["live"]["scope"])
+        self.assertEqual(["r"], brief["actions"]["live"]["resources"])
+
     def test_large_actions_are_losslessly_indexed_without_duplicate_records(self):
         expected = {}
         for index in range(3):

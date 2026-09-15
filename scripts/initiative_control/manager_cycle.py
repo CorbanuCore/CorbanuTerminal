@@ -175,10 +175,12 @@ def briefing(coordinator, packet, owner_context):
             for item in value:
                 yield from reference_digests(item)
 
-    def omit(source, key, reason, inputs=None, references=None):
+    def omit(source, key, reason, inputs=None, references=None, allocated=None):
         entry = {"source": source, "id": key, "reason": reason}
         if inputs is not None:
             entry["inputs_digest"] = digest(inputs)
+        if allocated is not None:
+            entry["allocated_digest"] = digest(allocated)
         omitted_references.append((entry, set(reference_digests(references))))
 
     historical_fields = reference_fields
@@ -187,8 +189,14 @@ def briefing(coordinator, packet, owner_context):
         inputs = action.pop("inputs", None)
         if isinstance(inputs, dict) and "allocation" in inputs:
             action["allocation"] = inputs["allocation"]
+        # scope/resources are frozen allocation copies, not outcomes. A terminal
+        # action's own manifest can be large (an 18-path write scope costs more
+        # than the rest of the record), and the retained allocation reference
+        # already names it, so keep only its digest in the omission entry.
+        allocated = {field: action.pop(field) for field in ("scope", "resources") if field in action}
         omit("actions", key, "terminal_history", inputs,
-             [inputs, *[action[field] for field in historical_fields if field in action]])
+             [inputs, *[action[field] for field in historical_fields if field in action]],
+             allocated or None)
     for key, allocation in packet["allocations"].items():
         if allocation["inputs"].get("consumed") is True:
             brief["allocations"][key] = {**allocation, "inputs": {"consumed": True}}

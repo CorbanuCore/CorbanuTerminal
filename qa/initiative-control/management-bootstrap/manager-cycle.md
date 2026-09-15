@@ -355,3 +355,27 @@ PYTHONPATH=scripts/initiative_control:/Volumes/CorbanuDrive/Corbanu/.codex-work/
 ResourceWarnings for synthetic HTTP 500/429 error fixtures; the suite exited zero.
 All implementation/test edits preceded this run; only this result was appended
 afterward. `git diff --check` passed.
+
+## Terminal-history manifests are omitted — September 15, 2026
+
+Fresh-manager runs began failing `briefing_size_hold` on every attempt: the
+fixed floor (before any event was selected) had grown past the unchanged 64 KiB
+`BRIEF_LIMIT`. Cause: a compacted terminal action still inlined its frozen
+`scope` and `resources`. Those are allocation copies, not outcomes, and an
+18-path Rust write scope cost more than the rest of the action record — the two
+blocked PF-60-S02 dispatch attempts were ~3 KB each, almost half of it manifest.
+
+Compaction now also removes `scope` and `resources` from a compacted terminal
+action and records their canonical digest as `allocated_digest` on the existing
+omission entry. The retained `allocation` key still names the allocation that
+froze them, the claim retains the exact manifest, and outcome previews,
+verification and receipt references are unchanged. Running, prepared and
+returned actions keep their manifests in full.
+
+Measured on the live state (12 actions, 45 consumed allocations): 67,843 →
+65,360 bytes at one selected event, restoring headroom without touching the
+limit. `BRIEF_LIMIT` remains **65536**; no ceiling was bypassed.
+
+Regression tests: `test_terminal_history_omits_allocated_scope_but_keeps_its_digest`
+proves the omission, the digest, and that the claim still carries the manifest;
+`test_running_actions_keep_their_scope` proves non-terminal actions are untouched.
