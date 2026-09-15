@@ -54,7 +54,11 @@ def validate_status(value):
     d.require(value["state"] in ("off", "unqualified", "held", "last-verified", "stale"))
     if value["last_verified"] is not None:
         d.stamp(value["last_verified"])
-    d.require(all(type(value[k]) is int and value[k] >= 0 for k in ["watermark", "pending"] + COUNTS + extra))
+    d.require(all(type(value[k]) is int and value[k] >= 0
+                  for k in ["watermark", "pending"] + COUNTS + extra if k != "fence_gap"))
+    if "fence_gap" in value:
+        gap = value["fence_gap"]
+        d.require(gap is None or type(gap) is int and gap >= 0)
     d.require(value["enabled"] or value["state"] == "off")
     return copy.deepcopy(value)
 
@@ -134,8 +138,11 @@ def project_disclosure(value, store, journal, alerts, now=None):
     if event is not None and event["kind"] == "restart-refused" and event["restart"] == "pending":
         event["restart"] = "held"
     value["last_listener_exit"] = event
-    value["fence_gap"] = s.fence_gap(store, journal)
-    if value["fence_gap"]:
+    try:
+        value["fence_gap"] = s.fence_gap(store, journal)
+    except (OSError, ValueError):
+        value["fence_gap"] = None
+    if value["fence_gap"] is None or value["fence_gap"]:
         value["state"] = "held"
 
 
@@ -502,6 +509,8 @@ def listener_child(root, guard, control, *, run=None):
         else:
             run(runtime, stop, data)
         code = 0
+    except s.RestartRefused:
+        code = s.RESTART_REFUSED_EXIT
     except BaseException:
         pass  # Never export raw SDK errors, URLs, credentials or callback data.
     finally:
@@ -550,7 +559,7 @@ class ListenerSupervisor:
         self.options, self.retry_at, self.pin = None, None, None
         self.manager.stop()
 
-    def record(self, kind, returncode=None):
+    def record(self, kind, returncode=None, at=None):
         with self.manager.store.lock(), s.locked(self.manager.store) as journal:
             try:
                 fence = s.ingress_count(self.manager.store)
@@ -563,7 +572,7 @@ class ListenerSupervisor:
                     and gap == 0 and journal["binding"] == self.manager.binding
                     and session is not None and session["phase"] != "stopped"
                     and (self.pin is None or self.pin == pin) and self.restarts < 3)
-            event = dict(kind=kind, at=self.now(), returncode=returncode, restarts=self.restarts,
+            event = dict(kind=kind, at=at if at is not None else self.now(), returncode=returncode, restarts=self.restarts,
                          fence_count=fence, ingress_count=journal["ingress"], fence_gap=gap,
                          epoch=journal["lifecycle"]["epoch"], restart="pending" if safe else "held")
             journal.setdefault("listener_events", []).append(event)
@@ -639,7 +648,8 @@ class ListenerSupervisor:
                     # Attribute each observed exit to its handle before reaping.
                     # Never replace a different process's pending observation.
                     self.pin = None
-                    event = ("child-exit", code)
+                    event = (("restart-refused", None, self.now()) if code == s.RESTART_REFUSED_EXIT
+                             else ("child-exit", code, self.now()))
                     if self.pending_event is None:
                         self.pending_event = event
                     else:
@@ -665,7 +675,7 @@ class ListenerSupervisor:
                 self.manager.start(**options, restart_pin=self.pin)
             except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
                 self.failed_start_process = self.manager.process
-                self.pending_event = ("restart-refused", None)
+                self.pending_event = ("restart-refused", None, self.now())
                 self.flush_event()
         if self.manager.process is not None and self.clock() >= self.pointer_at:
             self.pointer_at = self.clock() + 1

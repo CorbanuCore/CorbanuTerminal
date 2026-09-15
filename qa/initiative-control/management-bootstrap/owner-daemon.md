@@ -917,3 +917,124 @@ health publication are the scope of this correction; no packaged operator
 workflow, true-TUI, live-repository, human-test, benchmark or release
 qualification is claimed. Five allocated implementation/test/evidence files
 are changed; the commit is recorded in the worker RETURN.
+
+## Functional qualification fixes — owner-daemon-qualify-fixes-01, September 15, 2026
+
+Allocation digest:
+`b02cfbb95498a095e54bb732af10b4c290b7b60e6438e4146db2bbb2e6e874f1`.
+Claim: `cda98ad1-b6e9-4702-8d60-b29693fae3fd`.
+Worker: gpt-6-astra / high.
+Base: `948454162e584d4516c9ce3e39dc7d2663904929`.
+Branch: `bootstrap/owner-daemon-c-20260915`; worktree:
+`/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-owner-daemon-c-20260915`.
+The brief was read first after verifying SHA-256
+`0ff985919d6f60505f54e7fa2a32a254d0bac3fa36575b356d8b37440b3cce21`.
+
+Classification: bounded fixes restoring the authorized watchdog and disclosure
+contract. Product heading: **Internal delivery control — TO BUILD**; excerpts:
+“durable event dispatch, acknowledgments and watchdog” and “Show blockers,
+rendered sprints, human test plans, machines, run logs and freshness”.
+The initiative-delivery-control / PF-80-S01 context and manager ownership of
+shared governance records remain unchanged.
+
+These defects were found by functional qualification **after 675 unit tests
+and five independent review rounds had passed**, as reported in the frozen
+brief. The subsequent heartbeat round separately recorded 677 passing tests
+above. Neither earlier result qualifies these failed workflows.
+Original qualification report:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-odsup.20260915/RETURN-odsup-qualify-01.md`.
+It records 7 passing and 6 failing cases across 39 variants, including broken
+harness prerequisites. This worker does not change those original results or
+the separate harness work.
+
+### Tests written before implementation
+
+All names below belong to `test_decision_manager.ManagerTests`.
+The first five-test run on unchanged production code ran in **10.432s** and
+failed with **16 failures (including subcases) and one error**, reproducing every allocated
+product defect. Raw output is retained in this allocation's tool transcript.
+
+| Defect | New test | First observed failure | Disposition |
+| --- | --- | --- | --- |
+| D03 unknown gap | `test_missing_fence_discloses_unknown_on_every_projection` | Status, feed and dashboard returned zero for a missing fence. | Fixed: disclose null and held; the test also checks the persisted status cache and proves projection does not recreate the fence or rewrite the journal. |
+| D03 refusal accounting/retry | `test_child_admission_refusal_is_not_an_exit_or_another_retry` | Stopped, binding, epoch, gap and missing-fence hazards each became another child exit; epoch also attempted another restart. | Fixed: pre-admission refusal has a dedicated child exit code, recorded as held restart-refused with null returncode. Existing admission checks remain enforced. |
+| D09 retained request | `test_refused_pointer_different_request_keeps_retained_bytes` | No physical post, but the retained alerts bytes changed. | Reproduced; implementation blocked by writable scope. |
+| D10 event time | `test_exit_timestamp_survives_delayed_journal_flush` | Durable exit time shifted from 12:00:00 to 12:00:10 after failed writes. | Fixed: pending observations retain the time of first observed exit; retries use that timestamp. Reaping proceeds during write failure and restart backoff begins after durable flush. |
+| D14 dashboard counter | `test_dashboard_discloses_cumulative_discard_count_after_reopen` | Dashboard raised KeyError for listener_events_pruned while status/feed correctly reported four discards. | Reproduced; implementation blocked by writable scope. |
+
+The first post-change five-test run still failed the binding hazard's two
+assertions: runtime ownership validation precedes the transport gate. The
+correction classifies its pre-admission refusal too, without bypassing that
+validation. The focused D03/D10 replay then passed **3 tests in 7.730s**.
+The unchanged successful-restart/backoff and failed-start-survivor cases also
+passed in the first post-change run.
+
+### Mutation proof for completed fixes
+
+Each mutation compiled altered `decision_manager.py` source in memory,
+ran its named test, restored the original module source and ran a fresh fixture.
+No production file was mutated on disk. Raw attempts remain in the tool
+transcript.
+
+| Mutation | Named test above | Broken result | Restored result |
+| --- | --- | --- | --- |
+| Replace unknown gap null with zero. | Missing-fence projection | Four failures: status, feed, persisted cache and dashboard all show zero. | PASS, 0.514s |
+| Count the dedicated refusal exit code as child-exit. | Child-admission refusal | Eleven failures: wrong kinds/counts across five hazards and an extra epoch retry. | PASS, 6.471s |
+| Assign the flush time instead of retained event time. | Delayed-journal exit timestamp | One failure: timestamp moves forward ten seconds. | PASS, 0.723s |
+
+All three mutations failed as intended and all three restored runs passed.
+D09/D14 have no fix or mutation-success claim: their regressions remain failing,
+without skips or expected-failure annotations.
+
+### Scope blockers and retained limits
+
+D09's source is `scripts/initiative_control/decision_alerts.py`:
+`notice` overwrites the retained request and writes the sending state before
+`retry_pending_pointers` compares the reconstructed request in its exchange
+callback. A transport-only change cannot undo that already-durable rewrite.
+
+D14's source is `scripts/initiative_control/decision_feed.py`:
+`slack_health` explicitly constructs the dashboard dictionary and omits
+`listener_events_pruned`. Manager-side status already contains the counter.
+
+Neither source path is in this allocation's explicit five-path writable scope.
+Both files remain unchanged. No indirect monkey-patch or weakened fence is used
+to conceal the scope conflict. The manager must extend/reallocate these two
+paths to finish the requested four-defect repair. Harness D04, D06, D09 positive
+receipt and D10 reader-assertion problems remain assigned elsewhere.
+
+Recurrence stays OFF. No real service activation, installation, live Slack
+message, credential/profile read, native credential prompt, push, release or
+approval occurred. Tests use disposable synthetic stores and loopback SDK
+fixtures, with all profile aliases unset and TMPDIR pinned to /private/tmp.
+This is an incomplete internal implementation return, not functional acceptance
+or an unqualified human-test handoff. Independent confined exact-package replay
+and evidence review remain manager-owned gates after all four fixes.
+No true-TUI, live-repository, human acceptance or release qualification is claimed.
+
+### Final validation
+
+Full suite: **683 tests in 430.989s; 681 passed, one failure and one error**.
+The failure is the new D09 retained-bytes regression. The error is the new D14
+dashboard-counter KeyError. No other case failed, no tests were skipped or
+marked expected failures, and no retry of the full suite was needed.
+Known synthetic HTTP 500/429 fixture cleanup ResourceWarnings appeared.
+Retained synthetic evidence:
+`/private/tmp/isolated-transport-tests-e4e2bl8s`.
+
+Exact command:
+
+```sh
+env -u CODEX_HOME -u CORBANU_HOME -u PFTERMINAL_HOME TMPDIR=/private/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts/initiative_control:/Volumes/CorbanuDrive/Corbanu/.codex-work/initiative-control.oGQGyA/venv/lib/python3.14/site-packages /Volumes/CorbanuDrive/Corbanu/.codex-work/slack-sdk-test.Ob3i5O/venv/bin/python -B -m unittest discover -s scripts/initiative_control -p '*test*.py'
+python3 docs/plans/check.py
+python3 docs/sprints/check.py
+git diff --check
+```
+
+Both governance checkers passed: plans **3/3 active, zero slots available**;
+sprints **116 current, 126 archived**. Final `git diff --check` passed.
+The evidence file's pre-round contents match the base commit byte-for-byte;
+all four changed files are within the five allocated writable paths.
+The commit is recorded in the worker RETURN. **HOLD: D09 and D14 remain unfixed,
+and the full suite is not green.** Their fixes and mutation proofs require
+allocation of the two source paths identified above.
