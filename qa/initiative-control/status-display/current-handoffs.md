@@ -174,6 +174,55 @@ move to **Opus 5.0 High** (`claude-opus-5-plan`, provider `claude-plan`, effort
 - Dispatch defect fixed: worker START must be re-sent until the pane shows
   `Working (`; the dispatch helper now verifies that.
 
+### Update — September 15 10:10 UTC: accounting vectors closed, daemon qualified unassisted, security waiting on Travis
+
+- **Accounting** ([PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md)):
+  both previously partially-proven native vectors are **closed and received at
+  `16c43b5fe`**. A stage-one binding injected into an *already-running* combined
+  WS dispatch now stops it, and the native fixture emits the full safety /
+  model-verification / moderation matrix across 72 combinations. Every claim is
+  mutation-proven — guard bypass (`b530eb42`) and slot replacement (`5578019c`)
+  each failed with their exact named assertions before the mutations were removed.
+  Getting there took two recorded manager decisions, both triggered by the worker
+  correctly refusing to act alone: a deliberate widening to 20 paths, and a
+  bounded size-ceiling extension to 3700/1350 after it stopped 6 lines under the
+  frozen 3300 limit. Two non-blocking P3s are recorded as disclosed follow-ups
+  rather than dropped. Collection stays **OFF**.
+- **Task Node** ([PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)):
+  the owner daemon now runs a live tick **unassisted**. The launch path writes a
+  private `config.toml` and passes startup overrides, so a worker reaches a
+  working state with no human clearing update/trust prompts — with sandbox,
+  approval policy and prompt refusals unchanged. That also let the expired-lease
+  case be re-proven properly: PID 20423 was actively running `/bin/sleep 300`
+  when its real 180-second lease expired, giving `lease_expired` with a surviving
+  PID, HOLD and exactly one launch. Reviewed clean (0 findings) and received.
+  **Recurrence is still OFF**: independent confined functional acceptance and
+  Slack/recurring-supervision qualification remain, so activation is not yet
+  proposable.
+- **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
+  **waiting on Travis.** The code-blind gate needs a genuinely isolated macOS
+  environment (disposable VM, or a dedicated synthetic account with enforced
+  filesystem / process / IPC / network / Keychain isolation). The manager cannot
+  provision either — no passwordless `sudo` — and will not run the executor
+  without the boundary, because the isolated-execution contract already rejects
+  that evidence. Open decision `pf83-isolation-provisioning-20260915`. Meanwhile
+  everything not needing the environment advanced: package verification (an
+  altered manifest hash is refused), a bounded PTY protocol client, journaling and
+  sealing, preflight validation and fault/MCP helpers. The preflight honestly
+  reports all 175 controls **UNPROVEN**. A second blocker — the Bazel Rust target
+  failing under Bazel 9.0.0, so no package can be pinned — is manager-owned and
+  open. All 380 cases remain `not_reached`.
+
+Two more manager-side process defects were found and fixed:
+
+- A receive was recorded `verification_failed` even though the merge and all four
+  gates passed, because the manager committed a doc-only change to the receiving
+  branch while the gate was still running and the HEAD-unchanged check failed.
+  One integration writer means no manager commits during an in-flight receive.
+  Reconciled explicitly with the original receipt retained.
+- Worker dispatch now refuses to launch when the worktree HEAD does not equal the
+  assigned base, after a worker correctly stopped on exactly that divergence.
+
 ### Update — September 15 08:05 UTC: WS accounting, owner daemon C and the PF-83 harness all received
 
 Three units landed in one goal-mode session, each reviewed by Opus 5.0 High and
