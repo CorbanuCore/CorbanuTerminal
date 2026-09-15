@@ -431,6 +431,7 @@ async fn accounting_anthropic_native_presence_prices_and_two_reopens() -> anyhow
     let rollout = test.codex.rollout_path().unwrap();
     stop(&test).await;
     drop(test);
+    db.close().await;
     drop(db);
     for _ in 0..2 {
         let reopened = builder(endpoint.clone(), mode.clone())
@@ -498,6 +499,8 @@ async fn accounting_anthropic_native_presence_prices_and_two_reopens() -> anyhow
             }
         );
         stop(&reopened).await;
+        drop(reopened);
+        db.close().await;
     }
     assert_eq!(server.received_requests().await.unwrap().len(), 1);
     Ok(())
@@ -522,8 +525,10 @@ async fn accounting_anthropic_default_off_does_not_install_and_installed_off_del
         .await?;
     test.submit_turn("off native turn").await?;
     let db = test.codex.state_db().unwrap();
+    let mut connection = connection(&db).await?;
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM sqlite_schema WHERE name GLOB 'draft_accounting_*' OR name = '_accounting_migrations'")
-        .fetch_one(&mut connection(&db).await?).await?;
+        .fetch_one(&mut connection).await?;
+    sqlx::Connection::close(connection).await?;
     assert_eq!(count, 0);
     AccountingStore::open(&db, chrono::Utc::now().timestamp_millis()).await?;
     test.submit_turn("still off with installed store").await?;
@@ -532,6 +537,8 @@ async fn accounting_anthropic_default_off_does_not_install_and_installed_off_del
     stop(&test).await;
     db.delete_thread(owner).await?;
     assert!(db.get_thread(owner).await?.is_none());
+    drop(test);
+    db.close().await;
     Ok(())
 }
 
@@ -670,10 +677,12 @@ async fn role_override_native(case: RoleOverride) -> anyhow::Result<()> {
         .codex
         .state_db()
         .expect("fixture native state database");
+    let mut edges_connection = connection(&db).await?;
     let edges: Vec<(String, String)> =
         sqlx::query_as("SELECT parent_thread_id, child_thread_id FROM thread_spawn_edges")
-            .fetch_all(&mut connection(&db).await?)
+            .fetch_all(&mut edges_connection)
             .await?;
+    sqlx::Connection::close(edges_connection).await?;
     assert_eq!(edges.len(), 1);
     assert_eq!(edges[0].0, test.session_configured.thread_id.to_string());
     let child_id = codex_protocol::ThreadId::from_string(&edges[0].1)?;
@@ -792,6 +801,10 @@ async fn role_override_native(case: RoleOverride) -> anyhow::Result<()> {
         "no extra retry or unowned request"
     );
     stop(&test).await;
+    drop(native);
+    drop(test);
+    db.close().await;
+    drop(gate);
     Ok(())
 }
 

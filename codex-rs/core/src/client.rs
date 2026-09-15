@@ -775,14 +775,14 @@ impl ModelClient {
         }
     }
 
+    /// Install a denial binding once for this client and every existing/future clone.
     pub(crate) fn with_stage_one_memory_binding(
-        self,
+        &self,
         binding: Arc<crate::memory_stage_one::StageOneMemoryBinding>,
-    ) -> std::result::Result<Self, crate::memory_stage_one::StageOneMemoryDenial> {
+    ) -> std::result::Result<(), crate::memory_stage_one::StageOneMemoryDenial> {
         self.stage_one_memory_binding
             .set(binding)
-            .map_err(|_| crate::memory_stage_one::StageOneMemoryDenial::PolicyUnavailable)?;
-        Ok(self)
+            .map_err(|_| crate::memory_stage_one::StageOneMemoryDenial::PolicyUnavailable)
     }
 
     #[cfg(test)]

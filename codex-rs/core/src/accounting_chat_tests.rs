@@ -293,6 +293,62 @@ async fn accounting_chat_auth_and_guard_before_admission() -> anyhow::Result<()>
 }
 
 #[tokio::test]
+async fn accounting_chat_borrowed_binding_denies_existing_and_future_clones() -> anyhow::Result<()>
+{
+    let (mut owner, _) = crate::session::tests::make_session_and_context().await;
+    owner.services.agent_control = owner
+        .services
+        .agent_control
+        .clone()
+        .with_effective_security_policy(
+            codex_security_policy::SecurityLevel::Permissive,
+            owner.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )?;
+    let owner = Arc::new(owner);
+    let memory = crate::memory_stage_one::StageOneMemoryClient::new(
+        Arc::downgrade(&owner),
+        futures::future::pending().boxed().shared(),
+        owner.thread_id,
+        &owner.provider().await,
+    )
+    .await?;
+    let client = owner.services.model_client();
+    let existing = client.as_ref().clone();
+    let borrowed = client.as_ref();
+    borrowed.with_stage_one_memory_binding(memory.binding_for_fixture(owner.thread_id)?)?;
+    let future = borrowed.clone();
+    let controller = owner
+        .services
+        .agent_control
+        .trusted_security_controller()
+        .unwrap();
+    let change = controller.confirm_level_change(
+        codex_security_policy::SecurityLevel::Moderate,
+        codex_security_policy::RevocationState::new(),
+    )?;
+    controller.apply_confirmed_change(change)?;
+    let sends = Arc::new(AtomicUsize::new(0));
+    for clone in [&existing, &future] {
+        let transport = crate::memory_stage_one::StageOneGuardedTransport::new(
+            Probe(sends.clone()),
+            clone.stage_one_memory_binding.get().cloned(),
+        );
+        assert!(
+            transport.stream(request()).await.is_err(),
+            "binding installed through a borrowed client must deny dispatch on every clone"
+        );
+    }
+    assert_eq!(sends.load(Ordering::SeqCst), 0);
+    assert!(
+        borrowed
+            .with_stage_one_memory_binding(memory.binding_for_fixture(owner.thread_id)?)
+            .is_err()
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn accounting_chat_bootstrap_cancel_scope_and_latch() -> anyhow::Result<()> {
     let (mut session, _) = crate::session::tests::make_session_and_context().await;
     session.services.state_db = None;
