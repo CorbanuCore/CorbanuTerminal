@@ -156,3 +156,59 @@ qualification remain required. No human-test, benchmark, live-provider or releas
 
 Final receipt-tree governance and whitespace results, commit, file hash and conservative size
 counts are returned with this receipt. They cannot qualify the absent implementation.
+
+## acct-ws-impl-02 — verified lease, divergent dispatched base
+
+This continuation preserves the entire acct-ws-impl-01 receipt above. Its missing-lease
+blocker is resolved; implementation remains unstarted for a different, observed checkout
+mismatch. This is a routine evidence-only return, not an implementation candidate.
+
+- Action: `acct-ws-impl-02`; model/effort: `gpt-6-astra` / `high`.
+- Allocation digest: `77864ff8dca2eb259e5af3fe40328e56c0d2e894a42ed993017a278973c458e2`.
+- Claim: `53946144-79c3-42e1-857e-f32d5ec95482`.
+- Brief: `/private/tmp/fmgr.Q1SIYZ/briefs/acct-ws-impl-02.json`.
+- Brief SHA-256 verified: `1a09926d65ce7e1a34cc9daf884938d75c1ef7d6497b6198992ca5e49505bfbf`.
+- Lease: `/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-ws-20260915/LEASE.json`.
+- Lease SHA-256 verified: `b537e887800e87bec2ae4156afb1e834978a16176cd1e7a4a3e8f6a1afa94e2d`.
+- Lease target: `/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/acct-ws-20260915`;
+  no build used it in this action. The lease records reservation/diff comparison and exclusivity.
+- Frozen dispatch and lease base: `7e6728f1ddfeedd5e0443851547018457aba5a62`.
+- Actual clean starting HEAD: `4364dd53ef77a23f690901fcdc0690f6439961d7`.
+- Branch/worktree match the dispatch: `bootstrap/acct-ws-20260914` at
+  `/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-acct-ws-20260914`.
+- Merge base of actual HEAD and frozen base: `556da8be7555a13b3000718da10c767645f4aa52`.
+  `git log --oneline 7e6728f1ddfeedd5e0443851547018457aba5a62..HEAD` returns the
+  predecessor receipt commit `4364dd53e`; actual HEAD is not descended from the frozen base.
+- `git diff --stat HEAD 7e6728f1ddfeedd5e0443851547018457aba5a62` reports nine paths,
+  236 insertions and 167 deletions, including deletion of this 158-line predecessor receipt
+  and eight unallocated Task Node/control paths. These are existing branch differences,
+  not edits by this worker. The brief's assertion that the receipt exists on its base
+  is contradicted by that diff.
+
+**STOP / owner:** Fable receiving manager must reconcile the implementation checkout and
+frozen base while preserving predecessor history, then issue consistent dispatch/lease
+coordinates. Recommended action: prepare the branch with the intended receiving base and
+this receipt history, and redispatch from that exact commit. Alternatively explicitly
+allocate the actual branch tip and corresponding lease. The worker has no allocation to
+merge the eight unrelated paths or edit manager-owned plan/sprint/lease records. No new
+product decision or size exception is requested; no size STOP was reached.
+
+Read test-isolation guidance before checks. Both hash commands and all Git inspections
+exited 0. `python3 docs/plans/check.py` exited 0 (active 3/3, slots 0), and
+`python3 docs/sprints/check.py` exited 0 (current 116, archived 126). These structural
+checks do not prove actual checkout/base agreement. Final receipt-tree repetitions and
+`git diff --check` are reported in RETURN. No Rust fix/format is needed without Rust edits.
+
+No guarded Rust test command was run: the three exact focused commands listed above and
+all affected/retained/receiving suites remain unexecuted. Builds and Rust runs: 0; run IDs,
+JUnit artifacts and executed test counts: none. Pass/fail/skip/flaky/leaky counts are
+unavailable, not passing zero-test results. No credential prompt, live-profile access,
+provider call, subagent, push or transport fixture dispatch occurred.
+
+All 36 named cases and every vector in the preserved table remain unimplemented and
+unexecuted, now pending checkout reconciliation. All runtime contract items, all four
+literal goldens, socket counts, independent SQLite readback, barriers, ownership,
+cancellation and two-reopen proof remain without new evidence for the same reason.
+Only this receipt changed; the 17 allocated Rust paths remain unchanged. Independent
+review and receiving gates are absent. Deferred coverage and later functional gates
+remain exactly as disclosed above; no implementation or readiness claim is made.
