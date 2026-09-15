@@ -424,16 +424,29 @@ def identity_check():
     return receipt
 
 
+class FlushResult(int):
+    """Keep the delivered-count contract and expose single-send skips."""
+
+    def __new__(cls, delivered, single_sent):
+        result = super().__new__(cls, delivered)
+        result.single_sent = single_sent
+        return result
+
+
 def flush(state, auth, transport=None):
     transport = transport or post
     config = read_json(state / "control.json", state)["tasknode"]
     if config.get("enabled") is not True or not enrolled(state, config):
         raise ValueError("live writeback disabled or workspace enrollment not verified")
     delivered = 0
+    single_sent = []
     with locked(state / ".outbox.lock"):
         attempted = 0
         for path in sorted((state / "outbox").glob("*.json")):
             record = read_json(path, state)
+            if (state / "send-receipts" / (path.stem + ".intent.json")).exists():
+                single_sent.append(path.stem)
+                continue  # Intent alone blocks retransmission, even without a result.
             if record["event"].get("turnId") == LEGACY_DELIVERY_SPRINT:
                 continue  # Retain raw historical payload AND delivery metadata unchanged.
             if record["status"] != "pending" or timestamp(record["next_attempt_at"]) > timestamp(now()):
@@ -469,7 +482,7 @@ def flush(state, auth, transport=None):
                 else:
                     record.update(status="blocked", error=f"http_{status}_requires_operator")
             atomic_json(path, record)
-    return delivered
+    return FlushResult(delivered, single_sent)
 
 
 def retry(state, event_id):
@@ -551,7 +564,10 @@ def main():
         parser.error("network writes require --confirm-live and private --credentials-file")
     auth = credentials(args.credentials_file)
     if args.command == "flush":
-        print(f"Delivered {flush(args.state, auth)} progress events")
+        result = flush(args.state, auth)
+        print(f"Delivered {result} progress events")
+        if result.single_sent:
+            print(json.dumps({"single_sent": result.single_sent}))
     else:
         enroll(args.state, auth)
         print("Enrollment verified; live event delivery still requires enabled: true")
