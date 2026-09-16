@@ -262,16 +262,37 @@ class Coordinator:
                              **details, "evidence": self._reference(db, audit)})
 
     @staticmethod
-    def _sprint_document(source_path):
+    def _sprint_document(repo, source_path):
+        """Read the sprint document at a repository-relative path inside `repo`.
+
+        The ledger's agreement is with a repository document, so the caller may
+        choose the checkout but never the shape of the path: an absolute path, a
+        traversal, a symlink out of the tree or anything outside docs/sprints/ is
+        refused, and the stored path stays relative so the row does not pin one
+        worktree. `repo` must actually be a Corbanu checkout, which is proved by
+        the plan file the document names, not by the caller saying so.
+        """
         require(isinstance(source_path, str) and source_path.strip(), "sprint source_path required")
+        require(not source_path.startswith("/") and "\\" not in source_path
+                and re.fullmatch(r"docs/sprints/(?!.*//)[A-Za-z0-9._/-]+\.md", source_path) is not None
+                and ".." not in source_path.split("/"),
+                "sprint source_path must be repository-relative under docs/sprints")
+        # Rejected is a ValueError, so a refusal raised inside the filesystem
+        # try-block would be relabelled "unreadable"; each check reports itself.
         try:
-            path = Path(source_path).resolve(strict=True)
-            require(path.is_file(), "sprint source_path must be a regular file")
+            root = Path(repo).resolve(strict=True)
+            path = (root / source_path).resolve(strict=True)
+        except (OSError, ValueError) as exc:
+            raise Rejected("sprint source_path unreadable") from exc
+        require(root.is_dir(), "sprint repo must be a directory")
+        require(path.is_relative_to(root), "sprint source_path escapes the repository")
+        require(path.is_file(), "sprint source_path must be a regular file")
+        try:
             body = path.read_bytes()
-            require(len(body) <= 262144, "sprint document too large")
             text = body.decode("utf-8")
         except (OSError, ValueError) as exc:
             raise Rejected("sprint source_path unreadable") from exc
+        require(len(body) <= 262144, "sprint document too large")
         front = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", text, re.DOTALL)
         require(front is not None, "sprint front matter required")
         fields = {}
@@ -291,28 +312,49 @@ class Coordinator:
                 value = value[1:-1].replace("''", "'")
             require(isinstance(value, str), "invalid sprint scalar")
             fields[key] = value
-        return str(path), fields, hashlib.sha256(body).hexdigest()
+        return root, source_path, fields, hashlib.sha256(body).hexdigest()
 
     def register_sprint(self, sprint_id, workstream, dependencies, status, source_path,
-                        expected_revision, evidence):
-        """Owner-only add; validate the document, never activate or replace a sprint.
+                        expected_revision, evidence, repo, replace=False):
+        """Owner-only add; validate the document, never activate a sprint.
 
         Repository sprint documents identify their workstream through plan_file.
         An explicit workstream field, when present, must agree too.
+
+        `replace` re-registers a sprint that is still an unstarted draft, so a row
+        recorded with a bad source_path can be corrected through the audited API
+        instead of by hand. It refuses once the sprint has been allocated, worked
+        or archived, and it can only rewrite the registration and the path: the
+        workstream, status and dependencies must be unchanged.
         """
         ident(sprint_id)
         ident(workstream)
+        require(type(replace) is bool, "explicit add/replace required")
         require(status == "draft", "registered sprint must start as draft")
         require(isinstance(dependencies, list) and all(isinstance(d, str) for d in dependencies)
                 and len(set(dependencies)) == len(dependencies), "invalid sprint dependencies")
         for dependency in dependencies:
             ident(dependency)
         with self.owner_mutation("owner_register_sprint", expected_revision, evidence,
-                                 sprint=sprint_id) as (db, state):
-            require(sprint_id not in state["sprints"], "sprint already registered")
+                                 sprint=sprint_id, replace=replace) as (db, state):
+            existing = state["sprints"].get(sprint_id)
+            require((existing is not None) == replace,
+                    "sprint already registered" if existing is not None else "unknown sprint")
+            if existing is not None:
+                require(existing.get("status") == "draft" and not existing.get("archived")
+                        and "registration" in existing,
+                        "only an unstarted registered draft can be re-registered")
+                require(existing.get("workstream") == workstream
+                        and existing.get("dependencies") == list(dependencies),
+                        "re-registration may only correct the document reference")
+                require(not any(action.get("sprint") == sprint_id
+                                for action in state["actions"].values())
+                        and not any(allocation.get("sprint") == sprint_id
+                                    for allocation in state["allocations"].values()),
+                        "sprint already has allocations or actions")
             require(workstream in state["workstreams"], "unknown sprint workstream")
             self._unpaused(state, {"workstream": workstream})
-            path, front, document_digest = self._sprint_document(source_path)
+            root, path, front, document_digest = self._sprint_document(repo, source_path)
             plans = {
                 "security": "docs/plans/active/p0-security-levels.md",
                 "accounting": "docs/plans/active/portfolio-agent-cost-accounting.md",
@@ -322,6 +364,9 @@ class Coordinator:
             require(workstream in plans and front.get("plan_file") == plans[workstream]
                     and front.get("workstream", workstream) == workstream,
                     "sprint document workstream mismatch")
+            # A directory holding one crafted file is not a checkout. The plan the
+            # document claims to belong to has to be present in the same tree.
+            require((root / plans[workstream]).is_file(), "sprint plan file missing from repository")
             require(front.get("status") == status, "sprint document status mismatch")
             require("depends_on" in front, "sprint document dependencies missing")
             declared = front["depends_on"]

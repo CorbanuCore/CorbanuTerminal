@@ -932,19 +932,32 @@ class SprintRegistrationTests(unittest.TestCase):
     tearDown = CoordinatorTests.tearDown
     database_rows = OwnerControlsTests.database_rows
 
-    def document(self, **changes):
+    RELATIVE = "docs/sprints/current/initiative-delivery-control/pf82.md"
+
+    def repo(self):
+        root = Path(self.tmp.name) / "repo"
+        for plan in ("p0-security-levels", "portfolio-agent-cost-accounting",
+                     "initiative-delivery-control"):
+            path = root / "docs/plans/active" / (plan + ".md")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("# " + plan + "\n")
+        return root
+
+    def document(self, relative=None, **changes):
         front = {"sprint_id": "PF82", "status": "draft",
                  "plan_file": "docs/plans/active/initiative-delivery-control.md",
                  "depends_on": "PF80"}
         front.update(changes)
-        path = Path(self.tmp.name) / "sprint.md"
+        path = self.repo() / (relative or self.RELATIVE)
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("---\n" + "".join(f"{k}: {json.dumps(v)}\n" for k, v in front.items())
                         + "---\n# Synthetic sprint\n")
-        return str(path)
+        return path
 
     def payload(self, **changes):
+        self.document()
         payload = dict(sprint_id="PF82", workstream="delivery", dependencies=["PF80"],
-                       status="draft", source_path=self.document(),
+                       status="draft", source_path=self.RELATIVE, repo=str(self.repo()),
                        expected_revision=self.c.snapshot()["revision"],
                        evidence={"inspection": "synthetic owner evidence"})
         payload.update(changes)
@@ -970,9 +983,11 @@ class SprintRegistrationTests(unittest.TestCase):
         self.assertFalse(state["sprints"]["PF82"]["archived"])
         proof = self.c.read_evidence(receipt["evidence_digest"])
         self.assertEqual("PF82", proof["sprint_id"])
-        self.assertEqual(str(Path(payload["source_path"]).resolve()), proof["record"]["source_path"])
+        # The row stores the repository-relative path, never one worktree.
+        self.assertEqual(self.RELATIVE, proof["record"]["source_path"])
+        self.assertEqual(self.RELATIVE, state["sprints"]["PF82"]["source_path"])
         import hashlib
-        self.assertEqual(hashlib.sha256(Path(payload["source_path"]).read_bytes()).hexdigest(),
+        self.assertEqual(hashlib.sha256(self.document().read_bytes()).hexdigest(),
                          proof["document_sha256"])
         self.assertEqual(payload["evidence"], proof["evidence"])
         with self.c.connection() as db:
@@ -995,7 +1010,7 @@ class SprintRegistrationTests(unittest.TestCase):
                         state["sprints"]["PF80"]["status"] = "in_progress"
                         state["workstreams"]["delivery"]["sprint"] = "PF80"
                 payload = self.payload(sprint_id="PF81")
-                payload["source_path"] = self.document(sprint_id="PF81")
+                self.document(sprint_id="PF81")
                 self.refused("sprint already registered", payload)
 
     def test_register_document_mismatch_refused(self):
@@ -1008,22 +1023,22 @@ class SprintRegistrationTests(unittest.TestCase):
         ):
             with self.subTest(fields=fields):
                 payload = self.payload()
-                payload["source_path"] = self.document(**fields)
+                self.document(**fields)
                 self.refused("sprint document " + reason, payload)
 
     def test_register_missing_file_refused(self):
         payload = self.payload()
-        Path(payload["source_path"]).unlink()
+        self.document().unlink()
         self.refused("sprint source_path unreadable", payload)
 
     def test_register_unknown_dependency_refused(self):
         payload = self.payload(dependencies=["UNKNOWN"])
-        payload["source_path"] = self.document(depends_on="UNKNOWN")
+        self.document(depends_on="UNKNOWN")
         self.refused("unknown dependency", payload)
 
     def test_register_cycle_refused(self):
         payload = self.payload(dependencies=["PF82"])
-        payload["source_path"] = self.document(depends_on="PF82")
+        self.document(depends_on="PF82")
         self.refused("dependency cycle", payload)
         # Valid state cannot grow a multi-node cycle by adding only backward
         # references. A legacy corrupt component must nevertheless fail closed.
@@ -1048,7 +1063,7 @@ class SprintRegistrationTests(unittest.TestCase):
 
     def test_register_reserved_status_refused(self):
         payload = self.payload(status="in_progress")
-        payload["source_path"] = self.document(status="in_progress")
+        self.document(status="in_progress")
         self.refused("registered sprint must start as draft", payload)
 
     def test_register_reservation_limit_refused(self):
@@ -1063,8 +1078,79 @@ class SprintRegistrationTests(unittest.TestCase):
         ):
             with self.subTest(reason=reason):
                 payload = self.payload()
-                Path(payload["source_path"]).write_text(document)
+                self.document().write_text(document)
                 self.refused(reason, payload)
+
+    def test_registered_sprint_accepts_an_allocation(self):
+        """The point of registering: work can then be allocated against it."""
+        self.c.register_sprint(**self.payload())
+        allocation = {"sprint": "PF82", "kinds": ["implement"], "resources": ["worktree"],
+                      "scope": ["codex-rs/core/src/x.rs"], "timeout_seconds": 1800,
+                      "inputs": {"task": "synthetic"}}
+        self.c.put_allocation("pf82-impl-01", allocation, False,
+                              self.c.snapshot()["revision"], {"fixture": "allocate"})
+        self.assertEqual(allocation, self.c.snapshot()["allocations"]["pf82-impl-01"])
+
+    def test_source_path_is_confined_to_repository_sprint_documents(self):
+        outside = Path(self.tmp.name) / "elsewhere.md"
+        outside.write_text(self.document().read_text())
+        link = self.repo() / "docs/sprints/current/initiative-delivery-control/escape.md"
+        link.symlink_to(outside)
+        confined = "must be repository-relative under docs/sprints"
+        for source_path, reason in (
+            (str(self.document()), confined),
+            ("/etc/passwd", confined),
+            ("docs/sprints/../../elsewhere.md", confined),
+            ("docs/plans/active/initiative-delivery-control.md", confined),
+            ("docs/sprints/current/initiative-delivery-control/pf82.txt", confined),
+            ("docs/sprints/current/initiative-delivery-control/escape.md",
+             "escapes the repository"),
+        ):
+            with self.subTest(source_path=source_path):
+                self.refused("sprint source_path " + reason, self.payload(source_path=source_path))
+
+    def test_repo_without_the_named_plan_is_not_a_checkout(self):
+        bare = Path(self.tmp.name) / "bare"
+        (bare / Path(self.RELATIVE).parent).mkdir(parents=True)
+        (bare / self.RELATIVE).write_text(self.document().read_text())
+        self.refused("sprint plan file missing from repository", self.payload(repo=str(bare)))
+
+    def test_re_registration_corrects_the_document_reference_of_an_unstarted_draft(self):
+        self.c.register_sprint(**self.payload())
+        first = self.c.snapshot()["sprints"]["PF82"]["registration"]
+        moved = "docs/sprints/current/initiative-delivery-control/pf82-renamed.md"
+        self.document(relative=moved)
+        receipt = self.c.register_sprint(**self.payload(source_path=moved, replace=True))
+        record = Coordinator(self.root).snapshot()["sprints"]["PF82"]
+        self.assertEqual(moved, record["source_path"])
+        self.assertNotEqual(first, record["registration"])
+        self.assertEqual(receipt, record["registration"])
+        self.assertEqual(("draft", False, ["PF80"], "delivery"),
+                         (record["status"], record["archived"],
+                          record["dependencies"], record["workstream"]))
+        proof = self.c.read_evidence(receipt["evidence_digest"])
+        self.assertEqual(moved, proof["record"]["source_path"])
+
+    def test_re_registration_refused_once_the_sprint_is_real(self):
+        self.refused("unknown sprint", self.payload(replace=True))
+        self.c.register_sprint(**self.payload())
+        self.refused("sprint already registered", self.payload())
+        self.refused("may only correct the document reference",
+                     self.payload(replace=True, workstream="accounting"))
+        self.refused("may only correct the document reference",
+                     self.payload(replace=True, dependencies=[]))
+        self.c.put_allocation("pf82-impl-01", {"sprint": "PF82", "kinds": ["implement"],
+                              "resources": ["worktree"], "scope": ["codex-rs/core/src/x.rs"],
+                              "timeout_seconds": 1800, "inputs": {"task": "synthetic"}},
+                              False, self.c.snapshot()["revision"], {"fixture": "allocate"})
+        self.refused("already has allocations or actions", self.payload(replace=True))
+        with self.c.mutation("synthetic_fixture", {}) as (_, state):
+            del state["allocations"]["pf82-impl-01"]
+            state["sprints"]["PF82"]["status"] = "in_progress"
+        self.refused("only an unstarted registered draft", self.payload(replace=True))
+
+    def test_replace_flag_must_be_explicit_boolean(self):
+        self.refused("explicit add/replace required", self.payload(replace=1))
 
 
 if __name__ == "__main__":

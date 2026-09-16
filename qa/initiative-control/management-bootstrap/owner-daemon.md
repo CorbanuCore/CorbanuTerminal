@@ -1179,14 +1179,29 @@ Owner Python API (the CLI allowlist is outside this allocation):
 ```python
 Coordinator.register_sprint(
     sprint_id, workstream, dependencies, status, source_path,
-    expected_revision, evidence,
+    expected_revision, evidence, repo, replace=False,
 )
 ```
+
+`source_path` is repository-relative and must match
+`docs/sprints/**/*.md` with no absolute prefix, backslash, `..` segment or
+empty component; it is read under `repo` and the resolved file must still lie
+inside the resolved `repo`, which rejects a symlink pointing out of the tree.
+`repo` must be a real checkout, proved by the presence of the `plan_file` the
+document itself names, not by the caller asserting it. The **relative** path is
+what the row stores, so a sprint row never pins one worktree.
+
+`replace=True` re-registers a sprint that is still an unstarted registered
+draft, which is how a row recorded with a bad `source_path` is corrected through
+the audited API rather than by hand. It refuses if the sprint is archived, is no
+longer `draft`, was never registered, already has any allocation or action, or if
+the call would change the workstream, status or dependencies: the only thing a
+re-registration may move is the document reference.
 
 The operation uses `owner_mutation("owner_register_sprint", ...)`, atomically
 adds one draft/unarchived row, increments revision, emits an event and audit,
 and returns a retrievable evidence reference. Registration evidence pins the
-resolved absolute source filename, exact document SHA-256, row, revision and
+repository-relative source path, exact document SHA-256, row, revision and
 owner evidence. It neither changes the workstream's current sprint nor supplies
 successor activation authority. Existing records, allocations and modes remain.
 
@@ -1200,13 +1215,23 @@ Missing `depends_on` is refused; `none` represents no dependencies.
 
 Exact refusal messages include:
 
-- `sprint already registered` for every existing ID, including completed and
-  archived rows; no overwrite, reopening, reparenting or unarchiving.
+- `sprint already registered` for every existing ID when `replace` is false,
+  including completed and archived rows; no overwrite, reopening, reparenting
+  or unarchiving.
+- `unknown sprint` when `replace` is true and the ID was never registered.
+- `only an unstarted registered draft can be re-registered`,
+  `re-registration may only correct the document reference`,
+  `sprint already has allocations or actions`, `explicit add/replace required`.
 - `sprint document id mismatch`, `sprint document workstream mismatch`,
   `sprint document status mismatch`, `sprint document dependencies mismatch`,
   and `sprint document dependencies missing`.
-- `sprint source_path required` or `sprint source_path unreadable` for absent,
-  unreadable, nonregular, oversized or non-UTF-8 sources.
+- `sprint source_path required`, `sprint source_path must be repository-relative
+  under docs/sprints`, `sprint source_path escapes the repository`,
+  `sprint source_path must be a regular file`, `sprint repo must be a directory`,
+  `sprint document too large`, or `sprint source_path unreadable` for an absent
+  or non-UTF-8 source.
+- `sprint plan file missing from repository` when `repo` is not a checkout
+  holding the plan the document names.
 - `sprint front matter required`, `invalid sprint front matter`,
   `duplicate sprint front matter key`, or `invalid sprint scalar`.
 - `invalid identifier`, `invalid sprint dependencies`,
@@ -1277,15 +1302,19 @@ Registration evidence digest:
 `e8e622456186cfd3cf7b2edcf0f65c313f4907043bd0ae1378fa4650f31b8904`.
 Document SHA-256:
 `b275150d6a5ee027cfb25d7ddd3f46e48d5d5efbc501ad9379da10d760357dbd`.
-Stored source:
+Stored source (as first recorded, an absolute worktree path):
 `/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911/docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md`.
+That path was the first P2 in review: it pins one worktree and rots when the
+worktree is removed. It is repaired by re-registering PF-60-S03 with
+`replace=True` against the relative path, which is why the replace lever exists.
 
 Result: workstream **accounting**, status **draft**, archived **false**,
 dependencies **[PF-60-S02]**. Accounting's current sprint remains **PF-60-S02**;
 its mode remains enabled. Assertions verified every prior sprint, workstream,
 allocation, action, manager and global enable value was preserved. No activation
-occurred. The historical S02 source_path was deliberately not repaired through
-this add-only operation; existing-row edits are outside this mandate.
+occurred. The historical S02 source_path is still not repaired: `replace` is
+confined to unstarted drafts, and S02 is completed and archived. Correcting a
+finished sprint's recorded path is a separate decision, not a registration.
 Python tests use disposable synthetic state, unset profile aliases,
 `TMPDIR=/private/tmp` and no native credential access. No Rust tests are in scope.
 True-TUI, live-repository and code-blind functional acceptance are not claimed:
