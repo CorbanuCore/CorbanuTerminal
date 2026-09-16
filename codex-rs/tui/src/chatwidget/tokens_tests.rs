@@ -121,9 +121,77 @@ fn accounting_inspect_range_partial_no_amount_and_explicit_coverage() {
     Requested: [1970-01-01T00:00:00.001Z, 1970-01-01T01:00:00.000Z); timezone: UTC; grouping: Hour
     Oldest retained aggregate day (ledger): Some(0); 90-day drill-down cutoff: Some(0) ms UTC (exclusive)
     Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.
+    Unknown parent population: 0 inspectable attempts, excluded from range total
     Range total unavailable — partial or unavailable buckets excluded; no partial total.
-    Effective coverage for [1970-01-01T00:00:00.000Z, 1970-01-01T01:00:00.000Z): [1970-01-01T00:00:00.001Z, 1970-01-01T01:00:00.000Z)
+    Effective aggregate retention coverage for [1970-01-01T00:00:00.000Z, 1970-01-01T01:00:00.000Z): [1970-01-01T00:00:00.001Z, 1970-01-01T01:00:00.000Z)
     ");
+}
+
+#[test]
+fn accounting_inspect_range_aggregate_coverage_does_not_claim_raw_detail() {
+    let day = InspectionDay::DetailUnavailable {
+        coverage: RetentionCoverage {
+            completed_as_of_ms: 90 * 86_400_000 + 1_800_000,
+            detail_expired_through_ms: Some(1_800_000),
+            aggregate_day_floor: 0,
+            oldest_recorded_day: Some(0),
+        },
+        read_at_ms: 90 * 86_400_000 + 1_800_000,
+        compact: true,
+    };
+    let pages = inspection_pages(Ok(range_packet(false, day)));
+    let bucket = &pages[pages[0].links[0].1];
+    assert_eq!(bucket.title, "Bucket unavailable");
+    assert!(bucket.text.iter().any(|s| s == "Whole bucket within aggregate retention coverage; detail availability checked separately"));
+    assert!(!pages.iter().flat_map(|p| &p.text).any(|s| s.contains('$')));
+    insta::assert_snapshot!(
+        bucket.text.iter().filter(|s| s.starts_with("Bucket:") || s.starts_with("Whole bucket")).cloned().collect::<Vec<_>>().join("\n"),
+        @"
+    Bucket: [1970-01-01T00:00:00.000Z, 1970-01-01T01:00:00.000Z); effective aggregate retention coverage: [1970-01-01T00:00:00.000Z, 1970-01-01T01:00:00.000Z)
+    Whole bucket within aggregate retention coverage; detail availability checked separately
+    "
+    );
+}
+
+#[test]
+fn accounting_inspect_range_overview_discloses_unknown_population_before_total() {
+    let mut buckets = Vec::new();
+    for index in 0..2 {
+        let InspectionDay::Ready(mut view) = breakdown_packet() else {
+            panic!()
+        };
+        view.unknown_parent_unavailable_threads = (index + 2) as usize;
+        buckets.push(codex_state::accounting::InspectionBucket {
+            start_ms: index * 3_600_000,
+            end_ms: (index + 1) * 3_600_000,
+            effective: Some((index * 3_600_000, (index + 1) * 3_600_000)),
+            partial: false,
+            days: vec![InspectionDay::Ready(view)],
+        });
+    }
+    let pages = range_pages(
+        InspectionRange {
+            start_ms: 0,
+            end_ms: 2 * 3_600_000,
+            grouping: InspectionGrouping::Hour,
+        },
+        None,
+        2 * 3_600_000,
+        buckets,
+    );
+    let text = &pages[0].text;
+    let total = text.iter().position(|s| s.contains("$0.000014")).unwrap();
+    let count = "Unknown parent population: 2 inspectable attempts, excluded from range total";
+    let note = "Unresolved ancestry: 5 thread-slice entries have unavailable detail; their costs and retention coverage are unknown and excluded from this root.";
+    assert!(text.iter().position(|s| s == count).unwrap() < total);
+    assert!(text.iter().position(|s| s == note).unwrap() < total);
+    insta::assert_snapshot!(
+        text.iter().filter(|s| s.starts_with("Unknown parent population:") || s.starts_with("Unresolved ancestry:")).cloned().collect::<Vec<_>>().join("\n"),
+        @"
+    Unknown parent population: 2 inspectable attempts, excluded from range total
+    Unresolved ancestry: 5 thread-slice entries have unavailable detail; their costs and retention coverage are unknown and excluded from this root.
+    "
+    );
 }
 
 #[test]
@@ -135,9 +203,8 @@ fn accounting_inspect_range_breakdowns_and_navigation_reconcile() {
     for p in &pages[1..] {
         assert!(p.text.iter().any(|s| s.starts_with("Requested:")));
         assert!(
-            p.text
-                .iter()
-                .any(|s| s.starts_with("Bucket:") && s.contains("effective retained coverage:"))
+            p.text.iter().any(|s| s.starts_with("Bucket:")
+                && s.contains("effective aggregate retention coverage:"))
         );
         assert!(
             !p.text

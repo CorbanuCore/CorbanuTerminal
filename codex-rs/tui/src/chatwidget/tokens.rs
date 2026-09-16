@@ -795,6 +795,29 @@ fn range_pages(
     }) {
         context.push("Snapshot is not current; newer activity is unverified".into());
     }
+    let (unknown_attempts, unavailable_entries) = states
+        .iter()
+        .filter_map(|state| match state {
+            InspectionDay::Ready(view) => Some(view),
+            _ => None,
+        })
+        .fold((0, 0), |(attempts, unavailable), view| {
+            (
+                attempts + view.unknown_parent_totals.attempts,
+                unavailable + view.unknown_parent_unavailable_threads,
+            )
+        });
+    context.push(format!(
+        "Unknown parent population: {unknown_attempts} inspectable attempts, excluded from range total"
+    ));
+    if unavailable_entries > 0 {
+        context.push(format!(
+            "Unresolved ancestry: {unavailable_entries} thread-slice entries have unavailable detail; their costs and retention coverage are unknown and excluded from this root."
+        ));
+    }
+    if states.iter().any(|s| !matches!(s, InspectionDay::Ready(_))) {
+        context.push("Ancestry counts cover inspectable slices only; unavailable slices may contain additional unknown ancestry.".into());
+    }
     let mut pages = vec![InspectorPage {
         title: "Recorded request range".into(),
         text: context.clone(),
@@ -838,19 +861,19 @@ fn range_pages(
             .unwrap_or_else(|| "unavailable".into());
         let mut header = context.clone();
         header.push(format!(
-            "Bucket: {bounds}; effective retained coverage: {effective}"
+            "Bucket: {bounds}; effective aggregate retention coverage: {effective}"
         ));
         header.push(
             if bucket.partial {
                 "Partial bucket — excluded from totals"
             } else {
-                "Whole bucket within retained coverage; detail availability checked separately"
+                "Whole bucket within aggregate retention coverage; detail availability checked separately"
             }
             .into(),
         );
-        pages[0]
-            .text
-            .push(format!("Effective coverage for {bounds}: {effective}"));
+        pages[0].text.push(format!(
+            "Effective aggregate retention coverage for {bounds}: {effective}"
+        ));
         let mut merged: Option<codex_state::accounting::Inspection> = None;
         let mut diagnostics = Vec::new();
         let mut detail_unavailable = false;

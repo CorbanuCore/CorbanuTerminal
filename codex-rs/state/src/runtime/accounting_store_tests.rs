@@ -949,6 +949,89 @@ async fn accounting_inspect_range_mixed_compaction_exact_no_double_count() -> an
 }
 
 #[tokio::test]
+async fn accounting_inspect_range_week_day_slices_and_expired_prefix() -> anyhow::Result<()> {
+    const DAY: i64 = 86_400_000;
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let store = AccountingStore::open(&runtime, 0).await?;
+    let mut expected = Vec::new();
+    for (id, time) in [(1, 4 * DAY + 1), (2, 5 * DAY + 1)] {
+        let mut a = attempt(id);
+        a.dispatched_at_ms = time.try_into()?;
+        store.admit(a.thread_id, &a, &[snapshot()], time).await?;
+        let q = store
+            .observe(a.thread_id, &a, &[row(id as i64)], time)
+            .await?;
+        expected.push(std::collections::BTreeMap::from([(a.request_id, vec![q])]));
+    }
+    // Monday 1970-01-05 through the following Monday, exclusively.
+    store.maintain(11 * DAY).await?;
+    for now in [11 * DAY, 94 * DAY + DAY / 2] {
+        store.maintain(now).await?;
+        let before = rows(&runtime).await?;
+        let buckets = range_buckets(
+            range_read(&runtime, 4 * DAY, 11 * DAY, InspectionGrouping::Week, now).await?,
+        );
+        assert_eq!(buckets.len(), 1);
+        let bucket = &buckets[0];
+        assert_eq!(
+            (
+                bucket.start_ms,
+                bucket.end_ms,
+                bucket.effective,
+                bucket.partial
+            ),
+            (4 * DAY, 11 * DAY, Some((4 * DAY, 11 * DAY)), false)
+        );
+        assert_eq!(bucket.days.len(), 7);
+        for (index, day) in bucket.days.iter().enumerate() {
+            if now > 11 * DAY && index == 0 {
+                assert!(matches!(
+                    day,
+                    InspectionDay::DetailUnavailable { compact: true, coverage, .. }
+                        if coverage.detail_expired_through_ms == Some(4 * DAY + DAY / 2)
+                ));
+                continue;
+            }
+            let InspectionDay::Ready(view) = day else {
+                panic!("{day:?}")
+            };
+            assert_eq!(view.utc_day, 4 + index as i64);
+            let requests = expected.get(index).cloned().unwrap_or_default();
+            assert_eq!(
+                view.totals,
+                DayTotals::from_quotes(requests.values().flatten())?
+            );
+            assert_eq!(view.requests, requests);
+        }
+        assert_eq!(rows(&runtime).await?, before);
+    }
+    // Aggregate expiry clips effective coverage even though the bucket spans days.
+    let now = 370 * DAY;
+    store.maintain(now).await?;
+    let buckets = range_buckets(
+        range_read(&runtime, 4 * DAY, 11 * DAY, InspectionGrouping::Week, now).await?,
+    );
+    assert_eq!(
+        (
+            buckets[0].days.len(),
+            buckets[0].effective,
+            buckets[0].partial
+        ),
+        (7, Some((6 * DAY, 11 * DAY)), true)
+    );
+    assert!(
+        buckets[0]
+            .days
+            .iter()
+            .all(|d| matches!(d, InspectionDay::DetailUnavailable { .. }))
+    );
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
 async fn accounting_inspect_range_tree_unknown_and_single_snapshot() -> anyhow::Result<()> {
     const HOUR: i64 = 3_600_000;
     let path = home();
