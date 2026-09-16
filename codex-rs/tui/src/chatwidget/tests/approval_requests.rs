@@ -48,6 +48,51 @@ async fn exec_approval_emits_proposed_command_and_decision_history() {
     );
 }
 
+#[tokio::test]
+async fn declined_command_history_never_claims_execution_or_success() {
+    for command in ["echo refused", "cat refused.txt"] {
+        let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+        chat.on_task_started();
+        let mut item = begin_exec(&mut chat, "declined", command);
+        let AppServerThreadItem::CommandExecution { status, .. } = &mut item else {
+            panic!("expected command execution");
+        };
+        *status = AppServerCommandExecutionStatus::Declined;
+        handle_exec_end(&mut chat, item);
+
+        let cell = std::iter::from_fn(|| rx.try_recv().ok())
+            .find_map(|event| match event {
+                AppEvent::InsertHistoryCell(cell) => Some(cell),
+                _ => None,
+            })
+            .expect("declined command must remain in history");
+        let display = cell.display_lines(/*width*/ 80);
+        let transcript = cell.transcript_lines(/*width*/ 80);
+        for lines in [&display, &transcript] {
+            let text = lines_to_single_string(lines);
+            assert!(!text.contains("Ran "), "{text}");
+            assert!(!text.contains("Explored"), "{text}");
+            assert!(!text.contains("(no output)"), "{text}");
+            assert!(text.contains("Did not run"), "{text}");
+            assert!(
+                !lines.iter().flat_map(|line| &line.spans).any(|span| {
+                    span.content.contains(['•', '✓', '✔'])
+                        && span.style.fg == Some(ratatui::style::Color::Green)
+                }),
+                "{lines:?}"
+            );
+        }
+        assert_eq!(
+            lines_to_single_string(&display),
+            format!("✗ Did not run {command}\n  └ Approval declined\n")
+        );
+        assert_eq!(
+            lines_to_single_string(&transcript),
+            format!("$ {command}\n✗ Did not run (approval declined)\n")
+        );
+    }
+}
+
 #[test]
 fn app_server_exec_approval_request_splits_shell_wrapped_command() {
     let script = r#"python3 -c 'print("Hello, world!")'"#;
