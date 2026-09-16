@@ -7,6 +7,7 @@ from collections import Counter
 SPRINT = re.compile(r"\bPF-\d{2}-S\d{2}\b")
 HISTORY = "docs/plans/delivery-history-reconciliation.md"
 LEGACY = "PF-76-S01 history held for source reconciliation; not assigned to a main initiative."
+UNKNOWN_PROVENANCE = "PF-76-S01 history held for source reconciliation; report provenance unavailable or unrecognized."
 
 
 def document_url(path):
@@ -20,12 +21,17 @@ def issue(problem, count=1):
                 impact="The affected source or report cannot be treated as reconciled evidence; the manager must determine the scope.",
                 next_step="Inspect the source validation/report evidence and record the cause, affected work and proposed remedy.",
                 question=None, legacy=False, count=count)
-    if problem == LEGACY:
+    if problem in (LEGACY, UNKNOWN_PROVENANCE):
         item.update(summary="PF-76-S01 historical ID conflict — reports held for reconciliation",
                     kind="Manager bookkeeping", legacy=True,
                     background="The recovery source used PF-76-S01 for delivery control. Main uses that same ID for unrelated provider-profile persistence. The receiving delivery-control sprint is PF-80-S01.",
                     impact="Historical reports are excluded from current initiative joins to avoid crediting the wrong sprint. This notice does not block current PF-80-S01 implementation or ask you to approve it. Historical queued events stay held; they are not rewritten or replayed.",
                     next_step="Inventory historical reports and queued events against their original source and task mappings; record each disposition before any explicit migration. Preserve original IDs and receipts. Keep live posting OFF.")
+        if problem == UNKNOWN_PROVENANCE:
+            item.update(summary="PF-76-S01 provenance unresolved — report held",
+                        background="The report does not identify a recognized source. PF-76-S01 names both historical delivery control and modern provider-profile persistence; the ID alone cannot identify either.",
+                        impact="This report cannot establish progress for either sprint until its provenance is resolved. Existing records remain unchanged.",
+                        next_step="Inspect the original source and establish report provenance before joining or enqueueing it. Do not infer provenance from a task mapping. Keep live posting OFF.")
     elif problem.startswith("A worker report was rejected"):
         item.update(background="A report failed validation or did not identify a known sprint. Its contents are deliberately omitted here.",
                     impact="That report is not included in current progress. This is missing evidence, not proof that the worker stopped.",

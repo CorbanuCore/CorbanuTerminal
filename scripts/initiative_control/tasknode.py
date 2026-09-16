@@ -13,7 +13,7 @@ import subprocess
 import urllib.error
 import urllib.request
 
-from control import LEGACY_DELIVERY_SPRINT, RUN_STATUSES, STALE_SECONDS, atomic_json, checked_run, locked, now, read_json, safe_text, timestamp
+from control import RUN_STATUSES, STALE_SECONDS, atomic_json, checked_run, delivery_hold, locked, now, read_json, safe_text, timestamp
 
 ORIGIN = "https://tasknode.postfiat.org"
 PREFIX = ORIGIN + "/api/terminal/tasknode/campaign-tracker"
@@ -57,8 +57,8 @@ def event_for(run, workspace, task_ids, sequence):
 
 
 def enqueue(state, run):
-    if run.get("sprint_id") == LEGACY_DELIVERY_SPRINT:
-        raise ValueError("PF-76-S01 requires source reconciliation; no enqueue or automatic alias")
+    if reason := delivery_hold(run.get("sprint_id"), run):
+        raise ValueError(reason + "; no enqueue or automatic alias")
     config = read_json(state / "control.json", state)["tasknode"]
     tasks = config.get("task_mappings", {}).get(run["sprint_id"], [])
     with locked(state / ".outbox.lock"):
@@ -72,7 +72,11 @@ def enqueue(state, run):
         event = event_for(run, config["workspace_id"], tasks, len(index))
         destination = state / "outbox" / (event["id"] + ".json")
         if not destination.exists():
-            atomic_json(destination, {"event": event, "status": "pending", "attempts": 0, "next_attempt_at": now()})
+            record = {"event": event, "status": "pending", "attempts": 0, "next_attempt_at": now()}
+            # Local provenance only: preserve the immutable wire payload and ID.
+            if "source_namespace" in run:
+                record["source_namespace"] = run["source_namespace"]
+            atomic_json(destination, record)
         index[key] = event["id"]
         atomic_json(index_file, index)
         return event["id"]
@@ -188,7 +192,7 @@ def prepare(state, event_id):
     event = checked_event(record["event"], event_id)
     config = read_json(state / "control.json", state)["tasknode"]
     blockers = ["live_authority_entitlement_owner_and_target_lifecycle_unverified"]
-    if event["turnId"] == LEGACY_DELIVERY_SPRINT:
+    if delivery_hold(event["turnId"], record):
         blockers.append("historical_source_reconciliation_required")
     if config.get("enabled") is not True:
         blockers.append("posting_disabled")
@@ -447,7 +451,7 @@ def flush(state, auth, transport=None):
             if (state / "send-receipts" / (path.stem + ".intent.json")).exists():
                 single_sent.append(path.stem)
                 continue  # Intent alone blocks retransmission, even without a result.
-            if record["event"].get("turnId") == LEGACY_DELIVERY_SPRINT:
+            if delivery_hold(record["event"].get("turnId"), record):
                 continue  # Retain raw historical payload AND delivery metadata unchanged.
             if record["status"] != "pending" or timestamp(record["next_attempt_at"]) > timestamp(now()):
                 continue
@@ -492,7 +496,7 @@ def retry(state, event_id):
         path = state / "outbox" / (event_id + ".json")
         record = read_json(path, state)
         checked_event(record["event"], event_id)
-        if record["event"]["turnId"] == LEGACY_DELIVERY_SPRINT:
+        if delivery_hold(record["event"]["turnId"], record):
             raise ValueError("historical events require reconciliation; retry is not migration")
         if record["status"] != "blocked":
             raise ValueError("only blocked deliveries can be explicitly retried")

@@ -26,11 +26,26 @@ exists in live state and no outbox has ever been written there; the only
 PF-76-S01 delivery-control report in the repository is a synthetic test fixture,
 which stays where it is. There is nothing to migrate, replay or delete.
 
-What the inventory did find is that the collision is not only historical.
-PF-76-S01 is also a live security sprint, and the hold keys on the identifier, so
-that modern sprint could never report progress. The remaining unit is to
-discriminate on `source_namespace` instead of on the shared ID.
-[Inventory and located files](../../qa/initiative-control/pf-80-s01/pf76-inventory-20260916.md).
+The bounded fix now distinguishes report provenance. A PF-76-S01 report with
+explicit `source_namespace: main-provider-profile-persistence` reaches its normal
+task mapping. The synthetic historical namespace
+`synthetic-recovery-delivery-control` remains refused with a historical-source
+reason. Missing or unrecognized provenance remains held; a mapping is not proof
+of provenance. Modern reports join the provider sprint normally; historical
+notices continue to link here, and unknown provenance is labelled unresolved.
+
+The inventory's namespace was on the fixture wrapper, not its nested report.
+Reports now accept an optional namespace, which new queue records retain locally
+outside the unchanged immutable event payload. Producers must supply it explicitly;
+old reports/events without it are not reclassified, rewritten or replayed.
+`prepare`, `flush` and `retry` read this local metadata and retain the hold when
+it is absent. The single-event sender remains restricted to PF-80-S01.
+
+Product authority: **Internal delivery control — TO BUILD**, “Task Node receives
+only explicitly mapped, supported progress”. This restores an existing route;
+posting, enrollment and authorization gates do not change.
+[Inventory](../../qa/initiative-control/pf-80-s01/pf76-inventory-20260916.md) and
+[revision evidence](../../qa/initiative-control/pf-80-s01/pf76-discrimination-receipt.md).
 Do not silently alias IDs, delete history or replay an old event as new work.
 Live posting remains OFF pending its separate gates.
 
