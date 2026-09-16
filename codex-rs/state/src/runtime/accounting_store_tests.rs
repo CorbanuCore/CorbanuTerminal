@@ -397,6 +397,212 @@ async fn accounting_inspect_single_snapshot_concurrent_writer() -> anyhow::Resul
     Ok(())
 }
 
+// Root, closed child, grandchild, orphan, unrelated root, and cycle.
+async fn tree_fixture(runtime: &StateRuntime) -> anyhow::Result<()> {
+    seed(runtime).await?;
+    let store = AccountingStore::open(runtime, 0).await?;
+    for id in 1..=7 {
+        let mut a = attempt(id);
+        a.thread_id = ThreadId::from_string(&Uuid::from_u128(id + 6).to_string())?;
+        runtime
+            .upsert_thread(&test_thread_metadata(
+                runtime.sqlite().home(),
+                a.thread_id,
+                runtime.sqlite().home().to_path_buf(),
+            ))
+            .await?;
+        store.admit(a.thread_id, &a, &[snapshot()], 0).await?;
+        store.observe(a.thread_id, &a, &[row(id as i64)], 0).await?;
+    }
+    for (parent, child) in [(7, 8), (8, 9), (999, 10), (12, 13), (13, 12)] {
+        runtime
+            .upsert_thread_spawn_edge(
+                ThreadId::from_string(&Uuid::from_u128(parent).to_string())?,
+                ThreadId::from_string(&Uuid::from_u128(child).to_string())?,
+                crate::DirectionalThreadSpawnEdgeStatus::Closed,
+            )
+            .await?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_tree_reconciles_and_quarantines_unknown_parents() -> anyhow::Result<()>
+{
+    let path = home();
+    let runtime = open(&path).await?;
+    tree_fixture(&runtime).await?;
+    let before = rows(&runtime).await?;
+    let view = inspection(inspected(&runtime, 0, 0).await?);
+    // Independent known-price calculation: one USD per million noncached tokens.
+    assert_eq!(view.totals.known_usd, "0.000006".to_owned().try_into()?);
+    assert_eq!(view.own_totals.known_usd, "0.000001".to_owned().try_into()?);
+    assert_eq!(
+        view.descendant_totals.known_usd,
+        "0.000005".to_owned().try_into()?
+    );
+    assert_eq!(
+        view.unknown_parent_totals.known_usd,
+        "0.000017".to_owned().try_into()?
+    );
+    assert_eq!(
+        (
+            view.totals.attempts,
+            view.own_totals.attempts,
+            view.descendant_totals.attempts,
+            view.unknown_parent_totals.attempts
+        ),
+        (3, 1, 2, 3)
+    );
+    let ids = |requests: &std::collections::BTreeMap<Uuid, Vec<ObservationQuote>>| {
+        requests
+            .values()
+            .flatten()
+            .map(|q| q.attempt.attempt_id)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(ids(&view.requests), [1, 2, 3].map(Uuid::from_u128));
+    assert_eq!(
+        ids(&view.unknown_parent_requests),
+        [4, 6, 7].map(Uuid::from_u128)
+    );
+    assert_eq!(rows(&runtime).await?, before);
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_conflicting_and_missing_edges_are_unknown() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    tree_fixture(&runtime).await?;
+    let source =
+        json!({"subagent": {"thread_spawn": {"parent_thread_id": Uuid::from_u128(7), "depth": 1}}})
+            .to_string();
+    // Conflicting source versus edge, then source without an edge: neither is repaired.
+    for id in [9, 11] {
+        sqlx::query("UPDATE threads SET source = ? WHERE id = ?")
+            .bind(&source)
+            .bind(Uuid::from_u128(id).to_string())
+            .execute(runtime.pool.as_ref())
+            .await?;
+    }
+    let before = rows(&runtime).await?;
+    let view = inspection(inspected(&runtime, 0, 0).await?);
+    assert_eq!(
+        (view.totals.attempts, view.unknown_parent_totals.attempts),
+        (2, 5)
+    );
+    assert_eq!(view.totals.known_usd, "0.000003".to_owned().try_into()?);
+    assert_eq!(rows(&runtime).await?, before);
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_descendant_stale_and_compact_refuse_tree_total() -> anyhow::Result<()> {
+    for mutation in [
+        "DELETE FROM draft_accounting_contributions WHERE attempt_id = '00000000-0000-0000-0000-000000000002'",
+        "DELETE FROM draft_accounting_contributions WHERE attempt_id = '00000000-0000-0000-0000-000000000002'; DELETE FROM draft_accounting_estimates WHERE attempt_id = '00000000-0000-0000-0000-000000000002'",
+    ] {
+        let path = home();
+        let runtime = open(&path).await?;
+        tree_fixture(&runtime).await?;
+        sqlx::raw_sql(mutation)
+            .execute(runtime.pool.as_ref())
+            .await?;
+        let before = rows(&runtime).await?;
+        assert_eq!(
+            inspected(&runtime, 0, 0).await?,
+            InspectionDay::NeedsRefresh
+        );
+        assert_eq!(rows(&runtime).await?, before);
+        runtime.close().await;
+    }
+    let path = home();
+    let runtime = open(&path).await?;
+    tree_fixture(&runtime).await?;
+    let store = AccountingStore::open(&runtime, 90 * 86_400_000).await?;
+    let before = rows(&runtime).await?;
+    assert!(matches!(
+        AccountingStore::inspect_day(&runtime, attempt(1).thread_id, 0, 90 * 86_400_000).await?,
+        InspectionDay::DetailUnavailable { compact: true, .. }
+    ));
+    assert_eq!(rows(&runtime).await?, before);
+    drop(store);
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_tree_lineage_and_cost_share_one_snapshot() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    tree_fixture(&runtime).await?;
+    let before = inspected(&runtime, 0, 0).await?;
+    let mut read = runtime.pool.begin().await?;
+    validate_on_connection(&mut read).await?;
+    sqlx::query("UPDATE thread_spawn_edges SET parent_thread_id = ? WHERE child_thread_id = ?")
+        .bind(Uuid::from_u128(11).to_string())
+        .bind(Uuid::from_u128(8).to_string())
+        .execute(runtime.pool.as_ref())
+        .await?;
+    assert_eq!(
+        inspect_tree(&mut read, attempt(1).thread_id, 0, 0).await?,
+        before
+    );
+    read.commit().await?;
+    assert_eq!(
+        inspection(inspected(&runtime, 0, 0).await?).totals.attempts,
+        1
+    );
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_tree_combined_attempt_cap_is_not_per_run() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    tree_fixture(&runtime).await?;
+    let store = AccountingStore::open(&runtime, 0).await?;
+    // Batch synthetic rows to avoid hundreds of unrelated maintenance sweeps.
+    let template = store
+        .admit(attempt(1).thread_id, &attempt(19), &[], 0)
+        .await?;
+    let mut tx = runtime.pool.begin().await?;
+    for id in 20..530 {
+        let mut q = template.clone();
+        q.attempt = attempt(id);
+        q.attempt.thread_id = ThreadId::from_string(&Uuid::from_u128(8).to_string())?;
+        let a = &q.attempt;
+        sqlx::query("INSERT INTO draft_accounting_attempts VALUES (?, ?, ?)")
+            .bind(a.attempt_id.to_string())
+            .bind(a.request_id.to_string())
+            .bind(serde_json::to_string(a)?)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("INSERT INTO draft_accounting_price_bindings VALUES (?, NULL)")
+            .bind(a.attempt_id.to_string())
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("INSERT INTO draft_accounting_estimates VALUES (?, '[]', ?)")
+            .bind(a.attempt_id.to_string())
+            .bind(serde_json::to_string(&q)?)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("INSERT INTO draft_accounting_contributions VALUES (?, ?, 0, '[]')")
+            .bind(a.attempt_id.to_string())
+            .bind(a.thread_id.to_string())
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    assert_eq!(inspected(&runtime, 0, 0).await?, InspectionDay::TooLarge);
+    runtime.close().await;
+    Ok(())
+}
+
 fn home() -> impl std::ops::Deref<Target = std::path::PathBuf> {
     scopeguard::guard(crate::runtime::test_support::unique_temp_dir(), |path| {
         let _ = std::fs::remove_dir_all(path);

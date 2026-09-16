@@ -68,6 +68,10 @@ fn packet() -> InspectionDay {
                 unknown: i64::from(n.is_none()),
             }),
         },
+        own_totals: DayTotals::from_quotes([&q]).unwrap(),
+        descendant_totals: DayTotals::default(),
+        unknown_parent_totals: DayTotals::default(),
+        unknown_parent_requests: Default::default(),
         requests: std::collections::BTreeMap::from([(q.attempt.request_id, vec![q])]),
     })
 }
@@ -328,7 +332,7 @@ async fn accounting_inspect_maintenance_with_stale_raw_renders_refresh() -> anyh
         let text = inspection_pages(Ok(result))[0].text.join("\n");
         insta::allow_duplicates! {
             insta::assert_snapshot!(text, @"
-            Collection coverage: unknown; recorded attempts only. Descendants excluded.
+            Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
             Billed cost: unavailable — no settlement evidence
             Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
             Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.
@@ -343,7 +347,7 @@ async fn accounting_inspect_maintenance_with_healthy_raw_renders_lag() -> anyhow
     let result = maintenance_inspection("").await?;
     let text = inspection_pages(Ok(result))[0].text.join("\n");
     insta::assert_snapshot!(text, @"
-    Collection coverage: unknown; recorded attempts only. Descendants excluded.
+    Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
     Billed cost: unavailable — no settlement evidence
     Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
     Snapshot is not current; newer activity is unverified
@@ -416,7 +420,7 @@ fn accounting_inspect_coverage_never_claims_run_complete() {
     assert!(text.starts_with("Estimated token cost for recorded attempts:"));
     for caveat in [
         "Collection coverage: unknown",
-        "Descendants excluded",
+        "resolved descendants only",
         "Billed cost: unavailable",
         "other days",
         "Snapshot is not current; newer activity is unverified",
@@ -458,6 +462,201 @@ async fn accounting_inspect_snapshot_navigation_roundtrip() {
         Some(1)
     );
     assert!(render_bottom_popup(&chat, 40).contains("Recorded requests"));
+}
+
+fn breakdown_packet() -> InspectionDay {
+    let InspectionDay::Ready(mut view) = packet() else {
+        unreachable!()
+    };
+    view.requests.clear();
+    // Renderer boundary fixture: the installed ledger currently requires nonempty
+    // attribution; missing strings here exercise the explicit unknown fallback.
+    for (id, micros, provider, model) in [
+        (1, 1, "alpha", "one"),
+        (2, 2, "alpha", "two"),
+        (3, 4, "", ""),
+        (4, 8, "beta", "three"),
+    ] {
+        let mut q = quote();
+        q.attempt.attempt_id = Uuid::from_u128(id);
+        q.attempt.request_id = Uuid::from_u128(100 + id);
+        q.attempt.thread_id = if id == 1 {
+            view.owner
+        } else {
+            ThreadId::from_string(&Uuid::from_u128(200 + id).to_string()).unwrap()
+        };
+        q.attempt.provider = provider.into();
+        q.attempt.model = model.into();
+        q.known_subtotal = decimal(&format!("0.00000{micros}"));
+        q.all_buckets_priced = Some(q.known_subtotal);
+        if id == 4 {
+            view.unknown_parent_requests
+                .insert(q.attempt.request_id, vec![q]);
+        } else {
+            view.requests.insert(q.attempt.request_id, vec![q]);
+        }
+    }
+    view.totals = DayTotals::from_quotes(view.requests.values().flatten()).unwrap();
+    view.own_totals = DayTotals::from_quotes(
+        view.requests
+            .values()
+            .flatten()
+            .filter(|q| q.attempt.thread_id == view.owner),
+    )
+    .unwrap();
+    view.descendant_totals = DayTotals::from_quotes(
+        view.requests
+            .values()
+            .flatten()
+            .filter(|q| q.attempt.thread_id != view.owner),
+    )
+    .unwrap();
+    view.unknown_parent_totals =
+        DayTotals::from_quotes(view.unknown_parent_requests.values().flatten()).unwrap();
+    InspectionDay::Ready(view)
+}
+
+#[test]
+fn accounting_inspect_rendered_tree_and_provider_model_reconcile() {
+    let pages = inspection_pages(Ok(breakdown_packet()));
+    let group = |title: &str| pages.iter().find(|p| p.title == title).unwrap();
+    let exact_micros = |p: &InspectorPage| -> u64 {
+        let line = p
+            .text
+            .iter()
+            .find_map(|s| s.strip_prefix("Known estimate exact USD: "))
+            .unwrap();
+        // Independent integer parsing of the rendered fixture values.
+        line.strip_prefix("0.").unwrap().parse::<u64>().unwrap() * 10_u64.pow(8 - line.len() as u32)
+    };
+    assert_eq!(exact_micros(group("Root's own attempts")), 1);
+    assert_eq!(exact_micros(group("Descendant attempts")), 6);
+    assert!(
+        pages[0]
+            .text
+            .contains(&"Known subtotal exact USD: 0.000007".into())
+    );
+    let provider_pages: Vec<_> = pages
+        .iter()
+        .filter(|p| p.title.starts_with("Provider:"))
+        .collect();
+    assert_eq!(
+        provider_pages.iter().map(|p| exact_micros(p)).sum::<u64>(),
+        7
+    );
+    assert_eq!(
+        provider_pages.iter().map(|p| p.links.len()).sum::<usize>(),
+        3
+    );
+    assert_eq!(
+        exact_micros(group(
+            "Provider: unknown (attribution absent); Model: unknown (attribution absent)"
+        )),
+        4
+    );
+    let unknown = group("Unknown parent population");
+    assert_eq!(unknown.links.len(), 1);
+    assert!(unknown.text.iter().any(|s| s.contains("$0.000008")));
+    assert!(
+        pages[unknown.links[0].1]
+            .text
+            .contains(&format!("Attempt: {}", Uuid::from_u128(4)))
+    );
+    for group in provider_pages {
+        for (_, request) in &group.links {
+            assert_eq!(pages[*request].title, "Logical request");
+            assert_eq!(
+                pages[pages[*request].links[0].1].title,
+                "Attempt, components and original price"
+            );
+        }
+    }
+    insta::assert_snapshot!(pages.iter().filter(|p| p.title.starts_with("Provider:") || p.title.ends_with("attempts")).map(|p| format!("{}\n{}", p.title, p.text.iter().filter(|s| s.starts_with("Estimated token cost") || s.starts_with("Known estimate exact") || s.starts_with("Recorded attempts:")).cloned().collect::<Vec<_>>().join("\n"))).collect::<Vec<_>>().join("\n"), @"Root's own attempts\nEstimated token cost for recorded attempts: $0.000001\nRecorded attempts: 1\nKnown estimate exact USD: 0.000001\nDescendant attempts\nEstimated token cost for recorded attempts: $0.000006\nRecorded attempts: 2\nKnown estimate exact USD: 0.000006\nProvider: unknown (attribution absent); Model: unknown (attribution absent)\nEstimated token cost for recorded attempts: $0.000004\nRecorded attempts: 1\nKnown estimate exact USD: 0.000004\nProvider: alpha; Model: one\nEstimated token cost for recorded attempts: $0.000001\nRecorded attempts: 1\nKnown estimate exact USD: 0.000001\nProvider: alpha; Model: two\nEstimated token cost for recorded attempts: $0.000002\nRecorded attempts: 1\nKnown estimate exact USD: 0.000002");
+}
+
+#[test]
+fn accounting_inspect_estimate_only_never_invents_billed_or_difference() {
+    let pages = inspection_pages(Ok(breakdown_packet()));
+    for page in &pages {
+        assert!(
+            page.text
+                .contains(&"Billed cost: unavailable — no settlement evidence".into())
+        );
+        assert!(page.text.contains(
+            &"Estimate versus billed difference: unknown — no settlement evidence".into()
+        ));
+        assert!(!page.text.iter().any(|s| s.starts_with("Billed cost: $")));
+    }
+    assert!(
+        pages[0]
+            .text
+            .contains(&"Estimated token cost for recorded attempts: $0.000007".into())
+    );
+    let mut empty = quote();
+    empty.known_subtotal = Decimal::default();
+    empty.all_buckets_priced = None;
+    assert!(attempt_text(&empty).contains(&"Estimated token cost: unknown".into()));
+}
+
+#[test]
+fn accounting_inspect_breakdown_freshness_and_empty_attribution() {
+    let pages = inspection_pages(Ok(packet()));
+    for page in &pages {
+        assert!(
+            page.text
+                .contains(&"Snapshot is not current; newer activity is unverified".into()),
+            "{}",
+            page.title
+        );
+    }
+    let unknown = pages
+        .iter()
+        .find(|p| p.title == "Unknown provider/model attribution")
+        .unwrap();
+    assert!(
+        unknown
+            .text
+            .iter()
+            .any(|s| s.contains("No recorded attempts"))
+    );
+    assert!(!unknown.text.iter().any(|s| s.contains('$')));
+    for state in [
+        InspectionDay::NeedsRefresh,
+        InspectionDay::CheckpointLag,
+        InspectionDay::TooLarge,
+    ] {
+        let pages = inspection_pages(Ok(state));
+        assert_eq!(pages.len(), 1);
+        assert!(pages[0].links.is_empty());
+        assert!(!pages[0].text.iter().any(|s| s.contains('$')));
+    }
+}
+
+#[tokio::test]
+async fn accounting_inspect_breakdown_navigation_reuses_packet() {
+    let (mut chat, mut rx, _ops) = make_chatwidget_manual(None).await;
+    chat.open_accounting_inspector(0);
+    let AppEvent::LoadAccountingInspector {
+        generation,
+        thread,
+        day,
+    } = rx.try_recv().unwrap()
+    else {
+        panic!()
+    };
+    chat.finish_accounting_inspector(generation, thread, day, Ok(breakdown_packet()));
+    let links = chat.accounting_inspector.as_ref().unwrap().pages[0]
+        .links
+        .clone();
+    for (_, target) in links {
+        chat.navigate_accounting_inspector(generation, target);
+        assert_eq!(chat.accounting_inspector.as_ref().unwrap().page, target);
+        chat.navigate_accounting_inspector(generation, 0);
+    }
+    assert!(!matches!(
+        rx.try_recv(),
+        Ok(AppEvent::LoadAccountingInspector { .. })
+    ));
 }
 
 #[test]

@@ -498,8 +498,8 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
 }
 
 fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage> {
-    let mut pages = vec![InspectorPage { title: "Recorded requests — this thread only".into(), text: vec![
-        "Collection coverage: unknown; recorded attempts only. Descendants excluded.".into(),
+    let mut pages = vec![InspectorPage { title: "Recorded requests — root and descendants".into(), text: vec![
+        "Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.".into(),
         "Billed cost: unavailable — no settlement evidence".into(),
         "Logical requests may have attempts on other days; this UTC day is not their complete lifetime.".into(),
     ], links: Vec::new(), parent: None, selected: Arc::default() }];
@@ -527,6 +527,7 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
             .text
             .push("Snapshot is not current; newer activity is unverified".into());
     }
+    let freshness = pages[0].text.clone();
     let t = &ready.totals;
     pages[0]
         .text
@@ -545,8 +546,11 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
             m.known, m.unknown
         ));
     }
-    for (request, quotes) in ready.requests {
+    let context = pages[0].text.clone();
+    let mut request_pages = std::collections::BTreeMap::new();
+    for (request, quotes) in &ready.requests {
         let request_page = pages.len();
+        request_pages.insert(*request, request_page);
         let number = pages[0].links.len() + 1;
         pages[0]
             .links
@@ -570,6 +574,156 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
                 parent: Some(request_page),
                 selected: Arc::default(),
             });
+        }
+    }
+    // All navigation is over this one immutable packet; no second read.
+    let root_groups = [
+        (
+            "Root's own attempts".to_owned(),
+            ready
+                .requests
+                .values()
+                .flatten()
+                .filter(|q| q.attempt.thread_id == ready.owner)
+                .collect::<Vec<_>>(),
+        ),
+        (
+            "Descendant attempts".to_owned(),
+            ready
+                .requests
+                .values()
+                .flatten()
+                .filter(|q| q.attempt.thread_id != ready.owner)
+                .collect::<Vec<_>>(),
+        ),
+    ];
+    let mut providers = std::collections::BTreeMap::new();
+    for quote in ready.requests.values().flatten() {
+        let key = (&quote.attempt.provider, &quote.attempt.model);
+        providers.entry(key).or_insert_with(Vec::new).push(quote);
+    }
+    let mut groups = root_groups.to_vec();
+    for ((provider, model), quotes) in providers {
+        let provider = if provider.trim().is_empty() {
+            "unknown (attribution absent)"
+        } else {
+            provider
+        };
+        let model = if model.trim().is_empty() {
+            "unknown (attribution absent)"
+        } else {
+            model
+        };
+        groups.push((format!("Provider: {provider}; Model: {model}"), quotes));
+    }
+    // Keep missing attribution visible even when this schema has no such rows.
+    if !ready
+        .requests
+        .values()
+        .flatten()
+        .any(|q| q.attempt.provider.trim().is_empty() || q.attempt.model.trim().is_empty())
+    {
+        groups.push(("Unknown provider/model attribution".into(), Vec::new()));
+    }
+    for (title, quotes) in groups {
+        let mut text = freshness.clone();
+        text.extend(
+            context
+                .iter()
+                .filter(|s| s.starts_with("Read at:") || s.starts_with("UTC admission interval:"))
+                .cloned(),
+        );
+        match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
+            Ok(t) => {
+                text.extend(estimate(t.known_usd, t.unknown_estimates, t.attempts));
+                text.push(format!("Recorded attempts: {}", t.attempts));
+                if t.attempts > 0 {
+                    text.push(format!("Known estimate exact USD: {}", exact(t.known_usd)));
+                }
+            }
+            Err(_) => text.push("Estimate unavailable — exact arithmetic overflow".into()),
+        }
+        let links = quotes
+            .iter()
+            .map(|q| {
+                (
+                    format!("Request {}", q.attempt.request_id),
+                    request_pages[&q.attempt.request_id],
+                )
+            })
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let target = pages.len();
+        pages[0].links.push((title.clone(), target));
+        pages.push(InspectorPage {
+            title,
+            text,
+            links,
+            parent: Some(0),
+            selected: Arc::default(),
+        });
+    }
+    let unknown_page = pages.len();
+    pages[0]
+        .links
+        .push(("Unknown parent population".into(), unknown_page));
+    let u = &ready.unknown_parent_totals;
+    let mut text = vec![
+        "Membership in this root is unknown. These attempts are separate from root and descendant totals; they may belong to other runs.".into(),
+        format!("Recorded attempts with unresolved ancestry: {}", u.attempts),
+    ];
+    text.extend(estimate(u.known_usd, u.unknown_estimates, u.attempts));
+    text.extend(
+        context
+            .iter()
+            .filter(|s| s.starts_with("Read at:") || s.starts_with("UTC admission interval:"))
+            .cloned(),
+    );
+    text.extend(freshness.clone());
+    pages.push(InspectorPage {
+        title: "Unknown parent population".into(),
+        text,
+        links: Vec::new(),
+        parent: Some(0),
+        selected: Arc::default(),
+    });
+    for (request, quotes) in &ready.unknown_parent_requests {
+        for quote in quotes {
+            let target = pages.len();
+            pages[unknown_page].links.push((
+                format!("Request {request}; attempt {}", quote.attempt.attempt_id),
+                target,
+            ));
+            pages.push(InspectorPage {
+                title: "Unknown parent attempt".into(),
+                text: attempt_text(quote),
+                links: Vec::new(),
+                parent: Some(unknown_page),
+                selected: Arc::default(),
+            });
+        }
+    }
+    pages[0].text.push("Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.".into());
+    pages[0].text.push(format!(
+        "Unknown parent population: {} attempts, excluded from root total",
+        u.attempts
+    ));
+    for page in &mut pages {
+        page.text
+            .push("Estimate versus billed difference: unknown — no settlement evidence".into());
+        if !page.text.iter().any(|s| s.starts_with("Billed cost:")) {
+            page.text
+                .push("Billed cost: unavailable — no settlement evidence".into());
+        }
+        if ready.read_at_ms > ready.coverage.completed_as_of_ms
+            && !page
+                .text
+                .iter()
+                .any(|s| s == "Snapshot is not current; newer activity is unverified")
+        {
+            page.text
+                .push("Snapshot is not current; newer activity is unverified".into());
         }
     }
     pages
