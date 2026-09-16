@@ -8,6 +8,142 @@ use codex_state::accounting::{
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use pretty_assertions::assert_eq;
 
+async fn unavailable_inspector(width: u16, args: &str) -> ChatWidget {
+    let (mut chat, mut rx, mut ops) = make_chatwidget_manual(None).await;
+    chat.on_terminal_resize(width);
+    chat.open_accounting_command(args, NaiveDate::from_ymd_opt(2026, 9, 16).unwrap());
+    let AppEvent::LoadAccountingInspector {
+        generation,
+        thread,
+        day,
+        ..
+    } = rx.try_recv().unwrap()
+    else {
+        panic!("expected inspector load");
+    };
+    chat.finish_accounting_inspector(generation, thread, day, Ok(InspectionDay::Absent));
+    assert!(rx.try_recv().is_err());
+    assert!(ops.try_recv().is_err());
+    chat
+}
+
+#[tokio::test]
+async fn accounting_inspect_usability_unavailable_first_screen() {
+    for args in [
+        "requests 2026-09-16",
+        "requests 2026-09-16T00:00:00Z 2026-09-16T01:00:00Z hour",
+    ] {
+        let chat = unavailable_inspector(150, args).await;
+        let screen = render_bottom_popup_with_height(&chat, 150, 16);
+        assert!(
+            screen.contains("Unavailable — accounting ledger not installed."),
+            "{screen}"
+        );
+        assert!(screen.contains("Collection remains off."), "{screen}");
+    }
+}
+
+#[tokio::test]
+async fn accounting_inspect_usability_wrap_tracks_resize() {
+    let mut chat = unavailable_inspector(150, "requests 2026-09-16").await;
+    let wide = render_bottom_popup_with_height(&chat, 150, 16);
+    let first_lines = wide
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .take(3)
+        .collect::<Vec<_>>()
+        .join("\n");
+    insta::assert_snapshot!(first_lines, @"
+    Recorded requests — root and descendants
+    Requested UTC day: 2026-09-16
+    › Unavailable — accounting ledger not installed. Collection remains off.
+    ");
+    assert!(
+        wide.contains("Collection coverage: unknown; recorded root and resolved descendants only."),
+        "{wide}"
+    );
+    chat.on_terminal_resize(40);
+    let narrow = render_bottom_popup_with_height(&chat, 40, 16);
+    assert!(!narrow.contains("Unavailable — accounting ledger not installed."));
+    assert!(narrow.contains("Unavailable — accounting"), "{narrow}");
+    chat.on_terminal_resize(150);
+    assert_eq!(render_bottom_popup_with_height(&chat, 150, 16), wide);
+}
+
+#[tokio::test]
+async fn accounting_inspect_usability_short_day_visible_in_every_state() {
+    let mut screens = Vec::new();
+    for (args, date) in [
+        ("requests", "2026-09-16"),
+        ("requests 2026-09-15", "2026-09-15"),
+    ] {
+        let (mut chat, mut rx, _ops) = make_chatwidget_manual(None).await;
+        chat.on_terminal_resize(150);
+        chat.open_accounting_command(args, NaiveDate::from_ymd_opt(2026, 9, 16).unwrap());
+        let AppEvent::LoadAccountingInspector {
+            generation,
+            thread,
+            day,
+            ..
+        } = rx.try_recv().unwrap()
+        else {
+            panic!("expected inspector load");
+        };
+        let label = format!("Requested UTC day: {date}");
+        assert!(render_bottom_popup_with_height(&chat, 150, 16).contains(&label));
+        for result in [
+            Ok(InspectionDay::Absent),
+            Ok(InspectionDay::MissingThread),
+            Ok(InspectionDay::CheckpointLag),
+            Ok(InspectionDay::NeedsRefresh),
+            Ok(InspectionDay::TooLarge),
+            Err("Recorded requests unavailable — retry.".into()),
+        ] {
+            chat.finish_accounting_inspector(generation, thread, day, result);
+            let screen = render_bottom_popup_with_height(&chat, 150, 16);
+            assert!(screen.contains(&label), "{screen}");
+            screens.push(screen);
+        }
+    }
+    assert_ne!(screens[0], screens[6]);
+}
+
+#[tokio::test]
+async fn accounting_inspect_usability_hour_lifetime_wording() {
+    let chat = unavailable_inspector(
+        150,
+        "requests 2026-09-16T00:00:00Z 2026-09-16T01:00:00Z hour",
+    )
+    .await;
+    let text = chat.accounting_inspector.as_ref().unwrap().pages[0]
+        .text
+        .join("\n");
+    assert!(
+        !text.contains("this UTC day is not their complete lifetime"),
+        "{text}"
+    );
+    assert!(
+        text.contains("this UTC hour is not their complete lifetime"),
+        "{text}"
+    );
+    let loaded = inspection_pages(Ok(range_packet(false, packet())));
+    let text = loaded
+        .iter()
+        .flat_map(|page| &page.text)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(!text.contains("this UTC day is not their complete lifetime"));
+    assert!(text.contains("this UTC hour is not their complete lifetime"));
+
+    let chat = unavailable_inspector(150, "requests 2026-09-15 2026-09-16 day").await;
+    let text = chat.accounting_inspector.as_ref().unwrap().pages[0]
+        .text
+        .join("\n");
+    assert!(text.contains("the selected UTC interval is not their complete lifetime"));
+}
+
 fn decimal(text: &str) -> Decimal {
     text.to_owned().try_into().unwrap()
 }
@@ -608,7 +744,7 @@ async fn accounting_inspect_narrow_and_long_fields() {
             page: 0,
             alive: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         };
-        let params = inspector.params();
+        let params = inspector.params(usize::from(width));
         let names: Vec<_> = params.items.iter().map(|i| i.name.clone()).collect();
         assert!(names.iter().all(|s| !s.chars().any(char::is_control)));
         chat.bottom_pane.show_selection_view(params);
@@ -748,10 +884,10 @@ async fn accounting_inspect_maintenance_with_stale_raw_renders_refresh() -> anyh
         let text = inspection_pages(Ok(result))[0].text.join("\n");
         insta::allow_duplicates! {
             insta::assert_snapshot!(text, @"
+            Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.
             Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
             Billed cost: unavailable — no settlement evidence
             Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
-            Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.
             ");
         }
     }
@@ -763,10 +899,10 @@ async fn accounting_inspect_maintenance_with_healthy_raw_renders_lag() -> anyhow
     let result = maintenance_inspection("").await?;
     let text = inspection_pages(Ok(result))[0].text.join("\n");
     insta::assert_snapshot!(text, @"
+    Snapshot is not current; newer activity is unverified
     Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
     Billed cost: unavailable — no settlement evidence
     Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
-    Snapshot is not current; newer activity is unverified
     ");
     Ok(())
 }
@@ -782,7 +918,7 @@ fn accounting_inspect_availability_state_snapshots() {
     ];
     let text: Vec<_> = states
         .into_iter()
-        .map(|s| inspection_pages(Ok(s))[0].text.last().unwrap().clone())
+        .map(|s| inspection_pages(Ok(s))[0].text.first().unwrap().clone())
         .collect();
     insta::assert_snapshot!(text.join("\n"), @"
     Unavailable — accounting ledger not installed. Collection remains off.

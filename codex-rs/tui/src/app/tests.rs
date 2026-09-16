@@ -62,6 +62,7 @@ async fn accounting_load(
 }
 
 fn accounting_scroll(app: &mut App) -> String {
+    app.chat_widget.on_terminal_resize(40);
     let mut output = String::new();
     for _ in 0..120 {
         output.push_str(&render_bottom_popup(&app.chat_widget, 40));

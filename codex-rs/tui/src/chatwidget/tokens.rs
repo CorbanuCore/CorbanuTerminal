@@ -518,7 +518,7 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
     let ready = match result {
         Ok(InspectionDay::Ready(view)) => view,
         other => {
-            pages[0].text.push(match other {
+            pages[0].text.insert(0, match other {
                 Ok(InspectionDay::Absent) => "Unavailable — accounting ledger not installed. Collection remains off.".into(),
                 Ok(InspectionDay::MissingThread) => "Unavailable — native thread no longer exists.".into(),
                 Ok(InspectionDay::CheckpointLag) => "Snapshot is not current; newer activity is unverified".into(),
@@ -958,10 +958,20 @@ fn range_pages(
                 .text
                 .retain(|t| !t.starts_with("UTC admission interval:"));
             for text in &mut child.text {
-                *text = text.replace("this UTC day", "this bucket").replace(
-                    "threads have unavailable day detail",
-                    "thread-day entries have unavailable detail",
-                );
+                *text = text
+                    .replace(
+                        "this UTC day",
+                        if requested.grouping == InspectionGrouping::Hour {
+                            "this UTC hour"
+                        } else {
+                            "this bucket"
+                        },
+                    )
+                    .replace("attempts on other days", "attempts outside this bucket")
+                    .replace(
+                        "threads have unavailable day detail",
+                        "thread-day entries have unavailable detail",
+                    );
                 if text.starts_with("Unknown parent population:")
                     || text.starts_with("Unresolved ancestry:")
                 {
@@ -980,16 +990,16 @@ fn range_pages(
 }
 
 impl Inspector {
-    fn params(&self) -> SelectionViewParams {
+    fn params(&self, width: usize) -> SelectionViewParams {
         let page = &self.pages[self.page];
         let generation = self.generation;
-        // Small selectable fragments keep every long field reachable at 40 columns.
+        // Selectable wrapped lines keep long fields reachable at the current terminal width.
         let mut items: Vec<SelectionItem> = page
             .text
             .iter()
             .flat_map(|text| {
                 let clean: String = text.chars().filter(|c| !c.is_control()).collect();
-                textwrap::wrap(&clean, 26)
+                textwrap::wrap(&clean, width.saturating_sub(6).max(1))
                     .into_iter()
                     .map(|part| SelectionItem {
                         name: part.into_owned(),
@@ -1044,6 +1054,12 @@ impl Inspector {
             })),
             view_id: Some(INSPECTOR_VIEW),
             title: Some(page.title.clone()),
+            subtitle: self.range.is_none().then(|| {
+                let date = chrono::DateTime::from_timestamp(self.day * 86_400, 0)
+                    .unwrap()
+                    .date_naive();
+                format!("Requested UTC day: {date}")
+            }),
             items,
             allow_number_shortcuts: false,
             footer_hint: Some("↑↓ scroll · Enter open · Esc back/close".into()),
@@ -1061,6 +1077,13 @@ impl Inspector {
 }
 
 impl ChatWidget {
+    pub(super) fn reflow_accounting_inspector(&mut self, width: u16) {
+        if let Some(view) = &self.accounting_inspector {
+            self.bottom_pane
+                .replace_selection_view_if_present(INSPECTOR_VIEW, view.params(usize::from(width)));
+        }
+    }
+
     pub(super) fn invalidate_accounting_inspector_for_thread(&mut self) {
         if self
             .accounting_inspector
@@ -1168,11 +1191,11 @@ impl ChatWidget {
             page: 0,
             alive: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         };
-        let params = inspector.params();
-        if !self
-            .bottom_pane
-            .replace_selection_view_if_present(INSPECTOR_VIEW, inspector.params())
-        {
+        let params = inspector.params(self.last_rendered_width.get().unwrap_or(80));
+        if !self.bottom_pane.replace_selection_view_if_present(
+            INSPECTOR_VIEW,
+            inspector.params(self.last_rendered_width.get().unwrap_or(80)),
+        ) {
             self.bottom_pane.show_selection_view(params);
         }
         self.accounting_inspector = Some(inspector);
@@ -1207,13 +1230,25 @@ impl ChatWidget {
         if let Some(range) = view.range
             && !is_range
         {
-            view.pages[0].text.insert(0, format!("Requested: {}; timezone: UTC; grouping: {:?}; effective coverage: unavailable; bucket boundaries unavailable", interval(range.start_ms, range.end_ms), range.grouping));
+            view.pages[0].text.insert(1, format!("Requested: {}; timezone: UTC; grouping: {:?}; effective coverage: unavailable; bucket boundaries unavailable", interval(range.start_ms, range.end_ms), range.grouping));
+            let scope = if range.end_ms - range.start_ms == 3_600_000 {
+                "this UTC hour"
+            } else {
+                "the selected UTC interval"
+            };
+            for text in &mut view.pages[0].text {
+                if text.starts_with("Logical requests may have attempts") {
+                    *text = format!(
+                        "Logical requests may have attempts outside the selected interval; {scope} is not their complete lifetime."
+                    );
+                }
+            }
         }
         view.page = 0;
-        if !self
-            .bottom_pane
-            .replace_selection_view_if_present(INSPECTOR_VIEW, view.params())
-        {
+        if !self.bottom_pane.replace_selection_view_if_present(
+            INSPECTOR_VIEW,
+            view.params(self.last_rendered_width.get().unwrap_or(80)),
+        ) {
             self.accounting_inspector = None;
         }
         self.request_redraw();
@@ -1232,11 +1267,12 @@ impl ChatWidget {
             return;
         }
         view.page = page;
-        if !self
-            .bottom_pane
-            .replace_selection_view_if_present(INSPECTOR_VIEW, view.params())
-        {
-            self.bottom_pane.show_selection_view(view.params());
+        if !self.bottom_pane.replace_selection_view_if_present(
+            INSPECTOR_VIEW,
+            view.params(self.last_rendered_width.get().unwrap_or(80)),
+        ) {
+            self.bottom_pane
+                .show_selection_view(view.params(self.last_rendered_width.get().unwrap_or(80)));
         }
         self.request_redraw();
     }
