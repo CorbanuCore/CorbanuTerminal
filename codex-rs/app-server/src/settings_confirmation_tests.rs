@@ -77,7 +77,7 @@ async fn settings_confirmation_terminal_reply_cleans_up_and_never_replies_twice(
     use crate::outgoing_message::OutgoingEnvelope;
     use crate::outgoing_message::OutgoingMessage;
     use crate::outgoing_message::OutgoingMessageSender;
-    for terminal in ["applied", "failed", "dropped", "timeout"] {
+    for terminal in ["applied", "failed", "dropped", "timeout", "generation"] {
         let state = Arc::new(Mutex::new(ThreadState::default()));
         let completion = pending(&mut *state.lock().await, 42, "operation");
         let request_id = state.lock().await.pending_settings["operation"]
@@ -99,6 +99,11 @@ async fn settings_confirmation_terminal_reply_cleans_up_and_never_replies_twice(
             ),
             "dropped" => {
                 state.lock().await.pending_settings.clear();
+            }
+            "generation" => {
+                let mut state = state.lock().await;
+                state.listener_generation += 1;
+                state.finish_settings_confirmation("operation", Ok(()));
             }
             _ => {}
         }
