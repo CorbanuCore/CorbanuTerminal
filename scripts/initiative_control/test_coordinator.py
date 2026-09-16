@@ -1081,14 +1081,18 @@ class SprintRegistrationTests(unittest.TestCase):
                 self.document().write_text(document)
                 self.refused(reason, payload)
 
-    def test_registered_sprint_accepts_an_allocation(self):
-        """The point of registering: work can then be allocated against it."""
-        self.c.register_sprint(**self.payload())
+    def allocate(self):
         allocation = {"sprint": "PF82", "kinds": ["implement"], "resources": ["worktree"],
                       "scope": ["codex-rs/core/src/x.rs"], "timeout_seconds": 1800,
                       "inputs": {"task": "synthetic"}}
         self.c.put_allocation("pf82-impl-01", allocation, False,
                               self.c.snapshot()["revision"], {"fixture": "allocate"})
+        return allocation
+
+    def test_registered_sprint_accepts_an_allocation(self):
+        """The point of registering: work can then be allocated against it."""
+        self.c.register_sprint(**self.payload())
+        allocation = self.allocate()
         self.assertEqual(allocation, self.c.snapshot()["allocations"]["pf82-impl-01"])
 
     def test_source_path_is_confined_to_repository_sprint_documents(self):
@@ -1148,15 +1152,27 @@ class SprintRegistrationTests(unittest.TestCase):
                      self.payload(replace=True, workstream="accounting"))
         self.refused("may only correct the document reference",
                      self.payload(replace=True, dependencies=[]))
-        self.c.put_allocation("pf82-impl-01", {"sprint": "PF82", "kinds": ["implement"],
-                              "resources": ["worktree"], "scope": ["codex-rs/core/src/x.rs"],
-                              "timeout_seconds": 1800, "inputs": {"task": "synthetic"}},
-                              False, self.c.snapshot()["revision"], {"fixture": "allocate"})
-        self.refused("already has allocations or actions", self.payload(replace=True))
+        self.allocate()
+        # An undispatched allocation is a frozen offer, not work: the repair is
+        # still allowed while nothing has been dispatched against it.
+        moved = "docs/sprints/current/initiative-delivery-control/pf82-renamed.md"
+        self.document(relative=moved)
+        self.c.register_sprint(**self.payload(source_path=moved, replace=True))
         with self.c.mutation("synthetic_fixture", {}) as (_, state):
-            del state["allocations"]["pf82-impl-01"]
+            state["allocations"]["pf82-impl-01"]["inputs"] = {"consumed": True}
+        self.refused("already has a consumed allocation",
+                     self.payload(source_path=moved, replace=True))
+        with self.c.mutation("synthetic_fixture", {}) as (_, state):
+            state["allocations"]["pf82-impl-01"]["inputs"] = {"task": "synthetic"}
+            state["actions"]["pf82-impl-01"] = {"id": "pf82-impl-01", "sprint": "PF82",
+                                                "workstream": "delivery", "status": "accepted",
+                                                "sequence": [0, 0]}
+        self.refused("already has actions", self.payload(source_path=moved, replace=True))
+        with self.c.mutation("synthetic_fixture", {}) as (_, state):
+            del state["actions"]["pf82-impl-01"]
             state["sprints"]["PF82"]["status"] = "in_progress"
-        self.refused("only an unstarted registered draft", self.payload(replace=True))
+        self.refused("only an unstarted registered draft",
+                     self.payload(source_path=moved, replace=True))
 
     def test_re_registration_refused_for_a_sprint_worked_only_in_archived_history(self):
         """state["actions"] is pruned, and an allocation id can be repointed."""
@@ -1167,7 +1183,7 @@ class SprintRegistrationTests(unittest.TestCase):
                                                    "workstream": "delivery",
                                                    "status": "accepted"})))
         self.assertEqual({}, self.c.snapshot()["actions"])
-        self.refused("already has allocations or actions", self.payload(replace=True))
+        self.refused("already has actions", self.payload(replace=True))
 
     def test_replace_flag_must_be_explicit_boolean(self):
         self.refused("explicit add/replace required", self.payload(replace=1))

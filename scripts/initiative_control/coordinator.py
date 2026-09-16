@@ -350,16 +350,22 @@ class Coordinator:
                 require(existing.get("workstream") == workstream
                         and existing.get("dependencies") == list(dependencies),
                         "re-registration may only correct the document reference")
-                # state["actions"] is pruned into action_history, and an
-                # allocation id can be repointed, so neither alone proves the
-                # sprint was never worked. Both are checked, plus the history.
+                # What disqualifies a repair is work, not preparation. An
+                # allocation that has never been dispatched is a frozen offer and
+                # says nothing about the sprint document. The guarantee is the
+                # action check: state["actions"] is pruned into action_history,
+                # which is the only deletion path, so both are scanned. The
+                # consumed marker is an owner convention rather than something
+                # dispatch writes, so it is a second line of defence only.
                 require(not any(action.get("sprint") == sprint_id
                                 for action in state["actions"].values())
-                        and not any(allocation.get("sprint") == sprint_id
-                                    for allocation in state["allocations"].values())
                         and not any(json.loads(row[0]).get("sprint") == sprint_id for row
                                     in db.execute("SELECT body FROM action_history")),
-                        "sprint already has allocations or actions")
+                        "sprint already has actions")
+                require(not any(allocation.get("sprint") == sprint_id
+                                and allocation["inputs"].get("consumed") is True
+                                for allocation in state["allocations"].values()),
+                        "sprint already has a consumed allocation")
             require(workstream in state["workstreams"], "unknown sprint workstream")
             self._unpaused(state, {"workstream": workstream})
             root, path, front, document_digest = self._sprint_document(repo, source_path)
