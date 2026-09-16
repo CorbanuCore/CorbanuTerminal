@@ -1,0 +1,44 @@
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                   │
+│                                                 │
+│ model:     fixture-model   /model to change     │
+│ directory: /Volumes/…/tui-snapshot-rot-20260916 │
+╰─────────────────────────────────────────────────╯
+
+
+› Improve documentation in @filename
+
+  fixture-model via pf54-primary default · /Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916 · Corbanu Terminal · TPS: -- t…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

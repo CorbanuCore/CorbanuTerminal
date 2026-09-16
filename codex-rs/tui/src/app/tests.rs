@@ -473,7 +473,8 @@ use tokio::time;
 macro_rules! assert_app_snapshot {
     ($name:expr, $value:expr $(,)?) => {
         insta::with_settings!({snapshot_path => "../snapshots"}, {
-            assert_snapshot!($name, $value);
+            let normalized = crate::status::snapshot_helpers::normalize_snapshot_version(&$value);
+            assert_snapshot!($name, normalized);
         });
     };
 }

@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/tests/guardian.rs
+assertion_line: 657
+expression: normalize_snapshot_paths(rendered)
+---
+• Reviewing approval request (0s • esc to interrupt)
+  └ rm -rf '/tmp/current-review'
+
+
+› Ask Corbanu Terminal to do anything
+
+  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Termina…
