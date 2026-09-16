@@ -4,6 +4,42 @@ use pretty_assertions::assert_eq;
 use serial_test::serial;
 
 #[tokio::test]
+async fn accounting_inspect_usability_child_watcher_keeps_input_blocked() {
+    for command in [
+        "/usage requests 2026-09-16",
+        "/usage reset",
+        "/compact",
+        "change the task",
+    ] {
+        let (mut chat, mut rx, mut ops) = make_chatwidget_manual(None).await;
+        chat.thread_id = Some(ThreadId::new());
+        drain_insert_history(&mut rx);
+        chat.set_parent_owned_thread();
+        chat.bottom_pane
+            .set_composer_text(command.into(), Vec::new(), Vec::new());
+        let draft = chat.bottom_pane.composer_draft_snapshot();
+        chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(chat.bottom_pane.composer_draft_snapshot(), draft);
+        assert!(chat.accounting_inspector.is_none());
+        assert!(ops.try_recv().is_err());
+        let mut messages = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            match event {
+                AppEvent::InsertHistoryCell(cell) => messages.push(
+                    cell.display_lines(150)
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                ),
+                other => panic!("unexpected watcher event: {other:?}"),
+            }
+        }
+        assert!(messages.join("\n").contains(PARENT_OWNED_INPUT_MESSAGE));
+    }
+}
+
+#[tokio::test]
 async fn accounting_inspect_command_without_account_auth() {
     let (mut chat, mut rx, mut ops) = make_chatwidget_manual(None).await;
     assert!(!chat.has_codex_backend_auth());
