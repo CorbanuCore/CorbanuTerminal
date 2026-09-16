@@ -957,6 +957,7 @@ fn range_pages(
             child
                 .text
                 .retain(|t| !t.starts_with("UTC admission interval:"));
+            child.text.splice(0..0, header.clone());
             for text in &mut child.text {
                 *text = text
                     .replace(
@@ -978,7 +979,6 @@ fn range_pages(
                     *text = format!("Bucket: {text}");
                 }
             }
-            child.text.splice(0..0, header.clone());
             child.parent = Some(child.parent.map_or(0, |p| p + offset));
             for (_, target) in &mut child.links {
                 *target += offset;
