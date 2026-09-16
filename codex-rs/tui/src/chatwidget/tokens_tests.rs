@@ -121,10 +121,108 @@ fn accounting_inspect_range_partial_no_amount_and_explicit_coverage() {
     Requested: [1970-01-01T00:00:00.001Z, 1970-01-01T01:00:00.000Z); timezone: UTC; grouping: Hour
     Oldest retained aggregate day (ledger): Some(0); 90-day drill-down cutoff: Some(0) ms UTC (exclusive)
     Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.
-    Unknown parent population: 0 inspectable attempts, excluded from range total
+    Range: Unknown parent population: 0 inspectable attempts, excluded from range total
     Range total unavailable — partial or unavailable buckets excluded; no partial total.
-    Effective aggregate retention coverage for [1970-01-01T00:00:00.000Z, 1970-01-01T01:00:00.000Z): [1970-01-01T00:00:00.001Z, 1970-01-01T01:00:00.000Z)
+    Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [1970-01-01T00:00:00.000Z, 1970-01-01T01:00:00.000Z): [1970-01-01T00:00:00.001Z, 1970-01-01T01:00:00.000Z)
     ");
+}
+
+#[test]
+fn accounting_inspect_range_coverage_names_intersection_for_request_and_retention_clips() {
+    let day_ms = 86_400_000;
+    for (requested_start, aggregate_floor, effective_start) in [(1, 0, 1), (0, 1, day_ms)] {
+        let pages = range_pages(
+            InspectionRange {
+                start_ms: requested_start,
+                end_ms: 31 * day_ms,
+                grouping: InspectionGrouping::Month,
+            },
+            Some(aggregate_floor),
+            31 * day_ms,
+            vec![codex_state::accounting::InspectionBucket {
+                start_ms: 0,
+                end_ms: 31 * day_ms,
+                effective: Some((effective_start, 31 * day_ms)),
+                partial: true,
+                days: vec![InspectionDay::DetailUnavailable {
+                    coverage: RetentionCoverage {
+                        completed_as_of_ms: 31 * day_ms,
+                        detail_expired_through_ms: None,
+                        aggregate_day_floor: aggregate_floor,
+                        oldest_recorded_day: Some(aggregate_floor),
+                    },
+                    read_at_ms: 31 * day_ms,
+                    compact: false,
+                }],
+            }],
+        );
+        let bounds = interval(0, 31 * day_ms);
+        let effective = interval(effective_start, 31 * day_ms);
+        assert!(pages[0].text.contains(&format!(
+            "Effective coverage (requested ∩ aggregate retention ∩ snapshot) for {bounds}: {effective}"
+        )));
+        let bucket = &pages[pages[0].links[0].1];
+        assert!(bucket.text.contains(&format!(
+            "Bucket: {bounds}; effective coverage (requested ∩ aggregate retention ∩ snapshot): {effective}"
+        )));
+        assert!(
+            !pages
+                .iter()
+                .flat_map(|p| &p.text)
+                .any(|s| s.contains("effective aggregate retention coverage")
+                    || s.contains("Effective aggregate retention coverage"))
+        );
+        assert!(
+            bucket
+                .text
+                .iter()
+                .any(|s| s == "Partial bucket — excluded from totals")
+        );
+    }
+}
+
+#[test]
+fn accounting_inspect_range_bucket_ancestry_counts_have_explicit_scopes() {
+    let mut buckets = Vec::new();
+    for index in 0..2 {
+        let InspectionDay::Ready(mut view) = breakdown_packet() else {
+            panic!()
+        };
+        view.unknown_parent_unavailable_threads = (index + 2) as usize;
+        buckets.push(codex_state::accounting::InspectionBucket {
+            start_ms: index * 3_600_000,
+            end_ms: (index + 1) * 3_600_000,
+            effective: Some((index * 3_600_000, (index + 1) * 3_600_000)),
+            partial: false,
+            days: vec![InspectionDay::Ready(view)],
+        });
+    }
+    let pages = range_pages(
+        InspectionRange {
+            start_ms: 0,
+            end_ms: 7_200_000,
+            grouping: InspectionGrouping::Hour,
+        },
+        None,
+        7_200_000,
+        buckets,
+    );
+    let bucket = &pages[pages[0].links[0].1];
+    let counts = bucket
+        .text
+        .iter()
+        .filter(|s| s.contains("Unknown parent population:") || s.contains("Unresolved ancestry:"))
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(
+        counts,
+        vec![
+            "Range: Unknown parent population: 2 inspectable attempts, excluded from range total",
+            "Range: Unresolved ancestry: 5 thread-slice entries have unavailable detail; their costs and retention coverage are unknown and excluded from this root.",
+            "Bucket: Unresolved ancestry: 2 thread-day entries have unavailable detail; their costs and retention coverage are unknown and excluded from this root.",
+            "Bucket: Unknown parent population: 1 attempts, excluded from root total",
+        ]
+    );
 }
 
 #[test]
@@ -147,7 +245,7 @@ fn accounting_inspect_range_aggregate_coverage_does_not_claim_raw_detail() {
     insta::assert_snapshot!(
         bucket.text.iter().filter(|s| s.starts_with("Bucket:") || s.starts_with("Whole bucket")).cloned().collect::<Vec<_>>().join("\n"),
         @"
-    Bucket: [1970-01-01T00:00:00.000Z, 1970-01-01T01:00:00.000Z); effective aggregate retention coverage: [1970-01-01T00:00:00.000Z, 1970-01-01T01:00:00.000Z)
+    Bucket: [1970-01-01T00:00:00.000Z, 1970-01-01T01:00:00.000Z); effective coverage (requested ∩ aggregate retention ∩ snapshot): [1970-01-01T00:00:00.000Z, 1970-01-01T01:00:00.000Z)
     Whole bucket within aggregate retention coverage; detail availability checked separately
     "
     );
@@ -181,15 +279,16 @@ fn accounting_inspect_range_overview_discloses_unknown_population_before_total()
     );
     let text = &pages[0].text;
     let total = text.iter().position(|s| s.contains("$0.000014")).unwrap();
-    let count = "Unknown parent population: 2 inspectable attempts, excluded from range total";
-    let note = "Unresolved ancestry: 5 thread-slice entries have unavailable detail; their costs and retention coverage are unknown and excluded from this root.";
+    let count =
+        "Range: Unknown parent population: 2 inspectable attempts, excluded from range total";
+    let note = "Range: Unresolved ancestry: 5 thread-slice entries have unavailable detail; their costs and retention coverage are unknown and excluded from this root.";
     assert!(text.iter().position(|s| s == count).unwrap() < total);
     assert!(text.iter().position(|s| s == note).unwrap() < total);
     insta::assert_snapshot!(
-        text.iter().filter(|s| s.starts_with("Unknown parent population:") || s.starts_with("Unresolved ancestry:")).cloned().collect::<Vec<_>>().join("\n"),
+        text.iter().filter(|s| s.starts_with("Range: Unknown parent population:") || s.starts_with("Range: Unresolved ancestry:")).cloned().collect::<Vec<_>>().join("\n"),
         @"
-    Unknown parent population: 2 inspectable attempts, excluded from range total
-    Unresolved ancestry: 5 thread-slice entries have unavailable detail; their costs and retention coverage are unknown and excluded from this root.
+    Range: Unknown parent population: 2 inspectable attempts, excluded from range total
+    Range: Unresolved ancestry: 5 thread-slice entries have unavailable detail; their costs and retention coverage are unknown and excluded from this root.
     "
     );
 }
@@ -202,10 +301,8 @@ fn accounting_inspect_range_breakdowns_and_navigation_reconcile() {
     assert_eq!(pages[bucket].parent, Some(0));
     for p in &pages[1..] {
         assert!(p.text.iter().any(|s| s.starts_with("Requested:")));
-        assert!(
-            p.text.iter().any(|s| s.starts_with("Bucket:")
-                && s.contains("effective aggregate retention coverage:"))
-        );
+        assert!(p.text.iter().any(|s| s.starts_with("Bucket:")
+            && s.contains("effective coverage (requested ∩ aggregate retention ∩ snapshot):")));
         assert!(
             !p.text
                 .iter()
