@@ -303,102 +303,168 @@ impl Journal<'_> {
             RetentionFixture::Absent => anyhow::bail!("missing retention schema"),
         };
         ensure!(read_at_ms >= checkpoint, "backward inspection read");
-        // The inherited retained reader validates the whole store. Bound its inputs
-        // before it deserializes any payload; no LIMIT-based partial total.
-        let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM draft_accounting_attempts")
-            .fetch_one(&mut *conn)
-            .await?;
-        if rows > 10_000 {
-            return Ok(InspectionDay::TooLarge);
-        }
-        let excessive: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM draft_accounting_observations GROUP BY attempt_id HAVING count(*) > 4096)",
-        ).fetch_one(&mut *conn).await?;
-        if excessive {
-            return Ok(InspectionDay::TooLarge);
-        }
-        // Conservative input budget also bounds historical estimate versions and
-        // unrelated retained data visited by the inherited whole-store validator.
-        let bytes: i64 = sqlx::query_scalar(
-            "SELECT coalesce(sum(n), 0) FROM (
-             SELECT length(CAST(payload AS BLOB)) AS n FROM draft_accounting_attempts UNION ALL
-             SELECT length(CAST(payload AS BLOB)) FROM draft_accounting_observations UNION ALL
-             SELECT length(CAST(payload AS BLOB)) FROM draft_accounting_price_snapshots UNION ALL
-             SELECT length(CAST(payload AS BLOB)) + length(CAST(evidence AS BLOB)) FROM draft_accounting_estimates UNION ALL
-             SELECT length(CAST(evidence AS BLOB)) FROM draft_accounting_contributions UNION ALL
-             SELECT length(CAST(payload AS BLOB)) FROM draft_accounting_compact_days UNION ALL
-             SELECT length(thread_id) + length(snapshot_id) + 8 FROM draft_accounting_compact_snapshots UNION ALL
-             SELECT length(attempt_id) + 8 FROM draft_accounting_tombstones)",
-        ).fetch_one(&mut *conn).await?;
-        if bytes > 4 * 1024 * 1024 {
-            return Ok(InspectionDay::TooLarge);
-        }
         if day > checkpoint / DAY_MS {
             return Ok(InspectionDay::CheckpointLag);
         }
+        let start = day.checked_mul(DAY_MS).context("day overflow")?;
+        let (lower, upper) = window.unwrap_or((start, start + DAY_MS));
+        // Unknown ownership cannot be silently filtered into a zero result.
+        let malformed: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM draft_accounting_attempts WHERE
+             json_type(payload, '$.thread_id') IS NOT 'text' OR
+             json_type(payload, '$.dispatched_at_ms') IS NOT 'integer')",
+        )
+        .fetch_one(&mut *conn)
+        .await?;
+        ensure!(!malformed, "invalid accounting ownership");
         let selected: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM draft_accounting_attempts WHERE json_extract(payload, '$.thread_id') = ? AND json_extract(payload, '$.dispatched_at_ms') / 86400000 = ?",
-        ).bind(owner.to_string()).bind(day).fetch_one(&mut *conn).await?;
+            "SELECT count(*) FROM draft_accounting_attempts WHERE json_extract(payload, '$.thread_id') = ?
+             AND json_extract(payload, '$.dispatched_at_ms') >= ? AND json_extract(payload, '$.dispatched_at_ms') < ?",
+        ).bind(owner.to_string()).bind(lower).bind(upper).fetch_one(&mut *conn).await?;
         if selected > 512 {
             return Ok(InspectionDay::TooLarge);
         }
-        // Validate original bindings and old estimates before freshness hides corruption.
-        let ids: Vec<String> =
-            sqlx::query_scalar("SELECT attempt_id FROM draft_accounting_attempts")
-                .fetch_all(&mut *conn)
-                .await?;
+        // Inspection does not invoke the whole-store retention planner. Validate
+        // only selected attempts and their original evidence in this read snapshot.
+        let ids: Vec<String> = sqlx::query_scalar(
+            "SELECT attempt_id FROM draft_accounting_attempts WHERE json_extract(payload, '$.thread_id') = ?
+             AND json_extract(payload, '$.dispatched_at_ms') >= ? AND json_extract(payload, '$.dispatched_at_ms') < ?
+             ORDER BY attempt_id",
+        ).bind(owner.to_string()).bind(lower).bind(upper).fetch_all(&mut *conn).await?;
+        let orphan: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM draft_accounting_contributions c
+             LEFT JOIN draft_accounting_attempts a ON a.attempt_id = c.attempt_id
+             WHERE c.thread_id = ? AND c.utc_day = ? AND (a.attempt_id IS NULL OR
+             json_extract(a.payload, '$.thread_id') != c.thread_id OR
+             json_extract(a.payload, '$.dispatched_at_ms') / 86400000 != c.utc_day))",
+        )
+        .bind(owner.to_string())
+        .bind(day)
+        .fetch_one(&mut *conn)
+        .await?;
+        ensure!(!orphan, "foreign contribution attribution");
+        let mut records = Vec::new();
+        let mut expected = DayTotals::default();
+        let mut stale = false;
+        let mut lag = false;
+        let mut materialized = 8192;
         for id in ids {
-            Self::inspect_quote_on_connection(conn, Uuid::parse_str(&id)?).await?;
+            // Bound selected payloads and the observation vector before decoding.
+            // Historical estimate versions are validated individually below.
+            let (observations, bytes): (i64, i64) = sqlx::query_as(
+                "SELECT (SELECT count(*) FROM draft_accounting_observations WHERE attempt_id = ?1),
+                 coalesce(max(n), 0) FROM (
+                 SELECT length(CAST(payload AS BLOB)) n FROM draft_accounting_attempts WHERE attempt_id = ?1 UNION ALL
+                 SELECT sum(length(CAST(payload AS BLOB))) FROM draft_accounting_observations WHERE attempt_id = ?1 UNION ALL
+                 SELECT length(CAST(evidence AS BLOB)) FROM draft_accounting_estimates WHERE attempt_id = ?1 UNION ALL
+                 SELECT length(CAST(payload AS BLOB)) FROM draft_accounting_estimates WHERE attempt_id = ?1 UNION ALL
+                 SELECT length(CAST(evidence AS BLOB)) FROM draft_accounting_contributions WHERE attempt_id = ?1 UNION ALL
+                 SELECT length(CAST(payload AS BLOB)) FROM draft_accounting_price_snapshots
+                 WHERE snapshot_id IN (SELECT snapshot_id FROM draft_accounting_price_bindings WHERE attempt_id = ?1))",
+            ).bind(&id).fetch_one(&mut *conn).await?;
+            if observations > 4096 || bytes > 4 * 1024 * 1024 {
+                return Ok(InspectionDay::TooLarge);
+            }
+            let uuid = Uuid::parse_str(&id)?;
+            ensure!(uuid.to_string() == id, "noncanonical attempt key");
+            let deleted: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM draft_accounting_tombstones WHERE attempt_id = ?)",
+            )
+            .bind(&id)
+            .fetch_one(&mut *conn)
+            .await?;
+            ensure!(!deleted, "raw/tombstone collision");
+            let (attempt, observations) = authority(conn, uuid).await?;
+            let binding = binding(conn, uuid)
+                .await?
+                .context("missing original binding")?;
+            // Keep corrupt old versions visible without collecting their combined
+            // evidence or refusing a small packet because it has a long history.
+            let mut after: Option<String> = None;
+            loop {
+                let evidence: Option<String> = sqlx::query_scalar(
+                    "SELECT evidence FROM draft_accounting_estimates WHERE attempt_id = ?1
+                     AND (?2 IS NULL OR evidence > ?2) ORDER BY evidence LIMIT 1",
+                )
+                .bind(&id)
+                .bind(&after)
+                .fetch_optional(&mut *conn)
+                .await?;
+                let Some(evidence) = evidence else { break };
+                EstimateStore::read_on_connection(conn, uuid, &evidence)
+                    .await?
+                    .context("missing retained estimate")?;
+                after = Some(evidence);
+            }
+            let quote = bound_quote(conn, &attempt, &observations, binding).await?;
+            let dispatch = i64::from(quote.attempt.dispatched_at_ms);
+            ensure!(dispatch <= checkpoint, "future dispatch");
+            if let Some(snapshot) = &quote.snapshot {
+                ensure!(
+                    i64::from(snapshot.observed_at_ms) <= checkpoint
+                        && i64::from(snapshot.approved_at_ms) <= checkpoint,
+                    "future snapshot evidence"
+                );
+            }
+            materialized += serde_json::to_vec(&quote)?.len() + 2048;
+            if materialized > 4 * 1024 * 1024 {
+                return Ok(InspectionDay::TooLarge);
+            }
+            let reference: Option<(String, i64, String)> = sqlx::query_as(
+                "SELECT thread_id, utc_day, evidence FROM draft_accounting_contributions WHERE attempt_id = ?",
+            ).bind(&id).fetch_optional(&mut *conn).await?;
+            let current = if let Some((thread, bucket, evidence)) = reference {
+                ensure!(
+                    thread == owner.to_string() && bucket == day,
+                    "contribution attribution mismatch"
+                );
+                if EstimateStore::read_on_connection(conn, uuid, &evidence)
+                    .await?
+                    .is_none()
+                {
+                    false
+                } else {
+                    evidence == serde_json::to_string(&quote.observations)?
+                }
+            } else {
+                false
+            };
+            lag |= dispatch <= checkpoint - 90 * DAY_MS;
+            stale |= !current && dispatch > checkpoint - 90 * DAY_MS;
+            expected.add(&quote)?;
+            records.push(quote);
         }
-        let missing: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM draft_accounting_contributions c LEFT JOIN draft_accounting_estimates e ON c.attempt_id = e.attempt_id AND c.evidence = e.evidence WHERE e.attempt_id IS NULL)",
-        ).fetch_one(&mut *conn).await?;
-        if missing {
+        if stale {
             return Ok(InspectionDay::NeedsRefresh);
         }
-        let retained = Self::retained_day_on_connection(conn, owner, day, checkpoint).await?;
-        let (coverage, expected) = match retained {
-            RetainedDay::Available {
-                coverage,
-                totals: Current::Ready(totals),
-            } => (coverage, totals),
-            RetainedDay::Expired(coverage) => {
-                return Ok(InspectionDay::DetailUnavailable {
-                    coverage,
-                    read_at_ms,
-                    compact: false,
-                });
-            }
-            RetainedDay::Available { .. } => return Ok(InspectionDay::NeedsRefresh),
-            RetainedDay::NeedsMaintenance { .. } => {
-                // Retention can stop before reporting raw-day freshness. Preserve
-                // that diagnostic for retained raw contributions in this day only.
-                for (attempt, observations) in owned_attempts(conn, owner).await? {
-                    let dispatch = i64::from(attempt.dispatched_at_ms);
-                    if dispatch / DAY_MS != day || dispatch <= checkpoint - 90 * DAY_MS {
-                        continue;
-                    }
-                    let evidence: Option<String> = sqlx::query_scalar(
-                        "SELECT evidence FROM draft_accounting_contributions WHERE attempt_id = ?",
-                    )
-                    .bind(attempt.attempt_id.to_string())
-                    .fetch_optional(&mut *conn)
-                    .await?;
-                    if evidence.as_deref() != Some(serde_json::to_string(&observations)?.as_str()) {
-                        return Ok(InspectionDay::NeedsRefresh);
-                    }
-                }
-                return Ok(InspectionDay::CheckpointLag);
-            }
-            RetainedDay::NeedsActivation => return Ok(InspectionDay::CheckpointLag),
+        if lag {
+            return Ok(InspectionDay::CheckpointLag);
+        }
+        let coverage = RetentionCoverage {
+            completed_as_of_ms: checkpoint,
+            detail_expired_through_ms: (checkpoint >= 90 * DAY_MS)
+                .then(|| checkpoint - 90 * DAY_MS),
+            aggregate_day_floor: if checkpoint < REPLAY_MS {
+                0
+            } else {
+                (checkpoint - REPLAY_MS) / DAY_MS + 1
+            },
+            oldest_recorded_day: sqlx::query_scalar(
+                "SELECT min(day) FROM (
+                 SELECT utc_day day FROM draft_accounting_compact_days WHERE thread_id = ?1
+                 UNION ALL SELECT json_extract(payload, '$.dispatched_at_ms') / 86400000
+                 FROM draft_accounting_attempts WHERE json_extract(payload, '$.thread_id') = ?1)",
+            )
+            .bind(owner.to_string())
+            .fetch_one(&mut *conn)
+            .await?,
         };
         let compact: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM draft_accounting_compact_days WHERE thread_id = ? AND utc_day = ?)",
         ).bind(owner.to_string()).bind(day).fetch_one(&mut *conn).await?;
-        let start = day.checked_mul(DAY_MS).context("day overflow")?;
-        let (lower, upper) = window.unwrap_or((start, start + DAY_MS));
         // A compact prefix cannot supply detail, but retained raw suffixes can.
-        if (compact && window.is_none())
+        if day < coverage.aggregate_day_floor
+            || (compact && window.is_none())
             || (read_at_ms >= 90 * DAY_MS && lower <= read_at_ms - 90 * DAY_MS)
         {
             return Ok(InspectionDay::DetailUnavailable {
@@ -407,35 +473,32 @@ impl Journal<'_> {
                 compact,
             });
         }
-        let records = owned_attempts(conn, owner).await?;
-        let selected = records
-            .iter()
-            .filter(|(a, _)| i64::from(a.dispatched_at_ms) / DAY_MS == day)
-            .count();
-        if selected > 512 {
-            return Ok(InspectionDay::TooLarge);
-        }
         let mut requests: BTreeMap<Uuid, Vec<ObservationQuote>> = BTreeMap::new();
         let mut totals = DayTotals::default();
         // Budget the packet header, totals, map keys and per-row containers too.
         let mut projected = 8192usize;
-        for (attempt, _) in records {
+        for quote in records {
+            let attempt = &quote.attempt;
             let dispatch = i64::from(attempt.dispatched_at_ms);
             if dispatch / DAY_MS != day || dispatch < lower || dispatch >= upper {
                 continue;
             }
             // Check logical ownership across days and threads, including retries.
-            let siblings: Vec<String> = sqlx::query_scalar(
-                "SELECT payload FROM draft_accounting_attempts WHERE request_id = ?",
-            )
-            .bind(attempt.request_id.to_string())
-            .fetch_all(&mut *conn)
-            .await?;
-            for payload in siblings {
-                ensure!(
-                    attempt.same_owner(&serde_json::from_str(&payload)?),
-                    "request owner mismatch"
-                );
+            let mut after = String::new();
+            loop {
+                // A logical request may have arbitrarily many cross-day retries.
+                // Validate one bounded payload at a time rather than collecting them.
+                let sibling: Option<(String, Option<String>)> = sqlx::query_as(
+                    "SELECT attempt_id, CASE WHEN length(CAST(payload AS BLOB)) <= 4194304 THEN payload END
+                     FROM draft_accounting_attempts WHERE request_id = ? AND attempt_id > ?
+                     ORDER BY attempt_id LIMIT 1",
+                ).bind(attempt.request_id.to_string()).bind(&after).fetch_optional(&mut *conn).await?;
+                let Some((id, payload)) = sibling else { break };
+                let sibling: Attempt =
+                    serde_json::from_str(&payload.context("oversized request identity")?)?;
+                sibling.validate()?;
+                ensure!(attempt.same_owner(&sibling), "request owner mismatch");
+                after = id;
             }
             let mut predecessor = attempt.retry_of;
             let mut seen = HashSet::from([attempt.attempt_id]);
@@ -447,7 +510,6 @@ impl Journal<'_> {
                 ensure!(attempt.same_owner(&parent), "retry owner mismatch");
                 predecessor = parent.retry_of;
             }
-            let quote = Self::inspect_quote_on_connection(conn, attempt.attempt_id).await?;
             projected = projected
                 .checked_add(serde_json::to_vec(&quote)?.len() + 2048)
                 .context("inspection size overflow")?;

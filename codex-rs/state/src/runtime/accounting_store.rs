@@ -428,11 +428,6 @@ async fn inspect_tree_window(
     .bind(day)
     .fetch_all(&mut *conn)
     .await?;
-    // Bound per-owner whole-store validation before inspecting any candidate.
-    // This is conservative even when some candidates resolve to unrelated roots.
-    if candidates.len() > 512 {
-        return Ok(InspectionDay::TooLarge);
-    }
     // Cache only ancestry visited by selected-day owners. A malformed source,
     // absent ancestor, conflict or cycle is an unknown population, never another root.
     let mut ancestry: BTreeMap<String, (Option<String>, bool)> = BTreeMap::new();
@@ -451,6 +446,8 @@ async fn inspect_tree_window(
         let mut cursor = candidate.clone();
         let mut seen = HashSet::new();
         let mut reached = false;
+        let mut discovered = Vec::new();
+        let previous_bytes = graph_bytes;
         let relation = loop {
             if !seen.insert(cursor.clone()) {
                 break None;
@@ -474,7 +471,9 @@ async fn inspect_tree_window(
                         .as_ref()
                         .and_then(SessionSource::parent_thread_id)
                         .map(|id| id.to_string());
-                    if source_parent.is_some() && edge != source_parent {
+                    if matches!(parsed.as_ref(), None | Some(SessionSource::Unknown))
+                        || (source_parent.is_some() && edge != source_parent)
+                    {
                         (None, false)
                     } else {
                         let terminal = matches!(
@@ -491,10 +490,8 @@ async fn inspect_tree_window(
                 } else {
                     (None, false)
                 };
+                discovered.push(cursor.clone());
                 ancestry.insert(cursor.clone(), (parent, terminal));
-                if ancestry.len() > 10_000 || packet_bytes + graph_bytes > 4 * 1024 * 1024 {
-                    return Ok(InspectionDay::TooLarge);
-                }
             }
             let (parent, terminal) = &ancestry[&cursor];
             match parent {
@@ -505,7 +502,15 @@ async fn inspect_tree_window(
             }
         };
         if relation == Some(false) {
+            // Unrelated roots cannot consume the selected ancestry/packet budget.
+            for key in discovered {
+                ancestry.remove(&key);
+            }
+            graph_bytes = previous_bytes;
             continue;
+        }
+        if ancestry.len() > 10_000 || packet_bytes + graph_bytes > 4 * 1024 * 1024 {
+            return Ok(InspectionDay::TooLarge);
         }
         let other = Journal::inspect_window_on_connection(
             conn,

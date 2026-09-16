@@ -500,6 +500,25 @@ async fn accounting_inspect_conflicting_and_missing_edges_are_unknown() -> anyho
 }
 
 #[tokio::test]
+async fn accounting_inspect_malformed_source_with_edge_is_unknown() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    tree_fixture(&runtime).await?;
+    // A surviving edge cannot make an unparseable source authoritative.
+    sqlx::query("UPDATE threads SET source = 'malformed' WHERE id = ?")
+        .bind(Uuid::from_u128(8).to_string())
+        .execute(runtime.pool.as_ref())
+        .await?;
+    let view = inspection(inspected(&runtime, 0, 0).await?);
+    assert_eq!(
+        (view.totals.attempts, view.unknown_parent_totals.attempts),
+        (1, 5)
+    );
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
 async fn accounting_inspect_descendant_stale_and_compact_refuse_tree_total() -> anyhow::Result<()> {
     for mutation in [
         "DELETE FROM draft_accounting_contributions WHERE attempt_id = '00000000-0000-0000-0000-000000000002'",
@@ -604,8 +623,10 @@ async fn accounting_inspect_candidate_cap_precedes_unavailable_candidates() -> a
     let runtime = open(&path).await?;
     tree_fixture(&runtime).await?;
     let mut tx = runtime.pool.begin().await?;
-    // Distinct unknown owners, each missing contributions. Reject the candidate
-    // population before repeated per-owner validation or unavailable-state handling.
+    let mut expected = inspection(inspected(&runtime, 0, 0).await?);
+    expected.unknown_parent_unavailable_threads += 512;
+    // Distinct unknown owners missing contributions remain unavailable unknowns;
+    // their count must not suppress the known root and descendant totals.
     for id in 20..532 {
         let mut a = attempt(id);
         a.thread_id = ThreadId::from_string(&Uuid::from_u128(id + 1000).to_string())?;
@@ -621,7 +642,10 @@ async fn accounting_inspect_candidate_cap_precedes_unavailable_candidates() -> a
             .await?;
     }
     tx.commit().await?;
-    assert_eq!(inspected(&runtime, 0, 0).await?, InspectionDay::TooLarge);
+    assert_eq!(
+        inspected(&runtime, 0, 0).await?,
+        InspectionDay::Ready(expected)
+    );
     runtime.close().await;
     Ok(())
 }
