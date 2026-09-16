@@ -49,8 +49,10 @@ updated: 2026-09-11
 
 - [x] Draft sprint created and linked to one feature; no implementation completed.
 - [x] Travis requested user-selected ranges and grouping intervals; recorded below without starting S03 or extending retention.
+- [x] 2026-09-15 `acct-inspect-impl-01` verified its frozen brief and launch checkout, then stopped before code: this sprint remains draft with a placeholder base and the active plan omits its inspection coordinates. [Stopped return and all 34 case dispositions](../../../../qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inspect-impl-01-return.md); no implementation or functional acceptance claimed.
 
 ## Remaining
+- [ ] Fable reconciles S03-A allocation and exact worktree/branch/base in the active plan and this sprint, records executable status, reruns both governance checkers and redispatches; the active plan is outside `acct-inspect-impl-01` writable scope.
 - [ ] Three TUI paths in the write scope overlap PF-83-S01 and were **released to this lane on 2026-09-15** because no PF-83 action held them: codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/app/tests.rs. The release is recorded in that sprint. Re-check before launch rather than relying on this line, since PF-83 may re-reserve.
 - [ ] **Inherited from PF-60-S02 at its archival, transferred rather than discharged:** Corbanu plan gateway economics, startup prewarm, auxiliary collection, legacy evidence acquisition and complete application coverage all remain unqualified, and anonymous 365-day fencing is not permanent. Six leaky markers remain across the accounting suite (two in `accounting::policy_tests`, three in `accounting_anthropic`, one in `accounting_chat_native_mismatched_endpoint`); the three diagnosed in `acct-cleanup-04` showed no concrete fixture defect and were deliberately left rather than given speculative cleanup. Also inherited: the one disclosed review P3, that the provider-publication regression pins ordering against contributor emission rather than against the state lock.
 
