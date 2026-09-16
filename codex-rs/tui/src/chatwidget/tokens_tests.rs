@@ -71,6 +71,7 @@ fn packet() -> InspectionDay {
         own_totals: DayTotals::from_quotes([&q]).unwrap(),
         descendant_totals: DayTotals::default(),
         unknown_parent_totals: DayTotals::default(),
+        unknown_parent_unavailable_threads: 0,
         unknown_parent_requests: Default::default(),
         requests: std::collections::BTreeMap::from([(q.attempt.request_id, vec![q])]),
     })
@@ -572,6 +573,50 @@ fn accounting_inspect_rendered_tree_and_provider_model_reconcile() {
         }
     }
     insta::assert_snapshot!(pages.iter().filter(|p| p.title.starts_with("Provider:") || p.title.ends_with("attempts")).map(|p| format!("{}\n{}", p.title, p.text.iter().filter(|s| s.starts_with("Estimated token cost") || s.starts_with("Known estimate exact") || s.starts_with("Recorded attempts:")).cloned().collect::<Vec<_>>().join("\n"))).collect::<Vec<_>>().join("\n"), @"Root's own attempts\nEstimated token cost for recorded attempts: $0.000001\nRecorded attempts: 1\nKnown estimate exact USD: 0.000001\nDescendant attempts\nEstimated token cost for recorded attempts: $0.000006\nRecorded attempts: 2\nKnown estimate exact USD: 0.000006\nProvider: unknown (attribution absent); Model: unknown (attribution absent)\nEstimated token cost for recorded attempts: $0.000004\nRecorded attempts: 1\nKnown estimate exact USD: 0.000004\nProvider: alpha; Model: one\nEstimated token cost for recorded attempts: $0.000001\nRecorded attempts: 1\nKnown estimate exact USD: 0.000001\nProvider: alpha; Model: two\nEstimated token cost for recorded attempts: $0.000002\nRecorded attempts: 1\nKnown estimate exact USD: 0.000002");
+}
+
+#[test]
+fn accounting_inspect_group_partial_price_stays_unknown() {
+    let InspectionDay::Ready(mut view) = breakdown_packet() else {
+        unreachable!()
+    };
+    view.requests.get_mut(&Uuid::from_u128(102)).unwrap()[0].all_buckets_priced = None;
+    view.totals = DayTotals::from_quotes(view.requests.values().flatten()).unwrap();
+    view.descendant_totals.unknown_estimates = 1;
+    let pages = inspection_pages(Ok(InspectionDay::Ready(view)));
+    for title in ["Descendant attempts", "Provider: alpha; Model: two"] {
+        let page = pages.iter().find(|p| p.title == title).unwrap();
+        assert!(
+            page.text.iter().any(|s| s.contains("+ unknown costs")),
+            "{title}"
+        );
+        assert!(
+            page.text
+                .iter()
+                .any(|s| s.starts_with("Full recorded estimate: unavailable")),
+            "{title}"
+        );
+    }
+}
+
+#[test]
+fn accounting_inspect_unknown_unavailable_note() {
+    let InspectionDay::Ready(mut view) = packet() else {
+        unreachable!()
+    };
+    view.unknown_parent_unavailable_threads = 3;
+    let pages = inspection_pages(Ok(InspectionDay::Ready(view)));
+    let unknown = pages
+        .iter()
+        .find(|p| p.title == "Unknown parent population")
+        .unwrap();
+    let note = "Unresolved ancestry: 3 threads have unavailable day detail; their costs and retention coverage are unknown and excluded from this root.";
+    assert!(pages[0].text.iter().any(|s| s == note));
+    assert!(unknown.text.iter().any(|s| s == note));
+    insta::assert_snapshot!(unknown.text.iter().filter(|s| s.starts_with("Unresolved ancestry:") || s.starts_with("Estimates below")).cloned().collect::<Vec<_>>().join("\n"), @"
+    Unresolved ancestry: 3 threads have unavailable day detail; their costs and retention coverage are unknown and excluded from this root.
+    Estimates below cover inspectable attempts only; unavailable threads may have additional unknown costs.
+    ");
 }
 
 #[test]

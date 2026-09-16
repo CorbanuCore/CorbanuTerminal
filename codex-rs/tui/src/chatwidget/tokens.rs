@@ -673,6 +673,15 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
         "Membership in this root is unknown. These attempts are separate from root and descendant totals; they may belong to other runs.".into(),
         format!("Recorded attempts with unresolved ancestry: {}", u.attempts),
     ];
+    if ready.unknown_parent_unavailable_threads > 0 {
+        let note = format!(
+            "Unresolved ancestry: {} threads have unavailable day detail; their costs and retention coverage are unknown and excluded from this root.",
+            ready.unknown_parent_unavailable_threads
+        );
+        pages[0].text.push(note.clone());
+        text.push(note);
+        text.push("Estimates below cover inspectable attempts only; unavailable threads may have additional unknown costs.".into());
+    }
     text.extend(estimate(u.known_usd, u.unknown_estimates, u.attempts));
     text.extend(
         context

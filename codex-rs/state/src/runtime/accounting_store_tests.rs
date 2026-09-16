@@ -535,6 +535,98 @@ async fn accounting_inspect_descendant_stale_and_compact_refuse_tree_total() -> 
 }
 
 #[tokio::test]
+async fn accounting_inspect_unknown_unavailable_preserves_root() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    tree_fixture(&runtime).await?;
+    let mut expected = inspection(inspected(&runtime, 0, 0).await?);
+    expected.unknown_parent_requests.clear();
+    expected.unknown_parent_totals = DayTotals::default();
+    expected.unknown_parent_unavailable_threads = 3;
+    // Orphan and both cycle members have unavailable contributions.
+    for id in [4, 6, 7] {
+        sqlx::query("DELETE FROM draft_accounting_contributions WHERE attempt_id = ?")
+            .bind(Uuid::from_u128(id).to_string())
+            .execute(runtime.pool.as_ref())
+            .await?;
+    }
+    let before = rows(&runtime).await?;
+    assert_eq!(
+        inspected(&runtime, 0, 0).await?,
+        InspectionDay::Ready(expected)
+    );
+    assert_eq!(rows(&runtime).await?, before);
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_unknown_compact_preserves_root_coverage() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    tree_fixture(&runtime).await?;
+    let mut expected = inspection(inspected(&runtime, 0, 0).await?);
+    expected
+        .unknown_parent_requests
+        .remove(&attempt(4).request_id);
+    expected.unknown_parent_totals =
+        DayTotals::from_quotes(expected.unknown_parent_requests.values().flatten())?;
+    expected.unknown_parent_unavailable_threads = 1;
+    // Synthetic compact evidence isolates attribution loss from the global age cutoff.
+    let compact = json!({"version": 1, "known": vec![0; 7], "unknown": vec![1; 7],
+        "known_usd": "0", "unknown_estimates": 1, "attempts": 1})
+    .to_string();
+    for owner in [10, 8] {
+        sqlx::query("INSERT INTO draft_accounting_compact_days VALUES (?, 0, ?)")
+            .bind(Uuid::from_u128(owner).to_string())
+            .bind(&compact)
+            .execute(runtime.pool.as_ref())
+            .await?;
+        let before = rows(&runtime).await?;
+        let result = inspected(&runtime, 0, 0).await?;
+        if owner == 10 {
+            assert_eq!(inspection(result), expected);
+        } else {
+            assert!(matches!(
+                result,
+                InspectionDay::DetailUnavailable { compact: true, .. }
+            ));
+        }
+        assert_eq!(rows(&runtime).await?, before);
+    }
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_candidate_cap_precedes_unavailable_candidates() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    tree_fixture(&runtime).await?;
+    let mut tx = runtime.pool.begin().await?;
+    // Distinct unknown owners, each missing contributions. Reject the candidate
+    // population before repeated per-owner validation or unavailable-state handling.
+    for id in 20..532 {
+        let mut a = attempt(id);
+        a.thread_id = ThreadId::from_string(&Uuid::from_u128(id + 1000).to_string())?;
+        sqlx::query("INSERT INTO draft_accounting_attempts VALUES (?, ?, ?)")
+            .bind(a.attempt_id.to_string())
+            .bind(a.request_id.to_string())
+            .bind(serde_json::to_string(&a)?)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("INSERT INTO draft_accounting_price_bindings VALUES (?, NULL)")
+            .bind(a.attempt_id.to_string())
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    assert_eq!(inspected(&runtime, 0, 0).await?, InspectionDay::TooLarge);
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
 async fn accounting_inspect_tree_lineage_and_cost_share_one_snapshot() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;

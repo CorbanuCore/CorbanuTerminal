@@ -40,6 +40,8 @@ pub struct Inspection {
     pub own_totals: DayTotals,
     pub descendant_totals: DayTotals,
     pub unknown_parent_totals: DayTotals,
+    /// Unresolved owners whose day could not be inspected; no amount or coverage inferred.
+    pub unknown_parent_unavailable_threads: usize,
     pub unknown_parent_requests: std::collections::BTreeMap<uuid::Uuid, Vec<ObservationQuote>>,
     pub requests: std::collections::BTreeMap<uuid::Uuid, Vec<ObservationQuote>>,
 }
@@ -281,6 +283,11 @@ async fn inspect_tree(
     .bind(day)
     .fetch_all(&mut *conn)
     .await?;
+    // Bound per-owner whole-store validation before inspecting any candidate.
+    // This is conservative even when some candidates resolve to unrelated roots.
+    if candidates.len() > 512 {
+        return Ok(InspectionDay::TooLarge);
+    }
     // Cache only ancestry visited by selected-day owners. A malformed source,
     // absent ancestor, conflict or cycle is an unknown population, never another root.
     let mut ancestry: BTreeMap<String, (Option<String>, bool)> = BTreeMap::new();
@@ -363,6 +370,10 @@ async fn inspect_tree(
         )
         .await?;
         let InspectionDay::Ready(other) = other else {
+            if relation.is_none() {
+                view.unknown_parent_unavailable_threads += 1;
+                continue;
+            }
             return Ok(other);
         };
         attempts = attempts

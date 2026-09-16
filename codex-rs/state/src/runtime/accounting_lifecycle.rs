@@ -451,6 +451,7 @@ impl Journal<'_> {
             own_totals: totals.clone(),
             descendant_totals: DayTotals::default(),
             unknown_parent_totals: DayTotals::default(),
+            unknown_parent_unavailable_threads: 0,
             unknown_parent_requests: BTreeMap::new(),
             totals,
             requests,
