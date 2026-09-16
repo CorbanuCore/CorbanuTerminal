@@ -53,6 +53,72 @@ class SendTests(unittest.TestCase):
         return {str(p.relative_to(self.state)): p.read_bytes()
                 for p in self.state.rglob("*") if p.is_file()}
 
+    def test_historical_pf76_provenance_is_refused_with_reason(self):
+        fixture = json.loads((control.HERE / "fixtures/recovery-old-state.json").read_text())
+        historical = {**fixture["report"], "source_namespace": fixture["source_namespace"]}
+        before = self.snapshot()
+        with self.assertRaisesRegex(ValueError, "historical delivery-control provenance"):
+            tasknode.enqueue(self.state, historical)
+        self.assertEqual(self.snapshot(), before)
+        for namespace in (None, "", "unknown", fixture["source_namespace"]):
+            with self.subTest(namespace=namespace):
+                value = {**fixture["report"]}
+                if namespace is not None:
+                    value["source_namespace"] = namespace
+                with self.assertRaises(ValueError):
+                    tasknode.enqueue(self.state, value)
+                event = tasknode.event_for(fixture["report"], "fixture-workspace", ["fixture-task"], 0)
+                path = self.state / "outbox" / (event["id"] + ".json")
+                record = dict(event=event, status="blocked", attempts=0,
+                              next_attempt_at=control.now(), source_namespace=namespace)
+                control.atomic_json(path, record)
+                original = path.read_bytes()
+                self.assertIn("historical_source_reconciliation_required",
+                              tasknode.prepare(self.state, event["id"])["blockers"])
+                with self.assertRaises(ValueError):
+                    tasknode.retry(self.state, event["id"])
+                self.assertEqual(path.read_bytes(), original)
+        record["status"] = "pending"
+        control.atomic_json(path, record)
+        original = path.read_bytes()
+        self.config["tasknode"]["enabled"] = True
+        control.atomic_json(self.state / "control.json", self.config)
+        self.record_path.unlink()  # Leave only the synthetic historical record.
+        self.assertEqual(tasknode.flush(self.state, {}, self.transport), 0)
+        self.transport.assert_not_called()
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_modern_pf76_provenance_reaches_mapping(self):
+        modern = {**run(), "sprint_id": "PF-76-S01",
+                  "source_namespace": "main-provider-profile-persistence"}
+        self.config["tasknode"]["task_mappings"]["PF-76-S01"] = ["provider-task"]
+        control.atomic_json(self.state / "control.json", self.config)
+        control.report(self.state, modern)
+        event_id = tasknode.enqueue(self.state, modern)
+        self.assertEqual(tasknode.enqueue(self.state, modern), event_id)
+        path = self.state / "outbox" / (event_id + ".json")
+        record = control.read_json(path, self.state)
+        self.assertEqual(record["source_namespace"], modern["source_namespace"])
+        self.assertEqual(record["event"]["taskIds"], ["provider-task"])
+        self.assertEqual(record["event"]["turnId"], "PF-76-S01")
+        self.assertNotIn("source_namespace", record["event"])
+        preview = tasknode.prepare(self.state, event_id)
+        self.assertNotIn("historical_source_reconciliation_required", preview["blockers"])
+        self.assertIn("posting_disabled", preview["blockers"])
+        record["status"] = "blocked"
+        control.atomic_json(path, record)
+        tasknode.retry(self.state, event_id)
+        self.assertEqual(control.read_json(path, self.state)["status"], "pending")
+        with self.assertRaisesRegex(ValueError, "live writeback disabled"):
+            tasknode.flush(self.state, {}, self.transport)
+        self.transport.assert_not_called()
+        self.config["tasknode"]["enabled"] = True
+        control.atomic_json(self.state / "control.json", self.config)
+        self.record_path.unlink()
+        self.transport.return_value = (200, {"ok": True, "id": event_id})
+        self.assertEqual(tasknode.flush(self.state, {}, self.transport), 1)
+        self.assertEqual(self.transport.call_args.args[1]["event"]["taskIds"], ["provider-task"])
+
     def test_dry_run_is_read_only_and_selects_one_from_batch(self):
         for i in range(25):
             tasknode.enqueue(self.state, {**run(), "run_id": f"fixture-{i}"})

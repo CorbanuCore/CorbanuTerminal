@@ -21,7 +21,7 @@ import uuid
 
 from markdown_it import MarkdownIt
 from activity import latest_reports, presentation
-from attention import notices
+from attention import LEGACY, UNKNOWN_PROVENANCE, notices
 from facilities import facilities
 import decision_feed
 
@@ -30,9 +30,22 @@ MAX_FILE = 1024 * 1024
 STALE_SECONDS = 45 * 60
 RUN_STATUSES = {"working", "blocked", "awaiting_review", "finished", "failed", "cancelled"}
 # Recovery delivery control and main provider persistence share this raw ID.
-# Hold ambiguous reports in place; never join them to main's provider plan.
+# Missing or unrecognized provenance stays held; never infer it from the mapping.
 LEGACY_DELIVERY_SPRINT = "PF-76-S01"
+PROVIDER_PROFILE_SOURCE = "main-provider-profile-persistence"
+
 SECRET = re.compile(r"(?i)(?:bearer\s+\S+|(?:password|api[_ -]?key|access[_ -]?token|refresh[_ -]?token|secret)\s*[:=]\s*\S+|-----BEGIN .*PRIVATE KEY-----|\b(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]{12,})")
+
+
+def delivery_hold(sprint_id, record):
+    if sprint_id != LEGACY_DELIVERY_SPRINT:
+        return None
+    namespace = record.get("source_namespace")
+    if namespace == PROVIDER_PROFILE_SOURCE:
+        return None
+    if namespace == "synthetic-recovery-delivery-control":
+        return "historical delivery-control provenance requires source reconciliation"
+    return "missing or unrecognized PF-76-S01 provenance requires source reconciliation"
 
 
 def now():
@@ -126,8 +139,8 @@ def collect_references(repo, config, hashes):
 
 def checked_run(value):
     required = {"run_id", "sprint_id", "machine", "role", "agent", "session_id", "status", "summary", "updated_at", "commit", "branch", "worktree"}
-    if not isinstance(value, dict) or set(value) != required:
-        raise ValueError("run report must have exactly the documented fields")
+    if not isinstance(value, dict) or set(value) not in (required, required | {"source_namespace"}):
+        raise ValueError("run report must have exactly the documented fields (optional source_namespace)")
     for field, text in value.items():
         safe_text(text, 2000 if field == "summary" else 300)
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}", value["run_id"]):
@@ -295,8 +308,8 @@ def collect(repo, state):
     for path in paths:
         try:
             value = checked_run(read_json(path, state))
-            if value["sprint_id"] == LEGACY_DELIVERY_SPRINT:
-                problems.append("PF-76-S01 history held for source reconciliation; not assigned to a main initiative.")
+            if delivery_hold(value["sprint_id"], value):
+                problems.append(LEGACY if value.get("source_namespace") == "synthetic-recovery-delivery-control" else UNKNOWN_PROVENANCE)
                 continue
             if value["sprint_id"] not in known:
                 raise ValueError("unknown sprint")

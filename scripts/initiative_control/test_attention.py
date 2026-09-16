@@ -1,4 +1,5 @@
 import copy
+import tempfile
 import unittest
 from html.parser import HTMLParser
 from pathlib import Path
@@ -57,6 +58,31 @@ class AttentionTests(unittest.TestCase):
         page = self.render([attention.issue("PF-76-S01 validation failed")])
         self.assertIn(attention.document_url(self.sprints[1]["path"]), page)
         self.assertNotIn(attention.document_url(attention.HISTORY), page)
+        import control
+        import export
+        from test_control import run
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state, exported = Path(tmp) / "state", Path(tmp) / "export"
+            control.atomic_json(state / "control.json", {"human_tests": [], "tasknode": {"enabled": False}})
+            modern = {**run(), "sprint_id": "PF-76-S01",
+                      "source_namespace": "main-provider-profile-persistence"}
+            control.report(state, modern)
+            control.report(state, {**modern, "run_id": "historical",
+                                  "source_namespace": "synthetic-recovery-delivery-control"})
+            control.report(state, {**run(), "run_id": "unknown", "sprint_id": "PF-76-S01"})
+            export.export(control.HERE.parents[1], state, exported)
+            data = control.collect(exported / "source", state)
+            self.assertEqual(data["runs"], [modern])
+            self.assertEqual(data["problems"].count(attention.LEGACY), 1)
+            self.assertEqual(data["problems"].count(attention.UNKNOWN_PROVENANCE), 1)
+            self.assertEqual(len(data["problems"]), 2)
+            page = attention.notices(data)
+            self.assertIn(attention.document_url(attention.HISTORY), page)
+            provider = "docs/sprints/current/p0-security-levels/pf-76-s01-provider-profile-persistence.md"
+            self.assertNotIn(attention.document_url(provider), page)
+            unknown = attention.issue(attention.UNKNOWN_PROVENANCE)
+            self.assertIn("provenance unresolved", unknown["summary"])
 
     def test_explicit_question_is_read_only_and_all_its_refs_are_linked(self):
         item = attention.issue("PF-80-S01 test decision")
