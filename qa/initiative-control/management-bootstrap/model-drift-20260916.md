@@ -45,9 +45,28 @@ sessions were checked immediately:
 | --- | --- | --- |
 | `pf83d15` | `gpt-6-astra` | OK |
 | `pf83d17` | `gpt-6-astra`, `gpt-5.6-luna` | **DRIFT** |
+| `pf83d18` | `gpt-6-astra`, `gpt-5.6-luna` | **DRIFT**, after I wrongly resumed |
 
 The drifted action is failed, not accepted. It produced nothing, so nothing has
 to be unwound, which is luck rather than design.
+
+## I then drew the wrong conclusion, twice over
+
+Rather than idle, I probed: a short `corbanu exec` run with `--model gpt-6-astra`
+completed normally and its rollout records astra only. I took that as evidence
+the limit was transient, published that on the decision, and resumed dispatch.
+
+The next dispatch drifted immediately, in the same way. The probe was not a probe
+of the thing that was failing. `corbanu exec` is non-interactive; dispatch
+launches the **TUI**, and it is the TUI that downgrades. I tested the path that
+works and concluded about the path that does not.
+
+The useful residue is that the account is not hard-limited: an 18,000-token astra
+run went through while the TUI was refusing to stay on astra. Whatever is
+happening is a choice made in the interactive path, not an outright refusal from
+the service — which is worth knowing and which I would not have learned without
+the probe. But it did not license resuming, and resuming cost a second failed
+dispatch.
 
 ## What needs Travis
 
