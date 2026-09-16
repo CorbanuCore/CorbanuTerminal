@@ -87,7 +87,7 @@ Port/preparation/engine/adapter/reconciliation are reviewed and integrated local
 ## Verification
 - [ ] Apply [independent isolated execution](../../../../qa/code-blind-functional/isolated-execution.md) to affected functional handoff; record schema-2 proof or integrator-accepted internal-only N/A and later gate. Historical tests are not upgraded.
 - [x] Focused suite in a disposable venv with only pinned requirements, as this gate specifies: **689 of 689, OK**. The venv mattered - running it in a convenient pre-existing venv gave 518 tests and 5 import errors, so 171 tests were never running and I reported the gap as 'five known errors' all day. [Correction](../../../../qa/initiative-control/management-bootstrap/suite-venv-20260916.md).
-- [ ] Native: session_validity plus existing delivery/recovery selectors, full crate via just test and normal-library check after guarded formatting; production-compiled private module, no public caller.
+- [ ] Native: session_validity plus delivery/recovery selectors pass 55/55 and the full crate passes inside the 553/553 union, both run today. Left unchecked deliberately: the gate also requires the normal-library check after guarded formatting and a production-compiled private module with no public caller, and I have not established those.
 - [x] Governance: `python3 docs/plans/check.py` and `python3 docs/sprints/check.py` pass, `git diff --check` clean, verified on the integration tip.
 - [ ] Independent final-tree review and source manifest; inspect any registration/config changes before integration.
 - [ ] Actual-key native `/tasknode` success/cancel/expiry/relink if interactive runtime changes; otherwise record not applicable with reason.
