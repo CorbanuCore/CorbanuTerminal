@@ -261,6 +261,98 @@ class Coordinator:
             self._event(db, {"id": f"{operation}:{expected_revision}",
                              **details, "evidence": self._reference(db, audit)})
 
+    @staticmethod
+    def _sprint_document(source_path):
+        require(isinstance(source_path, str) and source_path.strip(), "sprint source_path required")
+        try:
+            path = Path(source_path).resolve(strict=True)
+            require(path.is_file(), "sprint source_path must be a regular file")
+            body = path.read_bytes()
+            require(len(body) <= 262144, "sprint document too large")
+            text = body.decode("utf-8")
+        except (OSError, ValueError) as exc:
+            raise Rejected("sprint source_path unreadable") from exc
+        front = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", text, re.DOTALL)
+        require(front is not None, "sprint front matter required")
+        fields = {}
+        for line in front[1].splitlines():
+            match = re.fullmatch(r"([a-z][a-z0-9_-]*):[ \t]*(.*?)", line)
+            require(match is not None, "invalid sprint front matter")
+            key, value = match.groups()
+            require(key not in fields, "duplicate sprint front matter key")
+            value = value.strip()
+            if value.startswith('"'):
+                try:
+                    value = json.loads(value)
+                except ValueError as exc:
+                    raise Rejected("invalid sprint scalar") from exc
+            elif value.startswith("'"):
+                require(value.endswith("'") and len(value) >= 2, "invalid sprint scalar")
+                value = value[1:-1].replace("''", "'")
+            require(isinstance(value, str), "invalid sprint scalar")
+            fields[key] = value
+        return str(path), fields, hashlib.sha256(body).hexdigest()
+
+    def register_sprint(self, sprint_id, workstream, dependencies, status, source_path,
+                        expected_revision, evidence):
+        """Owner-only add; validate the document, never activate or replace a sprint.
+
+        Repository sprint documents identify their workstream through plan_file.
+        An explicit workstream field, when present, must agree too.
+        """
+        ident(sprint_id)
+        ident(workstream)
+        require(status == "draft", "registered sprint must start as draft")
+        require(isinstance(dependencies, list) and all(isinstance(d, str) for d in dependencies)
+                and len(set(dependencies)) == len(dependencies), "invalid sprint dependencies")
+        for dependency in dependencies:
+            ident(dependency)
+        with self.owner_mutation("owner_register_sprint", expected_revision, evidence,
+                                 sprint=sprint_id) as (db, state):
+            require(sprint_id not in state["sprints"], "sprint already registered")
+            require(workstream in state["workstreams"], "unknown sprint workstream")
+            self._unpaused(state, {"workstream": workstream})
+            path, front, document_digest = self._sprint_document(source_path)
+            plans = {
+                "security": "docs/plans/active/p0-security-levels.md",
+                "accounting": "docs/plans/active/portfolio-agent-cost-accounting.md",
+                "delivery": "docs/plans/active/initiative-delivery-control.md",
+            }
+            require(front.get("sprint_id") == sprint_id, "sprint document id mismatch")
+            require(workstream in plans and front.get("plan_file") == plans[workstream]
+                    and front.get("workstream", workstream) == workstream,
+                    "sprint document workstream mismatch")
+            require(front.get("status") == status, "sprint document status mismatch")
+            require("depends_on" in front, "sprint document dependencies missing")
+            declared = front["depends_on"]
+            declared = [] if declared.lower() == "none" else [d.strip() for d in declared.split(",")]
+            require(declared == dependencies, "sprint document dependencies mismatch")
+            require(sprint_id not in dependencies, "dependency cycle")
+            require(all(d in state["sprints"] for d in dependencies), "unknown dependency")
+            record = {"workstream": workstream, "status": status, "dependencies": list(dependencies),
+                      "archived": False, "source_path": path}
+            state["sprints"][sprint_id] = record
+            # Validate the whole graph, including any malformed legacy component.
+            visited, visiting = set(), set()
+            def visit(key):
+                require(key not in visiting, "dependency cycle")
+                if key in visited:
+                    return
+                visiting.add(key)
+                for dependency in state["sprints"][key]["dependencies"]:
+                    require(dependency in state["sprints"], "unknown dependency")
+                    visit(dependency)
+                visiting.remove(key)
+                visited.add(key)
+            for key in state["sprints"]:
+                visit(key)
+            self._reservations(state)
+            receipt = self._reference(db, {"sprint_id": sprint_id, "record": record,
+                "document_sha256": document_digest, "revision": expected_revision + 1,
+                "evidence": evidence})
+            record["registration"] = receipt
+        return receipt
+
     def put_allocation(self, allocation_id, allocation, replace, expected_revision, evidence):
         require(type(replace) is bool, "explicit add/replace required")
         with self.owner_mutation("owner_allocation", expected_revision, evidence,

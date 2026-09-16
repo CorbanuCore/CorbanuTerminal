@@ -1152,3 +1152,145 @@ The four changed paths are within this allocation, and the prior evidence file
 contents remain byte-for-byte intact. The commit hash is in the worker RETURN.
 D09/D14's implementation-scope blockers are resolved; the functional acceptance
 and recurrence gates above remain separate and open.
+
+## Sprint registration repair — coordinator-sprint-registration-01
+
+The [S02 archival divergence](s02-archival-divergence-20260915.md) exposed a
+missing owner operation: a documented successor could not enter coordinator
+state after initialization. Unknown-sprint dispatch correctly refused it.
+This bounded reliability fix restores sequential sprint bookkeeping under
+PF-80-S01 (in_progress), active plan **initiative-delivery-control**.
+Product heading: **Internal delivery control — TO BUILD**; excerpt:
+“durable event dispatch, acknowledgments and watchdog”.
+It retains the existing owner, activation, pause and reservation boundaries.
+
+Frozen assignment: Astra High, branch `bootstrap/owner-daemon-c-20260915`,
+worktree `/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-owner-daemon-c-20260915`,
+base `55130a9b577529338b17e6a69adcb91a5cbc375c`.
+Allocation digest:
+`f98b606c6f5c56a2c640d6ca938cf38a15294bd94a381bf5763b771fe43b3fff`.
+Brief SHA-256 verified before reading:
+`5575f6dea21bc09fa8041053a079ffaa1787ba14d52e6613db2d5d92d78f6947`.
+
+### API and refusal contract
+
+Owner Python API (the CLI allowlist is outside this allocation):
+
+```python
+Coordinator.register_sprint(
+    sprint_id, workstream, dependencies, status, source_path,
+    expected_revision, evidence,
+)
+```
+
+The operation uses `owner_mutation("owner_register_sprint", ...)`, atomically
+adds one draft/unarchived row, increments revision, emits an event and audit,
+and returns a retrievable evidence reference. Registration evidence pins the
+resolved absolute source filename, exact document SHA-256, row, revision and
+owner evidence. It neither changes the workstream's current sprint nor supplies
+successor activation authority. Existing records, allocations and modes remain.
+
+Repository sprint front matter identifies its workstream by `plan_file`;
+the three existing mappings are security → p0-security-levels, accounting →
+portfolio-agent-cost-accounting, delivery → initiative-delivery-control, under
+`docs/plans/active/`. An optional explicit `workstream` must agree too.
+The file read must exist and be regular, have bounded UTF-8 scalar front matter,
+and match the supplied ID, workstream, status and ordered dependency list.
+Missing `depends_on` is refused; `none` represents no dependencies.
+
+Exact refusal messages include:
+
+- `sprint already registered` for every existing ID, including completed and
+  archived rows; no overwrite, reopening, reparenting or unarchiving.
+- `sprint document id mismatch`, `sprint document workstream mismatch`,
+  `sprint document status mismatch`, `sprint document dependencies mismatch`,
+  and `sprint document dependencies missing`.
+- `sprint source_path required` or `sprint source_path unreadable` for absent,
+  unreadable, nonregular, oversized or non-UTF-8 sources.
+- `sprint front matter required`, `invalid sprint front matter`,
+  `duplicate sprint front matter key`, or `invalid sprint scalar`.
+- `invalid identifier`, `invalid sprint dependencies`,
+  `unknown sprint workstream`, `unknown dependency`, `dependency cycle`.
+- `registered sprint must start as draft`, `owner revision and evidence required`,
+  `stale owner revision`, `dispatch/workstream paused`.
+- Existing reservation refusals: `three-reservation limit`,
+  `workstream already reserved`, `reservation differs from current sprint`.
+
+Every tested refusal compares all six SQLite tables before/after. Registration
+does not provide a manager action or a path around unknown-allocation refusal.
+
+### Regression and mutation evidence
+
+All 12 new `SprintRegistrationTests` passed. Each new test was exercised against
+altered module source compiled only in memory, restored in `finally`, then
+replayed with fresh synthetic state. Production source was never mutated on disk.
+The tool transcript retains all attempts. Two harness assertions stopped at
+nonunique source fragments (revision, then evidence); subsequent runs targeted
+the owner block/first occurrence. Those interruptions are not counted as passes.
+
+| Test suffix (`test_register_`) | Deliberate mutation | Broken result; restored |
+| --- | --- | --- |
+| existing_id_refused | Remove existing-ID refusal | 3 failures (draft, reserved, completed/archived); PASS |
+| document_mismatch_refused | Separately remove ID, workstream, status, dependencies comparisons | 5/4/2/1 failures respectively; all PASS |
+| missing_file_refused | Substitute asserted metadata for the document read | 1 failure, Rejected not raised; PASS |
+| unknown_dependency_refused | Silently drop unknown dependencies | 1 failure, Rejected not raised; PASS |
+| cycle_refused | Drop self-edge; separately allow revisiting a graph node | 1 failure each, Rejected not raised; both PASS |
+| stale_revision_refused | Remove owner revision comparison | 1 failure, Rejected not raised; PASS |
+| evidence_required | Remove owner evidence validation | 1 failure, Rejected not raised; PASS |
+| paused_refused | Remove registration pause check | 1 failure, Rejected not raised; PASS |
+| reserved_status_refused | Remove draft-only check | 1 failure, wrong reservation refusal; PASS |
+| reservation_limit_refused | Remove three-reservation limit | 1 failure, wrong duplicate-stream refusal; PASS |
+| malformed_front_matter_refused | Remove required-front guard; separately remove duplicate-key guard | 1 TypeError / 1 wrong-ID-refusal failure; both PASS |
+| draft_is_durable_audited_and_does_not_activate | Replace owner_mutation with bare mutation | 1 missing-audit TypeError; PASS |
+
+Total: **17 detected mutations, 17 restored passes**. Mismatch subcases after
+an illicit insert can additionally fail on the now-existing ID; these are
+retained cascade failures, not extra mutation experiments. The draft/reservation
+and malformed-document mutations demonstrate exact guard discrimination; later
+guards or parser errors still prevented registration in those mutants.
+
+### Qualification and live registration
+
+Final full suite: **695 tests passed in 438.625s**, no failures, errors or skips.
+Synthetic HTTP 429/500 fixture cleanup ResourceWarnings were retained.
+Synthetic transport artifacts: `/private/tmp/isolated-transport-tests-v1y16a94`.
+
+Exact full-suite command:
+
+```sh
+env -u CODEX_HOME -u CORBANU_HOME -u PFTERMINAL_HOME TMPDIR=/private/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=scripts/initiative_control:/Volumes/CorbanuDrive/Corbanu/.codex-work/initiative-control.oGQGyA/venv/lib/python3.14/site-packages /Volumes/CorbanuDrive/Corbanu/.codex-work/slack-sdk-test.Ob3i5O/venv/bin/python -B -m unittest discover -s scripts/initiative_control -p '*test*.py'
+python3 docs/plans/check.py
+python3 docs/sprints/check.py
+git diff --check
+```
+
+Governance passed: **3/3 active plans**, zero available slots;
+**115 current, 127 archived sprints**. Diff whitespace check passed.
+
+After the suite passed, the real owner API registered **PF-60-S03** from the
+receiving checkout's document, whose bytes matched this checkout. Database:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/initiative-control.oGQGyA/state/coordinator/coordinator.sqlite3`.
+The running allocation digest and claim were checked before mutation.
+Revision **1542 → 1543**, audit sequence **1770**, event sequence **747**,
+event ID `owner_register_sprint:1542`.
+Registration evidence digest:
+`e8e622456186cfd3cf7b2edcf0f65c313f4907043bd0ae1378fa4650f31b8904`.
+Document SHA-256:
+`b275150d6a5ee027cfb25d7ddd3f46e48d5d5efbc501ad9379da10d760357dbd`.
+Stored source:
+`/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911/docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md`.
+
+Result: workstream **accounting**, status **draft**, archived **false**,
+dependencies **[PF-60-S02]**. Accounting's current sprint remains **PF-60-S02**;
+its mode remains enabled. Assertions verified every prior sprint, workstream,
+allocation, action, manager and global enable value was preserved. No activation
+occurred. The historical S02 source_path was deliberately not repaired through
+this add-only operation; existing-row edits are outside this mandate.
+Python tests use disposable synthetic state, unset profile aliases,
+`TMPDIR=/private/tmp` and no native credential access. No Rust tests are in scope.
+True-TUI, live-repository and code-blind functional acceptance are not claimed:
+this is an internal owner API repair, with no Terminal interaction change.
+Reasoned internal-stage N/A is submitted for integrator disposition; the existing
+independent confined execution/evidence and recurrence gates remain open.
+No activation, service enablement, external messaging, release or push is authorized
+by this repair. The brief separately authorizes registering PF-60-S03 only.

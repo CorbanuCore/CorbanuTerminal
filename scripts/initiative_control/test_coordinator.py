@@ -925,5 +925,147 @@ os._exit(74)
                     self.call(operation, **payload, error="stale owner revision")
 
 
+class SprintRegistrationTests(unittest.TestCase):
+    """Document-backed owner registration in disposable, synthetic state."""
+
+    setUp = CoordinatorTests.setUp
+    tearDown = CoordinatorTests.tearDown
+    database_rows = OwnerControlsTests.database_rows
+
+    def document(self, **changes):
+        front = {"sprint_id": "PF82", "status": "draft",
+                 "plan_file": "docs/plans/active/initiative-delivery-control.md",
+                 "depends_on": "PF80"}
+        front.update(changes)
+        path = Path(self.tmp.name) / "sprint.md"
+        path.write_text("---\n" + "".join(f"{k}: {json.dumps(v)}\n" for k, v in front.items())
+                        + "---\n# Synthetic sprint\n")
+        return str(path)
+
+    def payload(self, **changes):
+        payload = dict(sprint_id="PF82", workstream="delivery", dependencies=["PF80"],
+                       status="draft", source_path=self.document(),
+                       expected_revision=self.c.snapshot()["revision"],
+                       evidence={"inspection": "synthetic owner evidence"})
+        payload.update(changes)
+        return payload
+
+    def refused(self, reason, payload):
+        before = self.database_rows()
+        with self.assertRaisesRegex(Rejected, reason):
+            self.c.register_sprint(**payload)
+        self.assertEqual(before, self.database_rows(), "refusal must roll back every table")
+
+    def test_register_draft_is_durable_audited_and_does_not_activate(self):
+        payload = self.payload()
+        before = self.c.snapshot()
+        receipt = self.c.register_sprint(**payload)
+        state = Coordinator(self.root).snapshot()
+        self.assertEqual(before["revision"] + 1, state["revision"])
+        self.assertEqual(before["workstreams"], state["workstreams"])
+        for key in ("enabled", "actions", "allocations", "manager"):
+            self.assertEqual(before[key], state[key])
+        self.assertEqual(before["sprints"], {k: v for k, v in state["sprints"].items() if k != "PF82"})
+        self.assertEqual("draft", state["sprints"]["PF82"]["status"])
+        self.assertFalse(state["sprints"]["PF82"]["archived"])
+        proof = self.c.read_evidence(receipt["evidence_digest"])
+        self.assertEqual("PF82", proof["sprint_id"])
+        self.assertEqual(str(Path(payload["source_path"]).resolve()), proof["record"]["source_path"])
+        import hashlib
+        self.assertEqual(hashlib.sha256(Path(payload["source_path"]).read_bytes()).hexdigest(),
+                         proof["document_sha256"])
+        self.assertEqual(payload["evidence"], proof["evidence"])
+        with self.c.connection() as db:
+            audit = json.loads(db.execute("SELECT body FROM audit WHERE operation='owner_register_sprint'").fetchone()[0])
+            event = json.loads(db.execute("SELECT body FROM events WHERE id=?",
+                                         (f'owner_register_sprint:{before["revision"]}',)).fetchone()[0])
+        self.assertEqual(payload["expected_revision"], audit["expected_revision"])
+        self.assertEqual("PF82", event["sprint"])
+        self.assertEqual(audit, self.c.read_evidence(event["evidence"]["evidence_digest"]))
+
+    def test_register_existing_id_refused(self):
+        for lifecycle, archived in (("draft", False), ("in_progress", False), ("completed", True)):
+            with self.subTest(lifecycle=lifecycle):
+                with self.c.mutation("synthetic_fixture", {}) as (_, state):
+                    state["sprints"]["PF81"].update(status=lifecycle, archived=archived)
+                    if lifecycle == "in_progress":
+                        state["sprints"]["PF80"]["status"] = "completed"
+                        state["workstreams"]["delivery"]["sprint"] = "PF81"
+                    else:
+                        state["sprints"]["PF80"]["status"] = "in_progress"
+                        state["workstreams"]["delivery"]["sprint"] = "PF80"
+                payload = self.payload(sprint_id="PF81")
+                payload["source_path"] = self.document(sprint_id="PF81")
+                self.refused("sprint already registered", payload)
+
+    def test_register_document_mismatch_refused(self):
+        for fields, reason in (
+            ({"sprint_id": "OTHER"}, "id mismatch"),
+            ({"plan_file": "docs/plans/active/portfolio-agent-cost-accounting.md"}, "workstream mismatch"),
+            ({"workstream": "accounting"}, "workstream mismatch"),
+            ({"status": "in_progress"}, "status mismatch"),
+            ({"depends_on": "PF81"}, "dependencies mismatch"),
+        ):
+            with self.subTest(fields=fields):
+                payload = self.payload()
+                payload["source_path"] = self.document(**fields)
+                self.refused("sprint document " + reason, payload)
+
+    def test_register_missing_file_refused(self):
+        payload = self.payload()
+        Path(payload["source_path"]).unlink()
+        self.refused("sprint source_path unreadable", payload)
+
+    def test_register_unknown_dependency_refused(self):
+        payload = self.payload(dependencies=["UNKNOWN"])
+        payload["source_path"] = self.document(depends_on="UNKNOWN")
+        self.refused("unknown dependency", payload)
+
+    def test_register_cycle_refused(self):
+        payload = self.payload(dependencies=["PF82"])
+        payload["source_path"] = self.document(depends_on="PF82")
+        self.refused("dependency cycle", payload)
+        # Valid state cannot grow a multi-node cycle by adding only backward
+        # references. A legacy corrupt component must nevertheless fail closed.
+        with self.c.mutation("synthetic_corrupt_graph", {}) as (_, state):
+            state["sprints"]["PF80"]["dependencies"] = ["PF81"]
+        self.refused("dependency cycle", self.payload())
+
+    def test_register_stale_revision_refused(self):
+        payload = self.payload()
+        self.c.event({"id": "new-owner-input"})
+        self.refused("stale owner revision", payload)
+
+    def test_register_evidence_required(self):
+        self.refused("owner revision and evidence required", self.payload(evidence={}))
+
+    def test_register_paused_refused(self):
+        self.c.set_enabled(False, {"fixture": "pause"})
+        self.refused("dispatch/workstream paused", self.payload())
+        self.c.set_enabled(True, {"fixture": "resume"})
+        self.c.set_stream_mode("delivery", "paused", self.c.snapshot()["revision"], {"fixture": "pause"})
+        self.refused("dispatch/workstream paused", self.payload())
+
+    def test_register_reserved_status_refused(self):
+        payload = self.payload(status="in_progress")
+        payload["source_path"] = self.document(status="in_progress")
+        self.refused("registered sprint must start as draft", payload)
+
+    def test_register_reservation_limit_refused(self):
+        with self.c.mutation("synthetic_corrupt_reservations", {}) as (_, state):
+            state["sprints"]["PF81"]["status"] = "blocked"
+        self.refused("three-reservation limit", self.payload())
+
+    def test_register_malformed_front_matter_refused(self):
+        for document, reason in (
+            ("# No front matter\n", "sprint front matter required"),
+            ('---\nsprint_id: "PF82"\nsprint_id: "OTHER"\n---\n', "duplicate sprint front matter key"),
+        ):
+            with self.subTest(reason=reason):
+                payload = self.payload()
+                Path(payload["source_path"]).write_text(document)
+                self.refused(reason, payload)
+
+
 if __name__ == "__main__":
     unittest.main()
