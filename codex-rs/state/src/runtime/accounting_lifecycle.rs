@@ -285,6 +285,16 @@ impl Journal<'_> {
         day: i64,
         read_at_ms: i64,
     ) -> anyhow::Result<crate::accounting::InspectionDay> {
+        Self::inspect_window_on_connection(conn, owner, day, read_at_ms, None).await
+    }
+
+    pub(in crate::runtime::accounting) async fn inspect_window_on_connection(
+        conn: &mut SqliteConnection,
+        owner: ThreadId,
+        day: i64,
+        read_at_ms: i64,
+        window: Option<(i64, i64)>,
+    ) -> anyhow::Result<crate::accounting::InspectionDay> {
         use crate::accounting::Inspection;
         use crate::accounting::InspectionDay;
         let checkpoint = match retention_fixture_on_connection(conn).await? {
@@ -386,7 +396,11 @@ impl Journal<'_> {
             "SELECT EXISTS(SELECT 1 FROM draft_accounting_compact_days WHERE thread_id = ? AND utc_day = ?)",
         ).bind(owner.to_string()).bind(day).fetch_one(&mut *conn).await?;
         let start = day.checked_mul(DAY_MS).context("day overflow")?;
-        if compact || (read_at_ms >= 90 * DAY_MS && start <= read_at_ms - 90 * DAY_MS) {
+        let (lower, upper) = window.unwrap_or((start, start + DAY_MS));
+        // A compact prefix cannot supply detail, but retained raw suffixes can.
+        if (compact && window.is_none())
+            || (read_at_ms >= 90 * DAY_MS && lower <= read_at_ms - 90 * DAY_MS)
+        {
             return Ok(InspectionDay::DetailUnavailable {
                 coverage,
                 read_at_ms,
@@ -406,7 +420,8 @@ impl Journal<'_> {
         // Budget the packet header, totals, map keys and per-row containers too.
         let mut projected = 8192usize;
         for (attempt, _) in records {
-            if i64::from(attempt.dispatched_at_ms) / DAY_MS != day {
+            let dispatch = i64::from(attempt.dispatched_at_ms);
+            if dispatch / DAY_MS != day || dispatch < lower || dispatch >= upper {
                 continue;
             }
             // Check logical ownership across days and threads, including retries.
@@ -442,7 +457,9 @@ impl Journal<'_> {
             totals.add(&quote)?;
             requests.entry(attempt.request_id).or_default().push(quote);
         }
-        ensure!(totals == expected, "inspection contribution mismatch");
+        if window.is_none() || (!compact && lower == start && upper == start + DAY_MS) {
+            ensure!(totals == expected, "inspection contribution mismatch");
+        }
         Ok(InspectionDay::Ready(Inspection {
             owner,
             utc_day: day,

@@ -296,6 +296,8 @@ use codex_protocol::ThreadId;
 use codex_state::accounting::BucketQuote;
 use codex_state::accounting::Decimal;
 use codex_state::accounting::InspectionDay;
+use codex_state::accounting::InspectionGrouping;
+use codex_state::accounting::InspectionRange;
 use codex_state::accounting::ObservationQuote;
 use uuid::Uuid;
 
@@ -305,6 +307,7 @@ pub(super) struct Inspector {
     generation: Uuid,
     thread: Option<ThreadId>,
     day: i64,
+    range: Option<InspectionRange>,
     pages: Vec<InspectorPage>,
     page: usize,
     alive: Arc<std::sync::atomic::AtomicBool>,
@@ -498,6 +501,15 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
 }
 
 fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage> {
+    if let Ok(InspectionDay::Range {
+        requested,
+        oldest_aggregate_day,
+        read_at_ms,
+        buckets,
+    }) = result
+    {
+        return range_pages(requested, oldest_aggregate_day, read_at_ms, buckets);
+    }
     let mut pages = vec![InspectorPage { title: "Recorded requests — root and descendants".into(), text: vec![
         "Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.".into(),
         "Billed cost: unavailable — no settlement evidence".into(),
@@ -517,7 +529,7 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
                     if compact { "compacted history lost request/provider attribution" } else { "day touches expired detail or aggregate history" },
                     coverage.completed_as_of_ms, coverage.aggregate_day_floor, coverage.oldest_recorded_day, read_at_ms.checked_sub(90 * 86_400_000).filter(|n| *n >= 0)),
                 Err(message) => message,
-                Ok(InspectionDay::Ready(_)) => unreachable!(),
+                Ok(InspectionDay::Ready(_) | InspectionDay::Range { .. }) => unreachable!(),
             });
             return pages;
         }
@@ -738,6 +750,207 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
     pages
 }
 
+fn interval(start: i64, end: i64) -> String {
+    let utc = |ms| {
+        chrono::DateTime::from_timestamp_millis(ms)
+            .unwrap()
+            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+    };
+    format!("[{}, {})", utc(start), utc(end))
+}
+
+fn range_pages(
+    requested: InspectionRange,
+    oldest: Option<i64>,
+    read_at: i64,
+    buckets: Vec<codex_state::accounting::InspectionBucket>,
+) -> Vec<InspectorPage> {
+    let mut context = vec![
+        format!(
+            "Requested: {}; timezone: UTC; grouping: {:?}",
+            interval(requested.start_ms, requested.end_ms),
+            requested.grouping
+        ),
+        format!(
+            "Oldest retained aggregate day (ledger): {oldest:?}; 90-day drill-down cutoff: {:?} ms UTC (exclusive)",
+            read_at.checked_sub(90 * 86_400_000).filter(|v| *v >= 0)
+        ),
+        "Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.".into(),
+    ];
+    let states = buckets.iter().flat_map(|b| &b.days).collect::<Vec<_>>();
+    if states
+        .iter()
+        .any(|s| matches!(s, InspectionDay::NeedsRefresh))
+    {
+        context.push("Recorded totals unavailable — stored contributions need refresh".into());
+    } else if states.iter().any(|s| match s {
+        InspectionDay::CheckpointLag => true,
+        InspectionDay::Ready(v) => v.read_at_ms > v.coverage.completed_as_of_ms,
+        InspectionDay::DetailUnavailable {
+            coverage,
+            read_at_ms,
+            ..
+        } => *read_at_ms > coverage.completed_as_of_ms,
+        _ => false,
+    }) {
+        context.push("Snapshot is not current; newer activity is unverified".into());
+    }
+    let mut pages = vec![InspectorPage {
+        title: "Recorded request range".into(),
+        text: context.clone(),
+        links: vec![],
+        parent: None,
+        selected: Arc::default(),
+    }];
+    let complete = buckets
+        .iter()
+        .all(|b| !b.partial && b.days.iter().all(|d| matches!(d, InspectionDay::Ready(_))));
+    if complete {
+        let quotes = buckets
+            .iter()
+            .flat_map(|b| &b.days)
+            .filter_map(|d| match d {
+                InspectionDay::Ready(v) => Some(v),
+                _ => None,
+            })
+            .flat_map(|v| v.requests.values().flatten());
+        match codex_state::accounting::DayTotals::from_quotes(quotes) {
+            Ok(total) => pages[0].text.extend(estimate(
+                total.known_usd,
+                total.unknown_estimates,
+                total.attempts,
+            )),
+            Err(_) => pages[0]
+                .text
+                .push("Range total unavailable — arithmetic overflow".into()),
+        }
+    } else {
+        pages[0].text.push(
+            "Range total unavailable — partial or unavailable buckets excluded; no partial total."
+                .into(),
+        );
+    }
+    for bucket in buckets {
+        let bounds = interval(bucket.start_ms, bucket.end_ms);
+        let effective = bucket
+            .effective
+            .map(|(s, e)| interval(s, e))
+            .unwrap_or_else(|| "unavailable".into());
+        let mut header = context.clone();
+        header.push(format!(
+            "Bucket: {bounds}; effective retained coverage: {effective}"
+        ));
+        header.push(
+            if bucket.partial {
+                "Partial bucket — excluded from totals"
+            } else {
+                "Whole bucket within retained coverage; detail availability checked separately"
+            }
+            .into(),
+        );
+        pages[0]
+            .text
+            .push(format!("Effective coverage for {bounds}: {effective}"));
+        let mut merged: Option<codex_state::accounting::Inspection> = None;
+        let mut diagnostics = Vec::new();
+        let mut detail_unavailable = false;
+        for day in bucket.days {
+            match day {
+                InspectionDay::Ready(view) => {
+                    if let Some(target) = &mut merged {
+                        for (id, quotes) in view.requests {
+                            target.requests.entry(id).or_default().extend(quotes);
+                        }
+                        for (id, quotes) in view.unknown_parent_requests {
+                            target
+                                .unknown_parent_requests
+                                .entry(id)
+                                .or_default()
+                                .extend(quotes);
+                        }
+                        target.unknown_parent_unavailable_threads +=
+                            view.unknown_parent_unavailable_threads;
+                    } else {
+                        merged = Some(view);
+                    }
+                }
+                other => {
+                    detail_unavailable |= matches!(other, InspectionDay::DetailUnavailable { .. });
+                    diagnostics.extend(inspection_pages(Ok(other)).remove(0).text);
+                }
+            }
+        }
+        let available = diagnostics.is_empty();
+        header.extend(diagnostics);
+        if detail_unavailable {
+            header.push(format!("Precision unsupported outside retained raw detail; compacted days lost request/provider attribution. No bucket total. Whole UTC-day bounds offered: {}; this does not restore attribution.", interval(requested.start_ms / 86_400_000 * 86_400_000, ((requested.end_ms - 1) / 86_400_000 + 1) * 86_400_000)));
+        }
+        let offset = pages.len();
+        pages[0]
+            .links
+            .push((format!("{:?} {bounds}", requested.grouping), offset));
+        let mut children = if !bucket.partial && available {
+            if let Some(mut view) = merged {
+                let recalculate = (|| -> anyhow::Result<()> {
+                    view.totals = codex_state::accounting::DayTotals::from_quotes(
+                        view.requests.values().flatten(),
+                    )?;
+                    view.own_totals = codex_state::accounting::DayTotals::from_quotes(
+                        view.requests
+                            .values()
+                            .flatten()
+                            .filter(|q| q.attempt.thread_id == view.owner),
+                    )?;
+                    view.descendant_totals = codex_state::accounting::DayTotals::from_quotes(
+                        view.requests
+                            .values()
+                            .flatten()
+                            .filter(|q| q.attempt.thread_id != view.owner),
+                    )?;
+                    view.unknown_parent_totals = codex_state::accounting::DayTotals::from_quotes(
+                        view.unknown_parent_requests.values().flatten(),
+                    )?;
+                    Ok(())
+                })();
+                match recalculate {
+                    Ok(()) => inspection_pages(Ok(InspectionDay::Ready(view))),
+                    Err(_) => inspection_pages(Err(
+                        "Bucket total unavailable — arithmetic overflow".into(),
+                    )),
+                }
+            } else {
+                inspection_pages(Err("Effective detail unavailable".into()))
+            }
+        } else {
+            vec![InspectorPage {
+                title: "Bucket unavailable".into(),
+                text: vec![],
+                links: vec![],
+                parent: None,
+                selected: Arc::default(),
+            }]
+        };
+        for child in &mut children {
+            child
+                .text
+                .retain(|t| !t.starts_with("UTC admission interval:"));
+            for text in &mut child.text {
+                *text = text.replace("this UTC day", "this bucket").replace(
+                    "threads have unavailable day detail",
+                    "thread-day entries have unavailable detail",
+                );
+            }
+            child.text.splice(0..0, header.clone());
+            child.parent = Some(child.parent.map_or(0, |p| p + offset));
+            for (_, target) in &mut child.links {
+                *target += offset;
+            }
+        }
+        pages.extend(children);
+    }
+    pages
+}
+
 impl Inspector {
     fn params(&self) -> SelectionViewParams {
         let page = &self.pages[self.page];
@@ -833,6 +1046,52 @@ impl ChatWidget {
 
     pub(super) fn open_accounting_command(&mut self, args: &str, today: NaiveDate) {
         let parts: Vec<_> = args.split_whitespace().collect();
+        if let ["requests", start, end, grouping] = parts.as_slice() {
+            let parsed = (|| -> anyhow::Result<InspectionRange> {
+                let parse = |value: &str| -> anyhow::Result<i64> {
+                    if value.len() == 10 {
+                        let date = NaiveDate::parse_from_str(value, "%Y-%m-%d")?;
+                        anyhow::ensure!(date.to_string() == value, "invalid UTC date");
+                        return Ok(date
+                            .and_hms_opt(0, 0, 0)
+                            .unwrap()
+                            .and_utc()
+                            .timestamp_millis());
+                    }
+                    anyhow::ensure!(value.ends_with('Z'), "timestamps must use UTC Z");
+                    let time = chrono::DateTime::parse_from_rfc3339(value)?;
+                    anyhow::ensure!(
+                        time.timestamp_subsec_nanos() < 1_000_000_000
+                            && time.timestamp_subsec_nanos() % 1_000_000 == 0,
+                        "precision finer than milliseconds is unsupported"
+                    );
+                    Ok(time.timestamp_millis())
+                };
+                let range = InspectionRange {
+                    start_ms: parse(start)?,
+                    end_ms: parse(end)?,
+                    grouping: match *grouping {
+                        "hour" => InspectionGrouping::Hour,
+                        "day" => InspectionGrouping::Day,
+                        "week" => InspectionGrouping::Week,
+                        "month" => InspectionGrouping::Month,
+                        _ => anyhow::bail!("grouping must be hour, day, week or month"),
+                    },
+                };
+                range.validate()?;
+                anyhow::ensure!(
+                    range.start_ms / 86_400_000
+                        <= today.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp() / 86_400,
+                    "future start is unavailable"
+                );
+                Ok(range)
+            })();
+            match parsed {
+                Ok(range) => self.open_accounting_range(range.start_ms / 86_400_000, Some(range)),
+                Err(error) => self.add_error_message(format!("Range refused: {error}")),
+            }
+            return;
+        }
         let date = match parts.as_slice() {
             ["requests"] => Some(today),
             ["requests", date] if date.len() == 10 => NaiveDate::parse_from_str(date, "%Y-%m-%d")
@@ -847,21 +1106,33 @@ impl ChatWidget {
             self.open_accounting_inspector(time.and_utc().timestamp() / 86_400);
         } else {
             self.add_error_message(
-                "Usage: /usage requests [YYYY-MM-DD] (UTC, no future dates)".into(),
+                "Usage: /usage requests [YYYY-MM-DD] (UTC, no future dates). Custom: /usage requests START END hour|day|week|month; dates or UTC timestamps ending Z; end exclusive.".into(),
             );
         }
     }
 
     pub(crate) fn open_accounting_inspector(&mut self, day: i64) {
+        self.open_accounting_range(day, None);
+    }
+
+    fn open_accounting_range(&mut self, day: i64, range: Option<InspectionRange>) {
         let generation = Uuid::new_v4();
         let thread = self.thread_id();
         let inspector = Inspector {
             generation,
             thread,
             day,
+            range,
             pages: vec![InspectorPage {
                 title: "Recorded requests".into(),
-                text: vec!["Loading recorded requests…".into()],
+                text: vec![match range {
+                    Some(r) => format!(
+                        "Loading recorded requests… Requested: {}; timezone: UTC; grouping: {:?}; effective coverage and bucket boundaries pending",
+                        interval(r.start_ms, r.end_ms),
+                        r.grouping
+                    ),
+                    None => "Loading recorded requests…".into(),
+                }],
                 links: Vec::new(),
                 parent: None,
                 selected: Arc::default(),
@@ -881,6 +1152,7 @@ impl ChatWidget {
             generation,
             thread,
             day,
+            range,
         });
         self.request_redraw();
     }
@@ -902,7 +1174,13 @@ impl ChatWidget {
         }) else {
             return;
         };
+        let is_range = matches!(result, Ok(InspectionDay::Range { .. }));
         view.pages = inspection_pages(result);
+        if let Some(range) = view.range
+            && !is_range
+        {
+            view.pages[0].text.insert(0, format!("Requested: {}; timezone: UTC; grouping: {:?}; effective coverage: unavailable; bucket boundaries unavailable", interval(range.start_ms, range.end_ms), range.grouping));
+        }
         view.page = 0;
         if !self
             .bottom_pane
@@ -951,7 +1229,7 @@ impl ChatWidget {
             && view.generation == generation
             && view.alive.load(std::sync::atomic::Ordering::Acquire)
         {
-            self.open_accounting_inspector(view.day);
+            self.open_accounting_range(view.day, view.range);
         }
     }
 }

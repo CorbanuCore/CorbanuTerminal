@@ -695,6 +695,304 @@ async fn accounting_inspect_tree_combined_attempt_cap_is_not_per_run() -> anyhow
     Ok(())
 }
 
+fn range_buckets(value: InspectionDay) -> Vec<InspectionBucket> {
+    let InspectionDay::Range { buckets, .. } = value else {
+        panic!("{value:?}")
+    };
+    buckets
+}
+
+async fn range_read(
+    runtime: &StateRuntime,
+    start: i64,
+    end: i64,
+    grouping: InspectionGrouping,
+    now: i64,
+) -> anyhow::Result<InspectionDay> {
+    AccountingStore::inspect_range(
+        runtime,
+        attempt(1).thread_id,
+        InspectionRange {
+            start_ms: start,
+            end_ms: end,
+            grouping,
+        },
+        now,
+    )
+    .await
+}
+
+#[tokio::test]
+async fn accounting_inspect_range_invalid_empty_reversed_and_unavailable() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    let before = rows(&runtime).await?;
+    for (start, end, reason) in [
+        (2, 1, "reversed"),
+        (1, 1, "empty"),
+        (-1, 1, "invalid"),
+        (0, i64::MAX, "overflow"),
+    ] {
+        assert!(
+            range_read(&runtime, start, end, InspectionGrouping::Day, 10)
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains(reason)
+        );
+    }
+    assert_eq!(
+        range_read(&runtime, 0, 1, InspectionGrouping::Hour, 10).await?,
+        InspectionDay::Absent
+    );
+    assert_eq!(rows(&runtime).await?, before);
+    seed(&runtime).await?;
+    AccountingStore::open(&runtime, 86_400_000).await?;
+    let bucket = range_buckets(
+        range_read(&runtime, 0, 3_600_000, InspectionGrouping::Hour, 86_400_000).await?,
+    )
+    .remove(0);
+    assert!(!bucket.partial);
+    assert_eq!(
+        inspection(bucket.days.into_iter().next().unwrap()).totals,
+        DayTotals::default()
+    );
+    runtime.close().await;
+    Ok(())
+}
+
+#[test]
+fn accounting_inspect_range_iso_week_calendar_month_boundaries() -> anyhow::Result<()> {
+    let ms = |s: &str| {
+        chrono::DateTime::parse_from_rfc3339(s)
+            .unwrap()
+            .timestamp_millis()
+    };
+    for (grouping, at, start, end) in [
+        (
+            InspectionGrouping::Week,
+            "2021-01-01T12:00:00Z",
+            "2020-12-28T00:00:00Z",
+            "2021-01-04T00:00:00Z",
+        ),
+        (
+            InspectionGrouping::Week,
+            "2026-04-01T00:00:00Z",
+            "2026-03-30T00:00:00Z",
+            "2026-04-06T00:00:00Z",
+        ),
+        (
+            InspectionGrouping::Month,
+            "2024-02-29T23:00:00Z",
+            "2024-02-01T00:00:00Z",
+            "2024-03-01T00:00:00Z",
+        ),
+        (
+            InspectionGrouping::Month,
+            "2025-12-31T12:00:00Z",
+            "2025-12-01T00:00:00Z",
+            "2026-01-01T00:00:00Z",
+        ),
+        (
+            InspectionGrouping::Hour,
+            "2026-03-08T09:30:00Z",
+            "2026-03-08T09:00:00Z",
+            "2026-03-08T10:00:00Z",
+        ),
+    ] {
+        assert_eq!(
+            InspectionRange {
+                start_ms: ms(at),
+                end_ms: ms(end),
+                grouping
+            }
+            .bucket(ms(at))?,
+            (ms(start), ms(end))
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_range_hours_half_open_and_cutoff_suffix() -> anyhow::Result<()> {
+    const HOUR: i64 = 3_600_000;
+    const DAY: i64 = 86_400_000;
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let store = AccountingStore::open(&runtime, 0).await?;
+    for (id, time) in [(1, 0), (2, HOUR), (3, 2 * HOUR - 1), (4, 2 * HOUR)] {
+        let mut a = attempt(id);
+        a.dispatched_at_ms = time.try_into()?;
+        store.admit(a.thread_id, &a, &[snapshot()], time).await?;
+        store
+            .observe(a.thread_id, &a, &[row(id as i64)], time)
+            .await?;
+    }
+    store.maintain(90 * DAY).await?;
+    let before = rows(&runtime).await?;
+    let buckets = range_buckets(
+        range_read(&runtime, HOUR, 2 * HOUR, InspectionGrouping::Hour, 90 * DAY).await?,
+    );
+    assert_eq!(
+        (buckets[0].partial, buckets[0].effective),
+        (false, Some((HOUR, 2 * HOUR)))
+    );
+    let view = inspection(buckets.into_iter().next().unwrap().days.remove(0));
+    assert_eq!(
+        view.requests
+            .values()
+            .flatten()
+            .map(|q| q.attempt.attempt_id)
+            .collect::<Vec<_>>(),
+        vec![Uuid::from_u128(2), Uuid::from_u128(3)]
+    );
+    assert_eq!(view.totals.known_usd, "0.000005".to_owned().try_into()?);
+    let old =
+        range_buckets(range_read(&runtime, 0, HOUR, InspectionGrouping::Hour, 90 * DAY).await?);
+    assert!(matches!(
+        old[0].days[0],
+        InspectionDay::DetailUnavailable { compact: true, .. }
+    ));
+    assert_eq!(rows(&runtime).await?, before);
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_range_partial_edges_and_checkpoint_coverage() -> anyhow::Result<()> {
+    const DAY: i64 = 86_400_000;
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let store = AccountingStore::open(&runtime, 0).await?;
+    store.maintain(3 * DAY).await?;
+    let buckets = range_buckets(
+        range_read(&runtime, 1, 3 * DAY - 1, InspectionGrouping::Day, 3 * DAY).await?,
+    );
+    assert_eq!(
+        buckets
+            .iter()
+            .map(|b| (b.start_ms, b.end_ms, b.partial, b.effective))
+            .collect::<Vec<_>>(),
+        vec![
+            (0, DAY, true, Some((1, DAY))),
+            (DAY, 2 * DAY, false, Some((DAY, 2 * DAY))),
+            (2 * DAY, 3 * DAY, true, Some((2 * DAY, 3 * DAY - 1)))
+        ]
+    );
+    let buckets = range_buckets(
+        range_read(
+            &runtime,
+            3 * DAY,
+            4 * DAY,
+            InspectionGrouping::Day,
+            3 * DAY + 10,
+        )
+        .await?,
+    );
+    assert_eq!(
+        (buckets[0].partial, buckets[0].effective),
+        (true, Some((3 * DAY, 3 * DAY + 1)))
+    );
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_range_mixed_compaction_exact_no_double_count() -> anyhow::Result<()> {
+    const DAY: i64 = 86_400_000;
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let store = AccountingStore::open(&runtime, 0).await?;
+    for (id, time) in [(1, 0), (2, DAY)] {
+        let mut a = attempt(id);
+        a.dispatched_at_ms = time.try_into()?;
+        store.admit(a.thread_id, &a, &[snapshot()], time).await?;
+        store
+            .observe(a.thread_id, &a, &[row(id as i64)], time)
+            .await?;
+    }
+    store.maintain(90 * DAY).await?;
+    let before = rows(&runtime).await?;
+    let value = range_read(&runtime, 0, 2 * DAY, InspectionGrouping::Day, 90 * DAY).await?;
+    assert!(
+        matches!(&value, InspectionDay::Range { oldest_aggregate_day: Some(0), read_at_ms, .. } if *read_at_ms == 90 * DAY)
+    );
+    let mut buckets = range_buckets(value);
+    assert!(matches!(
+        buckets[0].days[0],
+        InspectionDay::DetailUnavailable { compact: true, .. }
+    ));
+    let raw = inspection(buckets[1].days.remove(0));
+    assert_eq!(
+        (
+            raw.totals.attempts,
+            raw.totals.unknown_estimates,
+            raw.totals.known_usd
+        ),
+        (1, 1, "0.000002".to_owned().try_into()?)
+    );
+    // The store retains the compact sum, but the inspector must never misattribute it.
+    let RetainedDay::Available {
+        totals: Current::Ready(compact),
+        ..
+    } = store.read_day(attempt(1).thread_id, 0, 90 * DAY).await?
+    else {
+        panic!()
+    };
+    assert_eq!(compact.known_usd, "0.000001".to_owned().try_into()?);
+    assert_eq!(rows(&runtime).await?, before);
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_range_tree_unknown_and_single_snapshot() -> anyhow::Result<()> {
+    const HOUR: i64 = 3_600_000;
+    let path = home();
+    let runtime = Arc::new(open(&path).await?);
+    tree_fixture(&runtime).await?;
+    AccountingStore::open(&runtime, 2 * HOUR).await?;
+    let requested = InspectionRange {
+        start_ms: 0,
+        end_ms: 2 * HOUR,
+        grouping: InspectionGrouping::Hour,
+    };
+    let mut tx = runtime.pool.begin().await?;
+    // Pin exactly the same snapshot that the public entrypoint owns.
+    validate_on_connection(&mut tx).await?;
+    let writer = runtime.clone();
+    tokio::spawn(async move { AccountingStore::open(&writer, 3 * HOUR).await.map(|_| ()) })
+        .await??;
+    let mut buckets =
+        range_buckets(inspect_buckets(&mut tx, attempt(1).thread_id, requested, 3 * HOUR).await?);
+    let view = inspection(buckets[0].days.remove(0));
+    assert_eq!(view.coverage.completed_as_of_ms, 2 * HOUR);
+    assert_eq!(
+        (
+            view.totals.attempts,
+            view.own_totals.attempts,
+            view.descendant_totals.attempts,
+            view.unknown_parent_totals.attempts
+        ),
+        (3, 1, 2, 3)
+    );
+    assert_eq!(view.totals.known_usd, "0.000006".to_owned().try_into()?);
+    assert_eq!(
+        view.unknown_parent_totals.known_usd,
+        "0.000017".to_owned().try_into()?
+    );
+    assert_eq!(
+        inspection(buckets[1].days.remove(0)).totals,
+        DayTotals::default()
+    );
+    tx.commit().await?;
+    runtime.close().await;
+    Ok(())
+}
+
 fn home() -> impl std::ops::Deref<Target = std::path::PathBuf> {
     scopeguard::guard(crate::runtime::test_support::unique_temp_dir(), |path| {
         let _ = std::fs::remove_dir_all(path);

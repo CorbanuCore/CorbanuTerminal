@@ -42,6 +42,7 @@ async fn accounting_inspect_cancel_refresh_generation() {
         generation,
         thread,
         day,
+        ..
     } = rx.try_recv().unwrap()
     else {
         panic!()

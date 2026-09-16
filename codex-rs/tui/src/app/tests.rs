@@ -126,6 +126,39 @@ async fn accounting_inspect_app_real_store_to_view() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn accounting_inspect_range_app_dispatch_preserves_query() -> anyhow::Result<()> {
+    use codex_state::accounting::{InspectionDay, InspectionGrouping, InspectionRange};
+    let path = tempdir()?;
+    let (mut app, mut rx, _ops) = make_test_app_with_channels().await;
+    let (_, day) = accounting_fixture(&mut app, path.path()).await?;
+    while rx.try_recv().is_ok() {}
+    app.handle_accounting_inspector_event(AppEvent::OpenAccountingInspector { day });
+    let mut load = rx.recv().await.unwrap();
+    let requested = InspectionRange {
+        start_ms: day * 86_400_000,
+        end_ms: (day + 1) * 86_400_000,
+        grouping: InspectionGrouping::Hour,
+    };
+    let AppEvent::LoadAccountingInspector { range, .. } = &mut load else {
+        panic!()
+    };
+    *range = Some(requested);
+    app.handle_accounting_inspector_event(load);
+    let event = tokio::time::timeout(Duration::from_secs(20), rx.recv())
+        .await?
+        .unwrap();
+    assert!(matches!(&event, AppEvent::AccountingInspectorLoaded {
+        result: Ok(InspectionDay::Range { requested: actual, buckets, .. }), ..
+    } if *actual == requested && buckets.len() == 24));
+    app.handle_accounting_inspector_event(event);
+    let text = accounting_scroll(&mut app);
+    assert!(text.contains("timezone: UTC"));
+    assert!(text.contains("Range total unavailable"));
+    app.state_db.as_ref().unwrap().close().await;
+    Ok(())
+}
+
+#[tokio::test]
 async fn accounting_inspect_app_remote_does_not_read_local() -> anyhow::Result<()> {
     let path = tempdir()?;
     let (mut app, mut rx, _ops) = make_test_app_with_channels().await;
