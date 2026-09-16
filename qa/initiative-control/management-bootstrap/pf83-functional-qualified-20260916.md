@@ -39,9 +39,25 @@ ERROR codex_core::tools::router: error=failed to spawn code-mode host
 
 and the model answered "Unable to read sample.txt because the execution tool
 failed." That is why all 380 verdicts sat blocked: not a macOS ceiling, not a
-missing actor runtime, not the control count — a staging defect in our own
-harness. Extracting the pinned package and pointing a run at it made the same
-case pass first time.
+missing actor runtime, not the control count — our own harness.
+
+I traced it to the line rather than leaving it as "staging". In
+`.codex-work/functional-pf83.20260915/build_native.py` the build is
+
+```
+cargo build --release -p codex-cli --bin corbanu
+```
+
+and the package it writes contains exactly that one file, recorded as
+`"format": "cargo-cli-only"` with the limitation *"Standalone
+helpers/resources/archive qualification still required."* The limitation was
+declared honestly and then never connected to the thing it caused. Because the
+model in use declares code mode, `requested_tool_mode` takes the model's value
+and the missing host is fatal, so a package built that way cannot execute a
+single tool call no matter what else is fixed.
+
+Extracting the real pinned package and pointing a run at it made the same case
+pass first time.
 
 Two further observations, recorded rather than acted on:
 
@@ -65,5 +81,8 @@ Not closed, and not claimed: these are three cases I wrote, not the frozen
 F01–F11 original set, and I am not an independent code-blind executor — I have
 read the source. What this proves is that the environment can host that work,
 which is precisely what was in doubt. The harness still stages runs itself and
-must be corrected to extract the pinned package rather than one binary; until it
-is, the 380-verdict suite stays blocked by the same defect this receipt names.
+must be corrected so that `build_native.py` produces and pins the whole package,
+`codex-code-mode-host` included, rather than one binary; until it is, the
+380-verdict suite stays blocked by the same defect this receipt names.
+`verify_package` in `macos_preflight.py` already compares the full inventory, so
+it needs no change — it will simply start pinning more files.
