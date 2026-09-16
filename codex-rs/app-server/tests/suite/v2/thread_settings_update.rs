@@ -111,30 +111,69 @@ async fn finish_probe(mcp: &mut TestAppServer, call_id: &str) -> Result<usize> {
 }
 
 #[tokio::test]
+#[ignore = "PF-83 F04: reproduces an unauthorized-behaviour expectation; un-ignore with the product decision"]
 async fn thread_settings_confirmation_f04_restricts_work_steered_after_applied() -> Result<()> {
     use codex_app_server_protocol::AskForApproval;
+    use codex_app_server_protocol::JSONRPCMessage;
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering;
+
+    // Desired post-Applied steering contract, pending a product decision.
+    // Current "Permission selection confirmation — TO BUILD" explicitly keeps
+    // active-turn snapshots unchanged and applies command permissions next turn.
     let fixture = TempDir::new()?;
     let workspace = fixture.path().join("workspace");
     std::fs::create_dir(&workspace)?;
     let ready = fixture.path().join("ready");
     let release = fixture.path().join("release");
     let marker = fixture.path().join("outside-workspace");
+    let barrier_timeout = DEFAULT_TIMEOUT * 6;
+    let barrier_deadline = barrier_timeout - DEFAULT_TIMEOUT;
     let barrier = app_test_support::create_shell_command_sse_response(
-        vec!["python3".into(), "-c".into(),
-            "import pathlib,sys,time; pathlib.Path(sys.argv[1]).touch(); deadline=time.monotonic()+20\nwhile not pathlib.Path(sys.argv[2]).exists() and time.monotonic()<deadline: time.sleep(.01)".into(),
-            ready.to_string_lossy().into_owned(), release.to_string_lossy().into_owned()],
-        Some(&workspace), Some(25000), "barrier",
+        vec![
+            "python3".into(),
+            "-c".into(),
+            "import pathlib,sys,time; pathlib.Path(sys.argv[1]).touch(); deadline=time.monotonic()+float(sys.argv[3])\nwhile not pathlib.Path(sys.argv[2]).exists() and time.monotonic()<deadline: time.sleep(.01)".into(),
+            ready.to_string_lossy().into_owned(),
+            release.to_string_lossy().into_owned(),
+            barrier_deadline.as_secs_f64().to_string(),
+        ],
+        Some(&workspace),
+        Some(barrier_timeout.as_millis().try_into()?),
+        "barrier",
     )?;
-    let server = create_mock_responses_server_sequence_unchecked(vec![
+    let initial = [
         write_probe(&marker, "baseline")?,
         create_final_assistant_message_sse_response("baseline done")?,
         barrier,
-        write_probe(&marker, "after-applied")?,
-        create_final_assistant_message_sse_response("steered done")?,
-        write_probe(&marker, "next-turn")?,
-        create_final_assistant_message_sse_response("next done")?,
-    ])
-    .await;
+    ];
+    let probe = write_probe(&marker, "after-applied")?;
+    let done = create_final_assistant_message_sse_response("steered done")?;
+    let calls = AtomicUsize::new(0);
+    let server = responses::start_mock_server().await;
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path_regex(".*/responses$"))
+        .respond_with(move |request: &wiremock::Request| {
+            let call = calls.fetch_add(1, Ordering::SeqCst);
+            let body = if let Some(initial) = initial.get(call) {
+                initial.clone()
+            } else if call == initial.len()
+                && request
+                    .body_json::<Value>()
+                    .expect("valid model request")
+                    .to_string()
+                    .contains("now run the outside-workspace probe")
+            {
+                // Refused/deferred steering must not make scripted inference
+                // invent a write that the model was never asked to perform.
+                probe.clone()
+            } else {
+                done.clone()
+            };
+            responses::sse_response(body)
+        })
+        .mount(&server)
+        .await;
     let home = TempDir::new()?;
     create_config_toml(home.path(), &server.uri())?;
     let mut mcp = TestAppServer::builder()
@@ -187,30 +226,62 @@ async fn thread_settings_confirmation_f04_restricts_work_steered_after_applied()
             additional_context: None,
         })
         .await?;
-    let steered: codex_app_server_protocol::TurnSteerResponse = mcp.read_response(request).await?;
-    assert_eq!(steered.turn_id, turn.id);
+    let acknowledged_same_turn = timeout(DEFAULT_TIMEOUT, async {
+        loop {
+            match mcp.read_next_message().await? {
+                JSONRPCMessage::Response(response)
+                    if response.id == RequestId::Integer(request) =>
+                {
+                    let steered: codex_app_server_protocol::TurnSteerResponse =
+                        serde_json::from_value(response.result)?;
+                    break Ok::<_, anyhow::Error>(steered.turn_id == turn.id);
+                }
+                JSONRPCMessage::Error(error) if error.id == RequestId::Integer(request) => {
+                    break Ok(false);
+                }
+                JSONRPCMessage::Notification(_) => {}
+                message => anyhow::bail!("unexpected message while awaiting steer: {message:?}"),
+            }
+        }
+    })
+    .await??;
     std::fs::write(&release, "continue")?;
     let approvals = finish_probe(&mut mcp, "after-applied").await?;
     let wrote = marker.exists();
     if wrote {
         std::fs::remove_file(&marker)?;
     }
+    let model_received_steer = received_response_bodies(&server).await?.iter().any(|body| {
+        body.to_string()
+            .contains("now run the outside-workspace probe")
+    });
+    let admitted = acknowledged_same_turn && model_received_steer;
+
+    // Reset the inference script so refusing/deferring the steer cannot shift
+    // the independent fresh-turn control's response sequence.
+    server.reset().await;
+    responses::mount_sse_sequence(
+        &server,
+        vec![
+            write_probe(&marker, "next-turn")?,
+            create_final_assistant_message_sse_response("next done")?,
+        ],
+    )
+    .await;
     start_text_turn(&mut mcp, thread.id.clone()).await?;
     assert_eq!(finish_probe(&mut mcp, "next-turn").await?, 1);
     assert!(!marker.exists(), "fresh turn must enforce the restriction");
     assert!(
-        received_response_bodies(&server)
-            .await?
-            .iter()
-            .any(|body| body
-                .to_string()
-                .contains("now run the outside-workspace probe")),
-        "the model must receive the newly steered work"
+        !wrote,
+        concat!(
+            "DESIRED post-Applied steering contract (pending product decision, not the current next-turn snapshot contract): ",
+            "F04: work steered into the running turn after Applied must require approval and must not write after decline",
+            "; refusing or deferring admission into this turn with no write is also permitted"
+        )
     );
-    assert_eq!(
-        (approvals, wrote),
-        (1, false),
-        "F04: work steered into the running turn after Applied must require approval and must not write after decline"
+    assert!(
+        (admitted && approvals > 0) || (!model_received_steer && approvals == 0),
+        "DESIRED post-Applied steering contract: admitted work requires approval; otherwise it must not reach this turn's model or write"
     );
     Ok(())
 }
@@ -287,10 +358,20 @@ async fn thread_settings_confirmation_preserves_pending_approval() -> Result<()>
             !marker.exists(),
             "settings confirmation is not command approval"
         );
+        let unexpected_resolution = timeout(
+            Duration::from_millis(250),
+            mcp.read_stream_until_matching_notification(
+                "pending approval must not resolve after settings confirmation",
+                |notification| {
+                    notification.method == "serverRequest/resolved"
+                        || notification.method == "turn/completed"
+                },
+            ),
+        )
+        .await;
         assert!(
-            !mcp.pending_notification_methods()
-                .iter()
-                .any(|method| method == "serverRequest/resolved" || method == "turn/completed")
+            unexpected_resolution.is_err(),
+            "expected the bounded stream drain to time out without resolution/completion: {unexpected_resolution:?}"
         );
     }
     mcp.send_response(request_id, serde_json::json!({"decision": "decline"}))
@@ -307,10 +388,12 @@ async fn thread_settings_confirmation_preserves_pending_approval() -> Result<()>
 }
 
 #[tokio::test]
-async fn thread_settings_confirmation_leaves_mcp_refresh_equivalent_to_legacy() -> Result<()> {
+async fn thread_settings_confirmation_leaves_mcp_status_responses_unaffected() -> Result<()> {
     use codex_app_server_protocol::ListMcpServerStatusParams;
     use codex_app_server_protocol::ListMcpServerStatusResponse;
     use codex_app_server_protocol::McpServerStatusDetail;
+    // This checks MCP status responses only. It does not prove equivalence of
+    // live binding refresh, tool execution or authorization semantics.
     let mut observations = Vec::new();
     for confirm in [false, true] {
         let server = responses::start_mock_server().await;
@@ -380,7 +463,7 @@ async fn thread_settings_confirmation_leaves_mcp_refresh_equivalent_to_legacy() 
     }
     assert_eq!(
         observations[0], observations[1],
-        "confirmation must preserve the same before/after MCP refresh observations as legacy settings submission"
+        "MCP status responses are unaffected by confirmation; this does not prove refresh semantics are equivalent"
     );
     Ok(())
 }
