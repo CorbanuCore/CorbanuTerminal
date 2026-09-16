@@ -462,7 +462,48 @@ The same applies to `brief_file` and `brief_sha256`: change them together or not
 at all. They are a pair, and the worker verifies the pair before doing anything,
 which is the behaviour we want.
 
-## Reserve drawn: 13 KiB, 2026-09-16
+## Reserve drawn and returned: 13 KiB then 0, 2026-09-16
+
+**The draw was wrong and it is returned to zero.** I drew 13 KiB against the
+15 KiB reserve, then measured instead of guessing again, and the measurement
+says the reserve cannot fix this.
+
+Actual briefing size: **101,561 bytes**. Against 65,536 plus the full 15 KiB
+reserve that is still roughly 20 KiB over. Drawing the remainder would have
+bought nothing and left a drawn grant standing as a false fix.
+
+Where the bytes are:
+
+| Section | Bytes |
+| --- | ---: |
+| `original_evidence` | 46,350 |
+| `actions` | 19,620 |
+| `consumed_allocations` | 9,965 |
+| `sprints` | 6,125 |
+| `allocations` | 4,359 |
+
+`original_evidence` is 46% of the briefing on its own, and it is expanded
+evidence bodies. **That cost is mine.** Over this session I recorded long prose
+verdicts in `verify()` evidence — reasoning about why a worker stopped, what a
+review found, what a gate did and did not establish. Each was worth writing, but
+they are inlined into every subsequent briefing, so the manager pays for all of
+them on every cycle, forever.
+
+Compaction still helped and was done first: the `s02-receiving-verify-01`
+allocation had the full receiving assignment embedded, 5,806 bytes, and
+collapsed to a stub once `complete_sprint` and `archive_sprint` had executed and
+nothing revalidated it.
+
+**The actual fix is one of two things, and it is a design decision rather than a
+budget one:** keep verification evidence terse and put the reasoning in the
+repository where it is read once, or have the briefing reference evidence bodies
+by digest instead of inlining them. Until one of those lands, new manager cycles
+cannot be prepared. Direct coordinator operations, reviews and receives are
+unaffected.
+
+### Original draw note, retained
+
+#### Reserve drawn: 13 KiB, 2026-09-16
 
 `BRIEF_GRANT` set to 13 KiB against the standing 15 KiB `BRIEF_RESERVE`. This is
 the first draw; it was held at zero all session.
