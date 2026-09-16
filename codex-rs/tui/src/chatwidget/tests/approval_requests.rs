@@ -93,6 +93,93 @@ async fn declined_command_history_never_claims_execution_or_success() {
     }
 }
 
+#[tokio::test]
+async fn failed_command_without_exit_code_never_claims_execution_or_success() {
+    for command in ["echo pending", "cat pending.txt"] {
+        let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+        chat.on_task_started();
+        let mut item = begin_exec(&mut chat, "pending", command);
+        let AppServerThreadItem::CommandExecution {
+            status,
+            exit_code,
+            duration_ms,
+            ..
+        } = &mut item
+        else {
+            panic!("expected command execution");
+        };
+        *status = AppServerCommandExecutionStatus::Failed;
+        *exit_code = None;
+        *duration_ms = None;
+        handle_exec_end(&mut chat, item);
+
+        assert_unconfirmed_command_history(&mut rx, command);
+    }
+}
+
+#[tokio::test]
+async fn interrupted_pending_approval_never_claims_execution_or_success() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.on_task_started();
+    begin_exec(&mut chat, "pending", "echo pending");
+    handle_exec_approval_request(
+        &mut chat,
+        "pending",
+        ExecApprovalRequestEvent {
+            call_id: "pending".into(),
+            approval_id: None,
+            turn_id: "turn-1".into(),
+            environment_id: None,
+            command: vec!["echo".into(), "pending".into()],
+            cwd: AbsolutePathBuf::current_dir().expect("current dir"),
+            reason: None,
+            network_approval_context: None,
+            proposed_execpolicy_amendment: None,
+            proposed_network_policy_amendments: None,
+            additional_permissions: None,
+            available_decisions: None,
+        },
+    );
+    handle_turn_interrupted(&mut chat, "turn-1");
+
+    assert_unconfirmed_command_history(&mut rx, "echo pending");
+}
+
+fn assert_unconfirmed_command_history(
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
+    command: &str,
+) {
+    let cell = std::iter::from_fn(|| rx.try_recv().ok())
+        .find_map(|event| match event {
+            AppEvent::InsertHistoryCell(cell) => Some(cell),
+            _ => None,
+        })
+        .expect("unconfirmed command must remain in history");
+    let display = cell.display_lines(/*width*/ 80);
+    let transcript = cell.transcript_lines(/*width*/ 80);
+    for lines in [&display, &transcript] {
+        let text = lines_to_single_string(lines);
+        assert!(!text.contains("Ran "), "{text}");
+        assert!(!text.contains("Explored"), "{text}");
+        assert!(!text.contains("(no output)"), "{text}");
+        assert!(
+            !lines.iter().flat_map(|line| &line.spans).any(|span| {
+                span.content.contains(['•', '✓', '✔'])
+                    && span.style.fg == Some(ratatui::style::Color::Green)
+            }),
+            "{lines:?}"
+        );
+    }
+    assert_eq!(
+        lines_to_single_string(&display),
+        format!("✗ Execution unconfirmed {command}\n  └ No exit status received\n")
+    );
+    assert_eq!(
+        lines_to_single_string(&transcript),
+        format!("$ {command}\n✗ Execution unconfirmed (no exit status received)\n")
+    );
+}
+
 #[test]
 fn app_server_exec_approval_request_splits_shell_wrapped_command() {
     let script = r#"python3 -c 'print("Hello, world!")'"#;

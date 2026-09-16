@@ -192,7 +192,12 @@ fn activity_marker(start_time: Option<Instant>, animations_enabled: bool) -> Spa
 
 impl HistoryCell for ExecCell {
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
-        if self.is_exploring_cell() && !self.calls.iter().any(ExecCall::is_declined) {
+        if self.is_exploring_cell()
+            && !self
+                .calls
+                .iter()
+                .any(|call| call.is_declined() || call.is_unknown())
+        {
             self.exploring_display_lines(width)
         } else {
             self.command_display_lines(width)
@@ -231,6 +236,11 @@ impl HistoryCell for ExecCell {
                         let wrapped = adaptive_wrap_line(&unwrapped, wrap_opts.clone());
                         push_owned_lines(&wrapped, &mut lines);
                     }
+                }
+                if call.is_unknown() {
+                    lines.push(Line::from(
+                        "✗ Execution unconfirmed (no exit status received)".red(),
+                    ));
                 }
                 if let Some(duration) = call.duration
                     && let CommandOutcome::Exited(exit_code) = output.outcome
@@ -373,7 +383,7 @@ impl ExecCell {
                 .as_ref()
                 .map(|o| o.outcome == CommandOutcome::Exited(0))
         });
-        let bullet = if call.is_declined() {
+        let bullet = if call.is_declined() || call.is_unknown() {
             "✗".red().bold()
         } else {
             match success {
@@ -382,9 +392,12 @@ impl ExecCell {
                 None => activity_marker(call.start_time, self.animations_enabled()),
             }
         };
-        let is_interaction = call.is_unified_exec_interaction() && !call.is_declined();
+        let is_interaction =
+            call.is_unified_exec_interaction() && !call.is_declined() && !call.is_unknown();
         let title = if call.is_declined() {
             "Did not run"
+        } else if call.is_unknown() {
+            "Execution unconfirmed"
         } else if is_interaction {
             ""
         } else if !call.is_complete() {
@@ -454,6 +467,9 @@ impl ExecCell {
             lines.push(Line::from("  └ Approval declined".dim()));
             return lines;
         }
+        if call.is_unknown() {
+            lines.push(Line::from("  └ No exit status received".dim()));
+        }
 
         if let Some(output) = call.output.as_ref() {
             let line_limit = if call.is_user_shell_command() {
@@ -477,7 +493,7 @@ impl ExecCell {
             };
 
             if raw_output.lines.is_empty() {
-                if !call.is_unified_exec_interaction() {
+                if !call.is_unified_exec_interaction() && !call.is_unknown() {
                     lines.extend(prefix_lines(
                         vec![Line::from("(no output)".dim())],
                         Span::from(layout.output_block.initial_prefix).dim(),
@@ -846,6 +862,127 @@ mod tests {
           └ allowed content
         ✗ Did not run cat allowed.txt
           └ Approval declined
+        "
+        );
+    }
+
+    #[test]
+    fn unknown_command_preview_and_transcript() {
+        for source in [
+            ExecCommandSource::Agent,
+            ExecCommandSource::UserShell,
+            ExecCommandSource::UnifiedExecInteraction,
+        ] {
+            let mut cell = new_active_exec_command(
+                "unknown".into(),
+                vec!["echo".into(), "pending".into()],
+                Vec::new(),
+                source,
+                /*interaction_input*/ None,
+                /*animations_enabled*/ false,
+            );
+            assert!(cell.complete_call(
+                "unknown",
+                CommandOutput::unknown(String::new()),
+                std::time::Duration::ZERO,
+            ));
+            assert_eq!(cell.calls[0].duration, None);
+            assert!(!cell.is_active());
+            assert!(cell.should_flush());
+            cell.mark_failed();
+            let preview = cell.display_lines(/*width*/ 80);
+            assert_eq!(preview[0].spans[0].style.fg, Some(Color::Red));
+            let transcript = cell.transcript_lines(/*width*/ 80);
+            insta::allow_duplicates! {
+                insta::assert_snapshot!(
+                    preview.iter().map(render_line_text).chain(
+                        transcript.iter().map(render_line_text)
+                    ).join("\n"),
+                    @"
+                ✗ Execution unconfirmed echo pending
+                  └ No exit status received
+                $ echo pending
+                ✗ Execution unconfirmed (no exit status received)
+                "
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn unknown_exploring_call_keeps_running_neighbour_visible() {
+        let command = vec!["cat".to_string(), "pending.txt".to_string()];
+        let mut cell = new_active_exec_command(
+            "unknown".into(),
+            command.clone(),
+            codex_shell_command::parse_command::parse_command(&command),
+            ExecCommandSource::Agent,
+            /*interaction_input*/ None,
+            /*animations_enabled*/ false,
+        );
+        let command = vec!["cat".to_string(), "running.txt".to_string()];
+        assert!(cell.add_call(
+            "running".into(),
+            command.clone(),
+            codex_shell_command::parse_command::parse_command(&command),
+            ExecCommandSource::Agent,
+            /*interaction_input*/ None,
+        ));
+        cell.complete_call(
+            "unknown",
+            CommandOutput::unknown(String::new()),
+            std::time::Duration::ZERO,
+        );
+        assert!(cell.is_active());
+        assert!(!cell.should_flush());
+        insta::assert_snapshot!(
+            cell.display_lines(80).iter().map(render_line_text).join("\n"),
+            @"
+        ✗ Execution unconfirmed cat pending.txt
+          └ No exit status received
+        • Running cat running.txt
+        "
+        );
+        cell.append_output("running", "content\n");
+        cell.mark_failed();
+        assert!(cell.should_flush());
+        insta::assert_snapshot!(
+            cell.display_lines(80).iter().map(render_line_text).join("\n"),
+            @"
+        ✗ Execution unconfirmed cat pending.txt
+          └ No exit status received
+        • Ran cat running.txt
+          └ content
+        "
+        );
+    }
+
+    #[test]
+    fn unknown_completion_preserves_output_without_inventing_success() {
+        let mut cell = new_active_exec_command(
+            "unknown".into(),
+            vec!["echo".into(), "pending".into()],
+            Vec::new(),
+            ExecCommandSource::Agent,
+            /*interaction_input*/ None,
+            /*animations_enabled*/ false,
+        );
+        cell.complete_call(
+            "unknown",
+            CommandOutput::unknown("diagnostic".into()),
+            std::time::Duration::ZERO,
+        );
+        insta::assert_snapshot!(
+            cell.display_lines(80).iter().map(render_line_text).chain(
+                cell.transcript_lines(80).iter().map(render_line_text)
+            ).join("\n"),
+            @"
+        ✗ Execution unconfirmed echo pending
+          └ No exit status received
+          └ diagnostic
+        $ echo pending
+        diagnostic
+        ✗ Execution unconfirmed (no exit status received)
         "
         );
     }
