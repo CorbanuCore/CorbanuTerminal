@@ -461,3 +461,27 @@ that omits one file produces a correct stop, not a smaller diff.
 The same applies to `brief_file` and `brief_sha256`: change them together or not
 at all. They are a pair, and the worker verifies the pair before doing anything,
 which is the behaviour we want.
+
+## Reserve drawn: 13 KiB, 2026-09-16
+
+`BRIEF_GRANT` set to 13 KiB against the standing 15 KiB `BRIEF_RESERVE`. This is
+the first draw; it was held at zero all session.
+
+**Why.** A day of dispatch left the allocation index at about 35 KiB, up from
+roughly 23 KiB when briefings last fit. Compaction was run first and was not
+enough: several allocations cannot be collapsed yet because their actions are
+still non-terminal, and the two lifecycle allocations (`s02-complete-01`,
+`s02-receiving-verify-01`) must keep their full inputs because
+`complete_sprint` validates `receiving_action` against them, so a consumed stub
+fails validation. Compacting them is what produced `KeyError: receiving_action`.
+
+**What it unblocks.** Registering `PF-60-S03` in coordinator state, which is the
+only thing standing between the accounting lane and real S03 implementation
+work.
+
+**The debt.** This is a debt to repay by removing the underlying cost, not a
+larger normal. The repayment is mechanical: once today's actions reach terminal
+status their allocations compact, and the index should fall back below the
+original 64 KiB limit. `BRIEF_GRANT` returns to zero at that point. The previous
+draw in this file was repaid the same way — by collapsing spent allocations into
+a digest index, which recovered more than the grant.

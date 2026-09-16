@@ -34,7 +34,7 @@ MODEL, PROVIDER, EFFORT = "claude-opus-5-plan", "claude-plan", "high"
 # qa/initiative-control/management-bootstrap/manager-cycle.md. Treat any nonzero
 # value as a debt to repay by removing the underlying cost, as was done above.
 BRIEF_RESERVE = 15 * 1024
-BRIEF_GRANT = 0
+BRIEF_GRANT = 13 * 1024
 BRIEF_LIMIT, FINAL_LIMIT, RECORD_LIMIT = 65536 + BRIEF_GRANT, 131072, 16 * 1024 * 1024
 SAFE_PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin"
 SECRET = re.compile(r"(?<![A-Za-z0-9_-])sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}"
