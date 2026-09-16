@@ -7,5 +7,7 @@ expression: "render_bottom_popup(&chat, 80)"
 
 › 1. Show usage                View recent account token usage.
   2. Redeem usage limit reset  Check reset availability.
+  3. Recorded requests         Explain this thread's recorded requests for
+                               today (UTC).
 
   Press enter to confirm or esc to go back

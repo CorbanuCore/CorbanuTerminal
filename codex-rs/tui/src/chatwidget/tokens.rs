@@ -278,11 +278,517 @@ impl ChatWidget {
     /// Late background responses cannot mutate cards after a transcript reset,
     /// backtrack, or replacement flow clears this widget-owned state.
     pub(crate) fn clear_pending_token_activity_refreshes(&mut self) {
+        self.accounting_inspector = None;
+        self.bottom_pane.dismiss_view_by_id(INSPECTOR_VIEW);
         let cleared_refresh = self.refreshing_token_activity_output.take().is_some();
         let cleared_completed = self.completed_token_activity_output.take().is_some();
         if cleared_refresh || cleared_completed {
             self.bump_active_cell_revision();
             self.request_redraw();
+        }
+    }
+}
+
+// Inspector pages contain local evidence only; never insert them into history.
+use crate::bottom_pane::SelectionItem;
+use crate::bottom_pane::SelectionViewParams;
+use codex_protocol::ThreadId;
+use codex_state::accounting::BucketQuote;
+use codex_state::accounting::Decimal;
+use codex_state::accounting::InspectionDay;
+use codex_state::accounting::ObservationQuote;
+use uuid::Uuid;
+
+const INSPECTOR_VIEW: &str = "recorded-requests";
+
+pub(super) struct Inspector {
+    generation: Uuid,
+    thread: Option<ThreadId>,
+    day: i64,
+    pages: Vec<InspectorPage>,
+    page: usize,
+    alive: Arc<std::sync::atomic::AtomicBool>,
+}
+
+struct InspectorPage {
+    title: String,
+    text: Vec<String>,
+    links: Vec<(String, usize)>,
+    parent: Option<usize>,
+    selected: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+fn money(value: Decimal) -> String {
+    let display = value.display();
+    format!(
+        "${}{}{}",
+        display.text,
+        if display.rounded { " (rounded)" } else { "" },
+        if display.nonzero_sub_micro {
+            " (nonzero, less than $0.000001)"
+        } else {
+            ""
+        }
+    )
+}
+
+fn exact(value: Decimal) -> String {
+    serde_json::to_value(value)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_else(|| "unavailable".to_string())
+}
+
+fn estimate(known: Decimal, unknown: i64, attempts: i64) -> Vec<String> {
+    if attempts == 0 {
+        return vec!["No recorded attempts in this day; collection coverage unknown.".into()];
+    }
+    if unknown == 0 {
+        return vec![format!(
+            "Estimated token cost for recorded attempts: {}",
+            money(known)
+        )];
+    }
+    let mut lines = vec![
+        format!(
+            "Known estimated token cost: {} + unknown costs",
+            money(known)
+        ),
+        format!(
+            "Full recorded estimate: unavailable ({unknown} of {attempts} attempts incomplete)"
+        ),
+    ];
+    if known == Decimal::default() {
+        lines.insert(0, "Estimated token cost: unknown".into());
+    }
+    lines
+}
+
+const METRICS: [&str; 7] = [
+    "Input",
+    "Noncached input (derived for inclusive input)",
+    "Cache read",
+    "Cache write",
+    "Output",
+    "Reasoning (subset, not separately billed)",
+    "Total (not separately billed)",
+];
+const BUCKETS: [&str; 4] = ["Noncached input", "Cache read", "Cache write", "Output"];
+
+fn attempt_text(q: &ObservationQuote) -> Vec<String> {
+    let a = &q.attempt;
+    let mut lines = vec![
+        format!("Request: {}", a.request_id),
+        format!("Attempt: {}", a.attempt_id),
+        format!("Thread: {}", a.thread_id),
+        format!("Turn: {}", a.turn),
+        format!("Provider: {}", a.provider),
+        format!("Model: {}", a.model),
+        format!("Opaque scope: {}", a.scope),
+        format!("Arithmetic dialect: {:?}", a.dialect),
+        format!(
+            "Admission time: {} ms since Unix epoch (UTC)",
+            i64::from(a.dispatched_at_ms)
+        ),
+        format!(
+            "Retry predecessor: {}",
+            a.retry_of.map_or("none".into(), |v| v.to_string())
+        ),
+        "Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable"
+            .into(),
+    ];
+    lines.extend(estimate(
+        q.known_subtotal,
+        i64::from(q.all_buckets_priced.is_none()),
+        1,
+    ));
+    let u = &q.usage;
+    for (index, (label, value)) in METRICS
+        .iter()
+        .zip([
+            u.input,
+            u.noncached,
+            u.read,
+            u.write,
+            u.output,
+            u.reasoning,
+            u.total,
+        ])
+        .enumerate()
+    {
+        let derived = match a.dialect {
+            codex_state::accounting::Dialect::Inclusive => index == 1,
+            codex_state::accounting::Dialect::NativeAnthropic => index == 0 || index == 6,
+            codex_state::accounting::Dialect::UnknownCompatible => false,
+        };
+        lines.push(format!(
+            "{label}: {}",
+            value.map_or("unknown — no retained numeric evidence".into(), |n| {
+                if n == 0 {
+                    if derived {
+                        "0 (derived)"
+                    } else {
+                        "0 (reported)"
+                    }
+                    .into()
+                } else {
+                    format!("{n}{}", if derived { " (derived)" } else { "" })
+                }
+            })
+        ));
+    }
+    for (label, bucket) in BUCKETS.iter().zip(q.buckets) {
+        lines.push(format!(
+            "{label} cost: {}",
+            match bucket {
+                BucketQuote::Priced(v) => format!("{}; exact USD {}", money(v), exact(v)),
+                BucketQuote::MissingUsage => "unknown — no retained numeric evidence".into(),
+                BucketQuote::MissingRate => "unknown — rate unavailable".into(),
+            }
+        ));
+    }
+    lines.push(format!(
+        "Known subtotal exact USD: {}",
+        exact(q.known_subtotal)
+    ));
+    if let Some(s) = &q.snapshot {
+        lines.extend([
+            format!("Price ID: {}", s.id),
+            format!(
+                "Price source: {:?}; reference {}",
+                s.source_kind, s.source_reference
+            ),
+            format!("Price currency/unit: {:?} / {:?}", s.currency, s.unit),
+            format!(
+                "Price observed/approved: {} / {} ms UTC",
+                i64::from(s.observed_at_ms),
+                i64::from(s.approved_at_ms)
+            ),
+            format!(
+                "Price effective interval: [{}, {}) ms UTC",
+                i64::from(s.effective_from_ms),
+                s.effective_end_ms
+                    .map_or("unbounded".into(), |n| i64::from(n).to_string())
+            ),
+        ]);
+        for (label, rate) in BUCKETS.iter().zip([
+            s.rates.noncached,
+            s.rates.read,
+            s.rates.write,
+            s.rates.output,
+        ]) {
+            lines.push(rate.map_or_else(
+                || format!("Rate unavailable for {label}"),
+                |r| format!("{label} rate: {} USD per million tokens", exact(r)),
+            ));
+        }
+    } else {
+        lines.push("Price: unavailable — no dispatch-time price snapshot".into());
+    }
+    for o in &q.observations {
+        lines.push(format!(
+            "Evidence revision {}; source {}; sequence {}; presence patch {}",
+            i64::from(o.revision),
+            o.source,
+            i64::from(o.sequence),
+            serde_json::to_string(&o.patch).unwrap_or_default()
+        ));
+    }
+    lines
+}
+
+fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage> {
+    let mut pages = vec![InspectorPage { title: "Recorded requests — this thread only".into(), text: vec![
+        "Collection coverage: unknown; recorded attempts only. Descendants excluded.".into(),
+        "Billed cost: unavailable — no settlement evidence".into(),
+        "Logical requests may have attempts on other days; this UTC day is not their complete lifetime.".into(),
+    ], links: Vec::new(), parent: None, selected: Arc::default() }];
+    let ready = match result {
+        Ok(InspectionDay::Ready(view)) => view,
+        other => {
+            pages[0].text.push(match other {
+                Ok(InspectionDay::Absent) => "Unavailable — accounting ledger not installed. Collection remains off.".into(),
+                Ok(InspectionDay::MissingThread) => "Unavailable — native thread no longer exists.".into(),
+                Ok(InspectionDay::CheckpointLag) => "Snapshot is not current; newer activity is unverified".into(),
+                Ok(InspectionDay::NeedsRefresh) => "Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.".into(),
+                Ok(InspectionDay::TooLarge) => "Range too large for this inspector. No total shown.".into(),
+                Ok(InspectionDay::DetailUnavailable { coverage, read_at_ms, compact }) => format!(
+                    "Request detail unavailable for this whole UTC day — {}. No total shown. Store checkpoint: {}; aggregate day floor: {}; oldest recorded day: {:?}; 90-day wall-clock detail cutoff: {:?} ms UTC.",
+                    if compact { "compacted history lost request/provider attribution" } else { "day touches expired detail or aggregate history" },
+                    coverage.completed_as_of_ms, coverage.aggregate_day_floor, coverage.oldest_recorded_day, read_at_ms.checked_sub(90 * 86_400_000).filter(|n| *n >= 0)),
+                Err(message) => message,
+                Ok(InspectionDay::Ready(_)) => unreachable!(),
+            });
+            return pages;
+        }
+    };
+    if ready.read_at_ms > ready.coverage.completed_as_of_ms {
+        pages[0]
+            .text
+            .push("Snapshot is not current; newer activity is unverified".into());
+    }
+    let t = &ready.totals;
+    pages[0]
+        .text
+        .splice(0..0, estimate(t.known_usd, t.unknown_estimates, t.attempts));
+    pages[0].text.extend([
+        format!("UTC admission interval: [{}, {}) ms since Unix epoch", ready.utc_day * 86_400_000, (ready.utc_day + 1) * 86_400_000),
+        format!("Read at: {} ms UTC; store checkpoint: {} ms UTC; maintenance lag: {} ms",
+            ready.read_at_ms, ready.coverage.completed_as_of_ms, ready.read_at_ms - ready.coverage.completed_as_of_ms),
+        format!("90-day wall-clock detail cutoff: {:?}; aggregate day floor at checkpoint: {}; oldest recorded day: {:?}",
+            ready.read_at_ms.checked_sub(90 * 86_400_000).filter(|n| *n >= 0), ready.coverage.aggregate_day_floor, ready.coverage.oldest_recorded_day),
+        format!("Known subtotal exact USD: {}", exact(t.known_usd)),
+    ]);
+    for (label, m) in METRICS.iter().zip(&t.measured) {
+        pages[0].text.push(format!(
+            "{label}: {} known + unknown in {} attempts",
+            m.known, m.unknown
+        ));
+    }
+    for (request, quotes) in ready.requests {
+        let request_page = pages.len();
+        let number = pages[0].links.len() + 1;
+        pages[0]
+            .links
+            .push((format!("Request {number}"), request_page));
+        pages.push(InspectorPage {
+            title: "Logical request".into(),
+            text: vec![format!("Request: {request}")],
+            links: Vec::new(),
+            parent: Some(0),
+            selected: Arc::default(),
+        });
+        for (index, quote) in quotes.iter().enumerate() {
+            let target = pages.len();
+            pages[request_page]
+                .links
+                .push((format!("Attempt {}", index + 1), target));
+            pages.push(InspectorPage {
+                title: "Attempt, components and original price".into(),
+                text: attempt_text(quote),
+                links: Vec::new(),
+                parent: Some(request_page),
+                selected: Arc::default(),
+            });
+        }
+    }
+    pages
+}
+
+impl Inspector {
+    fn params(&self) -> SelectionViewParams {
+        let page = &self.pages[self.page];
+        let generation = self.generation;
+        // Small selectable fragments keep every long field reachable at 40 columns.
+        let mut items: Vec<SelectionItem> = page
+            .text
+            .iter()
+            .flat_map(|text| {
+                let clean: String = text.chars().filter(|c| !c.is_control()).collect();
+                textwrap::wrap(&clean, 26)
+                    .into_iter()
+                    .map(|part| SelectionItem {
+                        name: part.into_owned(),
+                        ..Default::default()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        for (label, target) in &page.links {
+            let page = *target;
+            items.push(SelectionItem {
+                name: label.clone(),
+                actions: vec![Box::new(move |tx| {
+                    tx.send(AppEvent::NavigateAccountingInspector { generation, page })
+                })],
+                ..Default::default()
+            });
+        }
+        if let Some(page) = page.parent {
+            items.push(SelectionItem {
+                name: "Back".into(),
+                actions: vec![Box::new(move |tx| {
+                    tx.send(AppEvent::NavigateAccountingInspector { generation, page })
+                })],
+                ..Default::default()
+            });
+        }
+        items.push(SelectionItem {
+            name: "Refresh".into(),
+            actions: vec![Box::new(move |tx| {
+                tx.send(AppEvent::RefreshAccountingInspector { generation })
+            })],
+            ..Default::default()
+        });
+        let close_alive = self.alive.clone();
+        items.push(SelectionItem {
+            name: "Close".into(),
+            dismiss_on_select: true,
+            actions: vec![Box::new(move |tx| {
+                close_alive.store(false, std::sync::atomic::Ordering::Release);
+                tx.send(AppEvent::CloseAccountingInspector { generation });
+            })],
+            ..Default::default()
+        });
+        let alive = self.alive.clone();
+        let parent = page.parent;
+        let selected = page.selected.clone();
+        SelectionViewParams {
+            initial_selected_idx: Some(selected.load(std::sync::atomic::Ordering::Relaxed)),
+            on_selection_changed: Some(Box::new(move |index, _| {
+                selected.store(index, std::sync::atomic::Ordering::Relaxed);
+            })),
+            view_id: Some(INSPECTOR_VIEW),
+            title: Some(page.title.clone()),
+            items,
+            allow_number_shortcuts: false,
+            footer_hint: Some("↑↓ scroll · Enter open · Esc back/close".into()),
+            on_cancel: Some(Box::new(move |tx| {
+                if let Some(page) = parent {
+                    tx.send(AppEvent::NavigateAccountingInspector { generation, page });
+                } else {
+                    alive.store(false, std::sync::atomic::Ordering::Release);
+                    tx.send(AppEvent::CloseAccountingInspector { generation });
+                }
+            })),
+            ..Default::default()
+        }
+    }
+}
+
+impl ChatWidget {
+    pub(super) fn invalidate_accounting_inspector_for_thread(&mut self) {
+        if self
+            .accounting_inspector
+            .as_ref()
+            .is_some_and(|v| v.thread != self.thread_id())
+        {
+            self.accounting_inspector = None;
+            self.bottom_pane.dismiss_view_by_id(INSPECTOR_VIEW);
+        }
+    }
+
+    pub(super) fn open_accounting_command(&mut self, args: &str, today: NaiveDate) {
+        let parts: Vec<_> = args.split_whitespace().collect();
+        let date = match parts.as_slice() {
+            ["requests"] => Some(today),
+            ["requests", date] if date.len() == 10 => NaiveDate::parse_from_str(date, "%Y-%m-%d")
+                .ok()
+                .filter(|d| d.to_string() == *date),
+            _ => None,
+        };
+        if let Some(date) = date.filter(|d| *d <= today)
+            && let Some(time) = date.and_hms_opt(0, 0, 0)
+            && time.and_utc().timestamp() >= 0
+        {
+            self.open_accounting_inspector(time.and_utc().timestamp() / 86_400);
+        } else {
+            self.add_error_message(
+                "Usage: /usage requests [YYYY-MM-DD] (UTC, no future dates)".into(),
+            );
+        }
+    }
+
+    pub(crate) fn open_accounting_inspector(&mut self, day: i64) {
+        let generation = Uuid::new_v4();
+        let thread = self.thread_id();
+        let inspector = Inspector {
+            generation,
+            thread,
+            day,
+            pages: vec![InspectorPage {
+                title: "Recorded requests".into(),
+                text: vec!["Loading recorded requests…".into()],
+                links: Vec::new(),
+                parent: None,
+                selected: Arc::default(),
+            }],
+            page: 0,
+            alive: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        };
+        let params = inspector.params();
+        if !self
+            .bottom_pane
+            .replace_selection_view_if_present(INSPECTOR_VIEW, inspector.params())
+        {
+            self.bottom_pane.show_selection_view(params);
+        }
+        self.accounting_inspector = Some(inspector);
+        self.app_event_tx.send(AppEvent::LoadAccountingInspector {
+            generation,
+            thread,
+            day,
+        });
+        self.request_redraw();
+    }
+
+    pub(crate) fn finish_accounting_inspector(
+        &mut self,
+        generation: Uuid,
+        thread: Option<ThreadId>,
+        day: i64,
+        result: Result<InspectionDay, String>,
+    ) {
+        let current_thread = self.thread_id();
+        let Some(view) = self.accounting_inspector.as_mut().filter(|v| {
+            v.generation == generation
+                && v.thread == thread
+                && v.day == day
+                && v.thread == current_thread
+                && v.alive.load(std::sync::atomic::Ordering::Acquire)
+        }) else {
+            return;
+        };
+        view.pages = inspection_pages(result);
+        view.page = 0;
+        if !self
+            .bottom_pane
+            .replace_selection_view_if_present(INSPECTOR_VIEW, view.params())
+        {
+            self.accounting_inspector = None;
+        }
+        self.request_redraw();
+    }
+
+    pub(crate) fn navigate_accounting_inspector(&mut self, generation: Uuid, page: usize) {
+        let thread = self.thread_id();
+        let Some(view) = self.accounting_inspector.as_mut().filter(|v| {
+            v.thread == thread
+                && v.generation == generation
+                && v.alive.load(std::sync::atomic::Ordering::Acquire)
+        }) else {
+            return;
+        };
+        if page >= view.pages.len() {
+            return;
+        }
+        view.page = page;
+        if !self
+            .bottom_pane
+            .replace_selection_view_if_present(INSPECTOR_VIEW, view.params())
+        {
+            self.bottom_pane.show_selection_view(view.params());
+        }
+        self.request_redraw();
+    }
+
+    pub(crate) fn close_accounting_inspector(&mut self, generation: Uuid) {
+        if self
+            .accounting_inspector
+            .as_ref()
+            .is_some_and(|v| v.generation == generation)
+        {
+            self.accounting_inspector = None;
+            self.bottom_pane.dismiss_view_by_id(INSPECTOR_VIEW);
+        }
+    }
+
+    pub(crate) fn refresh_accounting_inspector(&mut self, generation: Uuid) {
+        if let Some(view) = &self.accounting_inspector
+            && view.generation == generation
+            && view.alive.load(std::sync::atomic::Ordering::Acquire)
+        {
+            self.open_accounting_inspector(view.day);
         }
     }
 }

@@ -1050,6 +1050,31 @@ pub(crate) enum AppEvent {
     /// Open the default token-activity view selected from the `/usage` menu.
     OpenTokenActivity,
 
+    OpenAccountingInspector {
+        day: i64,
+    },
+    LoadAccountingInspector {
+        generation: uuid::Uuid,
+        thread: Option<ThreadId>,
+        day: i64,
+    },
+    AccountingInspectorLoaded {
+        generation: uuid::Uuid,
+        thread: Option<ThreadId>,
+        day: i64,
+        result: Result<codex_state::accounting::InspectionDay, String>,
+    },
+    NavigateAccountingInspector {
+        generation: uuid::Uuid,
+        page: usize,
+    },
+    CloseAccountingInspector {
+        generation: uuid::Uuid,
+    },
+    RefreshAccountingInspector {
+        generation: uuid::Uuid,
+    },
+
     /// Open the reset-credit flow selected from the `/usage` menu.
     OpenRateLimitResetCredits,
 

@@ -6,6 +6,397 @@ use std::path::Path;
 use std::sync::Arc;
 use uuid::Uuid;
 
+fn inspection(value: InspectionDay) -> Inspection {
+    let InspectionDay::Ready(value) = value else {
+        panic!("{value:?}")
+    };
+    value
+}
+
+async fn inspected(runtime: &StateRuntime, day: i64, time: i64) -> anyhow::Result<InspectionDay> {
+    AccountingStore::inspect_day(runtime, attempt(1).thread_id, day, time).await
+}
+
+#[tokio::test]
+async fn accounting_inspect_absent_schema_is_read_only() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    let before = rows(&runtime).await?;
+    assert_eq!(inspected(&runtime, 0, 0).await?, InspectionDay::Absent);
+    assert_eq!(rows(&runtime).await?, before);
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_schema_rejection_matrix() -> anyhow::Result<()> {
+    for mutation in [
+        "DROP TABLE draft_accounting_price_bindings",
+        "DROP INDEX draft_accounting_request",
+        "UPDATE _accounting_migrations SET success = 0",
+        "UPDATE _accounting_migrations SET checksum = X'00'",
+        "UPDATE _accounting_migrations SET version = 2",
+        "DELETE FROM _accounting_migrations",
+        "DROP TABLE _accounting_migrations",
+    ] {
+        let path = home();
+        let runtime = open(&path).await?;
+        seed(&runtime).await?;
+        sqlx::raw_sql(mutation)
+            .execute(runtime.pool.as_ref())
+            .await?;
+        let before = rows(&runtime).await?;
+        assert!(inspected(&runtime, 0, 1).await.is_err(), "{mutation}");
+        assert_eq!(rows(&runtime).await?, before);
+        runtime.close().await;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_raw_day_reconciles_contributions() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let a = attempt(1);
+    let mut retry = attempt(2);
+    retry.request_id = a.request_id;
+    retry.retry_of = Some(a.attempt_id);
+    let store = AccountingStore::open(&runtime, 0).await?;
+    store.admit(a.thread_id, &a, &[snapshot()], 0).await?;
+    store.observe(a.thread_id, &a, &[row(1)], 0).await?;
+    let first = store.observe(a.thread_id, &a, &[row(2)], 0).await?;
+    let second = store.admit(a.thread_id, &retry, &[], 0).await?;
+    let view = inspection(inspected(&runtime, 0, 0).await?);
+    assert_eq!(
+        view.requests,
+        std::collections::BTreeMap::from([(a.request_id, vec![first, second])])
+    );
+    assert_eq!(
+        view.totals,
+        DayTotals {
+            measured: std::array::from_fn(|index| Metric {
+                known: if index == 1 { 2 } else { 0 },
+                unknown: if index == 1 { 1 } else { 2 },
+            }),
+            known_usd: "0.000002".to_owned().try_into()?,
+            unknown_estimates: 2,
+            attempts: 2,
+        }
+    );
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_original_null_and_price_are_immutable() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let store = AccountingStore::open(&runtime, 0).await?;
+    for (a, prices) in [(attempt(1), vec![snapshot()]), (attempt(2), vec![])] {
+        store.admit(a.thread_id, &a, &prices, 0).await?;
+        let before = inspected(&runtime, 0, 0).await?;
+        let mut later = snapshot();
+        later.id = Uuid::from_u128(9999);
+        later.rates.noncached = Some("99".to_owned().try_into()?);
+        store.admit(a.thread_id, &a, &[later], 0).await?;
+        assert_eq!(inspected(&runtime, 0, 0).await?, before);
+    }
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_missing_binding_is_not_unpriced() -> anyhow::Result<()> {
+    for mutation in [
+        "DELETE FROM draft_accounting_contributions; DELETE FROM draft_accounting_estimates; DELETE FROM draft_accounting_price_bindings",
+        "UPDATE draft_accounting_contributions SET thread_id = '00000000-0000-0000-0000-000000000008'",
+        "UPDATE draft_accounting_attempts SET request_id = '00000000-0000-0000-0000-000000000008'",
+    ] {
+        let path = home();
+        let runtime = open(&path).await?;
+        seed(&runtime).await?;
+        let a = attempt(1);
+        AccountingStore::open(&runtime, 0)
+            .await?
+            .admit(a.thread_id, &a, &[], 0)
+            .await?;
+        assert!(
+            inspection(inspected(&runtime, 0, 0).await?).requests[&a.request_id][0]
+                .snapshot
+                .is_none()
+        );
+        sqlx::raw_sql(mutation)
+            .execute(runtime.pool.as_ref())
+            .await?;
+        let before = rows(&runtime).await?;
+        assert!(inspected(&runtime, 0, 0).await.is_err(), "{mutation}");
+        assert_eq!(rows(&runtime).await?, before);
+        runtime.close().await;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_checkpoint_and_stale_estimate() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let a = attempt(1);
+    let store = AccountingStore::open(&runtime, 0).await?;
+    store.admit(a.thread_id, &a, &[], 0).await?;
+    let before = rows(&runtime).await?;
+    let lagged = inspection(inspected(&runtime, 0, 12).await?);
+    assert_eq!(
+        (lagged.read_at_ms, lagged.coverage.completed_as_of_ms),
+        (12, 0)
+    );
+    assert_eq!(rows(&runtime).await?, before);
+    assert_eq!(
+        inspected(&runtime, 1, 86_400_000).await?,
+        InspectionDay::CheckpointLag
+    );
+    assert_eq!(rows(&runtime).await?, before);
+    store.observe(a.thread_id, &a, &[row(1)], 0).await?;
+    sqlx::query("UPDATE draft_accounting_contributions SET evidence = '[]'")
+        .execute(runtime.pool.as_ref())
+        .await?;
+    let stale = rows(&runtime).await?;
+    assert_eq!(
+        inspected(&runtime, 0, 1).await?,
+        InspectionDay::NeedsRefresh
+    );
+    assert_eq!(rows(&runtime).await?, stale);
+    sqlx::raw_sql(
+        "DELETE FROM draft_accounting_contributions; DELETE FROM draft_accounting_estimates",
+    )
+    .execute(runtime.pool.as_ref())
+    .await?;
+    assert_eq!(
+        inspected(&runtime, 0, 1).await?,
+        InspectionDay::NeedsRefresh
+    );
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_never_maintained_is_checkpoint_lag() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    sqlx::query(
+        "UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = NULL, admission_active = 0",
+    )
+    .execute(runtime.pool.as_ref())
+    .await?;
+    let before = rows(&runtime).await?;
+    assert_eq!(
+        inspected(&runtime, 0, 0).await?,
+        InspectionDay::CheckpointLag
+    );
+    assert_eq!(rows(&runtime).await?, before);
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_retention_and_compact_matrix() -> anyhow::Result<()> {
+    const DAY: i64 = 86_400_000;
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let a = attempt(1);
+    let store = AccountingStore::open(&runtime, 0).await?;
+    store.admit(a.thread_id, &a, &[], 0).await?;
+    assert!(matches!(
+        inspected(&runtime, 0, 90 * DAY - 1).await?,
+        InspectionDay::Ready(_)
+    ));
+    let before = rows(&runtime).await?;
+    for now in [90 * DAY, 90 * DAY + 1, 365 * DAY] {
+        assert!(matches!(
+            inspected(&runtime, 0, now).await?,
+            InspectionDay::DetailUnavailable { compact: false, .. }
+        ));
+    }
+    assert_eq!(rows(&runtime).await?, before);
+    let mut late = attempt(2);
+    late.dispatched_at_ms = 1.try_into()?;
+    store.admit(a.thread_id, &late, &[], 1).await?;
+    store.maintain(90 * DAY).await?;
+    let unavailable = inspected(&runtime, 0, 90 * DAY).await?;
+    assert!(matches!(
+        unavailable,
+        InspectionDay::DetailUnavailable {
+            compact: true,
+            coverage: RetentionCoverage {
+                oldest_recorded_day: Some(0),
+                ..
+            },
+            ..
+        }
+    ));
+    store.maintain(90 * DAY + 1).await?;
+    assert!(matches!(
+        inspected(&runtime, 0, 90 * DAY + 1).await?,
+        InspectionDay::DetailUnavailable { compact: true, .. }
+    ));
+    store.maintain(365 * DAY).await?;
+    assert!(matches!(
+        inspected(&runtime, 0, 365 * DAY).await?,
+        InspectionDay::DetailUnavailable {
+            coverage: RetentionCoverage {
+                aggregate_day_floor: 1,
+                oldest_recorded_day: None,
+                ..
+            },
+            ..
+        }
+    ));
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_half_open_date_bounds() -> anyhow::Result<()> {
+    const DAY: i64 = 86_400_000;
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let store = AccountingStore::open(&runtime, 0).await?;
+    for (id, time) in [(1, 0), (2, DAY - 1), (3, DAY)] {
+        let mut a = attempt(id);
+        a.dispatched_at_ms = time.try_into()?;
+        store.admit(a.thread_id, &a, &[], time).await?;
+    }
+    // Later observation admission does not change request-day ownership.
+    store
+        .observe(attempt(1).thread_id, &attempt(1), &[row(1)], DAY)
+        .await?;
+    assert_eq!(
+        inspection(inspected(&runtime, 0, DAY).await?)
+            .totals
+            .attempts,
+        2
+    );
+    assert_eq!(
+        inspection(inspected(&runtime, 1, DAY).await?)
+            .totals
+            .attempts,
+        1
+    );
+    for (day, now) in [
+        (-1, DAY),
+        (2, DAY),
+        (0, -1),
+        (0, DAY - 1),
+        (i64::MAX, i64::MAX),
+    ] {
+        assert!(inspected(&runtime, day, now).await.is_err());
+    }
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_corruption_and_unknowns() -> anyhow::Result<()> {
+    for mutation in [
+        "UPDATE draft_accounting_observations SET source = '00000000-0000-0000-0000-000000000009'",
+        "UPDATE draft_accounting_observations SET sequence = 9",
+        "UPDATE draft_accounting_estimates SET payload = '{}' WHERE evidence = '[]'",
+        "UPDATE draft_accounting_attempts SET payload = '{}'",
+    ] {
+        let path = home();
+        let runtime = open(&path).await?;
+        seed(&runtime).await?;
+        let a = attempt(1);
+        let store = AccountingStore::open(&runtime, 0).await?;
+        store.admit(a.thread_id, &a, &[], 0).await?;
+        let mut zero = row(1);
+        zero.patch = serde_json::from_value(json!({"input":0,"read":null}))?;
+        store.observe(a.thread_id, &a, &[zero.clone()], 0).await?;
+        let view = inspection(inspected(&runtime, 0, 0).await?);
+        assert_eq!(view.requests[&a.request_id][0].observations, vec![zero]);
+        assert_eq!(view.requests[&a.request_id][0].usage.noncached, Some(0));
+        assert_eq!(view.requests[&a.request_id][0].usage.read, None);
+        sqlx::raw_sql(mutation)
+            .execute(runtime.pool.as_ref())
+            .await?;
+        let before = rows(&runtime).await?;
+        assert!(inspected(&runtime, 0, 0).await.is_err(), "{mutation}");
+        assert_eq!(rows(&runtime).await?, before);
+        runtime.close().await;
+    }
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let store = AccountingStore::open(&runtime, 0).await?;
+    for id in [1, 2] {
+        let a = attempt(id);
+        store.admit(a.thread_id, &a, &[], 0).await?;
+        let mut observation = row(1);
+        observation.source = a.attempt_id;
+        observation.patch =
+            serde_json::from_value(json!({"input": if id == 1 { i64::MAX } else { 1 }}))?;
+        sqlx::query("INSERT INTO draft_accounting_observations VALUES (?, 1, ?, 1, ?)")
+            .bind(a.attempt_id.to_string())
+            .bind(observation.source.to_string())
+            .bind(serde_json::to_string(&observation)?)
+            .execute(runtime.pool.as_ref())
+            .await?;
+    }
+    marker(inspected(&runtime, 0, 0).await.unwrap_err(), "overflow");
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_single_snapshot_concurrent_writer() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let a = attempt(1);
+    let store = AccountingStore::open(&runtime, 0).await?;
+    store.admit(a.thread_id, &a, &[snapshot()], 0).await?;
+    let before = inspected(&runtime, 0, 0).await?;
+    // Establish the same read snapshot as inspect_day before releasing the writer.
+    let mut tx = runtime.pool.begin().await?;
+    validate_on_connection(&mut tx).await?;
+    let (release, barrier) = tokio::sync::oneshot::channel();
+    let writer_runtime = runtime.clone();
+    let writer = tokio::spawn(async move {
+        barrier.await?;
+        AccountingStore::open(&writer_runtime, 0)
+            .await?
+            .observe(a.thread_id, &a, &[row(1)], 0)
+            .await?;
+        anyhow::Ok(())
+    });
+    release.send(()).unwrap();
+    writer.await??;
+    assert_eq!(
+        Journal::inspect_on_connection(&mut tx, attempt(1).thread_id, 0, 0).await?,
+        before
+    );
+    tx.commit().await?;
+    let after = inspection(inspected(&runtime, 0, 0).await?);
+    assert_eq!(
+        after.totals.measured[1],
+        Metric {
+            known: 1,
+            unknown: 0
+        }
+    );
+    assert_eq!(
+        after.requests[&attempt(1).request_id][0].usage.noncached,
+        Some(1)
+    );
+    runtime.close().await;
+    Ok(())
+}
+
 fn home() -> impl std::ops::Deref<Target = std::path::PathBuf> {
     scopeguard::guard(crate::runtime::test_support::unique_temp_dir(), |path| {
         let _ = std::fs::remove_dir_all(path);

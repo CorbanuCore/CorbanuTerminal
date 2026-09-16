@@ -1,0 +1,27 @@
+---
+source: tui/src/status/tests.rs
+assertion_line: 1565
+expression: sanitized
+---
+/status
+
+╭────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.42)         │
+│                                        │
+│  Model:                ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟｶﾞ  │
+│  Model provider:       Ambient         │
+│  Directory: [[workspace]]              │
+│  Permissions:          Custom (workspa │
+│  Security:             Requested       │
+│                        Permissive;     │
+│                        effective       │
+│                        protection      │
+│                        unverified (/   │
+│                        security)       │
+│  Agents.md:            <none>          │
+│  Account:              ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟ@ex │
+│  Thread name:          ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟｶﾞ  │
+│  Collaboration mode:   ｶﾞﾊﾟ collaborat │
+│                                        │
+│  Limits:               data not availa │
+╰────────────────────────────────────────╯

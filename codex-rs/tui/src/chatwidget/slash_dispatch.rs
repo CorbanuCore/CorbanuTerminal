@@ -760,11 +760,13 @@ impl ChatWidget {
         let trimmed = args.trim();
         match cmd {
             SlashCommand::Usage => {
-                if self.ensure_usage_command_available() {
+                if trimmed.split_whitespace().next() == Some("requests") {
+                    self.open_accounting_command(trimmed, chrono::Utc::now().date_naive());
+                } else if self.ensure_usage_command_available() {
                     match tokens::TokenActivityView::parse(trimmed) {
                         Some(view) => self.add_token_activity_output(view),
                         None => self.add_error_message(
-                            "Usage: /usage [daily|weekly|cumulative]".to_string(),
+                            "Usage: /usage [daily|weekly|cumulative] or /usage requests [YYYY-MM-DD]".to_string(),
                         ),
                     }
                 }

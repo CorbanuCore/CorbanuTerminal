@@ -1,0 +1,1235 @@
+{
+  "note": "Source budget includes source, tests and accepted snapshots. Governance/evidence are separately disclosed under the frozen design; total includes this manifest.",
+  "changed_lines": {
+    "source": 2382,
+    "governance": 4,
+    "evidence": 37163
+  },
+  "files": [
+    {
+      "path": "codex-rs/state/src/runtime/accounting_estimates.rs",
+      "added": 11,
+      "deleted": 0,
+      "file_lines": 308,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/state/src/runtime/accounting_lifecycle.rs",
+      "added": 155,
+      "deleted": 0,
+      "file_lines": 460,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/state/src/runtime/accounting_pricing.rs",
+      "added": 1,
+      "deleted": 1,
+      "file_lines": 293,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/state/src/runtime/accounting_store.rs",
+      "added": 60,
+      "deleted": 0,
+      "file_lines": 328,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/state/src/runtime/accounting_store_tests.rs",
+      "added": 366,
+      "deleted": 0,
+      "file_lines": 1218,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/state/tests/accounting_store.rs",
+      "added": 410,
+      "deleted": 0,
+      "file_lines": 800,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/tui/src/app/event_dispatch.rs",
+      "added": 83,
+      "deleted": 0,
+      "file_lines": 6602,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/tui/src/app/tests.rs",
+      "added": 286,
+      "deleted": 0,
+      "file_lines": 15458,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/tui/src/app_event.rs",
+      "added": 25,
+      "deleted": 0,
+      "file_lines": 2375,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget.rs",
+      "added": 2,
+      "deleted": 0,
+      "file_lines": 2105,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/constructor.rs",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 321,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+      "added": 4,
+      "deleted": 2,
+      "file_lines": 1521,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu.snap",
+      "added": 2,
+      "deleted": 0,
+      "file_lines": 13,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_before_reset_refresh.snap",
+      "added": 2,
+      "deleted": 0,
+      "file_lines": 13,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_without_resets.snap",
+      "added": 2,
+      "deleted": 0,
+      "file_lines": 13,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_with_invalid_view_reports_usage.snap",
+      "added": 1,
+      "deleted": 1,
+      "file_lines": 5,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/tests/slash_commands.rs",
+      "added": 56,
+      "deleted": 0,
+      "file_lines": 3369,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/tests/usage.rs",
+      "added": 81,
+      "deleted": 3,
+      "file_lines": 1194,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/tokens.rs",
+      "added": 505,
+      "deleted": 0,
+      "file_lines": 797,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/tokens_tests.rs",
+      "added": 309,
+      "deleted": 0,
+      "file_lines": 347,
+      "category": "source"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/usage.rs",
+      "added": 13,
+      "deleted": 0,
+      "file_lines": 626,
+      "category": "source"
+    },
+    {
+      "path": "docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md",
+      "added": 3,
+      "deleted": 1,
+      "file_lines": 86,
+      "category": "governance"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inspect-impl-03-return.md",
+      "added": 100,
+      "deleted": 0,
+      "file_lines": 100,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-configure-many-restart-request/binary.sha256",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-configure-many-restart-request/scrollback.txt",
+      "added": 72,
+      "deleted": 0,
+      "file_lines": 72,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-configure-many-restart-request/viewport.txt",
+      "added": 44,
+      "deleted": 0,
+      "file_lines": 44,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-deferred-fallback-cancel/binary.sha256",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-deferred-fallback-cancel/scrollback.txt",
+      "added": 101,
+      "deleted": 0,
+      "file_lines": 101,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-deferred-fallback-cancel/viewport.txt",
+      "added": 44,
+      "deleted": 0,
+      "file_lines": 44,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-0-restart-false/binary.sha256",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-0-restart-false/scrollback.txt",
+      "added": 78,
+      "deleted": 0,
+      "file_lines": 78,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-0-restart-false/viewport.txt",
+      "added": 50,
+      "deleted": 0,
+      "file_lines": 50,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-0-restart-true/binary.sha256",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-0-restart-true/scrollback.txt",
+      "added": 78,
+      "deleted": 0,
+      "file_lines": 78,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-0-restart-true/viewport.txt",
+      "added": 50,
+      "deleted": 0,
+      "file_lines": 50,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-1-restart-false/binary.sha256",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-1-restart-false/scrollback.txt",
+      "added": 63,
+      "deleted": 0,
+      "file_lines": 63,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-1-restart-false/viewport.txt",
+      "added": 50,
+      "deleted": 0,
+      "file_lines": 50,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-1-restart-true/binary.sha256",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-1-restart-true/scrollback.txt",
+      "added": 63,
+      "deleted": 0,
+      "file_lines": 63,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-1-restart-true/viewport.txt",
+      "added": 50,
+      "deleted": 0,
+      "file_lines": 50,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-2-restart-false/binary.sha256",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-2-restart-false/scrollback.txt",
+      "added": 63,
+      "deleted": 0,
+      "file_lines": 63,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-2-restart-false/viewport.txt",
+      "added": 50,
+      "deleted": 0,
+      "file_lines": 50,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-2-restart-true/binary.sha256",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-2-restart-true/scrollback.txt",
+      "added": 63,
+      "deleted": 0,
+      "file_lines": 63,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-env-alias-2-restart-true/viewport.txt",
+      "added": 50,
+      "deleted": 0,
+      "file_lines": 50,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-fresh-wallet-api-handoff/binary.sha256",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-fresh-wallet-api-handoff/scrollback.txt",
+      "added": 101,
+      "deleted": 0,
+      "file_lines": 101,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-fresh-wallet-api-handoff/viewport.txt",
+      "added": 44,
+      "deleted": 0,
+      "file_lines": 44,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-fresh-wallet-api-key-success/binary.sha256",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-fresh-wallet-api-key-success/scrollback.txt",
+      "added": 45,
+      "deleted": 0,
+      "file_lines": 45,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-fresh-wallet-api-key-success/viewport.txt",
+      "added": 44,
+      "deleted": 0,
+      "file_lines": 44,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-fresh-wallet-api-no-fallback/binary.sha256",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-fresh-wallet-api-no-fallback/scrollback.txt",
+      "added": 115,
+      "deleted": 0,
+      "file_lines": 115,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-fresh-wallet-api-no-fallback/viewport.txt",
+      "added": 44,
+      "deleted": 0,
+      "file_lines": 44,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-locked-wallet-failure-retry/binary.sha256",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-locked-wallet-failure-retry/scrollback.txt",
+      "added": 101,
+      "deleted": 0,
+      "file_lines": 101,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-locked-wallet-failure-retry/viewport.txt",
+      "added": 44,
+      "deleted": 0,
+      "file_lines": 44,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-only-plan-return/binary.sha256",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-only-plan-return/scrollback.txt",
+      "added": 115,
+      "deleted": 0,
+      "file_lines": 115,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/pf53-only-plan-return/viewport.txt",
+      "added": 44,
+      "deleted": 0,
+      "file_lines": 44,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux03_width_resize_restore-26291-1/codex-tui.log.missing.txt",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux03_width_resize_restore-26291-1/command-log.txt",
+      "added": 134,
+      "deleted": 0,
+      "file_lines": 134,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux03_width_resize_restore-26291-1/config.toml",
+      "added": 6,
+      "deleted": 0,
+      "file_lines": 6,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux03_width_resize_restore-26291-1/dimensions.txt",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux03_width_resize_restore-26291-1/input-events.txt",
+      "added": 0,
+      "deleted": 0,
+      "file_lines": 0,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux03_width_resize_restore-26291-1/manifest.json",
+      "added": 18,
+      "deleted": 0,
+      "file_lines": 18,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux03_width_resize_restore-26291-1/pane-metadata.txt",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux03_width_resize_restore-26291-1/reason.txt",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux03_width_resize_restore-26291-1/reproduce.sh",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux03_width_resize_restore-26291-1/scrollback.txt",
+      "added": 40,
+      "deleted": 0,
+      "file_lines": 40,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux03_width_resize_restore-26291-1/viewport.txt",
+      "added": 40,
+      "deleted": 0,
+      "file_lines": 40,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_single_enter-26343-1/codex-tui.log.missing.txt",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_single_enter-26343-1/command-log.txt",
+      "added": 133,
+      "deleted": 0,
+      "file_lines": 133,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_single_enter-26343-1/config.toml",
+      "added": 6,
+      "deleted": 0,
+      "file_lines": 6,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_single_enter-26343-1/dimensions.txt",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_single_enter-26343-1/input-events.txt",
+      "added": 0,
+      "deleted": 0,
+      "file_lines": 0,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_single_enter-26343-1/manifest.json",
+      "added": 18,
+      "deleted": 0,
+      "file_lines": 18,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_single_enter-26343-1/pane-metadata.txt",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_single_enter-26343-1/reason.txt",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_single_enter-26343-1/reproduce.sh",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_single_enter-26343-1/scrollback.txt",
+      "added": 40,
+      "deleted": 0,
+      "file_lines": 40,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_single_enter-26343-1/viewport.txt",
+      "added": 40,
+      "deleted": 0,
+      "file_lines": 40,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_split_preserves-26308-1/codex-tui.log.missing.txt",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_split_preserves-26308-1/command-log.txt",
+      "added": 133,
+      "deleted": 0,
+      "file_lines": 133,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_split_preserves-26308-1/config.toml",
+      "added": 6,
+      "deleted": 0,
+      "file_lines": 6,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_split_preserves-26308-1/dimensions.txt",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_split_preserves-26308-1/input-events.txt",
+      "added": 0,
+      "deleted": 0,
+      "file_lines": 0,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_split_preserves-26308-1/manifest.json",
+      "added": 18,
+      "deleted": 0,
+      "file_lines": 18,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_split_preserves-26308-1/pane-metadata.txt",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_split_preserves-26308-1/reason.txt",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_split_preserves-26308-1/reproduce.sh",
+      "added": 1,
+      "deleted": 0,
+      "file_lines": 1,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_split_preserves-26308-1/scrollback.txt",
+      "added": 40,
+      "deleted": 0,
+      "file_lines": 40,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-tmux-artifacts/tmux-artifacts/tmux_smoke_split_preserves-26308-1/viewport.txt",
+      "added": 40,
+      "deleted": 0,
+      "file_lines": 40,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__app__tests__model_change_refreshes_committed_session_header.snap.new.txt",
+      "added": 19,
+      "deleted": 0,
+      "file_lines": 19,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__bottom_pane__command_popup__tests__command_popup_app.snap.new.txt",
+      "added": 21,
+      "deleted": 0,
+      "file_lines": 21,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__bottom_pane__command_popup__tests__command_popup_default_items.snap.new.txt",
+      "added": 58,
+      "deleted": 0,
+      "file_lines": 58,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__app_server_guardian_review_denied_renders_denied_request.snap.new.txt",
+      "added": 21,
+      "deleted": 0,
+      "file_lines": 21,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__app_server_guardian_review_timed_out_renders_timed_out_request.snap.new.txt",
+      "added": 21,
+      "deleted": 0,
+      "file_lines": 21,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__app_server_mcp_startup_failure_renders_warning_history.snap.new.txt",
+      "added": 15,
+      "deleted": 0,
+      "file_lines": 15,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__astra_openai_model_picker.snap.new.txt",
+      "added": 20,
+      "deleted": 0,
+      "file_lines": 20,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__chatwidget_tall.snap.new.txt",
+      "added": 29,
+      "deleted": 0,
+      "file_lines": 29,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__compact_queues_user_messages_snapshot.snap.new.txt",
+      "added": 23,
+      "deleted": 0,
+      "file_lines": 23,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__guardian_approved_exec_renders_approved_request.snap.new.txt",
+      "added": 17,
+      "deleted": 0,
+      "file_lines": 17,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__guardian_approved_request_permissions_renders_request_summary.snap.new.txt",
+      "added": 17,
+      "deleted": 0,
+      "file_lines": 17,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__guardian_denied_exec_renders_warning_and_denied_request.snap.new.txt",
+      "added": 25,
+      "deleted": 0,
+      "file_lines": 25,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__guardian_goal_continuation_drops_stale_reviews.snap.new.txt",
+      "added": 12,
+      "deleted": 0,
+      "file_lines": 12,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__guardian_parallel_reviews_render_aggregate_status.snap.new.txt",
+      "added": 13,
+      "deleted": 0,
+      "file_lines": 13,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__guardian_timed_out_exec_renders_warning_and_timed_out_request.snap.new.txt",
+      "added": 25,
+      "deleted": 0,
+      "file_lines": 25,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__image_generation_begin_restores_working_status.snap.new.txt",
+      "added": 12,
+      "deleted": 0,
+      "file_lines": 12,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__mcp_startup_header_booting.snap.new.txt",
+      "added": 12,
+      "deleted": 0,
+      "file_lines": 12,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__model_selection_popup.snap.new.txt",
+      "added": 15,
+      "deleted": 0,
+      "file_lines": 15,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__model_selection_popup_kimi_code_provider.snap.new.txt",
+      "added": 15,
+      "deleted": 0,
+      "file_lines": 15,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__model_selection_popup_openai_provider.snap.new.txt",
+      "added": 23,
+      "deleted": 0,
+      "file_lines": 23,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__model_selection_popup_openrouter_provider.snap.new.txt",
+      "added": 15,
+      "deleted": 0,
+      "file_lines": 15,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__pending_token_activity_refresh_renders_above_composer_snapshot.snap.new.txt",
+      "added": 15,
+      "deleted": 0,
+      "file_lines": 15,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__preamble_keeps_working_status.snap.new.txt",
+      "added": 12,
+      "deleted": 0,
+      "file_lines": 12,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__reasoning_delta_restores_recreated_status_indicator.snap.new.txt",
+      "added": 12,
+      "deleted": 0,
+      "file_lines": 12,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__review_queues_user_messages_snapshot.snap.new.txt",
+      "added": 23,
+      "deleted": 0,
+      "file_lines": 23,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__side_context_label_shows_hidden_side.snap.new.txt",
+      "added": 10,
+      "deleted": 0,
+      "file_lines": 10,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__slash_side_requests_forked_side_question_while_task_running.snap.new.txt",
+      "added": 12,
+      "deleted": 0,
+      "file_lines": 12,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__spawn_model_selection_popup.snap.new.txt",
+      "added": 20,
+      "deleted": 0,
+      "file_lines": 20,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__spawn_model_selection_popup_deepseek_provider.snap.new.txt",
+      "added": 18,
+      "deleted": 0,
+      "file_lines": 18,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__status_surface_previews_hardcoded_only.snap.new.txt",
+      "added": 7,
+      "deleted": 0,
+      "file_lines": 7,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__status_surface_previews_mixed.snap.new.txt",
+      "added": 7,
+      "deleted": 0,
+      "file_lines": 7,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__status_widget_active.snap.new.txt",
+      "added": 12,
+      "deleted": 0,
+      "file_lines": 12,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__unified_exec_begin_restores_working_status.snap.new.txt",
+      "added": 12,
+      "deleted": 0,
+      "file_lines": 12,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__unified_exec_wait_status_renders_command_in_single_details_row.snap.new.txt",
+      "added": 12,
+      "deleted": 0,
+      "file_lines": 12,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__history_cell__tests__session_info_availability_nux_tooltip_snapshot.snap.new.txt",
+      "added": 13,
+      "deleted": 0,
+      "file_lines": 13,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap.new.txt",
+      "added": 13,
+      "deleted": 0,
+      "file_lines": 13,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__history_cell__tests__standalone_windows_update_available_history_cell_snapshot.snap.new.txt",
+      "added": 13,
+      "deleted": 0,
+      "file_lines": 13,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_cached_limits_hide_credits_without_flag.snap.new.txt",
+      "added": 24,
+      "deleted": 0,
+      "file_lines": 24,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_includes_credits_and_limits.snap.new.txt",
+      "added": 24,
+      "deleted": 0,
+      "file_lines": 24,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_includes_enterprise_monthly_credit_limit.snap.new.txt",
+      "added": 23,
+      "deleted": 0,
+      "file_lines": 23,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_includes_forked_from.snap.new.txt",
+      "added": 24,
+      "deleted": 0,
+      "file_lines": 24,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_includes_monthly_limit.snap.new.txt",
+      "added": 22,
+      "deleted": 0,
+      "file_lines": 22,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_includes_reasoning_details.snap.new.txt",
+      "added": 23,
+      "deleted": 0,
+      "file_lines": 23,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_shows_active_user_defined_profile.snap.new.txt",
+      "added": 22,
+      "deleted": 0,
+      "file_lines": 22,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_shows_auto_review_permissions.snap.new.txt",
+      "added": 22,
+      "deleted": 0,
+      "file_lines": 22,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_shows_chatgpt_plan_without_email.snap.new.txt",
+      "added": 23,
+      "deleted": 0,
+      "file_lines": 23,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_shows_missing_limits_message.snap.new.txt",
+      "added": 22,
+      "deleted": 0,
+      "file_lines": 22,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_shows_refreshing_limits_notice.snap.new.txt",
+      "added": 23,
+      "deleted": 0,
+      "file_lines": 23,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_shows_stale_limits_message.snap.new.txt",
+      "added": 24,
+      "deleted": 0,
+      "file_lines": 24,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_shows_unavailable_limits_message.snap.new.txt",
+      "added": 22,
+      "deleted": 0,
+      "file_lines": 22,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_treats_refreshing_empty_limits_as_unavailable.snap.new.txt",
+      "added": 22,
+      "deleted": 0,
+      "file_lines": 22,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_truncates_halfwidth_kana_in_narrow_terminal.snap.new.txt",
+      "added": 27,
+      "deleted": 0,
+      "file_lines": 27,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_truncates_in_narrow_terminal.snap.new.txt",
+      "added": 22,
+      "deleted": 0,
+      "file_lines": 22,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_uses_command_backed_provider_account_identity.snap.new.txt",
+      "added": 22,
+      "deleted": 0,
+      "file_lines": 22,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_uses_default_reasoning_when_config_empty.snap.new.txt",
+      "added": 25,
+      "deleted": 0,
+      "file_lines": 25,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_uses_generic_limit_labels_for_unsupported_windows.snap.new.txt",
+      "added": 25,
+      "deleted": 0,
+      "file_lines": 25,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__transcript_overlay_status_rate_limit_refresh.snap.new.txt",
+      "added": 67,
+      "deleted": 0,
+      "file_lines": 67,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-case-map.json",
+      "added": 315,
+      "deleted": 0,
+      "file_lines": 315,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-pending-snapshots.json",
+      "added": 287,
+      "deleted": 0,
+      "file_lines": 287,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-source-manifest.json",
+      "added": 204,
+      "deleted": 0,
+      "file_lines": 204,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-source.patch",
+      "added": 2663,
+      "deleted": 0,
+      "file_lines": 2663,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-state-preflight.log",
+      "added": 194,
+      "deleted": 0,
+      "file_lines": 194,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-state-private-01.log",
+      "added": 334,
+      "deleted": 0,
+      "file_lines": 334,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-state-private-02.log",
+      "added": 96,
+      "deleted": 0,
+      "file_lines": 96,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-state-private-03.log",
+      "added": 130,
+      "deleted": 0,
+      "file_lines": 130,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-state-public-01.log",
+      "added": 117,
+      "deleted": 0,
+      "file_lines": 117,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-state-public-02.log",
+      "added": 158,
+      "deleted": 0,
+      "file_lines": 158,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-state-public-03.junit.xml",
+      "added": 11,
+      "deleted": 0,
+      "file_lines": 11,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-state-public-03.log",
+      "added": 124,
+      "deleted": 0,
+      "file_lines": 124,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-state-tasknode-final.junit.xml",
+      "added": 421,
+      "deleted": 0,
+      "file_lines": 421,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-state-tasknode-final.log",
+      "added": 675,
+      "deleted": 0,
+      "file_lines": 675,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-tui-01.log",
+      "added": 711,
+      "deleted": 0,
+      "file_lines": 711,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-tui-02.log",
+      "added": 527,
+      "deleted": 0,
+      "file_lines": 527,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-tui-03.log",
+      "added": 687,
+      "deleted": 0,
+      "file_lines": 687,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-tui-focused-final.junit.xml",
+      "added": 23,
+      "deleted": 0,
+      "file_lines": 23,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-tui-focused-final.log",
+      "added": 580,
+      "deleted": 0,
+      "file_lines": 580,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-tui-full-failures.json",
+      "added": 714,
+      "deleted": 0,
+      "file_lines": 714,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-tui-full-final.junit.xml",
+      "added": 11418,
+      "deleted": 0,
+      "file_lines": 11418,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-tui-full-final.log",
+      "added": 11886,
+      "deleted": 0,
+      "file_lines": 11886,
+      "category": "evidence"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/impl-03-receipt-manifest.json",
+      "added": 1235,
+      "deleted": 0,
+      "file_lines": 1235,
+      "category": "evidence"
+    }
+  ]
+}

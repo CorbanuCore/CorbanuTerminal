@@ -86,7 +86,7 @@ impl Decimal {
         Ok(Self::canonical(coefficient, scale))
     }
 
-    fn display(self) -> DisplayAmount {
+    pub fn display(self) -> DisplayAmount {
         let (whole, fraction, rounded, nonzero_sub_micro) = if self.scale <= 6 {
             let divisor = 10_u128.pow(self.scale);
             (

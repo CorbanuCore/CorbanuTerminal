@@ -3,6 +3,62 @@ use crate::bottom_pane::slash_commands::ServiceTierCommand;
 use pretty_assertions::assert_eq;
 use serial_test::serial;
 
+#[tokio::test]
+async fn accounting_inspect_command_without_account_auth() {
+    let (mut chat, mut rx, mut ops) = make_chatwidget_manual(None).await;
+    assert!(!chat.has_codex_backend_auth());
+    chat.dispatch_command_with_args(SlashCommand::Usage, "requests".into(), Vec::new());
+    assert_matches!(rx.try_recv(), Ok(AppEvent::LoadAccountingInspector { .. }));
+    assert!(rx.try_recv().is_err());
+    assert!(ops.try_recv().is_err());
+    assert!(render_bottom_popup(&chat, 80).contains("Loading recorded requests"));
+    chat.clear_pending_token_activity_refreshes();
+    chat.dispatch_command_with_args(SlashCommand::Usage, "weekly".into(), Vec::new());
+    let cells = drain_insert_history(&mut rx);
+    assert!(
+        cells
+            .iter()
+            .map(|c| lines_to_single_string(c))
+            .collect::<String>()
+            .contains("Sign in with ChatGPT")
+    );
+}
+
+#[tokio::test]
+async fn accounting_inspect_command_date_validation() {
+    let today = chrono::NaiveDate::from_ymd_opt(2026, 9, 15).unwrap();
+    for (args, day) in [
+        ("requests", Some(20711)),
+        ("requests 1970-01-01", Some(0)),
+        ("requests 2024-02-29", Some(19782)),
+        ("requests 2026-02-29", None),
+        ("requests 2026-9-15", None),
+        ("requests 2026-09-16", None),
+        ("requests 1969-12-31", None),
+        ("requests 2026-09-15 extra", None),
+        ("requests junk", None),
+    ] {
+        let (mut chat, mut rx, mut ops) = make_chatwidget_manual(None).await;
+        chat.open_accounting_command(args, today);
+        if let Some(expected) = day {
+            let AppEvent::LoadAccountingInspector { day, .. } = rx.try_recv().unwrap() else {
+                panic!("{args}")
+            };
+            assert_eq!(day, expected);
+            assert!(rx.try_recv().is_err());
+        } else {
+            let events: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+            assert!(
+                events
+                    .iter()
+                    .all(|e| !matches!(e, AppEvent::LoadAccountingInspector { .. }))
+            );
+            assert!(!render_bottom_popup(&chat, 80).contains("Loading recorded requests"));
+        }
+        assert!(ops.try_recv().is_err());
+    }
+}
+
 fn force_pet_image_support(chat: &mut ChatWidget) {
     chat.set_pet_image_support_for_tests(crate::pets::PetImageSupport::Supported(
         crate::pets::ImageProtocol::Kitty,

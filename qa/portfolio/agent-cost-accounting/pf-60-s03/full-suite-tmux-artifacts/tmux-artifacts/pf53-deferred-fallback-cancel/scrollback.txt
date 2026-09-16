@@ -1,0 +1,101 @@
+  Welcome to Corbanu Terminal, your crypto-native AI terminal
+
+  Choose a provider account for Corbanu Terminal
+
+  7. Provider: Ambient
+     Configured · active · ready
+
+  8. Provider: Kimi Code API Key
+     Use a key stored as KIMI_API_KEY
+
+  9. Provider: Z.AI API Key
+     Use a key stored as ZAI_API_KEY
+
+  10. Provider: DeepSeek API Key
+     Use a key stored as DEEPSEEK_API_KEY
+
+  11. Provider: OpenRouter API Key
+     Use a key stored as OPENROUTER_API_KEY
+
+  12. Provider: Meta API Key
+     Use a key stored as MODEL_API_KEY
+
+  13. Provider: Baseten API Key
+     Use a key stored as BASETEN_API_KEY
+
+  14. Provider: Vercel API Key
+     Use a key stored as AI_GATEWAY_API_KEY
+
+  15. Provider: Amazon Bedrock
+     Use this provider without an enrollment step
+
+  16. Provider: Ollama
+     Configured · unavailable
+
+  17. Provider: LM Studio
+     Configured · unavailable
+
+  18. Provider: PF53 Loopback PF53_LOOPBACK_API_KEY
+     Use a key stored as PF53_LOOPBACK_API_KEY
+
+> 19. Done
+     Finish provider setup
+
+  Use ↑/↓ to choose · Press enter to continue
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                         │
+│                                                       │
+│ model:     loading   /model to change                 │
+│ directory: /Volumes/…/worktrees/acct-inspect-20260915 │
+╰───────────────────────────────────────────────────────╯
+
+
+› Use /skills to list available skills
+
+  Ambient GLM 5.2 via ambient standard · /Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915 · Corbanu Terminal · TPS: -- tok/s
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                         │
+│                                                       │
+│ model:     z-ai/glm-5.2   /model to change            │
+│ directory: /Volumes/…/worktrees/acct-inspect-20260915 │
+╰───────────────────────────────────────────────────────╯
+
+
+› Use /skills to list available skills
+
+  Ambient GLM 5.2 via ambient standard · /Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915 · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

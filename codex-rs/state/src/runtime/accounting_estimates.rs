@@ -253,6 +253,17 @@ pub use lifecycle::RetainedDay;
 pub use lifecycle::RetentionCoverage;
 
 impl Journal<'_> {
+    pub(in crate::runtime::accounting) async fn inspect_quote_on_connection(
+        conn: &mut SqliteConnection,
+        id: Uuid,
+    ) -> anyhow::Result<ObservationQuote> {
+        ensure!(
+            binding(conn, id).await?.is_some(),
+            "missing original binding"
+        );
+        EstimateStore::latest_quote_on_connection(conn, id).await
+    }
+
     pub(in crate::runtime::accounting) async fn persist_price_on_connection(
         conn: &mut SqliteConnection,
         id: Uuid,
