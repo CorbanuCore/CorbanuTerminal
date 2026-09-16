@@ -80,7 +80,7 @@ pub(super) fn normalized_backend_snapshot<T: std::fmt::Display>(value: &T) -> St
     let rendered = format!("{value}");
 
     if platform_test_cwd == "/tmp/project" {
-        return rendered;
+        return normalize_snapshot_paths(rendered);
     }
 
     rendered
@@ -99,6 +99,21 @@ pub(super) fn normalized_backend_snapshot<T: std::fmt::Display>(value: &T) -> St
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+#[test]
+fn backend_snapshot_normalizes_status_header_and_update_version() {
+    let version = env!("CARGO_PKG_VERSION");
+    let rendered = format!(
+        "\"│ >_ Corbanu Terminal (v{version})│\"\n\"│ Update available! {version} -> 9.9.9│\""
+    );
+    let padding = " ".repeat(version.len() - 3);
+    assert_eq!(
+        normalized_backend_snapshot(&rendered),
+        format!(
+            "\"│ >_ Corbanu Terminal (v<V>){padding}│\"\n\"│ Update available! <V> -> 9.9.9{padding}│\""
+        )
+    );
 }
 
 pub(super) fn invalid_value(

@@ -1,6 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/status_surface_previews.rs
-assertion_line: 228
+assertion_line: 230
 expression: snapshot
 ---
 status line: my-project · feature/mixed-preview · Mixed preview thread
