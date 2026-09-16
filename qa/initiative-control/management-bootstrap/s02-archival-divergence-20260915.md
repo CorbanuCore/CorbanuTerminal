@@ -58,3 +58,13 @@ provenance record.
 Nothing else is affected. No worker is running against either sprint, the
 integration branch is clean, and the dashboard is accurate about everything
 except this.
+
+## Resolved, 2026-09-16
+
+The owner chose option 1 and it is executed. PF-60-S02 is `completed, archived: true` in coordinator state with `receiving_commit 533a160778e258f8e11863e26b4c6ea1a395102c`, matching the documents.
+
+One correction to what this document originally said. It claimed `complete_sprint` was achievable because "verified receiving actions exist". They did not: there were **no `integrate` or `verify_integration` actions in the coordinator at all**, only the Integrator's on-disk receipts. A `verify_integration` action had to be created and independently verified first — a separate worker confirmed the receiving commit is an ancestor of the tip, the merged source is present, every changed file lies inside the frozen scope, and all eight receiving tests recorded `exit_code 0` with `timed_out false`, returning PASS with no discrepancy. The recommendation was right; the reason given for it was wrong.
+
+Four owner-verified gates were supplied: receiving tests, governance checks, independent review, and the internal-stage functional gate as `not_applicable` with its reason and an explicit note that it is deferred to S03 and S04 rather than discharged.
+
+**Still true:** `PF-60-S03` does not exist in coordinator state, sprints are created only by `initialize` which refuses a second call, and the accounting workstream still points at the now-archived `PF-60-S02`. No S03 work can be dispatched until that is addressed at the coordinator level.
