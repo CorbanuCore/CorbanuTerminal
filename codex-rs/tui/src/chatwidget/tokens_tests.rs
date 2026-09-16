@@ -116,32 +116,104 @@ async fn accounting_inspect_usability_hour_lifetime_wording() {
         "requests 2026-09-16T00:00:00Z 2026-09-16T01:00:00Z hour",
     )
     .await;
-    let text = chat.accounting_inspector.as_ref().unwrap().pages[0]
-        .text
-        .join("\n");
+    let screen = render_bottom_popup_with_height(&chat, 150, 16);
     assert!(
-        !text.contains("this UTC day is not their complete lifetime"),
-        "{text}"
+        screen.contains("this UTC hour is not their complete lifetime"),
+        "{screen}"
     );
-    assert!(
-        text.contains("this UTC hour is not their complete lifetime"),
-        "{text}"
-    );
-    let loaded = inspection_pages(Ok(range_packet(false, packet())));
-    let text = loaded
-        .iter()
-        .flat_map(|page| &page.text)
-        .cloned()
-        .collect::<Vec<_>>()
-        .join("\n");
-    assert!(!text.contains("this UTC day is not their complete lifetime"));
-    assert!(text.contains("this UTC hour is not their complete lifetime"));
+    assert!(!screen.contains("this UTC day is not their complete lifetime"));
+
+    // Check both ready and unavailable detail through the bucket popup.
+    for state in [packet(), InspectionDay::NeedsRefresh] {
+        let caveat = rendered_hour_bucket_caveat(state).await;
+        insta::allow_duplicates! {
+            insta::assert_snapshot!(caveat, @"Logical requests may have attempts outside this bucket; this UTC hour is not their complete lifetime.");
+        }
+    }
 
     let chat = unavailable_inspector(150, "requests 2026-09-15 2026-09-16 day").await;
-    let text = chat.accounting_inspector.as_ref().unwrap().pages[0]
-        .text
-        .join("\n");
-    assert!(text.contains("the selected UTC interval is not their complete lifetime"));
+    let screen = render_bottom_popup_with_height(&chat, 150, 16);
+    assert!(
+        screen.contains("the selected UTC interval is not their complete lifetime"),
+        "{screen}"
+    );
+}
+
+async fn rendered_hour_bucket_caveat(state: InspectionDay) -> String {
+    let (mut chat, mut rx, mut ops) = make_chatwidget_manual(None).await;
+    chat.on_terminal_resize(150);
+    chat.open_accounting_command(
+        "requests 1970-01-01T00:00:00Z 1970-01-01T01:00:00Z hour",
+        NaiveDate::from_ymd_opt(2026, 9, 16).unwrap(),
+    );
+    let AppEvent::LoadAccountingInspector {
+        generation,
+        thread,
+        day,
+        ..
+    } = rx.try_recv().unwrap()
+    else {
+        panic!("expected inspector load");
+    };
+    chat.finish_accounting_inspector(generation, thread, day, Ok(range_packet(false, state)));
+    // Reach and open the bucket using the rendered label, not InspectorPage text.
+    for _ in 0..60 {
+        let screen = render_bottom_popup_with_height(&chat, 150, 16);
+        if screen
+            .lines()
+            .any(|line| line.trim_start().starts_with("› Hour ["))
+        {
+            chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+            let AppEvent::NavigateAccountingInspector { generation, page } = rx.try_recv().unwrap()
+            else {
+                panic!("expected bucket navigation: {screen}");
+            };
+            chat.navigate_accounting_inspector(generation, page);
+            break;
+        }
+        chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    }
+    for _ in 0..60 {
+        let screen = render_bottom_popup_with_height(&chat, 150, 16);
+        if let Some(line) = screen
+            .lines()
+            .find(|line| line.contains("Logical requests may"))
+        {
+            assert!(rx.try_recv().is_err());
+            assert!(ops.try_recv().is_err());
+            return line.trim().trim_start_matches('›').trim().to_owned();
+        }
+        chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    }
+    panic!(
+        "caveat not reachable: {}",
+        render_bottom_popup_with_height(&chat, 150, 16)
+    );
+}
+
+#[tokio::test]
+async fn accounting_inspect_usability_unavailable_hour_bucket_lifetime_wording() {
+    for state in [
+        InspectionDay::Absent,
+        InspectionDay::MissingThread,
+        InspectionDay::NeedsRefresh,
+        InspectionDay::TooLarge,
+        InspectionDay::DetailUnavailable {
+            coverage: RetentionCoverage {
+                completed_as_of_ms: 90 * 86_400_000,
+                detail_expired_through_ms: Some(0),
+                aggregate_day_floor: 0,
+                oldest_recorded_day: Some(0),
+            },
+            read_at_ms: 90 * 86_400_000,
+            compact: true,
+        },
+    ] {
+        let caveat = rendered_hour_bucket_caveat(state).await;
+        insta::allow_duplicates! {
+            insta::assert_snapshot!(caveat, @"Logical requests may have attempts outside this bucket; this UTC hour is not their complete lifetime.");
+        }
+    }
 }
 
 fn decimal(text: &str) -> Decimal {
