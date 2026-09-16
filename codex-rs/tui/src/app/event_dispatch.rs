@@ -34,6 +34,7 @@ impl App {
                 generation,
                 thread,
                 day,
+                range,
             } => {
                 let db = self.state_db.clone();
                 let embedded = matches!(self.app_server_target, crate::AppServerTarget::Embedded);
@@ -45,14 +46,23 @@ impl App {
                     } else if thread.is_none() || thread != current {
                         Err("Unavailable — no current native thread.".into())
                     } else if let (Some(db), Some(owner)) = (db, thread) {
-                        accounting_inspector_read_result(
-                            codex_state::accounting::AccountingStore::inspect_day(
-                                &db,
-                                owner,
-                                day,
-                                chrono::Utc::now().timestamp_millis(),
-                            ),
-                        )
+                        accounting_inspector_read_result(async {
+                            let now = chrono::Utc::now().timestamp_millis();
+                            match range {
+                                Some(range) => {
+                                    codex_state::accounting::AccountingStore::inspect_range(
+                                        &db, owner, range, now,
+                                    )
+                                    .await
+                                }
+                                None => {
+                                    codex_state::accounting::AccountingStore::inspect_day(
+                                        &db, owner, day, now,
+                                    )
+                                    .await
+                                }
+                            }
+                        })
                         .await
                     } else {
                         Err("Unavailable — native state database is not open.".into())

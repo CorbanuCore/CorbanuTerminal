@@ -1057,6 +1057,7 @@ pub(crate) enum AppEvent {
         generation: uuid::Uuid,
         thread: Option<ThreadId>,
         day: i64,
+        range: Option<codex_state::accounting::InspectionRange>,
     },
     AccountingInspectorLoaded {
         generation: uuid::Uuid,

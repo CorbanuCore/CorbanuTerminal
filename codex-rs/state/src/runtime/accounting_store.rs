@@ -46,9 +46,109 @@ pub struct Inspection {
     pub requests: std::collections::BTreeMap<uuid::Uuid, Vec<ObservationQuote>>,
 }
 
+/// UTC half-open requested interval and calendar-aligned grouping.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InspectionRange {
+    pub start_ms: i64,
+    pub end_ms: i64,
+    pub grouping: InspectionGrouping,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InspectionGrouping {
+    Hour,
+    Day,
+    Week,
+    Month,
+}
+
+impl InspectionRange {
+    pub fn validate(self) -> anyhow::Result<()> {
+        ensure!(
+            self.start_ms >= 0,
+            "invalid range: start precedes Unix epoch"
+        );
+        ensure!(
+            self.end_ms != self.start_ms,
+            "empty range: start equals end"
+        );
+        ensure!(
+            self.end_ms > self.start_ms,
+            "reversed range: end precedes start"
+        );
+        ensure!(
+            chrono::DateTime::from_timestamp_millis(self.end_ms).is_some(),
+            "invalid range: timestamp overflow"
+        );
+        Ok(())
+    }
+
+    /// Full aligned bounds; callers must not total a partially covered bucket.
+    pub fn bucket(self, time: i64) -> anyhow::Result<(i64, i64)> {
+        use chrono::Datelike;
+        let date = chrono::DateTime::from_timestamp_millis(time)
+            .context("invalid timestamp")?
+            .date_naive();
+        let (start, end) = match self.grouping {
+            InspectionGrouping::Hour => {
+                return Ok((
+                    time.div_euclid(3_600_000) * 3_600_000,
+                    (time.div_euclid(3_600_000) + 1) * 3_600_000,
+                ));
+            }
+            InspectionGrouping::Day => (date, date.succ_opt().context("day overflow")?),
+            InspectionGrouping::Week => {
+                let start =
+                    date - chrono::Duration::days(i64::from(date.weekday().num_days_from_monday()));
+                (
+                    start,
+                    start
+                        .checked_add_signed(chrono::Duration::days(7))
+                        .context("week overflow")?,
+                )
+            }
+            InspectionGrouping::Month => {
+                let start = date.with_day(1).context("month start")?;
+                (
+                    start,
+                    start
+                        .checked_add_months(chrono::Months::new(1))
+                        .context("month overflow")?,
+                )
+            }
+        };
+        Ok((
+            start
+                .and_hms_opt(0, 0, 0)
+                .context("midnight")?
+                .and_utc()
+                .timestamp_millis(),
+            end.and_hms_opt(0, 0, 0)
+                .context("midnight")?
+                .and_utc()
+                .timestamp_millis(),
+        ))
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct InspectionBucket {
+    pub start_ms: i64,
+    pub end_ms: i64,
+    pub effective: Option<(i64, i64)>,
+    pub partial: bool,
+    pub days: Vec<InspectionDay>,
+}
+
 /// Unavailability never carries a partial amount.
 #[derive(Debug, PartialEq, Eq)]
 pub enum InspectionDay {
+    Range {
+        requested: InspectionRange,
+        oldest_aggregate_day: Option<i64>,
+        read_at_ms: i64,
+        buckets: Vec<InspectionBucket>,
+    },
     Absent,
     MissingThread,
     /// The requested view is beyond, or has no completed, maintenance checkpoint.
@@ -103,6 +203,33 @@ impl<'a> AccountingStore<'a> {
         utc_day: i64,
         read_at_ms: i64,
     ) -> anyhow::Result<InspectionDay> {
+        Self::inspect(runtime, owner, utc_day, read_at_ms, None).await
+    }
+
+    pub async fn inspect_range(
+        runtime: &StateRuntime,
+        owner: ThreadId,
+        requested: InspectionRange,
+        read_at_ms: i64,
+    ) -> anyhow::Result<InspectionDay> {
+        requested.validate()?;
+        Self::inspect(
+            runtime,
+            owner,
+            requested.start_ms / 86_400_000,
+            read_at_ms,
+            Some(requested),
+        )
+        .await
+    }
+
+    async fn inspect(
+        runtime: &StateRuntime,
+        owner: ThreadId,
+        utc_day: i64,
+        read_at_ms: i64,
+        requested: Option<InspectionRange>,
+    ) -> anyhow::Result<InspectionDay> {
         let start = utc_day.checked_mul(86_400_000).context("day overflow")?;
         ensure!(utc_day >= 0 && read_at_ms >= start, "invalid or future day");
         start.checked_add(86_400_000).context("day end overflow")?;
@@ -124,7 +251,10 @@ impl<'a> AccountingStore<'a> {
         if !exists {
             return Ok(InspectionDay::MissingThread);
         }
-        let result = inspect_tree(&mut tx, owner, utc_day, read_at_ms).await?;
+        let result = match requested {
+            Some(requested) => inspect_buckets(&mut tx, owner, requested, read_at_ms).await?,
+            None => inspect_tree(&mut tx, owner, utc_day, read_at_ms).await?,
+        };
         tx.commit().await?;
         Ok(result)
     }
@@ -267,10 +397,25 @@ async fn inspect_tree(
     day: i64,
     read_at_ms: i64,
 ) -> anyhow::Result<InspectionDay> {
+    inspect_tree_window(conn, owner, day, read_at_ms, None).await
+}
+
+async fn inspect_tree_window(
+    conn: &mut SqliteConnection,
+    owner: ThreadId,
+    day: i64,
+    read_at_ms: i64,
+    window: Option<(i64, i64)>,
+) -> anyhow::Result<InspectionDay> {
     use codex_protocol::protocol::SessionSource;
     use std::collections::BTreeMap;
     use std::collections::HashSet;
-    let first = Journal::inspect_on_connection(conn, owner, day, read_at_ms).await?;
+    let first = match window {
+        Some(_) => {
+            Journal::inspect_window_on_connection(conn, owner, day, read_at_ms, window).await?
+        }
+        None => Journal::inspect_on_connection(conn, owner, day, read_at_ms).await?,
+    };
     let InspectionDay::Ready(mut view) = first else {
         return Ok(first);
     };
@@ -362,11 +507,12 @@ async fn inspect_tree(
         if relation == Some(false) {
             continue;
         }
-        let other = Journal::inspect_on_connection(
+        let other = Journal::inspect_window_on_connection(
             conn,
             ThreadId::from_string(&candidate)?,
             day,
             read_at_ms,
+            window,
         )
         .await?;
         let InspectionDay::Ready(other) = other else {
@@ -410,6 +556,88 @@ async fn inspect_tree(
     view.unknown_parent_totals =
         DayTotals::from_quotes(view.unknown_parent_requests.values().flatten())?;
     Ok(InspectionDay::Ready(view))
+}
+
+// All buckets reuse the already-open deferred snapshot, including ancestry.
+async fn inspect_buckets(
+    conn: &mut SqliteConnection,
+    owner: ThreadId,
+    requested: InspectionRange,
+    read_at_ms: i64,
+) -> anyhow::Result<InspectionDay> {
+    let oldest_aggregate_day =
+        sqlx::query_scalar("SELECT min(utc_day) FROM draft_accounting_compact_days")
+            .fetch_one(&mut *conn)
+            .await?;
+    let mut buckets = Vec::new();
+    let mut cursor = requested.start_ms;
+    let mut attempts = 0;
+    let mut bytes = 0;
+    while cursor < requested.end_ms {
+        if buckets.len() >= 10_000 {
+            return Ok(InspectionDay::TooLarge);
+        }
+        let (start_ms, end_ms) = requested.bucket(cursor)?;
+        let lower = start_ms.max(requested.start_ms);
+        let upper = end_ms.min(requested.end_ms);
+        let mut effective = Some((lower, upper));
+        let mut days = Vec::new();
+        let mut day = lower / 86_400_000;
+        while day <= (upper - 1) / 86_400_000 {
+            let window = (
+                lower.max(day * 86_400_000),
+                upper.min((day + 1) * 86_400_000),
+            );
+            let value = inspect_tree_window(conn, owner, day, read_at_ms, Some(window)).await?;
+            let coverage = match &value {
+                InspectionDay::Ready(view) => {
+                    attempts += view.totals.attempts + view.unknown_parent_totals.attempts;
+                    for quote in view
+                        .requests
+                        .values()
+                        .chain(view.unknown_parent_requests.values())
+                        .flatten()
+                    {
+                        bytes += serde_json::to_vec(quote)?.len() + 2048;
+                    }
+                    Some(&view.coverage)
+                }
+                InspectionDay::DetailUnavailable { coverage, .. } => Some(coverage),
+                InspectionDay::TooLarge => return Ok(value),
+                _ => None,
+            };
+            if let (Some((from, to)), Some(coverage)) = (effective, coverage) {
+                let from = from.max(coverage.aggregate_day_floor * 86_400_000);
+                let to = to
+                    .min(coverage.completed_as_of_ms.saturating_add(1))
+                    .min(read_at_ms.saturating_add(1));
+                effective = (from < to).then_some((from, to));
+            } else {
+                effective = None;
+            }
+            // Include empty-bucket/header costs in the unchanged packet ceiling.
+            bytes += 8192;
+            if attempts > 512 || bytes > 4 * 1024 * 1024 {
+                return Ok(InspectionDay::TooLarge);
+            }
+            days.push(value);
+            day += 1;
+        }
+        buckets.push(InspectionBucket {
+            start_ms,
+            end_ms,
+            effective,
+            partial: effective != Some((start_ms, end_ms)),
+            days,
+        });
+        cursor = end_ms;
+    }
+    Ok(InspectionDay::Range {
+        requested,
+        oldest_aggregate_day,
+        read_at_ms,
+        buckets,
+    })
 }
 
 pub(super) async fn ledger_exists(conn: &mut SqliteConnection) -> anyhow::Result<bool> {

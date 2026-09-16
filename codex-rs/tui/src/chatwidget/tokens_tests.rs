@@ -77,6 +77,256 @@ fn packet() -> InspectionDay {
     })
 }
 
+fn range_packet(partial: bool, day: InspectionDay) -> InspectionDay {
+    InspectionDay::Range {
+        requested: InspectionRange {
+            start_ms: i64::from(partial),
+            end_ms: 3_600_000,
+            grouping: InspectionGrouping::Hour,
+        },
+        oldest_aggregate_day: Some(0),
+        read_at_ms: 90 * 86_400_000,
+        buckets: vec![codex_state::accounting::InspectionBucket {
+            start_ms: 0,
+            end_ms: 3_600_000,
+            effective: Some((i64::from(partial), 3_600_000)),
+            partial,
+            days: vec![day],
+        }],
+    }
+}
+
+#[test]
+fn accounting_inspect_range_partial_no_amount_and_explicit_coverage() {
+    let InspectionDay::Ready(mut view) = packet() else {
+        panic!()
+    };
+    view.read_at_ms = view.coverage.completed_as_of_ms;
+    let pages = inspection_pages(Ok(range_packet(true, InspectionDay::Ready(view))));
+    let text = pages
+        .iter()
+        .flat_map(|p| &p.text)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(!text.contains('$'));
+    assert!(text.contains("Partial bucket — excluded from totals"));
+    assert!(text.contains("Range total unavailable"));
+    assert!(
+        pages
+            .iter()
+            .all(|p| p.text.iter().any(|t| t.contains("timezone: UTC")))
+    );
+    insta::assert_snapshot!(pages[0].text.join("\n"), @"
+    Requested: [1970-01-01T00:00:00.001Z, 1970-01-01T01:00:00.000Z); timezone: UTC; grouping: Hour
+    Oldest retained aggregate day (ledger): Some(0); 90-day drill-down cutoff: Some(0) ms UTC (exclusive)
+    Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.
+    Range total unavailable — partial or unavailable buckets excluded; no partial total.
+    Effective coverage for [1970-01-01T00:00:00.000Z, 1970-01-01T01:00:00.000Z): [1970-01-01T00:00:00.001Z, 1970-01-01T01:00:00.000Z)
+    ");
+}
+
+#[test]
+fn accounting_inspect_range_breakdowns_and_navigation_reconcile() {
+    let pages = inspection_pages(Ok(range_packet(false, breakdown_packet())));
+    assert!(pages[0].text.iter().any(|t| t.contains("$0.000007")));
+    let bucket = pages[0].links[0].1;
+    assert_eq!(pages[bucket].parent, Some(0));
+    for p in &pages[1..] {
+        assert!(p.text.iter().any(|s| s.starts_with("Requested:")));
+        assert!(
+            p.text
+                .iter()
+                .any(|s| s.starts_with("Bucket:") && s.contains("effective retained coverage:"))
+        );
+        assert!(
+            !p.text
+                .iter()
+                .any(|s| s.starts_with("UTC admission interval:"))
+        );
+        for (_, target) in &p.links {
+            assert!(*target > bucket && *target < pages.len());
+        }
+    }
+    for (title, amount) in [
+        ("Root's own attempts", "0.000001"),
+        ("Descendant attempts", "0.000006"),
+        ("Unknown parent population", "$0.000008"),
+        (
+            "Provider: unknown (attribution absent); Model: unknown (attribution absent)",
+            "0.000004",
+        ),
+    ] {
+        let p = pages.iter().find(|p| p.title == title).unwrap();
+        assert!(p.text.iter().any(|s| s.contains(amount)));
+    }
+}
+
+#[test]
+fn accounting_inspect_range_week_and_month_merge_exact_attempts() {
+    for grouping in [InspectionGrouping::Week, InspectionGrouping::Month] {
+        let start = 4 * 86_400_000; // Monday, 1970-01-05.
+        let requested = InspectionRange {
+            start_ms: start,
+            end_ms: start + 1,
+            grouping,
+        };
+        let (start_ms, end_ms) = requested.bucket(start).unwrap();
+        let mut days = Vec::new();
+        for index in 0..2 {
+            let InspectionDay::Ready(mut view) = breakdown_packet() else {
+                panic!()
+            };
+            view.utc_day = start_ms / 86_400_000 + index;
+            view.read_at_ms = end_ms;
+            view.coverage.completed_as_of_ms = end_ms;
+            for q in view
+                .requests
+                .values_mut()
+                .chain(view.unknown_parent_requests.values_mut())
+                .flatten()
+            {
+                q.attempt.attempt_id =
+                    Uuid::from_u128(q.attempt.attempt_id.as_u128() + index as u128 * 100);
+                q.attempt.dispatched_at_ms = (start_ms + index * 86_400_000).try_into().unwrap();
+            }
+            days.push(InspectionDay::Ready(view));
+        }
+        let pages = inspection_pages(Ok(InspectionDay::Range {
+            requested: InspectionRange {
+                start_ms,
+                end_ms,
+                grouping,
+            },
+            oldest_aggregate_day: None,
+            read_at_ms: end_ms,
+            buckets: vec![codex_state::accounting::InspectionBucket {
+                start_ms,
+                end_ms,
+                effective: Some((start_ms, end_ms)),
+                partial: false,
+                days,
+            }],
+        }));
+        assert!(pages[0].text.iter().any(|s| s.contains("$0.000014")));
+        for (title, amount) in [
+            ("Root's own attempts", "0.000002"),
+            ("Descendant attempts", "0.000012"),
+            ("Unknown parent population", "$0.000016"),
+        ] {
+            assert!(
+                pages
+                    .iter()
+                    .find(|p| p.title == title)
+                    .unwrap()
+                    .text
+                    .iter()
+                    .any(|s| s.contains(amount))
+            );
+        }
+        assert_eq!(
+            pages
+                .iter()
+                .filter(|p| p.title == "Attempt, components and original price")
+                .count(),
+            6
+        );
+    }
+}
+
+#[test]
+fn accounting_inspect_range_unavailable_precision_and_freshness() {
+    for state in [
+        InspectionDay::CheckpointLag,
+        InspectionDay::NeedsRefresh,
+        InspectionDay::DetailUnavailable {
+            coverage: RetentionCoverage {
+                completed_as_of_ms: 90 * 86_400_000,
+                detail_expired_through_ms: Some(0),
+                aggregate_day_floor: 0,
+                oldest_recorded_day: Some(0),
+            },
+            read_at_ms: 90 * 86_400_000,
+            compact: true,
+        },
+    ] {
+        let expected = match state {
+            InspectionDay::CheckpointLag => "Snapshot is not current",
+            InspectionDay::NeedsRefresh => "stored contributions need refresh",
+            _ => {
+                "Whole UTC-day bounds offered: [1970-01-01T00:00:00.000Z, 1970-01-02T00:00:00.000Z)"
+            }
+        };
+        let pages = inspection_pages(Ok(range_packet(false, state)));
+        let text = pages
+            .iter()
+            .flat_map(|p| &p.text)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(text.contains(expected));
+        assert!(!text.contains('$'));
+    }
+    let pages = inspection_pages(Ok(range_packet(false, packet())));
+    assert!(
+        pages[1..]
+            .iter()
+            .all(|p| p.text.iter().any(|s| s.contains("Snapshot is not current")))
+    );
+}
+
+#[tokio::test]
+async fn accounting_inspect_range_command_refresh_and_refusal() {
+    let (mut chat, mut rx, _ops) = make_chatwidget_manual(None).await;
+    let today = NaiveDate::from_ymd_opt(2026, 9, 16).unwrap();
+    for grouping in ["hour", "day", "week", "month"] {
+        chat.open_accounting_command(&format!("requests 2026-09-01 2026-09-02 {grouping}"), today);
+        let AppEvent::LoadAccountingInspector {
+            generation, range, ..
+        } = rx.try_recv().unwrap()
+        else {
+            panic!()
+        };
+        let range = range.unwrap();
+        assert_eq!(format!("{:?}", range.grouping).to_lowercase(), grouping);
+        chat.refresh_accounting_inspector(generation);
+        let AppEvent::LoadAccountingInspector {
+            range: refreshed,
+            generation: next,
+            ..
+        } = rx.try_recv().unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(refreshed, Some(range));
+        assert_ne!(next, generation);
+    }
+    for (args, message) in [
+        ("requests 2026-09-02 2026-09-01 hour", "reversed"),
+        ("requests 2026-09-01 2026-09-01 day", "empty"),
+        ("requests bad 2026-09-01 day", "Range refused"),
+        (
+            "requests 2026-09-01T00:00:00.0001Z 2026-09-02 hour",
+            "finer than milliseconds",
+        ),
+        ("requests 2026-09-01T00:00:00-07:00 2026-09-02 day", "UTC Z"),
+        ("requests 2026-09-01 2026-09-02 year", "grouping must"),
+    ] {
+        chat.open_accounting_command(args, today);
+        let AppEvent::InsertHistoryCell(cell) = rx.try_recv().unwrap() else {
+            panic!()
+        };
+        let text = cell
+            .display_lines(120)
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(text.contains(message), "{text}");
+        assert!(rx.try_recv().is_err());
+    }
+}
+
 #[test]
 fn accounting_inspect_partial_and_unknown_copy() {
     insta::assert_snapshot!(estimate(decimal("0.00018"), 1, 1).join("\n"), @"
@@ -189,6 +439,7 @@ async fn accounting_inspect_narrow_and_long_fields() {
             generation: Uuid::new_v4(),
             thread: None,
             day: 0,
+            range: None,
             pages: vec![page],
             page: 0,
             alive: Arc::new(std::sync::atomic::AtomicBool::new(true)),
@@ -438,6 +689,7 @@ async fn accounting_inspect_snapshot_navigation_roundtrip() {
         generation,
         thread,
         day,
+        ..
     } = rx.try_recv().unwrap()
     else {
         panic!()
@@ -685,6 +937,7 @@ async fn accounting_inspect_breakdown_navigation_reuses_packet() {
         generation,
         thread,
         day,
+        ..
     } = rx.try_recv().unwrap()
     else {
         panic!()
