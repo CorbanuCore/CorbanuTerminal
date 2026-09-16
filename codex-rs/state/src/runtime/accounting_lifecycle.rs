@@ -349,9 +349,27 @@ impl Journal<'_> {
                 });
             }
             RetainedDay::Available { .. } => return Ok(InspectionDay::NeedsRefresh),
-            RetainedDay::NeedsActivation | RetainedDay::NeedsMaintenance { .. } => {
+            RetainedDay::NeedsMaintenance { .. } => {
+                // Retention can stop before reporting raw-day freshness. Preserve
+                // that diagnostic for retained raw contributions in this day only.
+                for (attempt, observations) in owned_attempts(conn, owner).await? {
+                    let dispatch = i64::from(attempt.dispatched_at_ms);
+                    if dispatch / DAY_MS != day || dispatch <= checkpoint - 90 * DAY_MS {
+                        continue;
+                    }
+                    let evidence: Option<String> = sqlx::query_scalar(
+                        "SELECT evidence FROM draft_accounting_contributions WHERE attempt_id = ?",
+                    )
+                    .bind(attempt.attempt_id.to_string())
+                    .fetch_optional(&mut *conn)
+                    .await?;
+                    if evidence.as_deref() != Some(serde_json::to_string(&observations)?.as_str()) {
+                        return Ok(InspectionDay::NeedsRefresh);
+                    }
+                }
                 return Ok(InspectionDay::CheckpointLag);
             }
+            RetainedDay::NeedsActivation => return Ok(InspectionDay::CheckpointLag),
         };
         let compact: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM draft_accounting_compact_days WHERE thread_id = ? AND utc_day = ?)",
