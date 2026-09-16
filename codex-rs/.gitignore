@@ -1,6 +1,11 @@
 /target/
 /target-*/
 
+# TUI tests write tmux capture artifacts to tui/target/. Untracked build output
+# left the receiving checkout dirty, which fails an integration receipt whose
+# gates all passed - the receipt requires a clean tree after the tests run.
+/tui/target/
+
 # Recommended value of CARGO_TARGET_DIR when using Docker as explained in .devcontainer/README.md.
 /target-amd64/
 
