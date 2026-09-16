@@ -278,7 +278,7 @@ impl Journal<'_> {
         use crate::accounting::InspectionDay;
         let checkpoint = match retention_fixture_on_connection(conn).await? {
             RetentionFixture::Active(time) => time,
-            RetentionFixture::Staging => return Ok(InspectionDay::NeedsRefresh),
+            RetentionFixture::Staging => return Ok(InspectionDay::CheckpointLag),
             RetentionFixture::Absent => anyhow::bail!("missing retention schema"),
         };
         ensure!(read_at_ms >= checkpoint, "backward inspection read");
@@ -313,7 +313,7 @@ impl Journal<'_> {
             return Ok(InspectionDay::TooLarge);
         }
         if day > checkpoint / DAY_MS {
-            return Ok(InspectionDay::NeedsRefresh);
+            return Ok(InspectionDay::CheckpointLag);
         }
         let selected: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM draft_accounting_attempts WHERE json_extract(payload, '$.thread_id') = ? AND json_extract(payload, '$.dispatched_at_ms') / 86400000 = ?",
@@ -348,9 +348,10 @@ impl Journal<'_> {
                     compact: false,
                 });
             }
-            RetainedDay::Available { .. }
-            | RetainedDay::NeedsActivation
-            | RetainedDay::NeedsMaintenance { .. } => return Ok(InspectionDay::NeedsRefresh),
+            RetainedDay::Available { .. } => return Ok(InspectionDay::NeedsRefresh),
+            RetainedDay::NeedsActivation | RetainedDay::NeedsMaintenance { .. } => {
+                return Ok(InspectionDay::CheckpointLag);
+            }
         };
         let compact: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM draft_accounting_compact_days WHERE thread_id = ? AND utc_day = ?)",

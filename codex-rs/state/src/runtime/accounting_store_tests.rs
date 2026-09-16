@@ -153,6 +153,11 @@ async fn accounting_inspect_checkpoint_and_stale_estimate() -> anyhow::Result<()
         (12, 0)
     );
     assert_eq!(rows(&runtime).await?, before);
+    assert_eq!(
+        inspected(&runtime, 1, 86_400_000).await?,
+        InspectionDay::CheckpointLag
+    );
+    assert_eq!(rows(&runtime).await?, before);
     store.observe(a.thread_id, &a, &[row(1)], 0).await?;
     sqlx::query("UPDATE draft_accounting_contributions SET evidence = '[]'")
         .execute(runtime.pool.as_ref())
@@ -172,6 +177,26 @@ async fn accounting_inspect_checkpoint_and_stale_estimate() -> anyhow::Result<()
         inspected(&runtime, 0, 1).await?,
         InspectionDay::NeedsRefresh
     );
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_never_maintained_is_checkpoint_lag() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    sqlx::query(
+        "UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = NULL, admission_active = 0",
+    )
+    .execute(runtime.pool.as_ref())
+    .await?;
+    let before = rows(&runtime).await?;
+    assert_eq!(
+        inspected(&runtime, 0, 0).await?,
+        InspectionDay::CheckpointLag
+    );
+    assert_eq!(rows(&runtime).await?, before);
     runtime.close().await;
     Ok(())
 }

@@ -56,6 +56,8 @@ updated: 2026-09-16
 
 - [x] 2026-09-15 `acct-inspect-impl-03` verified the frozen brief/launch coordinates and implemented the scoped read-only UTC-day inspector with collection OFF. The [increment receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inspect-impl-03-return.md) records all 34 named tests passing, the 406-test state/TaskNode pass (one existing leaky marker), and failed full TUI regression (3980 passed, 93 failed, 47 timed out, 8 skipped). Functional/receiving acceptance remains open.
 
+- [x] 2026-09-15 `acct-inspect-fix-04` corrected the independent review's single P2: checkpoint lag now renders separately from stale contributions. The [correction receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inspect-fix-04-return.md) preserves the failing-before/passing-after regression, all 34 original cases passing, 19/19 focused TUI and 407/407 state/TaskNode results. Receiving and functional qualification remain open.
+
 ## Remaining
 - [ ] Fable receives/reviews the S03-A implementation and its 34-case map in the [acct-inspect-impl-03 receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inspect-impl-03-return.md); resolve disclosed conservative reader limits and evidence limitations before functional handoff. Worker verification is recorded separately from acceptance.
 - [ ] Three TUI paths in the write scope overlap PF-83-S01 and were **released to this lane on 2026-09-15** because no PF-83 action held them: codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/app/tests.rs. The release is recorded in that sprint. Re-check before launch rather than relying on this line, since PF-83 may re-reserve.

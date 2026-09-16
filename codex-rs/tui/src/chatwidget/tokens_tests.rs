@@ -204,11 +204,63 @@ async fn accounting_inspect_narrow_and_long_fields() {
     }
 }
 
+#[tokio::test]
+async fn accounting_inspect_empty_day_after_checkpoint_renders_lag() -> anyhow::Result<()> {
+    use codex_state::accounting::AccountingStore;
+
+    let home = tempfile::tempdir()?;
+    let owner = ThreadId::new();
+    let runtime = codex_state::StateRuntime::init(
+        codex_state::SqliteConfig::from_sqlite_home(
+            codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path().to_path_buf())?,
+        ),
+        "synthetic".into(),
+    )
+    .await?;
+    let metadata = codex_state::ThreadMetadataBuilder::new(
+        owner,
+        home.path().join("synthetic.jsonl"),
+        chrono::Utc::now(),
+        codex_protocol::protocol::SessionSource::Cli,
+    );
+    runtime.upsert_thread(&metadata.build("synthetic")).await?;
+    AccountingStore::open(&runtime, 0).await?;
+    let empty = AccountingStore::inspect_day(&runtime, owner, 0, 0).await?;
+    let InspectionDay::Ready(view) = &empty else {
+        panic!("{empty:?}");
+    };
+    assert_eq!(view.totals, DayTotals::default());
+    assert!(view.requests.is_empty());
+    assert_eq!(view.coverage.completed_as_of_ms, 0);
+    assert_eq!(
+        inspection_pages(Ok(empty))[0].text[0],
+        "No recorded attempts in this day; collection coverage unknown."
+    );
+
+    // The next UTC day has no requests and opening the inspector must not maintain it.
+    for _ in 0..2 {
+        let lagged = AccountingStore::inspect_day(&runtime, owner, 1, 86_400_000).await?;
+        let text = inspection_pages(Ok(lagged))[0].text.join("\n");
+        assert!(
+            text.contains("Snapshot is not current; newer activity is unverified"),
+            "{text}"
+        );
+        assert!(
+            !text.contains("stored contributions need refresh"),
+            "{text}"
+        );
+        assert!(!text.contains('$'), "{text}");
+    }
+    runtime.close().await;
+    Ok(())
+}
+
 #[test]
 fn accounting_inspect_availability_state_snapshots() {
     let states = [
         InspectionDay::Absent,
         InspectionDay::MissingThread,
+        InspectionDay::CheckpointLag,
         InspectionDay::NeedsRefresh,
         InspectionDay::TooLarge,
     ];
@@ -219,6 +271,7 @@ fn accounting_inspect_availability_state_snapshots() {
     insta::assert_snapshot!(text.join("\n"), @"
     Unavailable — accounting ledger not installed. Collection remains off.
     Unavailable — native thread no longer exists.
+    Snapshot is not current; newer activity is unverified
     Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.
     Range too large for this inspector. No total shown.
     ");

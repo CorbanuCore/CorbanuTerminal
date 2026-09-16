@@ -509,6 +509,7 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
             pages[0].text.push(match other {
                 Ok(InspectionDay::Absent) => "Unavailable — accounting ledger not installed. Collection remains off.".into(),
                 Ok(InspectionDay::MissingThread) => "Unavailable — native thread no longer exists.".into(),
+                Ok(InspectionDay::CheckpointLag) => "Snapshot is not current; newer activity is unverified".into(),
                 Ok(InspectionDay::NeedsRefresh) => "Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.".into(),
                 Ok(InspectionDay::TooLarge) => "Range too large for this inspector. No total shown.".into(),
                 Ok(InspectionDay::DetailUnavailable { coverage, read_at_ms, compact }) => format!(

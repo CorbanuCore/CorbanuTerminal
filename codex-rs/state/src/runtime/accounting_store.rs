@@ -44,6 +44,8 @@ pub struct Inspection {
 pub enum InspectionDay {
     Absent,
     MissingThread,
+    /// The requested view is beyond, or has no completed, maintenance checkpoint.
+    CheckpointLag,
     NeedsRefresh,
     TooLarge,
     DetailUnavailable {
