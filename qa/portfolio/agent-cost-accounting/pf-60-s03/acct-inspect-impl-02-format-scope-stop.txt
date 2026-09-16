@@ -1,0 +1,172 @@
+Observed after just fmt exited 0; before cleanup. These are transient changes, not accepted implementation.
+
+2	1	codex-rs/codex-api/src/endpoint/responses_accounting_tests.rs
+3	1	codex-rs/codex-api/src/sse/responses.rs
+26	11	codex-rs/core/src/accounting_chat_tests.rs
+18	6	codex-rs/core/src/accounting_responses_tests.rs
+2	1	codex-rs/core/tests/suite/accounting_anthropic_recovery.rs
+7	3	codex-rs/core/tests/suite/accounting_chat.rs
+7	3	codex-rs/core/tests/suite/accounting_chat_recovery.rs
+12	4	codex-rs/core/tests/suite/accounting_chat_support.rs
+7	3	codex-rs/core/tests/suite/accounting_responses.rs
+7	3	codex-rs/core/tests/suite/accounting_responses_recovery.rs
+14	6	codex-rs/core/tests/suite/accounting_responses_support.rs
+2	1	codex-rs/core/tests/suite/accounting_responses_ws_recovery.rs
+3	1	codex-rs/login/src/auth/default_client_tests.rs
+21	9	codex-rs/responses-api-proxy/src/synthetic.rs
+19	7	codex-rs/responses-api-proxy/src/synthetic_exchange.rs
+7	3	codex-rs/responses-api-proxy/src/synthetic_io.rs
+2	1	codex-rs/responses-api-proxy/src/synthetic_policy_tests.rs
+6	3	codex-rs/responses-api-proxy/src/synthetic_tests.rs
+9	4	codex-rs/responses-api-proxy/tests/synthetic_cli.rs
+11	0	codex-rs/state/src/runtime/accounting_estimates.rs
+127	0	codex-rs/state/src/runtime/accounting_lifecycle.rs
+1	1	codex-rs/state/src/runtime/accounting_pricing.rs
+59	0	codex-rs/state/src/runtime/accounting_store.rs
+32	0	codex-rs/tui/src/app/event_dispatch.rs
+25	0	codex-rs/tui/src/app_event.rs
+1	0	codex-rs/tui/src/chatwidget.rs
+1	0	codex-rs/tui/src/chatwidget/constructor.rs
+4	2	codex-rs/tui/src/chatwidget/slash_dispatch.rs
+451	0	codex-rs/tui/src/chatwidget/tokens.rs
+13	0	codex-rs/tui/src/chatwidget/usage.rs
+54	15	scripts/initiative_control/activate.py
+11	3	scripts/initiative_control/activity.py
+246	90	scripts/initiative_control/attention.py
+391	101	scripts/initiative_control/control.py
+833	260	scripts/initiative_control/coordinator.py
+34	6	scripts/initiative_control/coordinator_cli.py
+262	64	scripts/initiative_control/decision_alerts.py
+277	72	scripts/initiative_control/decision_feed.py
+11	3	scripts/initiative_control/decision_inspection.py
+682	172	scripts/initiative_control/decision_manager.py
+173	52	scripts/initiative_control/decision_replies.py
+125	30	scripts/initiative_control/decisions.py
+44	11	scripts/initiative_control/delivery.py
+85	24	scripts/initiative_control/export.py
+446	166	scripts/initiative_control/fable_launcher.py
+65	42	scripts/initiative_control/facilities.py
+125	33	scripts/initiative_control/facility_control.py
+186	43	scripts/initiative_control/integration.py
+292	79	scripts/initiative_control/isolated_browser_guest.py
+467	233	scripts/initiative_control/isolated_model_transport.py
+374	139	scripts/initiative_control/manager_cycle.py
+271	99	scripts/initiative_control/manager_cycle_test.py
+277	82	scripts/initiative_control/native_owner.py
+605	179	scripts/initiative_control/owner_daemon.py
+605	200	scripts/initiative_control/owner_tmux.py
+148	47	scripts/initiative_control/slack_reply_poll.py
+602	166	scripts/initiative_control/slack_transport.py
+15	7	scripts/initiative_control/sync_check.py
+423	115	scripts/initiative_control/tasknode.py
+35	10	scripts/initiative_control/test_activity.py
+180	49	scripts/initiative_control/test_attention.py
+391	98	scripts/initiative_control/test_control.py
+1183	301	scripts/initiative_control/test_coordinator.py
+372	78	scripts/initiative_control/test_decision_alerts.py
+466	110	scripts/initiative_control/test_decision_feed.py
+166	38	scripts/initiative_control/test_decision_inspection.py
+1913	468	scripts/initiative_control/test_decision_manager.py
+407	79	scripts/initiative_control/test_decision_replies.py
+210	61	scripts/initiative_control/test_decisions.py
+243	81	scripts/initiative_control/test_fable_launcher.py
+81	22	scripts/initiative_control/test_facility_control.py
+93	26	scripts/initiative_control/test_integration.py
+245	77	scripts/initiative_control/test_isolated_browser_guest.py
+457	216	scripts/initiative_control/test_isolated_model_transport.py
+547	154	scripts/initiative_control/test_manager_cycle.py
+155	42	scripts/initiative_control/test_native_owner.py
+316	107	scripts/initiative_control/test_owner_daemon.py
+566	162	scripts/initiative_control/test_owner_tmux.py
+337	93	scripts/initiative_control/test_preparation.py
+24	9	scripts/initiative_control/test_reference_documents.py
+181	58	scripts/initiative_control/test_slack_reply_poll.py
+944	221	scripts/initiative_control/test_slack_transport.py
+74	19	scripts/initiative_control/test_status_source.py
+236	80	scripts/initiative_control/test_tasknode.py
+33	10	scripts/initiative_control/tick.py
+codex-rs/codex-api/src/endpoint/responses_accounting_tests.rs
+codex-rs/codex-api/src/sse/responses.rs
+codex-rs/core/src/accounting_chat_tests.rs
+codex-rs/core/src/accounting_responses_tests.rs
+codex-rs/core/tests/suite/accounting_anthropic_recovery.rs
+codex-rs/core/tests/suite/accounting_chat.rs
+codex-rs/core/tests/suite/accounting_chat_recovery.rs
+codex-rs/core/tests/suite/accounting_chat_support.rs
+codex-rs/core/tests/suite/accounting_responses.rs
+codex-rs/core/tests/suite/accounting_responses_recovery.rs
+codex-rs/core/tests/suite/accounting_responses_support.rs
+codex-rs/core/tests/suite/accounting_responses_ws_recovery.rs
+codex-rs/login/src/auth/default_client_tests.rs
+codex-rs/responses-api-proxy/src/synthetic.rs
+codex-rs/responses-api-proxy/src/synthetic_exchange.rs
+codex-rs/responses-api-proxy/src/synthetic_io.rs
+codex-rs/responses-api-proxy/src/synthetic_policy_tests.rs
+codex-rs/responses-api-proxy/src/synthetic_tests.rs
+codex-rs/responses-api-proxy/tests/synthetic_cli.rs
+codex-rs/state/src/runtime/accounting_estimates.rs
+codex-rs/state/src/runtime/accounting_lifecycle.rs
+codex-rs/state/src/runtime/accounting_pricing.rs
+codex-rs/state/src/runtime/accounting_store.rs
+codex-rs/tui/src/app/event_dispatch.rs
+codex-rs/tui/src/app_event.rs
+codex-rs/tui/src/chatwidget.rs
+codex-rs/tui/src/chatwidget/constructor.rs
+codex-rs/tui/src/chatwidget/slash_dispatch.rs
+codex-rs/tui/src/chatwidget/tokens.rs
+codex-rs/tui/src/chatwidget/usage.rs
+scripts/initiative_control/activate.py
+scripts/initiative_control/activity.py
+scripts/initiative_control/attention.py
+scripts/initiative_control/control.py
+scripts/initiative_control/coordinator.py
+scripts/initiative_control/coordinator_cli.py
+scripts/initiative_control/decision_alerts.py
+scripts/initiative_control/decision_feed.py
+scripts/initiative_control/decision_inspection.py
+scripts/initiative_control/decision_manager.py
+scripts/initiative_control/decision_replies.py
+scripts/initiative_control/decisions.py
+scripts/initiative_control/delivery.py
+scripts/initiative_control/export.py
+scripts/initiative_control/fable_launcher.py
+scripts/initiative_control/facilities.py
+scripts/initiative_control/facility_control.py
+scripts/initiative_control/integration.py
+scripts/initiative_control/isolated_browser_guest.py
+scripts/initiative_control/isolated_model_transport.py
+scripts/initiative_control/manager_cycle.py
+scripts/initiative_control/manager_cycle_test.py
+scripts/initiative_control/native_owner.py
+scripts/initiative_control/owner_daemon.py
+scripts/initiative_control/owner_tmux.py
+scripts/initiative_control/slack_reply_poll.py
+scripts/initiative_control/slack_transport.py
+scripts/initiative_control/sync_check.py
+scripts/initiative_control/tasknode.py
+scripts/initiative_control/test_activity.py
+scripts/initiative_control/test_attention.py
+scripts/initiative_control/test_control.py
+scripts/initiative_control/test_coordinator.py
+scripts/initiative_control/test_decision_alerts.py
+scripts/initiative_control/test_decision_feed.py
+scripts/initiative_control/test_decision_inspection.py
+scripts/initiative_control/test_decision_manager.py
+scripts/initiative_control/test_decision_replies.py
+scripts/initiative_control/test_decisions.py
+scripts/initiative_control/test_fable_launcher.py
+scripts/initiative_control/test_facility_control.py
+scripts/initiative_control/test_integration.py
+scripts/initiative_control/test_isolated_browser_guest.py
+scripts/initiative_control/test_isolated_model_transport.py
+scripts/initiative_control/test_manager_cycle.py
+scripts/initiative_control/test_native_owner.py
+scripts/initiative_control/test_owner_daemon.py
+scripts/initiative_control/test_owner_tmux.py
+scripts/initiative_control/test_preparation.py
+scripts/initiative_control/test_reference_documents.py
+scripts/initiative_control/test_slack_reply_poll.py
+scripts/initiative_control/test_slack_transport.py
+scripts/initiative_control/test_status_source.py
+scripts/initiative_control/test_tasknode.py
+scripts/initiative_control/tick.py
