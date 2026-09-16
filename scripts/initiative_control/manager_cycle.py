@@ -229,17 +229,38 @@ def briefing(coordinator, packet, owner_context):
                 and encoded(inputs) == encoded({"allocation": key, **allocation["inputs"]})):
             del action["inputs"]
             action["inputs_from_allocation"] = key
-    expanded = set()
+    expanded, dropped = set(), set()
+
+    def budget_reserve():
+        # Room for the omission entry that will report every skipped digest, so
+        # the report itself can never be what pushes the briefing over the limit.
+        return 128 + 72 * (len(dropped) + 1)
 
     def collect(value):
         if isinstance(value, dict):
             if "evidence_digest" in value:
                 key = value["evidence_digest"]
+                # A body already present is mandatory (a selected event body the
+                # transition logic reads); it is never charged to this budget.
+                retained = key in originals
                 body = read_reference(value)
-                if key not in expanded:
+                if key in dropped:
+                    # A second reference must not quietly reinstate what the
+                    # budget already refused and reported as unreadable.
+                    del originals[key]
+                elif key not in expanded:
                     expanded.add(key)
-                    encoded(brief, limit=f.BRIEF_LIMIT)
-                    collect(body)
+                    if not retained:
+                        try:
+                            encoded(brief, limit=f.BRIEF_LIMIT - budget_reserve())
+                        except Rejected:
+                            # Prospective: the body is taken back out before it can
+                            # overshoot, and reported rather than silently dropped.
+                            del originals[key]
+                            dropped.add(key)
+                            body = None
+                    if body is not None:
+                        collect(body)
             for item in value.values():
                 collect(item)
         elif isinstance(value, list):
@@ -262,6 +283,13 @@ def briefing(coordinator, packet, owner_context):
             entry["evidence_digests"] = missing
         if missing or "inputs_digest" in entry:
             brief["evidence_omissions"].append(entry)
+    if dropped:
+        # The contract reports what the manager cannot read. A body dropped for
+        # budget is named here, so a short briefing is distinguishable from a
+        # complete one rather than looking like evidence that never existed.
+        brief["evidence_omissions"].append(
+            {"source": "briefing", "id": "evidence_budget",
+             "reason": "briefing_byte_limit", "evidence_digests": sorted(dropped)})
     return encoded(brief, limit=f.BRIEF_LIMIT).encode()
 
 

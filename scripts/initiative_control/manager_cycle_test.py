@@ -315,7 +315,10 @@ class BriefingSizeTests(unittest.TestCase):
 
     def test_fifo_restriction_recomputes_recent_transition_from_selected_events(self):
         action = self.action(size=18000)
-        self.c.event({"id": "verified:prior", "accepted": True})
+        # Restriction is now reached only by mandatory event bodies: optional
+        # expansion is skipped and reported instead of forcing an event to be
+        # deferred. The padding puts the cost where the FIFO walk can reach it.
+        self.c.event({"id": "verified:prior", "accepted": True, "pad": "z" * 60000})
         packet = self.packet([action])
         selected, raw = m.fit_briefing(self.c, packet, self.context)
         brief = json.loads(raw)
@@ -350,6 +353,41 @@ class BriefingSizeTests(unittest.TestCase):
         self.assertLess(len(raw), f.BRIEF_LIMIT)
         self.assertEqual(1, len(brief["events"]))
         self.assertEqual(4, len(brief["evidence_omissions"]))
+
+    def test_optional_expansion_beyond_budget_is_reported_not_dropped(self):
+        # The 2026-09-16 block: the overflow came from bodies referenced by live
+        # (non-terminal) actions, which no event-prefix walk can reach.
+        actions = [self.action("live-" + str(i), status="accepted", size=6000)
+                   for i in range(6)]
+        for action in actions:
+            action["status"] = "dispatched"
+        packet = self.packet(actions, recent=actions[-3:])
+        raw = m.briefing(self.c, packet, self.context)
+        brief = json.loads(raw)
+        self.assertLess(len(raw), f.BRIEF_LIMIT)
+        budget = [e for e in brief["evidence_omissions"] if e["id"] == "evidence_budget"]
+        self.assertEqual(1, len(budget), brief["evidence_omissions"])
+        entry = budget[0]
+        self.assertEqual(("briefing", "briefing_byte_limit"), (entry["source"], entry["reason"]))
+        self.assertTrue(entry["evidence_digests"])
+        self.assertEqual(sorted(set(entry["evidence_digests"])), entry["evidence_digests"])
+        # Every skipped digest is genuinely absent, and everything absent is named:
+        # the manager can tell a short briefing from a complete one.
+        referenced = {a[field]["evidence_digest"] for a in actions
+                      for field in ("dispatch_receipt", "ack_receipt", "result", "verification")}
+        for key in entry["evidence_digests"]:
+            self.assertIn(key, referenced)
+            self.assertNotIn(key, brief["original_evidence"])
+        self.assertEqual(sorted(referenced - set(brief["original_evidence"])),
+                         entry["evidence_digests"])
+        # Mandatory selected-event bodies are never charged to this budget.
+        for event in brief["events"]:
+            self.assertIn(event["evidence_digest"], brief["original_evidence"])
+
+    def test_no_budget_omission_when_everything_fits(self):
+        brief = self.brief(self.packet([self.action(size=10)]))
+        self.assertEqual([], [e for e in brief["evidence_omissions"]
+                              if e["id"] == "evidence_budget"])
 
 
 if __name__ == "__main__":
