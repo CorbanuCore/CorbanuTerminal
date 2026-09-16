@@ -296,6 +296,507 @@ async fn accounting_inspect_public_delete_and_empty() -> anyhow::Result<()> {
     Ok(())
 }
 
+// Populate valid unrelated history without invoking maintenance for every clone.
+async fn unrelated_population(runtime: &StateRuntime, count: u128) -> anyhow::Result<()> {
+    let store = AccountingStore::open(runtime, 0).await?;
+    let owner = attempt(1, 0)?;
+    let quote = store.admit(owner.thread_id, &owner, &[], 0).await?;
+    let threads: Vec<_> = (0..600)
+        .map(|id| ThreadId::from_string(&Uuid::from_u128(100_000 + id).to_string()))
+        .collect::<Result<_, _>>()?;
+    for thread in &threads {
+        native(runtime, *thread).await?;
+    }
+    let mut conn = connection(runtime).await?;
+    sqlx::query("BEGIN").execute(&mut conn).await?;
+    for id in 2..=count {
+        let mut a = attempt(id, 0)?;
+        a.thread_id = threads[(id as usize - 2) % threads.len()];
+        let mut q = quote.clone();
+        q.attempt = a.clone();
+        sqlx::query("INSERT INTO draft_accounting_attempts VALUES (?, ?, ?)")
+            .bind(a.attempt_id.to_string())
+            .bind(a.request_id.to_string())
+            .bind(serde_json::to_string(&a)?)
+            .execute(&mut conn)
+            .await?;
+        sqlx::query("INSERT INTO draft_accounting_price_bindings VALUES (?, NULL)")
+            .bind(a.attempt_id.to_string())
+            .execute(&mut conn)
+            .await?;
+        sqlx::query("INSERT INTO draft_accounting_estimates VALUES (?, '[]', ?)")
+            .bind(a.attempt_id.to_string())
+            .bind(serde_json::to_string(&q)?)
+            .execute(&mut conn)
+            .await?;
+        sqlx::query("INSERT INTO draft_accounting_contributions VALUES (?, ?, 0, '[]')")
+            .bind(a.attempt_id.to_string())
+            .bind(a.thread_id.to_string())
+            .execute(&mut conn)
+            .await?;
+    }
+    sqlx::query("COMMIT").execute(&mut conn).await?;
+    conn.close().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_small_day_on_busy_host() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    let a = attempt(1, 0)?;
+    native(&runtime, a.thread_id).await?;
+    unrelated_population(&runtime, 12_001).await?;
+    let view = ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?);
+    assert_eq!(
+        view.totals,
+        DayTotals::from_quotes(view.requests.values().flatten())?
+    );
+    assert_eq!(
+        (
+            view.totals.attempts,
+            view.unknown_parent_totals.attempts,
+            view.totals.unknown_estimates
+        ),
+        (1, 0, 1)
+    );
+    assert_eq!(view.totals.known_usd, "0".to_owned().try_into()?);
+    assert!(
+        view.totals
+            .measured
+            .iter()
+            .all(|metric| metric.known == 0 && metric.unknown == 1)
+    );
+    let range = AccountingStore::inspect_range(
+        &runtime,
+        a.thread_id,
+        InspectionRange {
+            start_ms: 0,
+            end_ms: DAY,
+            grouping: InspectionGrouping::Day,
+        },
+        0,
+    )
+    .await?;
+    let InspectionDay::Range { buckets, .. } = range else {
+        panic!("{range:?}")
+    };
+    assert_eq!(buckets.len(), 1);
+    assert_eq!(buckets[0].days.len(), 1);
+    let InspectionDay::Ready(bucket_view) = &buckets[0].days[0] else {
+        panic!("{buckets:?}")
+    };
+    assert_eq!(bucket_view, &view);
+    // The unrelated attempt's observation cap must not become the owner's cap.
+    let mut other = view.requests[&a.request_id][0].clone();
+    other.attempt = attempt(2, 0)?;
+    other.attempt.thread_id = ThreadId::from_string(&Uuid::from_u128(100_000).to_string())?;
+    other.observations = (1..=4097)
+        .map(|revision| {
+            let mut row = observation(&other.attempt, revision, 0)?;
+            row.patch = Patch::default();
+            Ok(row)
+        })
+        .collect::<anyhow::Result<_>>()?;
+    let mut conn = connection(&runtime).await?;
+    sqlx::query("BEGIN").execute(&mut conn).await?;
+    for row in &other.observations {
+        sqlx::query("INSERT INTO draft_accounting_observations VALUES (?, ?, ?, ?, ?)")
+            .bind(other.attempt.attempt_id.to_string())
+            .bind(i64::from(row.revision))
+            .bind(row.source.to_string())
+            .bind(i64::from(row.sequence))
+            .bind(serde_json::to_string(row)?)
+            .execute(&mut conn)
+            .await?;
+    }
+    let evidence = serde_json::to_string(&other.observations)?;
+    sqlx::query("INSERT INTO draft_accounting_estimates VALUES (?, ?, ?)")
+        .bind(other.attempt.attempt_id.to_string())
+        .bind(&evidence)
+        .bind(serde_json::to_string(&other)?)
+        .execute(&mut conn)
+        .await?;
+    sqlx::query("UPDATE draft_accounting_contributions SET evidence = ? WHERE attempt_id = ?")
+        .bind(evidence)
+        .bind(other.attempt.attempt_id.to_string())
+        .execute(&mut conn)
+        .await?;
+    sqlx::query("COMMIT").execute(&mut conn).await?;
+    assert_eq!(
+        AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?,
+        InspectionDay::Ready(view)
+    );
+    assert_eq!(
+        AccountingStore::inspect_day(&runtime, other.attempt.thread_id, 0, 0).await?,
+        InspectionDay::TooLarge
+    );
+    conn.close().await?;
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_work_budget_refuses_unknown_busy_host() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    let a = attempt(1, 0)?;
+    native(&runtime, a.thread_id).await?;
+    unrelated_population(&runtime, 12_001).await?;
+    let mut conn = connection(&runtime).await?;
+    // The same 12,001 rows / 600 unrelated roots pass the existing busy-host test.
+    // Missing lineage plus stale contributions requires repeated candidate scans;
+    // no candidate can exhaust the selected 512-attempt or 4 MiB result budget.
+    sqlx::query("UPDATE threads SET source = 'unknown' WHERE id != ?")
+        .bind(a.thread_id.to_string())
+        .execute(&mut conn)
+        .await?;
+    sqlx::query("DELETE FROM draft_accounting_contributions WHERE thread_id != ?")
+        .bind(a.thread_id.to_string())
+        .execute(&mut conn)
+        .await?;
+    assert_eq!(
+        tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0)
+        )
+        .await??,
+        InspectionDay::TooLarge
+    );
+    assert_eq!(
+        tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            AccountingStore::inspect_range(
+                &runtime,
+                a.thread_id,
+                InspectionRange {
+                    start_ms: 0,
+                    end_ms: DAY,
+                    grouping: InspectionGrouping::Day,
+                },
+                0
+            )
+        )
+        .await??,
+        InspectionDay::TooLarge
+    );
+    conn.close().await?;
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_work_budget_spans_range_buckets() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    let a = attempt(1, 0)?;
+    native(&runtime, a.thread_id).await?;
+    unrelated_population(&runtime, 12_001).await?;
+    let mut conn = connection(&runtime).await?;
+    sqlx::query("UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = ?")
+        .bind(3 * DAY)
+        .execute(&mut conn)
+        .await?;
+    // Each day and the ordinary three-day grouping must remain Ready.
+    let mut days = Vec::new();
+    for day in 0..3 {
+        let view = ready(AccountingStore::inspect_day(&runtime, a.thread_id, day, 3 * DAY).await?);
+        assert_eq!(view.totals.attempts, i64::from(day == 0));
+        days.push(InspectionDay::Ready(view));
+    }
+    let range = AccountingStore::inspect_range(
+        &runtime,
+        a.thread_id,
+        InspectionRange {
+            start_ms: 0,
+            end_ms: 3 * DAY,
+            grouping: InspectionGrouping::Day,
+        },
+        3 * DAY,
+    )
+    .await?;
+    let InspectionDay::Range { buckets, .. } = range else {
+        panic!("{range:?}")
+    };
+    assert_eq!(buckets.len(), 3);
+    for (bucket, expected) in buckets.into_iter().zip(days) {
+        assert!(!bucket.partial);
+        assert_eq!(bucket.days, vec![expected]);
+    }
+    // The hour range repeatedly scans the same retained rows. Its one total
+    // attempt and 72 buckets fit all result limits, but exhaust the work budget.
+    assert_eq!(
+        tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            AccountingStore::inspect_range(
+                &runtime,
+                a.thread_id,
+                InspectionRange {
+                    start_ms: 0,
+                    end_ms: 3 * DAY,
+                    grouping: InspectionGrouping::Hour,
+                },
+                3 * DAY
+            )
+        )
+        .await??,
+        InspectionDay::TooLarge
+    );
+    conn.close().await?;
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_whole_store_denominator_thresholds() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    let store = AccountingStore::open(&runtime, 0).await?;
+    // Obtain a genuine compact payload from an unrelated, expired raw attempt.
+    let mut old = attempt(1000, 0)?;
+    old.thread_id = ThreadId::from_string(&Uuid::from_u128(1000).to_string())?;
+    native(&runtime, old.thread_id).await?;
+    store.admit(old.thread_id, &old, &[], 0).await?;
+    store.maintain(92 * DAY).await?;
+    let owner = attempt(1, 91 * DAY)?.thread_id;
+    for id in 1..=8 {
+        let mut a = attempt(id, 91 * DAY)?;
+        a.thread_id = ThreadId::from_string(&Uuid::from_u128(id + 6).to_string())?;
+        native(&runtime, a.thread_id).await?;
+        store.admit(a.thread_id, &a, &[], 92 * DAY).await?;
+        if id > 1 {
+            runtime
+                .upsert_thread_spawn_edge(
+                    owner,
+                    a.thread_id,
+                    codex_state::DirectionalThreadSpawnEdgeStatus::Closed,
+                )
+                .await?;
+        }
+    }
+    let mut conn = connection(&runtime).await?;
+    let payload: String = sqlx::query_scalar("SELECT payload FROM draft_accounting_compact_days")
+        .fetch_one(&mut conn)
+        .await?;
+    let mut previous = 9i64;
+    // Pin adjacent passing/refusing totals, including the eight current attempts.
+    // Seven children fail first; even an empty current day eventually refuses.
+    for (count, day, expected_attempts) in [
+        (95_236i64, 91, Some(8)),
+        (95_237, 91, None),
+        (571_428, 92, Some(0)),
+        (571_429, 92, None),
+    ] {
+        sqlx::query(
+            "WITH RECURSIVE n(i) AS (VALUES(?1) UNION ALL SELECT i+1 FROM n WHERE i<?2)
+             INSERT INTO draft_accounting_compact_days
+             SELECT printf('00000000-0000-0000-0001-%012x',i),0,?3 FROM n",
+        )
+        .bind(previous + 1)
+        .bind(count)
+        .bind(&payload)
+        .execute(&mut conn)
+        .await?;
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT (SELECT count(*) FROM draft_accounting_attempts) +
+                 (SELECT count(*) FROM draft_accounting_compact_days)"
+            )
+            .fetch_one(&mut conn)
+            .await?,
+            count
+        );
+        let result = AccountingStore::inspect_day(&runtime, owner, day, 92 * DAY).await?;
+        if let Some(attempts) = expected_attempts {
+            let view = ready(result);
+            assert_eq!(
+                (view.totals.attempts, view.descendant_totals.attempts),
+                (attempts, if day == 91 { 7 } else { 0 })
+            );
+        } else {
+            assert_eq!(result, InspectionDay::TooLarge, "whole-store rows: {count}");
+        }
+        previous = count;
+    }
+    conn.close().await?;
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_valid_ten_thousand_retained_rows() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    let a = attempt(1, 0)?;
+    native(&runtime, a.thread_id).await?;
+    unrelated_population(&runtime, 10_000).await?;
+    let mut conn = connection(&runtime).await?;
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM draft_accounting_attempts")
+            .fetch_one(&mut conn)
+            .await?,
+        10_000
+    );
+    let view = ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?);
+    assert_eq!(
+        (
+            view.totals.attempts,
+            view.requests.len(),
+            view.unknown_parent_totals.attempts
+        ),
+        (1, 1, 0)
+    );
+    conn.close().await?;
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_maximal_valid_packet() -> anyhow::Result<()> {
+    const CEILING: usize = 4 * 1024 * 1024;
+    let path = home();
+    let runtime = open(&path).await?;
+    let a = attempt(1, 0)?;
+    native(&runtime, a.thread_id).await?;
+    let store = AccountingStore::open(&runtime, 0).await?;
+    store.admit(a.thread_id, &a, &[], 0).await?;
+    let template = store
+        .observe(a.thread_id, &a, &[observation(&a, 1, 1)?], 0)
+        .await?;
+    let mut quotes = Vec::new();
+    let mut packet = 8192;
+    loop {
+        let mut q = template.clone();
+        q.attempt = attempt(quotes.len() as u128 + 1, 0)?;
+        q.observations.clear();
+        let mut size = serde_json::to_vec(&q)?.len() + 2048;
+        for revision in 1..=4096 {
+            let row = observation(&q.attempt, revision, 1)?;
+            let extra = serde_json::to_vec(&row)?.len() + usize::from(revision > 1);
+            if packet + size + extra > CEILING - 1 {
+                break;
+            }
+            size += extra;
+            q.observations.push(row);
+        }
+        assert!(!q.observations.is_empty());
+        packet += size;
+        if q.observations.len() < 4096 {
+            // Fill the final sub-observation remainder with legal identity metadata.
+            let mut remaining = CEILING - 1 - packet;
+            for text in [&mut q.attempt.model, &mut q.attempt.provider] {
+                let padding = remaining.min(128 - text.len());
+                text.push_str(&"x".repeat(padding));
+                remaining -= padding;
+                packet += padding;
+            }
+            assert_eq!(remaining, 0);
+            quotes.push(q);
+            break;
+        }
+        quotes.push(q);
+    }
+    assert_eq!(packet, CEILING - 1);
+    assert_eq!(
+        8192 + quotes
+            .iter()
+            .map(|q| serde_json::to_vec(q).unwrap().len() + 2048)
+            .sum::<usize>(),
+        packet
+    );
+    let mut conn = connection(&runtime).await?;
+    sqlx::query("BEGIN").execute(&mut conn).await?;
+    sqlx::raw_sql(
+        "DELETE FROM draft_accounting_contributions; DELETE FROM draft_accounting_estimates;
+        DELETE FROM draft_accounting_observations; DELETE FROM draft_accounting_price_bindings;
+        DELETE FROM draft_accounting_attempts",
+    )
+    .execute(&mut conn)
+    .await?;
+    for q in &quotes {
+        let a = &q.attempt;
+        let evidence = serde_json::to_string(&q.observations)?;
+        sqlx::query("INSERT INTO draft_accounting_attempts VALUES (?, ?, ?)")
+            .bind(a.attempt_id.to_string())
+            .bind(a.request_id.to_string())
+            .bind(serde_json::to_string(a)?)
+            .execute(&mut conn)
+            .await?;
+        sqlx::query("INSERT INTO draft_accounting_price_bindings VALUES (?, NULL)")
+            .bind(a.attempt_id.to_string())
+            .execute(&mut conn)
+            .await?;
+        for row in &q.observations {
+            sqlx::query("INSERT INTO draft_accounting_observations VALUES (?, ?, ?, ?, ?)")
+                .bind(a.attempt_id.to_string())
+                .bind(i64::from(row.revision))
+                .bind(row.source.to_string())
+                .bind(i64::from(row.sequence))
+                .bind(serde_json::to_string(row)?)
+                .execute(&mut conn)
+                .await?;
+        }
+        sqlx::query("INSERT INTO draft_accounting_estimates VALUES (?, ?, ?)")
+            .bind(a.attempt_id.to_string())
+            .bind(&evidence)
+            .bind(serde_json::to_string(q)?)
+            .execute(&mut conn)
+            .await?;
+        sqlx::query("INSERT INTO draft_accounting_contributions VALUES (?, ?, 0, ?)")
+            .bind(a.attempt_id.to_string())
+            .bind(a.thread_id.to_string())
+            .bind(evidence)
+            .execute(&mut conn)
+            .await?;
+    }
+    // Valid historical versions together exceed 4 MiB but do not enlarge the packet.
+    let mut history_bytes = 0;
+    for omitted in 1..=16 {
+        let mut old = quotes[0].clone();
+        old.observations.truncate(old.observations.len() - omitted);
+        let evidence = serde_json::to_string(&old.observations)?;
+        history_bytes += evidence.len();
+        sqlx::query("INSERT INTO draft_accounting_estimates VALUES (?, ?, ?)")
+            .bind(old.attempt.attempt_id.to_string())
+            .bind(evidence)
+            .bind(serde_json::to_string(&old)?)
+            .execute(&mut conn)
+            .await?;
+    }
+    assert!(history_bytes > CEILING);
+    sqlx::query("COMMIT").execute(&mut conn).await?;
+    let view = ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?);
+    assert_eq!(view.totals, DayTotals::from_quotes(&quotes)?);
+    assert_eq!(
+        view.requests
+            .values()
+            .flatten()
+            .cloned()
+            .collect::<Vec<_>>(),
+        quotes
+    );
+    // Two more legal bytes cross the same projected packet ceiling.
+    let q = quotes.last_mut().unwrap();
+    q.attempt.turn.push_str("xx");
+    sqlx::query("UPDATE draft_accounting_attempts SET payload = ? WHERE attempt_id = ?")
+        .bind(serde_json::to_string(&q.attempt)?)
+        .bind(q.attempt.attempt_id.to_string())
+        .execute(&mut conn)
+        .await?;
+    sqlx::query("UPDATE draft_accounting_estimates SET payload = ? WHERE attempt_id = ?")
+        .bind(serde_json::to_string(q)?)
+        .bind(q.attempt.attempt_id.to_string())
+        .execute(&mut conn)
+        .await?;
+    assert_eq!(
+        AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?,
+        InspectionDay::TooLarge
+    );
+    conn.close().await?;
+    runtime.close().await;
+    Ok(())
+}
+
 #[tokio::test]
 async fn accounting_inspect_public_limits_no_truncation() -> anyhow::Result<()> {
     let path = home();
@@ -402,9 +903,11 @@ async fn inspection_limit_edges() -> anyhow::Result<()> {
     sqlx::raw_sql("INSERT INTO draft_accounting_attempts VALUES ('extra','extra','null')")
         .execute(&mut conn)
         .await?;
-    assert_eq!(
-        AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?,
-        InspectionDay::TooLarge
+    // Malformed ownership remains an error at any unrelated population size.
+    assert!(
+        AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0)
+            .await
+            .is_err()
     );
     sqlx::raw_sql("DELETE FROM draft_accounting_attempts")
         .execute(&mut conn)
@@ -416,11 +919,7 @@ async fn inspection_limit_edges() -> anyhow::Result<()> {
             .execute(&mut conn)
             .await?;
         let result = AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await;
-        if size == 4 * 1024 * 1024 {
-            assert!(result.is_err());
-        } else {
-            assert_eq!(result?, InspectionDay::TooLarge);
-        }
+        assert!(result.is_err());
     }
     conn.close().await?;
     runtime.close().await;

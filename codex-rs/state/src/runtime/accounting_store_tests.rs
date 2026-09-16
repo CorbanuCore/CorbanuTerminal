@@ -18,6 +18,165 @@ async fn inspected(runtime: &StateRuntime, day: i64, time: i64) -> anyhow::Resul
 }
 
 #[tokio::test]
+async fn accounting_inspect_noncanonical_own_id_is_an_error() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let a = attempt(1);
+    AccountingStore::open(&runtime, 0)
+        .await?
+        .admit(a.thread_id, &a, &[], 0)
+        .await?;
+    assert_eq!(
+        inspection(inspected(&runtime, 0, 0).await?).totals.attempts,
+        1
+    );
+    for spelling in [
+        a.thread_id.to_string().replace('-', ""),
+        format!("urn:uuid:{}", a.thread_id),
+        format!("{{{}}}", a.thread_id),
+    ] {
+        assert_eq!(ThreadId::from_string(&spelling)?, a.thread_id);
+        sqlx::query(
+            "UPDATE draft_accounting_attempts SET payload = json_set(payload, '$.thread_id', ?)",
+        )
+        .bind(spelling)
+        .execute(runtime.pool.as_ref())
+        .await?;
+        let before = rows(&runtime).await?;
+        marker(
+            inspected(&runtime, 0, 0).await.unwrap_err(),
+            "invalid accounting ownership",
+        );
+        assert_eq!(rows(&runtime).await?, before);
+    }
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_work_is_not_refunded_for_unrelated_roots() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    tree_fixture(&runtime).await?;
+    // All six other owners are provably unrelated roots.
+    sqlx::query("DELETE FROM thread_spawn_edges")
+        .execute(runtime.pool.as_ref())
+        .await?;
+    let mut conn = runtime.pool.acquire().await?;
+    let mut work = InspectionWork::new(&mut conn).await?;
+    let before = work.visits;
+    let view = inspect_tree_window(&mut conn, attempt(1).thread_id, 0, 0, None, &mut work).await?;
+    assert_eq!(inspection(view).totals.attempts, 1);
+    // Includes the owner's quote/history work, all seven candidates and six hops.
+    assert!(before - work.visits >= 13);
+    // Reuse the budget just as range buckets do: the second window must refuse.
+    work.visits = 12;
+    assert_eq!(
+        inspect_tree_window(&mut conn, attempt(1).thread_id, 0, 0, None, &mut work).await?,
+        InspectionDay::TooLarge
+    );
+    // Exhaustion on the final UNKNOWN candidate must not become unavailable+Ready.
+    sqlx::query("UPDATE threads SET source = 'unknown' WHERE id = ?")
+        .bind(Uuid::from_u128(13).to_string())
+        .execute(&mut *conn)
+        .await?;
+    let mut work = InspectionWork::new(&mut conn).await?;
+    work.rows = 60;
+    assert_eq!(
+        inspect_tree_window(&mut conn, attempt(1).thread_id, 0, 0, None, &mut work).await?,
+        InspectionDay::TooLarge
+    );
+    drop(conn);
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_provisional_unrelated_chain_is_bounded() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    tree_fixture(&runtime).await?;
+    let mut tx = runtime.pool.begin().await?;
+    sqlx::query("DELETE FROM thread_spawn_edges")
+        .execute(&mut *tx)
+        .await?;
+    // Candidate 8 traverses >10,000 nodes before terminating at an unrelated root.
+    sqlx::raw_sql(
+        "WITH RECURSIVE n(i) AS (VALUES(10000) UNION ALL SELECT i+1 FROM n WHERE i<20001)
+         INSERT INTO threads (id,rollout_path,created_at,updated_at,source,model_provider,cwd,title,sandbox_policy,approval_mode)
+         SELECT printf('00000000-0000-0000-0000-%012x',i),'fixture',0,0,'cli','fixture','fixture','','','' FROM n;
+         WITH RECURSIVE n(i) AS (VALUES(10000) UNION ALL SELECT i+1 FROM n WHERE i<20000)
+         INSERT INTO thread_spawn_edges SELECT printf('00000000-0000-0000-0000-%012x',i+1),
+         printf('00000000-0000-0000-0000-%012x',i),'closed' FROM n;
+         INSERT INTO thread_spawn_edges VALUES ('00000000-0000-0000-0000-000000002710',
+         '00000000-0000-0000-0000-000000000008','closed');"
+    ).execute(&mut *tx).await?;
+    tx.commit().await?;
+    assert_eq!(
+        tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            inspected(&runtime, 0, 0)
+        )
+        .await??,
+        InspectionDay::TooLarge
+    );
+    // An unrelated root's large parsed-and-dropped source is not retained memory.
+    sqlx::query("DELETE FROM thread_spawn_edges")
+        .execute(runtime.pool.as_ref())
+        .await?;
+    sqlx::query("UPDATE threads SET source = ? WHERE id = ?")
+        .bind(format!("{}\"cli\"", " ".repeat(4 * 1024 * 1024)))
+        .bind(Uuid::from_u128(8).to_string())
+        .execute(runtime.pool.as_ref())
+        .await?;
+    let view = inspection(inspected(&runtime, 0, 0).await?);
+    assert_eq!(
+        (view.totals.attempts, view.unknown_parent_totals.attempts),
+        (1, 0)
+    );
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_coverage_divergence_with_overdue_other_day() -> anyhow::Result<()> {
+    const DAY: i64 = 86_400_000;
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let a = attempt(1);
+    let store = AccountingStore::open(&runtime, 0).await?;
+    store.admit(a.thread_id, &a, &[], 0).await?;
+    // Simulate an advanced checkpoint with retention still overdue on day zero.
+    sqlx::query("UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = ?")
+        .bind(400 * DAY)
+        .execute(runtime.pool.as_ref())
+        .await?;
+    let before = rows(&runtime).await?;
+    assert!(matches!(
+        store.read_day(a.thread_id, 400, 400 * DAY).await?,
+        RetainedDay::NeedsMaintenance { .. }
+    ));
+    let view = inspection(inspected(&runtime, 400, 400 * DAY).await?);
+    assert_eq!(
+        (
+            view.totals.attempts,
+            view.coverage.aggregate_day_floor,
+            view.coverage.oldest_recorded_day
+        ),
+        (0, 36, Some(0))
+    );
+    assert!(matches!(
+        inspected(&runtime, 0, 400 * DAY).await?,
+        InspectionDay::CheckpointLag
+    ));
+    assert_eq!(rows(&runtime).await?, before);
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
 async fn accounting_inspect_absent_schema_is_read_only() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
@@ -500,6 +659,25 @@ async fn accounting_inspect_conflicting_and_missing_edges_are_unknown() -> anyho
 }
 
 #[tokio::test]
+async fn accounting_inspect_malformed_source_with_edge_is_unknown() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    tree_fixture(&runtime).await?;
+    // A surviving edge cannot make an unparseable source authoritative.
+    sqlx::query("UPDATE threads SET source = 'malformed' WHERE id = ?")
+        .bind(Uuid::from_u128(8).to_string())
+        .execute(runtime.pool.as_ref())
+        .await?;
+    let view = inspection(inspected(&runtime, 0, 0).await?);
+    assert_eq!(
+        (view.totals.attempts, view.unknown_parent_totals.attempts),
+        (1, 5)
+    );
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
 async fn accounting_inspect_descendant_stale_and_compact_refuse_tree_total() -> anyhow::Result<()> {
     for mutation in [
         "DELETE FROM draft_accounting_contributions WHERE attempt_id = '00000000-0000-0000-0000-000000000002'",
@@ -604,8 +782,10 @@ async fn accounting_inspect_candidate_cap_precedes_unavailable_candidates() -> a
     let runtime = open(&path).await?;
     tree_fixture(&runtime).await?;
     let mut tx = runtime.pool.begin().await?;
-    // Distinct unknown owners, each missing contributions. Reject the candidate
-    // population before repeated per-owner validation or unavailable-state handling.
+    let mut expected = inspection(inspected(&runtime, 0, 0).await?);
+    expected.unknown_parent_unavailable_threads += 512;
+    // Distinct unknown owners missing contributions remain unavailable unknowns;
+    // their count must not suppress the known root and descendant totals.
     for id in 20..532 {
         let mut a = attempt(id);
         a.thread_id = ThreadId::from_string(&Uuid::from_u128(id + 1000).to_string())?;
@@ -621,7 +801,10 @@ async fn accounting_inspect_candidate_cap_precedes_unavailable_candidates() -> a
             .await?;
     }
     tx.commit().await?;
-    assert_eq!(inspected(&runtime, 0, 0).await?, InspectionDay::TooLarge);
+    assert_eq!(
+        inspected(&runtime, 0, 0).await?,
+        InspectionDay::Ready(expected)
+    );
     runtime.close().await;
     Ok(())
 }
