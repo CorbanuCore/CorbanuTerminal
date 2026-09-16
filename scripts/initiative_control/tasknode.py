@@ -25,6 +25,10 @@ CLI_LOCK_SECONDS = 2.0
 CLI_CONTEXT = contextvars.ContextVar("tasknode_cli", default=False)
 
 
+class QueueLockTimeout(ValueError):
+    """The CLI acquisition deadline expired while another process held the queue."""
+
+
 @contextlib.contextmanager
 def locked(path):
     """Bound only CLI lock acquisition; library callers retain blocking flock."""
@@ -41,7 +45,7 @@ def locked(path):
                 break
             except BlockingIOError:
                 if time.monotonic() >= deadline:
-                    raise ValueError(f"another Task Node operation is holding the queue; lock path: {path}") from None
+                    raise QueueLockTimeout(f"another Task Node operation is holding the queue; lock path: {path}") from None
                 time.sleep(0.05)
         yield
 
@@ -53,7 +57,10 @@ def delivery_status(state, event_id, record):
     directory = state / "send-receipts"
     if (directory / (event_id + ".intent.json")).exists() or (directory / (event_id + ".result.json")).exists():
         result = directory / (event_id + ".result.json")
-        return read_json(result, state).get("outcome", "uncertain") if result.exists() else "uncertain"
+        try:
+            return read_json(result, state).get("outcome", "uncertain") if result.exists() else "uncertain"
+        except (OSError, ValueError, TypeError, AttributeError):
+            return "uncertain"  # An unreadable receipt cannot establish delivery.
     return record["status"]
 
 
@@ -555,8 +562,9 @@ def retry(state, event_id):
         # Explicit named retry accepts the duplicate risk; never infer failure
         # from uncertainty or erase single-event receipts to permit a resend.
         attempts = record["attempts"] if record["status"] == "uncertain" else 0
+        if record["status"] != "uncertain":
+            record.pop("error", None)
         record.update(status="pending", attempts=attempts, next_attempt_at=now())
-        record.pop("error", None)
         atomic_json(path, record)
 
 
@@ -574,6 +582,8 @@ def main():
     token = CLI_CONTEXT.set(True)
     try:
         cli()
+    except QueueLockTimeout as error:
+        CLIParser().error(str(error))
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
         if isinstance(error, FileNotFoundError):
             reason = "selected record or required local file does not exist"

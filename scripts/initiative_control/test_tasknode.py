@@ -521,6 +521,37 @@ class CLIFenceTests(unittest.TestCase):
                     reason="retained receipts; external reconciliation")
         self.assertEqual(self.snapshot(), before)
 
+    def test_cli_uncertain_retry_preserves_recorded_explanation(self):
+        record = control.read_json(self.record_path, self.state)
+        reason = "Delivery outcome unconfirmed; external reconciliation required."
+        record.update(status="uncertain", attempts=3, error=reason)
+        control.atomic_json(self.record_path, record)
+        code, _, errors = self.invoke("retry", "--state", self.state, "--event-id", self.event_id)
+        self.assertEqual(code, 0, errors)
+        retried = control.read_json(self.record_path, self.state)
+        self.assertEqual((retried["status"], retried["attempts"]), ("pending", 3))
+        self.assertEqual(retried["error"], reason)
+        self.assertEqual(retried["event"], self.event)
+
+    def test_cli_preview_with_damaged_result_retains_payload_and_uncertainty(self):
+        control.atomic_json(self.state / "send-receipts" / (self.event_id + ".intent.json"), {})
+        result_path = self.state / "send-receipts" / (self.event_id + ".result.json")
+        for damaged in (b'{"outcome":', b"\xff", b"[]"):
+            with self.subTest(damaged=damaged):
+                result_path.write_bytes(damaged)
+                before = self.snapshot()
+                for command in ("prepare", "preview"):
+                    result = self.child([command, "--state", self.state, "--event-id", self.event_id])
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    value = json.loads(result.stdout)
+                    self.assertEqual(value["status"], "uncertain")
+                    self.assertEqual(value["payload"], {"event": self.event})
+                    self.assertIn("external reconciliation required", value["reason"])
+                    self.assertIn("no automatic retry", value["reason"])
+                    self.assertFalse(value["send_authorized"])
+                    self.assertFalse(value["network_writes"])
+                self.assertEqual(self.snapshot(), before)
+
     def test_cli_recovery_operations_are_absent_and_denied(self):
         for command in ("delete-receipt", "edit-payload", "rewrite-id", "clear-outbox", "reset-attempts"):
             with self.subTest(command=command):

@@ -69,13 +69,19 @@ if mode in {"control", "tasknode"}:
     with module.locked(root / "state/.outbox.lock"):
         print("acquired", flush=True)
 else:
-    with patch.object(control, "collect", return_value={"runs": [run()]}), \
+    runs = [] if mode == "cli_flush" else [run()]
+    with patch.object(tasknode, "credentials", return_value={}), \
+         patch.object(tasknode, "post", side_effect=AssertionError("no transport")), \
+         patch.object(control, "collect", return_value={"runs": runs}), \
          patch.object(control, "publish"), \
          patch.object(tick, "collect", return_value={"runs": [run()]}), \
          patch.object(tick, "publish"):
-        if mode == "cli":
+        if mode in {"cli", "cli_flush"}:
             sys.argv = ["tick.py", "--root", str(root)]
-            runpy.run_path(str(Path(tick.__file__)), run_name="__main__")
+            try:
+                runpy.run_path(str(Path(tick.__file__)), run_name="__main__")
+            finally:
+                assert not tasknode.CLI_CONTEXT.get()
         else:
             tick.tick(root)
     assert not tasknode.CLI_CONTEXT.get()
@@ -100,11 +106,15 @@ else:
             started = time.monotonic()
             child = self.child("cli")
             output, errors = child.communicate(timeout=tasknode.CLI_LOCK_SECONDS + 3)
-            self.assertEqual(child.returncode, 0, errors)
-            self.assertIn("Refresh complete", output)
+            self.assertEqual(child.returncode, 2, errors)
+            refusal = f"another Task Node operation is holding the queue; lock path: {self.state / '.outbox.lock'}"
+            self.assertEqual(errors, f"Task Node refresh refused: {refusal}\n")
+            self.assertNotIn("Refresh complete", output)
             self.assertGreaterEqual(time.monotonic() - started, tasknode.CLI_LOCK_SECONDS)
             status = control.read_json(self.state / "writeback-status.json", self.state)
-            self.assertEqual(status["rejected_runs"], 1)
+            self.assertEqual(status["rejected_runs"], 0)
+            self.assertEqual(status["error"], refusal)
+            self.assertEqual(control.read_json(self.root / "site/health.json", self.root)["error"], refusal)
             self.assertEqual(status["outbox"], {})
             self.assertFalse((self.state / "outbox-index.json").exists())
             for path, content in before.items():
@@ -115,6 +125,50 @@ else:
         status = control.read_json(self.state / "writeback-status.json", self.state)
         self.assertEqual(status["rejected_runs"], 0)
         self.assertEqual(status["outbox"], {"pending": 1})
+
+    def test_tick_cli_flush_lock_expiry_is_not_credential_recovery(self):
+        config = control.read_json(self.state / "control.json", self.state)
+        config["tasknode"]["enabled"] = True
+        control.atomic_json(self.state / "control.json", config)
+        control.atomic_json(self.state / "enrollment.json",
+                            {"workspace_id": "fixture-workspace", "verified": True})
+        with control.locked(self.state / ".outbox.lock"):
+            child = self.child("cli_flush")
+            output, errors = child.communicate(timeout=tasknode.CLI_LOCK_SECONDS + 3)
+            self.assertEqual(child.returncode, 2, errors)
+            refusal = f"another Task Node operation is holding the queue; lock path: {self.state / '.outbox.lock'}"
+            self.assertEqual(errors, f"Task Node refresh refused: {refusal}\n")
+            self.assertNotIn("Refresh complete", output)
+            status = control.read_json(self.state / "writeback-status.json", self.state)
+            self.assertEqual(status["error"], refusal)
+            self.assertEqual(status["rejected_runs"], 0)
+            self.assertEqual(status["delivered_this_run"], 0)
+            self.assertEqual(control.read_json(self.root / "site/health.json", self.root)["error"], refusal)
+        child = self.child("cli_flush")
+        output, errors = child.communicate(timeout=5)
+        self.assertEqual(child.returncode, 0, errors)
+        self.assertIn("Refresh complete", output)
+        self.assertNotIn("error", control.read_json(self.state / "writeback-status.json", self.state))
+
+    def test_pending_record_with_crash_intent_publishes_uncertain(self):
+        event_id = tasknode.enqueue(self.state, run())
+        path = self.state / "outbox" / (event_id + ".json")
+        self.assertEqual(control.read_json(path, self.state)["status"], "pending")
+        control.atomic_json(self.state / "send-receipts" / (event_id + ".intent.json"), {})
+        before = {p: p.read_bytes() for p in self.state.rglob("*") if p.is_file()}
+        def published(*_):
+            status = control.read_json(self.state / "writeback-status.json", self.state)
+            self.assertEqual(status["outbox"], {"uncertain": 1})
+            self.assertIn("Delivery is uncertain; no automatic retry", status["error"])
+            self.assertIn("external reconciliation", status["error"])
+        with patch.object(tick, "collect", return_value={"runs": []}), \
+             patch.object(tick, "publish", side_effect=published) as publisher, \
+             patch.object(tick, "credentials", side_effect=AssertionError("no credentials")), \
+             redirect_stdout(io.StringIO()):
+            tick.tick(self.root)
+        publisher.assert_called_once()
+        for path, content in before.items():
+            self.assertEqual(path.read_bytes(), content)
 
     def test_library_tick_tasknode_and_control_still_block_until_release(self):
         for mode in ("tick", "tasknode", "control"):
