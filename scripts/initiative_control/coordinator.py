@@ -350,16 +350,21 @@ class Coordinator:
                 require(existing.get("workstream") == workstream
                         and existing.get("dependencies") == list(dependencies),
                         "re-registration may only correct the document reference")
-                # state["actions"] is pruned into action_history, and an
-                # allocation id can be repointed, so neither alone proves the
-                # sprint was never worked. Both are checked, plus the history.
+                # What disqualifies a repair is work, not preparation. An
+                # allocation that has never been dispatched is a frozen offer and
+                # says nothing about the sprint document; a consumed one means an
+                # action was dispatched against it. state["actions"] is pruned
+                # into action_history, so the history is checked as well: neither
+                # live actions nor a repointable allocation id proves it alone.
                 require(not any(action.get("sprint") == sprint_id
                                 for action in state["actions"].values())
-                        and not any(allocation.get("sprint") == sprint_id
-                                    for allocation in state["allocations"].values())
                         and not any(json.loads(row[0]).get("sprint") == sprint_id for row
                                     in db.execute("SELECT body FROM action_history")),
-                        "sprint already has allocations or actions")
+                        "sprint already has actions")
+                require(not any(allocation.get("sprint") == sprint_id
+                                and allocation["inputs"].get("consumed") is True
+                                for allocation in state["allocations"].values()),
+                        "sprint already has a consumed allocation")
             require(workstream in state["workstreams"], "unknown sprint workstream")
             self._unpaused(state, {"workstream": workstream})
             root, path, front, document_digest = self._sprint_document(repo, source_path)

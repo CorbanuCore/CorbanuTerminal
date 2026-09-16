@@ -1197,10 +1197,13 @@ worktree.
 `replace=True` re-registers a sprint that is still an unstarted registered
 draft, which is how a row recorded with a bad `source_path` is corrected through
 the audited API rather than by hand. It refuses if the sprint is archived, is no
-longer `draft`, was never registered, already has any allocation or action, in live
-state or in `action_history`, or if the call would change the workstream, status
-or dependencies: the only thing a re-registration may move is the document
-reference.
+longer `draft`, was never registered, already has an action in live state or in
+`action_history`, or a consumed allocation, or if the call would change the
+workstream, status or dependencies: the only thing a re-registration may move is
+the document reference. An allocation that has never been dispatched is a frozen
+offer and does not block the repair, because it says nothing about the document;
+once an action is dispatched against it the allocation is consumed and the
+sprint is no longer unstarted.
 
 The operation uses `owner_mutation("owner_register_sprint", ...)`, atomically
 adds one draft/unarchived row, increments revision, emits an event and audit,
@@ -1225,7 +1228,8 @@ Exact refusal messages include:
 - `unknown sprint` when `replace` is true and the ID was never registered.
 - `only an unstarted registered draft can be re-registered`,
   `re-registration may only correct the document reference`,
-  `sprint already has allocations or actions`, `explicit add/replace required`.
+  `sprint already has actions`, `sprint already has a consumed allocation`,
+  `explicit add/replace required`.
 - `sprint document id mismatch`, `sprint document workstream mismatch`,
   `sprint document status mismatch`, `sprint document dependencies mismatch`,
   and `sprint document dependencies missing`.
