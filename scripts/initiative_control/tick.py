@@ -56,10 +56,11 @@ def refresh(root):
                 raise ValueError("invalid outbox status")
         except (OSError, ValueError, KeyError, TypeError):
             status = "invalid"
-            result["error"] = " ".join(filter(None, (result.get("error"),
-                "An outbox record needs manager inspection; no payload is published.")))
         counts[status] = counts.get(status, 0) + 1
     result["outbox"] = counts
+    if counts.get("invalid"):
+        result["error"] = " ".join(filter(None, (result.get("error"),
+            "An outbox record needs manager inspection; no payload is published.")))
     if counts.get("uncertain"):
         reason = "Delivery is uncertain; no automatic retry; external reconciliation or explicit named batch retry required."
         result["error"] = " ".join(filter(None, (result.get("error"), reason)))

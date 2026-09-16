@@ -1,6 +1,8 @@
 """Tick status and process-edge lock regressions; synthetic state only."""
 from contextlib import redirect_stdout
+import hashlib
 import io
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -8,7 +10,7 @@ import sys
 import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import control
 import tasknode
@@ -55,6 +57,65 @@ class TickTests(unittest.TestCase):
                     tick.tick(self.root)
                 publisher.assert_called_once()
                 self.assertEqual(path.read_bytes(), before)
+
+    def test_multiple_invalid_records_append_one_notice_preserving_prior_error(self):
+        for i in range(2):
+            control.atomic_json(self.state / f"outbox/corrupt-{i}.json", {"status": "unknown"})
+        notice = "An outbox record needs manager inspection; no payload is published."
+        refusal = f"another Task Node operation is holding the queue; lock path: {self.state / '.outbox.lock'}"
+        for error, prefix in (
+            (None, ""),
+            (ValueError("invalid report"), "A mapped report was rejected; inspect its size, fields and task mapping."),
+            (tasknode.QueueLockTimeout(refusal), refusal),
+        ):
+            with self.subTest(error=error), \
+                 patch.object(tick, "collect", return_value={"runs": [run()]}), \
+                 patch.object(tick, "enqueue", side_effect=error), \
+                 patch.object(tick, "publish"), redirect_stdout(io.StringIO()):
+                if isinstance(error, tasknode.QueueLockTimeout):
+                    with self.assertRaises(tasknode.QueueLockTimeout):
+                        tick.refresh(self.root)
+                else:
+                    tick.refresh(self.root)
+                status = control.read_json(self.state / "writeback-status.json", self.state)
+                self.assertEqual(status["outbox"], {"invalid": 2})
+                self.assertEqual(status["error"], " ".join(filter(None, (prefix, notice))))
+                self.assertEqual(status["error"].count(notice), 1)
+
+    def test_large_corrupt_queue_still_publishes_with_lock_and_uncertainty(self):
+        source = self.root / "source"
+        source.mkdir()
+        (source / "fixture.txt").write_text("synthetic source")
+        hashes = {"fixture.txt": hashlib.sha256(b"synthetic source").hexdigest()}
+        control.atomic_json(self.state / "source.json", {
+            "collected_at": control.now(), "commit": "a" * 40, "files": hashes,
+            "tree_digest": hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest(),
+            "label": "fixture", "branch": "test/fixture"})
+        checker = Mock()
+        checker.check_plan_root.return_value = {"plans": [], "errors": [], "active_limit": 3}
+        checker.check_sprints.return_value = {"sprints": [], "errors": []}
+        for i in range(100):
+            control.atomic_json(self.state / f"outbox/corrupt-{i}.json", {"status": "unknown"})
+        event_id = tasknode.enqueue(self.state, run())
+        control.atomic_json(self.state / "send-receipts" / (event_id + ".intent.json"), {})
+        refusal = f"another Task Node operation is holding the queue; lock path: {self.state / '.outbox.lock'}"
+        with patch.object(tick, "collect", return_value={"runs": [run()]}), \
+             patch.object(tick, "enqueue", side_effect=tasknode.QueueLockTimeout(refusal)), \
+             patch.object(control, "load_checker", return_value=checker):
+            with self.assertRaises(tasknode.QueueLockTimeout):
+                tick.tick(self.root)
+            status = control.read_json(self.state / "writeback-status.json", self.state)
+            self.assertLessEqual(len(json.dumps(status)), 2000)
+            control.safe_text(json.dumps(status))
+            self.assertEqual(control.collect(source, self.state)["writeback"], status)
+        self.assertEqual(status["outbox"], {"invalid": 100, "uncertain": 1})
+        body = (self.root / "site/current/index.html").read_text()
+        notice = "An outbox record needs manager inspection; no payload is published."
+        self.assertEqual(body.count(notice), 1)
+        self.assertIn("invalid 100", body)
+        self.assertIn(refusal, body)
+        self.assertIn("Delivery is uncertain; no automatic retry", body)
+        self.assertNotIn("Delivery state unknown: no successful delivery check recorded", body)
 
     def child(self, mode):
         script = """

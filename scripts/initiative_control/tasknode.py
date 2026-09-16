@@ -533,6 +533,7 @@ def flush(state, auth, transport=None):
                 status, result = transport("/events", {"event": event}, auth)
                 if 200 <= status < 300 and result.get("ok") is True and result.get("id") == event["id"] and result.get("summaryState") != "deleted":
                     record.update(status="delivered", delivered_at=now())
+                    record.pop("error", None)
                     delivered += 1
                 elif status in {0, 429} or 500 <= status < 600:
                     delay = min(3600, 30 * 2 ** min(record["attempts"], 7))

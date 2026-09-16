@@ -532,6 +532,25 @@ class CLIFenceTests(unittest.TestCase):
         self.assertEqual((retried["status"], retried["attempts"]), ("pending", 3))
         self.assertEqual(retried["error"], reason)
         self.assertEqual(retried["event"], self.event)
+        self.enable_batch()
+        self.assertEqual(self.invoke(*self.flush_args(), transport=self.transport)[0], 0)
+        delivered = control.read_json(self.record_path, self.state)
+        self.assertEqual((delivered["status"], delivered["attempts"]), ("delivered", 4))
+        self.assertNotIn("error", delivered)
+
+    def test_cli_transient_failure_error_clears_after_success(self):
+        self.enable_batch()
+        transient = Mock(return_value=(503, {}))
+        self.assertEqual(self.invoke(*self.flush_args(), transport=transient)[0], 0)
+        record = control.read_json(self.record_path, self.state)
+        self.assertEqual(record["status"], "pending")
+        self.assertEqual(record["error"], "transient_delivery_failure")
+        record["next_attempt_at"] = control.now()
+        control.atomic_json(self.record_path, record)
+        self.assertEqual(self.invoke(*self.flush_args(), transport=self.transport)[0], 0)
+        delivered = control.read_json(self.record_path, self.state)
+        self.assertEqual((delivered["status"], delivered["attempts"]), ("delivered", 2))
+        self.assertNotIn("error", delivered)
 
     def test_cli_preview_with_damaged_result_retains_payload_and_uncertainty(self):
         control.atomic_json(self.state / "send-receipts" / (self.event_id + ".intent.json"), {})
