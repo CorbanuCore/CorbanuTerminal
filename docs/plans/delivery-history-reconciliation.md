@@ -21,10 +21,18 @@ separate. This notice does not itself block current delivery-control development
 
 ## Next action
 
-Inventory each historical report and queued event against its original source
-and task mapping, record an explicit disposition, and review any proposed
-migration before acting. Do not silently alias IDs, delete history or replay an
-old event as new work. Live posting remains OFF pending its separate gates.
+The inventory is done, 2026-09-16: **nothing is held.** No queued Task Node event
+exists in live state and no outbox has ever been written there; the only
+PF-76-S01 delivery-control report in the repository is a synthetic test fixture,
+which stays where it is. There is nothing to migrate, replay or delete.
+
+What the inventory did find is that the collision is not only historical.
+PF-76-S01 is also a live security sprint, and the hold keys on the identifier, so
+that modern sprint could never report progress. The remaining unit is to
+discriminate on `source_namespace` instead of on the shared ID.
+[Inventory and located files](../../qa/initiative-control/pf-80-s01/pf76-inventory-20260916.md).
+Do not silently alias IDs, delete history or replay an old event as new work.
+Live posting remains OFF pending its separate gates.
 
 ## Is a decision needed from Travis?
 
