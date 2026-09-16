@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-60-S03"
 title: "Inspectable run and campaign totals"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 3
@@ -11,10 +11,10 @@ write_scope: "codex-rs/state/src/runtime/accounting_store.rs, codex-rs/state/src
 integration_gate: "Fable receives onto integrate/management-workstreams-20260911 after S02 archival and an explicit PF-83 overlap handoff on the three shared TUI paths; audits literal scope and size against the frozen allocation, takes one independent Opus 5.0 High review plus necessary scoped correction, and reruns the combined state, TUI and accounting gates on the receiving tree. True-TUI proof and independent code-blind design and execution are owed by this sprint and are not deferred silently."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915"
 branch: "bootstrap/acct-inspect-20260915"
-base_commit: "124c3d68d14ddef34c1bffac157cbcd8e5074158"
+base_commit: "5105e3ce44d31fd16a35f6cb6900ef6abf6168a8"
 depends_on: "PF-60-S02"
 created: 2026-09-09
-updated: 2026-09-11
+updated: 2026-09-16
 ---
 
 # PF-60-S03 — Inspectable run and campaign totals
@@ -39,9 +39,9 @@ updated: 2026-09-11
 
 ## Preconditions
 
-- [ ] Plan active after explicit authority decision; global WIP and occupied lanes reconciled.
-- [ ] Dependencies completed and archived; Accepted PF-60-S02 output and its explicit go/no-go; no unresolved decision that changes this mandate.
-- [ ] Exact worktree/branch/40-character base match plan; literal scopes and receiving owner are allocated.
+- [x] Plan active after explicit authority decision; global WIP and occupied lanes reconciled.
+- [x] Dependencies completed and archived; Accepted PF-60-S02 output and its explicit go/no-go; no unresolved decision that changes this mandate.
+- [x] Exact worktree/branch/40-character base match plan; literal scopes and receiving owner are allocated. `base_commit` names the commit the lane branches from; the exact launch commit is carried in the frozen allocation inputs and must equal the checkout HEAD.
 - [ ] Inputs, disclosure rights and spend/time limits approved; external writes and live financial actions remain excluded.
 - [ ] Resolve exact changed files, native compatibility and nonempty test commands before any code sprint starts.
 
@@ -49,10 +49,10 @@ updated: 2026-09-11
 
 - [x] Draft sprint created and linked to one feature; no implementation completed.
 - [x] Travis requested user-selected ranges and grouping intervals; recorded below without starting S03 or extending retention.
+- [x] 2026-09-16 Sprint activated from the verified S02 receiving commit `533a16077`; records reconciled and both governance checkers rerun by Fable, whose fault the stop below was.
 - [x] 2026-09-15 `acct-inspect-impl-01` verified its frozen brief and launch checkout, then stopped before code: this sprint remains draft with a placeholder base and the active plan omits its inspection coordinates. [Stopped return and all 34 case dispositions](../../../../qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inspect-impl-01-return.md); no implementation or functional acceptance claimed.
 
 ## Remaining
-- [ ] Fable reconciles S03-A allocation and exact worktree/branch/base in the active plan and this sprint, records executable status, reruns both governance checkers and redispatches; the active plan is outside `acct-inspect-impl-01` writable scope.
 - [ ] Three TUI paths in the write scope overlap PF-83-S01 and were **released to this lane on 2026-09-15** because no PF-83 action held them: codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/app/tests.rs. The release is recorded in that sprint. Re-check before launch rather than relying on this line, since PF-83 may re-reserve.
 - [ ] **Inherited from PF-60-S02 at its archival, transferred rather than discharged:** Corbanu plan gateway economics, startup prewarm, auxiliary collection, legacy evidence acquisition and complete application coverage all remain unqualified, and anonymous 365-day fencing is not permanent. Six leaky markers remain across the accounting suite (two in `accounting::policy_tests`, three in `accounting_anthropic`, one in `accounting_chat_native_mismatched_endpoint`); the three diagnosed in `acct-cleanup-04` showed no concrete fixture defect and were deliberately left rather than given speculative cleanup. Also inherited: the one disclosed review P3, that the provider-publication regression pins ordering against contributor emission rather than against the state lock.
 

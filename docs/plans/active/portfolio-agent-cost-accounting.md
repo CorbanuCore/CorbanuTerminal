@@ -19,7 +19,7 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915"
     branch: "bootstrap/acct-inspect-20260915"
-    base_commit: "124c3d68d14ddef34c1bffac157cbcd8e5074158"
+    base_commit: "5105e3ce44d31fd16a35f6cb6900ef6abf6168a8"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-chat-20260915"
     branch: "bootstrap/acct-chat-20260915"
     base_commit: "155b0c1a96c2dc590cd7818e086ca2e0085e1996"
@@ -207,6 +207,7 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 | Astra High accounting direct-Chat lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/acct-chat-20260915` | `bootstrap/acct-chat-20260915` | Rebased onto the integration tip at each dispatch; the exact base commit is recorded in lease `acct-chat-20260915` and in the action's frozen inputs, which must agree with the checkout HEAD | PF-60-S02 [direct Chat Completions sampling allocation](../../research/agent-cost-accounting/chat-dispatch-allocation.md): 19 literal files, 38 named tests, target 3000/1150, STOP 3300/1300; default OFF; excludes Corbanu plan gateway economics, startup prewarm, auxiliary collection and both disclosed P3s. Exclusive build-target lease `acct-chat-20260915` |
 | Astra High accounting Responses-WebSocket lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/bootstrap-acct-ws-20260914` | `bootstrap/acct-ws-20260914` | `73fc51b1a73ec6304fb51603b6fb46ee9f61b56b` | PF-60-S02 [Responses WS sampling/fallback allocation](../../research/agent-cost-accounting/responses-websocket-allocation.md): received at `c86634e21` with both native vectors at `16c43b5fe`; consumed history |
 | Codex accounting contract-golden lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-contract-goldens-20260913` | `workstream/accounting-contract-goldens-20260913` | `81d0f90e77c1e9217a16e70fef1019ff9aa13753` | PF-60-S02 original-contract goldens f4507cb50 accepted at 855ab3382; consumed history |
+| Astra High accounting inspection lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915` | `bootstrap/acct-inspect-20260915` | `5105e3ce44d31fd16a35f6cb6900ef6abf6168a8` | PF-60-S03 [inspection allocation](../../research/agent-cost-accounting/s03-inspection-allocation-20260915.md): 21 literal files, 34 named tests, target 2500/1000, STOP 2800/1150; non-mutating inspection only, no schema migration; includes the three TUI paths released from PF-83-S01 on 2026-09-15 |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
 S02 retains its reservation; Travis approved conservative daily expiry in this
