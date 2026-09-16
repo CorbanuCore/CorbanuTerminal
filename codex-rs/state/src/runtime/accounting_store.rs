@@ -469,7 +469,7 @@ async fn inspect_tree_window(
     let candidates: Vec<String> = sqlx::query_scalar(
         "SELECT DISTINCT json_extract(payload, '$.thread_id') FROM draft_accounting_attempts
          WHERE json_extract(payload, '$.dispatched_at_ms') / 86400000 = ?
-         UNION SELECT thread_id FROM draft_accounting_compact_days WHERE utc_day = ? LIMIT 20001",
+         UNION SELECT thread_id FROM draft_accounting_compact_days WHERE utc_day = ?",
     )
     .bind(day)
     .bind(day)
@@ -497,7 +497,6 @@ async fn inspect_tree_window(
         let mut seen = HashSet::new();
         let mut reached = false;
         let mut discovered = BTreeMap::new();
-        let previous_bytes = graph_bytes;
         let relation = loop {
             if !work.visit() {
                 return Ok(InspectionDay::TooLarge);
@@ -515,8 +514,6 @@ async fn inspect_tree_window(
                 .fetch_optional(&mut *conn)
                 .await?;
                 let (parent, terminal) = if let Some((source, edge)) = row {
-                    graph_bytes +=
-                        source.len() + edge.as_ref().map_or(0, String::len) + cursor.len();
                     let parsed = serde_json::from_str::<SessionSource>(&source)
                         .or_else(|_| serde_json::from_value(serde_json::Value::String(source)))
                         .ok();
@@ -544,9 +541,7 @@ async fn inspect_tree_window(
                     (None, false)
                 };
                 discovered.insert(cursor.clone(), (parent, terminal));
-                if ancestry.len() + discovered.len() > 10_000
-                    || packet_bytes + graph_bytes > 4 * 1024 * 1024
-                {
+                if ancestry.len() + discovered.len() > 10_000 {
                     return Ok(InspectionDay::TooLarge);
                 }
             }
@@ -562,8 +557,16 @@ async fn inspect_tree_window(
         };
         if relation == Some(false) {
             // Unrelated roots cannot consume the selected ancestry/packet budget.
-            graph_bytes = previous_bytes;
             continue;
+        }
+        // Source text is parsed and dropped; only retained ancestry strings count.
+        // Provisional memory is bounded above by the node limit before rollback.
+        graph_bytes += discovered
+            .iter()
+            .map(|(id, (parent, _))| id.len() + parent.as_ref().map_or(0, String::len))
+            .sum::<usize>();
+        if packet_bytes + graph_bytes > 4 * 1024 * 1024 {
+            return Ok(InspectionDay::TooLarge);
         }
         ancestry.extend(discovered);
         let other = Journal::inspect_window_on_connection(

@@ -121,7 +121,7 @@ async fn accounting_inspect_provisional_unrelated_chain_is_bounded() -> anyhow::
         .await??,
         InspectionDay::TooLarge
     );
-    // A one-hop unrelated root must also check provisional bytes before rollback.
+    // An unrelated root's large parsed-and-dropped source is not retained memory.
     sqlx::query("DELETE FROM thread_spawn_edges")
         .execute(runtime.pool.as_ref())
         .await?;
@@ -130,7 +130,11 @@ async fn accounting_inspect_provisional_unrelated_chain_is_bounded() -> anyhow::
         .bind(Uuid::from_u128(8).to_string())
         .execute(runtime.pool.as_ref())
         .await?;
-    assert_eq!(inspected(&runtime, 0, 0).await?, InspectionDay::TooLarge);
+    let view = inspection(inspected(&runtime, 0, 0).await?);
+    assert_eq!(
+        (view.totals.attempts, view.unknown_parent_totals.attempts),
+        (1, 0)
+    );
     runtime.close().await;
     Ok(())
 }

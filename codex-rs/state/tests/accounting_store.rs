@@ -497,16 +497,34 @@ async fn accounting_inspect_work_budget_spans_range_buckets() -> anyhow::Result<
         .bind(3 * DAY)
         .execute(&mut conn)
         .await?;
-    // Each day alone is small and valid; the hour range repeatedly scans the same
-    // retained rows. Its one total attempt and 72 buckets fit all result limits.
+    // Each day and the ordinary three-day grouping must remain Ready.
+    let mut days = Vec::new();
     for day in 0..3 {
-        assert_eq!(
-            ready(AccountingStore::inspect_day(&runtime, a.thread_id, day, 3 * DAY).await?)
-                .totals
-                .attempts,
-            i64::from(day == 0)
-        );
+        let view = ready(AccountingStore::inspect_day(&runtime, a.thread_id, day, 3 * DAY).await?);
+        assert_eq!(view.totals.attempts, i64::from(day == 0));
+        days.push(InspectionDay::Ready(view));
     }
+    let range = AccountingStore::inspect_range(
+        &runtime,
+        a.thread_id,
+        InspectionRange {
+            start_ms: 0,
+            end_ms: 3 * DAY,
+            grouping: InspectionGrouping::Day,
+        },
+        3 * DAY,
+    )
+    .await?;
+    let InspectionDay::Range { buckets, .. } = range else {
+        panic!("{range:?}")
+    };
+    assert_eq!(buckets.len(), 3);
+    for (bucket, expected) in buckets.into_iter().zip(days) {
+        assert!(!bucket.partial);
+        assert_eq!(bucket.days, vec![expected]);
+    }
+    // The hour range repeatedly scans the same retained rows. Its one total
+    // attempt and 72 buckets fit all result limits, but exhaust the work budget.
     assert_eq!(
         tokio::time::timeout(
             std::time::Duration::from_secs(30),
@@ -524,6 +542,82 @@ async fn accounting_inspect_work_budget_spans_range_buckets() -> anyhow::Result<
         .await??,
         InspectionDay::TooLarge
     );
+    conn.close().await?;
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_whole_store_denominator_thresholds() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    let store = AccountingStore::open(&runtime, 0).await?;
+    // Obtain a genuine compact payload from an unrelated, expired raw attempt.
+    let mut old = attempt(1000, 0)?;
+    old.thread_id = ThreadId::from_string(&Uuid::from_u128(1000).to_string())?;
+    native(&runtime, old.thread_id).await?;
+    store.admit(old.thread_id, &old, &[], 0).await?;
+    store.maintain(92 * DAY).await?;
+    let owner = attempt(1, 91 * DAY)?.thread_id;
+    for id in 1..=8 {
+        let mut a = attempt(id, 91 * DAY)?;
+        a.thread_id = ThreadId::from_string(&Uuid::from_u128(id + 6).to_string())?;
+        native(&runtime, a.thread_id).await?;
+        store.admit(a.thread_id, &a, &[], 92 * DAY).await?;
+        if id > 1 {
+            runtime
+                .upsert_thread_spawn_edge(
+                    owner,
+                    a.thread_id,
+                    codex_state::DirectionalThreadSpawnEdgeStatus::Closed,
+                )
+                .await?;
+        }
+    }
+    let mut conn = connection(&runtime).await?;
+    let payload: String = sqlx::query_scalar("SELECT payload FROM draft_accounting_compact_days")
+        .fetch_one(&mut conn)
+        .await?;
+    let mut previous = 9i64;
+    // Pin adjacent passing/refusing totals, including the eight current attempts.
+    // Seven children fail first; even an empty current day eventually refuses.
+    for (count, day, expected_attempts) in [
+        (95_236i64, 91, Some(8)),
+        (95_237, 91, None),
+        (571_428, 92, Some(0)),
+        (571_429, 92, None),
+    ] {
+        sqlx::query(
+            "WITH RECURSIVE n(i) AS (VALUES(?1) UNION ALL SELECT i+1 FROM n WHERE i<?2)
+             INSERT INTO draft_accounting_compact_days
+             SELECT printf('00000000-0000-0000-0001-%012x',i),0,?3 FROM n",
+        )
+        .bind(previous + 1)
+        .bind(count)
+        .bind(&payload)
+        .execute(&mut conn)
+        .await?;
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT (SELECT count(*) FROM draft_accounting_attempts) +
+                 (SELECT count(*) FROM draft_accounting_compact_days)"
+            )
+            .fetch_one(&mut conn)
+            .await?,
+            count
+        );
+        let result = AccountingStore::inspect_day(&runtime, owner, day, 92 * DAY).await?;
+        if let Some(attempts) = expected_attempts {
+            let view = ready(result);
+            assert_eq!(
+                (view.totals.attempts, view.descendant_totals.attempts),
+                (attempts, if day == 91 { 7 } else { 0 })
+            );
+        } else {
+            assert_eq!(result, InspectionDay::TooLarge, "whole-store rows: {count}");
+        }
+        previous = count;
+    }
     conn.close().await?;
     runtime.close().await;
     Ok(())
