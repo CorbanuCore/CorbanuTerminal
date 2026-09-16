@@ -1201,9 +1201,12 @@ longer `draft`, was never registered, already has an action in live state or in
 `action_history`, or a consumed allocation, or if the call would change the
 workstream, status or dependencies: the only thing a re-registration may move is
 the document reference. An allocation that has never been dispatched is a frozen
-offer and does not block the repair, because it says nothing about the document;
-once an action is dispatched against it the allocation is consumed and the
-sprint is no longer unstarted.
+offer and does not block the repair, because it says nothing about the document.
+The guarantee rests on the action checks: every action is in `state["actions"]`
+or was archived into `action_history`, which is the only deletion path, and both
+are scanned. The consumed marker is an owner-written convention, not something
+dispatch sets, so it is a second line of defence and must never be relied on
+alone.
 
 The operation uses `owner_mutation("owner_register_sprint", ...)`, atomically
 adds one draft/unarchived row, increments revision, emits an event and audit,

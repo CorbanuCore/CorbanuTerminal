@@ -352,10 +352,11 @@ class Coordinator:
                         "re-registration may only correct the document reference")
                 # What disqualifies a repair is work, not preparation. An
                 # allocation that has never been dispatched is a frozen offer and
-                # says nothing about the sprint document; a consumed one means an
-                # action was dispatched against it. state["actions"] is pruned
-                # into action_history, so the history is checked as well: neither
-                # live actions nor a repointable allocation id proves it alone.
+                # says nothing about the sprint document. The guarantee is the
+                # action check: state["actions"] is pruned into action_history,
+                # which is the only deletion path, so both are scanned. The
+                # consumed marker is an owner convention rather than something
+                # dispatch writes, so it is a second line of defence only.
                 require(not any(action.get("sprint") == sprint_id
                                 for action in state["actions"].values())
                         and not any(json.loads(row[0]).get("sprint") == sprint_id for row
