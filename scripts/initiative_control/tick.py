@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 from control import atomic_json, collect, now, publish, read_json
-from tasknode import credentials, enrolled, enqueue, flush
+from tasknode import CLI_CONTEXT, credentials, enrolled, enqueue, flush
 
 
 def tick(root):
@@ -41,13 +41,16 @@ def refresh(root):
     for path in (state / "outbox").glob("*.json"):
         try:
             status = read_json(path, state)["status"]
-            if status not in {"pending", "delivered", "blocked"}:
+            if status not in {"pending", "delivered", "blocked", "uncertain"}:
                 raise ValueError("invalid outbox status")
         except (OSError, ValueError, KeyError, TypeError):
             status = "invalid"
             result["error"] = "An outbox record needs manager inspection; no payload is published."
         counts[status] = counts.get(status, 0) + 1
     result["outbox"] = counts
+    if counts.get("uncertain"):
+        reason = "Delivery is uncertain; no automatic retry; external reconciliation or explicit named batch retry required."
+        result["error"] = " ".join(filter(None, (result.get("error"), reason)))
     atomic_json(state / "writeback-status.json", result)
     publish(root / "source", state, root / "site")
     print("Refresh complete; live writeback " + ("enabled" if result["enabled"] else "disabled"))
@@ -56,4 +59,8 @@ def refresh(root):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
-    tick(parser.parse_args().root)
+    token = CLI_CONTEXT.set(True)
+    try:
+        tick(parser.parse_args().root)
+    finally:
+        CLI_CONTEXT.reset(token)

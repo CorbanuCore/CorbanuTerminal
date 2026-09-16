@@ -249,7 +249,10 @@ def prepare(state, event_id):
         blockers.append("retry_backoff_active")
     if (timestamp(now()) - timestamp(event["occurredAt"])).total_seconds() > STALE_SECONDS:
         blockers.append("stale_observation_requires_review")
-    return {"mode": "offline_single_event_preparation", "selected_count": 1,
+    status = delivery_status(state, event_id, record)
+    return {"status": status,
+            "reason": "delivery is uncertain; external reconciliation required; no automatic retry" if status == "uncertain" else "",
+            "mode": "offline_single_event_preparation", "selected_count": 1,
             "network_writes": False, "send_authorized": False,
             "event_id": event_id, "local_workspace_enrollment": local_enrollment,
             "blockers": blockers, "payload": {"event": event}}
@@ -551,7 +554,8 @@ def retry(state, event_id):
             raise ValueError("only blocked or uncertain batch deliveries can be explicitly retried")
         # Explicit named retry accepts the duplicate risk; never infer failure
         # from uncertainty or erase single-event receipts to permit a resend.
-        record.update(status="pending", attempts=0, next_attempt_at=now())
+        attempts = record["attempts"] if record["status"] == "uncertain" else 0
+        record.update(status="pending", attempts=attempts, next_attempt_at=now())
         record.pop("error", None)
         atomic_json(path, record)
 
