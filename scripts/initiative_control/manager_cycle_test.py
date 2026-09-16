@@ -315,7 +315,10 @@ class BriefingSizeTests(unittest.TestCase):
 
     def test_fifo_restriction_recomputes_recent_transition_from_selected_events(self):
         action = self.action(size=18000)
-        self.c.event({"id": "verified:prior", "accepted": True})
+        # Restriction is now reached only by mandatory event bodies: optional
+        # expansion is skipped and reported instead of forcing an event to be
+        # deferred. The padding puts the cost where the FIFO walk can reach it.
+        self.c.event({"id": "verified:prior", "accepted": True, "pad": "z" * 60000})
         packet = self.packet([action])
         selected, raw = m.fit_briefing(self.c, packet, self.context)
         brief = json.loads(raw)
@@ -350,6 +353,126 @@ class BriefingSizeTests(unittest.TestCase):
         self.assertLess(len(raw), f.BRIEF_LIMIT)
         self.assertEqual(1, len(brief["events"]))
         self.assertEqual(4, len(brief["evidence_omissions"]))
+
+    def test_optional_expansion_beyond_budget_is_reported_not_dropped(self):
+        # The 2026-09-16 block: the overflow came from bodies referenced by live
+        # (non-terminal) actions, which no event-prefix walk can reach.
+        actions = [self.action("live-" + str(i), status="accepted", size=6000)
+                   for i in range(6)]
+        for action in actions:
+            action["status"] = "dispatched"
+        packet = self.packet(actions, recent=actions[-3:])
+        raw = m.briefing(self.c, packet, self.context)
+        brief = json.loads(raw)
+        self.assertLess(len(raw), f.BRIEF_LIMIT)
+        budget = [e for e in brief["evidence_omissions"] if e["id"] == "evidence_budget"]
+        self.assertEqual(1, len(budget), brief["evidence_omissions"])
+        entry = budget[0]
+        self.assertEqual(("briefing", "briefing_byte_limit"), (entry["source"], entry["reason"]))
+        self.assertTrue(entry["evidence_digests"])
+        self.assertEqual(sorted(set(entry["evidence_digests"])), entry["evidence_digests"])
+        # Every skipped digest is genuinely absent, and everything absent is named:
+        # the manager can tell a short briefing from a complete one.
+        referenced = {a[field]["evidence_digest"] for a in actions
+                      for field in ("dispatch_receipt", "ack_receipt", "result", "verification")}
+        for key in entry["evidence_digests"]:
+            self.assertIn(key, referenced)
+            self.assertNotIn(key, brief["original_evidence"])
+        self.assertEqual(sorted(referenced - set(brief["original_evidence"])),
+                         entry["evidence_digests"])
+        # Mandatory selected-event bodies are never charged to this budget.
+        for event in brief["events"]:
+            self.assertIn(event["evidence_digest"], brief["original_evidence"])
+
+    def test_partial_fit_evicts_only_what_the_limit_requires(self):
+        # One body small enough to survive, one that cannot: the interleaving
+        # where the reserve arithmetic, not the all-refused case, is load-bearing.
+        small = self.ref({"kind": "small", "text": "s" * 40})
+        actions = []
+        for index in range(4):
+            action = dict(id="live-%d" % index, kind="repair", workstream="delivery",
+                          sprint="PF-80-S01", status="dispatched", sequence=[index, 0],
+                          rationale="fixture", inputs={"allocation": "historical"},
+                          allocation_digest="a" * 64, ack_receipt=small,
+                          result=self.ref({"kind": "bulk", "text": "b%d" % index * 9000}))
+            actions.append(action)
+        raw = m.briefing(self.c, self.packet(actions, recent=actions[-3:]), self.context)
+        brief = json.loads(raw)
+        self.assertLess(len(raw), f.BRIEF_LIMIT)
+        # The shared small body is referenced by all four actions and survives;
+        # the large per-action bodies are the ones reported as unreadable.
+        self.assertIn(small["evidence_digest"], brief["original_evidence"])
+        budget = next(e for e in brief["evidence_omissions"] if e["id"] == "evidence_budget")
+        self.assertNotIn(small["evidence_digest"], budget["evidence_digests"])
+        self.assertTrue(set(budget["evidence_digests"])
+                        & {a["result"]["evidence_digest"] for a in actions})
+
+    def test_a_refused_digest_is_not_reinstated_by_a_second_reference(self):
+        shared = self.ref({"kind": "shared", "text": "q" * 30000})
+        actions = []
+        for index in range(4):
+            actions.append(dict(id="live-%d" % index, kind="repair", workstream="delivery",
+                                sprint="PF-80-S01", status="dispatched", sequence=[index, 0],
+                                rationale="fixture", inputs={"allocation": "historical",
+                                                             "task": "x" * 9000},
+                                allocation_digest="a" * 64, result=shared))
+        brief = self.brief(self.packet(actions, recent=actions[-3:]))
+        key = shared["evidence_digest"]
+        # Four live actions reference the one body. Refusing it once must hold:
+        # the later references must not quietly put it back.
+        self.assertNotIn(key, brief["original_evidence"])
+        budget = next(e for e in brief["evidence_omissions"] if e["id"] == "evidence_budget")
+        self.assertEqual([key], budget["evidence_digests"])
+        self.assertFalse({d for e in brief["evidence_omissions"]
+                          for d in e.get("evidence_digests", [])}
+                         & set(brief["original_evidence"]),
+                         "nothing reported as unreadable may actually be present")
+
+    def live_actions(self, count, size, pad):
+        actions = []
+        for index in range(count):
+            action = dict(id="live-%d" % index, kind="repair", workstream="delivery",
+                          sprint="PF-80-S01", status="dispatched", sequence=[index, 0],
+                          rationale="fixture", allocation_digest="a" * 64,
+                          inputs={"allocation": "historical", "task": "x" * pad})
+            for field in ("dispatch_receipt", "ack_receipt", "result", "verification"):
+                action[field] = self.ref({"kind": field,
+                                          "text": ("%s-%d" % (field, index)) * size})
+            actions.append(action)
+        return actions
+
+    def test_the_omission_report_itself_cannot_push_the_briefing_over(self):
+        # Each refusal after the last accepted body adds a digest to the report
+        # and to the missing lists, none of which an estimate made at accept time
+        # can have reserved. These three shapes overshoot without the final
+        # eviction pass, so they pin it rather than the arithmetic that guesses.
+        for count, pad, size in ((3, 0, 740), (3, 500, 680), (3, 1000, 660)):
+            with self.subTest(count=count, pad=pad, size=size):
+                state = Coordinator(self.root / ("edge-%d-%d-%d" % (count, pad, size)))
+                state.initialize(*seed())
+                state.set_enabled(True, {"source": "fixture"})
+                state.event({"id": "tick", "text": "pending work"})
+                saved, self.c = self.c, state
+                try:
+                    actions = self.live_actions(count, size, pad)
+                    raw = m.briefing(self.c, self.packet(actions, recent=actions[-3:]),
+                                     self.context)
+                finally:
+                    self.c = saved
+                brief = json.loads(raw)
+                self.assertLessEqual(len(raw), f.BRIEF_LIMIT)
+                absent = {action[field]["evidence_digest"] for action in actions
+                          for field in ("dispatch_receipt", "ack_receipt",
+                                        "result", "verification")} - set(brief["original_evidence"])
+                reported = {d for e in brief["evidence_omissions"]
+                            for d in e.get("evidence_digests", [])}
+                self.assertTrue(absent)
+                self.assertEqual(absent, absent & reported)
+
+    def test_no_budget_omission_when_everything_fits(self):
+        brief = self.brief(self.packet([self.action(size=10)]))
+        self.assertEqual([], [e for e in brief["evidence_omissions"]
+                              if e["id"] == "evidence_budget"])
 
 
 if __name__ == "__main__":
