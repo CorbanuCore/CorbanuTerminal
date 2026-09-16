@@ -143,6 +143,9 @@ def briefing(coordinator, packet, owner_context):
     # Only selected top-level events establish a transition, never nested evidence
     # or deferred events. Core verification/reconciliation IDs carry the action ID.
     events = [read_reference(event) for event in packet["events"]]
+    # Selected event bodies are read for transition detection, so they are never
+    # charged to the evidence budget and never evicted.
+    mandatory = set(originals)
     changed = set()
     for event in events:
         event_id = event["id"]
@@ -274,23 +277,46 @@ def briefing(coordinator, packet, owner_context):
     for key, action in packet["actions"].items():
         collect({field: value for field, value in action.items()
                  if key not in compact or field not in historical_fields | {"inputs"}})
-    for entry, references in omitted_references:
-        # Every reference whose body was not expanded is listed, even when the
-        # digest is visible on a retained record: the contract reports what the
-        # manager cannot read, not which strings happen to appear.
-        missing = sorted(references - originals.keys())
-        if missing:
-            entry["evidence_digests"] = missing
-        if missing or "inputs_digest" in entry:
-            brief["evidence_omissions"].append(entry)
-    if dropped:
-        # The contract reports what the manager cannot read. A body dropped for
-        # budget is named here, so a short briefing is distinguishable from a
-        # complete one rather than looking like evidence that never existed.
-        brief["evidence_omissions"].append(
-            {"source": "briefing", "id": "evidence_budget",
-             "reason": "briefing_byte_limit", "evidence_digests": sorted(dropped)})
-    return encoded(brief, limit=f.BRIEF_LIMIT).encode()
+    def render():
+        """Rebuild the omission report from scratch and size the whole briefing.
+
+        The report is rebuilt rather than appended to, because a body evicted
+        below changes both the evidence_budget entry and the missing lists.
+        """
+        brief["evidence_omissions"] = []
+        for entry, references in omitted_references:
+            # Every reference whose body was not expanded is listed, even when the
+            # digest is visible on a retained record: the contract reports what the
+            # manager cannot read, not which strings happen to appear.
+            missing = sorted(references - originals.keys())
+            entry = {**entry, "evidence_digests": missing} if missing else entry
+            if missing or "inputs_digest" in entry:
+                brief["evidence_omissions"].append(entry)
+        if dropped:
+            # A body dropped for budget is named here, so a short briefing is
+            # distinguishable from a complete one rather than looking like
+            # evidence that never existed.
+            brief["evidence_omissions"].append(
+                {"source": "briefing", "id": "evidence_budget",
+                 "reason": "briefing_byte_limit", "evidence_digests": sorted(dropped)})
+        return encoded(brief, limit=f.BRIEF_LIMIT).encode()
+
+    # The reserve above is an estimate taken at the last accepted body; the
+    # omission report and the missing lists both grow with every later refusal.
+    # So the limit is enforced here, on the finished briefing, by evicting the
+    # largest remaining optional body until it fits. Ties break on digest, so
+    # the same packet always yields the same briefing.
+    while True:
+        try:
+            return render()
+        except Rejected:
+            optional = sorted((len(encoded(body).encode()), key)
+                              for key, body in originals.items() if key not in mandatory)
+            if not optional:
+                raise
+            key = optional[-1][1]
+            del originals[key]
+            dropped.add(key)
 
 
 def timestamp(value):
