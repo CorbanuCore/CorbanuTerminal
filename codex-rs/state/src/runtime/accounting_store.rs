@@ -35,7 +35,14 @@ pub struct Inspection {
     pub utc_day: i64,
     pub read_at_ms: i64,
     pub coverage: RetentionCoverage,
+    /// Resolved root plus descendants; unresolved ancestry is excluded.
     pub totals: DayTotals,
+    pub own_totals: DayTotals,
+    pub descendant_totals: DayTotals,
+    pub unknown_parent_totals: DayTotals,
+    /// Unresolved owners whose day could not be inspected; no amount or coverage inferred.
+    pub unknown_parent_unavailable_threads: usize,
+    pub unknown_parent_requests: std::collections::BTreeMap<uuid::Uuid, Vec<ObservationQuote>>,
     pub requests: std::collections::BTreeMap<uuid::Uuid, Vec<ObservationQuote>>,
 }
 
@@ -117,7 +124,7 @@ impl<'a> AccountingStore<'a> {
         if !exists {
             return Ok(InspectionDay::MissingThread);
         }
-        let result = Journal::inspect_on_connection(&mut tx, owner, utc_day, read_at_ms).await?;
+        let result = inspect_tree(&mut tx, owner, utc_day, read_at_ms).await?;
         tx.commit().await?;
         Ok(result)
     }
@@ -250,6 +257,159 @@ impl<'a> AccountingStore<'a> {
         tx.commit().await?;
         Ok(value)
     }
+}
+
+// Reuse the single-owner validator inside the caller's deferred snapshot. Never
+// open a store or refresh contributions while assembling the tree explanation.
+async fn inspect_tree(
+    conn: &mut SqliteConnection,
+    owner: ThreadId,
+    day: i64,
+    read_at_ms: i64,
+) -> anyhow::Result<InspectionDay> {
+    use codex_protocol::protocol::SessionSource;
+    use std::collections::BTreeMap;
+    use std::collections::HashSet;
+    let first = Journal::inspect_on_connection(conn, owner, day, read_at_ms).await?;
+    let InspectionDay::Ready(mut view) = first else {
+        return Ok(first);
+    };
+    let candidates: Vec<String> = sqlx::query_scalar(
+        "SELECT DISTINCT json_extract(payload, '$.thread_id') FROM draft_accounting_attempts
+         WHERE json_extract(payload, '$.dispatched_at_ms') / 86400000 = ?
+         UNION SELECT thread_id FROM draft_accounting_compact_days WHERE utc_day = ?",
+    )
+    .bind(day)
+    .bind(day)
+    .fetch_all(&mut *conn)
+    .await?;
+    // Bound per-owner whole-store validation before inspecting any candidate.
+    // This is conservative even when some candidates resolve to unrelated roots.
+    if candidates.len() > 512 {
+        return Ok(InspectionDay::TooLarge);
+    }
+    // Cache only ancestry visited by selected-day owners. A malformed source,
+    // absent ancestor, conflict or cycle is an unknown population, never another root.
+    let mut ancestry: BTreeMap<String, (Option<String>, bool)> = BTreeMap::new();
+    let mut graph_bytes = 0usize;
+    let mut packet_bytes = 8192usize;
+    let mut attempts = view.totals.attempts;
+    for quotes in view.requests.values() {
+        for quote in quotes {
+            packet_bytes += serde_json::to_vec(quote)?.len() + 2048;
+        }
+    }
+    for candidate in candidates {
+        if candidate == owner.to_string() {
+            continue;
+        }
+        let mut cursor = candidate.clone();
+        let mut seen = HashSet::new();
+        let mut reached = false;
+        let relation = loop {
+            if !seen.insert(cursor.clone()) {
+                break None;
+            }
+            reached |= cursor == owner.to_string();
+            if !ancestry.contains_key(&cursor) {
+                let row: Option<(String, Option<String>)> = sqlx::query_as(
+                    "SELECT t.source, e.parent_thread_id FROM threads t
+                     LEFT JOIN thread_spawn_edges e ON e.child_thread_id = t.id WHERE t.id = ?",
+                )
+                .bind(&cursor)
+                .fetch_optional(&mut *conn)
+                .await?;
+                let (parent, terminal) = if let Some((source, edge)) = row {
+                    graph_bytes +=
+                        source.len() + edge.as_ref().map_or(0, String::len) + cursor.len();
+                    let parsed = serde_json::from_str::<SessionSource>(&source)
+                        .or_else(|_| serde_json::from_value(serde_json::Value::String(source)))
+                        .ok();
+                    let source_parent = parsed
+                        .as_ref()
+                        .and_then(SessionSource::parent_thread_id)
+                        .map(|id| id.to_string());
+                    if source_parent.is_some() && edge != source_parent {
+                        (None, false)
+                    } else {
+                        let terminal = matches!(
+                            parsed,
+                            Some(
+                                SessionSource::Cli
+                                    | SessionSource::VSCode
+                                    | SessionSource::Exec
+                                    | SessionSource::Mcp
+                            )
+                        );
+                        (edge, terminal)
+                    }
+                } else {
+                    (None, false)
+                };
+                ancestry.insert(cursor.clone(), (parent, terminal));
+                if ancestry.len() > 10_000 || packet_bytes + graph_bytes > 4 * 1024 * 1024 {
+                    return Ok(InspectionDay::TooLarge);
+                }
+            }
+            let (parent, terminal) = &ancestry[&cursor];
+            match parent {
+                Some(parent) => cursor = parent.clone(),
+                None => {
+                    break terminal.then_some(reached);
+                }
+            }
+        };
+        if relation == Some(false) {
+            continue;
+        }
+        let other = Journal::inspect_on_connection(
+            conn,
+            ThreadId::from_string(&candidate)?,
+            day,
+            read_at_ms,
+        )
+        .await?;
+        let InspectionDay::Ready(other) = other else {
+            if relation.is_none() {
+                view.unknown_parent_unavailable_threads += 1;
+                continue;
+            }
+            return Ok(other);
+        };
+        attempts = attempts
+            .checked_add(other.totals.attempts)
+            .context("attempt count overflow")?;
+        if attempts > 512 {
+            return Ok(InspectionDay::TooLarge);
+        }
+        let target = if relation == Some(true) {
+            &mut view.requests
+        } else {
+            &mut view.unknown_parent_requests
+        };
+        for (request, quotes) in other.requests {
+            for quote in &quotes {
+                packet_bytes += serde_json::to_vec(quote)?.len() + 2048;
+            }
+            if packet_bytes + graph_bytes > 4 * 1024 * 1024 {
+                return Ok(InspectionDay::TooLarge);
+            }
+            ensure!(
+                target.insert(request, quotes).is_none(),
+                "request owner mismatch"
+            );
+        }
+    }
+    view.totals = DayTotals::from_quotes(view.requests.values().flatten())?;
+    view.descendant_totals = DayTotals::from_quotes(
+        view.requests
+            .values()
+            .flatten()
+            .filter(|q| q.attempt.thread_id != owner),
+    )?;
+    view.unknown_parent_totals =
+        DayTotals::from_quotes(view.unknown_parent_requests.values().flatten())?;
+    Ok(InspectionDay::Ready(view))
 }
 
 pub(super) async fn ledger_exists(conn: &mut SqliteConnection) -> anyhow::Result<bool> {

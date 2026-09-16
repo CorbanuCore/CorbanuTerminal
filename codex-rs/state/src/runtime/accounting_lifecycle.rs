@@ -49,6 +49,17 @@ pub struct DayTotals {
 }
 
 impl DayTotals {
+    /// Sum each supplied attempt once using the ledger's exact arithmetic.
+    pub fn from_quotes<'a>(
+        quotes: impl IntoIterator<Item = &'a ObservationQuote>,
+    ) -> anyhow::Result<Self> {
+        let mut totals = Self::default();
+        for quote in quotes {
+            totals.add(quote)?;
+        }
+        Ok(totals)
+    }
+
     fn full_usd(&self) -> Option<Decimal> {
         (self.attempts > 0 && self.unknown_estimates == 0).then_some(self.known_usd)
     }
@@ -437,6 +448,11 @@ impl Journal<'_> {
             utc_day: day,
             read_at_ms,
             coverage,
+            own_totals: totals.clone(),
+            descendant_totals: DayTotals::default(),
+            unknown_parent_totals: DayTotals::default(),
+            unknown_parent_unavailable_threads: 0,
+            unknown_parent_requests: BTreeMap::new(),
             totals,
             requests,
         }))
