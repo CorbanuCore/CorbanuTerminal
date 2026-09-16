@@ -389,6 +389,52 @@ impl<'a> AccountingStore<'a> {
     }
 }
 
+// Work, unlike selected output, is never refunded for an unrelated candidate.
+// Reserve table-scan row visits before SQL, and bound all candidate/chain walks.
+// One budget covers the entire range, not each bucket independently.
+pub(super) struct InspectionWork {
+    rows: usize,
+    visits: usize,
+    scan_rows: usize,
+}
+
+impl InspectionWork {
+    pub(super) async fn new(conn: &mut SqliteConnection) -> anyhow::Result<Self> {
+        let scanned: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM (
+             SELECT 1 FROM draft_accounting_attempts
+             UNION ALL SELECT 1 FROM draft_accounting_compact_days LIMIT 4000001)",
+        )
+        .fetch_one(&mut *conn)
+        .await?;
+        Ok(Self {
+            rows: 4_000_000usize.saturating_sub(scanned as usize),
+            visits: 20_000,
+            scan_rows: scanned as usize,
+        })
+    }
+
+    pub(super) fn scans(&mut self, count: usize) -> bool {
+        let cost = self.scan_rows.saturating_mul(count);
+        if cost > self.rows {
+            self.rows = 0;
+            return false;
+        }
+        self.rows -= cost;
+        true
+    }
+
+    pub(super) fn visit(&mut self) -> bool {
+        if self.visits == 0 || self.rows == 0 {
+            self.rows = 0;
+            return false;
+        }
+        self.visits -= 1;
+        self.rows -= 1;
+        true
+    }
+}
+
 // Reuse the single-owner validator inside the caller's deferred snapshot. Never
 // open a store or refresh contributions while assembling the tree explanation.
 async fn inspect_tree(
@@ -397,7 +443,8 @@ async fn inspect_tree(
     day: i64,
     read_at_ms: i64,
 ) -> anyhow::Result<InspectionDay> {
-    inspect_tree_window(conn, owner, day, read_at_ms, None).await
+    let mut work = InspectionWork::new(conn).await?;
+    inspect_tree_window(conn, owner, day, read_at_ms, None, &mut work).await
 }
 
 async fn inspect_tree_window(
@@ -406,23 +453,23 @@ async fn inspect_tree_window(
     day: i64,
     read_at_ms: i64,
     window: Option<(i64, i64)>,
+    work: &mut InspectionWork,
 ) -> anyhow::Result<InspectionDay> {
     use codex_protocol::protocol::SessionSource;
     use std::collections::BTreeMap;
     use std::collections::HashSet;
-    let first = match window {
-        Some(_) => {
-            Journal::inspect_window_on_connection(conn, owner, day, read_at_ms, window).await?
-        }
-        None => Journal::inspect_on_connection(conn, owner, day, read_at_ms).await?,
-    };
+    let first =
+        Journal::inspect_window_on_connection(conn, owner, day, read_at_ms, window, work).await?;
     let InspectionDay::Ready(mut view) = first else {
         return Ok(first);
     };
+    if !work.scans(1) {
+        return Ok(InspectionDay::TooLarge);
+    }
     let candidates: Vec<String> = sqlx::query_scalar(
         "SELECT DISTINCT json_extract(payload, '$.thread_id') FROM draft_accounting_attempts
          WHERE json_extract(payload, '$.dispatched_at_ms') / 86400000 = ?
-         UNION SELECT thread_id FROM draft_accounting_compact_days WHERE utc_day = ?",
+         UNION SELECT thread_id FROM draft_accounting_compact_days WHERE utc_day = ? LIMIT 20001",
     )
     .bind(day)
     .bind(day)
@@ -440,20 +487,26 @@ async fn inspect_tree_window(
         }
     }
     for candidate in candidates {
+        if !work.visit() {
+            return Ok(InspectionDay::TooLarge);
+        }
         if candidate == owner.to_string() {
             continue;
         }
         let mut cursor = candidate.clone();
         let mut seen = HashSet::new();
         let mut reached = false;
-        let mut discovered = Vec::new();
+        let mut discovered = BTreeMap::new();
         let previous_bytes = graph_bytes;
         let relation = loop {
+            if !work.visit() {
+                return Ok(InspectionDay::TooLarge);
+            }
             if !seen.insert(cursor.clone()) {
                 break None;
             }
             reached |= cursor == owner.to_string();
-            if !ancestry.contains_key(&cursor) {
+            if !ancestry.contains_key(&cursor) && !discovered.contains_key(&cursor) {
                 let row: Option<(String, Option<String>)> = sqlx::query_as(
                     "SELECT t.source, e.parent_thread_id FROM threads t
                      LEFT JOIN thread_spawn_edges e ON e.child_thread_id = t.id WHERE t.id = ?",
@@ -490,10 +543,16 @@ async fn inspect_tree_window(
                 } else {
                     (None, false)
                 };
-                discovered.push(cursor.clone());
-                ancestry.insert(cursor.clone(), (parent, terminal));
+                discovered.insert(cursor.clone(), (parent, terminal));
+                if ancestry.len() + discovered.len() > 10_000
+                    || packet_bytes + graph_bytes > 4 * 1024 * 1024
+                {
+                    return Ok(InspectionDay::TooLarge);
+                }
             }
-            let (parent, terminal) = &ancestry[&cursor];
+            let (parent, terminal) = ancestry
+                .get(&cursor)
+                .unwrap_or_else(|| &discovered[&cursor]);
             match parent {
                 Some(parent) => cursor = parent.clone(),
                 None => {
@@ -503,23 +562,22 @@ async fn inspect_tree_window(
         };
         if relation == Some(false) {
             // Unrelated roots cannot consume the selected ancestry/packet budget.
-            for key in discovered {
-                ancestry.remove(&key);
-            }
             graph_bytes = previous_bytes;
             continue;
         }
-        if ancestry.len() > 10_000 || packet_bytes + graph_bytes > 4 * 1024 * 1024 {
-            return Ok(InspectionDay::TooLarge);
-        }
+        ancestry.extend(discovered);
         let other = Journal::inspect_window_on_connection(
             conn,
             ThreadId::from_string(&candidate)?,
             day,
             read_at_ms,
             window,
+            work,
         )
         .await?;
+        if work.rows == 0 {
+            return Ok(InspectionDay::TooLarge);
+        }
         let InspectionDay::Ready(other) = other else {
             if relation.is_none() {
                 view.unknown_parent_unavailable_threads += 1;
@@ -570,6 +628,10 @@ async fn inspect_buckets(
     requested: InspectionRange,
     read_at_ms: i64,
 ) -> anyhow::Result<InspectionDay> {
+    let mut work = InspectionWork::new(conn).await?;
+    if !work.scans(1) {
+        return Ok(InspectionDay::TooLarge);
+    }
     let oldest_aggregate_day =
         sqlx::query_scalar("SELECT min(utc_day) FROM draft_accounting_compact_days")
             .fetch_one(&mut *conn)
@@ -593,7 +655,8 @@ async fn inspect_buckets(
                 lower.max(day * 86_400_000),
                 upper.min((day + 1) * 86_400_000),
             );
-            let value = inspect_tree_window(conn, owner, day, read_at_ms, Some(window)).await?;
+            let value =
+                inspect_tree_window(conn, owner, day, read_at_ms, Some(window), &mut work).await?;
             let coverage = match &value {
                 InspectionDay::Ready(view) => {
                     attempts += view.totals.attempts + view.unknown_parent_totals.attempts;

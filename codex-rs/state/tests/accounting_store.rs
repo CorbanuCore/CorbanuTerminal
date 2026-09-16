@@ -437,6 +437,99 @@ async fn accounting_inspect_small_day_on_busy_host() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn accounting_inspect_work_budget_refuses_unknown_busy_host() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    let a = attempt(1, 0)?;
+    native(&runtime, a.thread_id).await?;
+    unrelated_population(&runtime, 12_001).await?;
+    let mut conn = connection(&runtime).await?;
+    // The same 12,001 rows / 600 unrelated roots pass the existing busy-host test.
+    // Missing lineage plus stale contributions requires repeated candidate scans;
+    // no candidate can exhaust the selected 512-attempt or 4 MiB result budget.
+    sqlx::query("UPDATE threads SET source = 'unknown' WHERE id != ?")
+        .bind(a.thread_id.to_string())
+        .execute(&mut conn)
+        .await?;
+    sqlx::query("DELETE FROM draft_accounting_contributions WHERE thread_id != ?")
+        .bind(a.thread_id.to_string())
+        .execute(&mut conn)
+        .await?;
+    assert_eq!(
+        tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0)
+        )
+        .await??,
+        InspectionDay::TooLarge
+    );
+    assert_eq!(
+        tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            AccountingStore::inspect_range(
+                &runtime,
+                a.thread_id,
+                InspectionRange {
+                    start_ms: 0,
+                    end_ms: DAY,
+                    grouping: InspectionGrouping::Day,
+                },
+                0
+            )
+        )
+        .await??,
+        InspectionDay::TooLarge
+    );
+    conn.close().await?;
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_work_budget_spans_range_buckets() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    let a = attempt(1, 0)?;
+    native(&runtime, a.thread_id).await?;
+    unrelated_population(&runtime, 12_001).await?;
+    let mut conn = connection(&runtime).await?;
+    sqlx::query("UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = ?")
+        .bind(3 * DAY)
+        .execute(&mut conn)
+        .await?;
+    // Each day alone is small and valid; the hour range repeatedly scans the same
+    // retained rows. Its one total attempt and 72 buckets fit all result limits.
+    for day in 0..3 {
+        assert_eq!(
+            ready(AccountingStore::inspect_day(&runtime, a.thread_id, day, 3 * DAY).await?)
+                .totals
+                .attempts,
+            i64::from(day == 0)
+        );
+    }
+    assert_eq!(
+        tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            AccountingStore::inspect_range(
+                &runtime,
+                a.thread_id,
+                InspectionRange {
+                    start_ms: 0,
+                    end_ms: 3 * DAY,
+                    grouping: InspectionGrouping::Hour,
+                },
+                3 * DAY
+            )
+        )
+        .await??,
+        InspectionDay::TooLarge
+    );
+    conn.close().await?;
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
 async fn accounting_inspect_valid_ten_thousand_retained_rows() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
