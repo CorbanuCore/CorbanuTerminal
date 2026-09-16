@@ -22,6 +22,182 @@ use uuid::Uuid;
 
 const ENDPOINT: &str = "http://127.0.0.1:1/v1";
 
+#[tokio::test]
+async fn accounting_build_activation_uses_loaded_provider() -> anyhow::Result<()> {
+    let home = tempfile::tempdir()?;
+    let config = crate::config::ConfigBuilder::default()
+        .codex_home(home.path().to_path_buf())
+        .cli_overrides(vec![("model_provider".into(), "anthropic".into())])
+        .build()
+        .await?;
+    #[cfg(not(feature = "developer-accounting"))]
+    assert_eq!(config.accounting, AccountingMode::Disabled);
+    #[cfg(feature = "developer-accounting")]
+    assert!(matches!(
+        config.accounting,
+        AccountingMode::DirectAnthropic { approved_endpoint, .. }
+            if approved_endpoint == codex_model_provider_info::ANTHROPIC_BASE_URL
+    ));
+    Ok(())
+}
+
+#[cfg(feature = "developer-accounting")]
+#[test]
+fn accounting_developer_activation_excludes_other_routes() {
+    use crate::accounting::developer_accounting_mode;
+    use codex_model_provider_info::WireApi;
+    let mut provider = ModelProviderInfo::create_anthropic_provider();
+    for id in ["claude-plan", "openrouter", "corbanu", "custom", "openai"] {
+        assert_eq!(
+            developer_accounting_mode(id, &provider),
+            AccountingMode::Disabled
+        );
+    }
+    provider.wire_api = WireApi::Responses;
+    assert_eq!(
+        developer_accounting_mode("anthropic", &provider),
+        AccountingMode::Disabled
+    );
+    assert!(matches!(
+        developer_accounting_mode("openai", &provider),
+        AccountingMode::DirectOpenAiResponses { .. }
+    ));
+    provider.wire_api = WireApi::Chat;
+    assert!(matches!(
+        developer_accounting_mode("openai", &provider),
+        AccountingMode::DirectOpenAiChat { .. }
+    ));
+}
+
+#[cfg(feature = "developer-accounting")]
+#[tokio::test]
+async fn accounting_developer_activation_samples_http_and_installs_inspectable_day()
+-> anyhow::Result<()> {
+    use codex_state::accounting::{AccountingStore, InspectionDay};
+    use futures::StreamExt;
+    use serde_json::json;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    struct FixtureAuth;
+    impl codex_api::AuthProvider for FixtureAuth {
+        fn add_auth_headers(&self, _: &mut http::HeaderMap) {}
+    }
+
+    let server = MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    let events = [
+        json!({"type":"message_start","message":{"id":"activation-fixture","model":"claude-opus-5","usage":{"input_tokens":7,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}),
+        json!({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}),
+        json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"fixture complete"}}),
+        json!({"type":"content_block_stop","index":0}),
+        json!({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}),
+        json!({"type":"message_stop"}),
+    ];
+    let body: String = events
+        .iter()
+        .map(|e| format!("event: {}\ndata: {e}\n\n", e["type"].as_str().unwrap()))
+        .collect();
+    Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/v1/messages"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(body, "text/event-stream"))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let home = tempfile::tempdir()?;
+    // Built-in Anthropic intentionally ignores TOML endpoint overrides.
+    // Bind the local embedding fixture through the production developer selector.
+    let mode = crate::accounting::developer_accounting_mode(
+        "anthropic",
+        &ModelProviderInfo {
+            base_url: Some(endpoint.clone()),
+            ..ModelProviderInfo::create_anthropic_provider()
+        },
+    );
+    let db = StateRuntime::init(
+        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path())?),
+        "anthropic".into(),
+    )
+    .await?;
+    let owner = ThreadId::new();
+    db.upsert_thread(
+        &ThreadMetadataBuilder::new(
+            owner,
+            home.path().join("activation.jsonl"),
+            chrono::Utc::now(),
+            SessionSource::Cli,
+        )
+        .build("anthropic"),
+    )
+    .await?;
+    let now = chrono::Utc::now().timestamp_millis();
+    assert_eq!(
+        AccountingStore::inspect_day(&db, owner, now / 86_400_000, now).await?,
+        InspectionDay::Absent
+    );
+    let sampling = Sampling::start(db.clone(), owner, "activation-turn".into(), &mode).await?;
+    let evidence = ResponseEvidence::new(sampling.clone());
+    let transport = AccountingTransport::new(
+        codex_http_client::ReqwestTransport::from_http_client(
+            codex_http_client::HttpClientBuilder::new().build_direct()?,
+        ),
+        Some(evidence.clone()),
+        "claude-opus-5".into(),
+    );
+    let provider = codex_api::Provider {
+        name: "anthropic".into(),
+        base_url: endpoint,
+        query_params: None,
+        headers: Default::default(),
+        retry: codex_api::RetryConfig {
+            max_attempts: 1,
+            base_delay: std::time::Duration::ZERO,
+            retry_429: false,
+            retry_5xx: false,
+            retry_transport: false,
+        },
+        stream_idle_timeout: std::time::Duration::from_secs(5),
+    };
+    let client =
+        codex_api::AnthropicMessagesClient::new(transport, provider, Arc::new(FixtureAuth))
+            .with_usage_observer(Some(evidence.clone()));
+    let mut stream = client
+        .stream_request(
+            codex_api::AnthropicMessagesRequest {
+                model: "claude-opus-5".into(),
+                system: vec![],
+                messages: vec![],
+                tools: vec![],
+                tool_choice: None,
+                stream: true,
+                max_tokens: 10,
+                thinking: None,
+                output_config: None,
+                provider_options: None,
+            },
+            Default::default(),
+        )
+        .await?;
+    while let Some(event) = stream.next().await {
+        event?;
+    }
+    let now = chrono::Utc::now().timestamp_millis();
+    let day = AccountingStore::inspect_day(&db, owner, now / 86_400_000, now).await?;
+    let InspectionDay::Ready(view) = day else {
+        anyhow::bail!("expected populated day, got {day:?}");
+    };
+    assert_eq!(view.requests.len(), 1);
+    let quote = &view.requests.values().next().unwrap()[0];
+    assert_eq!(quote.observations.len(), 2);
+    assert_eq!(quote.attempt.model, "claude-opus-5");
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+    drop(stream);
+    drop(client);
+    drop(evidence);
+    drop(sampling);
+    db.close().await;
+    Ok(())
+}
+
 struct DeniedAuth;
 
 impl codex_api::AuthProvider for DeniedAuth {
@@ -104,6 +280,7 @@ async fn accounting_role_reload_preserves_internal_binding_without_changing_off_
             experimental_bearer_token: Some("synthetic".into()),
             ..ModelProviderInfo::create_anthropic_provider()
         };
+        config.accounting = AccountingMode::Disabled;
         if on {
             config.accounting = AccountingMode::DirectAnthropic {
                 scope: Uuid::new_v4(),

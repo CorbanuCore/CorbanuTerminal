@@ -1,0 +1,18 @@
+{
+  "default": {
+    "command": "just test -p codex-core accounting",
+    "path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/target/debug/deps/libcodex_core-6b2227d6b6ae2a71.rlib",
+    "features": [],
+    "declared_features": [
+      "developer-accounting"
+    ]
+  },
+  "enabled": {
+    "command": "just test -p codex-core accounting --features developer-accounting (library built; first lib-test compilation failed)",
+    "path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/target/debug/deps/libcodex_core-e3d04d9c88526618.rlib",
+    "features": "[\"developer-accounting\"]",
+    "declared_features": "[\"developer-accounting\"]",
+    "exists": true
+  },
+  "note": "Library artifacts copied with cp -c into the action's ignored local artifacts directory before symbol scanning. Feature-only test fixture fixes after the first enabled build do not change either production library."
+}

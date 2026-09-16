@@ -1,0 +1,55 @@
+╭───────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                 │
+│                                               │
+│ model:     gpt-5.6-sol low   /model to change │
+│ directory: ~/work                             │
+╰───────────────────────────────────────────────╯
+
+
+› Reply with fixture completion.
+
+
+⚠ Code Mode is unavailable because failed to spawn code-mode host /Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/
+  portfolio/agent-cost-accounting/pf-60-s03/acct-activation-20-artifacts/codex-code-mode-host: host executable was not found. Code mode will
+  fail closed; enable `features.code_mode_host` and install `codex-code-mode-host`.
+
+• Activation fixture complete.
+
+
+  Recorded requests — root and descendants
+  Requested UTC day: 2026-09-16
+
+  Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+  Snapshot is not current; newer activity is unverified
+  UTC admission interval: [1789516800000, 1789603200000) ms since Unix epoch
+  Read at: 1789591008056 ms UTC; store checkpoint: 1789591006009 ms UTC; maintenance lag: 2047 ms
+  90-day wall-clock detail cutoff: Some(1781815008056); aggregate day floor at checkpoint: 20348; oldest recorded day: Some(20712)
+  Known subtotal exact USD: 0.000125
+  Input: 7 known + unknown in 0 attempts
+› Noncached input (derived for inclusive input): 7 known + unknown in 0 attempts
+
+  ↑↓ scroll · Enter open · Esc back/close
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

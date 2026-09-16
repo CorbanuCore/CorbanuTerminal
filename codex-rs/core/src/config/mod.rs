@@ -636,7 +636,8 @@ pub enum ThreadStoreConfig {
     InMemory { id: String },
 }
 
-/// Internal native embedding opt-in. Never loaded from TOML, environment or CLI.
+/// Internal native embedding opt-in; no accounting TOML, environment or CLI key.
+/// The non-default `developer-accounting` build also binds supported provider routes.
 /// The binding is local estimate provenance, not provider authorization.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum AccountingMode {
@@ -4494,7 +4495,13 @@ impl Config {
         .map_err(std::io::Error::from)?;
         let otel = otel::resolve_config(cfg.otel.unwrap_or_default(), &mut startup_warnings);
         let config = Self {
+            #[cfg(not(feature = "developer-accounting"))]
             accounting: AccountingMode::Disabled,
+            #[cfg(feature = "developer-accounting")]
+            accounting: crate::accounting::developer_accounting_mode(
+                &model_provider_id,
+                &model_provider,
+            ),
             model,
             service_tier,
             review_model,

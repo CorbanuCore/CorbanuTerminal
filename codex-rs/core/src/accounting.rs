@@ -31,6 +31,39 @@ pub(crate) mod transport;
 #[path = "accounting_websocket.rs"]
 pub(crate) mod websocket;
 
+/// Build-time developer opt-in only; normal builds do not contain this selector.
+/// Existing collectors still enforce endpoint and authentication eligibility.
+#[cfg(feature = "developer-accounting")]
+pub(crate) fn developer_accounting_mode(
+    provider_id: &str,
+    provider: &codex_model_provider_info::ModelProviderInfo,
+) -> AccountingMode {
+    use codex_model_provider_info::WireApi;
+    let scope = Uuid::new_v4();
+    let approved_endpoint = provider.base_url.clone().unwrap_or_else(|| {
+        match provider.wire_api {
+            WireApi::Anthropic => codex_model_provider_info::ANTHROPIC_BASE_URL,
+            WireApi::Responses | WireApi::Chat => "https://api.openai.com/v1",
+        }
+        .into()
+    });
+    match (provider_id, provider.wire_api) {
+        ("anthropic", WireApi::Anthropic) => AccountingMode::DirectAnthropic {
+            scope,
+            approved_endpoint,
+        },
+        ("openai", WireApi::Responses) => AccountingMode::DirectOpenAiResponses {
+            scope,
+            approved_endpoint,
+        },
+        ("openai", WireApi::Chat) => AccountingMode::DirectOpenAiChat {
+            scope,
+            approved_endpoint,
+        },
+        _ => AccountingMode::Disabled,
+    }
+}
+
 pub(crate) const FAILURE: &str =
     "Native Anthropic accounting failed; request stopped without a repair send";
 pub(crate) type Slot = Arc<Mutex<Option<Arc<Sampling>>>>;

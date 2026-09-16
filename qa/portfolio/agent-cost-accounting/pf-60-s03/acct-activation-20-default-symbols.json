@@ -1,0 +1,13 @@
+{
+  "mode": "default",
+  "binary": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-20-artifacts/default-core.rlib",
+  "sha256": "dbc16934d49996b3704b9fda425374425e4ecb83f7adb6a3cdee758c2576c002",
+  "activation_symbol_count": 0,
+  "collector_control_symbol_count": 14,
+  "activation_symbols": [],
+  "control_sample": [
+    "0000000000000424 T __ZN10codex_core10accounting8Sampling13start_request17h8002f525ad93c09fE",
+    "                 U __ZN10codex_core10accounting8Sampling13start_request17h8002f525ad93c09fE"
+  ],
+  "limitations": "Tests these exact unstripped native artifacts only. Does not prove other targets, optimized/stripped builds, release packaging, feature-unified/all-features builds or absence of differently named equivalent code. Existing collector/install APIs remain compiled in by design."
+}
