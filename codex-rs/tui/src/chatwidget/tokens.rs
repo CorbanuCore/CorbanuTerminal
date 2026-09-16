@@ -808,11 +808,11 @@ fn range_pages(
             )
         });
     context.push(format!(
-        "Unknown parent population: {unknown_attempts} inspectable attempts, excluded from range total"
+        "Range: Unknown parent population: {unknown_attempts} inspectable attempts, excluded from range total"
     ));
     if unavailable_entries > 0 {
         context.push(format!(
-            "Unresolved ancestry: {unavailable_entries} thread-slice entries have unavailable detail; their costs and retention coverage are unknown and excluded from this root."
+            "Range: Unresolved ancestry: {unavailable_entries} thread-slice entries have unavailable detail; their costs and retention coverage are unknown and excluded from this root."
         ));
     }
     if states.iter().any(|s| !matches!(s, InspectionDay::Ready(_))) {
@@ -861,7 +861,7 @@ fn range_pages(
             .unwrap_or_else(|| "unavailable".into());
         let mut header = context.clone();
         header.push(format!(
-            "Bucket: {bounds}; effective aggregate retention coverage: {effective}"
+            "Bucket: {bounds}; effective coverage (requested ∩ aggregate retention ∩ snapshot): {effective}"
         ));
         header.push(
             if bucket.partial {
@@ -872,7 +872,7 @@ fn range_pages(
             .into(),
         );
         pages[0].text.push(format!(
-            "Effective aggregate retention coverage for {bounds}: {effective}"
+            "Effective coverage (requested ∩ aggregate retention ∩ snapshot) for {bounds}: {effective}"
         ));
         let mut merged: Option<codex_state::accounting::Inspection> = None;
         let mut diagnostics = Vec::new();
@@ -962,6 +962,11 @@ fn range_pages(
                     "threads have unavailable day detail",
                     "thread-day entries have unavailable detail",
                 );
+                if text.starts_with("Unknown parent population:")
+                    || text.starts_with("Unresolved ancestry:")
+                {
+                    *text = format!("Bucket: {text}");
+                }
             }
             child.text.splice(0..0, header.clone());
             child.parent = Some(child.parent.map_or(0, |p| p + offset));
