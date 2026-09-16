@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import Mock, patch
 
@@ -374,6 +375,259 @@ class IdentityTests(unittest.TestCase):
              patch.dict(os.environ, {}, clear=True), redirect_stdout(io.StringIO()) as output:
             tasknode.main()
         self.assertIn("missing_inherited_scope", json.loads(output.getvalue())["blockers"])
+
+
+class CLIFenceTests(unittest.TestCase):
+    setUp = SendTests.setUp
+    snapshot = SendTests.snapshot
+
+    def invoke(self, *args, transport=None):
+        output, errors = io.StringIO(), io.StringIO()
+        with patch.object(sys, "argv", ["tasknode.py", *map(str, args)]), \
+             patch.object(tasknode, "post", transport or Mock(side_effect=AssertionError("unexpected transport"))), \
+             redirect_stdout(output), redirect_stderr(errors):
+            try:
+                tasknode.main()
+                code = 0
+            except SystemExit as error:
+                code = error.code
+        return code, output.getvalue(), errors.getvalue()
+
+    def denied(self, *args, reason=None):
+        before = self.snapshot()
+        code, output, errors = self.invoke(*args)
+        self.assertNotEqual(code, 0)
+        self.assertEqual(output, "")
+        self.assertEqual(len(errors.splitlines()), 1)
+        self.assertIn("Task Node command refused:", errors)
+        self.assertNotIn("Traceback", errors)
+        if reason:
+            self.assertIn(reason, errors)
+        self.assertEqual(self.snapshot(), before)
+        return errors
+
+    def env(self):
+        return {"PATH": os.defpath, "HOME": str(self.state), "CODEX_HOME": str(self.state),
+                "CORBANU_HOME": str(self.state), "PFTERMINAL_HOME": str(self.state),
+                "PYTHONPATH": str(control.HERE), "PYTHONDONTWRITEBYTECODE": "1",
+                "CORBANU_TEST_DISABLE_NATIVE_KEYRING": "1"}
+
+    def child(self, args, prefix=""):
+        # Actual entry point, isolated synthetic state, no network-capable transport.
+        script = ("import tasknode, os\n"
+                  "def denied(*a, **kw): raise AssertionError('unexpected transport')\n"
+                  "tasknode.post = denied\n" + prefix + "\ntasknode.main()\n")
+        return subprocess.run([sys.executable, "-c", script, *map(str, args)],
+                              env=self.env(), text=True, capture_output=True, timeout=10)
+
+    def enable_batch(self):
+        self.config["tasknode"]["enabled"] = True
+        control.atomic_json(self.state / "control.json", self.config)
+
+    def flush_args(self):
+        return ["flush", "--state", self.state, "--confirm-live",
+                "--credentials-file", self.auth_file]
+
+    def live_args(self):
+        return ["send", "--state", self.state, "--event-id", self.event_id, "--live",
+                "--owner-activation-file", self.activation_file,
+                "--credentials-file", self.auth_file]
+
+    def test_cli_lock_expiry_names_real_holder_and_path_and_recovers(self):
+        holder = subprocess.Popen(
+            [sys.executable, "-c",
+             "import fcntl,sys; f=open(sys.argv[1],'a'); fcntl.flock(f,fcntl.LOCK_EX); "
+             "print('locked',flush=True); sys.stdin.read()", str(self.state / ".outbox.lock")],
+            env=self.env(), text=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        try:
+            self.assertEqual(holder.stdout.readline().strip(), "locked")
+            report = self.state / "run.json"
+            control.atomic_json(report, run())
+            self.enable_batch()
+            for args in (["retry", "--state", self.state, "--event-id", self.event_id],
+                         ["enqueue", "--state", self.state, "--report", report],
+                         self.flush_args()):
+                started = time.monotonic()
+                result = self.child(args)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertGreaterEqual(time.monotonic() - started, tasknode.CLI_LOCK_SECONDS)
+                self.assertIn("another Task Node operation is holding the queue", result.stderr)
+                self.assertIn(str(self.state / ".outbox.lock"), result.stderr)
+                self.assertEqual(len(result.stderr.splitlines()), 1)
+            self.config["tasknode"]["enabled"] = False
+            control.atomic_json(self.state / "control.json", self.config)
+            result = self.child(self.live_args())
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("holding the queue", result.stderr)
+            # Inspection remains lock-free, even while another process owns it.
+            self.assertEqual(self.child(["status", "--state", self.state]).returncode, 0)
+            self.assertEqual(self.child(["preview", "--state", self.state,
+                                         "--event-id", self.event_id]).returncode, 0)
+        finally:
+            holder.communicate(timeout=5)
+        self.assertEqual(self.child(["enqueue", "--state", self.state,
+                                     "--report", report]).returncode, 0)
+        self.assertFalse(tasknode.CLI_CONTEXT.get())
+
+    def test_cli_batch_crash_stays_uncertain_until_explicit_named_retry(self):
+        self.enable_batch()
+        crash = ("def crash(*a, **kw):\n"
+                 "    tasknode.atomic_json(tasknode.Path(os.environ[\"HOME\"]) / \"accepted.json\", a[1])\n"
+                 "    os._exit(73)\n"
+                 "tasknode.post = crash")
+        result = self.child(self.flush_args(), crash)
+        self.assertEqual(result.returncode, 73)
+        self.assertEqual(control.read_json(self.state / "accepted.json", self.state), {"event": self.event})
+        record = control.read_json(self.record_path, self.state)
+        self.assertEqual((record["status"], record["attempts"]), ("uncertain", 1))
+        before = self.snapshot()
+        for _ in range(2):
+            self.assertEqual(self.child(self.flush_args()).returncode, 0)
+        self.assertEqual(self.snapshot(), before)
+        result = self.child(["status", "--state", self.state])
+        status = json.loads(result.stdout)
+        self.assertEqual(status["status"], "uncertain")
+        self.assertIn("no automatic retry", status["reason"])
+        self.denied("retry", "--state", self.state, reason="requires --event-id")
+        self.assertEqual(self.invoke("retry", "--state", self.state,
+                                     "--event-id", self.event_id)[0], 0)
+        record = control.read_json(self.record_path, self.state)
+        self.assertEqual(record["event"], self.event)
+        self.assertEqual((record["status"], record["attempts"]), ("pending", 0))
+        self.assertEqual(self.invoke(*self.flush_args(), transport=self.transport)[0], 0)
+        self.transport.assert_called_once()
+        self.assertEqual(control.read_json(self.record_path, self.state)["status"], "delivered")
+
+    def test_cli_single_send_crash_retains_intent_and_denies_retry(self):
+        result = self.child(self.live_args(), "def crash(*a, **kw): os._exit(73)\ntasknode.post = crash")
+        self.assertEqual(result.returncode, 73)
+        self.assertTrue((self.state / "send-receipts" / (self.event_id + ".intent.json")).exists())
+        before = self.snapshot()
+        result = self.child(self.live_args())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["outcome"], "uncertain")
+        self.assertFalse(json.loads(result.stdout)["network_writes"])
+        self.assertEqual(json.loads(self.child(["status", "--state", self.state]).stdout)["status"], "uncertain")
+        self.denied("retry", "--state", self.state, "--event-id", self.event_id,
+                    reason="retained receipts; external reconciliation")
+        self.assertEqual(self.snapshot(), before)
+
+    def test_cli_recovery_operations_are_absent_and_denied(self):
+        for command in ("delete-receipt", "edit-payload", "rewrite-id", "clear-outbox", "reset-attempts"):
+            with self.subTest(command=command):
+                self.denied(command, "--state", self.state, reason="unsupported command")
+        for flag in ("--delete-receipt", "--payload", "--new-id", "--clear-outbox",
+                     "--reset-attempts", "--all", "--force"):
+            with self.subTest(flag=flag):
+                self.denied("retry", "--state", self.state, "--event-id", self.event_id, flag,
+                            reason="unsupported command")
+        code, help_text, _ = self.invoke("--help")
+        self.assertEqual(code, 0)
+        for forbidden in ("delete-receipt", "edit-payload", "rewrite-id", "clear-outbox",
+                          "reset-attempts", "--payload", "--all", "--force"):
+            self.assertNotIn(forbidden, help_text)
+
+    def test_cli_selectors_cannot_create_rewrite_or_bulk_retry_records(self):
+        for command in ("preview", "send", "retry"):
+            flags = ["--dry-run"] if command == "send" else []
+            for event_id in ("../escape", "cc-" + "0" * 64):
+                self.denied(command, "--state", self.state, "--event-id", event_id, *flags)
+            self.denied(command, "--state", self.state, "--event-id", self.event_id,
+                        "--event-id", self.event_id, *flags, reason="exactly once")
+        for status in ("pending", "delivered"):
+            record = control.read_json(self.record_path, self.state)
+            record["status"] = status
+            control.atomic_json(self.record_path, record)
+            self.denied("retry", "--state", self.state, "--event-id", self.event_id,
+                        reason="only blocked or uncertain")
+        record["status"] = "blocked"
+        control.atomic_json(self.record_path, record)
+        self.assertEqual(self.invoke("retry", "--state", self.state, "--event-id", self.event_id)[0], 0)
+        self.assertEqual(control.read_json(self.record_path, self.state)["event"], self.event)
+
+    def test_cli_credentials_are_file_only_and_never_echoed(self):
+        secret = "synthetic-sensitive-value"
+        for flag in ("--api-key", "--terminal-session", "--token", "--credentials", "--credentials-f"):
+            errors = self.denied("flush", "--state", self.state, "--confirm-live", flag, secret)
+            self.assertNotIn(secret, errors)
+        with patch.dict(os.environ, {"TASKNODE_API_KEY": secret, "TASKNODE_TERMINAL_SESSION": secret,
+                                     "API_KEY": secret, "TERMINAL_SESSION": secret}):
+            self.denied("flush", "--state", self.state, "--confirm-live",
+                        reason="private --credentials-file")
+        for contents in (secret, '{"terminal_session": "' + secret + '",', "[]"):
+            self.auth_file.write_text(contents)
+            errors = self.denied(*self.flush_args(), reason="credentials file")
+            self.assertNotIn(secret, errors)
+        control.atomic_json(self.auth_file, {"terminal_session": secret, "api_key": secret})
+        self.auth_file.chmod(0o644)
+        self.denied(*self.flush_args(), reason="owner-only")
+        self.auth_file.chmod(0o600)
+        self.enable_batch()
+        code, output, errors = self.invoke(*self.flush_args(), transport=self.transport)
+        self.assertEqual(code, 0, errors)
+        self.assertNotIn(secret, output + errors)
+        self.assertEqual(self.transport.call_args.args[2], {"terminal_session": secret, "api_key": secret})
+
+    def test_cli_enqueue_requires_validated_report_and_field_byte_checks(self):
+        report = self.state / "report.json"
+        for value in (self.event, {**run(), "extra": "field"}, {**run(), "summary": "猫" * 800},
+                      {**run(), "branch": "猫" * 200}, {**run(), "summary": "api_key=synthetic"},
+                      {**run(), "updated_at": "synthetic-invalid-timestamp"}):
+            control.atomic_json(report, value)
+            with self.subTest(fields=list(value)):
+                self.denied("enqueue", "--state", self.state, "--report", report)
+        control.atomic_json(report, {**run(), "run_id": "new-valid-run"})
+        code, output, errors = self.invoke("enqueue", "--state", self.state, "--report", report)
+        self.assertEqual(code, 0, errors)
+        self.assertTrue((self.state / "outbox" / (output.strip() + ".json")).exists())
+        for command in ("flush", "enroll", "status", "retry"):
+            self.denied(command, "--state", self.state, "--report", report,
+                        *(["--event-id", self.event_id] if command == "retry" else []))
+        self.denied("enqueue", "--state", self.state, "--payload", json.dumps(self.event))
+
+    def test_cli_inspection_is_read_only_and_status_is_json_lines(self):
+        tasknode.enqueue(self.state, {**run(), "run_id": "other"})
+        before = self.snapshot()
+        for command in ("status", "preview", "prepare"):
+            args = ["--event-id", self.event_id] if command != "status" else []
+            code, output, errors = self.invoke(command, "--state", self.state, *args)
+            self.assertEqual(code, 0, errors)
+            objects = [json.loads(line) for line in output.splitlines()]
+            self.assertEqual(len(objects), 2 if command == "status" else 1)
+            self.assertEqual(self.snapshot(), before)
+            self.denied(command, "--state", self.state, *args, "--credentials-file", self.auth_file)
+            self.denied(command, "--state", self.state, *args, "--confirm-live")
+
+    def test_cli_old_records_and_receipts_are_never_aged_out(self):
+        self.assertEqual(self.invoke(*self.live_args(), transport=self.transport)[0], 0)
+        before = self.snapshot()
+        old = 946684800
+        for path in self.state.rglob("*"):
+            if path.is_file():
+                os.utime(path, (old, old))
+        future = (control.timestamp(control.now()) + dt.timedelta(days=3650)).isoformat()
+        with patch.object(tasknode, "now", return_value=future):
+            self.assertEqual(self.invoke("status", "--state", self.state)[0], 0)
+            self.assertEqual(self.invoke("preview", "--state", self.state,
+                                         "--event-id", self.event_id)[0], 0)
+            self.denied("retry", "--state", self.state, "--event-id", self.event_id,
+                        reason="retained receipts")
+            self.assertEqual(self.snapshot(), before)
+            self.enable_batch()
+            retained = self.snapshot()
+            self.assertEqual(self.invoke(*self.flush_args())[0], 0)
+            self.assertEqual(self.snapshot(), retained)
+
+    def test_cli_posting_stays_off_and_refusal_names_local_blockers(self):
+        self.denied(*self.flush_args(), reason="live writeback disabled")
+        self.denied("send", "--state", self.state, "--event-id", self.event_id, "--live",
+                    reason="owner activation and credentials")
+        self.activation["gates"]["payload_review"] = False
+        control.atomic_json(self.activation_file, self.activation)
+        self.denied(*self.live_args(), reason="owner activation does not authorize")
+        (self.state / "enrollment.json").unlink()
+        self.denied(*self.live_args(), reason="local workspace enrollment unverified")
+        self.assertFalse(control.read_json(self.state / "control.json", self.state)["tasknode"]["enabled"])
 
 
 if __name__ == "__main__":

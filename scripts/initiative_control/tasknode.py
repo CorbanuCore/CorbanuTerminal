@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Goal-event-only Campaign Tracker outbox. Explicit setup required; no task actions."""
 import argparse
+import contextlib
+import contextvars
 import datetime as dt
+import fcntl
 import hashlib
 import json
 import os
@@ -10,13 +13,48 @@ import re
 import shutil
 import stat
 import subprocess
+import time
 import urllib.error
 import urllib.request
 
-from control import RUN_STATUSES, STALE_SECONDS, atomic_json, checked_run, delivery_hold, locked, now, read_json, safe_text, timestamp
+from control import RUN_STATUSES, STALE_SECONDS, atomic_json, checked_run, delivery_hold, locked as blocking_locked, now, read_json, safe_text, timestamp
 
 ORIGIN = "https://tasknode.postfiat.org"
 PREFIX = ORIGIN + "/api/terminal/tasknode/campaign-tracker"
+CLI_LOCK_SECONDS = 2.0
+CLI_CONTEXT = contextvars.ContextVar("tasknode_cli", default=False)
+
+
+@contextlib.contextmanager
+def locked(path):
+    """Bound only CLI lock acquisition; library callers retain blocking flock."""
+    if not CLI_CONTEXT.get():
+        with blocking_locked(path):
+            yield
+        return
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with path.open("a") as stream:
+        deadline = time.monotonic() + CLI_LOCK_SECONDS
+        while True:
+            try:
+                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise ValueError(f"another Task Node operation is holding the queue; lock path: {path}") from None
+                time.sleep(0.05)
+        yield
+
+
+def delivery_status(state, event_id, record):
+    # Unlike high-volume accounting telemetry, outbox records and receipts are
+    # the only local evidence of an external post. Retain them without age limits;
+    # any future owner-directed archival policy requires a separate decision.
+    directory = state / "send-receipts"
+    if (directory / (event_id + ".intent.json")).exists() or (directory / (event_id + ".result.json")).exists():
+        result = directory / (event_id + ".result.json")
+        return read_json(result, state).get("outcome", "uncertain") if result.exists() else "uncertain"
+    return record["status"]
 
 
 def identifier(value):
@@ -57,6 +95,7 @@ def event_for(run, workspace, task_ids, sequence):
 
 
 def enqueue(state, run):
+    checked_run(run)  # Validate even when report deduplication finds an existing event.
     if reason := delivery_hold(run.get("sprint_id"), run):
         raise ValueError(reason + "; no enqueue or automatic alias")
     config = read_json(state / "control.json", state)["tasknode"]
@@ -90,8 +129,11 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def credentials(path):
     if path.is_symlink() or stat.S_IMODE(path.stat().st_mode) & 0o077:
         raise ValueError("credentials file must be regular and owner-only (0600)")
-    value = read_json(path, path.parent)
-    if set(value) != {"terminal_session", "api_key"} or not all(isinstance(v, str) and v and "\n" not in v and "\r" not in v for v in value.values()):
+    try:
+        value = read_json(path, path.parent)
+    except (OSError, ValueError):
+        raise ValueError("credentials file is unreadable or invalid JSON") from None
+    if not isinstance(value, dict) or set(value) != {"terminal_session", "api_key"} or not all(isinstance(v, str) and v and "\n" not in v and "\r" not in v for v in value.values()):
         raise ValueError("credentials file must contain terminal_session and api_key")
     return value
 
@@ -276,7 +318,8 @@ def send(state, event_id, *, live=False, dry_run=False, activation_file=None,
         allowed_blockers = {"posting_disabled",
                             "live_authority_entitlement_owner_and_target_lifecycle_unverified"}
         if set(preview["blockers"]) - allowed_blockers:
-            raise ValueError("selected event has unresolved local gates")
+            raise ValueError("selected event has unresolved local gates: " + "; ".join(
+                blocker.replace("_", " ") for blocker in preview["blockers"] if blocker not in allowed_blockers))
         activation_file = Path(activation_file)
         metadata = activation_file.lstat()
         if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
@@ -473,14 +516,17 @@ def flush(state, auth, transport=None):
             if event.get("kind") != "goal" or event.get("workspaceId") != config["workspace_id"] or not event.get("taskIds") or set(event["taskIds"]) != set(allowed):
                 record.update(status="blocked", error="mapping_or_event_changed")
             else:
+                # Persist uncertainty BEFORE HTTP: death before the result write
+                # must never turn an absent receipt into permission to resend.
+                record.update(status="uncertain", attempts=record["attempts"] + 1)
+                atomic_json(path, record)
                 status, result = transport("/events", {"event": event}, auth)
-                record["attempts"] += 1
                 if 200 <= status < 300 and result.get("ok") is True and result.get("id") == event["id"] and result.get("summaryState") != "deleted":
                     record.update(status="delivered", delivered_at=now())
                     delivered += 1
                 elif status in {0, 429} or 500 <= status < 600:
                     delay = min(3600, 30 * 2 ** min(record["attempts"], 7))
-                    record.update(next_attempt_at=(timestamp(now()) + dt.timedelta(seconds=delay)).isoformat(), error="transient_delivery_failure")
+                    record.update(status="pending", next_attempt_at=(timestamp(now()) + dt.timedelta(seconds=delay)).isoformat(), error="transient_delivery_failure")
                     if record["attempts"] >= 8:
                         record["status"] = "blocked"
                 else:
@@ -498,15 +544,58 @@ def retry(state, event_id):
         checked_event(record["event"], event_id)
         if delivery_hold(record["event"]["turnId"], record):
             raise ValueError("historical events require reconciliation; retry is not migration")
-        if record["status"] != "blocked":
-            raise ValueError("only blocked deliveries can be explicitly retried")
+        directory = state / "send-receipts"
+        if any((directory / (event_id + suffix)).exists() for suffix in (".intent.json", ".result.json")):
+            raise ValueError("single-event delivery has retained receipts; external reconciliation is required before any resend")
+        if record["status"] not in {"blocked", "uncertain"}:
+            raise ValueError("only blocked or uncertain batch deliveries can be explicitly retried")
+        # Explicit named retry accepts the duplicate risk; never infer failure
+        # from uncertainty or erase single-event receipts to permit a resend.
         record.update(status="pending", attempts=0, next_attempt_at=now())
         record.pop("error", None)
         atomic_json(path, record)
 
 
+class CLIParser(argparse.ArgumentParser):
+    def error(self, message):
+        # argparse otherwise echoes unknown arguments (including pasted secrets).
+        if re.fullmatch(r"argument --[a-z-]+: expected one argument", message):
+            pass  # Known option name and fixed wording contain no supplied values.
+        elif message.startswith(("argument ", "unrecognized arguments:", "ambiguous option:")):
+            message = "unsupported command, option or value; use --help; credentials require --credentials-file"
+        self.exit(2, "Task Node command refused: " + " ".join(message.split()) + "\n")
+
+
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    token = CLI_CONTEXT.set(True)
+    try:
+        cli()
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        if isinstance(error, FileNotFoundError):
+            reason = "selected record or required local file does not exist"
+        elif isinstance(error, OSError):
+            reason = "local file access or delivery failed; inspect status before retry"
+        elif isinstance(error, (KeyError, TypeError, AttributeError, json.JSONDecodeError, UnicodeError)):
+            reason = "local record or input has invalid fields or encoding"
+        elif str(error).startswith("Invalid isoformat"):
+            reason = "local record or input has an invalid timestamp"
+        else:
+            reason = str(error)
+        CLIParser().error(reason)
+    finally:
+        CLI_CONTEXT.reset(token)
+
+
+def print_status(value):
+    if "blockers" in value:
+        value = {**value, "reasons": [blocker.replace("_", " ") for blocker in value["blockers"]]}
+    if value.get("outcome") == "uncertain":
+        value = {**value, "reason": "delivery is uncertain; external reconciliation required; no automatic retry"}
+    print(json.dumps(value, sort_keys=True))
+
+
+def cli():
+    parser = CLIParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("command", choices=("send", "identity-check", "prepare", "preview", "enqueue", "flush", "enroll", "retry", "status"))
     parser.add_argument("--state", type=Path)
     mode = parser.add_mutually_exclusive_group()
@@ -525,7 +614,7 @@ def main():
         if any((args.state, args.event_id, args.credentials_file, args.confirm_live,
                 args.report, args.dry_run, args.live, args.owner_activation_file)):
             parser.error("identity-check accepts no state, auth or write arguments")
-        print(json.dumps(identity_check(), indent=2, sort_keys=True))
+        print_status(identity_check())
         return
     if not args.state:
         parser.error("--state is required")
@@ -535,23 +624,32 @@ def main():
                 or (args.dry_run and (args.credentials_file or args.owner_activation_file))
                 or (args.live and (not args.credentials_file or not args.owner_activation_file))):
             parser.error("send requires one --event-id and --dry-run OR --live with owner activation and credentials")
-        print(json.dumps(send(args.state, args.event_id, live=args.live, dry_run=args.dry_run,
-                              activation_file=args.owner_activation_file,
-                              credentials_file=args.credentials_file), indent=2, sort_keys=True))
+        print_status(send(args.state, args.event_id, live=args.live, dry_run=args.dry_run,
+                          activation_file=args.owner_activation_file,
+                          credentials_file=args.credentials_file))
         return
     if args.live or args.dry_run or args.owner_activation_file:
         parser.error("single-event flags require send")
     if args.command in {"prepare", "preview"}:
         if not args.event_id or args.credentials_file or args.confirm_live or args.report:
             parser.error("offline preparation requires only --state and --event-id; live/report arguments forbidden")
-        print(json.dumps(prepare(args.state, args.event_id), indent=2, sort_keys=True))
+        print_status(prepare(args.state, args.event_id))
         return
     if args.event_id and args.command != "retry":
         parser.error("--event-id is only valid for prepare, preview or retry; flush is a batch operation")
+    if args.command in {"status", "retry"} and any((args.report, args.credentials_file, args.confirm_live)):
+        parser.error("inspection and retry forbid report, credentials and live arguments")
+    if args.command == "enqueue" and any((args.credentials_file, args.confirm_live)):
+        parser.error("enqueue accepts a validated report, not credentials or live arguments")
+    if args.command in {"flush", "enroll"} and args.report:
+        parser.error("network commands cannot accept an event payload or report")
     if args.command == "status":
         for path in sorted((args.state / "outbox").glob("*.json")):
             record = read_json(path, args.state)
-            print(json.dumps({"id": record["event"]["id"], "status": record["status"], "attempts": record["attempts"], "error": record.get("error")}))
+            status = delivery_status(args.state, path.stem, record)
+            reason = ("delivery is uncertain; no automatic retry; explicit named retry required for batch records; single-event receipts require external reconciliation"
+                      if status == "uncertain" else str(record.get("error") or "").replace("_", " "))
+            print(json.dumps({"id": record["event"]["id"], "status": status, "attempts": record["attempts"], "error": record.get("error"), "reason": reason}))
         return
     if args.command == "retry":
         if not args.event_id:
