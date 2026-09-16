@@ -86,9 +86,9 @@ Port/preparation/engine/adapter/reconciliation are reviewed and integrated local
 
 ## Verification
 - [ ] Apply [independent isolated execution](../../../../qa/code-blind-functional/isolated-execution.md) to affected functional handoff; record schema-2 proof or integrator-accepted internal-only N/A and later gate. Historical tests are not upgraded.
-- [ ] Focused: `python3 -m unittest discover -s scripts/initiative_control -p 'test_*.py'`; install only pinned requirements in a disposable venv.
+- [x] Focused suite in a disposable venv with only pinned requirements, as this gate specifies: **689 of 689, OK**. The venv mattered - running it in a convenient pre-existing venv gave 518 tests and 5 import errors, so 171 tests were never running and I reported the gap as 'five known errors' all day. [Correction](../../../../qa/initiative-control/management-bootstrap/suite-venv-20260916.md).
 - [ ] Native: session_validity plus existing delivery/recovery selectors, full crate via just test and normal-library check after guarded formatting; production-compiled private module, no public caller.
-- [ ] Governance: `python3 docs/plans/check.py`, `python3 docs/sprints/check.py`, `git diff --check`.
+- [x] Governance: `python3 docs/plans/check.py` and `python3 docs/sprints/check.py` pass, `git diff --check` clean, verified on the integration tip.
 - [ ] Independent final-tree review and source manifest; inspect any registration/config changes before integration.
 - [ ] Actual-key native `/tasknode` success/cancel/expiry/relink if interactive runtime changes; otherwise record not applicable with reason.
 - [ ] Named human accepts dashboard/recovery and first-live-event evidence; all protected/financial actions remain excluded.
