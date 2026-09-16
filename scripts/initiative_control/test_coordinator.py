@@ -925,5 +925,253 @@ os._exit(74)
                     self.call(operation, **payload, error="stale owner revision")
 
 
+class SprintRegistrationTests(unittest.TestCase):
+    """Document-backed owner registration in disposable, synthetic state."""
+
+    setUp = CoordinatorTests.setUp
+    tearDown = CoordinatorTests.tearDown
+    database_rows = OwnerControlsTests.database_rows
+
+    RELATIVE = "docs/sprints/current/initiative-delivery-control/pf82.md"
+
+    def repo(self):
+        root = Path(self.tmp.name) / "repo"
+        for plan in ("p0-security-levels", "portfolio-agent-cost-accounting",
+                     "initiative-delivery-control"):
+            path = root / "docs/plans/active" / (plan + ".md")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("# " + plan + "\n")
+        return root
+
+    def document(self, relative=None, **changes):
+        front = {"sprint_id": "PF82", "status": "draft",
+                 "plan_file": "docs/plans/active/initiative-delivery-control.md",
+                 "depends_on": "PF80"}
+        front.update(changes)
+        path = self.repo() / (relative or self.RELATIVE)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("---\n" + "".join(f"{k}: {json.dumps(v)}\n" for k, v in front.items())
+                        + "---\n# Synthetic sprint\n")
+        return path
+
+    def payload(self, **changes):
+        self.document()
+        payload = dict(sprint_id="PF82", workstream="delivery", dependencies=["PF80"],
+                       status="draft", source_path=self.RELATIVE, repo=str(self.repo()),
+                       expected_revision=self.c.snapshot()["revision"],
+                       evidence={"inspection": "synthetic owner evidence"})
+        payload.update(changes)
+        return payload
+
+    def refused(self, reason, payload):
+        before = self.database_rows()
+        with self.assertRaisesRegex(Rejected, reason):
+            self.c.register_sprint(**payload)
+        self.assertEqual(before, self.database_rows(), "refusal must roll back every table")
+
+    def test_register_draft_is_durable_audited_and_does_not_activate(self):
+        payload = self.payload()
+        before = self.c.snapshot()
+        receipt = self.c.register_sprint(**payload)
+        state = Coordinator(self.root).snapshot()
+        self.assertEqual(before["revision"] + 1, state["revision"])
+        self.assertEqual(before["workstreams"], state["workstreams"])
+        for key in ("enabled", "actions", "allocations", "manager"):
+            self.assertEqual(before[key], state[key])
+        self.assertEqual(before["sprints"], {k: v for k, v in state["sprints"].items() if k != "PF82"})
+        self.assertEqual("draft", state["sprints"]["PF82"]["status"])
+        self.assertFalse(state["sprints"]["PF82"]["archived"])
+        proof = self.c.read_evidence(receipt["evidence_digest"])
+        self.assertEqual("PF82", proof["sprint_id"])
+        # The row stores the repository-relative path, never one worktree.
+        self.assertEqual(self.RELATIVE, proof["record"]["source_path"])
+        self.assertEqual(self.RELATIVE, state["sprints"]["PF82"]["source_path"])
+        import hashlib
+        self.assertEqual(hashlib.sha256(self.document().read_bytes()).hexdigest(),
+                         proof["document_sha256"])
+        self.assertEqual(payload["evidence"], proof["evidence"])
+        with self.c.connection() as db:
+            audit = json.loads(db.execute("SELECT body FROM audit WHERE operation='owner_register_sprint'").fetchone()[0])
+            event = json.loads(db.execute("SELECT body FROM events WHERE id=?",
+                                         (f'owner_register_sprint:{before["revision"]}',)).fetchone()[0])
+        self.assertEqual(payload["expected_revision"], audit["expected_revision"])
+        self.assertEqual("PF82", event["sprint"])
+        self.assertEqual(audit, self.c.read_evidence(event["evidence"]["evidence_digest"]))
+
+    def test_register_existing_id_refused(self):
+        for lifecycle, archived in (("draft", False), ("in_progress", False), ("completed", True)):
+            with self.subTest(lifecycle=lifecycle):
+                with self.c.mutation("synthetic_fixture", {}) as (_, state):
+                    state["sprints"]["PF81"].update(status=lifecycle, archived=archived)
+                    if lifecycle == "in_progress":
+                        state["sprints"]["PF80"]["status"] = "completed"
+                        state["workstreams"]["delivery"]["sprint"] = "PF81"
+                    else:
+                        state["sprints"]["PF80"]["status"] = "in_progress"
+                        state["workstreams"]["delivery"]["sprint"] = "PF80"
+                payload = self.payload(sprint_id="PF81")
+                self.document(sprint_id="PF81")
+                self.refused("sprint already registered", payload)
+
+    def test_register_document_mismatch_refused(self):
+        for fields, reason in (
+            ({"sprint_id": "OTHER"}, "id mismatch"),
+            ({"plan_file": "docs/plans/active/portfolio-agent-cost-accounting.md"}, "workstream mismatch"),
+            ({"workstream": "accounting"}, "workstream mismatch"),
+            ({"status": "in_progress"}, "status mismatch"),
+            ({"depends_on": "PF81"}, "dependencies mismatch"),
+        ):
+            with self.subTest(fields=fields):
+                payload = self.payload()
+                self.document(**fields)
+                self.refused("sprint document " + reason, payload)
+
+    def test_register_missing_file_refused(self):
+        payload = self.payload()
+        self.document().unlink()
+        self.refused("sprint source_path unreadable", payload)
+
+    def test_register_unknown_dependency_refused(self):
+        payload = self.payload(dependencies=["UNKNOWN"])
+        self.document(depends_on="UNKNOWN")
+        self.refused("unknown dependency", payload)
+
+    def test_register_cycle_refused(self):
+        payload = self.payload(dependencies=["PF82"])
+        self.document(depends_on="PF82")
+        self.refused("dependency cycle", payload)
+        # Valid state cannot grow a multi-node cycle by adding only backward
+        # references. A legacy corrupt component must nevertheless fail closed.
+        with self.c.mutation("synthetic_corrupt_graph", {}) as (_, state):
+            state["sprints"]["PF80"]["dependencies"] = ["PF81"]
+        self.refused("dependency cycle", self.payload())
+
+    def test_register_stale_revision_refused(self):
+        payload = self.payload()
+        self.c.event({"id": "new-owner-input"})
+        self.refused("stale owner revision", payload)
+
+    def test_register_evidence_required(self):
+        self.refused("owner revision and evidence required", self.payload(evidence={}))
+
+    def test_register_paused_refused(self):
+        self.c.set_enabled(False, {"fixture": "pause"})
+        self.refused("dispatch/workstream paused", self.payload())
+        self.c.set_enabled(True, {"fixture": "resume"})
+        self.c.set_stream_mode("delivery", "paused", self.c.snapshot()["revision"], {"fixture": "pause"})
+        self.refused("dispatch/workstream paused", self.payload())
+
+    def test_register_reserved_status_refused(self):
+        payload = self.payload(status="in_progress")
+        self.document(status="in_progress")
+        self.refused("registered sprint must start as draft", payload)
+
+    def test_register_reservation_limit_refused(self):
+        with self.c.mutation("synthetic_corrupt_reservations", {}) as (_, state):
+            state["sprints"]["PF81"]["status"] = "blocked"
+        self.refused("three-reservation limit", self.payload())
+
+    def test_register_malformed_front_matter_refused(self):
+        for document, reason in (
+            ("# No front matter\n", "sprint front matter required"),
+            ('---\nsprint_id: "PF82"\nsprint_id: "OTHER"\n---\n', "duplicate sprint front matter key"),
+        ):
+            with self.subTest(reason=reason):
+                payload = self.payload()
+                self.document().write_text(document)
+                self.refused(reason, payload)
+
+    def test_registered_sprint_accepts_an_allocation(self):
+        """The point of registering: work can then be allocated against it."""
+        self.c.register_sprint(**self.payload())
+        allocation = {"sprint": "PF82", "kinds": ["implement"], "resources": ["worktree"],
+                      "scope": ["codex-rs/core/src/x.rs"], "timeout_seconds": 1800,
+                      "inputs": {"task": "synthetic"}}
+        self.c.put_allocation("pf82-impl-01", allocation, False,
+                              self.c.snapshot()["revision"], {"fixture": "allocate"})
+        self.assertEqual(allocation, self.c.snapshot()["allocations"]["pf82-impl-01"])
+
+    def test_source_path_is_confined_to_repository_sprint_documents(self):
+        outside = Path(self.tmp.name) / "elsewhere.md"
+        outside.write_text(self.document().read_text())
+        link = self.repo() / "docs/sprints/current/initiative-delivery-control/escape.md"
+        link.symlink_to(outside)
+        confined = "must be repository-relative under docs/sprints"
+        for source_path, reason in (
+            (str(self.document()), confined),
+            ("/etc/passwd", confined),
+            ("docs/sprints/../../elsewhere.md", confined),
+            ("docs/plans/active/initiative-delivery-control.md", confined),
+            ("docs/sprints/current/initiative-delivery-control/pf82.txt", confined),
+            ("docs/sprints//current/initiative-delivery-control/pf82.md", confined),
+            ("docs/sprints/./current/initiative-delivery-control/pf82.md", confined),
+            ("docs/sprints/current/initiative-delivery-control/escape.md",
+             "escapes the repository"),
+        ):
+            with self.subTest(source_path=source_path):
+                self.refused("sprint source_path " + reason, self.payload(source_path=source_path))
+
+    def test_repo_that_is_not_a_directory_says_so(self):
+        notdir = Path(self.tmp.name) / "file-as-repo"
+        notdir.write_text("not a checkout\n")
+        self.refused("sprint repo must be a directory", self.payload(repo=str(notdir)))
+        self.refused("sprint repo must be a directory",
+                     self.payload(repo=str(Path(self.tmp.name) / "absent")))
+
+    def test_repo_without_the_named_plan_is_not_a_checkout(self):
+        bare = Path(self.tmp.name) / "bare"
+        (bare / Path(self.RELATIVE).parent).mkdir(parents=True)
+        (bare / self.RELATIVE).write_text(self.document().read_text())
+        self.refused("sprint plan file missing from repository", self.payload(repo=str(bare)))
+
+    def test_re_registration_corrects_the_document_reference_of_an_unstarted_draft(self):
+        self.c.register_sprint(**self.payload())
+        first = self.c.snapshot()["sprints"]["PF82"]["registration"]
+        moved = "docs/sprints/current/initiative-delivery-control/pf82-renamed.md"
+        self.document(relative=moved)
+        receipt = self.c.register_sprint(**self.payload(source_path=moved, replace=True))
+        record = Coordinator(self.root).snapshot()["sprints"]["PF82"]
+        self.assertEqual(moved, record["source_path"])
+        self.assertNotEqual(first, record["registration"])
+        self.assertEqual(receipt, record["registration"])
+        self.assertEqual(("draft", False, ["PF80"], "delivery"),
+                         (record["status"], record["archived"],
+                          record["dependencies"], record["workstream"]))
+        proof = self.c.read_evidence(receipt["evidence_digest"])
+        self.assertEqual(moved, proof["record"]["source_path"])
+
+    def test_re_registration_refused_once_the_sprint_is_real(self):
+        self.refused("unknown sprint", self.payload(replace=True))
+        self.c.register_sprint(**self.payload())
+        self.refused("sprint already registered", self.payload())
+        self.refused("may only correct the document reference",
+                     self.payload(replace=True, workstream="accounting"))
+        self.refused("may only correct the document reference",
+                     self.payload(replace=True, dependencies=[]))
+        self.c.put_allocation("pf82-impl-01", {"sprint": "PF82", "kinds": ["implement"],
+                              "resources": ["worktree"], "scope": ["codex-rs/core/src/x.rs"],
+                              "timeout_seconds": 1800, "inputs": {"task": "synthetic"}},
+                              False, self.c.snapshot()["revision"], {"fixture": "allocate"})
+        self.refused("already has allocations or actions", self.payload(replace=True))
+        with self.c.mutation("synthetic_fixture", {}) as (_, state):
+            del state["allocations"]["pf82-impl-01"]
+            state["sprints"]["PF82"]["status"] = "in_progress"
+        self.refused("only an unstarted registered draft", self.payload(replace=True))
+
+    def test_re_registration_refused_for_a_sprint_worked_only_in_archived_history(self):
+        """state["actions"] is pruned, and an allocation id can be repointed."""
+        self.c.register_sprint(**self.payload())
+        with self.c.connection() as db:
+            db.execute("INSERT INTO action_history(id,body) VALUES(?,?)",
+                       ("pf82-old-01", json.dumps({"id": "pf82-old-01", "sprint": "PF82",
+                                                   "workstream": "delivery",
+                                                   "status": "accepted"})))
+        self.assertEqual({}, self.c.snapshot()["actions"])
+        self.refused("already has allocations or actions", self.payload(replace=True))
+
+    def test_replace_flag_must_be_explicit_boolean(self):
+        self.refused("explicit add/replace required", self.payload(replace=1))
+
+
 if __name__ == "__main__":
     unittest.main()

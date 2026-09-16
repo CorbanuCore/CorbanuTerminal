@@ -261,6 +261,151 @@ class Coordinator:
             self._event(db, {"id": f"{operation}:{expected_revision}",
                              **details, "evidence": self._reference(db, audit)})
 
+    @staticmethod
+    def _sprint_document(repo, source_path):
+        """Read the sprint document at a repository-relative path inside `repo`.
+
+        The ledger's agreement is with a repository document, so the caller may
+        choose the checkout but never the shape of the path: an absolute path, a
+        traversal, a symlink out of the tree or anything outside docs/sprints/ is
+        refused, and the stored path stays relative so the row does not pin one
+        worktree. `repo` must actually be a Corbanu checkout, which is proved by
+        the plan file the document names, not by the caller saying so.
+        """
+        require(isinstance(source_path, str) and source_path.strip(), "sprint source_path required")
+        segments = source_path.split("/")
+        # Stored verbatim, so the path must also be canonical: two registrations
+        # of one document cannot be recorded under different strings.
+        require(not source_path.startswith("/") and "\\" not in source_path
+                and re.fullmatch(r"docs/sprints/[A-Za-z0-9._/-]+\.md", source_path) is not None
+                and all(part and part not in {".", ".."} for part in segments),
+                "sprint source_path must be repository-relative under docs/sprints")
+        require(Path(repo).is_dir(), "sprint repo must be a directory")
+        # Rejected is a ValueError, so a refusal raised inside the filesystem
+        # try-block would be relabelled "unreadable"; each check reports itself.
+        try:
+            root = Path(repo).resolve(strict=True)
+            path = (root / source_path).resolve(strict=True)
+        except (OSError, ValueError) as exc:
+            raise Rejected("sprint source_path unreadable") from exc
+        require(path.is_relative_to(root), "sprint source_path escapes the repository")
+        require(path.is_file(), "sprint source_path must be a regular file")
+        try:
+            body = path.read_bytes()
+            text = body.decode("utf-8")
+        except (OSError, ValueError) as exc:
+            raise Rejected("sprint source_path unreadable") from exc
+        require(len(body) <= 262144, "sprint document too large")
+        front = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", text, re.DOTALL)
+        require(front is not None, "sprint front matter required")
+        fields = {}
+        for line in front[1].splitlines():
+            match = re.fullmatch(r"([a-z][a-z0-9_-]*):[ \t]*(.*?)", line)
+            require(match is not None, "invalid sprint front matter")
+            key, value = match.groups()
+            require(key not in fields, "duplicate sprint front matter key")
+            value = value.strip()
+            if value.startswith('"'):
+                try:
+                    value = json.loads(value)
+                except ValueError as exc:
+                    raise Rejected("invalid sprint scalar") from exc
+            elif value.startswith("'"):
+                require(value.endswith("'") and len(value) >= 2, "invalid sprint scalar")
+                value = value[1:-1].replace("''", "'")
+            require(isinstance(value, str), "invalid sprint scalar")
+            fields[key] = value
+        return root, source_path, fields, hashlib.sha256(body).hexdigest()
+
+    def register_sprint(self, sprint_id, workstream, dependencies, status, source_path,
+                        expected_revision, evidence, repo, replace=False):
+        """Owner-only add; validate the document, never activate a sprint.
+
+        Repository sprint documents identify their workstream through plan_file.
+        An explicit workstream field, when present, must agree too.
+
+        `replace` re-registers a sprint that is still an unstarted draft, so a row
+        recorded with a bad source_path can be corrected through the audited API
+        instead of by hand. It refuses once the sprint has been allocated, worked
+        or archived, and it can only rewrite the registration and the path: the
+        workstream, status and dependencies must be unchanged.
+        """
+        ident(sprint_id)
+        ident(workstream)
+        require(type(replace) is bool, "explicit add/replace required")
+        require(status == "draft", "registered sprint must start as draft")
+        require(isinstance(dependencies, list) and all(isinstance(d, str) for d in dependencies)
+                and len(set(dependencies)) == len(dependencies), "invalid sprint dependencies")
+        for dependency in dependencies:
+            ident(dependency)
+        with self.owner_mutation("owner_register_sprint", expected_revision, evidence,
+                                 sprint=sprint_id, replace=replace) as (db, state):
+            existing = state["sprints"].get(sprint_id)
+            require((existing is not None) == replace,
+                    "sprint already registered" if existing is not None else "unknown sprint")
+            if existing is not None:
+                require(existing.get("status") == "draft" and not existing.get("archived")
+                        and "registration" in existing,
+                        "only an unstarted registered draft can be re-registered")
+                require(existing.get("workstream") == workstream
+                        and existing.get("dependencies") == list(dependencies),
+                        "re-registration may only correct the document reference")
+                # state["actions"] is pruned into action_history, and an
+                # allocation id can be repointed, so neither alone proves the
+                # sprint was never worked. Both are checked, plus the history.
+                require(not any(action.get("sprint") == sprint_id
+                                for action in state["actions"].values())
+                        and not any(allocation.get("sprint") == sprint_id
+                                    for allocation in state["allocations"].values())
+                        and not any(json.loads(row[0]).get("sprint") == sprint_id for row
+                                    in db.execute("SELECT body FROM action_history")),
+                        "sprint already has allocations or actions")
+            require(workstream in state["workstreams"], "unknown sprint workstream")
+            self._unpaused(state, {"workstream": workstream})
+            root, path, front, document_digest = self._sprint_document(repo, source_path)
+            plans = {
+                "security": "docs/plans/active/p0-security-levels.md",
+                "accounting": "docs/plans/active/portfolio-agent-cost-accounting.md",
+                "delivery": "docs/plans/active/initiative-delivery-control.md",
+            }
+            require(front.get("sprint_id") == sprint_id, "sprint document id mismatch")
+            require(workstream in plans and front.get("plan_file") == plans[workstream]
+                    and front.get("workstream", workstream) == workstream,
+                    "sprint document workstream mismatch")
+            # A directory holding one crafted file is not a checkout. The plan the
+            # document claims to belong to has to be present in the same tree.
+            require((root / plans[workstream]).is_file(), "sprint plan file missing from repository")
+            require(front.get("status") == status, "sprint document status mismatch")
+            require("depends_on" in front, "sprint document dependencies missing")
+            declared = front["depends_on"]
+            declared = [] if declared.lower() == "none" else [d.strip() for d in declared.split(",")]
+            require(declared == dependencies, "sprint document dependencies mismatch")
+            require(sprint_id not in dependencies, "dependency cycle")
+            require(all(d in state["sprints"] for d in dependencies), "unknown dependency")
+            record = {"workstream": workstream, "status": status, "dependencies": list(dependencies),
+                      "archived": False, "source_path": path}
+            state["sprints"][sprint_id] = record
+            # Validate the whole graph, including any malformed legacy component.
+            visited, visiting = set(), set()
+            def visit(key):
+                require(key not in visiting, "dependency cycle")
+                if key in visited:
+                    return
+                visiting.add(key)
+                for dependency in state["sprints"][key]["dependencies"]:
+                    require(dependency in state["sprints"], "unknown dependency")
+                    visit(dependency)
+                visiting.remove(key)
+                visited.add(key)
+            for key in state["sprints"]:
+                visit(key)
+            self._reservations(state)
+            receipt = self._reference(db, {"sprint_id": sprint_id, "record": record,
+                "document_sha256": document_digest, "revision": expected_revision + 1,
+                "evidence": evidence})
+            record["registration"] = receipt
+        return receipt
+
     def put_allocation(self, allocation_id, allocation, replace, expected_revision, evidence):
         require(type(replace) is bool, "explicit add/replace required")
         with self.owner_mutation("owner_allocation", expected_revision, evidence,
