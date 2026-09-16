@@ -28,6 +28,32 @@ pub use super::types::Patch;
 pub use super::types::Presence;
 pub use super::types::Usage;
 
+/// One UTC day's immutable, recorded-only explanation. No collection coverage claim.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Inspection {
+    pub owner: ThreadId,
+    pub utc_day: i64,
+    pub read_at_ms: i64,
+    pub coverage: RetentionCoverage,
+    pub totals: DayTotals,
+    pub requests: std::collections::BTreeMap<uuid::Uuid, Vec<ObservationQuote>>,
+}
+
+/// Unavailability never carries a partial amount.
+#[derive(Debug, PartialEq, Eq)]
+pub enum InspectionDay {
+    Absent,
+    MissingThread,
+    NeedsRefresh,
+    TooLarge,
+    DetailUnavailable {
+        coverage: RetentionCoverage,
+        read_at_ms: i64,
+        compact: bool,
+    },
+    Ready(Inspection),
+}
+
 /// Original dispatch-time evidence, never a catalog to select a replacement from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OriginalPriceEvidence {
@@ -60,6 +86,40 @@ pub struct AccountingStore<'a> {
 }
 
 impl<'a> AccountingStore<'a> {
+    /// Inspect an existing ledger in one read transaction, without installation,
+    /// maintenance, repricing or repair. All times are UTC milliseconds/days.
+    pub async fn inspect_day(
+        runtime: &StateRuntime,
+        owner: ThreadId,
+        utc_day: i64,
+        read_at_ms: i64,
+    ) -> anyhow::Result<InspectionDay> {
+        let start = utc_day.checked_mul(86_400_000).context("day overflow")?;
+        ensure!(utc_day >= 0 && read_at_ms >= start, "invalid or future day");
+        start.checked_add(86_400_000).context("day end overflow")?;
+        let mut tx = runtime.pool.begin().await?;
+        if !ledger_exists(&mut tx).await? {
+            let objects: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM sqlite_schema WHERE name GLOB 'draft_accounting_*'",
+            )
+            .fetch_one(&mut *tx)
+            .await?;
+            ensure!(objects == 0, "unversioned accounting schema");
+            return Ok(InspectionDay::Absent);
+        }
+        validate_on_connection(&mut tx).await?;
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM threads WHERE id = ?)")
+            .bind(owner.to_string())
+            .fetch_one(&mut *tx)
+            .await?;
+        if !exists {
+            return Ok(InspectionDay::MissingThread);
+        }
+        let result = Journal::inspect_on_connection(&mut tx, owner, utc_day, read_at_ms).await?;
+        tx.commit().await?;
+        Ok(result)
+    }
+
     /// Atomically import 1..=64 complete attempts aged 90..365 days without raw
     /// staging. Each has at most 256 observations, with at most 4096 in total.
     /// Duplicate identical entries receive the same outcome but contribute once.

@@ -1,0 +1,44 @@
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                         │
+│                                                       │
+│ model:     z-ai/glm-5.2   /model to change            │
+│ directory: /Volumes/…/worktrees/acct-inspect-20260915 │
+╰───────────────────────────────────────────────────────╯
+
+• Created Solana wallet F7t8MDqnG2tz1iESsFMwPCLwv27t21ihx1kVGYAE7Rgo. The recovery material is shown only in the secure view.
+
+• Wallet unlocked for 5 minute(s).
+
+
+› Find and fix a bug in @filename
+
+  Ambient GLM 5.2 via ambient standard · /Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915 · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,315 @@
+{
+  "claim": "34 runnable functions passed. This is automated implementation evidence, not independent frozen-case or human acceptance. Read each evidence_limit and the receipt.",
+  "cases": [
+    {
+      "number": 1,
+      "name": "accounting_inspect_absent_schema_is_read_only",
+      "frozen_case": "missing installation returns unavailable; schema/ledgers/tables unchanged, no install or maintenance.",
+      "junit": "impl-03-state-tasknode-final.junit.xml",
+      "log": "impl-03-state-tasknode-final.log",
+      "run_uuid": "92598bba-e6f2-48b7-9eb6-ebe9c57ed06c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 2,
+      "name": "accounting_inspect_schema_rejection_matrix",
+      "frozen_case": "partial/unversioned/checksum/newer/failed ledger rejects; no repair and no empty-day laundering.",
+      "junit": "impl-03-state-tasknode-final.junit.xml",
+      "log": "impl-03-state-tasknode-final.log",
+      "run_uuid": "92598bba-e6f2-48b7-9eb6-ebe9c57ed06c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 3,
+      "name": "accounting_inspect_raw_day_reconciles_contributions",
+      "frozen_case": "independently literal full/partial/retry goldens equal complete DayTotals and grouped attempt membership; summing multiple estimate versions would fail.",
+      "junit": "impl-03-state-tasknode-final.junit.xml",
+      "log": "impl-03-state-tasknode-final.log",
+      "run_uuid": "92598bba-e6f2-48b7-9eb6-ebe9c57ed06c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 4,
+      "name": "accounting_inspect_original_null_and_price_are_immutable",
+      "frozen_case": "original NULL stays unpriced; changed current catalog/config cannot fill it; bound rates/source/interval remain original.",
+      "junit": "impl-03-state-tasknode-final.junit.xml",
+      "log": "impl-03-state-tasknode-final.log",
+      "run_uuid": "92598bba-e6f2-48b7-9eb6-ebe9c57ed06c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 5,
+      "name": "accounting_inspect_missing_binding_is_not_unpriced",
+      "frozen_case": "missing binding, wrong owner or contribution reference fails explicitly; legitimate NULL succeeds as unknown.",
+      "junit": "impl-03-state-tasknode-final.junit.xml",
+      "log": "impl-03-state-tasknode-final.log",
+      "run_uuid": "92598bba-e6f2-48b7-9eb6-ebe9c57ed06c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 6,
+      "name": "accounting_inspect_checkpoint_and_stale_estimate",
+      "frozen_case": "later read time labels checkpoint lag without writing; stale contributions/missing estimate return needs-refresh; no silent currentness or repair.",
+      "junit": "impl-03-state-tasknode-final.junit.xml",
+      "log": "impl-03-state-tasknode-final.log",
+      "run_uuid": "92598bba-e6f2-48b7-9eb6-ebe9c57ed06c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 7,
+      "name": "accounting_inspect_retention_and_compact_matrix",
+      "frozen_case": "exact raw-cutoff boundary, compact-only, mixed compact/raw, expired aggregate and oldest-day metadata; no detail beyond current 90-day cutoff even if raw bytes remain.",
+      "junit": "impl-03-state-tasknode-final.junit.xml",
+      "log": "impl-03-state-tasknode-final.log",
+      "run_uuid": "92598bba-e6f2-48b7-9eb6-ebe9c57ed06c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 8,
+      "name": "accounting_inspect_half_open_date_bounds",
+      "frozen_case": "exact day start included/end excluded, negative/future day/backward clock/overflow rejected; different observation arrival dates do not move attempts.",
+      "junit": "impl-03-state-tasknode-final.junit.xml",
+      "log": "impl-03-state-tasknode-final.log",
+      "run_uuid": "92598bba-e6f2-48b7-9eb6-ebe9c57ed06c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 9,
+      "name": "accounting_inspect_corruption_and_unknowns",
+      "frozen_case": "conflicting identity/source sequence/old estimate corruption and overflow fail; Missing/Null/0 and no-observation admission remain distinguishable, no fabricated terminal reason.",
+      "junit": "impl-03-state-tasknode-final.junit.xml",
+      "log": "impl-03-state-tasknode-final.log",
+      "run_uuid": "92598bba-e6f2-48b7-9eb6-ebe9c57ed06c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 10,
+      "name": "accounting_inspect_single_snapshot_concurrent_writer",
+      "frozen_case": "deterministic second-connection writer/read barrier proves no mix of old summary with new rows; no probabilistic race-winner expectation.",
+      "junit": "impl-03-state-tasknode-final.junit.xml",
+      "log": "impl-03-state-tasknode-final.log",
+      "run_uuid": "92598bba-e6f2-48b7-9eb6-ebe9c57ed06c",
+      "runnable_function_result": "PASS",
+      "evidence_limit": "Deterministic writer barrier around the same transaction reader; no test-only pause inside public inspect_day."
+    },
+    {
+      "number": 11,
+      "name": "accounting_inspect_public_reopens_twice",
+      "frozen_case": "ordinary installed facade setup, close/reopen twice, identical ownership/current observations/original-price packet; no replay charge.",
+      "junit": "impl-03-state-tasknode-final.junit.xml",
+      "log": "impl-03-state-tasknode-final.log",
+      "run_uuid": "92598bba-e6f2-48b7-9eb6-ebe9c57ed06c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 12,
+      "name": "accounting_inspect_public_reads_do_not_write",
+      "frozen_case": "whole accounting/native table and migration/checkpoint comparison before/after success/absence/error/cancel; selected payload outputs only, no extra auth/network.",
+      "junit": "impl-03-state-tasknode-final.junit.xml",
+      "log": "impl-03-state-tasknode-final.log",
+      "run_uuid": "92598bba-e6f2-48b7-9eb6-ebe9c57ed06c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 13,
+      "name": "accounting_inspect_public_identity_retry_scope",
+      "frozen_case": "two logical calls in one turn and multiple retry attempts, cross-day predecessor, same provider/model in another thread; only correct owner/day participates once.",
+      "junit": "impl-03-state-tasknode-final.junit.xml",
+      "log": "impl-03-state-tasknode-final.log",
+      "run_uuid": "92598bba-e6f2-48b7-9eb6-ebe9c57ed06c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 14,
+      "name": "accounting_inspect_public_literal_partial_goldens",
+      "frozen_case": "explicit Inclusive 100 input/20 read/write missing/40 output yields unknown noncached/full cost and known read+output subtotal using fixed synthetic rates; full counterpart with reported write zero, all-zero-unpriced and nonzero-unpriced variants.",
+      "junit": "impl-03-state-tasknode-final.junit.xml",
+      "log": "impl-03-state-tasknode-final.log",
+      "run_uuid": "92598bba-e6f2-48b7-9eb6-ebe9c57ed06c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 15,
+      "name": "accounting_inspect_public_delete_and_empty",
+      "frozen_case": "native deletion leaves no recoverable packet; unrelated owner intact; no-schema, absent-owner and empty day are distinct; old IDs do not resurrect.",
+      "junit": "impl-03-state-tasknode-final.junit.xml",
+      "log": "impl-03-state-tasknode-final.log",
+      "run_uuid": "92598bba-e6f2-48b7-9eb6-ebe9c57ed06c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 16,
+      "name": "accounting_inspect_public_limits_no_truncation",
+      "frozen_case": "exact accepted/rejected row/observation/result limits; no amount for an incomplete enumeration; no silent first-page-total claim.",
+      "junit": "impl-03-state-tasknode-final.junit.xml",
+      "log": "impl-03-state-tasknode-final.log",
+      "run_uuid": "92598bba-e6f2-48b7-9eb6-ebe9c57ed06c",
+      "runnable_function_result": "PASS",
+      "evidence_limit": "Valid 512/4096 acceptance and 513/4097 rejection. 10000-row/4MiB input boundaries use invalid payloads: validation error at edge, TooLarge above. No maximal valid projected-result fixture."
+    },
+    {
+      "number": 17,
+      "name": "accounting_inspect_partial_and_unknown_copy",
+      "frozen_case": "inline snapshots, known plus unknown and full-unavailable adjacent; all seven metrics and billed/coverage distinctions.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 18,
+      "name": "accounting_inspect_unpriced_zero_and_missing_rate",
+      "frozen_case": "explicit zero vs unknown vs missing snapshot vs absent individual rate; no $0 headline for unknown work.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 19,
+      "name": "accounting_inspect_exact_rounding_reconciliation",
+      "frozen_case": "canonical decimals, half-even ties, nonzero sub-micro, sum-before-rounding and subtotal detail remain auditable.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 20,
+      "name": "accounting_inspect_request_attempt_price_detail",
+      "frozen_case": "full IDs, retry link, provider/model, scope, original price provenance and interval, absent literal wire/status disclosed.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 21,
+      "name": "accounting_inspect_narrow_and_long_fields",
+      "frozen_case": "40- and 80-column layouts and small viewport; unknown labels and every required detail remain reachable with ordinary keys, sanitized long provider/model strings cannot inject terminal controls.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 22,
+      "name": "accounting_inspect_availability_state_snapshots",
+      "frozen_case": "absent/empty/missing-thread/remote/corrupt/stale/retention/too-large/loading states have distinct bounded text and recovery controls.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 23,
+      "name": "accounting_inspect_coverage_never_claims_run_complete",
+      "frozen_case": "full numeric estimates still recorded-only; no billing, allowance, balance or collection-complete label; cross-day request caveat retained.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 24,
+      "name": "accounting_inspect_snapshot_navigation_roundtrip",
+      "frozen_case": "group -> attempt -> component/price pages -> back retains exact snapshot and selected row; every row reachable, no hidden truncation.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 25,
+      "name": "accounting_inspect_menu_and_reset_regression",
+      "frozen_case": "original Show usage/reset positions and events retained, new third action works; disabled-reset keyboard navigation expectation updated explicitly.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 26,
+      "name": "accounting_inspect_cancel_refresh_generation",
+      "frozen_case": "Escape during loading, close/reopen and refresh reject earlier results; navigation cannot reopen a cancelled view.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 27,
+      "name": "accounting_inspect_command_without_account_auth",
+      "frozen_case": "`/usage requests` works with synthetic direct-provider/signed-out profile; no backend/Plan credential probe; existing account command auth remains intact.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 28,
+      "name": "accounting_inspect_command_date_validation",
+      "frozen_case": "valid explicit date/default UTC day and invalid/trailing/future inputs; deterministic date injection, no environment edits or query on invalid input.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 29,
+      "name": "accounting_inspect_app_real_store_to_view",
+      "frozen_case": "real normal-library store populated synthetically, route through AppEvent and keys, compare visible exact component/subtotal packet with independent fixture expectations; no API usage request.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 30,
+      "name": "accounting_inspect_app_remote_does_not_read_local",
+      "frozen_case": "local decoy ledger populated but remote target returns unsupported; no local values surfaced or remote account fallback.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 31,
+      "name": "accounting_inspect_app_thread_switch_stale_reply",
+      "frozen_case": "held real read then switch thread/clear and release; no old data on new thread, no popup reopening; fresh read uses current owner.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS",
+      "evidence_limit": "Actual database result held before UI delivery, not a paused SQLite engine."
+    },
+    {
+      "number": 32,
+      "name": "accounting_inspect_app_error_retry_and_timeout",
+      "frozen_case": "missing optional state, locked/failed read and controlled timeout; close works and retry issues a new correlation, no schema repair or collector activation.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS",
+      "evidence_limit": "Actual missing/closed DB routing plus production timeout wrapper with a pending future and controlled clock, not OS-lock qualification."
+    },
+    {
+      "number": 33,
+      "name": "accounting_inspect_app_restart_and_profile_isolation",
+      "frozen_case": "isolated installed and fresh profiles; reopen preserves recorded evidence, empty profile does not inherit old view/state or install ledger; no live credential access.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS"
+    },
+    {
+      "number": 34,
+      "name": "accounting_inspect_app_off_and_old_usage_routes",
+      "frozen_case": "new local inspector produces zero provider/account calls or admissions; ordinary account chart/reset event routes and existing collector Disabled setting remain unchanged.",
+      "junit": "impl-03-tui-focused-final.junit.xml",
+      "log": "impl-03-tui-focused-final.log",
+      "run_uuid": "c0c87928-8044-4172-8679-f06dc8dca35c",
+      "runnable_function_result": "PASS"
+    }
+  ]
+}

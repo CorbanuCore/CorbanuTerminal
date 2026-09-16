@@ -1,0 +1,18 @@
+---
+source: tui/src/chatwidget/tests/popups_and_settings.rs
+assertion_line: 3419
+expression: popup
+---
+  Select Model and Effort
+  Corbanu Terminal Orc pane - DeepSeek API key
+
+  OpenAI  Ambient  Corbanu API  Kimi Code  Z.AI  [DeepSeek]  Claude Plan  Anthropic  Meta  Vercel  Baseten
+  OpenRouter
+
+  1. DeepSeek V4 Pro (Direct)                   Model: deepseek-v4-pro. DeepSeek API: V4 Pro - $0.435/M
+                                                input, $0.003625/M cached input, $0.87/M output.
+› 2. DeepSeek V4 Flash 0731 (Direct) (current)  Model: deepseek-v4-flash. DeepSeek Responses API: V4 Flash
+                                                0731 - $0.14/M input, $0.0028/M cached input, $0.28/M
+                                                output.
+
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back

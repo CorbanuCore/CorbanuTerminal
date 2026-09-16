@@ -591,6 +591,7 @@ pub(crate) struct ChatWidget {
     rate_limit_snapshots_by_limit_id: BTreeMap<String, RateLimitSnapshotDisplay>,
     refreshing_status_outputs: Vec<(u64, StatusHistoryHandle)>,
     next_status_refresh_request_id: u64,
+    accounting_inspector: Option<tokens::Inspector>,
     refreshing_token_activity_output: Option<tokens::PendingTokenActivityOutput>,
     completed_token_activity_output: Option<history_cell::CompositeHistoryCell>,
     next_token_activity_request_id: u64,
@@ -1404,6 +1405,7 @@ impl ChatWidget {
     }
 
     fn request_redraw(&mut self) {
+        self.invalidate_accounting_inspector_for_thread();
         self.frame_requester.schedule_frame();
     }
 

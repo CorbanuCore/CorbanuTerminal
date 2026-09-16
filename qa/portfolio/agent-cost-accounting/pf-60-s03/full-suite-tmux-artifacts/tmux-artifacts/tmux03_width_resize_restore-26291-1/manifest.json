@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "scenario": "tmux03_width_resize_restore",
+  "files": [
+    "reason.txt",
+    "viewport.txt",
+    "scrollback.txt",
+    "pane-metadata.txt",
+    "command-log.txt",
+    "input-events.txt",
+    "dimensions.txt",
+    "reproduce.sh"
+  ],
+  "attachments": [
+    "config.toml",
+    "codex-tui.log"
+  ]
+}

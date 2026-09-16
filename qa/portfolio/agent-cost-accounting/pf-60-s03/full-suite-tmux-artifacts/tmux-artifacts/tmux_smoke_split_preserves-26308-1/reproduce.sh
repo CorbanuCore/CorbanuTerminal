@@ -1,0 +1,1 @@
+CORBANU_TMUX_REQUIRED=1 just test -p codex-tui --test all tmux_smoke_split_preserves

@@ -1,0 +1,115 @@
+  Welcome to Corbanu Terminal, your crypto-native AI terminal
+
+  Choose a provider account for Corbanu Terminal
+
+  6. Provider: Ambient API Key
+     Use a key stored as AMBIENT_API_KEY
+
+  7. Provider: Kimi Code API Key
+     Use a key stored as KIMI_API_KEY
+
+  8. Provider: Z.AI API Key
+     Use a key stored as ZAI_API_KEY
+
+  9. Provider: DeepSeek API Key
+     Use a key stored as DEEPSEEK_API_KEY
+
+  10. Provider: OpenRouter API Key
+     Use a key stored as OPENROUTER_API_KEY
+
+  11. Provider: Meta API Key
+     Use a key stored as MODEL_API_KEY
+
+  12. Provider: Baseten API Key
+     Use a key stored as BASETEN_API_KEY
+
+  13. Provider: Vercel API Key
+     Use a key stored as AI_GATEWAY_API_KEY
+
+  14. Provider: Amazon Bedrock
+     Use this provider without an enrollment step
+
+  15. Provider: Ollama
+     Configured · unavailable
+
+  16. Provider: LM Studio
+     Configured · unavailable
+
+  17. Provider: PF53 Loopback PF53_LOOPBACK_API_KEY
+     Use a key stored as PF53_LOOPBACK_API_KEY
+
+> 18. Done
+     Finish provider setup
+
+  Use ↑/↓ to choose · Press enter to continue
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                         │
+│                                                       │
+│ model:     loading   /model to change                 │
+│ directory: /Volumes/…/worktrees/acct-inspect-20260915 │
+╰───────────────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  gpt-5.4 default · /Volumes/CorbanuDrive/Corbanu/worktrees/acct-inspect-20260915 · Corbanu Terminal · TPS: -- tok/s
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                         │
+│                                                       │
+│ model:     loading   /model to change                 │
+│ directory: /Volumes/…/worktrees/acct-inspect-20260915 │
+╰───────────────────────────────────────────────────────╯
+
+▌ Create Solana wallet
+▌ Step 1 of 2 — masked
+▌
+▌ Passcode (6+ characters; use 12+ for portable recovery)
+
+Press enter to confirm or esc to go back
+
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                         │
+│                                                       │
+│ model:     gpt-5.4   /model to change                 │
+│ directory: /Volumes/…/worktrees/acct-inspect-20260915 │
+╰───────────────────────────────────────────────────────╯
+
+
+  Set up providers
+  Configure more than one provider, then choose Done.
+
+  Search providers
+› OpenAI — account                Not configured
+  OpenAI — API key                Not configured
+  Claude Account — account        Not configured
+  Corbanu API — queue after Done  Not configured
+  Anthropic — API key             Not configured
+  Ambient — API key               Not configured
+  Kimi Code — API key             Not configured
+  Z.AI — API key                  Not configured
+
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

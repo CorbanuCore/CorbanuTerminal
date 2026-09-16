@@ -1,0 +1,204 @@
+{
+  "base_commit": "40442cc751dec6e0bc91c5ba7364d7c1aa0e0c00",
+  "files": [
+    {
+      "path": "codex-rs/state/src/runtime/accounting_estimates.rs",
+      "added": 11,
+      "deleted": 0,
+      "changed": 11,
+      "file_lines": 308,
+      "sha256": "b89f029752f95fdc3bc4816d93b932c4d0729e896ebbc7e9abbca2919a992018",
+      "category": "production"
+    },
+    {
+      "path": "codex-rs/state/src/runtime/accounting_lifecycle.rs",
+      "added": 155,
+      "deleted": 0,
+      "changed": 155,
+      "file_lines": 460,
+      "sha256": "7126c0b9a8e8e704e1cf1a885e923b753df79668d570b958ad761867277a5520",
+      "category": "production"
+    },
+    {
+      "path": "codex-rs/state/src/runtime/accounting_pricing.rs",
+      "added": 1,
+      "deleted": 1,
+      "changed": 2,
+      "file_lines": 293,
+      "sha256": "f837564f55c67fda1f45ce3edf020243b825e88a28276db07e4263471b66c46a",
+      "category": "production"
+    },
+    {
+      "path": "codex-rs/state/src/runtime/accounting_store.rs",
+      "added": 60,
+      "deleted": 0,
+      "changed": 60,
+      "file_lines": 328,
+      "sha256": "38b2e14e286b45a004cbd1a35b384bed8608b78e8e648643f75f52ac77d0e60a",
+      "category": "production"
+    },
+    {
+      "path": "codex-rs/state/src/runtime/accounting_store_tests.rs",
+      "added": 366,
+      "deleted": 0,
+      "changed": 366,
+      "file_lines": 1218,
+      "sha256": "05a6497217dc7d076c88a546e9238202064903d1e7f7aa2f7c7c4dfce86d656f",
+      "category": "test_or_snapshot"
+    },
+    {
+      "path": "codex-rs/state/tests/accounting_store.rs",
+      "added": 410,
+      "deleted": 0,
+      "changed": 410,
+      "file_lines": 800,
+      "sha256": "49096f4b743657faffbd5d5a12ea97844f9a84fc2bd1d4a068a372f04d511295",
+      "category": "test_or_snapshot"
+    },
+    {
+      "path": "codex-rs/tui/src/app/event_dispatch.rs",
+      "added": 83,
+      "deleted": 0,
+      "changed": 83,
+      "file_lines": 6602,
+      "sha256": "612345f3ae5606ebe445ea652ec3ba5450138bf985080ba803dfd54218417274",
+      "category": "production"
+    },
+    {
+      "path": "codex-rs/tui/src/app/tests.rs",
+      "added": 286,
+      "deleted": 0,
+      "changed": 286,
+      "file_lines": 15458,
+      "sha256": "21b7346b35a5d09a5bf74798ccfc5d91364fcc50dc03738c036d586b73b55cb5",
+      "category": "test_or_snapshot"
+    },
+    {
+      "path": "codex-rs/tui/src/app_event.rs",
+      "added": 25,
+      "deleted": 0,
+      "changed": 25,
+      "file_lines": 2375,
+      "sha256": "8150e3d8907bc93001c67fad9d741ad3c8a794e059b5faa59c15438dbc06d1c1",
+      "category": "production"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget.rs",
+      "added": 2,
+      "deleted": 0,
+      "changed": 2,
+      "file_lines": 2105,
+      "sha256": "89a49682ceac5fb4ab87fbf4ccbc7498994d80019035c8d9e62c5bd0a2fd2436",
+      "category": "production"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/constructor.rs",
+      "added": 1,
+      "deleted": 0,
+      "changed": 1,
+      "file_lines": 321,
+      "sha256": "a90edcf1e68fe9523d3d6b1d6e7df0333a0d640f370b5bab1a30a420919a58fe",
+      "category": "production"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/slash_dispatch.rs",
+      "added": 4,
+      "deleted": 2,
+      "changed": 6,
+      "file_lines": 1521,
+      "sha256": "74ae593a278dc3403a9e02206d62b59418d29fcdbc33cbc4ec97657e7d010b73",
+      "category": "production"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu.snap",
+      "added": 2,
+      "deleted": 0,
+      "changed": 2,
+      "file_lines": 13,
+      "sha256": "d8c143d749dc198afe83ceffd2f504bcbaacaf3288678a7635bd9de2c3c80434",
+      "category": "test_or_snapshot"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_before_reset_refresh.snap",
+      "added": 2,
+      "deleted": 0,
+      "changed": 2,
+      "file_lines": 13,
+      "sha256": "33fe36705d378821d31665251d7931ec3a8bf5ba3479ef37c94709cc56acd370",
+      "category": "test_or_snapshot"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_without_resets.snap",
+      "added": 2,
+      "deleted": 0,
+      "changed": 2,
+      "file_lines": 13,
+      "sha256": "3f50da30ccbf8ff980103262f1bf990b3235266cb54d307f1d7987a0bfaf28b9",
+      "category": "test_or_snapshot"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_with_invalid_view_reports_usage.snap",
+      "added": 1,
+      "deleted": 1,
+      "changed": 2,
+      "file_lines": 5,
+      "sha256": "dd8c1e2c68e119a7a5a69fd8fd73e13dc5d8cacefa889e141ec6409f0142b9ab",
+      "category": "test_or_snapshot"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/tests/slash_commands.rs",
+      "added": 56,
+      "deleted": 0,
+      "changed": 56,
+      "file_lines": 3369,
+      "sha256": "0f098ffa1bf9cdb7dbc3f68bb2d7958bafc56fffdf5ab9cc22e5ab2c1c686731",
+      "category": "test_or_snapshot"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/tests/usage.rs",
+      "added": 81,
+      "deleted": 3,
+      "changed": 84,
+      "file_lines": 1194,
+      "sha256": "240abb289ad396c9463df95ad99b74e12e965043d4cc5583575b27b9777fa899",
+      "category": "test_or_snapshot"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/tokens.rs",
+      "added": 505,
+      "deleted": 0,
+      "changed": 505,
+      "file_lines": 797,
+      "sha256": "8c079fc427ec30e21102881c6dc3e4d13a107741acd23bfcbd5a4dde070a2c03",
+      "category": "production"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/tokens_tests.rs",
+      "added": 309,
+      "deleted": 0,
+      "changed": 309,
+      "file_lines": 347,
+      "sha256": "87458b41e6c5a290c0d0c789c78a1afae2d03b729772c463e0ad2987bc200f3b",
+      "category": "test_or_snapshot"
+    },
+    {
+      "path": "codex-rs/tui/src/chatwidget/usage.rs",
+      "added": 13,
+      "deleted": 0,
+      "changed": 13,
+      "file_lines": 626,
+      "sha256": "96d57dd8f9d30536ba98f66fd272fe857938c4e1f5fec77046321255faaaeab8",
+      "category": "production"
+    }
+  ],
+  "total_changed_lines": 2382,
+  "production_changed_lines": 863,
+  "target": [
+    2500,
+    1000
+  ],
+  "stop_before_exceeding": [
+    2800,
+    1150
+  ]
+}

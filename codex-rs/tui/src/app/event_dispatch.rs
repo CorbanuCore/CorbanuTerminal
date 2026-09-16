@@ -23,6 +23,83 @@ use std::collections::HashSet;
 
 const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
 
+impl App {
+    // This local-only route has no app-server client or account request capability.
+    pub(super) fn handle_accounting_inspector_event(&mut self, event: AppEvent) {
+        match event {
+            AppEvent::OpenAccountingInspector { day } => {
+                self.chat_widget.open_accounting_inspector(day)
+            }
+            AppEvent::LoadAccountingInspector {
+                generation,
+                thread,
+                day,
+            } => {
+                let db = self.state_db.clone();
+                let embedded = matches!(self.app_server_target, crate::AppServerTarget::Embedded);
+                let current = self.current_displayed_thread_id();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = if !embedded {
+                        Err("Unavailable — recorded request inspection is local-only; remote server selected.".into())
+                    } else if thread.is_none() || thread != current {
+                        Err("Unavailable — no current native thread.".into())
+                    } else if let (Some(db), Some(owner)) = (db, thread) {
+                        accounting_inspector_read_result(
+                            codex_state::accounting::AccountingStore::inspect_day(
+                                &db,
+                                owner,
+                                day,
+                                chrono::Utc::now().timestamp_millis(),
+                            ),
+                        )
+                        .await
+                    } else {
+                        Err("Unavailable — native state database is not open.".into())
+                    };
+                    tx.send(AppEvent::AccountingInspectorLoaded {
+                        generation,
+                        thread,
+                        day,
+                        result,
+                    });
+                });
+            }
+            AppEvent::AccountingInspectorLoaded {
+                generation,
+                thread,
+                day,
+                result,
+            } => {
+                if thread == self.current_displayed_thread_id() {
+                    self.chat_widget
+                        .finish_accounting_inspector(generation, thread, day, result);
+                }
+            }
+            AppEvent::NavigateAccountingInspector { generation, page } => self
+                .chat_widget
+                .navigate_accounting_inspector(generation, page),
+            AppEvent::CloseAccountingInspector { generation } => {
+                self.chat_widget.close_accounting_inspector(generation)
+            }
+            AppEvent::RefreshAccountingInspector { generation } => {
+                self.chat_widget.refresh_accounting_inspector(generation)
+            }
+            _ => unreachable!("non-inspector event"),
+        }
+    }
+}
+
+pub(super) async fn accounting_inspector_read_result(
+    read: impl std::future::Future<Output = anyhow::Result<codex_state::accounting::InspectionDay>>,
+) -> Result<codex_state::accounting::InspectionDay, String> {
+    match tokio::time::timeout(Duration::from_secs(15), read).await {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(_)) => Err("Unavailable — accounting evidence is corrupt, incompatible or could not be read. Refresh to retry; no repair performed.".into()),
+        Err(_) => Err("Unavailable — inspection timed out. Refresh to retry.".into()),
+    }
+}
+
 fn resolve_shared_provider_selection_model(
     configured_model: Option<String>,
     active_model: &str,
@@ -1680,6 +1757,12 @@ impl App {
             AppEvent::RefreshRateLimits { origin } => {
                 self.refresh_rate_limits(app_server, origin);
             }
+            event @ (AppEvent::OpenAccountingInspector { .. }
+            | AppEvent::LoadAccountingInspector { .. }
+            | AppEvent::AccountingInspectorLoaded { .. }
+            | AppEvent::NavigateAccountingInspector { .. }
+            | AppEvent::CloseAccountingInspector { .. }
+            | AppEvent::RefreshAccountingInspector { .. }) => self.handle_accounting_inspector_event(event),
             AppEvent::RefreshTokenActivity { request_id } => {
                 self.refresh_token_activity(app_server, request_id);
             }
