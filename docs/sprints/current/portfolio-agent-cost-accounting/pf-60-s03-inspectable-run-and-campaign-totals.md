@@ -87,8 +87,8 @@ updated: 2026-09-16
 ## Verification
 - [ ] **Inherited from PF-60-S02:** [isolated code-blind functional execution](../../../../qa/code-blind-functional/isolated-execution.md) with real keys and negative controls, independent evidence review of that execution, and true-TUI qualification. S02 accepted an internal-stage N/A for its own increments only, which deferred these here; it did not discharge them. This sprint is the first user-facing unit, so they fall due.
 
-- [ ] Focused: From codex-rs: just test -p codex-tui usage
-- [ ] Integration: from repo root, `python3 docs/plans/check.py; python3 docs/sprints/check.py`; `git diff --check`.
+- [x] Focused, as specified: `just test -p codex-tui usage` passes 91/91. Recorded because I had been receiving against a filter of my own - `accounting_inspect_` plus the state and tasknode packages - which added coverage but was not the gate written here. The union of both is 553/553 and is the number future receipts should use.
+- [x] Integration: `python3 docs/plans/check.py` and `python3 docs/sprints/check.py` pass and `git diff --check` is clean on the integration tip.
 - [ ] Resolve TUI applicability against the plan; record actual-key success, failure/cancel, recovery/resume and final binary evidence for every affected interactive path.
 - [ ] Record expected versus actual results and nonzero test counts; no unchecked assumption is converted into a pass.
 
