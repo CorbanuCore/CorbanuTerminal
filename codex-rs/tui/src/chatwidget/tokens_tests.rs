@@ -255,6 +255,102 @@ async fn accounting_inspect_empty_day_after_checkpoint_renders_lag() -> anyhow::
     Ok(())
 }
 
+// Admit synthetic evidence, then model a late raw import and interrupted
+// estimate/contribution persistence without adding a production mutation API.
+async fn maintenance_inspection(mutation: &str) -> anyhow::Result<InspectionDay> {
+    use codex_state::accounting::{AccountingStore, RetainedDay};
+
+    const CHECKPOINT: i64 = 100 * 86_400_000;
+    let home = tempfile::tempdir()?;
+    let runtime = codex_state::StateRuntime::init(
+        codex_state::SqliteConfig::from_sqlite_home(
+            codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path().to_path_buf())?,
+        ),
+        "synthetic".into(),
+    )
+    .await?;
+    let mut recent = quote().attempt;
+    recent.retry_of = None;
+    recent.dispatched_at_ms = CHECKPOINT.try_into()?;
+    let owner = recent.thread_id;
+    let metadata = codex_state::ThreadMetadataBuilder::new(
+        owner,
+        home.path().join("synthetic.jsonl"),
+        chrono::Utc::now(),
+        codex_protocol::protocol::SessionSource::Cli,
+    );
+    runtime.upsert_thread(&metadata.build("synthetic")).await?;
+    let store = AccountingStore::open(&runtime, CHECKPOINT).await?;
+    store.admit(owner, &recent, &[], CHECKPOINT).await?;
+    let mut late = recent.clone();
+    late.attempt_id = Uuid::from_u128(8);
+    late.request_id = Uuid::from_u128(9);
+    store.admit(owner, &late, &[], CHECKPOINT).await?;
+    let mutation = format!(
+        "UPDATE draft_accounting_attempts SET payload = json_set(payload, '$.dispatched_at_ms', 0) WHERE attempt_id = '{id}';
+         UPDATE draft_accounting_estimates SET payload = json_set(payload, '$.attempt.dispatched_at_ms', 0) WHERE attempt_id = '{id}';
+         UPDATE draft_accounting_contributions SET utc_day = 0 WHERE attempt_id = '{id}';
+         {mutation}",
+        id = late.attempt_id,
+    );
+    // TUI has no SQL dependency. Python is already required by the guarded test
+    // runner; its standard sqlite3 module touches only this disposable fixture.
+    let output = tokio::process::Command::new(if cfg!(windows) { "python" } else { "python3" })
+        .arg("-c")
+        .arg("import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.executescript(sys.argv[2]); c.close()")
+        .arg(runtime.sqlite().state_db_path())
+        .arg(mutation)
+        .output()
+        .await?;
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        store.read_day(owner, /*utc_day*/ 100, CHECKPOINT).await?,
+        RetainedDay::NeedsMaintenance {
+            completed_as_of_ms: CHECKPOINT
+        }
+    );
+    let result = AccountingStore::inspect_day(&runtime, owner, /*utc_day*/ 100, CHECKPOINT).await?;
+    assert_eq!(
+        AccountingStore::inspect_day(&runtime, owner, /*utc_day*/ 100, CHECKPOINT).await?,
+        result
+    );
+    runtime.close().await;
+    Ok(result)
+}
+
+#[tokio::test]
+async fn accounting_inspect_maintenance_with_stale_raw_renders_refresh() -> anyhow::Result<()> {
+    for mutation in [
+        "DELETE FROM draft_accounting_contributions WHERE utc_day = 100",
+        "DELETE FROM draft_accounting_contributions WHERE utc_day = 100; DELETE FROM draft_accounting_estimates WHERE attempt_id = '00000000-0000-0000-0000-000000000001'",
+    ] {
+        let result = maintenance_inspection(mutation).await?;
+        let text = inspection_pages(Ok(result))[0].text.join("\n");
+        insta::allow_duplicates! {
+            insta::assert_snapshot!(text, @"
+            Collection coverage: unknown; recorded attempts only. Descendants excluded.
+            Billed cost: unavailable — no settlement evidence
+            Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+            Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.
+            ");
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_maintenance_with_healthy_raw_renders_lag() -> anyhow::Result<()> {
+    let result = maintenance_inspection("").await?;
+    let text = inspection_pages(Ok(result))[0].text.join("\n");
+    insta::assert_snapshot!(text, @"
+    Collection coverage: unknown; recorded attempts only. Descendants excluded.
+    Billed cost: unavailable — no settlement evidence
+    Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+    Snapshot is not current; newer activity is unverified
+    ");
+    Ok(())
+}
+
 #[test]
 fn accounting_inspect_availability_state_snapshots() {
     let states = [
