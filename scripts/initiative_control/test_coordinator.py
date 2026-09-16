@@ -1103,11 +1103,20 @@ class SprintRegistrationTests(unittest.TestCase):
             ("docs/sprints/../../elsewhere.md", confined),
             ("docs/plans/active/initiative-delivery-control.md", confined),
             ("docs/sprints/current/initiative-delivery-control/pf82.txt", confined),
+            ("docs/sprints//current/initiative-delivery-control/pf82.md", confined),
+            ("docs/sprints/./current/initiative-delivery-control/pf82.md", confined),
             ("docs/sprints/current/initiative-delivery-control/escape.md",
              "escapes the repository"),
         ):
             with self.subTest(source_path=source_path):
                 self.refused("sprint source_path " + reason, self.payload(source_path=source_path))
+
+    def test_repo_that_is_not_a_directory_says_so(self):
+        notdir = Path(self.tmp.name) / "file-as-repo"
+        notdir.write_text("not a checkout\n")
+        self.refused("sprint repo must be a directory", self.payload(repo=str(notdir)))
+        self.refused("sprint repo must be a directory",
+                     self.payload(repo=str(Path(self.tmp.name) / "absent")))
 
     def test_repo_without_the_named_plan_is_not_a_checkout(self):
         bare = Path(self.tmp.name) / "bare"
@@ -1148,6 +1157,17 @@ class SprintRegistrationTests(unittest.TestCase):
             del state["allocations"]["pf82-impl-01"]
             state["sprints"]["PF82"]["status"] = "in_progress"
         self.refused("only an unstarted registered draft", self.payload(replace=True))
+
+    def test_re_registration_refused_for_a_sprint_worked_only_in_archived_history(self):
+        """state["actions"] is pruned, and an allocation id can be repointed."""
+        self.c.register_sprint(**self.payload())
+        with self.c.connection() as db:
+            db.execute("INSERT INTO action_history(id,body) VALUES(?,?)",
+                       ("pf82-old-01", json.dumps({"id": "pf82-old-01", "sprint": "PF82",
+                                                   "workstream": "delivery",
+                                                   "status": "accepted"})))
+        self.assertEqual({}, self.c.snapshot()["actions"])
+        self.refused("already has allocations or actions", self.payload(replace=True))
 
     def test_replace_flag_must_be_explicit_boolean(self):
         self.refused("explicit add/replace required", self.payload(replace=1))

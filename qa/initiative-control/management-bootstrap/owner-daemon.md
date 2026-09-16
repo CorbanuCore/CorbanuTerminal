@@ -1184,19 +1184,23 @@ Coordinator.register_sprint(
 ```
 
 `source_path` is repository-relative and must match
-`docs/sprints/**/*.md` with no absolute prefix, backslash, `..` segment or
-empty component; it is read under `repo` and the resolved file must still lie
-inside the resolved `repo`, which rejects a symlink pointing out of the tree.
-`repo` must be a real checkout, proved by the presence of the `plan_file` the
-document itself names, not by the caller asserting it. The **relative** path is
-what the row stores, so a sprint row never pins one worktree.
+`docs/sprints/**/*.md` with no absolute prefix, backslash, or empty, `.` or `..`
+segment, so the stored string is canonical; it is read under `repo` and the
+resolved file must still lie inside the resolved `repo`, which rejects a symlink
+pointing out of the tree on the final or any intermediate component. `repo` must
+be a directory that also contains the `plan_file` the document names, which
+rejects a directory holding only the crafted sprint document; it is not proof of
+a genuine checkout, since a caller able to write two files can satisfy it. The
+**relative** path is what the row stores, so a sprint row never pins one
+worktree.
 
 `replace=True` re-registers a sprint that is still an unstarted registered
 draft, which is how a row recorded with a bad `source_path` is corrected through
 the audited API rather than by hand. It refuses if the sprint is archived, is no
-longer `draft`, was never registered, already has any allocation or action, or if
-the call would change the workstream, status or dependencies: the only thing a
-re-registration may move is the document reference.
+longer `draft`, was never registered, already has any allocation or action, in live
+state or in `action_history`, or if the call would change the workstream, status
+or dependencies: the only thing a re-registration may move is the document
+reference.
 
 The operation uses `owner_mutation("owner_register_sprint", ...)`, atomically
 adds one draft/unarchived row, increments revision, emits an event and audit,

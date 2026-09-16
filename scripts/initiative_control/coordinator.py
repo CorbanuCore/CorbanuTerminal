@@ -273,10 +273,14 @@ class Coordinator:
         the plan file the document names, not by the caller saying so.
         """
         require(isinstance(source_path, str) and source_path.strip(), "sprint source_path required")
+        segments = source_path.split("/")
+        # Stored verbatim, so the path must also be canonical: two registrations
+        # of one document cannot be recorded under different strings.
         require(not source_path.startswith("/") and "\\" not in source_path
-                and re.fullmatch(r"docs/sprints/(?!.*//)[A-Za-z0-9._/-]+\.md", source_path) is not None
-                and ".." not in source_path.split("/"),
+                and re.fullmatch(r"docs/sprints/[A-Za-z0-9._/-]+\.md", source_path) is not None
+                and all(part and part not in {".", ".."} for part in segments),
                 "sprint source_path must be repository-relative under docs/sprints")
+        require(Path(repo).is_dir(), "sprint repo must be a directory")
         # Rejected is a ValueError, so a refusal raised inside the filesystem
         # try-block would be relabelled "unreadable"; each check reports itself.
         try:
@@ -284,7 +288,6 @@ class Coordinator:
             path = (root / source_path).resolve(strict=True)
         except (OSError, ValueError) as exc:
             raise Rejected("sprint source_path unreadable") from exc
-        require(root.is_dir(), "sprint repo must be a directory")
         require(path.is_relative_to(root), "sprint source_path escapes the repository")
         require(path.is_file(), "sprint source_path must be a regular file")
         try:
@@ -347,10 +350,15 @@ class Coordinator:
                 require(existing.get("workstream") == workstream
                         and existing.get("dependencies") == list(dependencies),
                         "re-registration may only correct the document reference")
+                # state["actions"] is pruned into action_history, and an
+                # allocation id can be repointed, so neither alone proves the
+                # sprint was never worked. Both are checked, plus the history.
                 require(not any(action.get("sprint") == sprint_id
                                 for action in state["actions"].values())
                         and not any(allocation.get("sprint") == sprint_id
-                                    for allocation in state["allocations"].values()),
+                                    for allocation in state["allocations"].values())
+                        and not any(json.loads(row[0]).get("sprint") == sprint_id for row
+                                    in db.execute("SELECT body FROM action_history")),
                         "sprint already has allocations or actions")
             require(workstream in state["workstreams"], "unknown sprint workstream")
             self._unpaused(state, {"workstream": workstream})
