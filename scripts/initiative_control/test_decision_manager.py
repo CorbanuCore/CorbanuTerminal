@@ -976,28 +976,83 @@ class ManagerTests(fixtures.LiveFixture):
                     child.stdout.close()
                 self.assertEqual(manager.failure(child), expected)
 
-    def test_quarantine_count_age_and_held_state_survive_qualification_and_dashboard_projection(self):
+    def test_outstanding_count_age_and_review_recovery_on_manager_and_dashboard(self):
         import decision_feed as feed
         self.sending()
         self.callback(fixtures.payload("EvPoison", subtype="message_deleted", deleted_ts="109.000001"))
-        self.review_gap()
-        self.assertIsNone(self.store.read("transport")["hold"])
         at = (d.stamp(NOW) + s.dt.timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        fresh = dict(state="healthy", event_flush_failures=0, pending_events=0, observed_at=at, reason=None)
+        self.store.write("supervisor", dict(binding=PIN, health=fresh))
         status = m.project_status(self.store, at, True)
         projected = feed.project_slack(self.feed_root, self.root, at, True)
         dashboard = feed.slack_health(dict(slack=projected), at)
         for surface in (status, projected["status"], dashboard):
             self.assertEqual(surface["state"], "held")
             self.assertEqual(surface["supervisor_health"]["state"], "unhealthy")
+            self.assertEqual(surface["supervisor_health"]["reason"], "quarantined-intake")
             self.assertEqual(surface["supervisor_health"]["quarantine"],
                              dict(count=1, held=0, oldest_at=NOW, age_seconds=60))
         later = (d.stamp(NOW) + s.dt.timedelta(seconds=120)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        self.assertEqual(feed.slack_health(dict(slack=projected), later)["supervisor_health"]["quarantine"]["age_seconds"], 120)
+        aged = feed.slack_health(dict(slack=projected), later)["supervisor_health"]
+        self.assertEqual(aged["quarantine"]["age_seconds"], 120)
+        self.assertEqual(aged["reason"], "observation-stale")
+        self.review_gap()
+        self.assertIsNone(self.store.read("transport")["hold"])
+        recovered = feed.project_slack(self.feed_root, self.root, at, True)
+        for surface in (m.project_status(self.store, at, True), recovered["status"],
+                        feed.slack_health(dict(slack=recovered), at)):
+            self.assertEqual(surface["state"], "last-verified")
+            self.assertEqual(surface["supervisor_health"]["state"], "healthy")
+            self.assertNotIn("quarantine", surface["supervisor_health"])
+        self.transport.now = lambda: at
+        self.callback(fixtures.payload("EvNew", subtype="message_deleted", deleted_ts="110.000001"))
+        self.assertEqual(m.project_status(self.store, later, True)["supervisor_health"]["quarantine"],
+                         dict(count=1, held=0, oldest_at=at, age_seconds=60))
+
+    def test_legacy_quarantine_unknown_pruned_age_clears_only_after_review(self):
+        self.sending()
+        self.callback(fixtures.payload("EvPoison", subtype="message_deleted", deleted_ts="109.000001"))
         with s.locked(self.store) as journal:
             journal["quarantine"] = dict(total=129, records=journal["quarantine"]["records"])
             self.store.write("transport", journal)
-        legacy = m.project_status(self.store, at, True)["supervisor_health"]["quarantine"]
+        legacy = m.project_status(self.store, NOW, True)["supervisor_health"]["quarantine"]
         self.assertEqual(legacy, dict(count=129, held=0, oldest_at=None, age_seconds=None))
+        self.review_gap()
+        self.assertNotIn("quarantine", m.project_status(self.store, NOW, True)["supervisor_health"])
+
+    def test_supervisor_reason_precedes_quarantine_without_hiding_count(self):
+        import decision_feed as feed
+        self.sending()
+        self.callback(fixtures.payload("EvPoison", subtype="message_deleted", deleted_ts="109.000001"))
+        at = (d.stamp(NOW) + s.dt.timedelta(seconds=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        for reason, observation in (
+            ("observation-unavailable", None),
+            ("observation-stale", dict(state="healthy", event_flush_failures=0,
+                                      pending_events=0, observed_at=NOW, reason=None)),
+            ("event-flush-failed", dict(state="unhealthy", event_flush_failures=1,
+                                       pending_events=1, observed_at=at, reason="event-flush-failed")),
+        ):
+            with self.subTest(reason=reason):
+                self.store.write("supervisor", dict(binding=PIN, health=observation))
+                projected = feed.project_slack(self.feed_root, self.root, at, True)
+                for surface in (m.project_status(self.store, at, True), projected["status"],
+                                feed.slack_health(dict(slack=projected), at)):
+                    health = surface["supervisor_health"]
+                    self.assertEqual(health["reason"], reason)
+                    self.assertEqual(health["quarantine"]["count"], 1)
+                    self.assertEqual(health["quarantine"]["age_seconds"], 6)
+                    m.validate_supervisor_health(health)
+
+    def test_expired_history_is_not_outstanding_and_review_does_not_discard_held(self):
+        key, row = self.uncertain_follower()
+        self.callback(fixtures.payload("EvUnbound", thread_ts=row["parent"]["receipt"]["ts"]))
+        self.review_gap()
+        self.assertEqual(m.project_status(self.store, NOW, True)["supervisor_health"]["quarantine"]["held"], 1)
+        deadline = self.store.read("transport")["held_human"]["EvUnbound"]["expires_at"]
+        s.drain(self.store, now=deadline)
+        journal = self.store.read("transport")
+        self.assertEqual(journal["quarantine"]["records"][-1]["reason"], "unbound-expired")
+        self.assertNotIn("quarantine", m.project_status(self.store, deadline, True)["supervisor_health"])
 
     def test_unbound_pending_count_is_projected_until_exact_binding(self):
         import decision_feed as feed

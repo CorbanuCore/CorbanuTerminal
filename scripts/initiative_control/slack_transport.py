@@ -100,9 +100,35 @@ def quarantine(value, payload, pin, offset, reason, now):
     append_quarantine(value, record)
 
 
+def outstanding_quarantine(value):
+    """Current review obligation; historical/expired records are not live intake."""
+    audit = value.get("quarantine", {})
+    if "outstanding" in audit:
+        return copy.deepcopy(audit["outstanding"])
+    reviewed = max((row["ingress"] for row in value.get("gap_reviews", [])), default=0)
+    records = audit.get("records", [])
+    pending = [row for row in records
+               if row["ingress"] > reviewed and row["reason"] != "unbound-expired"]
+    # Old journals pruned without a disposition summary. Those missing records
+    # require review unless the review fence covers the entire pruned prefix.
+    pruned = audit.get("total", 0) - len(records)
+    if reviewed >= value.get("ingress", 0):
+        pruned = 0
+    times = [row.get("at") for row in pending]
+    oldest = min(times) if times and all(times) and not pruned else None
+    return dict(count=len(pending) + pruned, oldest_at=oldest)
+
+
 def append_quarantine(value, record):
     d.stamp(record["at"])
+    outstanding = outstanding_quarantine(value)
+    if record["reason"] != "unbound-expired":
+        outstanding["oldest_at"] = (min(outstanding["oldest_at"], record["at"])
+                                    if outstanding["oldest_at"] is not None else
+                                    None if outstanding["count"] else record["at"])
+        outstanding["count"] += 1
     audit = value.setdefault("quarantine", dict(total=0, records=[]))
+    audit["outstanding"] = outstanding
     if not audit["total"]:
         audit["oldest_at"] = record["at"]
     audit["total"] += 1
@@ -146,9 +172,9 @@ def settle_held(value, now):
     held = value.get("held_human", {})
     for key, entry in sorted(held.items(), key=lambda item: item[1]["ingress"]):
         event = entry["envelope"]
-        expired = d.stamp(now) >= d.stamp(entry["expires_at"])
         route = value["routes"].get(event["thread_ts"])
-        if not expired and route is None:
+        expired = route is None and d.stamp(now) >= d.stamp(entry["expires_at"])
+        if route is None and not expired:
             continue
         invalid = route is not None and event["message_ts"] in (event["thread_ts"], route["details"])
         if expired or invalid:
@@ -302,7 +328,15 @@ def locked(store):
                 d.require((d.stamp(entry["expires_at"]) - d.stamp(entry["arrived_at"])).total_seconds() == HELD_HUMAN_SECONDS)
         if "quarantine" in value:
             audit = value["quarantine"]
-            d.shape(audit, "total records" + (" oldest_at" if "oldest_at" in audit else ""))
+            d.shape(audit, "total records" + (" oldest_at" if "oldest_at" in audit else "")
+                    + (" outstanding" if "outstanding" in audit else ""))
+            if "outstanding" in audit:
+                pending = audit["outstanding"]
+                d.shape(pending, "count oldest_at")
+                d.require(type(pending["count"]) is int and 0 <= pending["count"] <= audit["total"])
+                d.require(pending["count"] or pending["oldest_at"] is None)
+                if pending["oldest_at"] is not None:
+                    d.stamp(pending["oldest_at"])
             if "oldest_at" in audit:
                 d.stamp(audit["oldest_at"])
             d.require(type(audit["records"]) is list and len(audit["records"]) <= 128)
@@ -735,6 +769,8 @@ class Transport:
                 a.token(gap_review["evidence"])
                 d.require(not any(not e["drained"] for e in value["events"].values()))
                 value["gap_reviews"].append(dict(gap_review, at=self.now()))
+                if "quarantine" in value:
+                    value["quarantine"]["outstanding"] = dict(count=0, oldest_at=None)
             value.update(binding=pin, last_verified=self.now(), hold=None, ingress=ingress, ui_evidence=copy.deepcopy(ui_evidence))
             self.store.write("transport", value)
         return pin

@@ -1415,6 +1415,7 @@ class TransportTests(LiveFixture):
     def test_unbound_late_bound_details_message_is_quarantined_not_delivered(self):
         row = self.unbind_fixture()
         self.callback(payload(ts=row["details"]["receipt"]["ts"]))
+        self.transport.now = lambda: self.store.read("transport")["held_human"]["Ev001"]["expires_at"]
         self.transport.bind_alert(self.key, row)
         journal = self.store.read("transport")
         self.assertEqual(journal["held_human"], {})
@@ -1434,26 +1435,91 @@ class TransportTests(LiveFixture):
         self.assertEqual({e["envelope"]["kind"] for e in self.store.read("replies")["events"].values()},
                          {"message", "edit", "delete"})
 
-    def test_unbound_expiry_is_durable_content_free_and_precedes_late_binding(self):
+    def test_unbound_expiry_without_route_is_durable_and_cannot_be_resurrected(self):
         row = self.unbind_fixture()
         self.callback(payload(text="private held answer"))
         deadline = self.store.read("transport")["held_human"]["Ev001"]["expires_at"]
         self.transport.now = lambda: deadline
         with patch.object(self.store, "write", side_effect=OSError("fixture")):
             with self.assertRaises(OSError):
-                self.transport.bind_alert(self.key, row)
+                s.drain(self.store, now=deadline)
         self.assertIn("Ev001", self.store.read("transport")["held_human"])
         self.assertNotIn("quarantine", self.store.read("transport"))
+        self.assertEqual(s.drain(self.store, now=deadline), 0)
         self.transport.bind_alert(self.key, row)
         value = self.store.read("transport")
         self.assertEqual(value["held_human"], {})
         self.assertEqual(value["events"], {})
+        self.assertEqual(s.outstanding_quarantine(value), dict(count=0, oldest_at=None))
         record = value["quarantine"]["records"][-1]
         self.assertEqual((record["reason"], record["channel"], record["message_ts"], record["at"]),
                          ("unbound-expired", PIN["channel"], "101.000001", deadline))
         self.assertNotIn("private held answer", d.canonical(value).decode())
         self.assertEqual(s.drain(self.store, now=deadline), 0)
         self.assertEqual(self.store.read("transport")["quarantine"]["total"], 1)
+
+    def test_route_at_or_after_deadline_delivers_retained_reply_once(self):
+        row = self.unbind_fixture()
+        for index, delay in enumerate((0, 60)):
+            with self.subTest(delay=delay):
+                with s.locked(self.store) as journal:
+                    journal["routes"].clear()
+                    self.store.write("transport", journal)
+                key = "EvLate" + str(index)
+                self.callback(payload(key, ts=f"101.{index + 1:06d}"))
+                deadline = self.store.read("transport")["held_human"][key]["expires_at"]
+                at = (d.stamp(deadline) + s.dt.timedelta(seconds=delay)).strftime("%Y-%m-%dT%H:%M:%SZ")
+                self.transport.now = lambda: at
+                with patch.object(self.store, "write", side_effect=OSError("fixture")):
+                    with self.assertRaises(OSError):
+                        self.transport.bind_alert(self.key, row)
+                self.assertIn(key, self.store.read("transport")["held_human"])
+                self.transport.bind_alert(self.key, row)
+                self.assertEqual(s.drain(self.store, now=at), 1)
+                self.assertEqual(s.drain(self.store, now=at), 0)
+                self.assertIn(key, self.store.read("replies")["events"])
+                self.assertNotIn("quarantine", self.store.read("transport"))
+
+    def test_routed_reply_waits_for_queue_capacity_past_deadline(self):
+        row = self.unbind_fixture()
+        self.callback()
+        journal = self.store.read("transport")
+        journal["routes"]["100.000001"] = dict(alert=self.key, details=row["details"]["receipt"]["ts"])
+        journal["events"] = {str(index): dict(drained=False) for index in range(100)}
+        deadline = journal["held_human"]["Ev001"]["expires_at"]
+        s.settle_held(journal, deadline)
+        self.assertIn("Ev001", journal["held_human"])
+        self.assertNotIn("quarantine", journal)
+        journal["events"].clear()
+        s.settle_held(journal, deadline)
+        self.assertIn("Ev001", journal["events"])
+        self.assertFalse(journal["held_human"])
+
+    def test_outstanding_quarantine_survives_pruning_then_exact_review_clears_it(self):
+        self.sending()
+        for index in range(130):
+            self.callback(payload("EvPoison" + str(index), subtype="message_deleted",
+                                  deleted_ts="109.000001"))
+        journal = self.store.read("transport")
+        self.assertEqual(len(journal["quarantine"]["records"]), 128)
+        self.assertEqual(s.outstanding_quarantine(journal), dict(count=130, oldest_at=NOW))
+        write = self.store.write
+        def fail_review(name, value):
+            if name == "transport" and value["gap_reviews"]:
+                raise OSError("fixture final review write")
+            return write(name, value)
+        with patch.object(self.store, "write", side_effect=fail_review):
+            with self.assertRaises(d.Invalid):
+                self.review_gap()
+        self.assertEqual(s.outstanding_quarantine(self.store.read("transport"))["count"], 130)
+        self.review_gap()
+        journal = self.store.read("transport")
+        self.assertEqual(s.outstanding_quarantine(journal), dict(count=0, oldest_at=None))
+        self.assertEqual(journal["quarantine"]["total"], 130)
+        later = (d.stamp(NOW) + s.dt.timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.transport.now = lambda: later
+        self.callback(payload("EvNew", subtype="message_deleted", deleted_ts="110.000001"))
+        self.assertEqual(s.outstanding_quarantine(self.store.read("transport")), dict(count=1, oldest_at=later))
 
     def test_unbound_idle_renewal_records_expiry_without_new_callbacks(self):
         self.unbind_fixture()
@@ -1525,7 +1591,8 @@ class TransportTests(LiveFixture):
             self.transport.gate()  # Continuing intake does not grant decision/work authority.
         self.review_gap()
         self.transport.gate()
-        self.assertEqual(self.store.read("transport")["quarantine"], journal["quarantine"])
+        expected = dict(journal["quarantine"], outstanding=dict(count=0, oldest_at=None))
+        self.assertEqual(self.store.read("transport")["quarantine"], expected)
 
     def test_quarantine_is_bounded_and_redelivery_does_not_starve_valid_intake(self):
         self.sending()

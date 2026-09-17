@@ -119,7 +119,10 @@ def attach_quarantine(health, intake, now):
                             if intake["oldest_at"] is not None else None)
     health["quarantine"] = intake
     if intake["count"]:
-        health.update(state="unhealthy", reason="quarantined-intake")
+        health["state"] = "unhealthy"
+        if health.get("reason") in (None, "quarantined-intake"):
+            health["reason"] = ("event-flush-failed" if health["event_flush_failures"] else
+                                "event-unflushed" if health["pending_events"] else "quarantined-intake")
     return health
 
 
@@ -127,18 +130,19 @@ def assess_supervisor_health(health, now):
     """Apply the same observation validity at projection and publication."""
     unknown = dict(state="unknown", event_flush_failures=0, pending_events=0,
                    observed_at=None, reason="observation-unavailable")
+    intake = None
     try:
         validate_supervisor_health(health)
-        if health.get("quarantine", {}).get("count"):
-            return attach_quarantine(health, health["quarantine"], now)
+        intake = health.get("quarantine")
         age = (d.stamp(now) - d.stamp(health["observed_at"])).total_seconds()
         d.require(age >= 0)
-        # Never age an observed failure back into apparent health.
-        if age > 5 and health["state"] == "healthy":
-            return dict(unknown, observed_at=health["observed_at"], reason="observation-stale")
-        return copy.deepcopy(health)
+        # Intake must not keep a dead supervisor's observation fresh. Retain
+        # real flush failures, but age an intake-only failure like healthy data.
+        if age > 5 and not (health["event_flush_failures"] or health["pending_events"]):
+            health = dict(unknown, observed_at=health["observed_at"], reason="observation-stale")
+        return attach_quarantine(health, intake, now) if intake is not None else copy.deepcopy(health)
     except (OSError, ValueError, KeyError, TypeError):
-        return unknown
+        return attach_quarantine(unknown, intake, now) if intake is not None else unknown
 
 
 def read_supervisor_health(store, now, binding):
@@ -155,13 +159,13 @@ def read_supervisor_health(store, now, binding):
 def project_disclosure(value, store, journal, alerts, now=None):
     now = now or utc_now()
     health = read_supervisor_health(store, now, journal["binding"])
-    audit, held = journal.get("quarantine", {}), journal.get("held_human", {})
-    count = audit.get("total", 0) + len(held)
+    audit, held = s.outstanding_quarantine(journal), journal.get("held_human", {})
+    count = audit["count"] + len(held)
     if count:
         times = [entry["arrived_at"] for entry in held.values()]
-        if audit.get("oldest_at") is not None:
+        if audit["oldest_at"] is not None:
             times.append(audit["oldest_at"])
-        oldest = (None if audit.get("total", 0) and audit.get("oldest_at") is None
+        oldest = (None if audit["count"] and audit["oldest_at"] is None
                   else min(times) if times else None)
         health = attach_quarantine(health, dict(count=count, held=len(held), oldest_at=oldest, age_seconds=None), now)
         value["state"] = "held"
