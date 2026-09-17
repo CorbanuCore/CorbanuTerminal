@@ -3,9 +3,13 @@ import copy
 import json
 from pathlib import Path
 
-path = Path(__file__).with_name("owner-marks-78-rehearsal-first.jsonl")
+import sys
+
+path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).with_name("owner-marks-78-rehearsal-first.jsonl")
 records = [json.loads(line) for line in path.read_text().splitlines() if line.startswith("{")]
 assert records[-1]["kind"] == "PASS"
+refusal = next(row for row in records if row["kind"] == "disarmed_interval_refused")
+assert refusal["tick"]["refusal"] == "owner_off", refusal
 preview = next(row["preview"] for row in records if row["kind"] == "dry_run_no_writes")
 actual = next(row["changes"] for row in records if row["kind"] == "first_admitted_delta")
 keys = dict(state="id", events="seq", audit="seq", action_history="id", evidence="digest",

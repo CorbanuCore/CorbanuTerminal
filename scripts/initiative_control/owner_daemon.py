@@ -1,6 +1,6 @@
 """Default-OFF one-tick owner; admitted, journaled TMUX worker lifecycle."""
 import argparse
-from contextlib import closing, contextmanager
+from contextlib import closing, contextmanager, nullcontext
 import fcntl
 import os
 from pathlib import Path
@@ -166,6 +166,21 @@ def remove_activation_intent(root):
         os.close(fd)
 
 
+PREVIEW_READ_SECONDS = 0.25
+
+
+def preview_backup(source, destination):
+    """Bound each read-only SQLite backup; never hold an owner flock."""
+    deadline = time.monotonic() + PREVIEW_READ_SECONDS
+    source.execute("PRAGMA busy_timeout=0")
+
+    def progress(status, remaining, total):
+        f.require(time.monotonic() < deadline, "preview_read_budget_exceeded")
+        f.require(status not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED), "preview_database_busy")
+
+    source.backup(destination, pages=32, progress=progress, sleep=0)
+
+
 @contextmanager
 def activation_store(config_path, readonly=False):
     # Disarm must remain possible after package/config drift. Only resolve the
@@ -173,15 +188,21 @@ def activation_store(config_path, readonly=False):
     config = load(config_path)
     f.require(type(config) is dict and isinstance(config.get("coordinator"), str), "invalid_config")
     root = f.private_dir(config["coordinator"])
-    with locked(root / "owner-daemon.lock"), locked(root / "owner-admission.lock"):
+    with (nullcontext() if readonly else locked(root / "owner-daemon.lock")), \
+            (nullcontext() if readonly else locked(root / "owner-admission.lock")):
         path = private_file(root / "owner.sqlite3")
         f.require(not any(Path(str(path) + suffix).exists() for suffix in
                           ("-journal", "-wal", "-shm")), "owner_recovery_required")
-        mode = "ro" if readonly else "rw"
-        with closing(sqlite3.connect(path.as_uri() + "?mode=" + mode, uri=True)) as db:
+        with closing(sqlite3.connect(":memory:" if readonly else path.as_uri() + "?mode=rw",
+                                     uri=not readonly)) as db:
+            if readonly:
+                with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=0)) as source:
+                    f.require(source.execute("PRAGMA journal_mode").fetchone()[0] == "delete", "journal_mode")
+                    preview_backup(source, db)
             db.row_factory = sqlite3.Row
             db.execute("PRAGMA synchronous=FULL")
-            f.require(db.execute("PRAGMA journal_mode").fetchone()[0] == "delete", "journal_mode")
+            f.require(db.execute("PRAGMA journal_mode").fetchone()[0] ==
+                      ("memory" if readonly else "delete"), "journal_mode")
             for table, columns in SCHEMA.items():
                 row = db.execute("SELECT sql FROM sqlite_master WHERE name=?", (table,)).fetchone()
                 f.require(row and row[0] == f"CREATE TABLE {table} ({columns})", "schema_drift")
@@ -226,7 +247,10 @@ def coordinator_activation_impact(root):
                        watchdog_will_report=overdue and not manager.get("stall_reported", False))
     return dict(observed_at=observed_at, revision=snapshot["revision"], enabled=snapshot["enabled"],
                 in_flight=in_flight, overdue=[row for row in in_flight if row["overdue"]],
-                manager=manager,
+                manager=manager, dispatch_control=snapshot.get("dispatch_control"),
+                ownership={a["id"]: dict(owner=coordinator.dispatch_owner(snapshot, a),
+                           claim=a.get("claim"), allocation_digest=a.get("allocation_digest"),
+                           status=a["status"]) for a in snapshot["actions"].values()},
                 warning="Armed fixture-only operation is not read-only: admitted ticks can mutate the "
                 "shared coordinator even when dispatch is paused or a manager owns it. Watchdog marks "
                 "unreported overdue dispatching/dispatched/running actions stall_reported, changes "
@@ -301,12 +325,10 @@ def arming_preview(root, db, meta, config, authority, impact):
         memory.row_factory = sqlite3.Row
         # The source connection is read-only; backup writes solely into RAM.
         with source.connection(readonly=True) as original:
-            original.execute("PRAGMA busy_timeout=250")
-            original.execute("BEGIN")
-            row = original.execute("SELECT body FROM state WHERE id=1").fetchone()
-            f.require(row is not None and f.strict_json(row[0])["revision"] == impact["revision"],
-                      "preview_coordinator_changed")
-            original.backup(memory)
+            preview_backup(original, memory)
+        row = memory.execute("SELECT body FROM state WHERE id=1").fetchone()
+        f.require(row is not None and f.strict_json(row[0])["revision"] == impact["revision"],
+                  "preview_coordinator_changed")
 
         class PreviewCoordinator(ExistingCoordinator):
             def __init__(self):
@@ -347,6 +369,11 @@ def arming_preview(root, db, meta, config, authority, impact):
         changes = preview_changes(before, rows())
     return dict(
         state="WOULD_ARM", dry_run=True, generation=authority["generation"],
+        read_policy=dict(owner_locks=False, sqlite_backup_seconds=PREVIEW_READ_SECONDS,
+                         sqlite_backup_pages=32, busy_wait_seconds=0,
+                         warning="Advisory independent snapshots. SQLite briefly takes read locks; "
+                         "each backup refuses on contention or its 250ms budget. "
+                         "No owner lock spans the preview; revalidate at arm."),
         activation_digest=digest(authority), coordinator=impact,
         arm=dict(
             database=str(root / "owner.sqlite3"), table="meta", key=dict(singleton=1),
@@ -408,6 +435,8 @@ def arm_owner(config_path, authority, dry_run=False):
         if os.path.lexists(root / "activation.json"):
             private_file(root / "activation.json")
         impact = coordinator_activation_impact(root)
+        if "transport" in config:
+            f.require(impact["dispatch_control"] is not None, "dispatch_handoff_required")
         if dry_run:
             return arming_preview(root, db, meta, config, authority, impact)
         f.write_json(root / "activation-transaction.json",
@@ -439,6 +468,63 @@ def disarm_owner(config_path, generation):
         return dict(state="OFF", generation=generation + 1)
 
 
+def handoff(config_path, request):
+    """One SQLite commit defines the cutover, with both dispatchers excluded.
+
+    Cooperating hand dispatch uses --hand-run and the same locks/journal. Initial
+    cutover requires the operator to quiesce legacy/manual key senders first.
+    """
+    f.require(type(request) is dict and set(request) ==
+              {"expected_revision", "assignments", "evidence"}, "invalid_handoff")
+    with activation_store(config_path) as (root, db, meta):
+        coordinator = ExistingCoordinator(root)
+        state = coordinator.snapshot()
+        f.require(isinstance(request["assignments"], dict), "invalid_handoff")
+        for key, selection in request["assignments"].items():
+            action = state["actions"][key]
+            if selection.get("to") == "owner" and action["status"] != "prepared":
+                # A legacy hand claim has no daemon effect receipts. Never
+                # fabricate those or relaunch it to make ownership appear valid.
+                row = db.execute("SELECT * FROM operations WHERE action_id=? AND effect='claim'",
+                                 (key,)).fetchone()
+                f.require(row is not None and row["phase"] == "applied"
+                          and row["config_generation"] == meta["control_generation"]
+                          and row["authority_digest"] == meta["activation_digest"],
+                          "handoff_requires_receipted_claim")
+                receipt = load(root / row["receipt_artifact"])
+                f.require(digest(receipt) == row["receipt_digest"]
+                          and receipt["result"]["claim"] == action.get("claim")
+                          and receipt["result"]["allocation_digest"] == action["allocation_digest"],
+                          "handoff_claim_mismatch")
+        control = coordinator._handoff(**request)
+        return dict(state="HANDED_OFF", control=control,
+                    coordinator=str(root), assignments=request["assignments"])
+
+
+def reconfigure_owner(config_path, replacement):
+    """Explicit OFF-only repin; preserve journals, generations and history."""
+    with activation_store(config_path) as (root, db, meta):
+        f.require(meta["requested_mode"] == "off", "reconfigure_requires_off")
+        config = configuration(replacement)
+        f.require(config["coordinator"] == str(root), "coordinator_change_forbidden")
+        f.require(not db.execute("SELECT 1 FROM operations WHERE phase != 'applied'").fetchone()
+                  and not db.execute("SELECT 1 FROM holds WHERE resolved_at IS NULL").fetchone(),
+                  "reconfigure_requires_settled_operations")
+        state = ExistingCoordinator(root).snapshot()
+        f.require(not any(a.get("dispatch_owner") == "owner" and a["status"] not in
+                          {"prepared", "accepted", "failed", "cancelled"}
+                          for a in state["actions"].values()), "reconfigure_requires_quiescent_owner")
+        f.write_json(root / "activation-transaction.json",
+                     dict(reconfigure=digest(config), previous_generation=meta["control_generation"]))
+        f.write_json(config_path, config)
+        db.execute("UPDATE meta SET config_digest=?,package_digest=? WHERE singleton=1",
+                   (digest(config), package_digest()))
+        db.commit()
+        remove_activation_intent(root)
+        return dict(state="OFF", config_digest=digest(config), package_digest=package_digest(),
+                    generation=meta["control_generation"])
+
+
 def fixture_receipt(request):
     return {"fixture_only": True, "request_digest": digest(request),
             "event": {"id": "owner-fixture:" + request["identity"], "fixture_only": True}}
@@ -458,11 +544,17 @@ def configured_adapter(config):
 
 
 class Kernel:
-    def __init__(self, config_path):
+    def __init__(self, config_path, dispatcher="owner"):
+        f.require(dispatcher in {"owner", "hand"}, "invalid_dispatcher")
+        self.dispatcher = dispatcher
         self.config_path = Path(config_path)
-        self.config = configuration(config_path)
+        # Validate shared state only after acquiring the delivery lock in tick;
+        # a cooperating dispatcher may currently be committing its SQLite journal.
+        self.config = load(config_path)
         self.root = f.private_dir(self.config["coordinator"])
         self.c = ExistingCoordinator(self.root)
+        if dispatcher == "hand":
+            f.require("transport" in self.config, "hand_run_requires_transport")
         self.db = None
 
     def admit(self):
@@ -548,6 +640,7 @@ class Kernel:
         meta = self.admit()
         state = self.c.snapshot()
         current = state["actions"][action["id"]]
+        self.c._dispatcher(state, current, self.dispatcher)
         if not state["enabled"] or state["manager"] is not None:
             raise DispatchDeferred("dispatch_paused_or_owned")
         f.require(current["allocation_digest"] == action["allocation_digest"]
@@ -639,7 +732,7 @@ class Kernel:
         assignment = encoded({k: action[k] for k in
                               ("kind", "workstream", "sprint", "scope", "inputs", "timeout_seconds")})
         claim_request = {"action_id": action["id"], "allocation_digest": action["allocation_digest"]}
-        action = self.step(action, "claim", claim_request, lambda: self.c.claim(action["id"]))
+        action = self.step(action, "claim", claim_request, lambda: self.c.claim(action["id"], dispatcher=self.dispatcher))
         f.require(self.c.snapshot()["actions"][action["id"]].get("claim") == action["claim"], "claim_drift")
         binding = {k: runtime[k] for k in ("model", "provider", "effort", "worktree")}
         binding.update(action_id=action["id"], claim=action["claim"],
@@ -677,9 +770,9 @@ class Kernel:
         agent = worker.meta["session"]
         ack = self.step(action, "ack", request, lambda: state)
         self.step(action, "dispatched", request,
-                  lambda: self.c.dispatched(action["id"], action["claim"], agent, ack))
+                  lambda: self.c.dispatched(action["id"], action["claim"], agent, ack, dispatcher=self.dispatcher))
         self.step(action, "acknowledged", request,
-                  lambda: self.c.acknowledge(action["id"], agent, action["allocation_digest"], ack))
+                  lambda: self.c.acknowledge(action["id"], agent, action["allocation_digest"], ack, dispatcher=self.dispatcher))
         self.step(action, "start", request, worker.start)
         state = self.worker_observation(worker, action, launch_id)
         if not state.get("submitted"):
@@ -690,14 +783,16 @@ class Kernel:
             return "working"
         result = self.step(action, "return_observed", request, lambda: state)
         self.step(action, "returned", request,
-                  lambda: self.c.returned(action["id"], agent, result))
+                  lambda: self.c.returned(action["id"], agent, result, dispatcher=self.dispatcher))
         return "returned"
 
     def workers(self, adapter):
         """One bounded pass. An operation failure holds only its owning action."""
         outcomes = {}
-        for action in self.c.snapshot()["actions"].values():
-            if action["kind"] not in WORKER_KINDS:
+        snapshot = self.c.snapshot()
+        for action in snapshot["actions"].values():
+            if (self.c.dispatch_owner(snapshot, action) not in (None, self.dispatcher)
+                    or action["kind"] not in WORKER_KINDS):
                 continue
             rows = self.db.execute("SELECT * FROM operations WHERE domain='tmux' AND action_id=?",
                                    (action["id"],)).fetchall()
@@ -727,6 +822,9 @@ class Kernel:
                     outcomes[action["id"]] = "deferred"
                     continue
                 # Unreceipted claims are not adopted; only our recorded claim can resume.
+                if not rows and action["status"] != "prepared" and self.dispatcher == "hand":
+                    outcomes[action["id"]] = "external_hand_claim"
+                    continue
                 f.require(bool(rows) or action["status"] == "prepared", "unowned_claim")
                 outcomes[action["id"]] = self.worker_action(adapter, action)
             except DispatchDeferred:
@@ -741,15 +839,27 @@ class Kernel:
                                 "WHERE domain='tmux' AND action_id=?", (reason, action["id"]))
                 self.db.commit()
                 outcomes[action["id"]] = "HOLD"
-        watchdog = self.c.watchdog()
+        watchdog = self.c.watchdog(dispatcher=self.dispatcher)
         now = time.time()
         self.db.execute("INSERT OR REPLACE INTO health VALUES(?,?,?,?,?,?,?)",
                         ("watchdog", now, now, 0, None, "ok", digest(watchdog)))
         self.db.commit()
-        held = self.db.execute("SELECT 1 FROM holds WHERE resolved_at IS NULL").fetchone()
+        # An action-local hand HOLD is visible in status but must not turn the
+        # owner lane into HOLD (and vice versa). Unknown/global holds remain hard.
+        excluded = {digest(["tmux", a["id"], "claim"]) for a in snapshot["actions"].values()
+                    if self.c.dispatch_owner(snapshot, a) not in (None, self.dispatcher)}
+        excluded.update(row["op_id"] for row in self.db.execute("SELECT op_id,action_id FROM operations")
+                        if row["action_id"] in snapshot["actions"] and
+                        self.c.dispatch_owner(snapshot, snapshot["actions"][row["action_id"]])
+                        not in (None, self.dispatcher))
+        held = any(row[0] not in excluded for row in self.db.execute(
+            "SELECT op_id FROM holds WHERE resolved_at IS NULL"))
         readiness = self.c.readiness()
         return {"state": "HOLD" if held else "READY" if readiness in {"paused", "owned"} else "ACTIVE",
-                "actions": outcomes, "routing": "tmux-workers", "fixture_only": False}
+                "actions": outcomes, "routing": "tmux-workers", "fixture_only": False,
+                "dispatcher": self.dispatcher,
+                "ownership": {a["id"]: self.c.dispatch_owner(snapshot, a)
+                              for a in snapshot["actions"].values()}}
 
     def tick(self, adapter=None):
         adapter = configured_adapter(self.config) if adapter is None else adapter
@@ -757,9 +867,11 @@ class Kernel:
         f.require(type(adapter) is FixedTestAdapter or (type(adapter) is TmuxAdapter
                   and adapter.config == self.config.get("transport")), "live_adapter_unavailable")
         path = private_file(self.root / "owner.sqlite3")
-        f.require(not any(Path(str(path) + suffix).exists() for suffix in ("-journal", "-wal", "-shm")),
-                  "owner_recovery_required")
         with locked(self.root / "owner-daemon.lock"):
+            f.require(not any(Path(str(path) + suffix).exists() for suffix in ("-journal", "-wal", "-shm")),
+                      "owner_recovery_required")
+            if self.dispatcher == "hand":
+                f.require("dispatch_control" in self.c.snapshot(), "dispatch_handoff_required")
             self.db = sqlite3.connect(path.as_uri() + "?mode=rw", uri=True)
             self.db.row_factory = sqlite3.Row
             boot = None
@@ -946,14 +1058,18 @@ def scheduled_tick(root, recover=None):
             f.require(schedule_pins(Path(pins["python"]), Path(pins["runtime"]),
                                     Path(pins["config"]), pins["python_sha256"]) == pins, "schedule_pin_drift")
             result = Kernel(Path(pins["config"])).tick()
-        except (f.LaunchError, Rejected):
-            result = {"state": "HOLD", "reason": "owner_run_refused"}
+        except BlockingIOError:
+            result = {"state": "BUSY", "dispatcher": "owner"}
+        except (f.LaunchError, Rejected) as exc:
+            result = {"state": "HOLD", "reason": "owner_run_refused", "refusal": str(exc)}
         except Exception as exc:
             result = {"state": "ERROR", "reason": type(exc).__name__}
         status["completed_at"] = time.time()
         if result.get("reason") == "owner_run_refused":
             status.update(hold="owner_run_refused", first_refusal=status.get("first_refusal") or time.time(),
-                          last_refusal=time.time())
+                          last_refusal=time.time(), refusal=result.get("refusal"))
+        elif result["state"] == "BUSY":
+            status.update(skipped=status["skipped"] + 1, previous_success=None)
         elif result.get("reason"):
             status.update(errors=status.get("errors", 0) + 1,
                           consecutive_errors=status.get("consecutive_errors", 0) + 1,
@@ -972,6 +1088,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_mutually_exclusive_group()
     commands.add_argument("--run", action="store_true")
+    commands.add_argument("--hand-run", action="store_true", help="one hand-owned TMUX pass using the shared journal")
+    commands.add_argument("--handoff", type=Path, help="revision-bound ownership partition/transfer JSON")
+    commands.add_argument("--reconfigure", type=Path, help="OFF-only replacement config and package repin")
     commands.add_argument("--arm", action="store_true",
                           help="arm shared coordinator mutation; fixture-only is not read-only; "
                           "inspect --activation-status before arming")
@@ -991,6 +1110,23 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.dry_run and not args.arm:
         parser.error("--dry-run requires --arm")
+    if args.handoff or args.reconfigure or args.hand_run:
+        if (args.config is None or args.schedule or args.recover is not None or args.observe
+                or args.publish_state or args.authority or args.generation is not None):
+            parser.error("handoff/reconfigure/hand-run require only --config and their own input")
+        try:
+            if args.handoff:
+                result = handoff(args.config, load(args.handoff))
+            elif args.reconfigure:
+                result = reconfigure_owner(args.config, args.reconfigure)
+            else:
+                result = Kernel(args.config, dispatcher="hand").tick()
+            print(encoded(result))
+            return 0
+        except (f.LaunchError, Rejected, OSError, sqlite3.Error, ValueError, TypeError, KeyError) as exc:
+            reason = str(exc) if isinstance(exc, (f.LaunchError, Rejected)) else type(exc).__name__
+            print(encoded(dict(state="BUSY" if isinstance(exc, BlockingIOError) else "REFUSED", reason=reason)))
+            return 0 if args.hand_run and isinstance(exc, BlockingIOError) else 2
     if args.arm or args.disarm or args.activation_status:
         if (args.config is None or args.schedule or args.recover is not None or args.observe
                 or args.publish_state or (args.arm and (args.authority is None or args.generation is not None))
@@ -1046,9 +1182,12 @@ def main(argv=None):
         # Configuration selects only built-in adapters; default remains the fixture.
         print(encoded(kernel.tick()))
         return 0
-    except (f.LaunchError, OSError, sqlite3.Error, ValueError, TypeError, KeyError):
-        print('{"state":"HOLD","reason":"owner_run_refused"}')
-        return 2
+    except (f.LaunchError, Rejected, OSError, sqlite3.Error, ValueError, TypeError, KeyError) as exc:
+        reason = str(exc) if isinstance(exc, (f.LaunchError, Rejected)) else type(exc).__name__
+        print(encoded(dict(state="BUSY" if isinstance(exc, BlockingIOError) else "HOLD",
+                           reason="dispatch_busy" if isinstance(exc, BlockingIOError) else "owner_run_refused",
+                           refusal=reason)))
+        return 0 if isinstance(exc, BlockingIOError) else 2
 
 
 if __name__ == "__main__":

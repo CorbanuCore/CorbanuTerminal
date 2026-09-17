@@ -693,10 +693,51 @@ class Coordinator:
             if other["id"] != action["id"] and other["status"] not in TERMINAL | {"prepared"}:
                 require(not set(action["resources"]) & set(other["resources"]), "resource owned")
 
-    def claim(self, action_id):
+    @staticmethod
+    def dispatch_owner(state, action):
+        # Existing coordinators retain their old contract until explicit cutover.
+        return action.get("dispatch_owner", "hand") if "dispatch_control" in state else None
+
+    @classmethod
+    def _dispatcher(cls, state, action, dispatcher):
+        require(dispatcher in {"owner", "hand"}, "invalid dispatcher")
+        require(cls.dispatch_owner(state, action) in (None, dispatcher), "wrong dispatch owner")
+
+    def _handoff(self, assignments, expected_revision, evidence):
+        """Called by owner_daemon.handoff under both delivery/activation locks."""
+        require(type(expected_revision) is int and isinstance(evidence, dict) and evidence,
+                "handoff revision and evidence required")
+        require(isinstance(assignments, dict), "handoff assignments required")
+        with self.mutation("dispatch_handoff", {"assignments": assignments,
+                           "expected_revision": expected_revision, "evidence": evidence}) as (db, state):
+            require(state["revision"] == expected_revision, "stale handoff revision")
+            require(state["manager"] is None, "manager cycle already owned")
+            if "dispatch_control" not in state:
+                require(set(assignments) == {a["id"] for a in state["actions"].values()
+                                             if a["status"] not in TERMINAL},
+                        "initial handoff must partition every pending action")
+            for key, selection in assignments.items():
+                require(isinstance(selection, dict) and set(selection) ==
+                        {"from", "to", "claim", "allocation_digest", "status"}, "invalid handoff selection")
+                action = state["actions"][key]
+                current = self.dispatch_owner(state, action)
+                require(selection["from"] == current, "stale dispatch owner")
+                require(selection["to"] in {"hand", "owner"}, "invalid dispatcher")
+                require(selection["claim"] == action.get("claim") and
+                        selection["allocation_digest"] == action["allocation_digest"] and
+                        selection["status"] == action["status"], "stale handoff claim")
+                action["dispatch_owner"] = selection["to"]
+            state["dispatch_control"] = dict(revision=state["revision"] + 1,
+                                             at=self.clock(), default="hand",
+                                             evidence=self._reference(db, evidence))
+            receipt = dict(state["dispatch_control"])
+        return receipt
+
+    def claim(self, action_id, dispatcher="hand"):
         with self.mutation("claim", {"action": action_id}) as (_, state):
             require(state["enabled"], "dispatch paused")
             action = state["actions"][action_id]
+            self._dispatcher(state, action, dispatcher)
             require(action["status"] == "prepared", "action already claimed")
             require(action["allocation_digest"] == digest(state["allocations"].get(action["inputs"]["allocation"])),
                     "stale allocation claim")
@@ -707,24 +748,27 @@ class Coordinator:
             receipt = json.loads(encoded(action))
         return receipt
 
-    def dispatched(self, action_id, claim, agent_id, native_receipt):
+    def dispatched(self, action_id, claim, agent_id, native_receipt, dispatcher="hand"):
         ident(agent_id)
         require(bool(native_receipt), "native dispatch receipt required")
         with self.mutation("dispatched", {"action": action_id, "native": native_receipt}) as (db, state):
             action = state["actions"][action_id]
+            self._dispatcher(state, action, dispatcher)
             require(action["status"] == "dispatching" and action["claim"] == claim, "wrong dispatch claim")
             action.update(status="dispatched", agent=agent_id, dispatch_receipt=self._reference(db, native_receipt), updated=self.clock())
 
-    def acknowledge(self, action_id, agent_id, allocation_digest, native_receipt):
+    def acknowledge(self, action_id, agent_id, allocation_digest, native_receipt, dispatcher="hand"):
         with self.mutation("acknowledged", {"action": action_id, "native": native_receipt}) as (db, state):
             action = state["actions"][action_id]
+            self._dispatcher(state, action, dispatcher)
             require(action["status"] == "dispatched" and action["agent"] == agent_id, "wrong agent/state")
             require(action["allocation_digest"] == allocation_digest and bool(native_receipt), "wrong allocation ACK")
             action.update(status="running", ack_receipt=self._reference(db, native_receipt), updated=self.clock())
 
-    def returned(self, action_id, agent_id, result):
+    def returned(self, action_id, agent_id, result, dispatcher="hand"):
         with self.mutation("returned", {"action": action_id, "result": result}) as (db, state):
             action = state["actions"][action_id]
+            self._dispatcher(state, action, dispatcher)
             require(action["status"] == "running" and action["agent"] == agent_id, "wrong agent/state")
             reference = self._reference(db, result)
             action.update(status="returned", result=reference, updated=self.clock())
@@ -739,11 +783,12 @@ class Coordinator:
             action.update(status="accepted" if accepted else "failed", verification=reference, updated=self.clock())
             self._event(db, {"id": "verified:" + action_id, "accepted": accepted, "evidence": reference})
 
-    def reconcile_dispatch(self, action_id, evidence, agent_id=None):
+    def reconcile_dispatch(self, action_id, evidence, agent_id=None, dispatcher="hand"):
         """Owner inspects native state first. No automatic duplicate launch."""
         require(bool(evidence), "native reconciliation evidence required")
         with self.mutation("reconcile_dispatch", evidence) as (db, state):
             action = state["actions"][action_id]
+            self._dispatcher(state, action, dispatcher)
             allowed = {"dispatching", "dispatch_uncertain"} if agent_id else {"dispatching", "dispatch_uncertain", "dispatched", "running"}
             require(action["status"] in allowed, "not a reconcilable dispatch")
             action.update(status="dispatched" if agent_id else "failed", updated=self.clock())
@@ -756,13 +801,14 @@ class Coordinator:
                 action["dispatch_epoch"] += 1
             self._event(db, {"id": f"dispatch-reconciled:{action_id}:{state['revision']}", "evidence": evidence})
 
-    def watchdog(self):
+    def watchdog(self, dispatcher=None):
         """Report each stall once; never re-launch on timeout alone."""
         found = []
         snapshot = self.snapshot()
         now = self.clock()
         overdue = [a["id"] for a in snapshot["actions"].values()
-                   if a["status"] in {"dispatching", "dispatched", "running"}
+                   if (dispatcher is None or self.dispatch_owner(snapshot, a) in (None, dispatcher))
+                   and a["status"] in {"dispatching", "dispatched", "running"}
                    and a["deadline"] < now and not a.get("stall_reported")]
         manager = snapshot["manager"]
         if not overdue and not (manager and manager["deadline"] < now and not manager.get("stall_reported")):
@@ -776,7 +822,8 @@ class Coordinator:
                     found.append(event)
                 manager["stall_reported"] = True
             for action in state["actions"].values():
-                if (action["status"] not in {"dispatching", "dispatched", "running"}
+                if ((dispatcher is not None and self.dispatch_owner(state, action) not in (None, dispatcher))
+                        or action["status"] not in {"dispatching", "dispatched", "running"}
                         or action["deadline"] >= now or action.get("stall_reported")):
                     continue
                 action["stall_reported"] = True

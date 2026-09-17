@@ -181,7 +181,17 @@ def owner_activation(args):
                         interval=args.interval, publish_state=str(args.publish_state))
         if previous:
             previous = dict(previous, domain=owner.installation_domain(previous))
-            f.require({key: previous[key] for key in expected} == expected, "installation_conflict")
+            if getattr(args, "repin", False):
+                f.require(previous["phase"] == "uninstalled" and presence == "absent",
+                          "repin_requires_uninstalled")
+                f.require(all(previous[key] == expected[key] for key in
+                              ("label", "domain", "interval", "publish_state")), "installation_conflict")
+                with owner.activation_store(args.config) as (_, _, meta):
+                    f.require(meta["requested_mode"] == "off"
+                              and meta["config_digest"] == owner.digest(owner.load(args.config))
+                              and meta["package_digest"] == owner.package_digest(), "repin_requires_off_pins")
+            else:
+                f.require({key: previous[key] for key in expected} == expected, "installation_conflict")
             if presence == "present":
                 f.require(previous["phase"] == "installed", "installation_reconciliation_required")
                 previous["sibling_observation"] = sibling_observation()
@@ -209,6 +219,7 @@ if __name__ == "__main__" and "--owner" in sys.argv:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--label")
     parser.add_argument("--confirm-live", action="store_true")
+    parser.add_argument("--repin", action="store_true", help="explicit OFF-only repin of an uninstalled schedule")
     parser.add_argument("--domain", choices=("gui", "user"), default="gui")
     parser.add_argument("--publish-state", type=Path)
     parser.add_argument("--python", type=Path)

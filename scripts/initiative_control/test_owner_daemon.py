@@ -425,6 +425,34 @@ class ArmingPreviewTests(unittest.TestCase):
             owner.arm_owner(self.config_path, self.authority, dry_run=True)
         self.assertEqual(before, self.files())
 
+    def test_preview_never_acquires_owner_locks_even_during_backup(self):
+        original = owner.preview_backup
+        snapshots = []
+        def check(source, destination):
+            with owner.locked(self.root / "owner-daemon.lock"), \
+                    owner.locked(self.root / "owner-admission.lock"):
+                snapshots.append(True)
+                return original(source, destination)
+        before = self.files()
+        with patch.object(owner, "preview_backup", side_effect=check):
+            result = owner.arm_owner(self.config_path, self.authority, dry_run=True)
+        self.assertEqual(2, len(snapshots))
+        self.assertFalse(result["read_policy"]["owner_locks"])
+        self.assertEqual(before, self.files())
+
+    def test_backup_busy_or_elapsed_budget_refuses(self):
+        with closing(sqlite3.connect(":memory:")) as destination:
+            class Busy:
+                def execute(self, sql):
+                    pass
+                def backup(self, dest, pages, progress, sleep):
+                    progress(sqlite3.SQLITE_BUSY, 1, 2)
+            with self.assertRaisesRegex(f.LaunchError, "preview_database_busy"):
+                owner.preview_backup(Busy(), destination)
+            with patch.object(owner.time, "monotonic", side_effect=[0, 1]):
+                with self.assertRaisesRegex(f.LaunchError, "preview_read_budget_exceeded"):
+                    owner.preview_backup(Busy(), destination)
+
     def test_preview_option_cannot_be_silently_ignored(self):
         for args in (("--dry-run",), ("--run", "--dry-run"),
                      ("--disarm", "--dry-run", "--config", str(self.config_path), "--generation", "0")):
@@ -705,6 +733,10 @@ class ArmingTests(unittest.TestCase):
 
     def test_transport_arm_does_not_launch_or_read_auth(self):
         self.transport()
+        with self.assertRaisesRegex(f.LaunchError, "dispatch_handoff_required"):
+            owner.arm_owner(self.config_path, self.authority)
+        owner.handoff(self.config_path, dict(expected_revision=self.c.snapshot()["revision"],
+                      assignments={}, evidence={"fixture": "both dispatchers quiescent"}))
         with patch.object(tmux, "TmuxAdapter", side_effect=AssertionError("no transport effects")):
             owner.arm_owner(self.config_path, self.authority)
         self.assertFalse((self.root / "unused").exists())
@@ -987,8 +1019,8 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.configure()
         self.prepared()
         original = owner.ExistingCoordinator.claim
-        def crash(c, action):
-            original(c, action)
+        def crash(c, action, **kwargs):
+            original(c, action, **kwargs)
             raise SystemExit(75)
         with patch.object(owner.ExistingCoordinator, "claim", crash):
             with self.assertRaises(SystemExit):
@@ -1000,8 +1032,8 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.configure()
         self.prepared()
         original = owner.ExistingCoordinator.returned
-        def crash(c, *args):
-            original(c, *args)
+        def crash(c, *args, **kwargs):
+            original(c, *args, **kwargs)
             raise SystemExit(75)
         with patch.object(owner.ExistingCoordinator, "returned", crash):
             with self.assertRaises(SystemExit):
@@ -1203,6 +1235,140 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.assertEqual([], FakeWorker.events)
 
 
+class HandoffTests(unittest.TestCase):
+    setUp = OwnerDaemonTests.setUp
+    tearDown = OwnerDaemonTests.tearDown
+    sql = OwnerDaemonTests.sql
+    arm = OwnerDaemonTests.arm
+    child = OwnerDaemonTests.child
+    configure = WorkerLifecycleTests.configure
+    prepared = WorkerLifecycleTests.prepared
+    tick = WorkerLifecycleTests.tick
+
+    def transfer(self, choices, revision=None):
+        state = self.c.snapshot()
+        request = dict(expected_revision=state["revision"] if revision is None else revision,
+                       evidence={"fixture": "cooperating dispatchers; no raw key senders"},
+                       assignments={key: dict(
+                           **{field: state["actions"][key].get(field)
+                              for field in ("claim", "status", "allocation_digest")},
+                           **{"from": self.c.dispatch_owner(state, state["actions"][key]), "to": side})
+                           for key, side in choices.items()})
+        return owner.handoff(self.config_path, request)
+
+    def test_partition_is_atomic_and_defaults_new_actions_to_hand(self):
+        self.configure()
+        self.prepared("owned")
+        self.prepared("manual")
+        before = self.c.snapshot()
+        with self.assertRaisesRegex(owner.Rejected, "partition every"):
+            self.transfer({"owned": "owner"})
+        self.assertEqual(before, self.c.snapshot())
+        with self.assertRaisesRegex(owner.Rejected, "stale handoff revision"):
+            self.transfer({"owned": "owner", "manual": "hand"}, revision=0)
+        receipt = self.transfer({"owned": "owner", "manual": "hand"})
+        self.assertEqual(before["revision"] + 1, receipt["control"]["revision"])
+        self.prepared("later")
+        with self.assertRaisesRegex(owner.Rejected, "wrong dispatch owner"):
+            self.c.claim("owned")
+        self.assertEqual({"owned": "returned"}, self.tick()["actions"])
+        self.assertEqual("prepared", self.c.snapshot()["actions"]["manual"]["status"])
+        self.assertEqual("prepared", self.c.snapshot()["actions"]["later"]["status"])
+        self.assertEqual({"manual": "returned", "later": "returned"},
+                         owner.Kernel(self.config_path, dispatcher="hand").tick()["actions"])
+        self.assertEqual([], self.sql("SELECT * FROM holds"))
+        observed = owner.activation_status(self.config_path)["coordinator"]["ownership"]
+        self.assertEqual("owner", observed["owned"]["owner"])
+        self.assertEqual("hand", observed["manual"]["owner"])
+        self.assertEqual("hand", observed["later"]["owner"])
+
+    def test_legacy_hand_claim_is_not_launched_held_or_watchdog_mutated(self):
+        self.configure()
+        self.prepared("manual")
+        claim = self.c.claim("manual")
+        self.transfer({"manual": "hand"})
+        with self.c.mutation("fixture", {}) as (_, state):
+            state["actions"]["manual"]["deadline"] = 1
+        before = self.c.snapshot()["actions"]["manual"]
+        self.assertEqual({}, self.tick()["actions"])
+        self.assertEqual(before, self.c.snapshot()["actions"]["manual"])
+        self.assertEqual([], self.sql("SELECT * FROM holds"))
+        self.assertEqual([], FakeWorker.events)
+        with self.assertRaisesRegex(f.LaunchError, "handoff_requires_receipted_claim"):
+            self.transfer({"manual": "owner"})
+        self.assertEqual(claim["claim"], self.c.snapshot()["actions"]["manual"]["claim"])
+
+    def test_active_claim_round_trip_reuses_journal_without_duplicate_keys(self):
+        self.configure()
+        self.prepared("work")
+        self.transfer({"work": "owner"})
+        FakeWorker.modes["work"] = "missing-ack"
+        self.assertEqual("awaiting_ack", self.tick()["actions"]["work"])
+        claim = self.c.snapshot()["actions"]["work"]["claim"]
+        self.transfer({"work": "hand"})
+        self.assertEqual({}, self.tick()["actions"])
+        self.assertEqual("awaiting_ack",
+                         owner.Kernel(self.config_path, dispatcher="hand").tick()["actions"]["work"])
+        self.transfer({"work": "owner"})
+        FakeWorker.modes.clear()
+        self.assertEqual("returned", self.tick()["actions"]["work"])
+        self.assertEqual(claim, self.c.snapshot()["actions"]["work"]["claim"])
+        self.assertEqual([("work", "launch"), ("work", "prompt"), ("work", "start")], FakeWorker.events)
+
+    def test_cutover_refuses_while_delivery_lock_held_and_preserves_claim(self):
+        self.configure()
+        self.prepared()
+        before = self.c.snapshot()
+        with owner.locked(self.root / "owner-daemon.lock"):
+            with self.assertRaises(BlockingIOError):
+                self.transfer({"one": "owner"})
+        self.assertEqual(before, self.c.snapshot())
+
+    def test_hand_hold_does_not_hold_owner_lane(self):
+        self.configure()
+        self.prepared("manual")
+        self.prepared("owned")
+        self.transfer({"manual": "hand", "owned": "owner"})
+        FakeWorker.modes["manual"] = "wrong-ack"
+        self.assertEqual("HOLD", owner.Kernel(self.config_path, dispatcher="hand").tick()["state"])
+        result = self.tick()
+        self.assertEqual(("ACTIVE", {"owned": "returned"}), (result["state"], result["actions"]))
+        self.assertEqual([("wrong_ack",)], self.sql("SELECT reason_code FROM holds"))
+
+    def test_hand_cannot_ack_or_return_owner_claim(self):
+        self.configure()
+        self.prepared()
+        self.transfer({"one": "owner"})
+        claim = self.c.claim("one", dispatcher="owner")
+        with self.assertRaisesRegex(owner.Rejected, "wrong dispatch owner"):
+            self.c.dispatched("one", claim["claim"], "agent", {"fixture": True})
+        self.c.dispatched("one", claim["claim"], "agent", {"fixture": True}, dispatcher="owner")
+        with self.assertRaisesRegex(owner.Rejected, "wrong dispatch owner"):
+            self.c.acknowledge("one", "agent", claim["allocation_digest"], {"fixture": True})
+        self.c.acknowledge("one", "agent", claim["allocation_digest"], {"fixture": True}, dispatcher="owner")
+        with self.assertRaisesRegex(owner.Rejected, "wrong dispatch owner"):
+            self.c.returned("one", "agent", {"fixture": True})
+        with self.assertRaisesRegex(owner.Rejected, "wrong dispatch owner"):
+            self.c.reconcile_dispatch("one", {"fixture": True})
+
+    def test_reconfigure_requires_off_and_preserves_old_history(self):
+        owner.arm_owner(self.config_path, self.authority)
+        owner.Kernel(self.config_path).tick()
+        replacement = self.root / "replacement.json"
+        config = dict(self.config, manager_enabled=False)
+        f.write_json(replacement, config)
+        with self.assertRaisesRegex(f.LaunchError, "reconfigure_requires_off"):
+            owner.reconfigure_owner(self.config_path, replacement)
+        owner.disarm_owner(self.config_path, 1)
+        before = self.sql("SELECT * FROM operations")
+        result = owner.reconfigure_owner(self.config_path, replacement)
+        self.assertEqual(2, result["generation"])
+        self.assertEqual(before, self.sql("SELECT * FROM operations"))
+        self.assertEqual(config, owner.load(self.config_path))
+        with self.assertRaisesRegex(f.LaunchError, "owner_off"):
+            owner.Kernel(self.config_path).tick()
+
+
 class RecurrenceTests(unittest.TestCase):
     setUp = OwnerDaemonTests.setUp
     tearDown = OwnerDaemonTests.tearDown
@@ -1261,7 +1427,51 @@ class RecurrenceTests(unittest.TestCase):
             owner.scheduled_tick(args.root, recover="disposable arming verified")
             self.assertEqual("ACTIVE", owner.scheduled_tick(args.root)["state"])
             owner.disarm_owner(self.config_path, 1)
-            self.assertEqual("owner_run_refused", owner.scheduled_tick(args.root)["reason"])
+            result = owner.scheduled_tick(args.root)
+            self.assertEqual("owner_run_refused", result["reason"])
+            self.assertEqual("owner_off", result["refusal"])
+            self.assertEqual("owner_off", owner.load(args.root / "tick.json")["refusal"])
+
+    def test_explicit_off_only_schedule_repin_preserves_tick_history(self):
+        import activate
+        args = self.installation()
+        service, command, _ = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+            owner.scheduled_tick(args.root)
+            tick = owner.load(args.root / "tick.json")
+            args.repin = True
+            with self.assertRaisesRegex(f.LaunchError, "repin_requires_uninstalled"):
+                activate.owner_activation(args)
+            args.owner = "uninstall"
+            activate.owner_activation(args)
+            replacement = self.root / "replacement.json"
+            f.write_json(replacement, dict(self.config, manager_enabled=False))
+            owner.reconfigure_owner(self.config_path, replacement)
+            args.owner = "install"
+            args.repin = False
+            with self.assertRaisesRegex(f.LaunchError, "installation_conflict"):
+                activate.owner_activation(args)
+            args.repin = True
+            activate.owner_activation(args)
+            self.assertEqual(tick, owner.load(args.root / "tick.json"))
+            self.assertEqual("installed", owner.load(args.root / "installation.json")["phase"])
+
+    def test_busy_hand_dispatch_does_not_latch_or_count_as_admitted_success(self):
+        import activate
+        args = self.installation()
+        service, command, _ = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+            owner.arm_owner(self.config_path, self.authority)
+            with owner.locked(self.root / "owner-daemon.lock"):
+                self.assertEqual("BUSY", owner.scheduled_tick(args.root)["state"])
+            tick = owner.load(args.root / "tick.json")
+            self.assertIsNone(tick["last_success"])
+            self.assertIsNone(tick["hold"])
+            self.assertEqual(1, tick["skipped"])
+            self.assertEqual([], self.sql("SELECT * FROM boots"))
+            self.assertEqual("ACTIVE", owner.scheduled_tick(args.root)["state"])
 
     def test_install_twice_and_uninstall_preserve_latch_and_remove_service(self):
         import activate
