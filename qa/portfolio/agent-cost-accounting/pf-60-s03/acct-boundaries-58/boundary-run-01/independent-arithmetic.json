@@ -1,0 +1,102 @@
+[
+  {
+    "kind": "root",
+    "index": 0,
+    "model": "gpt-5.6-sol",
+    "path": "/v1/responses",
+    "service_tier": null,
+    "input": 100,
+    "cached": 20,
+    "output": 10,
+    "reasoning": 4,
+    "real_utc": "2026-09-17T08:40:13.150200+00:00",
+    "fixture_utc": "2026-03-08T06:59:59Z",
+    "emission": 0,
+    "exact_usd": "0.00071",
+    "rates_per_million": [
+      "5",
+      ".5",
+      "30"
+    ]
+  },
+  {
+    "kind": "root",
+    "index": 1,
+    "model": "gpt-5.6-sol",
+    "path": "/v1/responses",
+    "service_tier": null,
+    "input": 101,
+    "cached": 20,
+    "output": 10,
+    "reasoning": 4,
+    "real_utc": "2026-09-17T08:40:13.329678+00:00",
+    "fixture_utc": "2026-03-08T06:59:59Z",
+    "emission": 1,
+    "exact_usd": "0.000715",
+    "rates_per_million": [
+      "5",
+      ".5",
+      "30"
+    ]
+  },
+  {
+    "kind": "child",
+    "index": 0,
+    "model": "gpt-5.6-sol",
+    "path": "/v1/responses",
+    "service_tier": null,
+    "input": 80,
+    "cached": 10,
+    "output": 6,
+    "reasoning": 2,
+    "real_utc": "2026-09-17T08:40:13.403200+00:00",
+    "fixture_utc": "2026-03-08T06:59:59Z",
+    "emission": 2,
+    "exact_usd": "0.000535",
+    "rates_per_million": [
+      "5",
+      ".5",
+      "30"
+    ]
+  },
+  {
+    "kind": "root",
+    "index": 2,
+    "model": "gpt-5.6-sol",
+    "path": "/v1/responses",
+    "service_tier": null,
+    "input": 102,
+    "cached": 20,
+    "output": 10,
+    "reasoning": 4,
+    "real_utc": "2026-09-17T08:40:16.930814+00:00",
+    "fixture_utc": "2026-03-08T07:00:00Z",
+    "emission": 3,
+    "exact_usd": "0.00072",
+    "rates_per_million": [
+      "5",
+      ".5",
+      "30"
+    ]
+  },
+  {
+    "kind": "checkpoint",
+    "index": 0,
+    "model": "gpt-5.6-sol",
+    "path": "/v1/responses",
+    "service_tier": null,
+    "input": 100,
+    "cached": 20,
+    "output": 10,
+    "reasoning": 4,
+    "real_utc": "2026-09-17T08:40:20.405338+00:00",
+    "fixture_utc": "2026-03-10T12:00:00Z",
+    "emission": 4,
+    "exact_usd": "0.00071",
+    "rates_per_million": [
+      "5",
+      ".5",
+      "30"
+    ]
+  }
+]

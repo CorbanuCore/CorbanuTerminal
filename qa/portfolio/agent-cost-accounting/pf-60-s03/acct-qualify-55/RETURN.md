@@ -17,7 +17,10 @@ not independent acceptance or an authorization to distribute the feature build.
 
 Seven historical requests were actually sent by the CLI to the loopback provider:
 six in the selected root tree and one independent root. A further Oct 2 synthetic
-request advances the normal checkpoint and is outside every comparison.
+request resumes the selected root, advances the normal checkpoint, and is outside
+every comparison. Its historical wire phase was mistakenly labelled orphan;
+round 58 labels a fresh replay checkpoint and verifies the stored selected-root
+identity. The historical wire receipt remains unchanged.
 The clock leaves monotonic timers and OS wait deadlines real. Exact times are
 sampled admission times, not post-hoc edits to accounting rows.
 
@@ -93,12 +96,13 @@ provider diversity beyond openai is not claimed.
 
 ## Reproducible UTC citation
 
-Removed the historical orphan-artifact citation in acct-qualify-50/RETURN.md and
-replaced it with [verify_utc_alignment.py](verify_utc_alignment.py). Running it
-reproduces the old JSON byte-for-byte from its three preserved PTY selections:
-3/3 labels pass. It is described as a **label** check; the new multi-bucket evidence
-above supplies actual boundary membership. No old raw result was overwritten or
-relabeled as the new qualification.
+The tracked historical receipt remains linked from acct-qualify-50/RETURN.md.
+[verify_utc_alignment.py](verify_utc_alignment.py) regenerates its bytes from the
+three preserved PTY selections into this round-55 directory and compares them
+with the untouched round-50 receipt, failing on mismatch: 3/3 labels pass. It is described as a **label** check; the new multi-bucket evidence
+above supplies actual boundary membership. Round 58 corrected the producer's former write to the closed receipt; the
+historical bytes were identical, but that write path was inappropriate. New
+reproductions leave the historical receipt untouched.
 
 ## Unknown ancestry
 

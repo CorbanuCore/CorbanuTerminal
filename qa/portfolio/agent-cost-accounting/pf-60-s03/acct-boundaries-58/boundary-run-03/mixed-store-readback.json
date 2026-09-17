@@ -1,0 +1,49 @@
+{
+  "raw": [
+    [
+      "18df1b61-9f2a-43e4-a8ee-0a00fe9689a5",
+      "{\"attempt_id\":\"18df1b61-9f2a-43e4-a8ee-0a00fe9689a5\",\"request_id\":\"d6b6890e-9998-4b0b-9ca1-2e22dbe891d5\",\"thread_id\":\"019ccc3e-e198-7e90-9544-2743da42cc3e\",\"turn\":\"01a195b1-7f00-7a11-907f-1eba517eb97e\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-terra\",\"scope\":\"bb206cd7-70a7-4d75-8128-cd8392762d51\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1793512800000}"
+    ],
+    [
+      "48255bb1-2d2f-4d45-b97c-e419f5498f34",
+      "{\"attempt_id\":\"48255bb1-2d2f-4d45-b97c-e419f5498f34\",\"request_id\":\"a849ca0e-3b63-44e5-8799-f6b1d7859658\",\"thread_id\":\"019ccc3e-e198-7e90-9544-2743da42cc3e\",\"turn\":\"01a1998e-4400-7b62-b85a-29092bf95631\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-terra\",\"scope\":\"664142dc-7b26-499f-942d-96bd3750beba\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1793577600000}"
+    ],
+    [
+      "ec6b52f2-8353-47ea-95f3-7299df77d282",
+      "{\"attempt_id\":\"ec6b52f2-8353-47ea-95f3-7299df77d282\",\"request_id\":\"831ba61b-9b0a-486e-ba20-b8945e0885e3\",\"thread_id\":\"019ccc3e-e198-7e90-9544-2743da42cc3e\",\"turn\":\"01a1a66e-2a00-7ac1-9bfe-3ba4f6d7bb81\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"d9b2a5f4-73cf-48a8-b111-50d6af940ed1\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1793793600000}"
+    ],
+    [
+      "6786af2e-9221-4e3e-a83a-923c66c32ddd",
+      "{\"attempt_id\":\"6786af2e-9221-4e3e-a83a-923c66c32ddd\",\"request_id\":\"bb3d82e2-03c7-408c-8842-66ee7fb57545\",\"thread_id\":\"019ccc3e-e198-7e90-9544-2743da42cc3e\",\"turn\":\"01a3652d-d318-7fc3-b0b3-09b5804a0d09\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"46f5ef53-d40d-469e-bbaf-2d85197a0609\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1801288799000}"
+    ]
+  ],
+  "compact": [
+    [
+      "019ccc3e-e198-7e90-9544-2743da42cc3e",
+      20520,
+      "{\"version\":1,\"known\":[303,243,60,0,30,12,333],\"unknown\":[0,0,0,0,0,0,0],\"known_usd\":\"0.002145\",\"unknown_estimates\":0,\"attempts\":3}"
+    ],
+    [
+      "019ccc3e-e198-7e90-9544-2743da42cc3e",
+      20522,
+      "{\"version\":1,\"known\":[100,80,20,0,10,4,110],\"unknown\":[0,0,0,0,0,0,0],\"known_usd\":\"0.00071\",\"unknown_estimates\":0,\"attempts\":1}"
+    ],
+    [
+      "019ccc3e-e198-7e90-9544-2743da42cc3e",
+      20757,
+      "{\"version\":1,\"known\":[103,83,20,0,10,4,113],\"unknown\":[0,0,0,0,0,0,0],\"known_usd\":\"0.000725\",\"unknown_estimates\":0,\"attempts\":1}"
+    ],
+    [
+      "019ccc3e-e198-7e90-9544-2743da42cc3e",
+      20758,
+      "{\"version\":1,\"known\":[104,84,20,0,10,4,114],\"unknown\":[0,0,0,0,0,0,0],\"known_usd\":\"0.00073\",\"unknown_estimates\":0,\"attempts\":1}"
+    ]
+  ],
+  "checkpoint": [
+    [
+      1,
+      1801288799000,
+      1
+    ]
+  ]
+}
