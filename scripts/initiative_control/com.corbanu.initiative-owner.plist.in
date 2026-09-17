@@ -3,11 +3,14 @@
 <plist version="1.0">
 <dict>
     <key>Label</key><string>com.corbanu.initiative-owner</string>
-    <!-- Noninstalled design template. Increment A has no live adapter. -->
+    <!-- Noninstalled template; activate.py resolves and pins all paths. -->
     <key>Disabled</key><true/>
     <key>ProgramArguments</key>
     <array>
         <string>@PINNED_PYTHON@</string>
+        <string>-E</string>
+        <string>-s</string>
+        <string>-S</string>
         <string>-B</string>
         <string>@PRIVATE_RUNTIME@/owner_daemon.py</string>
         <string>--run</string>
@@ -17,8 +20,9 @@
     <key>WorkingDirectory</key><string>@PRIVATE_RUNTIME@</string>
     <key>RunAtLoad</key><false/>
     <key>KeepAlive</key><false/>
-    <!-- Reviewed activation in increment E supplies recurrence policy. -->
-    <key>ThrottleInterval</key><integer>30</integer>
+    <!-- Activation explicitly kickstarts once; missed intervals are not replayed. -->
+    <key>StartInterval</key><integer>30</integer>
+    <key>ThrottleInterval</key><integer>0</integer>
     <key>ExitTimeOut</key><integer>30</integer>
     <key>ProcessType</key><string>Background</string>
     <key>Umask</key><integer>63</integer>
