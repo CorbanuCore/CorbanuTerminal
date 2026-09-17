@@ -111,7 +111,6 @@ async fn finish_probe(mcp: &mut TestAppServer, call_id: &str) -> Result<usize> {
 }
 
 #[tokio::test]
-#[ignore = "PF-83 F04: reproduces an unauthorized-behaviour expectation; un-ignore with the product decision"]
 async fn thread_settings_confirmation_f04_restricts_work_steered_after_applied() -> Result<()> {
     use codex_app_server_protocol::AskForApproval;
     use codex_app_server_protocol::JSONRPCMessage;
@@ -385,6 +384,93 @@ async fn thread_settings_confirmation_preserves_pending_approval() -> Result<()>
     assert_eq!(finish_probe(&mut mcp, "next").await?, 0);
     assert_eq!(std::fs::read_to_string(marker)?, "executed");
     Ok(())
+}
+
+// An approved process crosses a settings update at a filesystem barrier. The
+// next scripted command belongs to the original work, not to a steered message.
+async fn preserve_running_authority_after_confirmation(
+    final_policy: codex_app_server_protocol::AskForApproval,
+) -> Result<()> {
+    use codex_app_server_protocol::AskForApproval;
+    use codex_app_server_protocol::ServerRequest;
+    let fixture = TempDir::new()?;
+    let ready = fixture.path().join("ready");
+    let release = fixture.path().join("release");
+    let completed = fixture.path().join("completed");
+    let probe = fixture.path().join("probe");
+    let barrier = app_test_support::create_shell_command_sse_response(
+        vec![
+            "python3".into(),
+            "-c".into(),
+            "import pathlib,sys,time; pathlib.Path(sys.argv[1]).touch(); deadline=time.monotonic()+50\nwhile not pathlib.Path(sys.argv[2]).exists() and time.monotonic()<deadline: time.sleep(.01)\nassert pathlib.Path(sys.argv[2]).exists(); pathlib.Path(sys.argv[3]).write_text('approved work completed')".into(),
+            ready.to_string_lossy().into_owned(),
+            release.to_string_lossy().into_owned(),
+            completed.to_string_lossy().into_owned(),
+        ],
+        /*workdir*/ None,
+        Some(60000),
+        "approved-barrier",
+    )?;
+    let server = create_mock_responses_server_sequence_unchecked(vec![
+        barrier,
+        write_probe(&probe, "original-work-follow-up")?,
+        create_final_assistant_message_sse_response("done")?,
+    ])
+    .await;
+    let home = TempDir::new()?;
+    create_config_toml(home.path(), &server.uri())?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .build_initialized_with_timeout(Duration::from_secs(60))
+        .await?;
+    let thread = start_thread(&mut mcp).await?.thread;
+    confirm_permission(&mut mcp, &thread.id, AskForApproval::UnlessTrusted).await?;
+    start_text_turn(&mut mcp, thread.id.clone()).await?;
+    let ServerRequest::CommandExecutionRequestApproval { request_id, params } =
+        timeout(DEFAULT_TIMEOUT, mcp.read_stream_until_request_message()).await??
+    else {
+        anyhow::bail!("expected barrier approval");
+    };
+    assert_eq!(params.item_id, "approved-barrier");
+    mcp.send_response(request_id, serde_json::json!({"decision": "accept"}))
+        .await?;
+    timeout(DEFAULT_TIMEOUT, async {
+        while !ready.exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .context("approved process did not reach barrier")?;
+    confirm_permission(&mut mcp, &thread.id, AskForApproval::Never).await?;
+    if final_policy != AskForApproval::Never {
+        confirm_permission(&mut mcp, &thread.id, final_policy).await?;
+    }
+    assert!(!completed.exists(), "process must still be at the barrier");
+    std::fs::write(&release, "continue")?;
+    assert_eq!(finish_probe(&mut mcp, "original-work-follow-up").await?, 1);
+    assert_eq!(
+        std::fs::read_to_string(completed)?,
+        "approved work completed"
+    );
+    assert!(
+        !probe.exists(),
+        "original work keeps its approval requirement"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn thread_settings_confirmation_loosening_preserves_running_work_authority() -> Result<()> {
+    preserve_running_authority_after_confirmation(codex_app_server_protocol::AskForApproval::Never)
+        .await
+}
+
+#[tokio::test]
+async fn thread_settings_confirmation_tightening_preserves_granted_approval() -> Result<()> {
+    preserve_running_authority_after_confirmation(
+        codex_app_server_protocol::AskForApproval::UnlessTrusted,
+    )
+    .await
 }
 
 #[tokio::test]

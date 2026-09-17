@@ -11565,6 +11565,110 @@ async fn steer_input_returns_active_turn_id() {
 }
 
 #[tokio::test]
+async fn steer_input_rejects_changed_authorization_without_mutating_active_work() {
+    let updates = [
+        SessionSettingsUpdate {
+            approval_policy: Some(AskForApproval::UnlessTrusted),
+            ..Default::default()
+        },
+        SessionSettingsUpdate {
+            permission_profile: Some(PermissionProfile::Disabled),
+            ..Default::default()
+        },
+        SessionSettingsUpdate {
+            approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
+            ..Default::default()
+        },
+    ];
+    for update in updates {
+        let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+        let captured = (
+            tc.approval_policy.value(),
+            tc.permission_profile.clone(),
+            tc.config.approvals_reviewer,
+        );
+        sess.spawn_task(
+            Arc::clone(&tc),
+            Vec::new(),
+            NeverEndingTask {
+                kind: TaskKind::Regular,
+                listen_to_cancellation_token: false,
+            },
+        )
+        .await;
+        sess.update_settings(update).await.expect("update settings");
+        let error = sess
+            .steer_input(
+                vec![UserInput::Text {
+                    text: "new work".into(),
+                    text_elements: Vec::new(),
+                }],
+                /*additional_context*/ Default::default(),
+                Some(&tc.sub_id),
+                /*client_user_message_id*/ None,
+                /*responsesapi_client_metadata*/ None,
+            )
+            .await
+            .expect_err("changed authorization must refuse admission");
+        assert_eq!(error, SteerInputError::AuthorizationChanged);
+        assert_eq!(
+            error.to_error_event().message,
+            "Permissions changed since this turn started. Wait for it to finish or stop it, then submit your message again."
+        );
+        assert_eq!(
+            sess.input_queue.get_pending_input(&sess.active_turn).await,
+            (Vec::new(), None)
+        );
+        let active = sess.active_turn.lock().await;
+        let task = active.as_ref().unwrap().task.as_ref().unwrap();
+        assert!(Arc::ptr_eq(&task.turn_context, &tc));
+        assert_eq!(
+            (
+                tc.approval_policy.value(),
+                tc.permission_profile.clone(),
+                tc.config.approvals_reviewer,
+            ),
+            captured
+        );
+    }
+}
+
+#[tokio::test]
+async fn steer_input_accepts_unchanged_authorization_after_settings_update() {
+    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        Vec::new(),
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: false,
+        },
+    )
+    .await;
+    sess.update_settings(SessionSettingsUpdate {
+        approval_policy: Some(tc.approval_policy.value()),
+        reasoning_summary: Some(ReasoningSummaryConfig::Detailed),
+        ..Default::default()
+    })
+    .await
+    .expect("no-op authorization and unrelated setting update");
+    assert_eq!(
+        sess.steer_input(
+            vec![UserInput::Text {
+                text: "new work".into(),
+                text_elements: Vec::new(),
+            }],
+            /*additional_context*/ Default::default(),
+            Some(&tc.sub_id),
+            /*client_user_message_id*/ None,
+            /*responsesapi_client_metadata*/ None,
+        )
+        .await,
+        Ok(tc.sub_id.clone())
+    );
+}
+
+#[tokio::test]
 async fn abort_empty_active_turn_preserves_pending_input() {
     let (sess, _tc, _rx) = make_session_and_context_with_rx().await;
     let pending_item = ResponseItem::Message {

@@ -263,6 +263,7 @@ pub enum SteerInputError {
     NoActiveTurn(Vec<UserInput>),
     ExpectedTurnMismatch { expected: String, actual: String },
     ActiveTurnNotSteerable { turn_kind: NonSteerableTurnKind },
+    AuthorizationChanged,
     EmptyInput,
 }
 
@@ -289,6 +290,10 @@ impl SteerInputError {
                     }),
                 }
             }
+            Self::AuthorizationChanged => ErrorEvent {
+                message: "Permissions changed since this turn started. Wait for it to finish or stop it, then submit your message again.".to_string(),
+                codex_error_info: Some(CodexErrorInfo::BadRequest),
+            },
             Self::EmptyInput => ErrorEvent {
                 message: "input must not be empty".to_string(),
                 codex_error_info: Some(CodexErrorInfo::BadRequest),
@@ -4370,10 +4375,21 @@ impl Session {
             return Err(SteerInputError::EmptyInput);
         }
 
-        let additional_context_input = {
-            let mut state = self.state.lock().await;
-            state.additional_context.merge(additional_context)
-        };
+        // Serialize authorization comparison and admission with settings updates.
+        // A new context cannot re-sandbox existing exec sessions: steered work
+        // could still send them instructions through write_stdin. Refuse admission
+        // instead of changing running work or revoking an already granted approval.
+        let mut state = self.state.lock().await;
+        let current = Self::build_effective_session_config(&state.session_configuration);
+        let captured = &active_task.turn_context;
+        if current.permissions.approval_policy.value() != captured.approval_policy.value()
+            || current.permissions.effective_permission_profile() != captured.permission_profile
+            || current.approvals_reviewer != captured.config.approvals_reviewer
+            || state.session_configuration.windows_sandbox_level != captured.windows_sandbox_level
+        {
+            return Err(SteerInputError::AuthorizationChanged);
+        }
+        let additional_context_input = state.additional_context.merge(additional_context);
 
         if let Some(responsesapi_client_metadata) = responsesapi_client_metadata {
             active_task
@@ -4397,6 +4413,7 @@ impl Session {
                 pending_input,
             )
             .await;
+        drop(state);
         Ok(active_turn_id.clone())
     }
 
