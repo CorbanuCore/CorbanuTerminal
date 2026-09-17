@@ -1,0 +1,35 @@
+{
+  "equality": {
+    "selected": {
+      "byte_identical": true,
+      "bytes": 1554,
+      "sha256": "cb01c7c7fdc7e4872d760318224460f6a79120b9c2c2e8409dfdb23f9c347465"
+    },
+    "viewport": {
+      "byte_identical": true,
+      "bytes": 1249,
+      "sha256": "e40aa441137f8f956d17b726e035d3f0ea510a0b3dc5f847511868bfb2a51c7e"
+    }
+  },
+  "note": "The selected JSON files are byte-identical (SHA-256 cb01c7c7fdc7e4872d760318224460f6a79120b9c2c2e8409dfdb23f9c347465), and the compressed viewport files are byte-identical (SHA-256 e40aa441137f8f956d17b726e035d3f0ea510a0b3dc5f847511868bfb2a51c7e; 1249 bytes each), including Read at 1786363200000 and the admission interval. These captures are indistinguishable at the page level: they bind neither identical nor distinct attempt populations or resolved roots. The separation rests on the store read-backs alone; no distinct-population claim is made from these pages. Actual wall-clock capture dates are not asserted.",
+  "retracted_claim": "They remain distinct captures/attempt populations",
+  "store_readback_sources": [
+    {
+      "path": "acct-readers-61/reader-run-05/native-bindings.json",
+      "sha256": "647eb9a9b284c1c331fc017473e219e822d62f13038353f286baf722afa6a727"
+    },
+    {
+      "path": "acct-readers-61/reader-run-05/identities.json",
+      "sha256": "08ce534b2ee15e83b222b95091682cbf7239e2747e4beb806a334dd3c5e60a01"
+    },
+    {
+      "path": "acct-scope-62/scope-run-01/store-before-fresh-reader.json",
+      "sha256": "449c4649528de85c564884ae549f0bf283caad396331bc907c2df9a8abfff079"
+    },
+    {
+      "path": "acct-scope-62/scope-run-01/store-during-fresh-reader.json",
+      "sha256": "449c4649528de85c564884ae549f0bf283caad396331bc907c2df9a8abfff079"
+    }
+  ],
+  "limitation": "Store read-backs separate the datasets; the identical pages do not bind which root or attempts either session resolved at capture time."
+}

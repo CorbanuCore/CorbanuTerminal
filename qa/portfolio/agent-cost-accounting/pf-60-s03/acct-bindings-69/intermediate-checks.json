@@ -1,0 +1,19 @@
+{
+  "events": [
+    {
+      "attempt": "gates-01/prerequisites",
+      "exit": 1,
+      "reason": "Worker command repeated --bins; cargo rejected arguments before building.",
+      "evidence": "gates-01/prerequisites.json",
+      "correction": "Single --bins selection across the three prerequisite packages; fresh gates-02 output."
+    },
+    {
+      "attempt": "page-controls-02",
+      "exit": 1,
+      "reason": "Worker temporarily moved the digest loop after semantic validation; a stale-estimate injected dollar line failed the earlier semantic assertion instead of the mutation harness's required content-digest assertion.",
+      "observed_auditor_stderr": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\", line 96, in <module>\n    assert not subtotal and not re.search(r\"\\$[0-9]\",text),name\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: stale-estimate\n",
+      "correction": "Restored digest-first validation; updated coverage_controls.py's exact-removal expected error to unexpected content on subtotal page. Final page-controls-03 and removal-controls-02 passed.",
+      "limitation": "No success claimed for page-controls-02. This records the observed command failure, not a fresh replay."
+    }
+  ]
+}

@@ -54,9 +54,10 @@ for allocation, run, stem in [
                          viewport=str(viewport.relative_to(repo)),
                          viewport_sha256=hashlib.sha256(viewport.read_bytes()).hexdigest(),
                          rows=rows))
-assert captures[0]["selected"] != captures[1]["selected"]
+assert captures[0]["selected_sha256"] == captures[1]["selected_sha256"]
+assert captures[0]["viewport_sha256"] == captures[1]["viewport_sha256"]
 save("capture-bindings.json", dict(captures=captures,
-     note="Distinct capture paths; identical selected rows do not bind identical attempt populations. Actual wall-clock capture dates are not asserted."))
+     note="The selected JSON files are byte-identical (SHA-256 cb01c7c7fdc7e4872d760318224460f6a79120b9c2c2e8409dfdb23f9c347465), and the compressed viewport files are byte-identical (SHA-256 e40aa441137f8f956d17b726e035d3f0ea510a0b3dc5f847511868bfb2a51c7e; 1249 bytes each), including Read at 1786363200000 and the admission interval. These captures are indistinguishable at the page level: they bind neither identical nor distinct attempt populations or resolved roots. The separation rests on the store read-backs alone; no distinct-population claim is made from these pages. Actual wall-clock capture dates are not asserted."))
 
 lanes = []
 for name in ("prerequisites", "core-default", "core-feature", "tui"):

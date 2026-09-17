@@ -118,8 +118,13 @@ Whitespace and final scope checks pass; no broad formatter, commit or push.
 One precision correction to the brief: both preserved empty pages request
 **2026-08-10**, with the same UTC admission interval. “Different days” is wrong
 if it means their requested UTC day; actual wall-clock capture dates are not
-established here. They remain distinct captures/attempt populations, so the
-amount/scope correction is valid. No other substantive brief error was found.
+established here. **Round-69 correction:** the earlier claim “They remain
+distinct captures/attempt populations” is retracted. Both selected JSON files
+and compressed viewport files are byte-identical, including the read time and
+admission interval. The pages are indistinguishable and bind neither identical
+nor distinct attempt populations or resolved roots. The separation rests on the
+store read-backs alone; round 62's amount must not be imported into round 61.
+See the corrected `capture-bindings.json` note for exact hashes and limits.
 
 This internal QA revision changes no user-facing product path; no new
 functional handoff is claimed. Fable retains the internal-stage N/A decision

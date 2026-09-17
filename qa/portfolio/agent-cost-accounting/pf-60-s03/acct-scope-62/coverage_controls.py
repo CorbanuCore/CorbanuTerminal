@@ -69,7 +69,7 @@ for kind in ("exact", "displayed"):
         )
         assert process.returncode != 0 and not target.exists(), (kind, name)
         if kind == "exact":
-            assert "numeric page coverage mismatch" in process.stderr, process.stderr
+            assert "unexpected content on subtotal page" in process.stderr, process.stderr
         else:
             assert "AssertionError" in process.stderr and name in process.stderr
         results.append(dict(kind=kind, page=name, exit=process.returncode,
