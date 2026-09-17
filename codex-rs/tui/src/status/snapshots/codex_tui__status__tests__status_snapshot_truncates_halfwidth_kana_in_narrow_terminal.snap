@@ -10,7 +10,12 @@ expression: sanitized
 │  Model:                ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟｶﾞ  │
 │  Model provider:       Ambient         │
 │  Directory: [[workspace]]              │
-│  Permissions:          Custom (workspa │
+│  Permissions:          Next turn:      │
+│                        Custom          │
+│                        (workspace      │
+│                        with network    │
+│                        access, Ask for │
+│                        approval)       │
 │  Security:             Requested       │
 │                        Permissive;     │
 │                        effective       │

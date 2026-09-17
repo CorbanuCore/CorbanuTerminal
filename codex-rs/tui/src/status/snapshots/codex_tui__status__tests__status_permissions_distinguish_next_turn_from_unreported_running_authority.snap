@@ -1,0 +1,31 @@
+---
+source: tui/src/status/tests.rs
+expression: "sections.join(\"\\n\\n\")"
+---
+width 42: 2 lines
+Permissions:      Next turn: Full
+Access
+
+width 46: 1 lines
+Permissions:      Next turn: Full Access
+
+width 70: 1 lines
+Permissions:      Next turn: Full Access
+
+width 100: 1 lines
+Permissions:      Next turn: Full Access
+
+width 42: 3 lines
+Permissions:      Next turn: Read
+Only (Ask for
+approval)
+
+width 46: 2 lines
+Permissions:      Next turn: Read Only
+(Ask for approval)
+
+width 70: 1 lines
+Permissions:      Next turn: Read Only (Ask for approval)
+
+width 100: 1 lines
+Permissions:      Next turn: Read Only (Ask for approval)

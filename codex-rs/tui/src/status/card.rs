@@ -858,7 +858,16 @@ impl HistoryCell for StatusHistoryCell {
             lines.push(formatter.line("Model provider", vec![Span::from(model_provider.clone())]));
         }
         lines.push(formatter.line("Directory", vec![Span::from(directory_value)]));
-        lines.push(formatter.line("Permissions", vec![Span::from(self.permissions.clone())]));
+        // Config reflects session settings, not the active task's captured authority.
+        let permissions = format!("Next turn: {}", self.permissions);
+        let mut permission_lines = textwrap::wrap(&permissions, value_width.max(1)).into_iter();
+        if let Some(first) = permission_lines.next() {
+            lines.push(formatter.line("Permissions", vec![Span::from(first.into_owned())]));
+            lines.extend(
+                permission_lines
+                    .map(|line| formatter.continuation(vec![Span::from(line.into_owned())])),
+            );
+        }
         let mut security_lines = textwrap::wrap(&self.security, value_width.max(1)).into_iter();
         if let Some(first) = security_lines.next() {
             lines.push(formatter.line("Security", vec![Span::from(first.into_owned())]));

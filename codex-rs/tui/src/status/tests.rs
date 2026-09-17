@@ -265,7 +265,7 @@ fn permissions_text_for(config: &Config) -> Option<String> {
         /*collaboration_mode*/ None,
         /*reasoning_effort_override*/ None,
     );
-    render_lines(&composite.display_lines(/*width*/ 80))
+    render_lines(&composite.display_lines(/*width*/ 240))
         .iter()
         .find(|line| line.contains("Permissions:"))
         .and_then(|line| {
@@ -274,8 +274,77 @@ fn permissions_text_for(config: &Config) -> Option<String> {
                 .map(str::trim)
                 .map(|text| text.trim_end_matches('│'))
                 .map(str::trim)
+                .and_then(|text| text.strip_prefix("Next turn: "))
                 .map(ToString::to_string)
         })
+}
+
+#[tokio::test]
+async fn status_permissions_compact_next_turn_label_at_narrow_widths() {
+    let temp_home = TempDir::new().expect("temp home");
+    let mut config = test_config(&temp_home).await;
+    let mut sections = Vec::new();
+    for (profile, active, policy) in [
+        (
+            PermissionProfile::Disabled,
+            ActivePermissionProfile::new(":danger-full-access"),
+            AskForApproval::Never,
+        ),
+        (
+            PermissionProfile::read_only(),
+            ActivePermissionProfile::read_only(),
+            AskForApproval::OnRequest,
+        ),
+    ] {
+        config
+            .permissions
+            .approval_policy
+            .set(policy.to_core())
+            .unwrap();
+        config
+            .permissions
+            .set_permission_profile_from_session_snapshot(PermissionProfileSnapshot::active(
+                profile, active,
+            ))
+            .unwrap();
+        let cell = new_status_output(
+            &config,
+            /*account_display*/ None,
+            /*token_info*/ None,
+            &TokenUsage::default(),
+            &None,
+            /*thread_name*/ None,
+            /*forked_from*/ None,
+            /*rate_limits*/ None,
+            /*_plan_type*/ None,
+            Local::now(),
+            "gpt-5.2",
+            /*collaboration_mode*/ None,
+            /*reasoning_effort_override*/ None,
+        );
+        // The renderer has no running-turn snapshot: retain the scope qualifier
+        // without an unconditional paragraph or a guessed authority comparison.
+        for width in [42, 46, 70, 100] {
+            let lines = render_lines(&cell.display_lines(width));
+            assert!(lines.iter().all(|line| line.width() <= usize::from(width)));
+            let section = lines
+                .iter()
+                .skip_while(|line| !line.contains("Permissions:"))
+                .take_while(|line| !line.contains("Security:"))
+                .map(|line| line.trim_matches(['│', ' ']))
+                .collect::<Vec<_>>();
+            assert!(section.len() <= 4, "width {width}: {section:?}");
+            sections.push(format!(
+                "width {width}: {} lines\n{}",
+                section.len(),
+                section.join("\n")
+            ));
+        }
+    }
+    insta::assert_snapshot!(
+        "status_permissions_distinguish_next_turn_from_unreported_running_authority",
+        sections.join("\n\n")
+    );
 }
 
 #[tokio::test]

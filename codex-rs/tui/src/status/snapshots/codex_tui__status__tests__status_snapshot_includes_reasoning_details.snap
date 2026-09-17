@@ -10,7 +10,7 @@ expression: sanitized
 │  Model:            gpt-5.1-codex-max                                     │
 │  Model provider:   Ambient                                               │
 │  Directory: [[workspace]]                                                │
-│  Permissions:      Workspace (Ask for approval)                          │
+│  Permissions:      Next turn: Workspace (Ask for approval)               │
 │  Security:         Requested Permissive; effective protection unverified │
 │                    (/security)                                           │
 │  Agents.md:        <none>                                                │

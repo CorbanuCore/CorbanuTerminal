@@ -4,18 +4,19 @@ expression: sanitized
 ---
 /status
 
-╭─────────────────────────────────────────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v<V>)                                                 │
-│                                                                             │
-│  Model:            gpt-5.1-codex-max                                        │
-│  Model provider:   Ambient                                                  │
-│  Directory: [[workspace]]                                                   │
-│  Permissions:      Custom (workspace with network access, Ask for approval) │
-│  Security:         Requested Permissive; effective protection unverified    │
-│                    (/security)                                              │
-│  Agents.md:        <none>                                                   │
-│                                                                             │
-│  Token usage:      750 total  (500 input + 250 output)                      │
-│  Context window:   100% left (750 used / 272K)                              │
-│  Limits:           data not available yet                                   │
-╰─────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v<V>)                                              │
+│                                                                          │
+│  Model:            gpt-5.1-codex-max                                     │
+│  Model provider:   Ambient                                               │
+│  Directory: [[workspace]]                                                │
+│  Permissions:      Next turn: Custom (workspace with network access, Ask │
+│                    for approval)                                         │
+│  Security:         Requested Permissive; effective protection unverified │
+│                    (/security)                                           │
+│  Agents.md:        <none>                                                │
+│                                                                          │
+│  Token usage:      750 total  (500 input + 250 output)                   │
+│  Context window:   100% left (750 used / 272K)                           │
+│  Limits:           data not available yet                                │
+╰──────────────────────────────────────────────────────────────────────────╯
