@@ -1,0 +1,46 @@
+{
+  "kind": "clean sparse Git checkout of proposed QA snapshot, then independent corruption controls",
+  "source_base": "8317d81a49aac1246120e806b7e380c13c738862",
+  "snapshot": "6e3e901cb584ec94a040f52b66315f5a1a934d57",
+  "ignored_package_absent": true,
+  "clean_before_and_after": true,
+  "no_network": true,
+  "no_package_launch": true,
+  "cases": [
+    {
+      "case": "clean-checkout",
+      "exit": 2,
+      "expected_exit": 2,
+      "passed": true,
+      "stdout_sha256": "55d4196ae42003bff51712ab436db37231369641cfb768f10b5543f2195e638b"
+    },
+    {
+      "case": "clean-finalizer",
+      "exit": 2,
+      "expected_exit": 2,
+      "passed": true,
+      "stdout_sha256": "ee4d4d64a6c4b3dc159120416e6500e3094447bed06b712417373838ef8938c6"
+    },
+    {
+      "case": "wrong-claim",
+      "exit": 1,
+      "expected_exit": 1,
+      "passed": true,
+      "stdout_sha256": "c0fa1f36c294dc1cd32e151efde354b19bc7488b9a2c50132d5016e03a163387"
+    },
+    {
+      "case": "corrupt-viewport",
+      "exit": 1,
+      "expected_exit": 1,
+      "passed": true,
+      "stdout_sha256": "2259b3032d44f905deee411ce00e972534e55d37228907304a778d804f4cb035"
+    },
+    {
+      "case": "missing-log",
+      "exit": 2,
+      "expected_exit": 2,
+      "passed": true,
+      "stdout_sha256": "feab5ba1ddda06d7ca3158d91c0638b5ebe3b99ea68e1e153ef63458a92b98fd"
+    }
+  ]
+}

@@ -45,6 +45,21 @@ The [regenerated inventory](../acct-controls-72/scope.json) and
 [change record](../acct-fitness-76/inventory-refresh.json) disclose the three
 round-75 edits that invalidated round-72 digests.
 
+Recheck the numerical claims and linked gate/inventory receipts from the repository
+root with Python and Git (no build, credentials, network or profile required):
+
+```sh
+python3 -B qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py
+```
+
+The command prints agreement, disagreement or unavailable evidence for each item.
+It uses committed-evidence membership and current checkout contents; ignored local
+package binaries cannot establish clean-checkout package availability. Exit status
+is zero for full agreement, one for disagreement, or two for missing evidence.
+Round identifiers and severity labels are references, not measured quantities.
+The [inventory correction](../acct-inventory-79/inventory-correction.json) supersedes
+the refreshed round-75 new-file labels and totals in the earlier change record.
+
 **Owner decisions only:**
 
 - Fable may accept or reject this bounded QA revision for integration under the
