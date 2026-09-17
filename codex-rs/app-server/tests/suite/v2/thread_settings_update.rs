@@ -482,6 +482,18 @@ async fn restart_settled_permission_case(
     let resumed: ThreadResumeResponse =
         timeout(DEFAULT_TIMEOUT, restarted.read_response(request)).await??;
     assert_eq!(resumed.thread.id, thread);
+    if initial == AskForApproval::UnlessTrusted {
+        assert_ne!(
+            resumed.approval_policy,
+            AskForApproval::Never,
+            "restarting a restricted thread must not silently remove approval requirements"
+        );
+        assert_ne!(
+            resumed.sandbox,
+            SandboxPolicy::DangerFullAccess,
+            "restarting a restricted thread must not silently remove the sandbox"
+        );
+    }
     // Test what resume actually reports, permitting a disclosed reset rather
     // than requiring an invented persistence default. The probe is outside the
     // workspace so a workspace reset cannot accidentally make it a safe write.
