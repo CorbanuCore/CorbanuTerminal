@@ -1,0 +1,18 @@
+[
+  [
+    "{\"attempt_id\":\"7966aa29-f8c4-4e38-88a2-096eec9df1f3\",\"request_id\":\"bedb3873-8759-4f9c-84a2-5676521e6d4e\",\"thread_id\":\"019fe13e-8a00-7d60-8386-730da60467ed\",\"turn\":\"019fe13e-8a00-7d60-8386-73389645b3e1\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"e73305ee-644b-4616-b514-d2f272a09364\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786190400000}",
+    "{\"id\":\"ae3c83a4-238d-408b-8d8f-7b7c00b477db\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"e73305ee-644b-4616-b514-d2f272a09364\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786190400000,\"approved_at_ms\":1786190400000,\"effective_from_ms\":1786190400000,\"effective_end_ms\":null}"
+  ],
+  [
+    "{\"attempt_id\":\"94245dea-c447-4932-a15e-9f21a0977504\",\"request_id\":\"bfaab456-8304-42d7-b208-516aeb2377a1\",\"thread_id\":\"019fe13e-8a00-7d60-8386-730da60467ed\",\"turn\":\"019feb8b-4200-7b90-912a-ea5de3f279dd\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"95b0af97-0818-4ea6-96fb-bae1225c422c\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786363200000}",
+    "{\"id\":\"e018b55c-19d1-4f4d-9c57-0618263ce5ad\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"95b0af97-0818-4ea6-96fb-bae1225c422c\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786363200000,\"approved_at_ms\":1786363200000,\"effective_from_ms\":1786363200000,\"effective_end_ms\":null}"
+  ],
+  [
+    "{\"attempt_id\":\"34062763-73e5-46f6-926b-95efc8e3108f\",\"request_id\":\"4d3efad7-7edb-48e7-a9f1-24ab30438ba8\",\"thread_id\":\"019feb8b-4200-75a3-8b64-371f08ea8181\",\"turn\":\"019feb8b-4200-75a3-8b64-374557b0f3bb\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-6-astra\",\"scope\":\"553a3425-22c9-4339-8989-dbba882c0ed8\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786363200000}",
+    null
+  ],
+  [
+    "{\"attempt_id\":\"07175ba1-499b-445b-b623-c7cf9c26b9d8\",\"request_id\":\"052cab0b-893f-4762-a748-2346d4ea1a92\",\"thread_id\":\"019feb8b-4200-7c42-8105-e5d34ee8b0c6\",\"turn\":\"019feb8b-4200-7c42-8105-e6072eae7e0a\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"dfc6672b-f6bb-4a4a-8d05-ddc70b83bf93\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786363200000}",
+    "{\"id\":\"30224c0b-35cf-40ab-94d2-0219220e8050\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"dfc6672b-f6bb-4a4a-8d05-ddc70b83bf93\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786363200000,\"approved_at_ms\":1786363200000,\"effective_from_ms\":1786363200000,\"effective_end_ms\":null}"
+  ]
+]

@@ -5,6 +5,9 @@ import json
 from pathlib import Path
 import re
 import sys
+import gzip
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "acct-readers-61"))
+from p3_checks import assert_day, assert_compact_hour, assert_timezone
 
 run = Path(sys.argv[1])
 rows = json.loads((run/"independent-arithmetic.json").read_text())
@@ -31,6 +34,11 @@ for case in cases:
         "Reasoning (subset, not separately billed)":sum(r["reasoning"] for r in members),
         "Total (not separately billed)":sum(r["input"]+r["output"] for r in members)}
     numeric = 0
+    if case["expected_state"] == "unavailable-compact":
+        raw = gzip.decompress((run/(case["case"]+".txt.gz")).read_bytes()).decode()
+        assert_day(raw, case["start"][:10])
+    if case["expected_state"] == "unavailable-precision":
+        assert_compact_hour(" ".join(case["rendered"][case["case"]]))
     for name,lines in case["rendered"].items():
         assert lines==json.loads((run/(name+"-selected.json")).read_text())
         exact = [s for s in lines if s.startswith("Known subtotal exact USD: ")]
@@ -54,6 +62,13 @@ for case in cases:
         assert numeric>=1,case["case"]
     receipt.append(dict(case=case["case"],emissions=case["emissions"],exact_usd=str(total),
                         metrics=metrics,expected_state=case["expected_state"],numeric_pages=numeric))
+# Fresh timezone claims require a process-bound positive control.
+controls = json.loads((run/"timezone-controls.json").read_text())
+assert {p["tz"] for p in controls} == {"America/New_York", "UTC", "Asia/Kolkata", "America/Phoenix"}
+assert len({p["pid"] for p in controls}) == 4
+for probe in controls:
+    assert_timezone(run/("timezone-"+probe["tz"].replace("/","-")+".json"),
+                    probe["pid"], probe["tz"], "2026-03-10T12:00:00Z")
 # DST wall-clock jumps do not alter UTC bucket duration/membership.
 spring = [c for c in receipt if c["case"].startswith("spring-") and not c["case"].endswith("day")]
 assert len(spring)==8

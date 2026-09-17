@@ -1,0 +1,62 @@
+[
+  {
+    "provider": "openai",
+    "model": "gpt-5.6-sol",
+    "fixture_utc": "2026-08-08T12:00:00Z",
+    "usage_present": true,
+    "path": "/v1/responses",
+    "input": 100,
+    "cached": 20,
+    "cache_write": 0,
+    "output": 10,
+    "reasoning": 4
+  },
+  {
+    "provider": "openai",
+    "model": "gpt-5.6-sol",
+    "fixture_utc": "2026-08-10T12:00:00Z",
+    "usage_present": true,
+    "path": "/v1/responses",
+    "input": 100,
+    "cached": 20,
+    "cache_write": 0,
+    "output": 10,
+    "reasoning": 4
+  },
+  {
+    "provider": "reader_local",
+    "model": "reader-local-model",
+    "fixture_utc": "2026-08-10T12:00:00Z",
+    "usage_present": true,
+    "path": "/v1/responses",
+    "input": 100,
+    "cached": 20,
+    "cache_write": 0,
+    "output": 10,
+    "reasoning": 4
+  },
+  {
+    "provider": "openai",
+    "model": "gpt-6-astra",
+    "fixture_utc": "2026-08-10T12:00:00Z",
+    "usage_present": true,
+    "path": "/v1/responses",
+    "input": 100,
+    "cached": 20,
+    "cache_write": 0,
+    "output": 10,
+    "reasoning": 4
+  },
+  {
+    "provider": "openai",
+    "model": "gpt-5.6-sol",
+    "fixture_utc": "2026-08-10T12:00:00Z",
+    "usage_present": false,
+    "path": "/v1/responses",
+    "input": 100,
+    "cached": 20,
+    "cache_write": 0,
+    "output": 10,
+    "reasoning": 4
+  }
+]

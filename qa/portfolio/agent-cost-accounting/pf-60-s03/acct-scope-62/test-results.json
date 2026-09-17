@@ -1,0 +1,30 @@
+{
+  "source_commit": "defa10a2dd00b6d4f8b91d54978b480c75a2b0e4",
+  "threads": 4,
+  "prerequisites_first": true,
+  "lanes": [
+    {
+      "lane": "core-default",
+      "run": 124,
+      "passed": 124,
+      "exact_failure_lines": [],
+      "summary": "Summary [  46.622s] 124 tests run: 124 passed (1 slow), 3545 skipped"
+    },
+    {
+      "lane": "core-feature",
+      "run": 127,
+      "passed": 127,
+      "exact_failure_lines": [],
+      "summary": "Summary [  47.002s] 127 tests run: 127 passed (1 slow), 3545 skipped"
+    },
+    {
+      "lane": "tui",
+      "run": 91,
+      "passed": 91,
+      "exact_failure_lines": [],
+      "summary": "Summary [   1.232s] 91 tests run: 91 passed, 4078 skipped"
+    }
+  ],
+  "total_run": 342,
+  "total_passed": 342
+}

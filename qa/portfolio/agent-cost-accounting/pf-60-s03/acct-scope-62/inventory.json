@@ -1,0 +1,436 @@
+{
+  "files": [
+    {
+      "path": ".gitignore",
+      "bytes": 104,
+      "sha256": "5940df53c1eeb904e4a5268d0e1ae98c4dd94a09cd5958a36b08527fac2bcc1f"
+    },
+    {
+      "path": "PREFLIGHT.md",
+      "bytes": 1513,
+      "sha256": "cc7cc241f60dd209b6ab4b1781329bd7181de0775684d9dbd21de9ad9420f4a5"
+    },
+    {
+      "path": "REPRODUCE.md",
+      "bytes": 2723,
+      "sha256": "5dd6ab9fc2a36ab8a41664545dbb73bc372cf109217dd83ae86e3440555f2fbb"
+    },
+    {
+      "path": "RETURN.md",
+      "bytes": 8072,
+      "sha256": "cc77c039e74a2168338047d843f34643efe6887458d08a80c24bcc58fa62d112"
+    },
+    {
+      "path": "attempts.json",
+      "bytes": 1151,
+      "sha256": "a013ac677da449f27e328d06784c961e505b074b168554bf3d676c165fffd936"
+    },
+    {
+      "path": "audit_scope.py",
+      "bytes": 5971,
+      "sha256": "559713f9155825f216ae734e9c7ec0575f0d651e2b415a958d50ca72ddbce7dc"
+    },
+    {
+      "path": "coverage-run-01/baseline.json",
+      "bytes": 5023,
+      "sha256": "89d2f35d5970bb5b78232097e2a94eeb1c9f25b2ff171b07bb3f53f2826845a9"
+    },
+    {
+      "path": "coverage-run-01/results.json",
+      "bytes": 16039,
+      "sha256": "82369c0601b972289c639f9712f52c4e8fe4eb9e438128f2268dc348aae498d7"
+    },
+    {
+      "path": "coverage-run-02/baseline.json",
+      "bytes": 5023,
+      "sha256": "89d2f35d5970bb5b78232097e2a94eeb1c9f25b2ff171b07bb3f53f2826845a9"
+    },
+    {
+      "path": "coverage-run-02/failure.json",
+      "bytes": 843,
+      "sha256": "f34c40e8fe112fae131920178a420f2a4cc2b0f20bdb9c8eceb977815e9787d3"
+    },
+    {
+      "path": "coverage-run-02/pre-revision-audit.py",
+      "bytes": 7519,
+      "sha256": "175ac7dfb9a9d3c1bfa7df788f44459ef2cf1245cdac26b97bd06607144c5df7"
+    },
+    {
+      "path": "coverage-run-03/baseline.json",
+      "bytes": 5023,
+      "sha256": "89d2f35d5970bb5b78232097e2a94eeb1c9f25b2ff171b07bb3f53f2826845a9"
+    },
+    {
+      "path": "coverage-run-03/pre-revision-audit.py",
+      "bytes": 7519,
+      "sha256": "175ac7dfb9a9d3c1bfa7df788f44459ef2cf1245cdac26b97bd06607144c5df7"
+    },
+    {
+      "path": "coverage-run-03/results.json",
+      "bytes": 19089,
+      "sha256": "bb46cb6d0654d2f09b0706ce6171f2a3b740c6ca0b8c8395c96d2a1c28c3e0ff"
+    },
+    {
+      "path": "coverage_controls.py",
+      "bytes": 4310,
+      "sha256": "87de9692677b7529b57e0be91cba0d18b7e567ebea491a736e6bfae5a6798398"
+    },
+    {
+      "path": "finalize-result.log.gz",
+      "bytes": 20,
+      "sha256": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64"
+    },
+    {
+      "path": "finalize.py",
+      "bytes": 5351,
+      "sha256": "564d662e7b4d22750272be0e1c68a0ab35f934b98885971cf847b151e89e29e7"
+    },
+    {
+      "path": "gates-01/core-default.log.gz",
+      "bytes": 4984,
+      "sha256": "745c3d3bc5fb61b34e4489e6bfe24e0c876f41a91adfb454553ae2dc61b96f61"
+    },
+    {
+      "path": "gates-01/core-feature.log.gz",
+      "bytes": 5061,
+      "sha256": "fdcaad42d04e2d96753c659513ec80483c8223a3a592f8e88c796554c0bdaeeb"
+    },
+    {
+      "path": "gates-01/feature-binary.log.gz",
+      "bytes": 3132,
+      "sha256": "cc61f11ea2951c0555a206a501752b44c967e59bbb108f13d45b80c797fd717d"
+    },
+    {
+      "path": "gates-01/lanes.json",
+      "bytes": 2011,
+      "sha256": "204b5dfa3fee9617325ec1bd42a97471b4ae66ec844f7e50a8ef338733f4b355"
+    },
+    {
+      "path": "gates-01/prerequisites.log.gz",
+      "bytes": 3132,
+      "sha256": "49549aa700f1c1b9e9369861eece8411bc6d665dc2d0530616a11094df39f8ca"
+    },
+    {
+      "path": "gates-01/tui.log.gz",
+      "bytes": 6525,
+      "sha256": "d5559eae8b08fdfdf9e55ff0a2e7527950d08d88bef249aec6ab03736fa0a6f9"
+    },
+    {
+      "path": "p3-negative-controls.json",
+      "bytes": 4077,
+      "sha256": "8fb7da91a173affe51c29600176a0d1ae0cc226cec5065289e8be75eace91554"
+    },
+    {
+      "path": "reader-findings.md",
+      "bytes": 5819,
+      "sha256": "07041d9216d549165d0bccaeffddbb6bca5ee144ec76fcd5f6dea01c070cb380"
+    },
+    {
+      "path": "residual-source-evidence.json",
+      "bytes": 14214,
+      "sha256": "4dd1eeb184375508de53d8db33b365e5ede6082c66651f833df25438c73bc84d"
+    },
+    {
+      "path": "residuals.md",
+      "bytes": 4897,
+      "sha256": "39b7f3429a32eeb370e636b1389e73ae6a47e8dbc0d67ee75c320f5187b19dae"
+    },
+    {
+      "path": "scope-audit.json",
+      "bytes": 3750,
+      "sha256": "2fb9e60700db87751fa44a42f13476a44690f603a2729a0216084f5bba77d602"
+    },
+    {
+      "path": "scope-run-01/driver.py.gz",
+      "bytes": 2281,
+      "sha256": "c07e5b1ebf3a0df7ad86d015bc3ac19e9136071765145fd3f5d191266713938e"
+    },
+    {
+      "path": "scope-run-01/emissions.json",
+      "bytes": 1031,
+      "sha256": "ac7ccf70cccb64b74d510b1339d7907ef7052c52b9d9865e73b8f7823b0b1430"
+    },
+    {
+      "path": "scope-run-01/fresh-scope-reader-startup.txt.gz",
+      "bytes": 210,
+      "sha256": "534c804074e80950bc53d7ef6c024eace1a975af9de1e0bebae765f02ad6d7b8"
+    },
+    {
+      "path": "scope-run-01/fresh-scope-reader.raw.gz",
+      "bytes": 4546,
+      "sha256": "2164564ac2025c6505bb0bd6562a98381890fa97fb9c3e755e92ab31d4bce5b3"
+    },
+    {
+      "path": "scope-run-01/fresh-scope-zero-selected.json",
+      "bytes": 1554,
+      "sha256": "cb01c7c7fdc7e4872d760318224460f6a79120b9c2c2e8409dfdb23f9c347465"
+    },
+    {
+      "path": "scope-run-01/fresh-scope-zero.txt.gz",
+      "bytes": 1249,
+      "sha256": "e40aa441137f8f956d17b726e035d3f0ea510a0b3dc5f847511868bfb2a51c7e"
+    },
+    {
+      "path": "scope-run-01/keys.json",
+      "bytes": 26825,
+      "sha256": "d2a06401086bb17adb3916d2317a1e7badea088afe9d025ed117641280a15b7d"
+    },
+    {
+      "path": "scope-run-01/manifest.json",
+      "bytes": 679,
+      "sha256": "36f93e9e8a919ff426bc2746ecba6ae4cc9381567bcef9e75bf1fefb87b58a5f"
+    },
+    {
+      "path": "scope-run-01/native-bindings.json",
+      "bytes": 3719,
+      "sha256": "68da5e4d84ef784ce0a8b617998374f076312ada6c71158878b5f0b74919dfde"
+    },
+    {
+      "path": "scope-run-01/reader-cases.json",
+      "bytes": 5777,
+      "sha256": "0d3d436583837b545e6fd9580c5300bda1b55654aa8f1b02823691a26e4c1026"
+    },
+    {
+      "path": "scope-run-01/reader-helpers.py.gz",
+      "bytes": 2826,
+      "sha256": "8bd07e533f4682916054df17577db2775d059666e814cbdb156a6bd239b2ef29"
+    },
+    {
+      "path": "scope-run-01/root-a-control-Request-1-Attempt-1-selected.json",
+      "bytes": 1928,
+      "sha256": "58c81368916962c7fd7908a1b340778d968225683fa9de784a242b5fe2aafb0f"
+    },
+    {
+      "path": "scope-run-01/root-a-control-Request-1-Attempt-1.txt.gz",
+      "bytes": 1832,
+      "sha256": "b7dfa22f5abb8f00b7519f83e2839ea8629e61b72f707815af26793360ce5af7"
+    },
+    {
+      "path": "scope-run-01/root-a-control-Request-1-selected.json",
+      "bytes": 241,
+      "sha256": "4c48166e8a2a394fcdd06bf0df5009d758cea91e3a36aa738a1342fa38df6f65"
+    },
+    {
+      "path": "scope-run-01/root-a-control-Request-1.txt.gz",
+      "bytes": 521,
+      "sha256": "ae995bd8a35903966126b3f163100ee1af0ba2aa96b401e1b9238a2015c96cd0"
+    },
+    {
+      "path": "scope-run-01/root-a-control-Request-2-Attempt-1-selected.json",
+      "bytes": 1928,
+      "sha256": "87084c8d32a00248cb030882e007193cb564da95239a154f044da8bb26c31dc2"
+    },
+    {
+      "path": "scope-run-01/root-a-control-Request-2-Attempt-1.txt.gz",
+      "bytes": 1838,
+      "sha256": "688b1b326b074bae6be62c791793b5618dbf4679c8557385da2d086c72f21a99"
+    },
+    {
+      "path": "scope-run-01/root-a-control-Request-2-selected.json",
+      "bytes": 241,
+      "sha256": "afaa314fc9e74e3ec9816cd4449a07627bc12f55471f9b52e49f30da712a8cc5"
+    },
+    {
+      "path": "scope-run-01/root-a-control-Request-2.txt.gz",
+      "bytes": 521,
+      "sha256": "37f69bbf645caed73621de92a6ac5621083ff2f5e8b109c5cef965ad813b25d0"
+    },
+    {
+      "path": "scope-run-01/root-a-control-inspect-startup.txt.gz",
+      "bytes": 255,
+      "sha256": "caa0ab93fb79426da90129d03319f53a4554519d1c05f38a3bc251963611d293"
+    },
+    {
+      "path": "scope-run-01/root-a-control-inspect.raw.gz",
+      "bytes": 17629,
+      "sha256": "09fd37619dcacdbcf4f3bab6f6e13c18ea6c615eeace676d0b001c44c8ae740f"
+    },
+    {
+      "path": "scope-run-01/root-a-control-selected.json",
+      "bytes": 1638,
+      "sha256": "c4677d5388522513bcadfa1537a7322f3776d7f930f70a0ad8fb3cbc8fe98812"
+    },
+    {
+      "path": "scope-run-01/root-a-control.txt.gz",
+      "bytes": 1427,
+      "sha256": "6a4e491985dd2f3d4c337f59cf18eaeb5769fde18a83f99b507f8b3de4c489e3"
+    },
+    {
+      "path": "scope-run-01/root-a-first-complete.txt.gz",
+      "bytes": 258,
+      "sha256": "8a3de6ebe6722da0199b10e6df592f3f86f52f22d5485de296ccc75621e2ef8f"
+    },
+    {
+      "path": "scope-run-01/root-a-first-startup.txt.gz",
+      "bytes": 206,
+      "sha256": "4b8f4b71fe7e463cee9582728f99cef10968ead5aa6b6d55a7f5e3f0f9a13694"
+    },
+    {
+      "path": "scope-run-01/root-a-first.raw.gz",
+      "bytes": 994,
+      "sha256": "b0020ab969111f3781fe935e119466271dd5f0ca58ddd483ecf933e407edd175"
+    },
+    {
+      "path": "scope-run-01/root-a-second-complete.txt.gz",
+      "bytes": 263,
+      "sha256": "0244f0c7808ff6c635b7949320aa63bc7cc497e4f8aee480cba97e0821517296"
+    },
+    {
+      "path": "scope-run-01/root-a-second-startup.txt.gz",
+      "bytes": 259,
+      "sha256": "e7ca328e385d2ecfc18c44058592f1916d6c5a231d123a7f3067e6c9817541c5"
+    },
+    {
+      "path": "scope-run-01/root-a-second.raw.gz",
+      "bytes": 870,
+      "sha256": "3432e4558a8ca31433d9fe8c760fdaa45688f72ce3c3d6b82b27c3af68d7a2fb"
+    },
+    {
+      "path": "scope-run-01/root-b-complete.txt.gz",
+      "bytes": 269,
+      "sha256": "33fb2f5b32e39edecc7289e71d0fbd65564fd54a252aa0d524c9e0ecbef82f25"
+    },
+    {
+      "path": "scope-run-01/root-b-control-Request-1-Attempt-1-selected.json",
+      "bytes": 1928,
+      "sha256": "f69529b92aa570c3352a528f687d3551d312b348e68c88e38c49850bdb603831"
+    },
+    {
+      "path": "scope-run-01/root-b-control-Request-1-Attempt-1.txt.gz",
+      "bytes": 1786,
+      "sha256": "51fa0f3afcbc5371c4df3691df5231b0ce4d360d461db744113d893547a1621b"
+    },
+    {
+      "path": "scope-run-01/root-b-control-Request-1-selected.json",
+      "bytes": 241,
+      "sha256": "afe764c9757b30a185abe536dd2ca7b2e350d249ca5a7984c8bbdd372652aefa"
+    },
+    {
+      "path": "scope-run-01/root-b-control-Request-1.txt.gz",
+      "bytes": 511,
+      "sha256": "a2c3374143e5ebb721b51cdb8a8d8bb65aa4b6db96d8e26f03781c4ac0ca69c3"
+    },
+    {
+      "path": "scope-run-01/root-b-control-inspect-startup.txt.gz",
+      "bytes": 259,
+      "sha256": "ab83dce9d85e7cae37215c321e1bcc9515711202b7e1ec27583f8f55225b734a"
+    },
+    {
+      "path": "scope-run-01/root-b-control-inspect.raw.gz",
+      "bytes": 10224,
+      "sha256": "7f7dfe09bf7cb9c2acb8192a16371c42db531500d4f83c5063e36861cece889c"
+    },
+    {
+      "path": "scope-run-01/root-b-control-selected.json",
+      "bytes": 1622,
+      "sha256": "d431d82abc1a791bff3edd0b59a532a49b0e455cb306212fe6567524a08e23d7"
+    },
+    {
+      "path": "scope-run-01/root-b-control.txt.gz",
+      "bytes": 1382,
+      "sha256": "ffd672e46b35ab182ba815f44322415749ef32cca019e796c53bee36946c5bf3"
+    },
+    {
+      "path": "scope-run-01/root-b-startup.txt.gz",
+      "bytes": 215,
+      "sha256": "4dc48616fe3405df9feb4a16717da155eced7b991057480d077ca1d3d3b9c727"
+    },
+    {
+      "path": "scope-run-01/root-b.raw.gz",
+      "bytes": 1016,
+      "sha256": "63911c584eb3190e66e16e36bf510c469c0e49841db287a4bf0938e6a8ab3174"
+    },
+    {
+      "path": "scope-run-01/root-c-complete.txt.gz",
+      "bytes": 272,
+      "sha256": "ceae3fb1a0f82a7ad0a108224f23a8c7799688b5ed4a3be4f1607c6a20a54aba"
+    },
+    {
+      "path": "scope-run-01/root-c-control-Request-1-Attempt-1-selected.json",
+      "bytes": 1928,
+      "sha256": "10fff12f4a1fa58032767ec06946145ff4fa5f3fb76f3866a4ac612dfefc9b32"
+    },
+    {
+      "path": "scope-run-01/root-c-control-Request-1-Attempt-1.txt.gz",
+      "bytes": 1780,
+      "sha256": "11d84ece30fae4697a363fad2fac41fa546e55a2f04f7858b0ca8bdd24667cdf"
+    },
+    {
+      "path": "scope-run-01/root-c-control-Request-1-selected.json",
+      "bytes": 241,
+      "sha256": "87c6c133bca50a4da15ef073fe158d3f1d20b1ad3d2b73304c576192edbe3814"
+    },
+    {
+      "path": "scope-run-01/root-c-control-Request-1.txt.gz",
+      "bytes": 509,
+      "sha256": "8475fd65aeb73b7bb6f8feb77e0303bbac6158027d73a8986dfd4f020951025a"
+    },
+    {
+      "path": "scope-run-01/root-c-control-inspect-startup.txt.gz",
+      "bytes": 267,
+      "sha256": "1f30c906528525b22816c994e20e3b9724b842b1c770ca24fe9c856f79449df6"
+    },
+    {
+      "path": "scope-run-01/root-c-control-inspect.raw.gz",
+      "bytes": 10274,
+      "sha256": "23052217e374f94e3d9f9494eefa41dfb3a123ea53c812132a519ca8388a1091"
+    },
+    {
+      "path": "scope-run-01/root-c-control-selected.json",
+      "bytes": 1622,
+      "sha256": "d431d82abc1a791bff3edd0b59a532a49b0e455cb306212fe6567524a08e23d7"
+    },
+    {
+      "path": "scope-run-01/root-c-control.txt.gz",
+      "bytes": 1382,
+      "sha256": "ffd672e46b35ab182ba815f44322415749ef32cca019e796c53bee36946c5bf3"
+    },
+    {
+      "path": "scope-run-01/root-c-startup.txt.gz",
+      "bytes": 221,
+      "sha256": "820ee2fc370d0bf3663e4ef21e4beaa44c49df3f7cb9da2ee71ac4907c123b56"
+    },
+    {
+      "path": "scope-run-01/root-c.raw.gz",
+      "bytes": 1018,
+      "sha256": "1aa06f196505dfb6eaee140274bba908eb73063a9861d9a1dd9761b677e26f4b"
+    },
+    {
+      "path": "scope-run-01/scope-zero-result.json",
+      "bytes": 4644,
+      "sha256": "dcdf0d20ac5d520718b794cec4e3d4c2832ccc8df7bc0cfb3793f71ae21cb34f"
+    },
+    {
+      "path": "scope-run-01/store-before-fresh-reader.json",
+      "bytes": 21435,
+      "sha256": "449c4649528de85c564884ae549f0bf283caad396331bc907c2df9a8abfff079"
+    },
+    {
+      "path": "scope-run-01/store-during-fresh-reader.json",
+      "bytes": 21435,
+      "sha256": "449c4649528de85c564884ae549f0bf283caad396331bc907c2df9a8abfff079"
+    },
+    {
+      "path": "scope-run-01.log.gz",
+      "bytes": 155,
+      "sha256": "2697d16aa1ac6ea7f87e66e28456ae7fc5057a99caa82bba41364ee293bc2009"
+    },
+    {
+      "path": "scope.json",
+      "bytes": 15111,
+      "sha256": "bc6092bd3bd937a95226214687af87caa5b87687ed12868e68c5425a0b303fa9"
+    },
+    {
+      "path": "scope_repro.py",
+      "bytes": 5370,
+      "sha256": "b9d2749a8cb6df589da5118835ef937db5cb0d6e18b47dad4524b75fa236f40d"
+    },
+    {
+      "path": "test-results.json",
+      "bytes": 760,
+      "sha256": "0deaa10e2fcb61a980b9e5ebc01af89882b9d8590797f225f3f23ccf26e12b2a"
+    }
+  ],
+  "count": 86,
+  "excludes": "self, ignored fixture/raw logs/cache, regenerable mutation directories; original gz captures and counterexample error receipts retained"
+}

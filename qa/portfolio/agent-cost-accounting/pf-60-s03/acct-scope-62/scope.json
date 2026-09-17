@@ -1,0 +1,441 @@
+{
+  "status": " M qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/RETURN.md\n M qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\n M qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/negative_controls.py\n M qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/reader-findings.md\n?? qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/\n",
+  "tracked_numstat": "5\t3\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/RETURN.md\n35\t4\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py\n10\t5\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/negative_controls.py\n6\t1\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/reader-findings.md\n",
+  "production_lines_changed": 0,
+  "rust_test_lines_changed": 0,
+  "new_qa_source_lines": {
+    "audit_scope.py": 104,
+    "finalize.py": 90,
+    "scope_repro.py": 93,
+    "coverage_controls.py": 83
+  },
+  "new_files": [
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/.gitignore",
+      "bytes": 104,
+      "lines": 7
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/PREFLIGHT.md",
+      "bytes": 1513,
+      "lines": 9
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/REPRODUCE.md",
+      "bytes": 2723,
+      "lines": 39
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/RETURN.md",
+      "bytes": 8072,
+      "lines": 137
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/attempts.json",
+      "bytes": 1151,
+      "lines": 37
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/audit_scope.py",
+      "bytes": 5971,
+      "lines": 104
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/coverage-run-01/baseline.json",
+      "bytes": 5023,
+      "lines": 152
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/coverage-run-01/results.json",
+      "bytes": 16039,
+      "lines": 202
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/coverage-run-02/baseline.json",
+      "bytes": 5023,
+      "lines": 152
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/coverage-run-02/failure.json",
+      "bytes": 843,
+      "lines": 11
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/coverage-run-02/pre-revision-audit.py",
+      "bytes": 7519,
+      "lines": 119
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/coverage-run-03/baseline.json",
+      "bytes": 5023,
+      "lines": 152
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/coverage-run-03/pre-revision-audit.py",
+      "bytes": 7519,
+      "lines": 119
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/coverage-run-03/results.json",
+      "bytes": 19089,
+      "lines": 286
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/coverage_controls.py",
+      "bytes": 4310,
+      "lines": 83
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/finalize-result.log.gz",
+      "bytes": 20,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/finalize.py",
+      "bytes": 5351,
+      "lines": 90
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/gates-01/core-default.log.gz",
+      "bytes": 4984,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/gates-01/core-feature.log.gz",
+      "bytes": 5061,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/gates-01/feature-binary.log.gz",
+      "bytes": 3132,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/gates-01/lanes.json",
+      "bytes": 2011,
+      "lines": 80
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/gates-01/prerequisites.log.gz",
+      "bytes": 3132,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/gates-01/tui.log.gz",
+      "bytes": 6525,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/p3-negative-controls.json",
+      "bytes": 4077,
+      "lines": 90
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/reader-findings.md",
+      "bytes": 5819,
+      "lines": 95
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/residual-source-evidence.json",
+      "bytes": 14214,
+      "lines": 65
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/residuals.md",
+      "bytes": 4897,
+      "lines": 75
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-audit.json",
+      "bytes": 3750,
+      "lines": 110
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01.log.gz",
+      "bytes": 155,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/driver.py.gz",
+      "bytes": 2281,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/emissions.json",
+      "bytes": 1031,
+      "lines": 50
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/fresh-scope-reader-startup.txt.gz",
+      "bytes": 210,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/fresh-scope-reader.raw.gz",
+      "bytes": 4546,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/fresh-scope-zero-selected.json",
+      "bytes": 1554,
+      "lines": 26
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/fresh-scope-zero.txt.gz",
+      "bytes": 1249,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/keys.json",
+      "bytes": 26825,
+      "lines": 1698
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/manifest.json",
+      "bytes": 679,
+      "lines": 9
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/native-bindings.json",
+      "bytes": 3719,
+      "lines": 18
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/reader-cases.json",
+      "bytes": 5777,
+      "lines": 111
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/reader-helpers.py.gz",
+      "bytes": 2826,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-control-Request-1-Attempt-1-selected.json",
+      "bytes": 1928,
+      "lines": 41
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-control-Request-1-Attempt-1.txt.gz",
+      "bytes": 1832,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-control-Request-1-selected.json",
+      "bytes": 241,
+      "lines": 9
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-control-Request-1.txt.gz",
+      "bytes": 521,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-control-Request-2-Attempt-1-selected.json",
+      "bytes": 1928,
+      "lines": 41
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-control-Request-2-Attempt-1.txt.gz",
+      "bytes": 1838,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-control-Request-2-selected.json",
+      "bytes": 241,
+      "lines": 9
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-control-Request-2.txt.gz",
+      "bytes": 521,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-control-inspect-startup.txt.gz",
+      "bytes": 255,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-control-inspect.raw.gz",
+      "bytes": 17629,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-control-selected.json",
+      "bytes": 1638,
+      "lines": 29
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-control.txt.gz",
+      "bytes": 1427,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-first-complete.txt.gz",
+      "bytes": 258,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-first-startup.txt.gz",
+      "bytes": 206,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-first.raw.gz",
+      "bytes": 994,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-second-complete.txt.gz",
+      "bytes": 263,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-second-startup.txt.gz",
+      "bytes": 259,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-a-second.raw.gz",
+      "bytes": 870,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-b-complete.txt.gz",
+      "bytes": 269,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-b-control-Request-1-Attempt-1-selected.json",
+      "bytes": 1928,
+      "lines": 41
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-b-control-Request-1-Attempt-1.txt.gz",
+      "bytes": 1786,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-b-control-Request-1-selected.json",
+      "bytes": 241,
+      "lines": 9
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-b-control-Request-1.txt.gz",
+      "bytes": 511,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-b-control-inspect-startup.txt.gz",
+      "bytes": 259,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-b-control-inspect.raw.gz",
+      "bytes": 10224,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-b-control-selected.json",
+      "bytes": 1622,
+      "lines": 28
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-b-control.txt.gz",
+      "bytes": 1382,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-b-startup.txt.gz",
+      "bytes": 215,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-b.raw.gz",
+      "bytes": 1016,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-c-complete.txt.gz",
+      "bytes": 272,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-c-control-Request-1-Attempt-1-selected.json",
+      "bytes": 1928,
+      "lines": 41
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-c-control-Request-1-Attempt-1.txt.gz",
+      "bytes": 1780,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-c-control-Request-1-selected.json",
+      "bytes": 241,
+      "lines": 9
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-c-control-Request-1.txt.gz",
+      "bytes": 509,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-c-control-inspect-startup.txt.gz",
+      "bytes": 267,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-c-control-inspect.raw.gz",
+      "bytes": 10274,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-c-control-selected.json",
+      "bytes": 1622,
+      "lines": 28
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-c-control.txt.gz",
+      "bytes": 1382,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-c-startup.txt.gz",
+      "bytes": 221,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/root-c.raw.gz",
+      "bytes": 1018,
+      "lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/scope-zero-result.json",
+      "bytes": 4644,
+      "lines": 109
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/store-before-fresh-reader.json",
+      "bytes": 21435,
+      "lines": 168
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/store-during-fresh-reader.json",
+      "bytes": 21435,
+      "lines": 168
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope_repro.py",
+      "bytes": 5370,
+      "lines": 93
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/test-results.json",
+      "bytes": 760,
+      "lines": 30
+    }
+  ],
+  "count_excludes": "scope.json and inventory.json avoid recursive counts",
+  "binary_sha256": "f78a1cc8a433030d3f50d91cfd415946e5fe3dd4e08e69d5c9644244c0d018bb"
+}

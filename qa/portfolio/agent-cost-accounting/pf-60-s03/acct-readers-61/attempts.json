@@ -1,0 +1,62 @@
+[
+  {
+    "run": "gates-01",
+    "exit": 0,
+    "disposition": "124+127+91 pass; prerequisites and feature binary built"
+  },
+  {
+    "run": "boundary-run-01",
+    "exit": 1,
+    "disposition": "PID assertion rejected child-overwritten timezone probe"
+  },
+  {
+    "run": "boundary-run-02",
+    "exit": 0,
+    "disposition": "26 cases; four per-product-PID timezone positive controls"
+  },
+  {
+    "run": "reader-run-01",
+    "exit": 1,
+    "disposition": "Anthropic built-in endpoint ignored override; loopback sandbox denied external transport; timed out. No Anthropic fixture emission"
+  },
+  {
+    "run": "reader-run-02",
+    "exit": 0,
+    "disposition": "Exploratory capture completed; sqlite=false did NOT produce backend unavailability. That named page is not a backend-failure pass"
+  },
+  {
+    "run": "reader-run-03",
+    "exit": 1,
+    "disposition": "Backend Refresh did not recover after inexact table-rename restoration"
+  },
+  {
+    "run": "reader-run-04",
+    "exit": 1,
+    "disposition": "Reopened backend still unreadable after inexact restoration; blocked subsequent stale assertion"
+  },
+  {
+    "run": "reader-run-05",
+    "exit": 0,
+    "disposition": "Final six categories; backend fault remains during retry, exact backup restored after stop, fresh read succeeds; stale case separately succeeds"
+  },
+  {
+    "run": "reader-audit-first",
+    "exit": 1,
+    "disposition": "Audit incorrectly required monetary unknown text on request navigation page with no amount; narrowed to numeric pages"
+  },
+  {
+    "run": "reader-audit-final",
+    "exit": 0,
+    "disposition": "15 numeric pages, independent amounts/rates/metrics and reader-state assertions"
+  },
+  {
+    "run": "boundary-audit",
+    "exit": 0,
+    "disposition": "26 independent cases"
+  },
+  {
+    "run": "p3-negative-controls",
+    "exit": 0,
+    "disposition": "6 counterexamples rejected, four positive localtime controls"
+  }
+]
