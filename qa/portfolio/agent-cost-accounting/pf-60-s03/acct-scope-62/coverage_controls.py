@@ -64,14 +64,15 @@ for kind in ("exact", "displayed"):
         assert old_target.exists() == (old.returncode == 0)
         target = directory / "receipt.json"
         process = subprocess.run(
-            [sys.executable, str(prior / "audit_readers.py"), str(directory), str(target)],
+            [sys.executable, "-B", str(prior / "audit_readers.py"), str(directory), str(target),
+             "--semantics-only"],
             capture_output=True, text=True,
         )
         assert process.returncode != 0 and not target.exists(), (kind, name)
-        if kind == "exact":
-            assert "unexpected content on subtotal page" in process.stderr, process.stderr
-        else:
-            assert "AssertionError" in process.stderr and name in process.stderr
+        diagnostics = json.loads(process.stderr.splitlines()[0])
+        expected_check = ("exact-count:" if kind == "exact" else "display-count:") + name
+        assert expected_check in diagnostics["semantic_failures"], process.stderr
+        assert expected_check in diagnostics["monetary_checks_evaluated"], process.stderr
         results.append(dict(kind=kind, page=name, exit=process.returncode,
                             old_check_exit=old.returncode,old_receipt_written=old_target.exists(),
                             old_error=old.stderr,
