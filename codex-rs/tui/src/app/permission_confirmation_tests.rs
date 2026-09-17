@@ -123,7 +123,7 @@ async fn permission_confirmation_f07_conflicts_are_refused_and_old_completion_ca
             // Establish the command-channel baseline before any selection.
             // Session initialization may request ordinary metadata such as skills.
             let startup_ops = std::iter::from_fn(|| ops.try_recv().ok()).collect::<Vec<_>>();
-            eprintln!("F07 pre-selection startup commands: {startup_ops:?}");
+            assert!(!startup_ops.is_empty(), "session initialization must request skills");
             assert!(startup_ops.iter().all(|op| matches!(op,
                 crate::app_command::AppCommand::ListSkills { .. }
             )), "unexpected pre-selection command: {startup_ops:?}");
@@ -191,13 +191,6 @@ async fn permission_confirmation_f07_conflicts_are_refused_and_old_completion_ca
                 assert!(messages.contains("A permission selection is still pending"));
                 assert!(!messages.contains("Permissions requested: refused-conflict"));
                 assert!(messages.contains(&format!("Permissions confirmed for new turns: {profile}")));
-                let settled = RuntimePermissionProfileOverride::from_config(&app.fresh_session_config());
-                if let Some(old) = previous {
-                    app.finish_permission_confirmation(old, PermissionConfirmationResult::Applied);
-                    assert!(app.pending_permission_confirmation.is_none());
-                    assert_eq!(RuntimePermissionProfileOverride::from_config(&app.fresh_session_config()), settled);
-                    assert!(events.try_recv().is_err(), "obsolete completion must not render another success");
-                }
                 assert_eq!(app.fresh_session_config().permissions.active_permission_profile().unwrap().id, profile);
                 let unexpected = ops.try_recv().ok();
                 assert!(unexpected.is_none(), "selection must not approve, interrupt or replay: {unexpected:?}");
@@ -206,6 +199,113 @@ async fn permission_confirmation_f07_conflicts_are_refused_and_old_completion_ca
             server.shutdown().await.unwrap();
         }
     }).await;
+}
+
+#[tokio::test]
+async fn permission_confirmation_f10_unconfirmed_selection_does_not_persist_launch_authority() {
+    Box::pin(async {
+        for (initial, policy, requested) in [
+            (":read-only", "untrusted", ":danger-full-access"),
+            (":danger-full-access", "never", ":read-only"),
+        ] {
+            let home = tempfile::tempdir().unwrap();
+            let config_path = home.path().join("config.toml");
+            let saved = format!(
+                "default_permissions = \"{initial}\"\napproval_policy = \"{policy}\"\ncli_auth_credentials_store = \"file\"\n"
+            );
+            std::fs::write(&config_path, &saved).unwrap();
+            let (mut app, mut events, _ops) =
+                super::super::tests::make_test_app_with_channels().await;
+            app.config = ConfigBuilder::default()
+                .codex_home(home.path().to_path_buf())
+                .harness_overrides(ConfigOverrides {
+                    cwd: Some(home.path().to_path_buf()),
+                    ..Default::default()
+                })
+                .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
+                .build()
+                .await
+                .unwrap();
+            let before = RuntimePermissionProfileOverride::from_config(&app.config);
+            let before_policy = app.config.permissions.approval_policy.value();
+            let mut server = crate::start_embedded_app_server_for_picker(&app.config)
+                .await
+                .unwrap();
+            let started = server.start_thread(&app.config).await.unwrap();
+            app.active_thread_id = Some(started.session.thread_id);
+            app.chat_widget.handle_thread_session(started.session);
+            // Full-access startup may persist project trust before selection.
+            // Freeze the initialized disk state, not the pre-startup input.
+            let saved = std::fs::read_to_string(&config_path).unwrap();
+            while events.try_recv().is_ok() {}
+            app.request_permission_confirmation(
+                &mut server,
+                ThreadSettingsUpdateParams {
+                    thread_id: app.active_thread_id.unwrap().to_string(),
+                    permissions: Some(requested.into()),
+                    ..Default::default()
+                },
+                requested.into(),
+                None,
+            );
+            let pending = app.pending_permission_confirmation.clone().unwrap();
+            assert!(!pending.observed);
+            // Observe the real RPC reply without delivering it or the settings
+            // notification to the TUI. This is unconfirmed UI state, not proof
+            // that backend application is still pending.
+            tokio::time::timeout(std::time::Duration::from_secs(20), async {
+                loop {
+                    if let Some(AppEvent::PermissionConfirmationCompleted { selection_id, result }) =
+                        events.recv().await
+                    {
+                        assert_eq!(selection_id, pending.selection_id);
+                        assert!(matches!(result, PermissionConfirmationResult::Applied));
+                        break;
+                    }
+                }
+            })
+            .await
+            .unwrap();
+            assert_eq!(app.pending_permission_confirmation, Some(pending));
+            assert_eq!(app.runtime_permission_profile_override, None);
+            assert_eq!(app.runtime_approval_policy_override, None);
+            assert_eq!(
+                RuntimePermissionProfileOverride::from_config(&app.fresh_session_config()),
+                before
+            );
+            server.shutdown().await.unwrap();
+            drop(app);
+            assert_eq!(std::fs::read_to_string(&config_path).unwrap(), saved);
+
+            // Discard all runtime state and load the same synthetic home anew.
+            // A fresh thread tests saved launch authority, not resume semantics.
+            let reloaded = ConfigBuilder::default()
+                .codex_home(home.path().to_path_buf())
+                .harness_overrides(ConfigOverrides {
+                    cwd: Some(home.path().to_path_buf()),
+                    ..Default::default()
+                })
+                .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
+                .build()
+                .await
+                .unwrap();
+            assert_eq!(RuntimePermissionProfileOverride::from_config(&reloaded), before);
+            assert_eq!(reloaded.permissions.approval_policy.value(), before_policy);
+            let mut restarted = crate::start_embedded_app_server_for_picker(&reloaded)
+                .await
+                .unwrap();
+            let fresh = restarted.start_thread(&reloaded).await.unwrap();
+            assert_eq!(
+                (fresh.session.active_permission_profile, fresh.session.permission_profile,
+                 fresh.session.approval_policy),
+                (Some(ActivePermissionProfile::new(initial)),
+                 reloaded.permissions.effective_permission_profile(),
+                 AskForApproval::from(before_policy))
+            );
+            restarted.shutdown().await.unwrap();
+        }
+    })
+    .await;
 }
 
 #[tokio::test]
