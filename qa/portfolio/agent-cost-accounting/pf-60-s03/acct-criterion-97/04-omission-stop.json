@@ -1,0 +1,34 @@
+{
+  "label": "04-omission-stop",
+  "command": [
+    "bash",
+    "--noprofile",
+    "--norc",
+    "-x",
+    "-c",
+    "set -eu\nq=qa/portfolio/agent-cost-accounting/pf-60-s03\ntest \"$(git rev-parse --show-toplevel)\" = \"$PWD\"\ncandidate=$(git rev-parse HEAD)\nprintf 'Candidate: %s\\n' \"$candidate\"\ngit status --porcelain --untracked-files=all --ignored=matching\nif ! git diff --quiet HEAD -- || test -n \"$(git ls-files --unmerged)\"; then\n    printf '%s\\n' 'STOP: tracked source changes; preserve them and resolve the candidate.'\n    exit 1\nfi\nomitted=$(git ls-files --others --exclude-standard --directory; git ls-files --others --ignored --exclude-standard --directory)\nif test -n \"$omitted\"; then\n    printf 'Omitted paths:\\n%s\\n' \"$omitted\"\n    if test -z \"${REPLAY_OMISSIONS_NOTE:-}\"; then\n        printf '%s\\n' 'STOP: classify omissions using the criterion above; record REPLAY_OMISSIONS_NOTE and rerun only if permissible.'\n        exit 1\n    fi\n    printf 'Operator omission assessment: %s\\n' \"$REPLAY_OMISSIONS_NOTE\"\nfi\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\ntest ! -e \"$audit\"\ntest ! -L \"$audit\"\ncase \"$audit\" in \"$PWD\"/*) git check-ignore -v \"$audit\" ;; esac\ngit clone --no-local --no-checkout . \"$audit\"\ngit -C \"$audit\" checkout --detach \"$candidate\"\naudit=$(cd \"$audit\" && pwd -P)\ngit -C \"$audit\" update-ref refs/heads/integrate/management-workstreams-20260911 \"$candidate\"\ngit -C \"$audit\" config --local corbanu.replayRoot \"$audit\"\ngit -C \"$audit\" config --local corbanu.replayCandidate \"$candidate\"\nprintf 'Run every remaining block from: %s\\n' \"$audit\"\n"
+  ],
+  "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/target/source-copy",
+  "note_sha256": "5bb815f274e38d3f851fa7fa39892b716874cf7983f7d92ea66bb7f57cfde691",
+  "script_sha256": "80e043397ec98a7db1671a1aeae0374a74ec71919024cdac1909d807dbb06334",
+  "log_sha256": "0f8a96ca406b1dad2a16bec42efabdfffa1aa66a717b53316a243871a3e7071b",
+  "exit": 1,
+  "expected_exit": 1,
+  "elapsed_seconds": 0.2880570888519287,
+  "fresh_shell": true,
+  "environment_keys": [
+    "CARGO_HOME",
+    "CARGO_TERM_COLOR",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "LC_ALL",
+    "PATH",
+    "PYTHONDONTWRITEBYTECODE",
+    "RUSTUP_HOME",
+    "TERM",
+    "TMPDIR"
+  ],
+  "explicit_inputs": {}
+}

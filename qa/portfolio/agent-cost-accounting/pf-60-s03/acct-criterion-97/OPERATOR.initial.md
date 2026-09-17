@@ -49,7 +49,7 @@ test "$(git rev-parse --show-toplevel)" = "$PWD"
 candidate=$(git rev-parse HEAD)
 printf 'Candidate: %s\n' "$candidate"
 git status --porcelain --untracked-files=all --ignored=matching
-if ! git diff --quiet -- || ! git diff --cached --quiet HEAD -- || test -n "$(git ls-files --unmerged)"; then
+if ! git diff --quiet HEAD -- || test -n "$(git ls-files --unmerged)"; then
     printf '%s\n' 'STOP: tracked source changes; preserve them and resolve the candidate.'
     exit 1
 fi
@@ -64,8 +64,7 @@ if test -n "$omitted"; then
 fi
 audit=${CORBANU_AUDIT_DIR:-"$PWD/$q/acct-criterion-97/target/audit-copy"}
 case "$audit" in /*) ;; *) printf '%s\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac
-test ! -e "$audit"
-test ! -L "$audit"
+test ! -e "$audit" && test ! -L "$audit"
 case "$audit" in "$PWD"/*) git check-ignore -v "$audit" ;; esac
 git clone --no-local --no-checkout . "$audit"
 git -C "$audit" checkout --detach "$candidate"

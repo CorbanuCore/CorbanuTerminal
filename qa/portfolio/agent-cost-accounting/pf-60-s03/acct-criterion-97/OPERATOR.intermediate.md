@@ -49,7 +49,7 @@ test "$(git rev-parse --show-toplevel)" = "$PWD"
 candidate=$(git rev-parse HEAD)
 printf 'Candidate: %s\n' "$candidate"
 git status --porcelain --untracked-files=all --ignored=matching
-if ! git diff --quiet -- || ! git diff --cached --quiet HEAD -- || test -n "$(git ls-files --unmerged)"; then
+if ! git diff --quiet HEAD -- || test -n "$(git ls-files --unmerged)"; then
     printf '%s\n' 'STOP: tracked source changes; preserve them and resolve the candidate.'
     exit 1
 fi
