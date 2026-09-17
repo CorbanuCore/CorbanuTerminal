@@ -10,6 +10,11 @@ helpers = helpers.replace("lambda: active_model in visible()", "lambda: active_m
 exec(compile(helpers, str(helper_path), "exec"))
 from zoneinfo import ZoneInfo
 import selectors
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "acct-readers-61"))
+from p3_checks import assert_day, assert_compact_hour, assert_timezone
+env["DYLD_INSERT_LIBRARIES"] = str(Path(__file__).resolve().parent.parent / "acct-readers-61/tz_clock.dylib")
+timezone_controls = []
 
 cases = []
 def recalc():
@@ -35,6 +40,7 @@ def day(name, value, deleted=False, unavailable=False):
     rows = members(start, end, deleted)
     command("/usage requests "+value)
     text = page(name)
+    assert_day(text, value)
     if unavailable:
         require(text, "compacted history lost request/provider attribution", name)
         assert "Known subtotal exact USD:" not in text
@@ -127,7 +133,11 @@ try:
     recalc()
     for zone in ["America/New_York","UTC","Asia/Kolkata","America/Phoenix"]:
         env["TZ"] = zone
+        probe_path = out / ("timezone-"+zone.replace("/","-")+".json")
+        env["ACCT_TZ_PROBE"] = str(probe_path)
         launch("spring-inspect-"+zone.replace("/","-"),root)
+        timezone_controls.append(assert_timezone(probe_path, child.pid, zone, sample_utc))
+        save("timezone-controls.json", timezone_controls)
         child.delaybeforesend = 0
         label = "spring-"+zone.replace("/","-")
         hours(label,"2026-03-08T06:00:00Z","2026-03-08T08:00:00Z",[
@@ -135,6 +145,7 @@ try:
             ("2026-03-08T07:00:00Z","2026-03-08T08:00:00Z")])
         day(label+"-day","2026-03-08")
         stop()
+    env.pop("ACCT_TZ_PROBE")
     launch("before-deletion-inspect",root)
     child.delaybeforesend = 0
     day("before-deletion","2026-03-08")
@@ -217,6 +228,7 @@ try:
     page("mixed-hours-overview")
     open_link("Hour [2026-11-01T05:00:00.000Z, 2026-11-01T06:00:00.000Z)")
     text = page("mixed-compact-hour")
+    assert_compact_hour(text)
     assert "Known subtotal exact USD:" not in text
     record("mixed-compact-hour","2026-11-01T05:00:00Z","2026-11-01T06:00:00Z",
            members("2026-11-01T05:00:00Z","2026-11-01T06:00:00Z"),
