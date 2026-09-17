@@ -11,9 +11,9 @@
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md",
-      "bytes": 14306,
-      "sha256": "e26a219a84212133543b0557ee299f178dc3139c6b2f958ad8506f394eac7a82",
-      "lines": 196,
+      "bytes": 16093,
+      "sha256": "ac2fe444c1e515819b74899e217a8a62fc53a67eb2a83bf61ff6e42d1eaa80e3",
+      "lines": 213,
       "kind": "new"
     },
     {
@@ -130,8 +130,8 @@
     }
   ],
   "self_excluded": true,
-  "total_new_bytes": 56370,
-  "total_new_text_lines": 742,
+  "total_new_bytes": 58157,
+  "total_new_text_lines": 759,
   "refresh": {
     "allocation": "acct-fitness-76",
     "checked_at_base": "1aadfc123592530f657794489249e954f5e3885a",
@@ -145,7 +145,7 @@
   "total_modified_files": 3,
   "total_modified_bytes": 16713,
   "total_modified_text_lines": 230,
-  "total_current_bytes": 73083,
-  "total_current_text_lines": 972,
+  "total_current_bytes": 74870,
+  "total_current_text_lines": 989,
   "classification_basis": "kind means presence at the original round-75 base: absent=new, present=modified. Sizes and lines are current full-file sizes, not diff additions/deletions. Membership remains historical and excludes this inventory."
 }

@@ -99,6 +99,3 @@ CHANGELOG.ignore.md
 # Python bytecode files
 __pycache__/
 *.pyc
-
-# QA replay scratch: disposable clones and their captured stdout, never evidence.
-qa/portfolio/agent-cost-accounting/pf-60-s03/*/target/

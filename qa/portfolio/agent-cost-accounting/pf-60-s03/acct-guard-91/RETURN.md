@@ -85,8 +85,21 @@ Existing-file diff against the assigned base:
 
 Existing files total: +108/-33. New scripts, receipts and raw evidence are under
 `acct-guard-91/`; [scope.json](scope.json) lists every changed/new file's current
-line count, byte count and SHA-256, excluding only itself. Compressed logs have
-no text-line count. [final-check.json](final-check.json) records the final
+line count, byte count and SHA-256, excluding itself and disposable scratch.
+The round-92 reconciliation restricts this historical membership to paths in
+commit `05b8e6e1aea5a55d7a58f3af3c21621a3fa3fb2f`, with current content hashes.
+The 31 removed `target/` entries were disposable replay/simulation outputs beside
+local Git clones, ignored by design. They duplicate retained streams and receipts
+under `replay-results/`, `simulation-initial/` and `simulation-final/`; clone
+metadata and temporary checkout state are execution scratch, not acceptance
+evidence. Readers replay the committed scripts using retained Git history; they
+do not need the original temporary directories. Absolute `run_directory` and
+checkout paths in historical receipts identify where a run occurred, not files
+promised in this commit. The committed `.gitignore` documents the exclusion.
+Round-92 also corrects ten simulation stderr files from a newline to zero bytes,
+matching both their empty-stderr receipts and the original local raw captures.
+The correction is disclosed rather than presented as a fresh historical run.
+Compressed logs have no text-line count. [final-check.json](final-check.json) records the final
 baseline, verbatim-output, explicit-raise and scope checks.
 
 Nothing in the brief was found factually wrong. Its manual-check option was
