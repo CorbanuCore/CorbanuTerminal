@@ -20,14 +20,36 @@ both lanes. This preserves the accepted hand ownership boundary and avoids
 mutating hand claims from the owner lane.
 
 Read the computed `coordinator.watchdog_coverage.summary` before executing the
-cutover using the received candidate's status reader. Its BEFORE line must say
-`new default actions=covered` for fixture-only operation. Before arming, and
-after promotion, it must say `new default actions=excluded; hand stall
-detection=manager responsibility (--hand-run is manual; no scheduled hand
-watchdog)`. Counts and exact IDs come from the current snapshot, never from
-this prose. The recipe prints BEFORE, BEFORE ARM and AFTER and validates these
-conditions. Predictions require an admitted tick reaching its watchdog; status
-alone does not prove admission or continued service health.
+cutover using the received candidate's status reader. Round 89 corrects counts:
+only unreported overdue dispatching/dispatched/running actions count. Prepared,
+returned, uncertain, terminal, already-reported and future-deadline actions do
+not. The separate ownership map includes those actions.
+
+The exact line formats are below; `C` and `E` stand for observed integer counts,
+not literal text to type or invented live measurements:
+
+```text
+BEFORE: Owner watchdog on admitted ticks (unreported overdue actions): covered=C, excluded=0; manager=covered; new default actions=covered; hand stall detection=covered by this watchdog.
+AFTER: Owner watchdog on admitted ticks (unreported overdue actions): covered=C, excluded=E; manager=covered; new default actions=excluded; hand stall detection=manager responsibility (--hand-run is manual; no scheduled hand watchdog).
+```
+
+BEFORE ARM uses the AFTER format with its own observed counts. The recipe prints
+all three computed lines and checks the same-snapshot counts against report
+predictions. Manager coverage and hand guidance come from the watchdog's own
+lane predicate. The expected change is fixture-wide coverage to owner-lane
+coverage; count equality across time is not expected. Existing actions can
+expire, report or finish between reads. Predictions require an admitted tick
+reaching its watchdog; status alone does not prove admission or service health.
+
+If the fields, line or action predictions disagree within a snapshot, or the
+routing change differs from these expectations, stop the cutover. Before arm,
+leave admission OFF; after arm, revoke admission with the current generation
+using the disarm command below. Keep both raw status JSONs, timestamps, revisions,
+pins and the refusal transcript. Quiesce cooperating dispatchers and compare
+each changed action's status, deadline, stall flag and owner; re-read with the
+received candidate before proceeding. Do not edit SQLite, retry arming blindly,
+or assume disarm kills existing workers. If ownership, holds or pins remain
+uncertain, escalate to the integration owner with that evidence.
 
 Before the command, stop **new hand dispatch and raw key delivery** and let any
 in-progress delivery finish. Leave existing workers running. Finish/reconcile
@@ -119,6 +141,27 @@ def run(script, *args, expected=0):
     assert result.returncode == expected, "Stop here; retain the transcript and inspect the named refusal"
     return json.loads(result.stdout) if result.stdout.strip() else None
 
+def check_coverage(status, *, partitioned):
+    assert status["complete"], "Coverage unavailable; stop and preserve the raw status"
+    impact = status["coordinator"]
+    coverage = impact["watchdog_coverage"]
+    assert coverage["manager_covered"], "Unexpected manager coverage; stop"
+    assert coverage["future_default_covered"] is (not partitioned)
+    assert coverage["hand_stall_detection"] == (
+        "manager responsibility (--hand-run is manual; no scheduled hand watchdog)"
+        if partitioned else "covered by this watchdog")
+    assert set(coverage["covered_actions"]) == {
+        row["id"] for row in impact["in_flight"] if row["watchdog_will_report"]}
+    expected_excluded = {
+        row["id"] for row in impact["in_flight"]
+        if row["overdue"] and not row["stall_reported"]
+        and row["status"] in {"dispatching", "dispatched", "running"}
+        and not row["watchdog_covered"]}
+    assert set(coverage["excluded_actions"]) == expected_excluded
+    if not partitioned:
+        assert not coverage["excluded_actions"]
+    return coverage["summary"]
+
 # Existing runtime can disarm despite a later candidate/package change.
 status = run("owner_daemon.py", "--activation-status", "--config", config_path)
 assert status["complete"] and status["state"] == "armed"
@@ -126,8 +169,8 @@ assert status["complete"] and status["state"] == "armed"
 # computed watchdog coverage. This read does not repin, arm or change history.
 before = owner.activation_status(config_path)
 assert before["complete"] and before["scope"] == "fixture-only"
-assert before["coordinator"]["watchdog_coverage"]["future_default_covered"]
-print("BEFORE: " + before["coordinator"]["watchdog_coverage"]["summary"], flush=True)
+print("BEFORE: " + check_coverage(before, partitioned=False), flush=True)
+print(json.dumps(dict(before_status=before)), flush=True)
 run("owner_daemon.py", "--disarm", "--config", config_path, "--generation", status["generation"])
 run("activate.py", "--owner", "uninstall", "--root", root)
 
@@ -175,9 +218,8 @@ assert status["complete"] and status["state"] == "off"
 assert {key for key, row in status["coordinator"]["ownership"].items()
         if row["owner"] == "owner"} == selected
 coverage = status["coordinator"]["watchdog_coverage"]
-assert not coverage["future_default_covered"]
-assert set(coverage["covered_actions"]) == selected
-print("BEFORE ARM: " + coverage["summary"], flush=True)
+print("BEFORE ARM: " + check_coverage(status, partitioned=True), flush=True)
+# Prepared selected actions are in ownership, not the overdue coverage count.
 # Every excluded action and all future default hand work require manager-owned
 # stall detection. --hand-run is one pass, not a recurring hand watchdog.
 print(json.dumps(dict(excluded=coverage["excluded_actions"],
@@ -204,8 +246,7 @@ run("owner_daemon.py", "--schedule", root, "--recover",
     "tmux promotion: shared ownership map inspected; manual raw delivery stopped; pins and allocations verified")
 after = run("owner_daemon.py", "--activation-status", "--config", config_path)
 assert after["complete"] and after["state"] == "armed" and after["scope"] == "tmux-workers"
-assert not after["coordinator"]["watchdog_coverage"]["future_default_covered"]
-print("AFTER: " + after["coordinator"]["watchdog_coverage"]["summary"], flush=True)
+print("AFTER: " + check_coverage(after, partitioned=True), flush=True)
 print(json.dumps(dict(promotion_evidence=str(evidence), runtime=str(runtime),
                       python=str(python), config=str(config_path))))
 PY

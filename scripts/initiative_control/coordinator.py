@@ -803,8 +803,23 @@ class Coordinator:
 
     @classmethod
     def watchdog_covers(cls, state, action, dispatcher=None):
-        """The same ownership predicate serves execution and advisory coverage."""
-        return dispatcher is None or cls.dispatch_owner(state, action) in (None, dispatcher)
+        """Shared lane predicate; action=None denotes the unpartitioned manager."""
+        return action is None or dispatcher is None or cls.dispatch_owner(state, action) in (None, dispatcher)
+
+    @staticmethod
+    def watchdog_due(record, now):
+        return bool(record and record["deadline"] < now and not record.get("stall_reported"))
+
+    @classmethod
+    def watchdog_action_reportable(cls, action, now):
+        """Reportable at this instant, before applying the dispatcher lane."""
+        return (action["status"] in {"dispatching", "dispatched", "running"}
+                and cls.watchdog_due(action, now))
+
+    @classmethod
+    def watchdog_manager_reportable(cls, state, now, dispatcher=None):
+        return (cls.watchdog_covers(state, None, dispatcher)
+                and cls.watchdog_due(state["manager"], now))
 
     def watchdog(self, dispatcher=None):
         """Report each stall once; never re-launch on timeout alone."""
@@ -813,14 +828,12 @@ class Coordinator:
         now = self.clock()
         overdue = [a["id"] for a in snapshot["actions"].values()
                    if self.watchdog_covers(snapshot, a, dispatcher)
-                   and a["status"] in {"dispatching", "dispatched", "running"}
-                   and a["deadline"] < now and not a.get("stall_reported")]
-        manager = snapshot["manager"]
-        if not overdue and not (manager and manager["deadline"] < now and not manager.get("stall_reported")):
+                   and self.watchdog_action_reportable(a, now)]
+        if not overdue and not self.watchdog_manager_reportable(snapshot, now, dispatcher):
             return found
         with self.mutation("watchdog", {"observed_at": now}) as (db, state):
             manager = state["manager"]
-            if manager and manager["deadline"] < now and not manager.get("stall_reported"):
+            if self.watchdog_manager_reportable(state, now, dispatcher):
                 # Launcher/process reconciliation required before another manager.
                 event = {"id": "manager-stall:" + manager["id"], "manager": manager["id"]}
                 if self._event(db, event):
@@ -828,8 +841,7 @@ class Coordinator:
                 manager["stall_reported"] = True
             for action in state["actions"].values():
                 if (not self.watchdog_covers(state, action, dispatcher)
-                        or action["status"] not in {"dispatching", "dispatched", "running"}
-                        or action["deadline"] >= now or action.get("stall_reported")):
+                        or not self.watchdog_action_reportable(action, now)):
                     continue
                 action["stall_reported"] = True
                 if action["status"] == "dispatching":

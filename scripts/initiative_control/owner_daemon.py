@@ -227,20 +227,26 @@ def coordinator_activation_impact(root, dispatcher=None):
         snapshot = f.strict_json(row[0])
     observed_at = time.time()
     actions = sorted(snapshot["actions"].values(), key=lambda value: value["id"])
-    covered = [a["id"] for a in actions if coordinator.watchdog_covers(snapshot, a, dispatcher)]
-    excluded = [a["id"] for a in actions if not coordinator.watchdog_covers(snapshot, a, dispatcher)]
+    reportable = [a for a in actions if coordinator.watchdog_action_reportable(a, observed_at)]
+    covered = [a["id"] for a in reportable if coordinator.watchdog_covers(snapshot, a, dispatcher)]
+    excluded = [a["id"] for a in reportable if not coordinator.watchdog_covers(snapshot, a, dispatcher)]
     default_action = {}
     future_covered = coordinator.watchdog_covers(snapshot, default_action, dispatcher)
     coverage = dict(
         dispatcher=dispatcher, covered_actions=covered, excluded_actions=excluded,
         future_default_owner=coordinator.dispatch_owner(snapshot, default_action),
-        future_default_covered=future_covered, manager_covered=True,
+        future_default_covered=future_covered,
+        manager_covered=coordinator.watchdog_covers(snapshot, None, dispatcher),
+        counted_actions="unreported overdue dispatching/dispatched/running actions",
         condition="On an admitted tick reaching the watchdog; OFF, refusal or earlier failure runs no watchdog.",
         hand_stall_detection="manager responsibility (--hand-run is manual; no scheduled hand watchdog)"
-        if dispatcher == "owner" and "dispatch_control" in snapshot else "covered by this watchdog",
+        if not coordinator.watchdog_covers(snapshot, {"dispatch_owner": "hand"}, dispatcher)
+        else "covered by this watchdog",
     )
     coverage["summary"] = (
-        f"Owner watchdog on admitted ticks: covered={len(covered)}, excluded={len(excluded)}; "
+        f"Owner watchdog on admitted ticks (unreported overdue actions): "
+        f"covered={len(covered)}, excluded={len(excluded)}; "
+        f"manager={'covered' if coverage['manager_covered'] else 'excluded'}; "
         f"new default actions={'covered' if future_covered else 'excluded'}; "
         f"hand stall detection={coverage['hand_stall_detection']}."
     )
@@ -251,8 +257,7 @@ def coordinator_activation_impact(root, dispatcher=None):
             continue
         overdue = action["deadline"] < observed_at
         covered_action = coordinator.watchdog_covers(snapshot, action, dispatcher)
-        will_report = (covered_action and overdue and not action.get("stall_reported", False)
-                       and action["status"] in {"dispatching", "dispatched", "running"})
+        will_report = covered_action and coordinator.watchdog_action_reportable(action, observed_at)
         in_flight.append(dict(id=action["id"], status=action["status"], deadline=action["deadline"],
                               overdue=overdue, stall_reported=bool(action.get("stall_reported")),
                               dispatch_owner=coordinator.dispatch_owner(snapshot, action),
@@ -264,7 +269,8 @@ def coordinator_activation_impact(root, dispatcher=None):
         overdue = manager["deadline"] < observed_at
         manager = dict(id=manager["id"], deadline=manager["deadline"], overdue=overdue,
                        stall_reported=bool(manager.get("stall_reported")),
-                       watchdog_will_report=overdue and not manager.get("stall_reported", False))
+                       watchdog_will_report=coordinator.watchdog_manager_reportable(
+                           snapshot, observed_at, dispatcher))
     return dict(observed_at=observed_at, revision=snapshot["revision"], enabled=snapshot["enabled"],
                 in_flight=in_flight, overdue=[row for row in in_flight if row["overdue"]],
                 manager=manager, watchdog_coverage=coverage,
@@ -275,7 +281,7 @@ def coordinator_activation_impact(root, dispatcher=None):
                 warning=coverage["summary"] + " Armed operation is not read-only. "
                 "For covered actions only, watchdog_will_report predicts unreported overdue "
                 "dispatching/dispatched/running stalls if an admitted tick reaches the watchdog; "
-                "dispatching becomes dispatch_uncertain. Manager stalls are covered in either lane. "
+                "dispatching becomes dispatch_uncertain. "
                 "Covered watchdog mutations can occur while dispatch is paused; "
                 "fixture-only processing can append events when dispatch is ready. "
                 "This snapshot is advisory, not an ownership gate or reservation; claims and "
@@ -284,7 +290,8 @@ def coordinator_activation_impact(root, dispatcher=None):
 
 def unresolved_holds(db):
     """Read receipts, including holds whose action is now in the other lane."""
-    return [dict(row) for row in db.execute(
+    return [dict(row, dispatch_owner=None, excluded_from_owner_lane=None,
+                 ownership_status="not_checked") for row in db.execute(
         "SELECT h.op_id,h.reason_code,h.first_seen,h.last_seen,o.action_id "
         "FROM holds h LEFT JOIN operations o ON o.op_id=h.op_id "
         "WHERE h.resolved_at IS NULL ORDER BY h.op_id")]
@@ -307,6 +314,8 @@ def activation_status(config_path):
     try:
         with activation_store(config_path) as (_, db, meta):
             result["unresolved_holds"] = unresolved_holds(db)
+            for hold in result["unresolved_holds"]:
+                hold["ownership_status"] = "coordinator_unavailable"
             result.update(state=meta["requested_mode"], generation=meta["control_generation"],
                           next_generation=meta["control_generation"] + 1, stored=meta)
     except errors as exc:
@@ -322,9 +331,13 @@ def activation_status(config_path):
         claims = {digest(["tmux", key, "claim"]): key for key in ownership}
         for hold in result["unresolved_holds"]:
             hold["action_id"] = hold["action_id"] or claims.get(hold["op_id"])
-            hold["dispatch_owner"] = ownership.get(hold["action_id"], {}).get("owner")
-            hold["excluded_from_owner_lane"] = (
-                "transport" in config and hold["dispatch_owner"] == "hand")
+            action = ownership.get(hold["action_id"])
+            hold["ownership_status"] = ("resolved" if action is not None else
+                                        "action_missing" if hold["action_id"] else "unmapped")
+            if action is not None:
+                hold["dispatch_owner"] = action["owner"]
+                hold["excluded_from_owner_lane"] = (
+                    "transport" in config and hold["dispatch_owner"] == "hand")
     result["complete"] = not result["unavailable"]
     return result
 
