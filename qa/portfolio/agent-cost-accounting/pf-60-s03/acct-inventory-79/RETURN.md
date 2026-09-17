@@ -1,5 +1,10 @@
 # RETURN
 
+Historical round-79 execution record. Round-81 amendments below clarify package
+exclusion and the coverage claim; raw round-79 outputs and its self-inventory
+remain historical snapshots. Fresh verification is recorded in
+[round 81](../acct-baseline-81/RETURN.md).
+
 Allocation `acct-inventory-79`; model `gpt-6-astra`; effort `high`.
 Claim `5429d53f-c91a-4705-8b00-986f1153a557`.
 Allocation digest `48ebbdcdccbce4eca86e76d5e775d62dac14ffa31c3afba8fcbb78277d36111d`.
@@ -39,9 +44,16 @@ python3 -B qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify
 [acceptance-output.txt](acceptance-output.txt) is its complete verbatim output
 today. It is byte-identical to [clean-checkout.stdout.txt](clean-checkout.stdout.txt):
 **20 agreements, 0 disagreements, 3 unavailable; exit 2**.
-All acceptance quantities, referenced gate results/timings, mutation counts,
-page/viewport counts and refreshed inventory totals were re-derived.
-Only the ignored package binaries cannot be re-derived from committed evidence:
+The matched acceptance claims, referenced gate results/timings, mutation counts,
+page/viewport counts and refreshed inventory totals were re-derived. The coverage
+guard detects unmatched digit-form quantities outside matched spans, fenced code
+and link targets, excluding known round/sprint/severity identifiers; it does not
+audit worded quantities or numbers in the excluded regions.
+Only the ignored package binaries cannot be re-derived from committed evidence.
+They are deliberately excluded local debug build products under
+`acct-fitness-76/.gitignore`'s `/package/` rule, totaling **713,231,616 bytes**
+(**680.191 MiB**); no licensing prohibition is established. See the
+[exclusion record](../acct-baseline-81/package-exclusion.md). The three are:
 `codex` **607,785,336 bytes**, `codex-code-mode-host` **93,937,576 bytes**,
 `rmcp_test_server` **11,508,704 bytes**, and their claimed mode `0555` and SHA-256.
 The retained manifest/build log do agree. Missing bytes are never a passed package.

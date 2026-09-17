@@ -56,6 +56,27 @@ The command prints agreement, disagreement or unavailable evidence for each item
 It uses committed-evidence membership and current checkout contents; ignored local
 package binaries cannot establish clean-checkout package availability. Exit status
 is zero for full agreement, one for disagreement, or two for missing evidence.
+The expected retained-evidence baseline is:
+
+```text
+RESULT agreement=20 disagreement=0 unavailable=3 exit=2
+```
+
+The only expected unavailable items are `committed package codex`,
+`committed package codex-code-mode-host` and `committed package rmcp_test_server`,
+all under the [package directory](../acct-fitness-76/.gitignore). These are deliberately ignored local debug
+build products; [the exclusion record](../acct-baseline-81/package-exclusion.md)
+gives their sizes and the applicable repository rule. Any different counts or
+unavailable item, or any disagreement, deviates from this baseline even if the
+exit status is still two. Legitimate changes must update this documented baseline.
+This expected baseline describes retained evidence, not complete qualification.
+
+The numerical coverage guard checks for unmatched digit-form quantities outside
+fenced code and link targets, after removing matched claim spans and known
+round/sprint/severity identifiers. It does not audit quantities written as words,
+numbers inside those excluded regions (including the expected baseline above),
+or the truth of nonnumerical statements. Specific evidence checks separately
+cover the worded attempt count, timeout count and inventory-edit count.
 Round identifiers and severity labels are references, not measured quantities.
 The [inventory correction](../acct-inventory-79/inventory-correction.json) supersedes
 the refreshed round-75 new-file labels and totals in the earlier change record.
