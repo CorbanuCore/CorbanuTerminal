@@ -538,8 +538,11 @@ def service(label, domain=None):
     domain = installation_domain({"domain": domain} if domain is not None else {})
     f.require(isinstance(label, str) and
               re.fullmatch(r"com\.corbanu\.initiative-owner(?:\.[a-zA-Z0-9-]+)?", label), "invalid_label")
-    result = subprocess.run(["/bin/launchctl", "print", f"{domain}/{label}"],
-                            capture_output=True, text=True, timeout=5, env={})
+    try:
+        result = subprocess.run(["/bin/launchctl", "print", f"{domain}/{label}"],
+                                capture_output=True, text=True, timeout=5, env={})
+    except UnicodeError as exc:
+        raise f.LaunchError(f"service_observation_unavailable: {domain}/{label}") from exc
     if result.returncode == 0:
         return "present", result.stdout
     if result.returncode == 113 and f'Could not find service "{label}"' in result.stderr:
@@ -548,6 +551,11 @@ def service(label, domain=None):
     missing = f"Could not find domain for {'user gui' if kind == 'gui' else 'uid'}: {uid}"
     if result.returncode == 112 and missing in result.stderr.splitlines():
         return "domain_absent", missing
+    unavailable = "Could not print domain: 125: Domain does not support specified action"
+    if kind == "gui" and result.returncode == 125 and unavailable in result.stderr.splitlines():
+        # A real user without an Aqua session can have only a Background domain.
+        # Activation permits this observation only for the sibling domain.
+        return "domain_absent", unavailable
     raise f.LaunchError(f"service_observation_unavailable: {domain}/{label}")
 
 

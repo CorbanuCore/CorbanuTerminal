@@ -100,21 +100,25 @@ def owner_activation(args):
         domains = (domain, f"{'user' if domain.startswith('gui/') else 'gui'}/{os.getuid()}")
         def observe(location):
             try:
-                return owner.service(label, location)
+                result = owner.service(label, location)
             except (OSError, subprocess.SubprocessError) as exc:
                 raise f.LaunchError(f"service_observation_unavailable: {location}/{label}") from exc
+            f.require(location != domain or result[0] != "domain_absent",
+                      f"service_observation_unavailable: {location}/{label}")
+            return result
+        def is_clear(location, state):
+            return state == "absent" or (location != domain and state == "domain_absent")
         observations = {location: observe(location) for location in domains}
         def sibling_observation():
             state, detail = observations[domains[1]]
             return dict(domain=domains[1], state=state,
                         reason=detail if state == "domain_absent" else None)
         presence, output = observations[domain]
-        f.require(presence != "domain_absent", f"service_observation_unavailable: {domain}/{label}")
         target = f"{domain}/{label}"
         if args.owner == "install":
             for location, (state, _) in observations.items():
                 if location != domain or not previous:
-                    f.require(state in {"absent", "domain_absent"}, f"service_conflict: {location}/{label}")
+                    f.require(is_clear(location, state), f"service_conflict: {location}/{label}")
         # A manual move can leave a job outside its receipt's domain.
         # Validate every loaded instance before removing any of them.
         for location, (state, output) in observations.items():
@@ -130,8 +134,7 @@ def owner_activation(args):
                                    check=True, timeout=40, env={})
             for location in domains:
                 observations[location] = observe(location)
-                allowed = {"absent", "domain_absent"} if location != domain else {"absent"}
-                f.require(observations[location][0] in allowed,
+                f.require(is_clear(location, observations[location][0]),
                           f"service_still_present: {location}/{label}")
             if plist.exists():
                 f.require(f.file_digest(owner.private_file(plist)) == previous["plist_sha256"], "plist_drift")
