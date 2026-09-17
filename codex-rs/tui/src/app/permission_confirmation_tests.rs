@@ -202,7 +202,7 @@ async fn permission_confirmation_f07_conflicts_are_refused_and_old_completion_ca
 }
 
 #[tokio::test]
-async fn permission_confirmation_f10_unconfirmed_selection_does_not_persist_launch_authority() {
+async fn permission_confirmation_f10_request_does_not_optimistically_apply_or_persist() {
     Box::pin(async {
         for (initial, policy, requested) in [
             (":read-only", "untrusted", ":danger-full-access"),
@@ -277,8 +277,10 @@ async fn permission_confirmation_f10_unconfirmed_selection_does_not_persist_laun
             drop(app);
             assert_eq!(std::fs::read_to_string(&config_path).unwrap(), saved);
 
-            // Discard all runtime state and load the same synthetic home anew.
-            // A fresh thread tests saved launch authority, not resume semantics.
+            // This checks request-time persistence only. Confirmed selection
+            // also leaves saved launch config unchanged, so disk reload and a
+            // fresh thread cannot distinguish confirmation or prove recovery
+            // of a pending change in the affected thread.
             let reloaded = ConfigBuilder::default()
                 .codex_home(home.path().to_path_buf())
                 .harness_overrides(ConfigOverrides {
