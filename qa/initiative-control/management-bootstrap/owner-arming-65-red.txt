@@ -1,0 +1,403 @@
+test_arm_tick_disarm_rearm_uses_real_entry_point (test_owner_daemon.ArmingTests.test_arm_tick_disarm_rearm_uses_real_entry_point) ... ERROR
+test_cli_arm_status_disarm_and_named_refusal (test_owner_daemon.ArmingTests.test_cli_arm_status_disarm_and_named_refusal) ... FAIL
+test_crash_each_arm_boundary_fences_admission_until_disarm (test_owner_daemon.ArmingTests.test_crash_each_arm_boundary_fences_admission_until_disarm) ... 
+  test_crash_each_arm_boundary_fences_admission_until_disarm (test_owner_daemon.ArmingTests.test_crash_each_arm_boundary_fences_admission_until_disarm) (target='intent-before') ... FAIL
+  test_crash_each_arm_boundary_fences_admission_until_disarm (test_owner_daemon.ArmingTests.test_crash_each_arm_boundary_fences_admission_until_disarm) (target='intent-after') ... FAIL
+  test_crash_each_arm_boundary_fences_admission_until_disarm (test_owner_daemon.ArmingTests.test_crash_each_arm_boundary_fences_admission_until_disarm) (target='file-before') ... FAIL
+  test_crash_each_arm_boundary_fences_admission_until_disarm (test_owner_daemon.ArmingTests.test_crash_each_arm_boundary_fences_admission_until_disarm) (target='file-after') ... FAIL
+  test_crash_each_arm_boundary_fences_admission_until_disarm (test_owner_daemon.ArmingTests.test_crash_each_arm_boundary_fences_admission_until_disarm) (target='commit-after') ... FAIL
+test_disarm_remains_available_after_package_and_config_drift (test_owner_daemon.ArmingTests.test_disarm_remains_available_after_package_and_config_drift) ... ERROR
+test_partial_file_write_recovery_preserves_off_and_consumes_generation (test_owner_daemon.ArmingTests.test_partial_file_write_recovery_preserves_off_and_consumes_generation) ... ERROR
+test_refuses_already_armed (test_owner_daemon.ArmingTests.test_refuses_already_armed) ... ERROR
+test_refuses_blank_authority (test_owner_daemon.ArmingTests.test_refuses_blank_authority) ... ERROR
+test_refuses_busy_owner_and_admission_locks (test_owner_daemon.ArmingTests.test_refuses_busy_owner_and_admission_locks) ... 
+  test_refuses_busy_owner_and_admission_locks (test_owner_daemon.ArmingTests.test_refuses_busy_owner_and_admission_locks) (name='owner-daemon.lock') ... ERROR
+  test_refuses_busy_owner_and_admission_locks (test_owner_daemon.ArmingTests.test_refuses_busy_owner_and_admission_locks) (name='owner-admission.lock') ... ERROR
+test_refuses_disarm_boolean_generation (test_owner_daemon.ArmingTests.test_refuses_disarm_boolean_generation) ... ERROR
+test_refuses_disarm_stale_generation (test_owner_daemon.ArmingTests.test_refuses_disarm_stale_generation) ... ERROR
+test_refuses_invalid_activation_keys (test_owner_daemon.ArmingTests.test_refuses_invalid_activation_keys) ... ERROR
+test_refuses_invalid_decision_id (test_owner_daemon.ArmingTests.test_refuses_invalid_decision_id) ... ERROR
+test_refuses_invalid_generation (test_owner_daemon.ArmingTests.test_refuses_invalid_generation) ... ERROR
+test_refuses_invalid_revision (test_owner_daemon.ArmingTests.test_refuses_invalid_revision) ... ERROR
+test_refuses_owner_journal (test_owner_daemon.ArmingTests.test_refuses_owner_journal) ... ERROR
+test_refuses_package_drift (test_owner_daemon.ArmingTests.test_refuses_package_drift) ... ERROR
+test_refuses_pending_activation (test_owner_daemon.ArmingTests.test_refuses_pending_activation) ... ERROR
+test_refuses_schema_drift (test_owner_daemon.ArmingTests.test_refuses_schema_drift) ... ERROR
+test_refuses_skipped_generation (test_owner_daemon.ArmingTests.test_refuses_skipped_generation) ... ERROR
+test_refuses_stale_generation (test_owner_daemon.ArmingTests.test_refuses_stale_generation) ... ERROR
+test_refuses_state_drift (test_owner_daemon.ArmingTests.test_refuses_state_drift) ... ERROR
+test_refuses_wrong_config_digest (test_owner_daemon.ArmingTests.test_refuses_wrong_config_digest) ... ERROR
+test_refuses_wrong_package_digest (test_owner_daemon.ArmingTests.test_refuses_wrong_package_digest) ... ERROR
+test_refuses_wrong_scope_with_transport (test_owner_daemon.ArmingTests.test_refuses_wrong_scope_with_transport) ... ERROR
+test_refuses_wrong_scope_without_transport (test_owner_daemon.ArmingTests.test_refuses_wrong_scope_without_transport) ... ERROR
+test_transport_arm_does_not_launch_or_read_auth (test_owner_daemon.ArmingTests.test_transport_arm_does_not_launch_or_read_auth) ... ERROR
+
+======================================================================
+ERROR: test_arm_tick_disarm_rearm_uses_real_entry_point (test_owner_daemon.ArmingTests.test_arm_tick_disarm_rearm_uses_real_entry_point)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 436, in test_arm_tick_disarm_rearm_uses_real_entry_point
+    result = owner.arm_owner(self.config_path, self.authority)
+             ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_disarm_remains_available_after_package_and_config_drift (test_owner_daemon.ArmingTests.test_disarm_remains_available_after_package_and_config_drift)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 459, in test_disarm_remains_available_after_package_and_config_drift
+    owner.arm_owner(self.config_path, self.authority)
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_partial_file_write_recovery_preserves_off_and_consumes_generation (test_owner_daemon.ArmingTests.test_partial_file_write_recovery_preserves_off_and_consumes_generation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 520, in test_partial_file_write_recovery_preserves_off_and_consumes_generation
+    self.refuse("activation_recovery_required")
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 339, in refuse
+    owner.arm_owner(self.config_path, {**self.authority, **changes})
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_already_armed (test_owner_daemon.ArmingTests.test_refuses_already_armed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 390, in test_refuses_already_armed
+    owner.arm_owner(self.config_path, self.authority)
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_blank_authority (test_owner_daemon.ArmingTests.test_refuses_blank_authority)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 350, in test_refuses_blank_authority
+    self.refuse("activation_authority_required", authority=" ")
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 339, in refuse
+    owner.arm_owner(self.config_path, {**self.authority, **changes})
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_busy_owner_and_admission_locks (test_owner_daemon.ArmingTests.test_refuses_busy_owner_and_admission_locks) (name='owner-daemon.lock')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 431, in test_refuses_busy_owner_and_admission_locks
+    owner.arm_owner(self.config_path, self.authority)
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_busy_owner_and_admission_locks (test_owner_daemon.ArmingTests.test_refuses_busy_owner_and_admission_locks) (name='owner-admission.lock')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 431, in test_refuses_busy_owner_and_admission_locks
+    owner.arm_owner(self.config_path, self.authority)
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_disarm_boolean_generation (test_owner_daemon.ArmingTests.test_refuses_disarm_boolean_generation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 410, in test_refuses_disarm_boolean_generation
+    owner.disarm_owner(self.config_path, True)
+    ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'disarm_owner'
+
+======================================================================
+ERROR: test_refuses_disarm_stale_generation (test_owner_daemon.ArmingTests.test_refuses_disarm_stale_generation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 404, in test_refuses_disarm_stale_generation
+    owner.disarm_owner(self.config_path, 1)
+    ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'disarm_owner'
+
+======================================================================
+ERROR: test_refuses_invalid_activation_keys (test_owner_daemon.ArmingTests.test_refuses_invalid_activation_keys)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 344, in test_refuses_invalid_activation_keys
+    self.refuse("invalid_activation", extra=True)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 339, in refuse
+    owner.arm_owner(self.config_path, {**self.authority, **changes})
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_invalid_decision_id (test_owner_daemon.ArmingTests.test_refuses_invalid_decision_id)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 347, in test_refuses_invalid_decision_id
+    self.refuse("activation_decision_id_required", decision_id=[])
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 339, in refuse
+    owner.arm_owner(self.config_path, {**self.authority, **changes})
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_invalid_generation (test_owner_daemon.ArmingTests.test_refuses_invalid_generation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 356, in test_refuses_invalid_generation
+    self.refuse("activation_generation_required", generation=True)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 339, in refuse
+    owner.arm_owner(self.config_path, {**self.authority, **changes})
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_invalid_revision (test_owner_daemon.ArmingTests.test_refuses_invalid_revision)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 353, in test_refuses_invalid_revision
+    self.refuse("activation_revision_required", revision=True)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 339, in refuse
+    owner.arm_owner(self.config_path, {**self.authority, **changes})
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_owner_journal (test_owner_daemon.ArmingTests.test_refuses_owner_journal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 419, in test_refuses_owner_journal
+    self.refuse("owner_recovery_required")
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 339, in refuse
+    owner.arm_owner(self.config_path, {**self.authority, **changes})
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_package_drift (test_owner_daemon.ArmingTests.test_refuses_package_drift)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 399, in test_refuses_package_drift
+    self.refuse("package_drift")
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 339, in refuse
+    owner.arm_owner(self.config_path, {**self.authority, **changes})
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_pending_activation (test_owner_daemon.ArmingTests.test_refuses_pending_activation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 415, in test_refuses_pending_activation
+    self.refuse("activation_recovery_required")
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 339, in refuse
+    owner.arm_owner(self.config_path, {**self.authority, **changes})
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_schema_drift (test_owner_daemon.ArmingTests.test_refuses_schema_drift)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 424, in test_refuses_schema_drift
+    self.refuse("schema_drift")
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 339, in refuse
+    owner.arm_owner(self.config_path, {**self.authority, **changes})
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_skipped_generation (test_owner_daemon.ArmingTests.test_refuses_skipped_generation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 387, in test_refuses_skipped_generation
+    self.refuse("activation_generation_mismatch", generation=2)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 339, in refuse
+    owner.arm_owner(self.config_path, {**self.authority, **changes})
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_stale_generation (test_owner_daemon.ArmingTests.test_refuses_stale_generation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 382, in test_refuses_stale_generation
+    owner.arm_owner(self.config_path, self.authority)
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_state_drift (test_owner_daemon.ArmingTests.test_refuses_state_drift)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 395, in test_refuses_state_drift
+    self.refuse("state_drift")
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 339, in refuse
+    owner.arm_owner(self.config_path, {**self.authority, **changes})
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_wrong_config_digest (test_owner_daemon.ArmingTests.test_refuses_wrong_config_digest)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 376, in test_refuses_wrong_config_digest
+    self.refuse("activation_config_mismatch", config_digest="0" * 64)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 339, in refuse
+    owner.arm_owner(self.config_path, {**self.authority, **changes})
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_wrong_package_digest (test_owner_daemon.ArmingTests.test_refuses_wrong_package_digest)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 379, in test_refuses_wrong_package_digest
+    self.refuse("activation_package_mismatch", package_digest="0" * 64)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 339, in refuse
+    owner.arm_owner(self.config_path, {**self.authority, **changes})
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_refuses_wrong_scope_with_transport (test_owner_daemon.ArmingTests.test_refuses_wrong_scope_with_transport)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 372, in test_refuses_wrong_scope_with_transport
+    self.transport()
+    ~~~~~~~~~~~~~~^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 364, in transport
+    binary_sha256=f.file_digest(binary), tmux=binary,
+                  ~~~~~~~~~~~~~^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/fable_launcher.py", line 71, in file_digest
+    with path.open("rb") as stream:
+         ^^^^^^^^^
+AttributeError: 'str' object has no attribute 'open'
+
+======================================================================
+ERROR: test_refuses_wrong_scope_without_transport (test_owner_daemon.ArmingTests.test_refuses_wrong_scope_without_transport)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 359, in test_refuses_wrong_scope_without_transport
+    self.refuse("activation_scope_mismatch", scope="tmux-workers")
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 339, in refuse
+    owner.arm_owner(self.config_path, {**self.authority, **changes})
+    ^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'arm_owner'
+
+======================================================================
+ERROR: test_transport_arm_does_not_launch_or_read_auth (test_owner_daemon.ArmingTests.test_transport_arm_does_not_launch_or_read_auth)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 451, in test_transport_arm_does_not_launch_or_read_auth
+    self.transport()
+    ~~~~~~~~~~~~~~^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 364, in transport
+    binary_sha256=f.file_digest(binary), tmux=binary,
+                  ~~~~~~~~~~~~~^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/fable_launcher.py", line 71, in file_digest
+    with path.open("rb") as stream:
+         ^^^^^^^^^
+AttributeError: 'str' object has no attribute 'open'
+
+======================================================================
+FAIL: test_cli_arm_status_disarm_and_named_refusal (test_owner_daemon.ArmingTests.test_cli_arm_status_disarm_and_named_refusal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 469, in test_cli_arm_status_disarm_and_named_refusal
+    self.assertEqual(0, result.returncode, result.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 0 != 2 : usage: owner_daemon.py [-h] [--run] [--config CONFIG] [--schedule SCHEDULE]
+                       [--recover RECOVER] [--observe] [--label LABEL]
+                       [--publish-state PUBLISH_STATE]
+owner_daemon.py: error: unrecognized arguments: --arm --authority /private/tmp/owner-fixture-3ts6z0fl/state/decision.json
+
+
+======================================================================
+FAIL: test_crash_each_arm_boundary_fences_admission_until_disarm (test_owner_daemon.ArmingTests.test_crash_each_arm_boundary_fences_admission_until_disarm) (target='intent-before')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 509, in test_crash_each_arm_boundary_fences_admission_until_disarm
+    self.assertEqual(73, result.returncode, result.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 73 != 1 : Traceback (most recent call last):
+  File "<string>", line 9, in <module>
+    write, remove = f.write_json, o.remove_activation_intent
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'remove_activation_intent'
+
+
+======================================================================
+FAIL: test_crash_each_arm_boundary_fences_admission_until_disarm (test_owner_daemon.ArmingTests.test_crash_each_arm_boundary_fences_admission_until_disarm) (target='intent-after')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 509, in test_crash_each_arm_boundary_fences_admission_until_disarm
+    self.assertEqual(73, result.returncode, result.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 73 != 1 : Traceback (most recent call last):
+  File "<string>", line 9, in <module>
+    write, remove = f.write_json, o.remove_activation_intent
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'remove_activation_intent'
+
+
+======================================================================
+FAIL: test_crash_each_arm_boundary_fences_admission_until_disarm (test_owner_daemon.ArmingTests.test_crash_each_arm_boundary_fences_admission_until_disarm) (target='file-before')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 509, in test_crash_each_arm_boundary_fences_admission_until_disarm
+    self.assertEqual(73, result.returncode, result.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 73 != 1 : Traceback (most recent call last):
+  File "<string>", line 9, in <module>
+    write, remove = f.write_json, o.remove_activation_intent
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'remove_activation_intent'
+
+
+======================================================================
+FAIL: test_crash_each_arm_boundary_fences_admission_until_disarm (test_owner_daemon.ArmingTests.test_crash_each_arm_boundary_fences_admission_until_disarm) (target='file-after')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 509, in test_crash_each_arm_boundary_fences_admission_until_disarm
+    self.assertEqual(73, result.returncode, result.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 73 != 1 : Traceback (most recent call last):
+  File "<string>", line 9, in <module>
+    write, remove = f.write_json, o.remove_activation_intent
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'remove_activation_intent'
+
+
+======================================================================
+FAIL: test_crash_each_arm_boundary_fences_admission_until_disarm (test_owner_daemon.ArmingTests.test_crash_each_arm_boundary_fences_admission_until_disarm) (target='commit-after')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 509, in test_crash_each_arm_boundary_fences_admission_until_disarm
+    self.assertEqual(73, result.returncode, result.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 73 != 1 : Traceback (most recent call last):
+  File "<string>", line 9, in <module>
+    write, remove = f.write_json, o.remove_activation_intent
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'owner_daemon' has no attribute 'remove_activation_intent'
+
+
+----------------------------------------------------------------------
+Ran 26 tests in 0.604s
+
+FAILED (failures=6, errors=25)

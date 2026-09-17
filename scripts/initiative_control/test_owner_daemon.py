@@ -322,6 +322,355 @@ class OwnerDaemonTests(unittest.TestCase):
         self.assertEqual([], self.sql("SELECT * FROM operations"))
 
 
+class ActivationVisibilityTests(unittest.TestCase):
+    setUp = OwnerDaemonTests.setUp
+    tearDown = OwnerDaemonTests.tearDown
+    child = OwnerDaemonTests.child
+    tick = OwnerDaemonTests.tick
+
+    def manual_claim(self):
+        from test_coordinator import CoordinatorTests
+        self.c.clock = lambda: 1000.0
+        CoordinatorTests.prepared(self, "manual")
+        return self.c.claim("manual")
+
+    def test_status_lists_in_flight_and_overdue_with_exact_watchdog_effects(self):
+        with self.c.mutation("fixture", {}) as (_, state):
+            for index, status in enumerate(("prepared", "dispatching", "dispatched",
+                                             "running", "dispatch_uncertain", "returned",
+                                             "accepted", "failed", "cancelled")):
+                state["actions"][status] = dict(id=status, status=status, deadline=999.0,
+                                               stall_reported=status == "running")
+            state["actions"]["boundary"] = dict(id="boundary", status="dispatching", deadline=1000.0)
+            state["actions"]["future"] = dict(id="future", status="running", deadline=1001.0)
+            for index, action in enumerate(state["actions"].values()):
+                action.update(workstream="delivery", sequence=index)
+            state["manager"] = dict(id="manual-manager", deadline=998.0)
+        before = {p.name: p.read_bytes() for p in self.root.iterdir() if p.is_file()}
+        with patch.object(owner.time, "time", return_value=1000.0):
+            status = owner.activation_status(self.config_path)
+        impact = status["coordinator"]
+        self.assertEqual(1000.0, impact["observed_at"])
+        self.assertEqual(self.c.snapshot()["revision"], impact["revision"])
+        rows = {row["id"]: row for row in impact["in_flight"]}
+        self.assertEqual({"dispatching", "dispatched", "running", "dispatch_uncertain",
+                          "returned", "boundary", "future"}, set(rows))
+        self.assertEqual(999.0, rows["dispatching"]["deadline"])
+        self.assertEqual("dispatch_uncertain", rows["dispatching"]["watchdog_status"])
+        self.assertEqual("dispatched", rows["dispatched"]["watchdog_status"])
+        self.assertTrue(rows["dispatching"]["watchdog_will_report"])
+        self.assertFalse(rows["running"]["watchdog_will_report"])
+        self.assertFalse(rows["dispatch_uncertain"]["watchdog_will_report"])
+        self.assertFalse(rows["returned"]["watchdog_will_report"])
+        self.assertEqual({"dispatching", "dispatched", "running", "dispatch_uncertain", "returned"},
+                         {row["id"] for row in impact["overdue"]})
+        self.assertFalse(rows["boundary"]["overdue"])
+        self.assertFalse(rows["future"]["overdue"])
+        self.assertEqual(998.0, impact["manager"]["deadline"])
+        self.assertTrue(impact["manager"]["watchdog_will_report"])
+        self.assertIn("fixture-only", impact["warning"])
+        self.assertIn("dispatch_uncertain", impact["warning"])
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir() if p.is_file()})
+
+    def test_empty_status_still_warns_about_future_shared_state_mutation(self):
+        result = owner.activation_status(self.config_path)["coordinator"]
+        self.assertEqual([], result["in_flight"])
+        self.assertEqual([], result["overdue"])
+        self.assertIsNone(result["manager"])
+        self.assertIn("not read-only", result["warning"])
+        self.assertIn("snapshot", result["warning"])
+
+    def test_manual_overdue_claim_does_not_refuse_arm_and_paused_tick_matches_warning(self):
+        claimed = self.manual_claim()
+        self.c.set_enabled(False, {"fixture_only": True})
+        before = self.c.snapshot()
+        result = owner.arm_owner(self.config_path, self.authority)
+        self.assertEqual("ARMED", result["state"])
+        row = result["coordinator"]["overdue"][0]
+        self.assertEqual(("manual", claimed["deadline"], "dispatch_uncertain"),
+                         (row["id"], row["deadline"], row["watchdog_status"]))
+        self.assertEqual(before, self.c.snapshot())
+        self.tick()
+        action = self.c.snapshot()["actions"]["manual"]
+        self.assertEqual("dispatch_uncertain", action["status"])
+        self.assertTrue(action["stall_reported"])
+
+    def test_cli_status_discloses_manual_deadline_and_help_warns_before_arming(self):
+        claimed = self.manual_claim()
+        result = self.child(None, "--activation-status", "--config", str(self.config_path))
+        self.assertEqual(0, result.returncode, result.stderr)
+        row = json.loads(result.stdout)["coordinator"]["overdue"][0]
+        self.assertEqual("manual", row["id"])
+        self.assertEqual(claimed["deadline"], row["deadline"])
+        help_text = " ".join(self.child(None, "--help").stdout.split())
+        self.assertIn("not read-only", help_text)
+        self.assertIn("--activation-status", help_text)
+
+    def test_status_does_not_recover_coordinator_journal(self):
+        journal = self.root / "coordinator.sqlite3-journal"
+        f.write_file(journal, b"fixture hot-journal marker")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir() if p.is_file()}
+        result = owner.activation_status(self.config_path)
+        self.assertFalse(result["complete"])
+        self.assertEqual("off", result["state"])
+        self.assertIsNone(result["coordinator"])
+        self.assertEqual("coordinator_recovery_required", result["unavailable"]["coordinator"]["reason"])
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir() if p.is_file()})
+
+    def test_busy_coordinator_returns_partial_status_through_cli(self):
+        with closing(sqlite3.connect(self.c.path)) as db:
+            db.execute("BEGIN EXCLUSIVE")
+            result = self.child(None, "--activation-status", "--config", str(self.config_path))
+        self.assertEqual(0, result.returncode, result.stderr)
+        value = json.loads(result.stdout)
+        self.assertFalse(value["complete"])
+        self.assertEqual("off", value["state"])
+        self.assertEqual(0, value["generation"])
+        self.assertIsNone(value["coordinator"])
+        self.assertEqual("OperationalError", value["unavailable"]["coordinator"]["reason"])
+
+    def test_busy_owner_still_reports_coordinator_and_unknown_owner(self):
+        with owner.locked(self.root / "owner-daemon.lock"):
+            result = owner.activation_status(self.config_path)
+        self.assertFalse(result["complete"])
+        self.assertIsNone(result["state"])
+        self.assertIsNone(result["generation"])
+        self.assertIsNone(result["stored"])
+        self.assertIn("owner", result["unavailable"])
+        self.assertEqual([], result["coordinator"]["in_flight"])
+
+    def test_partial_status_cli_redacts_untrusted_error_details(self):
+        import io
+        from contextlib import redirect_stdout
+        for component, operation in (("owner", "activation_store"),
+                                     ("coordinator", "coordinator_activation_impact")):
+            for error in (OSError("private-path-canary"), sqlite3.OperationalError("private-statement-canary"),
+                          ValueError("private-value-canary"), TypeError("private-type-canary"),
+                          KeyError("private-key-canary"), f.LaunchError("owner_busy"),
+                          owner.Rejected("coordinator_recovery_required")):
+                with self.subTest(component=component, error=type(error).__name__):
+                    output = io.StringIO()
+                    with patch.object(owner, operation, side_effect=error), redirect_stdout(output):
+                        code = owner.main(["--activation-status", "--config", str(self.config_path)])
+                    self.assertEqual(0, code)
+                    value = json.loads(output.getvalue())
+                    self.assertFalse(value["complete"])
+                    expected = str(error) if isinstance(error, (f.LaunchError, owner.Rejected)) else type(error).__name__
+                    self.assertEqual(dict(error=type(error).__name__, reason=expected),
+                                     value["unavailable"][component])
+                    self.assertNotIn("canary", output.getvalue())
+                    self.assertIsNotNone(value["coordinator"] if component == "owner" else value["state"])
+
+    def test_complete_status_is_explicit(self):
+        result = owner.activation_status(self.config_path)
+        self.assertTrue(result["complete"])
+        self.assertEqual({}, result["unavailable"])
+
+
+class ArmingTests(unittest.TestCase):
+    setUp = OwnerDaemonTests.setUp
+    tearDown = OwnerDaemonTests.tearDown
+    sql = OwnerDaemonTests.sql
+    child = OwnerDaemonTests.child
+    tick = OwnerDaemonTests.tick
+
+    def state(self):
+        return ((self.root / "owner.sqlite3").read_bytes(),
+                {p.name: p.read_bytes() for p in self.root.glob("activation*")})
+
+    def refuse(self, reason, **changes):
+        before = self.state()
+        with self.assertRaisesRegex(f.LaunchError, "^" + reason + "$"):
+            owner.arm_owner(self.config_path, {**self.authority, **changes})
+        self.assertEqual(before, self.state())
+        self.assertEqual([], self.sql("SELECT * FROM boots"))
+
+    def test_refuses_invalid_activation_keys(self):
+        self.refuse("invalid_activation", extra=True)
+
+    def test_refuses_invalid_decision_id(self):
+        self.refuse("activation_decision_id_required", decision_id=[])
+
+    def test_refuses_blank_authority(self):
+        self.refuse("activation_authority_required", authority=" ")
+
+    def test_refuses_invalid_revision(self):
+        self.refuse("activation_revision_required", revision=True)
+
+    def test_refuses_invalid_generation(self):
+        self.refuse("activation_generation_required", generation=True)
+
+    def test_refuses_wrong_scope_without_transport(self):
+        self.refuse("activation_scope_mismatch", scope="tmux-workers")
+
+    def transport(self):
+        binary = str(Path("/bin/echo").resolve())
+        self.config["transport"] = dict(kind="tmux", binary=binary,
+                                       binary_sha256=f.file_digest(Path(binary)), tmux=binary,
+                                       runs_dir=str(self.root),
+                                       auth_link=str(self.root / "unused/auth.json"))
+        f.write_json(self.config_path, self.config)
+        self.sql("UPDATE meta SET config_digest=?", (digest(self.config),))
+        self.authority.update(scope="tmux-workers", config_digest=digest(self.config))
+
+    def test_refuses_wrong_scope_with_transport(self):
+        self.transport()
+        self.refuse("activation_scope_mismatch", scope="fixture-only")
+
+    def test_refuses_wrong_config_digest(self):
+        self.refuse("activation_config_mismatch", config_digest="0" * 64)
+
+    def test_refuses_wrong_package_digest(self):
+        self.refuse("activation_package_mismatch", package_digest="0" * 64)
+
+    def test_refuses_stale_generation(self):
+        owner.arm_owner(self.config_path, self.authority)
+        owner.disarm_owner(self.config_path, 1)
+        self.refuse("activation_generation_mismatch")
+
+    def test_refuses_skipped_generation(self):
+        self.refuse("activation_generation_mismatch", generation=2)
+
+    def test_refuses_already_armed(self):
+        owner.arm_owner(self.config_path, self.authority)
+        self.refuse("owner_already_armed", generation=2)
+
+    def test_refuses_state_drift(self):
+        self.sql("UPDATE meta SET config_digest='wrong'")
+        self.refuse("state_drift")
+
+    def test_refuses_package_drift(self):
+        f.write_json(self.config_path, {**self.config, "package_digest": "wrong"})
+        self.refuse("package_drift")
+
+    def test_refuses_disarm_stale_generation(self):
+        before = self.state()
+        with self.assertRaisesRegex(f.LaunchError, "^activation_generation_mismatch$"):
+            owner.disarm_owner(self.config_path, 1)
+        self.assertEqual(before, self.state())
+
+    def test_refuses_disarm_boolean_generation(self):
+        before = self.state()
+        with self.assertRaisesRegex(f.LaunchError, "^activation_generation_required$"):
+            owner.disarm_owner(self.config_path, True)
+        self.assertEqual(before, self.state())
+
+    def test_refuses_pending_activation(self):
+        f.write_json(self.root / "activation-transaction.json", {"interrupted": True})
+        self.refuse("activation_recovery_required")
+
+    def test_refuses_owner_journal(self):
+        f.write_file(self.root / "owner.sqlite3-journal", b"fixture")
+        self.refuse("owner_recovery_required")
+
+    def test_refuses_schema_drift(self):
+        self.sql("CREATE TABLE unexpected (value TEXT)")
+        self.sql("DROP TABLE health")
+        self.refuse("schema_drift")
+
+    def test_refuses_busy_owner_and_admission_locks(self):
+        for name in ("owner-daemon.lock", "owner-admission.lock"):
+            with self.subTest(name=name), owner.locked(self.root / name):
+                before = self.state()
+                with self.assertRaises(BlockingIOError):
+                    owner.arm_owner(self.config_path, self.authority)
+                self.assertEqual(before, self.state())
+
+    def test_arm_tick_disarm_rearm_uses_real_entry_point(self):
+        before = self.c.snapshot()
+        result = owner.arm_owner(self.config_path, self.authority)
+        self.assertEqual(dict(state="ARMED", generation=1,
+                              activation_digest=digest(self.authority)),
+                         {key: value for key, value in result.items() if key != "coordinator"})
+        self.assertEqual([], result["coordinator"]["in_flight"])
+        self.assertEqual(before, self.c.snapshot())
+        self.assertEqual(self.authority, owner.load(self.root / "activation.json"))
+        self.assertEqual("ACTIVE", self.tick()["state"])
+        result = owner.disarm_owner(self.config_path, 1)
+        self.assertEqual(dict(state="OFF", generation=2), result)
+        with self.assertRaisesRegex(f.LaunchError, "owner_off"):
+            self.tick()
+        self.assertEqual(self.authority, owner.load(self.root / "activation.json"))
+        owner.arm_owner(self.config_path, {**self.authority, "generation": 3})
+        self.assertEqual("ACTIVE", self.tick()["state"])
+
+    def test_transport_arm_does_not_launch_or_read_auth(self):
+        self.transport()
+        with patch.object(tmux, "TmuxAdapter", side_effect=AssertionError("no transport effects")):
+            owner.arm_owner(self.config_path, self.authority)
+        self.assertFalse((self.root / "unused").exists())
+        self.assertEqual([], self.sql("SELECT * FROM processes"))
+        self.assertEqual([], self.sql("SELECT * FROM boots"))
+
+    def test_disarm_remains_available_after_package_and_config_drift(self):
+        owner.arm_owner(self.config_path, self.authority)
+        f.write_json(self.config_path, {**self.config, "package_digest": "wrong", "worktrees": []})
+        owner.disarm_owner(self.config_path, 1)
+        self.assertEqual([("off", 2)], self.sql("SELECT requested_mode,control_generation FROM meta"))
+
+    def test_cli_arm_status_disarm_and_named_refusal(self):
+        path = self.root / "decision.json"
+        f.write_json(path, self.authority)
+        result = self.child(None, "--arm", "--config", str(self.config_path),
+                            "--authority", str(path))
+        self.assertEqual(0, result.returncode, result.stderr)
+        result = self.child(None, "--activation-status", "--config", str(self.config_path))
+        self.assertEqual(0, result.returncode, result.stderr)
+        state = json.loads(result.stdout)
+        self.assertEqual(1, state["generation"])
+        self.assertEqual(digest(self.config), state["config_digest"])
+        result = self.child(None, "--arm", "--config", str(self.config_path),
+                            "--authority", str(path))
+        self.assertEqual(2, result.returncode)
+        self.assertEqual("activation_generation_mismatch", json.loads(result.stdout)["reason"])
+        result = self.child(None, "--disarm", "--config", str(self.config_path), "--generation", "1")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("OFF", json.loads(result.stdout)["state"])
+
+    def test_crash_each_arm_boundary_fences_admission_until_disarm(self):
+        # Actual child exits: before/after each file publication and after SQL commit.
+        for target in ("intent-before", "intent-after", "file-before", "file-after", "commit-after"):
+            with self.subTest(target=target):
+                code = """
+import os, sys
+from pathlib import Path
+import owner_daemon as o
+import fable_launcher as f
+config = Path(sys.argv[1])
+a = o.load(config.parent / "decision.json")
+write, remove = f.write_json, o.remove_activation_intent
+def crash_write(path, value):
+    name = "intent" if path.name == "activation-transaction.json" else "file"
+    if name + "-before" == TARGET: os._exit(73)
+    write(path, value)
+    if name + "-after" == TARGET: os._exit(73)
+def crash_remove(root):
+    if TARGET == "commit-after": os._exit(73)
+    remove(root)
+f.write_json, o.remove_activation_intent = crash_write, crash_remove
+o.arm_owner(config, a)
+"""
+                generation = self.sql("SELECT control_generation FROM meta")[0][0]
+                f.write_json(self.root / "decision.json", {**self.authority, "generation": generation + 1})
+                result = self.child("TARGET = " + repr(target) + "\n" + code)
+                self.assertEqual(73, result.returncode, result.stderr)
+                with self.assertRaises(f.LaunchError):
+                    self.tick()
+                current = self.sql("SELECT control_generation FROM meta")[0][0]
+                owner.disarm_owner(self.config_path, current)
+                with self.assertRaisesRegex(f.LaunchError, "owner_off"):
+                    self.tick()
+                self.assertFalse((self.root / "activation-transaction.json").exists())
+
+    def test_partial_file_write_recovery_preserves_off_and_consumes_generation(self):
+        f.write_file(self.root / "activation-transaction.json.pending", b"partial")
+        self.refuse("activation_recovery_required")
+        owner.disarm_owner(self.config_path, 0)
+        self.assertFalse((self.root / "activation-transaction.json.pending").exists())
+        self.refuse("activation_generation_mismatch")
+        owner.arm_owner(self.config_path, {**self.authority, "generation": 2})
+
+
 class FakeWorker(tmux.Worker):
     """Durable harmless launcher seam; no tmux process, model or credential reads."""
     modes = {}
@@ -568,7 +917,7 @@ class WorkerLifecycleTests(unittest.TestCase):
         for scope in ("fixture-only", "live"):
             self.authority["scope"] = scope
             self.arm()
-            with self.assertRaisesRegex(f.LaunchError, "activation_authority_required"):
+            with self.assertRaisesRegex(f.LaunchError, "activation_scope_mismatch"):
                 self.tick()
         self.authority["scope"] = "tmux-workers"
         self.arm()
@@ -789,6 +1138,21 @@ class RecurrenceTests(unittest.TestCase):
             return ("present", f"path = {loaded[domain]}\n") if domain in loaded else ("absent", "")
 
         return patch.object(owner, "service", side_effect=service), patch.object(subprocess, "run", side_effect=run), calls
+
+    def test_real_arming_requires_separate_schedule_hold_recovery(self):
+        import activate
+        args = self.installation()
+        service, command, _ = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+            self.assertEqual("owner_run_refused", owner.scheduled_tick(args.root)["reason"])
+            owner.arm_owner(self.config_path, self.authority)
+            self.assertEqual("owner_run_refused", owner.scheduled_tick(args.root)["reason"])
+            self.assertEqual([], self.sql("SELECT * FROM boots"))
+            owner.scheduled_tick(args.root, recover="disposable arming verified")
+            self.assertEqual("ACTIVE", owner.scheduled_tick(args.root)["state"])
+            owner.disarm_owner(self.config_path, 1)
+            self.assertEqual("owner_run_refused", owner.scheduled_tick(args.root)["reason"])
 
     def test_install_twice_and_uninstall_preserve_latch_and_remove_service(self):
         import activate

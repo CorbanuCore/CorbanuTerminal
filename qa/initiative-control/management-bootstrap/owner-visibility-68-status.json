@@ -1,0 +1,49 @@
+{
+  "state": "off",
+  "generation": 0,
+  "next_generation": 1,
+  "config_digest": "702d75936e1e45cff9d16992429cb2355939af82567f11b9cbcf67ec2189bd20",
+  "package_digest": "b24f191ada2029197cb333d286a15e30484060d7ad60e225aed418c45c00e927",
+  "scope": "fixture-only",
+  "recovery_required": false,
+  "stored": {
+    "singleton": 1,
+    "schema_version": 1,
+    "config_digest": "702d75936e1e45cff9d16992429cb2355939af82567f11b9cbcf67ec2189bd20",
+    "package_digest": "b24f191ada2029197cb333d286a15e30484060d7ad60e225aed418c45c00e927",
+    "control_generation": 0,
+    "requested_mode": "off",
+    "activation_decision_id": null,
+    "activation_revision": null,
+    "activation_digest": null
+  },
+  "coordinator": {
+    "observed_at": 1200.0,
+    "revision": 5,
+    "enabled": true,
+    "in_flight": [
+      {
+        "id": "manual",
+        "status": "dispatching",
+        "deadline": 1060.0,
+        "overdue": true,
+        "stall_reported": false,
+        "watchdog_will_report": true,
+        "watchdog_status": "dispatch_uncertain"
+      }
+    ],
+    "overdue": [
+      {
+        "id": "manual",
+        "status": "dispatching",
+        "deadline": 1060.0,
+        "overdue": true,
+        "stall_reported": false,
+        "watchdog_will_report": true,
+        "watchdog_status": "dispatch_uncertain"
+      }
+    ],
+    "manager": null,
+    "warning": "Armed fixture-only operation is not read-only: admitted ticks can mutate the shared coordinator even when dispatch is paused or a manager owns it. Watchdog marks unreported overdue dispatching/dispatched/running actions stall_reported, changes dispatching to dispatch_uncertain, and appends stall events; it also reports overdue manager runs. Fixture processing can append events. This snapshot is advisory, not an ownership gate or reservation; claims and deadlines can change before a tick."
+  }
+}

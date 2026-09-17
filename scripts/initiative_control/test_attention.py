@@ -139,6 +139,29 @@ class DecisionRenderingTests(unittest.TestCase):
         return attention.render_decisions(self.value if value is None else value,
                                           now or self.now, self.sprints, self.documents)
 
+    def test_omitted_settled_history_is_distinct_from_unavailable_status(self):
+        from test_decisions import revision
+        value = revision(revision(self.value), "resolved")
+        value["decisions"][0]["revisions"][-1]["resolution"]["answered_revision"] = 1
+        # Legacy compact projections may have omitted the answered row.
+        for enabled in (False, True):
+            for disclosed in (False, True):
+                with self.subTest(enabled=enabled, disclosed=disclosed):
+                    slack = dict(status=dict(enabled=enabled), decisions=[
+                        dict(id="choice-1", revision=3, delivery="off", pending=0, replies={})])
+                    if disclosed:
+                        slack["omitted_revisions"] = 2
+                    page = attention.render_decisions(value, self.now, self.sprints, self.documents, slack=slack)
+                    current = page.split('id="decision-choice-1"', 1)[1].split("<details>", 1)[0]
+                    if disclosed:
+                        self.assertIn("omits 2 older revision(s) for this decision", current)
+                        self.assertIn("Slack — question revision 1: omitted from saved projection", current)
+                        self.assertIn("settled history" if enabled else "projection was off", current)
+                        self.assertNotIn("Slack status for this question revision: unknown", current)
+                    else:
+                        self.assertIn("Slack status for this question revision: unknown", current)
+                        self.assertNotIn("settled history", current)
+
     def test_dec001_005_full_context_exact_summary_links_and_purity(self):
         record = self.value["decisions"][0]["revisions"][0]
         second = "docs/sprints/current/second.md"

@@ -1,0 +1,53 @@
+test_bound_never_drops_open_or_acknowledged_question_after_closed_history (__main__.ProjectionRegressionTests.test_bound_never_drops_open_or_acknowledged_question_after_closed_history) ... ERROR
+test_oversize_fails_before_cache_write_without_silent_row_truncation (__main__.ProjectionRegressionTests.test_oversize_fails_before_cache_write_without_silent_row_truncation) ... ERROR
+test_twenty_decisions_fifty_three_revisions_projects_within_bound (__main__.ProjectionRegressionTests.test_twenty_decisions_fifty_three_revisions_projects_within_bound) ... ERROR
+
+======================================================================
+ERROR: test_bound_never_drops_open_or_acknowledged_question_after_closed_history (__main__.ProjectionRegressionTests.test_bound_never_drops_open_or_acknowledged_question_after_closed_history)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/qa/initiative-control/management-bootstrap/owner_visibility_68_feed_repro.py", line 60, in test_bound_never_drops_open_or_acknowledged_question_after_closed_history
+    self.save(value)
+    ~~~~~~~~~^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/qa/initiative-control/management-bootstrap/owner_visibility_68_feed_repro.py", line 36, in save
+    control.atomic_json(self.state / "decisions.fixture.json", d.validate(value, NOW))
+                                                               ~~~~~~~~~~^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 176, in validate
+    raise Invalid() from None
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+ERROR: test_oversize_fails_before_cache_write_without_silent_row_truncation (__main__.ProjectionRegressionTests.test_oversize_fails_before_cache_write_without_silent_row_truncation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/qa/initiative-control/management-bootstrap/owner_visibility_68_feed_repro.py", line 68, in test_oversize_fails_before_cache_write_without_silent_row_truncation
+    feed.project_slack(self.state, None, NOW)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_feed.py", line 130, in project_slack
+    with replies.feed_lock(state):
+         ~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_replies.py", line 92, in feed_lock
+    fd = os.open(root / ".decisions.fixture.lock", os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK)
+FileNotFoundError: [Errno 2] No such file or directory: '/private/tmp/tmphg_dxefr/.decisions.fixture.lock'
+
+======================================================================
+ERROR: test_twenty_decisions_fifty_three_revisions_projects_within_bound (__main__.ProjectionRegressionTests.test_twenty_decisions_fifty_three_revisions_projects_within_bound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/qa/initiative-control/management-bootstrap/owner_visibility_68_feed_repro.py", line 43, in test_twenty_decisions_fifty_three_revisions_projects_within_bound
+    result = feed.project_slack(self.state, None, NOW)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_feed.py", line 130, in project_slack
+    with replies.feed_lock(state):
+         ~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_replies.py", line 92, in feed_lock
+    fd = os.open(root / ".decisions.fixture.lock", os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK)
+FileNotFoundError: [Errno 2] No such file or directory: '/private/tmp/tmplte0isqr/.decisions.fixture.lock'
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.039s
+
+FAILED (errors=3)

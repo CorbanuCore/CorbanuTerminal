@@ -1,0 +1,39 @@
+test_bound_never_drops_open_or_acknowledged_question_after_closed_history (__main__.ProjectionRegressionTests.test_bound_never_drops_open_or_acknowledged_question_after_closed_history) ... ERROR
+test_oversize_fails_before_cache_write_without_silent_row_truncation (__main__.ProjectionRegressionTests.test_oversize_fails_before_cache_write_without_silent_row_truncation) ... ok
+test_twenty_decisions_fifty_three_revisions_projects_within_bound (__main__.ProjectionRegressionTests.test_twenty_decisions_fifty_three_revisions_projects_within_bound) ... ERROR
+
+======================================================================
+ERROR: test_bound_never_drops_open_or_acknowledged_question_after_closed_history (__main__.ProjectionRegressionTests.test_bound_never_drops_open_or_acknowledged_question_after_closed_history)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/qa/initiative-control/management-bootstrap/owner_visibility_68_feed_repro.py", line 63, in test_bound_never_drops_open_or_acknowledged_question_after_closed_history
+    result = feed.project_slack(self.state, None, NOW)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_feed.py", line 134, in project_slack
+    result = validate_slack(dict(schema=1, assessed_at=at, feed_digest=d.digest(feed), status=status, decisions=rows), feed, at)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_feed.py", line 24, in validate_slack
+    d.require(len(d.canonical(value)) <= SLACK_LIMIT and not d.SECRET.search(d.canonical(value).decode()))
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 33, in require
+    raise Invalid()
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+ERROR: test_twenty_decisions_fifty_three_revisions_projects_within_bound (__main__.ProjectionRegressionTests.test_twenty_decisions_fifty_three_revisions_projects_within_bound)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/qa/initiative-control/management-bootstrap/owner_visibility_68_feed_repro.py", line 45, in test_twenty_decisions_fifty_three_revisions_projects_within_bound
+    result = feed.project_slack(self.state, None, NOW)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_feed.py", line 134, in project_slack
+    result = validate_slack(dict(schema=1, assessed_at=at, feed_digest=d.digest(feed), status=status, decisions=rows), feed, at)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_feed.py", line 24, in validate_slack
+    d.require(len(d.canonical(value)) <= SLACK_LIMIT and not d.SECRET.search(d.canonical(value).decode()))
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 33, in require
+    raise Invalid()
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.081s
+
+FAILED (errors=2)
+Synthetic 20-decision/53-revision projection: {'rows': 53, 'bytes': 16850}

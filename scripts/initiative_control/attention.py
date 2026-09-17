@@ -144,6 +144,14 @@ def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=N
         body += ' No open decisions found in this fresh assessment.'
     body += '</p>'
     unavailable = {}
+    # Explicit omission metadata distinguishes compacted history from a missing
+    # observation. Older projections without it cannot establish that distinction.
+    omitted = {}
+    if slack is not None and slack.get("omitted_revisions", 0):
+        projected = {(row["id"], row["revision"]) for row in slack["decisions"]}
+        omitted = {item["id"]: {record["revision"] for record in item["revisions"]
+                               if (item["id"], record["revision"]) not in projected}
+                   for item in feed["decisions"]}
 
     def link(label, path, available):
         if available:
@@ -199,6 +207,11 @@ def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=N
                 row = rows[0]
                 counts = ', '.join(name.replace('_', ' ') + ': ' + str(count) for name, count in row["replies"].items())
                 result += '<p><strong>Slack — question revision ' + str(question_revision) + '</strong> Alert: ' + esc(row["delivery"]) + '; awaiting processing: ' + str(row["pending"]) + '. Current reply-state counts: ' + esc(counts) + '. Saved observation only.</p>'
+            elif question_revision in omitted.get(decision_id, set()):
+                reason = ("settled history; detail not retained" if slack["status"]["enabled"]
+                          else "projection was off; historical detail not retained")
+                result += (f'<p>Slack — question revision {question_revision}: omitted from saved projection '
+                           f'({reason}).</p>')
             else:
                 result += '<p>Slack status for this question revision: unknown.</p>'
         return result
@@ -224,6 +237,10 @@ def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=N
             body += (f'<div class="decision-body-bounded" tabindex="0" role="region" '
                      f'aria-label="Decision context: {esc(record["summary"])}">'
                      f'<a href="#{anchor}">Permanent decision link</a>')
+            if omitted.get(decision["id"]):
+                count = len(omitted[decision["id"]])
+                body += (f'<p>Slack projection omits {count} older revision(s) for this decision. '
+                         'Full decision history remains below; omitted Slack detail is marked on each affected revision.</p>')
             body += content(record, decision_id=decision["id"])
             for earlier in decision["revisions"][:-1]:
                 body += f'<details><summary>Retained revision {earlier["revision"]} (historical)</summary>' + content(earlier, decision_id=decision["id"]) + '</details>'
