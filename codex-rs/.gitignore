@@ -11,3 +11,9 @@
 
 # Value of CARGO_TARGET_DIR when using .devcontainer/devcontainer.json.
 /target-arm64/
+
+# insta writes .snap.new PENDING artifacts next to the golden. They are never
+# content: a passing test deletes them, which leaves the receiving tree dirty and
+# fails a receipt whose gates all passed. Two receipts died on this before I
+# fixed the cause rather than the instance.
+*.snap.new
