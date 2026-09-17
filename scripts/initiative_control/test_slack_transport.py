@@ -1120,8 +1120,11 @@ class TransportTests(LiveFixture):
         self.assertEqual(len(self.acks), 1)
         self.transport.active = True
         self.callback(payload("EvOther", thread_ts="199.000001"))
-        self.assertEqual(len(self.acks), 1)
+        self.assertEqual(len(self.acks), 2)
+        self.assertTrue(self.transport.active)
         with s.locked(self.store) as value:
+            self.assertEqual(value["quarantine"]["records"][-1]["reason"], "unbound-human-thread")
+            self.assertEqual(value["hold"], "ingress-held")
             self.assertEqual(value["watermark"], 1)
             self.assertEqual(value["events"]["Ev001"]["envelope"]["text"], "Five testers")
 
@@ -1365,12 +1368,95 @@ class TransportTests(LiveFixture):
         with s.locked(self.store) as value:
             self.assertEqual(value["watermark"], 3)
 
-    def test_wrong_envelopes_and_unknown_original_are_held_without_ack(self):
+    def test_poison_shapes_are_quarantined_and_following_human_reply_is_delivered(self):
         self.sending()
-        cases = [dict(payload(), team_id="TWRONG"), dict(payload(), api_app_id="AWRONG"), payload(user="UOTHER"),
-                 payload(text="x" * 17000), payload(subtype="message_deleted", deleted_ts="109.000001"),
-                 payload(subtype="message_changed", message=dict(user=PIN["human"], ts="101.000001", thread_ts="100.000001",
-                         text="Changed", edited={"user": "UOTHER"}))]
+        cases = [
+            (payload(user="UOTHER"), "nonhuman-author", "other"),
+            (payload(subtype="message_deleted", deleted_ts="109.000001"), "unknown-delete", "unknown"),
+            (payload(subtype="message_changed", message=dict(user=PIN["human"], ts="101.000001",
+                thread_ts="100.000001", text="private-body", edited={"user": "UOTHER"})),
+                "invalid-message", "pinned-human"),
+            (payload(subtype="message_replied"), "unsupported-subtype", "pinned-human"),
+            (payload(thread_ts="999.000001"), "unbound-human-thread", "pinned-human"),
+            (dict(payload(), event=None), "invalid-message", "unknown"),
+            (dict(payload(), event=[]), "invalid-message", "unknown"),
+            (payload(subtype="message_changed", message=None), "invalid-message", "unknown"),
+            (payload(subtype=[]), "invalid-message", "pinned-human"),
+            (payload(text="private-body" * 500), "invalid-message", "pinned-human"),
+        ]
+        for index, (event, reason, hint) in enumerate(cases):
+            with self.subTest(index=index):
+                self.callback(event, envelope_id="poison-" + str(index))
+                journal = self.store.read("transport")
+                self.assertTrue(self.transport.active)
+                self.assertEqual(len(self.acks), index + 1)
+                self.assertEqual(s.fence_gap(self.store, journal), 0)
+                record = journal["quarantine"]["records"][-1]
+                self.assertEqual((record["reason"], record["author_hint"]), (reason, hint))
+                self.assertEqual(record["ingress"], index + 1)
+                self.assertNotIn("private-body", d.canonical(journal["quarantine"]).decode())
+        self.callback(payload("EvAfterPoison"))
+        self.assertEqual(s.drain(self.store), 1)
+        self.assertEqual(list(r.snapshot(self.store, self.key)["replies"]), ["EvAfterPoison"])
+        journal = self.store.read("transport")
+        self.assertEqual(journal["quarantine"]["total"], len(cases))
+        self.assertEqual(journal["hold"], "ingress-held")
+        with self.assertRaises(d.Invalid):
+            self.transport.gate()  # Continuing intake does not grant decision/work authority.
+        self.review_gap()
+        self.transport.gate()
+        self.assertEqual(self.store.read("transport")["quarantine"], journal["quarantine"])
+
+    def test_quarantine_is_bounded_and_redelivery_does_not_starve_valid_intake(self):
+        self.sending()
+        event = payload("EvPoison", subtype="message_deleted", deleted_ts="109.000001")
+        for _ in range(131):
+            self.callback(event)
+        journal = self.store.read("transport")
+        self.assertEqual(journal["quarantine"]["total"], 131)
+        self.assertEqual(len(journal["quarantine"]["records"]), 128)
+        self.assertEqual(journal["quarantine"]["records"][0]["ingress"], 4)
+        self.assertEqual(len(self.acks), 131)
+        self.assertTrue(self.transport.active)
+        self.callback(payload("EvSurvived"))
+        self.assertEqual(s.drain(self.store), 1)
+
+    def test_quarantine_write_failure_never_acknowledges_or_covers_callback(self):
+        self.sending()
+        with patch.object(self.store, "write", side_effect=OSError("private-body")):
+            self.callback(payload(subtype="message_deleted", deleted_ts="109.000001"))
+        self.assertEqual(self.acks, [])
+        self.assertFalse(self.transport.active)
+        journal = self.store.read("transport")
+        self.assertNotIn("quarantine", journal)
+        self.assertEqual(s.fence_gap(self.store, journal), 1)
+        self.assertEqual(self.transport.failure_snapshot(),
+                         s.failure_record("transport-io", "callback-store", callbacks=1, disconnect_marks=0, quarantined=0))
+
+    @runtime_case
+    def test_three_fence_marks_can_be_cleanup_with_zero_callbacks(self):
+        self.owner.close()
+        before = s.ingress_count(self.store)
+        write = self.store.write
+        def fail_connected(name, value):
+            if name == "transport" and value["lifecycle"]["session"]["phase"] == "connected":
+                raise BlockingIOError("private fixture lock failure")
+            return write(name, value)
+        with patch.object(SocketModeClient, "connect"), \
+                patch.object(SocketModeClient, "is_connected", return_value=True), \
+                patch.object(self.store, "write", side_effect=fail_connected):
+            with self.assertRaises(BlockingIOError):
+                self.transport.listen(ongoing=True, runtime=self.runtime)
+        self.assertEqual(s.ingress_count(self.store) - before, 3)
+        self.assertEqual(self.store.read("transport")["ingress"], 0)
+        self.assertEqual(self.transport.failure_snapshot(),
+                         s.failure_record("transport-busy", "session-renew", callbacks=0, disconnect_marks=3, quarantined=0))
+        self.assertEqual(self.acks, [])
+
+    def test_wrong_envelopes_are_held_without_ack(self):
+        self.sending()
+        cases = [dict(payload(), team_id="TWRONG"), dict(payload(), api_app_id="AWRONG"),
+                 payload(text="x" * 17000)]
         for value in cases:
             self.transport.active = True  # Independent authenticated callback-seam trial.
             self.callback(value)

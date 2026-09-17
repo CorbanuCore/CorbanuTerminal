@@ -1,0 +1,256 @@
+test_attempt_validation_precedes_all_writes_and_http (test_slack_transport.TransportTests.test_attempt_validation_precedes_all_writes_and_http) ... ok
+test_callback_edit_delete_event_dedup_and_restart_drain (test_slack_transport.TransportTests.test_callback_edit_delete_event_dedup_and_restart_drain) ... ok
+test_cancel_process_wins_store_lock_before_drain_without_offline_intake (test_slack_transport.TransportTests.test_cancel_process_wins_store_lock_before_drain_without_offline_intake) ... ok
+test_cancelled_disposition_crash_after_write_is_idempotent_on_restart (test_slack_transport.TransportTests.test_cancelled_disposition_crash_after_write_is_idempotent_on_restart) ... ok
+test_cancelled_disposition_crash_before_write_recovers_without_intake (test_slack_transport.TransportTests.test_cancelled_disposition_crash_before_write_recovers_without_intake) ... ok
+test_cancelled_pending_events_are_audited_without_intake_and_valid_sibling_drains (test_slack_transport.TransportTests.test_cancelled_pending_events_are_audited_without_intake_and_valid_sibling_drains) ... ok
+test_digest_attempt_retains_uuid_receipt_and_duplicate_semantics (test_slack_transport.TransportTests.test_digest_attempt_retains_uuid_receipt_and_duplicate_semantics) ... ok
+test_drain_crash_after_intake_deduplicates_and_full_state_holds (test_slack_transport.TransportTests.test_drain_crash_after_intake_deduplicates_and_full_state_holds) ... ok
+test_failed_append_before_bytes_missing_fence_has_no_reset_route (test_slack_transport.TransportTests.test_failed_append_before_bytes_missing_fence_has_no_reset_route) ... ok
+test_fence_repair_real_crash_boundaries_preserve_loss_and_all_old_data (test_slack_transport.TransportTests.test_fence_repair_real_crash_boundaries_preserve_loss_and_all_old_data) ... ok
+test_fsync_corruption_missing_extension_and_socket_shutdown_hold (test_slack_transport.TransportTests.test_fsync_corruption_missing_extension_and_socket_shutdown_hold) ... ok
+test_history_requires_unique_exact_attempt_identity_channel_thread_and_local_request (test_slack_transport.TransportTests.test_history_requires_unique_exact_attempt_identity_channel_thread_and_local_request) ... ok
+test_history_unicode_colon_emoji_recovers_exact_attempt_after_real_crash (test_slack_transport.TransportTests.test_history_unicode_colon_emoji_recovers_exact_attempt_after_real_crash) ... ok
+test_history_url_autolink_recovers_exact_attempt_after_real_crash (test_slack_transport.TransportTests.test_history_url_autolink_recovers_exact_attempt_after_real_crash) ... ok
+test_http_timeout_and_wrong_channel_hold (test_slack_transport.TransportTests.test_http_timeout_and_wrong_channel_hold) ... ok
+test_ingress_process_crash_before_ack_and_independent_locks (test_slack_transport.TransportTests.test_ingress_process_crash_before_ack_and_independent_locks) ... ok
+test_initial_qualification_failures_retry_after_real_reload_without_reset (test_slack_transport.TransportTests.test_initial_qualification_failures_retry_after_real_reload_without_reset) ... ok
+test_initial_retry_exception_denies_prior_evidence_and_missing_fence (test_slack_transport.TransportTests.test_initial_retry_exception_denies_prior_evidence_and_missing_fence) ... ok
+test_initial_retry_rechecks_evidence_after_actual_auth_exchange (test_slack_transport.TransportTests.test_initial_retry_rechecks_evidence_after_actual_auth_exchange) ... ok
+test_malformed_orphan_classifies_without_http_and_owner_retains_evidence (test_slack_transport.TransportTests.test_malformed_orphan_classifies_without_http_and_owner_retains_evidence) ... ok
+test_minimal_scopes_require_explicit_owner_ui_evidence (test_slack_transport.TransportTests.test_minimal_scopes_require_explicit_owner_ui_evidence) ... ok
+test_missing_or_ambiguous_history_never_resends (test_slack_transport.TransportTests.test_missing_or_ambiguous_history_never_resends) ... ok
+test_missing_replaced_owner_lock_and_legacy_journal_stay_held (test_slack_transport.TransportTests.test_missing_replaced_owner_lock_and_legacy_journal_stay_held) ... ok
+test_no_retry_for_ambiguous_sdk_responses (test_slack_transport.TransportTests.test_no_retry_for_ambiguous_sdk_responses) ... /opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 500: 'Internal Server Error'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+ok
+test_off_missing_scopes_wrong_identity_and_stale_binding (test_slack_transport.TransportTests.test_off_missing_scopes_wrong_identity_and_stale_binding) ... ok
+test_ongoing_reception_passes_sixty_seconds_reconnects_without_gap_clear (test_slack_transport.TransportTests.test_ongoing_reception_passes_sixty_seconds_reconnects_without_gap_clear) ... ok
+test_ongoing_reconnect_failure_streak_is_bounded_and_shutdown_is_explicit (test_slack_transport.TransportTests.test_ongoing_reconnect_failure_streak_is_bounded_and_shutdown_is_explicit) ... ok
+test_orphan_repair_preserves_fence_and_session_refusals (test_slack_transport.TransportTests.test_orphan_repair_preserves_fence_and_session_refusals) ... ok
+test_orphan_repair_requires_exact_evidence_request_and_uncertain_receipt (test_slack_transport.TransportTests.test_orphan_repair_requires_exact_evidence_request_and_uncertain_receipt) ... ok
+test_outage_review_is_explicit_watermark_pinned_and_retained (test_slack_transport.TransportTests.test_outage_review_is_explicit_watermark_pinned_and_retained) ... ok
+test_outbound_parent_details_notice_echoes_do_not_stop_human_intake (test_slack_transport.TransportTests.test_outbound_parent_details_notice_echoes_do_not_stop_human_intake) ... ok
+test_owner_cannot_clear_any_legacy_encodable_attempt_or_missing_history (test_slack_transport.TransportTests.test_owner_cannot_clear_any_legacy_encodable_attempt_or_missing_history) ... ok
+test_owner_loss_during_durable_post_request_does_not_send_or_replay (test_slack_transport.TransportTests.test_owner_loss_during_durable_post_request_does_not_send_or_replay) ... ok
+test_parent_history_with_self_thread_recovers_but_reply_thread_remains_exact (test_slack_transport.TransportTests.test_parent_history_with_self_thread_recovers_but_reply_thread_remains_exact) ... ok
+test_poison_shapes_are_quarantined_and_following_human_reply_is_delivered (test_slack_transport.TransportTests.test_poison_shapes_are_quarantined_and_following_human_reply_is_delivered) ... ok
+test_process_crash_after_http_acceptance_reconciles_positive_history (test_slack_transport.TransportTests.test_process_crash_after_http_acceptance_reconciles_positive_history) ... ok
+test_quarantine_is_bounded_and_redelivery_does_not_starve_valid_intake (test_slack_transport.TransportTests.test_quarantine_is_bounded_and_redelivery_does_not_starve_valid_intake) ... ok
+test_quarantine_write_failure_never_acknowledges_or_covers_callback (test_slack_transport.TransportTests.test_quarantine_write_failure_never_acknowledges_or_covers_callback) ... ok
+test_rate_limit_is_retained_without_retry (test_slack_transport.TransportTests.test_rate_limit_is_retained_without_retry) ... /opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 429: 'Too Many Requests'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+ok
+test_real_sdk_qualification_posts_and_restart_receipts (test_slack_transport.TransportTests.test_real_sdk_qualification_posts_and_restart_receipts) ... ok
+test_receipt_write_then_lost_return_and_mib_limit_retain_prior_state (test_slack_transport.TransportTests.test_receipt_write_then_lost_return_and_mib_limit_retain_prior_state) ... ok
+test_reconcile_orphan_refuses_non_string_attempt (test_slack_transport.TransportTests.test_reconcile_orphan_refuses_non_string_attempt) ... ok
+test_repair_refusals_and_failed_publication_keep_incident_held (test_slack_transport.TransportTests.test_repair_refusals_and_failed_publication_keep_incident_held) ... ok
+test_repair_snapshot_binding_inode_capacity_and_sync_failure (test_slack_transport.TransportTests.test_repair_snapshot_binding_inode_capacity_and_sync_failure) ... ok
+test_repair_waits_for_real_old_inode_callback_and_rejects_stale_preview (test_slack_transport.TransportTests.test_repair_waits_for_real_old_inode_callback_and_rejects_stale_preview) ... ok
+test_runtime_birth_partial_fsync_failure_never_reinitializes (test_slack_transport.TransportTests.test_runtime_birth_partial_fsync_failure_never_reinitializes) ... ok
+test_runtime_guard_unknown_legacy_binding_inode_and_direct_entry_refuse (test_slack_transport.TransportTests.test_runtime_guard_unknown_legacy_binding_inode_and_direct_entry_refuse) ... ok
+test_sdk_silent_health_disconnect_is_polled_fenced_and_reconnected (test_slack_transport.TransportTests.test_sdk_silent_health_disconnect_is_polled_fenced_and_reconnected) ... ok
+test_sdk_socket_rate_limit_and_forced_disconnect_cannot_retry (test_slack_transport.TransportTests.test_sdk_socket_rate_limit_and_forced_disconnect_cannot_retry) ... ok
+test_session_generation_duplicate_conflict_and_unbound_thread_hold (test_slack_transport.TransportTests.test_session_generation_duplicate_conflict_and_unbound_thread_hold) ... FAIL
+test_startup_crash_and_competing_owner_never_establish_authority (test_slack_transport.TransportTests.test_startup_crash_and_competing_owner_never_establish_authority) ... ok
+test_startup_renewal_and_shutdown_write_failures_release_lifetime_ownership (test_slack_transport.TransportTests.test_startup_renewal_and_shutdown_write_failures_release_lifetime_ownership) ... ok
+test_stopped_listener_expires_then_resumes_held_until_exact_gap_review (test_slack_transport.TransportTests.test_stopped_listener_expires_then_resumes_held_until_exact_gap_review) ... ok
+test_three_fence_marks_can_be_cleanup_with_zero_callbacks (test_slack_transport.TransportTests.test_three_fence_marks_can_be_cleanup_with_zero_callbacks) ... ok
+test_unproven_cancellation_or_alert_binding_does_not_discard_ingress (test_slack_transport.TransportTests.test_unproven_cancellation_or_alert_binding_does_not_discard_ingress) ... ok
+test_wrong_envelopes_are_held_without_ack (test_slack_transport.TransportTests.test_wrong_envelopes_are_held_without_ack) ... ok
+test_cli_keeps_fixed_redaction_and_records_import_failure (test_decision_manager.ListenerStartupTests.test_cli_keeps_fixed_redaction_and_records_import_failure) ... ok
+test_one_shot_records_real_child_death_before_and_after_handshake (test_decision_manager.ListenerStartupTests.test_one_shot_records_real_child_death_before_and_after_handshake) ... ok
+test_rejected_start_keeps_running_child_supervised (test_decision_manager.ListenerStartupTests.test_rejected_start_keeps_running_child_supervised) ... ok
+test_restart_child_death_before_handshake_is_not_lost_after_reap (test_decision_manager.ListenerStartupTests.test_restart_child_death_before_handshake_is_not_lost_after_reap) ... ok
+test_spawn_failure_does_not_invent_child_exit (test_decision_manager.ListenerStartupTests.test_spawn_failure_does_not_invent_child_exit) ... ok
+test_supervised_post_handshake_startup_death_is_observed (test_decision_manager.ListenerStartupTests.test_supervised_post_handshake_startup_death_is_observed) ... ok
+test_supervised_startup_death_retries_failed_record_without_duplicate (test_decision_manager.ListenerStartupTests.test_supervised_startup_death_retries_failed_record_without_duplicate) ... ok
+test_acceptance_crash_recovers_exact_late_assistant_without_resubmission (test_decision_manager.ManagerTests.test_acceptance_crash_recovers_exact_late_assistant_without_resubmission) ... ok
+test_actual_listener_killed_during_durable_permit_write_cannot_emit_work (test_decision_manager.ManagerTests.test_actual_listener_killed_during_durable_permit_write_cannot_emit_work) ... ok
+test_changed_durable_epoch_after_permit_write_is_reloaded_without_reissue (test_decision_manager.ManagerTests.test_changed_durable_epoch_after_permit_write_is_reloaded_without_reissue) ... ok
+test_child_admission_refusal_is_not_an_exit_or_another_retry (test_decision_manager.ManagerTests.test_child_admission_refusal_is_not_an_exit_or_another_retry) ... ok
+test_cli_notice_delete_precedes_permit (test_decision_manager.ManagerTests.test_cli_notice_delete_precedes_permit) ... ok
+test_cli_notice_edit_precedes_permit (test_decision_manager.ManagerTests.test_cli_notice_edit_precedes_permit) ... ok
+test_cli_notice_new_feed_precedes_permit (test_decision_manager.ManagerTests.test_cli_notice_new_feed_precedes_permit) ... ok
+test_cli_notice_outage_precedes_permit (test_decision_manager.ManagerTests.test_cli_notice_outage_precedes_permit) ... ok
+test_cli_notice_success_precedes_one_permit (test_decision_manager.ManagerTests.test_cli_notice_success_precedes_one_permit) ... ok
+test_cli_reconcile_binds_own_thread_posts_pointer_and_cannot_repoint_parent (test_decision_manager.ManagerTests.test_cli_reconcile_binds_own_thread_posts_pointer_and_cannot_repoint_parent) ... ok
+test_cli_reconcile_held_and_sessionless_leaves_pointer_pending_until_admitted_send (test_decision_manager.ManagerTests.test_cli_reconcile_held_and_sessionless_leaves_pointer_pending_until_admitted_send) ... ok
+test_cli_reconcile_under_hold_leaves_pointer_pending_until_admitted_send (test_decision_manager.ManagerTests.test_cli_reconcile_under_hold_leaves_pointer_pending_until_admitted_send) ... ok
+test_cli_reconcile_without_session_leaves_pointer_pending_until_admitted_send (test_decision_manager.ManagerTests.test_cli_reconcile_without_session_leaves_pointer_pending_until_admitted_send) ... ok
+test_controller_crashes_before_ready_after_renewal_during_stop_and_after_reap (test_decision_manager.ManagerTests.test_controller_crashes_before_ready_after_renewal_during_stop_and_after_reap) ... ok
+test_controller_sigkill_orphan_eof_excludes_replacement_until_process_death (test_decision_manager.ManagerTests.test_controller_sigkill_orphan_eof_excludes_replacement_until_process_death) ... ok
+test_current_allocation_not_display_status_and_preexisting_ingress_fence (test_decision_manager.ManagerTests.test_current_allocation_not_display_status_and_preexisting_ingress_fence) ... ok
+test_dashboard_discloses_cumulative_discard_count_after_reopen (test_decision_manager.ManagerTests.test_dashboard_discloses_cumulative_discard_count_after_reopen) ... ok
+test_dedicated_exec_rejects_wrong_root_and_inherited_descriptor_before_ready (test_decision_manager.ManagerTests.test_dedicated_exec_rejects_wrong_root_and_inherited_descriptor_before_ready) ... 
+  test_dedicated_exec_rejects_wrong_root_and_inherited_descriptor_before_ready (test_decision_manager.ManagerTests.test_dedicated_exec_rejects_wrong_root_and_inherited_descriptor_before_ready) (wrong='root') ... FAIL
+  test_dedicated_exec_rejects_wrong_root_and_inherited_descriptor_before_ready (test_decision_manager.ManagerTests.test_dedicated_exec_rejects_wrong_root_and_inherited_descriptor_before_ready) (wrong='descriptor') ... FAIL
+test_delete_during_final_durable_unlock_write_cannot_release_work (test_decision_manager.ManagerTests.test_delete_during_final_durable_unlock_write_cannot_release_work) ... ok
+test_edit_during_ack_drains_and_fences_work_but_retains_actual_ack (test_decision_manager.ManagerTests.test_edit_during_ack_drains_and_fences_work_but_retains_actual_ack) ... ok
+test_epoch_change_after_admission_prevents_durable_permit (test_decision_manager.ManagerTests.test_epoch_change_after_admission_prevents_durable_permit) ... ok
+test_exit_timestamp_survives_delayed_journal_flush (test_decision_manager.ManagerTests.test_exit_timestamp_survives_delayed_journal_flush) ... ok
+test_expired_binding_allows_registered_local_drain_not_send_or_work (test_decision_manager.ManagerTests.test_expired_binding_allows_registered_local_drain_not_send_or_work) ... ok
+test_failed_follower_leaves_parent_answerable (test_decision_manager.ManagerTests.test_failed_follower_leaves_parent_answerable) ... ok
+test_failed_pointer_leaves_parent_answerable (test_decision_manager.ManagerTests.test_failed_pointer_leaves_parent_answerable) ... ok
+test_failed_start_survivor_exit_is_recorded_after_pending_refusal (test_decision_manager.ManagerTests.test_failed_start_survivor_exit_is_recorded_after_pending_refusal) ... ok
+test_failure_before_handshake_survives_failed_start_cleanup (test_decision_manager.ManagerTests.test_failure_before_handshake_survives_failed_start_cleanup) ... FAIL
+test_failure_frames_are_bounded_and_closed_vocabulary_only (test_decision_manager.ManagerTests.test_failure_frames_are_bounded_and_closed_vocabulary_only) ... ok
+test_fake_wrong_agent_wrong_submission_and_generic_text_are_not_ack (test_decision_manager.ManagerTests.test_fake_wrong_agent_wrong_submission_and_generic_text_are_not_ack) ... ok
+test_fallback_surfaces_without_mutating_legacy_alerts (test_decision_manager.ManagerTests.test_fallback_surfaces_without_mutating_legacy_alerts) ... ok
+test_fence_recovery_preserves_consumed_permit_and_allows_new_question (test_decision_manager.ManagerTests.test_fence_recovery_preserves_consumed_permit_and_allows_new_question) ... ok
+test_fence_recovery_refuses_historical_late_ack_and_allows_new_question (test_decision_manager.ManagerTests.test_fence_recovery_refuses_historical_late_ack_and_allows_new_question) ... ok
+test_first_unflushed_exit_reaches_file_only_status_and_dashboard (test_decision_manager.ManagerTests.test_first_unflushed_exit_reaches_file_only_status_and_dashboard) ... ok
+test_follower_post_in_progress_leaves_parent_answerable (test_decision_manager.ManagerTests.test_follower_post_in_progress_leaves_parent_answerable) ... ok
+test_follower_sdk_each_thread_attributes_only_its_own_question (test_decision_manager.ManagerTests.test_follower_sdk_each_thread_attributes_only_its_own_question) ... ok
+test_foreground_local_commands_repair_and_eof_without_live_sdk (test_decision_manager.ManagerTests.test_foreground_local_commands_repair_and_eof_without_live_sdk) ... ok
+test_fresh_off_process_does_not_import_sdk_and_cli_registration_executes (test_decision_manager.ManagerTests.test_fresh_off_process_does_not_import_sdk_and_cli_registration_executes) ... ok
+test_gap_projection_and_dashboard_health_preserve_exact_count (test_decision_manager.ManagerTests.test_gap_projection_and_dashboard_health_preserve_exact_count) ... ok
+test_idle_pointer_watch_does_not_acquire_callback_lock_or_rescan (test_decision_manager.ManagerTests.test_idle_pointer_watch_does_not_acquire_callback_lock_or_rescan) ... ok
+test_idle_supervisor_bounds_durable_writes_and_keeps_fresh_transitions (test_decision_manager.ManagerTests.test_idle_supervisor_bounds_durable_writes_and_keeps_fresh_transitions) ... ok
+test_interpret_holds_target_delete_behind_ten_unrelated_events (test_decision_manager.ManagerTests.test_interpret_holds_target_delete_behind_ten_unrelated_events) ... ok
+test_legacy_pending_restart_refusal_is_normalized_without_rewriting_journal (test_decision_manager.ManagerTests.test_legacy_pending_restart_refusal_is_normalized_without_rewriting_journal) ... ok
+test_listener_aged_history_restarts_through_bounded_control_frame (test_decision_manager.ManagerTests.test_listener_aged_history_restarts_through_bounded_control_frame) ... ok
+test_listener_event_pruning_keeps_newest_and_accounts_for_discarded_exits (test_decision_manager.ManagerTests.test_listener_event_pruning_keeps_newest_and_accounts_for_discarded_exits) ... ok
+test_listener_event_pruning_makes_room_at_store_byte_limit (test_decision_manager.ManagerTests.test_listener_event_pruning_makes_room_at_store_byte_limit) ... ok
+test_listener_exit_hold_recovers_via_restart_and_explicit_qualification (test_decision_manager.ManagerTests.test_listener_exit_hold_recovers_via_restart_and_explicit_qualification) ... ok
+test_listener_incident_records_exit_and_three_unknown_arrivals (test_decision_manager.ManagerTests.test_listener_incident_records_exit_and_three_unknown_arrivals) ... ok
+test_listener_record_failures_retry_observation_and_reap_once (test_decision_manager.ManagerTests.test_listener_record_failures_retry_observation_and_reap_once) ... ok
+test_listener_restart_rechecks_stopped_epoch_and_binding (test_decision_manager.ManagerTests.test_listener_restart_rechecks_stopped_epoch_and_binding) ... ok
+test_listener_restart_timeout_retries_refusal_write_then_stays_held (test_decision_manager.ManagerTests.test_listener_restart_timeout_retries_refusal_write_then_stays_held) ... ok
+test_listener_restarts_with_backoff_and_exhausts_after_three (test_decision_manager.ManagerTests.test_listener_restarts_with_backoff_and_exhausts_after_three) ... ok
+test_local_fence_registration_has_no_implicit_runtime_credentials_or_sdk (test_decision_manager.ManagerTests.test_local_fence_registration_has_no_implicit_runtime_credentials_or_sdk) ... ok
+test_lost_delete_fsync_failure_durably_fences_restart (test_decision_manager.ManagerTests.test_lost_delete_fsync_failure_durably_fences_restart) ... ok
+test_lost_delete_transport_process_contention_durably_fences_restart (test_decision_manager.ManagerTests.test_lost_delete_transport_process_contention_durably_fences_restart) ... ok
+test_missing_fence_discloses_unknown_on_every_projection (test_decision_manager.ManagerTests.test_missing_fence_discloses_unknown_on_every_projection) ... ok
+test_native_bridge_cannot_import_tmux_evidence_or_change_kind (test_decision_manager.ManagerTests.test_native_bridge_cannot_import_tmux_evidence_or_change_kind) ... ok
+test_off_status_needs_no_files_sdk_credentials_or_tools_and_redacts (test_decision_manager.ManagerTests.test_off_status_needs_no_files_sdk_credentials_or_tools_and_redacts) ... ok
+test_old_parent_answer_edit_stays_with_parent_after_follower (test_decision_manager.ManagerTests.test_old_parent_answer_edit_stays_with_parent_after_follower) ... ok
+test_orphan_reconciliation_clears_only_its_status_hold (test_decision_manager.ManagerTests.test_orphan_reconciliation_clears_only_its_status_hold) ... ok
+test_owner_orphan_cli_records_exact_request_without_credentials_or_http (test_decision_manager.ManagerTests.test_owner_orphan_cli_records_exact_request_without_credentials_or_http) ... ok
+test_pending_follower_leaves_parent_answerable (test_decision_manager.ManagerTests.test_pending_follower_leaves_parent_answerable) ... ok
+test_persistent_flush_failure_reaps_reports_and_recovers_restart (test_decision_manager.ManagerTests.test_persistent_flush_failure_reaps_reports_and_recovers_restart) ... ok
+test_persistent_flush_failure_still_checks_pointers_without_overwriting_event (test_decision_manager.ManagerTests.test_persistent_flush_failure_still_checks_pointers_without_overwriting_event) ... ok
+test_pointer_message_mention_contains_only_documented_fields (test_decision_manager.ManagerTests.test_pointer_message_mention_contains_only_documented_fields) ... ok
+test_pointer_pre_admission_refusal_never_writes_uncertain (test_decision_manager.ManagerTests.test_pointer_pre_admission_refusal_never_writes_uncertain) ... ok
+test_post_ack_newer_feed_stopped_cancelled_and_outage_hold_work (test_decision_manager.ManagerTests.test_post_ack_newer_feed_stopped_cancelled_and_outage_hold_work) ... ok
+test_production_clock_advances_and_cli_has_no_frozen_time_override (test_decision_manager.ManagerTests.test_production_clock_advances_and_cli_has_no_frozen_time_override) ... ok
+test_real_child_failure_record_survives_reap_and_projects_to_dashboard (test_decision_manager.ManagerTests.test_real_child_failure_record_survives_reap_and_projects_to_dashboard) ... FAIL
+test_real_stdio_exact_tool_and_assistant_ack_one_unlock_after_restart (test_decision_manager.ManagerTests.test_real_stdio_exact_tool_and_assistant_ack_one_unlock_after_restart) ... ok
+test_reconciled_unbound_follower_leaves_parent_answerable (test_decision_manager.ManagerTests.test_reconciled_unbound_follower_leaves_parent_answerable) ... ok
+test_recorded_resolution_crash_and_held_transport_keep_outstanding_count (test_decision_manager.ManagerTests.test_recorded_resolution_crash_and_held_transport_keep_outstanding_count) ... ok
+test_refused_pointer_different_request_keeps_retained_bytes (test_decision_manager.ManagerTests.test_refused_pointer_different_request_keeps_retained_bytes) ... ok
+test_refused_pointer_leaves_parent_answerable (test_decision_manager.ManagerTests.test_refused_pointer_leaves_parent_answerable) ... ok
+test_request_crash_has_no_resend_or_invented_acceptance (test_decision_manager.ManagerTests.test_request_crash_has_no_resend_or_invented_acceptance) ... ok
+test_resume_holds_target_delete_behind_ten_unrelated_events (test_decision_manager.ManagerTests.test_resume_holds_target_delete_behind_ten_unrelated_events) ... ok
+test_route_binding_refuses_another_alert_on_an_existing_thread (test_decision_manager.ManagerTests.test_route_binding_refuses_another_alert_on_an_existing_thread) ... ok
+test_sent_unbound_follower_leaves_parent_answerable (test_decision_manager.ManagerTests.test_sent_unbound_follower_leaves_parent_answerable) ... ok
+test_sigkill_connected_renewal_denies_cli_status_and_finish_before_restart (test_decision_manager.ManagerTests.test_sigkill_connected_renewal_denies_cli_status_and_finish_before_restart) ... ok
+test_stdio_allocation_observation_and_frame_bound (test_decision_manager.ManagerTests.test_stdio_allocation_observation_and_frame_bound) ... ok
+test_stdio_eof_and_timeout_do_not_invent_ack (test_decision_manager.ManagerTests.test_stdio_eof_and_timeout_do_not_invent_ack) ... ok
+test_supervised_pending_pointer_retry_is_admitted_and_exactly_once (test_decision_manager.ManagerTests.test_supervised_pending_pointer_retry_is_admitted_and_exactly_once) ... ok
+test_supervised_pointer_posts_only_retained_approved_slot (test_decision_manager.ManagerTests.test_supervised_pointer_posts_only_retained_approved_slot) ... ok
+test_supervisor_finite_graceful_eof_hung_close_and_expiring_scoped_hook (test_decision_manager.ManagerTests.test_supervisor_finite_graceful_eof_hung_close_and_expiring_scoped_hook) ... ok
+test_supervisor_observation_missing_stale_or_unwritable_is_not_healthy (test_decision_manager.ManagerTests.test_supervisor_observation_missing_stale_or_unwritable_is_not_healthy) ... ok
+test_supervisor_sigstop_unknown_owner_and_real_forced_kill (test_decision_manager.ManagerTests.test_supervisor_sigstop_unknown_owner_and_real_forced_kill) ... ok
+test_supervisor_spawn_handshake_and_wait_failures_keep_exclusion_or_reap (test_decision_manager.ManagerTests.test_supervisor_spawn_handshake_and_wait_failures_keep_exclusion_or_reap) ... ok
+test_supervisor_waits_for_real_executor_old_inode_despite_false_stopped_frame (test_decision_manager.ManagerTests.test_supervisor_waits_for_real_executor_old_inode_despite_false_stopped_frame) ... ok
+test_tmux_handoff_end_to_end_mixed_transport_refusals_and_one_unlock (test_decision_manager.ManagerTests.test_tmux_handoff_end_to_end_mixed_transport_refusals_and_one_unlock) ... ok
+test_tmux_ingress_during_ack_preserves_native_final_fence (test_decision_manager.ManagerTests.test_tmux_ingress_during_ack_preserves_native_final_fence) ... ok
+test_tmux_slow_model_turn_keeps_fresh_witness_and_unlocks (test_decision_manager.ManagerTests.test_tmux_slow_model_turn_keeps_fresh_witness_and_unlocks) ... ok
+test_unacknowledged_answer_projects_until_real_ack_and_sent_notice (test_decision_manager.ManagerTests.test_unacknowledged_answer_projects_until_real_ack_and_sent_notice) ... ok
+test_unbound_follower_reply_is_never_attributed_to_parent (test_decision_manager.ManagerTests.test_unbound_follower_reply_is_never_attributed_to_parent) ... FAIL
+test_uncertain_follower_leaves_parent_answerable (test_decision_manager.ManagerTests.test_uncertain_follower_leaves_parent_answerable) ... ok
+test_uncertain_pointer_leaves_parent_answerable_and_reconciles_without_reposting (test_decision_manager.ManagerTests.test_uncertain_pointer_leaves_parent_answerable_and_reconciles_without_reposting) ... ok
+
+======================================================================
+FAIL: test_session_generation_duplicate_conflict_and_unbound_thread_hold (test_slack_transport.TransportTests.test_session_generation_duplicate_conflict_and_unbound_thread_hold)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_slack_transport.py", line 1123, in test_session_generation_duplicate_conflict_and_unbound_thread_hold
+    self.assertEqual(len(self.acks), 1)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+AssertionError: 2 != 1
+
+======================================================================
+FAIL: test_dedicated_exec_rejects_wrong_root_and_inherited_descriptor_before_ready (test_decision_manager.ManagerTests.test_dedicated_exec_rejects_wrong_root_and_inherited_descriptor_before_ready) (wrong='root')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 1759, in test_dedicated_exec_rejects_wrong_root_and_inherited_descriptor_before_ready
+    self.assertEqual((process.returncode, output, error), (1, b"", b""))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Tuples differ: (1, b'{"failure":{"callbacks":null,"disconnect_[106 chars] b'') != (1, b'', b'')
+
+First differing element 1:
+b'{"failure":{"callbacks":null,"disconnect_[100 chars]"}\n'
+b''
+
++ (1, b'', b'')
+- (1,
+-  b'{"failure":{"callbacks":null,"disconnect_marks":null,"quarantined":null,"rea'
+-  b'son":"transport-io","stage":"bootstrap"},"type":"listener-failure"}\n',
+-  b'')
+
+======================================================================
+FAIL: test_dedicated_exec_rejects_wrong_root_and_inherited_descriptor_before_ready (test_decision_manager.ManagerTests.test_dedicated_exec_rejects_wrong_root_and_inherited_descriptor_before_ready) (wrong='descriptor')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 1759, in test_dedicated_exec_rejects_wrong_root_and_inherited_descriptor_before_ready
+    self.assertEqual((process.returncode, output, error), (1, b"", b""))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Tuples differ: (1, b'{"failure":{"callbacks":null,"disconnect_[109 chars] b'') != (1, b'', b'')
+
+First differing element 1:
+b'{"failure":{"callbacks":null,"disconnect_[103 chars]"}\n'
+b''
+
++ (1, b'', b'')
+- (1,
+-  b'{"failure":{"callbacks":null,"disconnect_marks":null,"quarantined":null,"rea'
+-  b'son":"validation-failed","stage":"runtime"},"type":"listener-failure"}\n',
+-  b'')
+
+======================================================================
+FAIL: test_failure_before_handshake_survives_failed_start_cleanup (test_decision_manager.ManagerTests.test_failure_before_handshake_survives_failed_start_cleanup)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 934, in test_failure_before_handshake_survives_failed_start_cleanup
+    self.assertEqual(event["failure"], s.failure_record("transport-io", "bootstrap"))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'callbacks': 0, 'disconnect_marks': 0, 'qu[62 chars]sor'} != {'reason': 'transport-io', 'stage': 'bootst[57 chars]': 0}
+  {'callbacks': 0,
+   'disconnect_marks': 0,
+   'quarantined': 0,
+-  'reason': 'child-unreported',
+-  'stage': 'supervisor'}
++  'reason': 'transport-io',
++  'stage': 'bootstrap'}
+
+======================================================================
+FAIL: test_real_child_failure_record_survives_reap_and_projects_to_dashboard (test_decision_manager.ManagerTests.test_real_child_failure_record_survives_reap_and_projects_to_dashboard)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 912, in test_real_child_failure_record_survives_reap_and_projects_to_dashboard
+    self.assertEqual(event["failure"], s.failure_record("transport-io", "runtime"))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'callbacks': 0, 'disconnect_marks': 0, 'qu[62 chars]sor'} != {'reason': 'transport-io', 'stage': 'runtim[55 chars]': 0}
+  {'callbacks': 0,
+   'disconnect_marks': 0,
+   'quarantined': 0,
+-  'reason': 'child-unreported',
+-  'stage': 'supervisor'}
++  'reason': 'transport-io',
++  'stage': 'runtime'}
+
+======================================================================
+FAIL: test_unbound_follower_reply_is_never_attributed_to_parent (test_decision_manager.ManagerTests.test_unbound_follower_reply_is_never_attributed_to_parent)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 556, in test_unbound_follower_reply_is_never_attributed_to_parent
+    self.assertFalse(self.transport.active)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+----------------------------------------------------------------------
+Ran 157 tests in 232.559s
+
+FAILED (failures=6)

@@ -40,6 +40,8 @@ def supervised_child(root, guard, control, mode, endpoint):
     if mode == "ignore-term":
         fixtures.signal.signal(fixtures.signal.SIGTERM, fixtures.signal.SIG_IGN)
     def run(runtime, stop, data):
+        if mode == "failure-record":
+            raise OSError("private-message xoxb-not-a-real-token https://private.invalid")
         if mode.startswith("refuse-"):
             store = a.Store(root)
             with s.locked(store) as journal:
@@ -551,8 +553,10 @@ class ManagerTests(fixtures.LiveFixture):
     def test_unbound_follower_reply_is_never_attributed_to_parent(self):
         key, row = self.uncertain_follower()
         self.callback(fixtures.payload("EvUnbound", thread_ts=row["parent"]["receipt"]["ts"]))
-        self.assertFalse(self.transport.active)
-        self.assertEqual(self.acks, [])
+        self.assertTrue(self.transport.active)
+        self.assertEqual(len(self.acks), 1)
+        self.assertEqual(self.store.read("transport")["quarantine"]["records"][-1]["reason"], "unbound-human-thread")
+        self.assertEqual(self.store.read("transport")["hold"], "ingress-held")
         self.assertEqual(self.store.read("transport")["events"], {})
         self.assertEqual(self.store.read("replies")["events"], {})
 
@@ -898,6 +902,84 @@ class ManagerTests(fixtures.LiveFixture):
             if expected == 4:
                 supervisor.record("restart-refused")
 
+    def test_real_child_failure_record_survives_reap_and_projects_to_dashboard(self):
+        manager = m.ManagedListener(self.store, PIN, live=True)
+        self.addCleanup(manager.stop)
+        supervisor = m.ListenerSupervisor(manager, self.transport, lambda: NOW)
+        with fixture_child("failure-record", self.endpoint):
+            supervisor.start(seconds=60, ongoing=True)
+        manager.process.wait(timeout=5)
+        supervisor.tick()
+        event = self.store.read("transport")["listener_events"][-1]
+        self.assertEqual(event["failure"], s.failure_record("transport-io", "runtime"))
+        self.assertEqual(event["returncode"], 1)
+        self.assertIsNone(manager.process)
+        import decision_feed as feed
+        projected = feed.project_slack(self.feed_root, self.root, NOW, True)
+        health = feed.slack_health(dict(slack=projected), NOW)
+        self.assertEqual(health["last_listener_exit"], event)
+        self.assertNotIn("private-message", d.canonical(projected).decode())
+        self.assertNotIn("xoxb-", d.canonical(projected).decode())
+        supervisor.tick()
+        self.assertEqual(len(self.store.read("transport")["listener_events"]), 1)
+
+    def test_production_child_reports_missing_disposable_credentials_without_sdk_io(self):
+        self.owner.close()
+        manager = m.ManagedListener(self.store, PIN, live=True)
+        self.addCleanup(manager.stop)
+        supervisor = m.ListenerSupervisor(manager, self.transport, lambda: NOW)
+        popen = subprocess.Popen
+        def launch(command, **kwargs):
+            env = {key: value for key, value in os.environ.items()
+                   if key not in ("CORBANU_SLACK_BOT_TOKEN", "CORBANU_SLACK_APP_TOKEN")}
+            return popen(command, env=env, **kwargs)
+        with patch.object(m.subprocess, "Popen", side_effect=launch):
+            supervisor.start(seconds=60, ongoing=True)
+        manager.process.wait(timeout=5)
+        supervisor.tick()
+        event = self.store.read("transport")["listener_events"][-1]
+        self.assertEqual(event["failure"], s.failure_record(
+            "validation-failed", "credentials", callbacks=0, disconnect_marks=0, quarantined=0))
+        self.assertEqual(event["returncode"], 1)
+        self.assertEqual(self.messages, [])
+
+    def test_failure_before_handshake_survives_failed_start_cleanup(self):
+        manager = m.ManagedListener(self.store, PIN, live=True)
+        self.addCleanup(manager.stop)
+        supervisor = m.ListenerSupervisor(manager, self.transport, lambda: NOW)
+        popen = subprocess.Popen
+        def launch(command, **kwargs):
+            return popen([*command[:-1], "-1"], **kwargs)
+        with patch.object(m.subprocess, "Popen", side_effect=launch), self.assertRaises(d.Invalid):
+            supervisor.start(seconds=60, ongoing=True)
+        event = self.store.read("transport")["listener_events"][-1]
+        self.assertEqual(event["failure"], s.failure_record("transport-io", "bootstrap"))
+        self.assertEqual(event["returncode"], 1)
+        self.assertIsNone(manager.process)
+
+    def test_failure_frames_are_bounded_and_closed_vocabulary_only(self):
+        manager = m.ManagedListener(self.store, PIN)
+        frames = [
+            b"raw private-message",
+            d.canonical(dict(type="listener-failure", failure=dict(
+                s.failure_record("sdk-failed", "connect"), reason="private-message"))),
+            d.canonical(dict(type="listener-failure", failure=dict(
+                s.failure_record("sdk-failed", "connect"), traceback="private-message"))),
+            d.canonical(dict(type="listener-failure", failure=dict(
+                s.failure_record("sdk-failed", "connect"), callbacks=True))),
+            b"x" * 2048,
+        ]
+        for raw in frames:
+            with self.subTest(size=len(raw)):
+                child = subprocess.Popen([sys.executable, "-c",
+                    "import os,sys; os.write(1, bytes.fromhex(sys.argv[1])); sys.exit(1)", raw.hex()],
+                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                try:
+                    child.wait(timeout=5)
+                    self.assertEqual(manager.failure(child), s.failure_record("child-unreported", "supervisor"))
+                finally:
+                    child.stdout.close()
+
     def test_listener_incident_records_exit_and_three_unknown_arrivals(self):
         manager, supervisor, clock = self.watchdog()
         manager.process.kill()
@@ -1091,7 +1173,8 @@ class ManagerTests(fixtures.LiveFixture):
                 self.assertEqual(status["state"], "held")
                 self.assertEqual(status["supervisor_health"],
                     dict(state="unhealthy", event_flush_failures=second + 1, pending_events=1))
-                self.assertEqual(supervisor.pending_event, ("child-exit", -9, NOW))
+                self.assertEqual(supervisor.pending_event, ("child-exit", -9, NOW,
+                    s.failure_record("child-signalled", "supervisor")))
             incoming, writer = os.pipe()
             reader, outgoing = os.pipe()
             try:
@@ -1695,7 +1778,9 @@ class ManagerTests(fixtures.LiveFixture):
                     process = subprocess.Popen(command, pass_fds=(guard, reader), close_fds=True,
                                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     output, error = process.communicate(d.canonical(dict(binding=PIN, seconds=1, ongoing=False)) + b"\n", timeout=7)
-                    self.assertEqual((process.returncode, output, error), (1, b"", b""))
+                    self.assertEqual((process.returncode, error), (1, b""))
+                    expected = s.failure_record("transport-io", "bootstrap") if wrong == "root" else s.failure_record("validation-failed", "runtime")
+                    self.assertEqual(json.loads(output), dict(type="listener-failure", failure=expected))
                 finally:
                     for fd in (guard, reader, writer):
                         os.close(fd)

@@ -42,7 +42,10 @@ def validate_status(value):
         validate_supervisor_health(health)
     event = value.get("last_listener_exit")
     if event is not None:
-        d.shape(event, "kind at returncode restarts fence_count ingress_count fence_gap epoch restart")
+        d.shape(event, "kind at returncode restarts fence_count ingress_count fence_gap epoch restart"
+                + (" failure" if "failure" in event else ""))
+        if "failure" in event:
+            s.validate_failure(event["failure"])
         d.require((event["kind"] == "child-exit" and type(event["returncode"]) is int)
                   or (event["kind"] == "restart-refused" and event["returncode"] is None
                       and event["restart"] == "held"))
@@ -420,7 +423,11 @@ class ManagedListener:
                 if restart_pin is not None:
                     config["restart_pin"] = restart_pin
                 channel.emit(config)
-                d.require(channel.read() == dict(type="runtime-owned"))  # Not connected/qualified/stopped.
+                frame = channel.read()
+                if type(frame) is dict and frame.get("type") == "listener-failure":
+                    d.shape(frame, "type failure")
+                    self.process._listener_failure = copy.deepcopy(s.validate_failure(frame["failure"]))
+                d.require(frame == dict(type="runtime-owned"))  # Not connected/qualified/stopped.
                 return dict(state="starting")
             except BaseException:
                 self.failed_start_process = self.process  # Preserve startup death evidence across reaping.
@@ -430,6 +437,35 @@ class ManagedListener:
                 for fd in (guard, reader, writer):
                     if fd is not None:
                         os.close(fd)  # Never LOCK_UN: child inherited the locked open-file description.
+
+    def failure(self, process):
+        """One bounded frame on the owned stdout pipe, read only after proved death.
+
+        stderr stays discarded. Invalid/missing frames yield fixed fallback codes.
+        Cache before reaping closes stdout, including pre-handshake startup failures.
+        """
+        cached = getattr(process, "_listener_failure", None)
+        if type(cached) is dict:
+            return copy.deepcopy(cached)
+        code = process.poll()
+        d.require(type(code) is int)
+        reason = ("restart-refused" if code == s.RESTART_REFUSED_EXIT else
+                  "shutdown-timeout" if code == 72 else
+                  "child-signalled" if code < 0 else "child-unreported")
+        result = s.failure_record(reason, "supervisor")
+        try:
+            fd = process.stdout.fileno()
+            if select.select([fd], [], [], 0)[0]:
+                raw = os.read(fd, 1025)
+                d.require(len(raw) <= 1024)
+                frame = json.loads(raw, object_pairs_hook=d.pairs)
+                d.shape(frame, "type failure")
+                d.require(frame["type"] == "listener-failure")
+                result = s.validate_failure(frame["failure"])
+        except (OSError, ValueError, TypeError, AttributeError, KeyError):
+            pass
+        process._listener_failure = copy.deepcopy(result)
+        return copy.deepcopy(result)
 
     def stop(self):
         with self.operation:
@@ -448,6 +484,7 @@ class ManagedListener:
                         if action == process.kill:
                             raise
                 d.require(process.returncode is not None)
+                self.failure(process)
                 process.stdin.close()
                 process.stdout.close()
                 self.process = None
@@ -477,7 +514,7 @@ def listener_child(root, guard, control, *, run=None):
     No cleanup unlocks guard: even successful SDK close need not join all runners.
     os._exit and the parent's wait encompass every thread; no descendants allowed.
     """
-    code = 1
+    code, stage, transport, failure = 1, "bootstrap", None, None
     try:
         d.require(len({guard, control, 0, 1, 2}) == 5 and stat.S_ISFIFO(os.fstat(control).st_mode))
         os.set_inheritable(guard, False)
@@ -487,6 +524,7 @@ def listener_child(root, guard, control, *, run=None):
         d.shape(data, "binding seconds ongoing" + (" restart_pin" if "restart_pin" in data else ""))
         d.require(type(data["ongoing"]) is bool and type(data["seconds"]) in (int, float) and 0 < data["seconds"] <= 60)
         store = a.Store(root)
+        stage = "runtime"
         runtime = s._ChildRuntime(guard, store, a.identity(data["binding"]))
         def no_descendants(event, args):
             d.require(event not in {"subprocess.Popen", "os.fork", "os.forkpty", "os.posix_spawn", "os.exec"})
@@ -514,9 +552,22 @@ def listener_child(root, guard, control, *, run=None):
         code = 0
     except s.RestartRefused:
         code = s.RESTART_REFUSED_EXIT
-    except BaseException:
-        pass  # Never export raw SDK errors, URLs, credentials or callback data.
+        failure = s.failure_record("restart-refused", "session-start")
+    except BaseException as error:
+        if transport is not None:
+            transport.failed(error)
+            failure = transport.failure_snapshot()
+        else:
+            failure = s.failure_record(s.failure_reason(error), stage)
     finally:
+        if failure is None and transport is not None and transport.failure is not None:
+            failure = transport.failure_snapshot()
+        if failure is not None:
+            try:
+                # Fixed vocabulary and numeric counters only; one atomic, bounded pipe write.
+                os.write(1, d.canonical(dict(type="listener-failure", failure=failure)) + b"\n")
+            except BaseException:
+                pass  # Parent still records signal/timeout/unreported failure.
         os._exit(code)
 
 
@@ -570,7 +621,7 @@ class ListenerSupervisor:
         self.options, self.retry_at, self.pin = None, None, None
         self.manager.stop()
 
-    def record(self, kind, returncode=None, at=None):
+    def record(self, kind, returncode=None, at=None, failure=None):
         with self.manager.store.lock(), s.locked(self.manager.store) as journal:
             try:
                 fence = s.ingress_count(self.manager.store)
@@ -586,6 +637,8 @@ class ListenerSupervisor:
             event = dict(kind=kind, at=at if at is not None else self.now(), returncode=returncode, restarts=self.restarts,
                          fence_count=fence, ingress_count=journal["ingress"], fence_gap=gap,
                          epoch=journal["lifecycle"]["epoch"], restart="pending" if safe else "held")
+            if failure is not None:
+                event["failure"] = copy.deepcopy(s.validate_failure(failure))
             journal.setdefault("listener_events", []).append(event)
             journal["hold"] = journal["hold"] or "listener-exited"
             prune_listener_events(journal)
@@ -647,8 +700,9 @@ class ListenerSupervisor:
         if self.exited_process is process:
             return
         self.pin = None
-        event = (("restart-refused", None, self.now()) if code == s.RESTART_REFUSED_EXIT
-                 else ("child-exit", code, self.now()))
+        failure = self.manager.failure(process)
+        event = (("restart-refused", None, self.now(), failure) if code == s.RESTART_REFUSED_EXIT
+                 else ("child-exit", code, self.now(), failure))
         if self.pending_event is None:
             self.pending_event = event
         else:
