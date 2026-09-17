@@ -54,7 +54,7 @@ def validate_status(value):
         d.require(all(type(event[k]) is int and event[k] >= 0 for k in ("restarts", "ingress_count", "epoch")))
         d.require(all(event[k] is None or type(event[k]) is int and event[k] >= 0 for k in ("fence_count", "fence_gap")))
     d.require(type(value["schema"]) is int and value["schema"] == 1 and type(value["enabled"]) is bool)
-    d.require(value["state"] in ("off", "unqualified", "held", "last-verified", "stale"))
+    d.require(value["state"] in ("off", "unqualified", "held", "last-verified", "stale", "unknown"))
     if value["last_verified"] is not None:
         d.stamp(value["last_verified"])
     d.require(all(type(value[k]) is int and value[k] >= 0
@@ -96,7 +96,10 @@ def validate_supervisor_health(health):
     quarantined = 0
     if "quarantine" in health:
         intake = health["quarantine"]
-        d.shape(intake, "count held oldest_at age_seconds")
+        d.shape(intake, "count held oldest_at age_seconds" + (" unknown" if "unknown" in intake else ""))
+        unknown = intake.get("unknown", 0)
+        d.require(type(unknown) is int and unknown >= 0)
+        d.require(not unknown or health["state"] != "healthy")
         quarantined = intake["count"]
         d.require(type(intake["count"]) is int and type(intake["held"]) is int
                   and 0 <= intake["held"] <= intake["count"])
@@ -109,7 +112,7 @@ def validate_supervisor_health(health):
     if health.get("observed_at") is not None:
         d.stamp(health["observed_at"])
     if "reason" in health:
-        d.require(health["reason"] in ("event-flush-failed", "event-unflushed", "observation-unavailable", "observation-stale", "quarantined-intake", None))
+        d.require(health["reason"] in ("event-flush-failed", "event-unflushed", "observation-unavailable", "observation-stale", "quarantined-intake", "quarantine-history-unknown", None))
 
 
 def attach_quarantine(health, intake, now):
@@ -120,9 +123,13 @@ def attach_quarantine(health, intake, now):
     health["quarantine"] = intake
     if intake["count"]:
         health["state"] = "unhealthy"
-        if health.get("reason") in (None, "quarantined-intake"):
+        if health.get("reason") in (None, "quarantined-intake", "quarantine-history-unknown"):
             health["reason"] = ("event-flush-failed" if health["event_flush_failures"] else
                                 "event-unflushed" if health["pending_events"] else "quarantined-intake")
+    elif intake.get("unknown") and health["state"] != "unhealthy":
+        health["state"] = "unknown"
+        if health.get("reason") is None:
+            health["reason"] = "quarantine-history-unknown"
     return health
 
 
@@ -161,14 +168,20 @@ def project_disclosure(value, store, journal, alerts, now=None):
     health = read_supervisor_health(store, now, journal["binding"])
     audit, held = s.outstanding_quarantine(journal), journal.get("held_human", {})
     count = audit["count"] + len(held)
-    if count:
+    if count or audit.get("unknown"):
         times = [entry["arrived_at"] for entry in held.values()]
         if audit["oldest_at"] is not None:
             times.append(audit["oldest_at"])
         oldest = (None if audit["count"] and audit["oldest_at"] is None
                   else min(times) if times else None)
-        health = attach_quarantine(health, dict(count=count, held=len(held), oldest_at=oldest, age_seconds=None), now)
-        value["state"] = "held"
+        intake = dict(count=count, held=len(held), oldest_at=oldest, age_seconds=None)
+        if audit.get("unknown"):
+            intake["unknown"] = audit["unknown"]
+        health = attach_quarantine(health, intake, now)
+        if count:
+            value["state"] = "held"
+        elif value["state"] == "last-verified":
+            value["state"] = "unknown"
     value["supervisor_health"] = health
     value["pending_pointers"] = len(a.pending_pointers(alerts))
     exits = [event for event in journal.get("listener_events", []) if event["kind"] == "child-exit"]

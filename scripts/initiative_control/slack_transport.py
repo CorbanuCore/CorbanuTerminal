@@ -109,14 +109,16 @@ def outstanding_quarantine(value):
     records = audit.get("records", [])
     pending = [row for row in records
                if row["ingress"] > reviewed and row["reason"] != "unbound-expired"]
-    # Old journals pruned without a disposition summary. Those missing records
-    # require review unless the review fence covers the entire pruned prefix.
+    # Missing legacy dispositions cannot prove a live review obligation.
+    # In particular, comparing an old review with the moving journal ingress
+    # re-arms reviewed history after an unrelated callback. Keep that history
+    # unknown until an exact review durably writes the outstanding summary.
     pruned = audit.get("total", 0) - len(records)
-    if reviewed >= value.get("ingress", 0):
-        pruned = 0
     times = [row.get("at") for row in pending]
-    oldest = min(times) if times and all(times) and not pruned else None
-    return dict(count=len(pending) + pruned, oldest_at=oldest)
+    result = dict(count=len(pending), oldest_at=min(times) if times and all(times) else None)
+    if pruned:
+        result["unknown"] = pruned
+    return result
 
 
 def append_quarantine(value, record):
@@ -332,8 +334,10 @@ def locked(store):
                     + (" outstanding" if "outstanding" in audit else ""))
             if "outstanding" in audit:
                 pending = audit["outstanding"]
-                d.shape(pending, "count oldest_at")
-                d.require(type(pending["count"]) is int and 0 <= pending["count"] <= audit["total"])
+                d.shape(pending, "count oldest_at" + (" unknown" if "unknown" in pending else ""))
+                unknown = pending.get("unknown", 0)
+                d.require(type(unknown) is int and 0 <= unknown <= audit["total"])
+                d.require(type(pending["count"]) is int and 0 <= pending["count"] <= audit["total"] - unknown)
                 d.require(pending["count"] or pending["oldest_at"] is None)
                 if pending["oldest_at"] is not None:
                     d.stamp(pending["oldest_at"])

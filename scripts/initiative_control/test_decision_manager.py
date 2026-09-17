@@ -1009,16 +1009,56 @@ class ManagerTests(fixtures.LiveFixture):
         self.assertEqual(m.project_status(self.store, later, True)["supervisor_health"]["quarantine"],
                          dict(count=1, held=0, oldest_at=at, age_seconds=60))
 
-    def test_legacy_quarantine_unknown_pruned_age_clears_only_after_review(self):
+    def test_legacy_quarantine_separates_unknown_history_from_outstanding(self):
         self.sending()
         self.callback(fixtures.payload("EvPoison", subtype="message_deleted", deleted_ts="109.000001"))
         with s.locked(self.store) as journal:
             journal["quarantine"] = dict(total=129, records=journal["quarantine"]["records"])
             self.store.write("transport", journal)
         legacy = m.project_status(self.store, NOW, True)["supervisor_health"]["quarantine"]
-        self.assertEqual(legacy, dict(count=129, held=0, oldest_at=None, age_seconds=None))
+        self.assertEqual(legacy, dict(count=1, held=0, oldest_at=NOW, age_seconds=0, unknown=128))
         self.review_gap()
         self.assertNotIn("quarantine", m.project_status(self.store, NOW, True)["supervisor_health"])
+
+    def test_reviewed_legacy_pruning_stays_unknown_after_unrelated_ingress(self):
+        import decision_feed as feed
+        self.sending()
+        self.callback(fixtures.payload("EvPoison", subtype="message_deleted", deleted_ts="109.000001"))
+        self.review_gap()
+        with s.locked(self.store) as journal:
+            # A pre-summary journal: the review remains durable, dispositions
+            # of missing records do not. No new quarantine follows the review.
+            journal["quarantine"] = dict(total=129, records=journal["quarantine"]["records"])
+            self.store.write("transport", journal)
+        self.store.write("supervisor", dict(binding=PIN, health=dict(
+            state="healthy", event_flush_failures=0, pending_events=0, observed_at=NOW, reason=None)))
+        for advanced in (False, True):
+            with self.subTest(advanced=advanced):
+                if advanced:
+                    self.callback(fixtures.payload("EvBot", user=PIN["bot"], bot_id=PIN["bot"], app_id=PIN["app"]))
+                projected = feed.project_slack(self.feed_root, self.root, NOW, True)
+                for surface in (m.project_status(self.store, NOW, True), projected["status"],
+                                feed.slack_health(dict(slack=projected), NOW)):
+                    self.assertEqual(surface["state"], "unknown")
+                    health = surface["supervisor_health"]
+                    self.assertEqual((health["state"], health["reason"]),
+                                     ("unknown", "quarantine-history-unknown"))
+                    self.assertEqual(health["quarantine"],
+                                     dict(count=0, held=0, oldest_at=None, age_seconds=None, unknown=128))
+                    m.validate_supervisor_health(health)
+        self.assertIsNone(self.store.read("transport")["hold"])
+        supervisor = m.ListenerSupervisor(m.ManagedListener(self.store, PIN), self.transport, lambda: NOW)
+        self.assertEqual(supervisor.status(True)["state"], "unknown")
+        self.assertEqual(supervisor.status(True)["supervisor_health"]["state"], "unknown")
+        later = (d.stamp(NOW) + s.dt.timedelta(seconds=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        aged = feed.slack_health(dict(slack=projected), later)["supervisor_health"]
+        self.assertEqual(aged["reason"], "observation-stale")
+        self.assertEqual(aged["quarantine"]["count"], 0)
+        self.assertEqual(aged["quarantine"]["unknown"], 128)
+        s.hold(self.store, "ingress-held")
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "held")
+        held = feed.project_slack(self.feed_root, self.root, NOW, True)
+        self.assertEqual(feed.slack_health(dict(slack=held), NOW)["state"], "held")
 
     def test_supervisor_reason_precedes_quarantine_without_hiding_count(self):
         import decision_feed as feed

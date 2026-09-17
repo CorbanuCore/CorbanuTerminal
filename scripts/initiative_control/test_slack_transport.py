@@ -1521,6 +1521,56 @@ class TransportTests(LiveFixture):
         self.callback(payload("EvNew", subtype="message_deleted", deleted_ts="110.000001"))
         self.assertEqual(s.outstanding_quarantine(self.store.read("transport")), dict(count=1, oldest_at=later))
 
+    def test_legacy_unknown_is_durable_and_exact_review_does_not_rearm(self):
+        self.sending()
+        self.callback(payload("EvOld", subtype="message_deleted", deleted_ts="109.000001"))
+        self.review_gap()
+        with s.locked(self.store) as journal:
+            journal["quarantine"] = dict(total=129, records=journal["quarantine"]["records"])
+            self.store.write("transport", journal)
+        expected = dict(count=0, oldest_at=None, unknown=128)
+        self.assertEqual(s.outstanding_quarantine(self.store.read("transport")), expected)
+        self.callback(payload("EvBot", user=PIN["bot"], bot_id=PIN["bot"], app_id=PIN["app"]))
+        self.assertEqual(s.outstanding_quarantine(self.store.read("transport")), expected)
+        self.assertIsNone(self.store.read("transport")["hold"])
+        self.callback(payload("EvNew", subtype="message_deleted", deleted_ts="110.000001"))
+        expected = dict(count=1, oldest_at=NOW, unknown=128)
+        self.assertEqual(self.store.read("transport")["quarantine"]["outstanding"], expected)
+        write = self.store.write
+        def fail_review(name, value):
+            if name == "transport" and len(value["gap_reviews"]) == 2:
+                raise OSError("fixture final legacy review write")
+            return write(name, value)
+        with patch.object(self.store, "write", side_effect=fail_review), self.assertRaises(d.Invalid):
+            self.review_gap()
+        self.assertEqual(s.outstanding_quarantine(self.store.read("transport")), expected)
+        self.review_gap()
+        # Reopen the durable store; unrelated arrivals and a fresh rejection
+        # must not resurrect the pruned prefix after successful review.
+        reopened = a.Store(self.root)
+        self.assertEqual(reopened.read("transport")["quarantine"]["outstanding"],
+                         dict(count=0, oldest_at=None))
+        self.callback(payload("EvAnotherBot", user=PIN["bot"], bot_id=PIN["bot"], app_id=PIN["app"]))
+        self.assertEqual(s.outstanding_quarantine(reopened.read("transport")), dict(count=0, oldest_at=None))
+        later = (d.stamp(NOW) + s.dt.timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.transport.now = lambda: later
+        self.callback(payload("EvLater", subtype="message_deleted", deleted_ts="111.000001"))
+        self.assertEqual(s.outstanding_quarantine(reopened.read("transport")), dict(count=1, oldest_at=later))
+        self.assertEqual(reopened.read("transport")["quarantine"]["total"], 131)
+
+    def test_legacy_unknown_summary_rejects_invalid_counts(self):
+        self.sending()
+        self.callback(payload("EvPoison", subtype="message_deleted", deleted_ts="109.000001"))
+        original = self.store.read("transport")
+        for unknown in (-1, True, "1", 1, 2):
+            with self.subTest(unknown=unknown):
+                journal = copy.deepcopy(original)
+                journal["quarantine"]["outstanding"]["unknown"] = unknown
+                self.store.write("transport", journal)
+                with self.assertRaises(d.Invalid), s.locked(self.store):
+                    pass
+        self.store.write("transport", original)
+
     def test_unbound_idle_renewal_records_expiry_without_new_callbacks(self):
         self.unbind_fixture()
         self.callback()

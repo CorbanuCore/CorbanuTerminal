@@ -1,0 +1,10 @@
+test_legacy_quarantine_separates_unknown_history_from_outstanding (test_decision_manager.ManagerTests.test_legacy_quarantine_separates_unknown_history_from_outstanding) ... ok
+test_reviewed_legacy_pruning_stays_unknown_after_unrelated_ingress (test_decision_manager.ManagerTests.test_reviewed_legacy_pruning_stays_unknown_after_unrelated_ingress) ... ok
+test_legacy_unknown_is_durable_and_exact_review_does_not_rearm (test_slack_transport.TransportTests.test_legacy_unknown_is_durable_and_exact_review_does_not_rearm) ... ok
+test_legacy_unknown_summary_rejects_invalid_counts (test_slack_transport.TransportTests.test_legacy_unknown_summary_rejects_invalid_counts) ... ok
+test_outstanding_quarantine_survives_pruning_then_exact_review_clears_it (test_slack_transport.TransportTests.test_outstanding_quarantine_survives_pruning_then_exact_review_clears_it) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 6.713s
+
+OK
