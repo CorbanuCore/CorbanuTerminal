@@ -1,0 +1,39 @@
+DELIBERATE IN-MEMORY SCHEMA MUTATION: remove F09 pre_state.required captured_authority
+Weakened schema SHA-256 (sorted compact JSON): d966da95b6c1afcec5ca666013389882cdf9875a7c6d7c735c5fc6dbf2c80304
+Fixtures unchanged; expected outcome: controls FAIL with missing captured_authority accepted.
+test_all_frozen_cases_and_branches_are_recordable (test_contract.ContractCounterexamples.test_all_frozen_cases_and_branches_are_recordable) ... ok
+test_complete_blocked_coverage_is_recordable (test_contract.ContractCounterexamples.test_complete_blocked_coverage_is_recordable) ... ok
+test_continuation_approval_and_effect_inside_window_are_recordable (test_contract.ContractCounterexamples.test_continuation_approval_and_effect_inside_window_are_recordable) ... ok
+test_effect_and_approval_must_be_inside_probe_window (test_contract.ContractCounterexamples.test_effect_and_approval_must_be_inside_probe_window) ... ok
+test_f07_acceptance_without_id_is_rejected (test_contract.ContractCounterexamples.test_f07_acceptance_without_id_is_rejected) ... ok
+test_f07_approval_fields_are_indispensable (test_contract.ContractCounterexamples.test_f07_approval_fields_are_indispensable) ... ok
+test_f07_approved_and_silent_effects_are_distinguishable (test_contract.ContractCounterexamples.test_f07_approved_and_silent_effects_are_distinguishable) ... ok
+test_f07_late_row_must_match_frozen_turn_and_window (test_contract.ContractCounterexamples.test_f07_late_row_must_match_frozen_turn_and_window) ... ok
+test_f07_settled_row_and_distinct_probes_are_bound (test_contract.ContractCounterexamples.test_f07_settled_row_and_distinct_probes_are_bound) ... ok
+test_f09_missing_continuation_is_rejected (test_contract.ContractCounterexamples.test_f09_missing_continuation_is_rejected) ... ok
+test_f09_new_turn_disguised_as_continuation_is_rejected (test_contract.ContractCounterexamples.test_f09_new_turn_disguised_as_continuation_is_rejected) ... ok
+test_f09_probe_before_selection_or_after_end_is_rejected (test_contract.ContractCounterexamples.test_f09_probe_before_selection_or_after_end_is_rejected) ... ok
+test_f09_retroactive_restriction_remains_recordable_failure (test_contract.ContractCounterexamples.test_f09_retroactive_restriction_remains_recordable_failure) ... ok
+test_frozen_observations_cannot_be_omitted (test_contract.ContractCounterexamples.test_frozen_observations_cannot_be_omitted) ... 
+  test_frozen_observations_cannot_be_omitted (test_contract.ContractCounterexamples.test_frozen_observations_cannot_be_omitted) (case='F09', path=('pre_state', 'captured_authority')) ... FAIL
+test_frozen_phase_and_artifact_requirements (test_contract.ContractCounterexamples.test_frozen_phase_and_artifact_requirements) ... ok
+test_meta_validation (test_contract.ContractCounterexamples.test_meta_validation) ... ok
+test_missing_result_and_erased_original_branch_are_rejected (test_contract.ContractCounterexamples.test_missing_result_and_erased_original_branch_are_rejected) ... ok
+test_round82_binding_matches_handwritten_cases (test_contract.ContractCounterexamples.test_round82_binding_matches_handwritten_cases) ... ok
+test_schema_branch_rename_or_drop_is_rejected (test_contract.ContractCounterexamples.test_schema_branch_rename_or_drop_is_rejected) ... ok
+test_unknown_and_wrong_case_branches_are_rejected (test_contract.ContractCounterexamples.test_unknown_and_wrong_case_branches_are_rejected) ... ok
+test_unspecified_blocker_and_unapproved_disposition_are_rejected (test_contract.ContractCounterexamples.test_unspecified_blocker_and_unapproved_disposition_are_rejected) ... ok
+
+======================================================================
+FAIL: test_frozen_observations_cannot_be_omitted (test_contract.ContractCounterexamples.test_frozen_observations_cannot_be_omitted) (case='F09', path=('pre_state', 'captured_authority'))
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-f09gap-83/test_contract.py", line 50, in test_frozen_observations_cannot_be_omitted
+    with self.assertRaises(ValidationError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: ValidationError not raised
+
+----------------------------------------------------------------------
+Ran 21 tests in 0.559s
+
+FAILED (failures=1)

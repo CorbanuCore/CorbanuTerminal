@@ -2,57 +2,161 @@
 import copy
 import unittest
 
-from jsonschema import ValidationError
+from jsonschema import Draft202012Validator, ValidationError
+from unittest.mock import patch
 
 import check_contract as contract
 
 
-def evidence(artifact="synthetic.raw"):
-    return dict(artifact=artifact, sha256="0" * 64, locator="line:1", observed="synthetic only")
+# Frozen hand-written inputs have no dependency on the schemas under test.
+from pathlib import Path
+import sys
 
-
-def capture(case="F09"):
-    rule = next(r["then"] for r in contract.CAPTURE["allOf"]
-                if r["if"]["properties"]["case"]["const"] == case)
-    doc = dict(case=case, attempt_id="synthetic-1", branch=rule["properties"]["branch"]["enum"][0],
-               profile="fresh", repository="tensorcash", queue_variant="synthetic",
-               queue_packet_sha256="0" * 64, retention_policy="pf83-synthetic-capture-v1",
-               capture_identity=evidence(), verdict="failed")
-    for section in ("pre_state", "observable", "post_state", "negative_control"):
-        doc[section] = {key: evidence() for key in rule["properties"][section]["required"]}
-    artifact = rule["x-indispensable-artifact"]
-    doc["refuting_artifact"] = evidence(artifact)
-    phases = ["pre_change", "in_continuation", "new_turn"] if case == "F09" else ["settled", "late"]
-    doc["authority_observations"] = [dict(
-        phase=phase, turn_or_session_id="new" if phase == "new_turn" else "old",
-        probe_label=phase, claimed_effective="full", monotonic_ns=(i + 1) * 10,
-        approval_id=None, approval_disposition="not_offered", approval_decision_ns=None,
-        approval_scope=None, marker_exists=True, effect_count=1, first_effect_ns=(i + 1) * 10,
-        observer_sequence=i + 1, source=evidence(artifact)) for i, phase in enumerate(phases)]
-    if case == "F09":
-        doc["continuation_window"] = dict(captured_turn_id="old", new_turn_id="new",
-                                          selection_ack_ns=15, turn_ended_ns=25, source=evidence())
-    return doc
-
-
-def blocked_results():
-    expected = []
-    for rule in contract.CAPTURE["allOf"]:
-        for branch in rule["then"]["properties"]["branch"]["enum"]:
-            expected.append(dict(case=rule["if"]["properties"]["case"]["const"], branch=branch,
-                                 profile="fresh", repository="tensorcash", queue_variant="synthetic",
-                                 queue_packet_sha256="0" * 64))
-    records = [dict(row, attempt_id=f"synthetic-{i}", status="blocked", capture=None,
-                    missing_artifacts=["admission"], prerequisites=["admitted_executor"],
-                    coverage_gaps=["original_branch"], last_checkpoint="No dispatch; synthetic test",
-                    retained_evidence=[], product_authority=None) for i, row in enumerate(expected)]
-    return dict(schema_version=1, contract_sha256="0" * 64, queue_manifest=evidence(),
-                coverage_manifest=dict(frozen_manifest=evidence(), expected=expected), records=records)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "pf83-controls-86"))
+from frozen_fixtures import BRANCHES, CASES, blocked_results, capture
 
 
 class ContractCounterexamples(unittest.TestCase):
     def test_meta_validation(self):
         contract.meta_validate()
+
+    def test_all_frozen_cases_and_branches_are_recordable(self):
+        for case, branches in BRANCHES.items():
+            for _, branch in branches:
+                with self.subTest(case=case, branch=branch):
+                    doc = capture(case)
+                    doc["branch"] = branch
+                    contract.check_capture(doc)
+
+    def test_frozen_observations_cannot_be_omitted(self):
+        # Paths come ONLY from hand-written fixtures, not the contract.
+        for case in CASES:
+            doc = capture(case)
+            paths = [(key,) for key in doc]
+            for section in ("pre_state", "observable", "post_state", "negative_control"):
+                paths.extend((section, key) for key in doc[section])
+            for section in ("late_window", "continuation_window"):
+                if section in doc:
+                    paths.extend((section, key) for key in doc[section])
+            for i, row in enumerate(doc.get("authority_observations", [])):
+                paths.extend(("authority_observations", i, key) for key in row)
+            for path in paths:
+                with self.subTest(case=case, path=path):
+                    missing = copy.deepcopy(doc)
+                    parent = missing
+                    for key in path[:-1]:
+                        parent = parent[key]
+                    del parent[path[-1]]
+                    with self.assertRaises(ValidationError):
+                        Draft202012Validator(contract.CAPTURE).validate(missing)
+
+    def test_frozen_phase_and_artifact_requirements(self):
+        for case, phases in (("F07", ("settled", "late")),
+                             ("F09", ("pre_change", "in_continuation", "new_turn"))):
+            for phase in phases:
+                with self.subTest(case=case, phase=phase):
+                    doc = capture(case)
+                    rows = [r for r in doc["authority_observations"] if r["phase"] != phase]
+                    # Preserve length so minItems cannot conceal loss of contains.
+                    rows.append(copy.deepcopy(rows[0]))
+                    doc["authority_observations"] = rows
+                    with self.assertRaises(ValidationError):
+                        Draft202012Validator(contract.CAPTURE).validate(doc)
+        for case in CASES:
+            with self.subTest(case=case):
+                doc = capture(case)
+                doc["refuting_artifact"]["artifact"] = "unrelated.raw"
+                with self.assertRaises(ValidationError):
+                    contract.check_capture(doc)
+
+    def test_f07_late_row_must_match_frozen_turn_and_window(self):
+        for change in (dict(turn_or_session_id="old"),
+                       *(dict(monotonic_ns=t) for t in (14, 15, 17, 18, 25, 26))):
+            with self.subTest(change=change):
+                doc = capture("F07")
+                doc["authority_observations"][1].update(change)
+                with self.assertRaises(ValueError):
+                    contract.check_capture(doc)
+        for change in (dict(settled_turn_id="new"), dict(settlement_ns=15),
+                       dict(turn_ended_ns=25), dict(dwell_until_ns=5),
+                       dict(dwell_until_ns=25), dict(observation_ended_ns=18)):
+            with self.subTest(window=change):
+                doc = capture("F07")
+                doc["late_window"].update(change)
+                with self.assertRaises(ValueError):
+                    contract.check_capture(doc)
+
+    def test_f07_settled_row_and_distinct_probes_are_bound(self):
+        for change in (dict(turn_or_session_id="new"), dict(monotonic_ns=5),
+                       dict(monotonic_ns=15), dict(probe_label="late")):
+            with self.subTest(change=change):
+                doc = capture("F07")
+                doc["authority_observations"][0].update(change)
+                with self.assertRaises(ValueError):
+                    contract.check_capture(doc)
+
+    def test_effect_and_approval_must_be_inside_probe_window(self):
+        for case, row_index, outside in (
+            ("F07", 0, (4, 5, 11, 15, 16)),
+            ("F07", 1, (14, 15, 18, 21, 25, 26)),
+            ("F09", 1, (14, 15, 21, 25, 26)),
+        ):
+            for field in ("first_effect_ns", "approval_decision_ns"):
+                for timestamp in outside:
+                    with self.subTest(case=case, row=row_index, field=field, time=timestamp):
+                        doc = capture(case)
+                        row = doc["authority_observations"][row_index]
+                        if field == "approval_decision_ns":
+                            row.update(approval_id="probe-approval", approval_scope=row["phase"],
+                                       approval_disposition="accepted")
+                        row[field] = timestamp
+                        with self.assertRaisesRegex(ValueError, "outside phase window"):
+                            contract.check_capture(doc)
+
+    def test_continuation_approval_and_effect_inside_window_are_recordable(self):
+        doc = capture()
+        row = doc["authority_observations"][1]
+        row.update(approval_id="probe-approval", approval_scope="in_continuation",
+                   approval_disposition="accepted", approval_decision_ns=17, first_effect_ns=19)
+        contract.check_capture(doc)
+        # Contradictory ordering is evidence of failure, not a schema success rule.
+        row.update(approval_decision_ns=19, first_effect_ns=17)
+        contract.check_capture(doc)
+
+    def test_schema_branch_rename_or_drop_is_rejected(self):
+        for target in ("capture", "coverage_tuple", "result", "annotation"):
+            for mutation in ("rename", "drop"):
+                with self.subTest(target=target, mutation=mutation):
+                    schema = copy.deepcopy(contract.CAPTURE if target in ("capture", "annotation")
+                                           else contract.RESULTS)
+                    rules = schema["allOf"] if target in ("capture", "annotation") else (
+                        schema["$defs"][target]["allOf"])
+                    rule = rules[0]["then"]
+                    branches = rule["x-required-branches"] if target == "annotation" else (
+                        rule["properties"]["branch"]["enum"])
+                    if mutation == "rename":
+                        branches[0] = "renamed-branch"
+                    else:
+                        branches.pop()
+                    name = "CAPTURE" if target in ("capture", "annotation") else "RESULTS"
+                    with patch.object(contract, name, schema), self.assertRaisesRegex(
+                            ValueError, "frozen round-82 binding"):
+                        contract.meta_validate()
+
+    def test_round82_binding_matches_handwritten_cases(self):
+        self.assertEqual(contract.frozen_branches(),
+                         {case: [identifier for _, identifier in rows]
+                          for case, rows in BRANCHES.items()})
+        # Changing the source or mapping itself must not silently rebaseline.
+        from pathlib import Path
+        original_read = Path.read_bytes
+        for filename in ("branch-bindings.json", "evidence-contract.schema.json"):
+            def changed_read(path):
+                raw = original_read(path)
+                return raw + b" " if path.name == filename else raw
+            with self.subTest(file=filename), patch.object(Path, "read_bytes", changed_read):
+                with self.assertRaisesRegex(ValueError, "digest mismatch"):
+                    contract.frozen_branches()
 
     def test_f09_missing_continuation_is_rejected(self):
         doc = capture()

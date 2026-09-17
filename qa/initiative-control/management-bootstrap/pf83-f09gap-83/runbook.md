@@ -1,5 +1,10 @@
 # PF83 round 83 — refutable captures
 
+Round-86 revision: use the hardened schema/checker in this directory and the
+[frozen controls and current receipts](../pf83-controls-86/RETURN.md).
+Round-83 logs/command receipts remain historical evidence at base commit
+`c7b8a9b5336ad91a525d4643f725434e457b9bdc`; they do not qualify this revision.
+
 Routine internal QA-contract revision supporting product heading **Permission
 selection confirmation — TO BUILD**: “A submitted selection is not a confirmed
 change” and “Existing active-turn approval/sandbox snapshots and pending approvals
@@ -39,6 +44,13 @@ command authority; shared-service policy is not the same boundary. Unknown or
 ambiguous clock ordering blocks the claim. If the admitted interface cannot
 produce this observation, mark `continuation_probe_route` blocked.
 
+An `in_continuation` row's non-null `first_effect_ns` and
+`approval_decision_ns` must each be strictly inside
+`(selection_ack_ns, turn_ended_ns)`, and no later than its `monotonic_ns`.
+Null still means observed absence under continuous coverage. Outside-window
+events stay in raw evidence and make this probe insufficient; never drop an
+event or relabel it to claim the required window was exercised.
+
 Full→restricted: the continuation probe should retain captured Full Access and
 effect without fresh approval, while a new-turn restricted probe remains
 unapproved with no effect. Restricted→full: withhold approval for the continuation
@@ -59,6 +71,19 @@ approval. In the mandatory negative probe, explicitly withhold command approval;
 any effect contradicts restricted authority. An additional approved control may
 run separately with another label. Keep late probes and raw observation through
 the frozen dwell and turn boundary; disclose the finite observation window.
+
+F07 now requires typed `late_window` with `settled_turn_id`, distinct
+`late_turn_id`, `settlement_ns`, `turn_ended_ns`, `dwell_until_ns`,
+`observation_ended_ns` and a sealed `source` reference. Freeze the planned dwell,
+cutoff and probe labels before keys; record actual turn IDs and boundary events
+from raw capture, binding the window before the corresponding probes. The
+reviewer must compare these with the frozen plan rather than accept a window
+chosen retrospectively to fit results. Settled rows must belong to the settled
+turn strictly between settlement and its end. Late rows must belong to the
+distinct late turn strictly after BOTH the turn boundary and dwell deadline and
+before observation cutoff. Row, effect and approval-decision times share the
+phase window; decisions/effects cannot postdate the observation. Each phase has
+a distinct probe label. A later timestamp alone cannot satisfy late coverage.
 F06 and F08 timelines use the same command-approval disposition/scope/decision
 and first-effect columns, so their approval IDs cannot stand for acceptance.
 For every case, effect entries cite independent observer bytes and approval
@@ -109,7 +134,12 @@ otherwise `product_authority` is null. No approval is supplied by this contract.
 
 `check_contract.py` meta-validates both schemas, validates documents, rejects
 missing/unexpected coverage tuples and duplicate attempt IDs, requires all
-original branches, and checks F09 same-turn/time ordering. Preserve multiple
+original branches, and checks F07/F09 turn/window ordering. The hash-pinned
+round-86 `branch-bindings.json` pairs every exact round-82 descriptive branch
+with its round-83 identifier. The checker verifies the frozen round-82 digest,
+all 15 mappings, capture enums/annotations and both results enum locations
+before accepting captures/results; renamed or dropped branches fail. Required
+coverage comes from that frozen mapping, not from the current schema. Preserve multiple
 attempts per tuple; a later pass never deletes a failure. The checker cannot
 verify external files, true observation, full queue coverage, accepted scope or
 independence. The independent reviewer must verify these against frozen inputs,

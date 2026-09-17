@@ -67,7 +67,8 @@
     "queue_packet_sha256": {"type":"string","pattern":"^[0-9a-f]{64}$"},
     "retention_policy": {"const":"pf83-synthetic-capture-v1"},
     "authority_observations": {"type":"array"},
-    "continuation_window": {"type":"object"}
+    "continuation_window": {"type":"object"},
+    "late_window": {"type":"object"}
   },
   "$defs": {
     "evidence": {
@@ -411,6 +412,21 @@
             "description": "A later raw frame or probe contradicting the latest accepted selection, an older completion overwriting it, or a refused selection presented as accepted refutes the claim. A timestamped serialized/refused attempt is a coverage limit, not fabricated overlap."
           },
           "branch": {"enum":["full-restricted-full","restricted-full-restricted","open-confirmation-conflict"]},
+          "late_window": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["settled_turn_id","late_turn_id","settlement_ns","turn_ended_ns","dwell_until_ns","observation_ended_ns","source"],
+            "properties": {
+              "settled_turn_id": {"type":"string","minLength":1},
+              "late_turn_id": {"type":"string","minLength":1},
+              "settlement_ns": {"type":"integer","minimum":0},
+              "turn_ended_ns": {"type":"integer","minimum":0},
+              "dwell_until_ns": {"type":"integer","minimum":0},
+              "observation_ended_ns": {"type":"integer","minimum":0},
+              "source": {"$ref":"#/$defs/evidence"}
+            },
+            "description": "Freeze dwell deadline, observation cutoff and turn identities before probes; cite actual settlement/boundary events and clock mapping. Settled rows belong to the settled turn after settlement and before its end; late rows belong to the distinct late turn after BOTH that boundary and the dwell deadline, before cutoff. check_contract.py enforces row, effect and approval-decision bounds; raw review verifies the frozen schedule and continuous coverage."
+          },
           "authority_observations": {
             "type": "array",
             "minItems": 2,
@@ -434,7 +450,7 @@
             "description": "Every required phase must cite actual rows of selection-order.jsonl. Same values must occur there; reviewer verifies links, unique fresh probe labels, turn identity and clock order against raw bytes. Additional observations preserve later effects; the required phase sample cannot hide them."
           }
         },
-        "required": ["authority_observations"]
+        "required": ["authority_observations","late_window"]
       }
     },
     {
@@ -667,7 +683,7 @@
               "turn_ended_ns": {"type":"integer","minimum":0},
               "source": {"$ref":"#/$defs/evidence"}
             },
-            "description": "Clock mapping must establish these strict phase boundaries beyond uncertainty. The checker enforces same captured turn before/after selection and a distinct later new turn. Independent reviewer verifies actual raw boundary events, including uncertainty."
+            "description": "Clock mapping must establish these strict phase boundaries beyond uncertainty. The checker enforces same captured turn before/after selection and a distinct later new turn. Any non-null first_effect_ns and approval_decision_ns in an in_continuation row must also be strictly after selection_ack_ns and before turn_ended_ns, and no later than the observation timestamp. Independent reviewer verifies actual raw boundary events, including uncertainty."
           }
         },
         "required": ["authority_observations","continuation_window"]

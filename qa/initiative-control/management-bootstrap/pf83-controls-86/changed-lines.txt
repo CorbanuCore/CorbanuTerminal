@@ -1,0 +1,25 @@
+Fixture/source freeze: 6 hashes match; scope: all changes within allocation
+69	8	qa/initiative-control/management-bootstrap/pf83-f09gap-83/check_contract.py
+19	3	qa/initiative-control/management-bootstrap/pf83-f09gap-83/evidence-contract.schema.json
+31	1	qa/initiative-control/management-bootstrap/pf83-f09gap-83/runbook.md
+146	42	qa/initiative-control/management-bootstrap/pf83-f09gap-83/test_contract.py
+2	0	qa/initiative-control/management-bootstrap/pf83-controls-86/.gitignore (new)
+125	0	qa/initiative-control/management-bootstrap/pf83-controls-86/RETURN.md (new)
+30	0	qa/initiative-control/management-bootstrap/pf83-controls-86/branch-bindings.json (new)
+5	0	qa/initiative-control/management-bootstrap/pf83-controls-86/contract-controls-command.json (new)
+26	0	qa/initiative-control/management-bootstrap/pf83-controls-86/contract-controls.log (new)
+18	0	qa/initiative-control/management-bootstrap/pf83-controls-86/fixture-freeze.json (new)
+148	0	qa/initiative-control/management-bootstrap/pf83-controls-86/frozen_fixtures.py (new)
+25	0	qa/initiative-control/management-bootstrap/pf83-controls-86/permission-confirmation-command.json (new)
+576	0	qa/initiative-control/management-bootstrap/pf83-controls-86/permission-confirmation.log (new)
+27	0	qa/initiative-control/management-bootstrap/pf83-controls-86/prerequisites-command.json (new)
+410	0	qa/initiative-control/management-bootstrap/pf83-controls-86/prerequisites.log (new)
+30	0	qa/initiative-control/management-bootstrap/pf83-controls-86/run_controls.py (new)
+5	0	qa/initiative-control/management-bootstrap/pf83-controls-86/schema-meta-validation-command.json (new)
+1	0	qa/initiative-control/management-bootstrap/pf83-controls-86/schema-meta-validation.log (new)
+25	0	qa/initiative-control/management-bootstrap/pf83-controls-86/thread-settings-command.json (new)
+182	0	qa/initiative-control/management-bootstrap/pf83-controls-86/thread-settings.log (new)
+11	0	qa/initiative-control/management-bootstrap/pf83-controls-86/validate.py (new)
+5	0	qa/initiative-control/management-bootstrap/pf83-controls-86/weakened-schema-red-command.json (new)
+39	0	qa/initiative-control/management-bootstrap/pf83-controls-86/weakened-schema-red.log (new)
+This inventory excludes its own file; build caches and bytecode are ignored.
