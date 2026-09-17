@@ -345,20 +345,18 @@ fn resolve_mcp_oauth_credentials_store_mode(
 #[cfg(test)]
 pub(crate) async fn test_config() -> Config {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    Config::load_from_base_config_with_overrides(
+    let mut config = Config::load_from_base_config_with_overrides(
         ConfigToml {
             model: Some("gpt-5.5".to_string()),
             ..Default::default()
         },
-        ConfigOverrides {
-            #[cfg(feature = "developer-accounting")]
-            accounting: Some(AccountingMode::Disabled),
-            ..Default::default()
-        },
+        ConfigOverrides::default(),
         AbsolutePathBuf::from_absolute_path(codex_home.path()).expect("temp dir should resolve"),
     )
     .await
-    .expect("load default test config")
+    .expect("load default test config");
+    config.accounting = AccountingMode::Disabled;
+    config
 }
 
 /// Application configuration loaded from disk and merged with overrides.
@@ -2046,7 +2044,7 @@ impl Config {
             .map(AbsolutePathBuf::try_from)
             .transpose()?;
 
-        Self::load_config_with_layer_stack(
+        let config = Self::load_config_with_layer_stack(
             LOCAL_FS.as_ref(),
             cfg,
             ConfigOverrides {
@@ -2056,8 +2054,6 @@ impl Config {
                 // requirements and plugin configuration for this live thread.
                 model: self.model.clone(),
                 model_provider: Some(self.model_provider_id.clone()),
-                #[cfg(feature = "developer-accounting")]
-                accounting: Some(self.accounting.clone()),
                 codex_self_exe: self.codex_self_exe.clone(),
                 default_zsh_path,
                 ..Default::default()
@@ -2065,7 +2061,16 @@ impl Config {
             refreshed_config.codex_home.clone(),
             config_layer_stack,
         )
-        .await
+        .await?;
+        // Qualification pins the approved route/scope, including explicit OFF.
+        // Changed routes are excluded or fail admission; start a new session to rebind.
+        #[cfg(feature = "developer-accounting")]
+        let config = {
+            let mut config = config;
+            config.accounting.clone_from(&self.accounting);
+            config
+        };
+        Ok(config)
     }
 
     /// This is the preferred way to create an instance of [Config].
@@ -2791,10 +2796,6 @@ fn apply_managed_filesystem_constraints(
 /// Optional overrides for user configuration (e.g., from CLI flags).
 #[derive(Default, Debug, Clone)]
 pub struct ConfigOverrides {
-    /// Preserve an embedding's explicit mode, including OFF, in developer builds.
-    /// This is not a TOML or command-line setting.
-    #[cfg(feature = "developer-accounting")]
-    pub accounting: Option<AccountingMode>,
     pub model: Option<String>,
     /// Permit an explicitly selected provider to replace an incompatible model
     /// with its catalog default. App-server clients opt into this behavior with
@@ -3499,8 +3500,6 @@ impl Config {
 
         // Destructure ConfigOverrides fully to ensure all overrides are applied.
         let ConfigOverrides {
-            #[cfg(feature = "developer-accounting")]
-            accounting,
             model,
             allow_provider_model_fallback,
             review_model: override_review_model,
@@ -4510,9 +4509,10 @@ impl Config {
             #[cfg(not(feature = "developer-accounting"))]
             accounting: AccountingMode::Disabled,
             #[cfg(feature = "developer-accounting")]
-            accounting: accounting.unwrap_or_else(|| {
-                crate::accounting::developer_accounting_mode(&model_provider_id, &model_provider)
-            }),
+            accounting: crate::accounting::developer_accounting_mode(
+                &model_provider_id,
+                &model_provider,
+            ),
             model,
             service_tier,
             review_model,

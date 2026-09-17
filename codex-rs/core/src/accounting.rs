@@ -1,7 +1,7 @@
 //! Native sampling ownership glue. Replay, exact money and retention stay in state.
 
-// Distributed artifacts use the release profile (debug assertions disabled).
-// Keep developer collection confined to debug builds, even with --all-features.
+// Reject optimized release builds; the package entrypoint also rejects marked
+// developer binaries, including debug profiles such as dev-small.
 #[cfg(all(feature = "developer-accounting", not(debug_assertions)))]
 compile_error!("developer-accounting is debug-only and must not be enabled in distribution builds");
 
@@ -45,6 +45,9 @@ pub(crate) fn developer_accounting_mode(
     provider: &codex_model_provider_info::ModelProviderInfo,
 ) -> AccountingMode {
     use codex_model_provider_info::WireApi;
+    // Retain a byte marker in executable data even when symbols are stripped.
+    // scripts/build_codex_package.py refuses any input carrying this marker.
+    std::hint::black_box(b"CORBANU_DEVELOPER_ACCOUNTING_NOT_FOR_DISTRIBUTION");
     let scope = Uuid::new_v4();
     let approved_endpoint = provider.base_url.clone().unwrap_or_else(|| {
         match provider.wire_api {

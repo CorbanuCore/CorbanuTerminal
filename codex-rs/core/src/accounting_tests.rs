@@ -61,21 +61,27 @@ async fn accounting_developer_loader_override_survives_refresh() -> anyhow::Resu
             approved_endpoint: ENDPOINT.into(),
         },
     ] {
-        let config = crate::config::Config::load_config_with_layer_stack(
+        let mut config = crate::config::Config::load_config_with_layer_stack(
             codex_exec_server::LOCAL_FS.as_ref(),
             codex_config::config_toml::ConfigToml::default(),
             crate::config::ConfigOverrides {
                 cwd: Some(home.path().to_path_buf()),
-                accounting: Some(mode.clone()),
                 ..Default::default()
             },
             AbsolutePathBuf::from_absolute_path(home.path())?,
             codex_config::ConfigLayerStack::default(),
         )
         .await?;
+        config.accounting = mode.clone();
         assert_eq!(config.accounting, mode);
-        let refreshed = config.rebuild_preserving_session_layers(&config).await?;
+        let mut refreshed = config.rebuild_preserving_session_layers(&config).await?;
         assert_eq!(refreshed.accounting, mode);
+        refreshed.model_provider_id = "anthropic".into();
+        let switched = refreshed
+            .rebuild_preserving_session_layers(&refreshed)
+            .await?;
+        assert_eq!(switched.model_provider_id, "anthropic");
+        assert_eq!(switched.accounting, mode);
     }
     Ok(())
 }

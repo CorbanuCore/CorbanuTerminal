@@ -21,13 +21,21 @@ Exact target-directory base: `/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activ
 
 | Lane (commands run from `codex-rs`) | CARGO_TARGET_DIR under the exact base above | Final result | Log |
 | --- | --- | --- | --- |
-| `just test -p codex-core accounting` | `default/target` | 124 run, 124 passed, 0 failed; 1 slow; 3529 filter-excluded; exit 0; 67.659s | [default.log](default.log) |
-| `just test -p codex-core accounting --features codex-core/developer-accounting` | `feature/target` | 127 run, 127 passed, 0 failed; 1 slow, 2 leaky; 3529 filter-excluded; exit 0; 53.299s | [feature.log](feature.log) |
-| `just test -p codex-tui usage` | `tui/target` | 91 run, 91 passed, 0 failed; 4071 filter-excluded; exit 0; 0.453s | [tui.log](tui.log) |
+| `just test -p codex-core accounting` | `default/target` | 124 run, 124 passed, 0 failed; 1 slow; 3529 filter-excluded; exit 0; 67.659s | Summary inlined below |
+| `just test -p codex-core accounting --features codex-core/developer-accounting` | `feature/target` | 127 run, 127 passed, 0 failed; 1 slow, 2 leaky; 3529 filter-excluded; exit 0; 53.299s | Summary inlined below |
+| `just test -p codex-tui usage` | `tui/target` | 91 run, 91 passed, 0 failed; 4071 filter-excluded; exit 0; 0.453s | Summary inlined below |
 
-Each directory was created fresh for this action and never shared between lanes/features. The two core directories were reused only for their own corrected same-feature build after the initial test-code compilation failure: wrong namespaces for `LOCAL_FS` and `ConfigToml`, exit 101, zero tests executed. Raw failed attempts remain in [default-build-attempt-1.log](default-build-attempt-1.log) and [feature-build-attempt-1.log](feature-build-attempt-1.log). No test retries or timeouts occurred in the final runs.
+Each directory was created fresh for this action and never shared between lanes/features. The two core directories were reused only for their own corrected same-feature build after the initial test-code compilation failure: wrong namespaces for `LOCAL_FS` and `ConfigToml`, exit 101, zero tests executed. Raw attempts remain local and gitignored; both failed with ``error[E0425]: cannot find value `LOCAL_FS` in crate `codex_file_system` `` and ``error[E0603]: struct import `ConfigToml` is private``. No test retries or timeouts occurred in the final runs.
 
 The feature lane's leaky tests are `accounting::chat::tests::accounting_chat_frame_guard_denies_provider_change_before_client_publication` and `accounting::responses::tests::accounting_responses_auth_route_eligibility`. Nextest counted them passed; this receipt does not diagnose or waive their leaks. `accounting_responses_ws_native_auxiliary_scope_and_event_parity` was slow but passed in both core lanes (48.950s default, 34.223s feature).
+
+Historical nextest output, transcribed from the local logs by acct-activation-37 (raw logs are not committed):
+
+```text
+Summary [  67.659s] 124 tests run: 124 passed (1 slow), 3529 skipped
+Summary [  53.299s] 127 tests run: 127 passed (1 slow, 2 leaky), 3529 skipped
+Summary [   0.453s] 91 tests run: 91 passed, 4071 skipped
+```
 
 ## Individually verified feature-enabled cases
 
@@ -51,7 +59,7 @@ Every case below is present as PASS in `feature.log`:
 
 `#[cfg(all(feature = "developer-accounting", not(debug_assertions)))] compile_error!(...)` rejects developer collection when debug assertions are disabled. The repository's release workflows invoke `cargo build --release`, and its release profile does not enable debug assertions. This covers both explicit feature selection and `--all-features` in that distribution configuration.
 
-Actual negative build: `CARGO_TARGET_DIR="$PWD/../qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/release-guard/target" cargo check --release -p codex-core --features codex-core/developer-accounting`, from `codex-rs`. **Exit 101**, solely at `core/src/accounting.rs:6`: `developer-accounting is debug-only and must not be enabled in distribution builds`. Full output: [release-guard.log](release-guard.log). No release binary was executed.
+Actual negative build: `CARGO_TARGET_DIR="$PWD/../qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/release-guard/target" cargo check --release -p codex-core --features codex-core/developer-accounting`, from `codex-rs`. **Exit 101**, solely at `core/src/accounting.rs:6`: `developer-accounting is debug-only and must not be enabled in distribution builds`. The diagnostic above is the relevant evidence; the full log remains local and gitignored. No release binary was executed.
 
 Limit: there is no universal “will be distributed” Rust cfg. A manually distributed debug binary, or a release profile deliberately overridden to enable debug assertions, is not detected by this guard. The enforced property is rejection under the repository's current release configuration, not detection of every possible packaging action. Stronger arbitrary-packaging enforcement would need a mandatory distribution marker/build check, outside this source-only allocation.
 
