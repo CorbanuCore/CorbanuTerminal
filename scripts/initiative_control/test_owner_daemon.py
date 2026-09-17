@@ -518,7 +518,16 @@ class ActivationVisibilityTests(unittest.TestCase):
                     ("default-hand", None, "running", 999, False),
                     ("owner-future", "owner", "running", 1001, False),
                     ("owner-reported", "owner", "running", 999, True),
-                    ("owner-returned", "owner", "returned", 999, False))):
+                    ("owner-returned", "owner", "returned", 999, False),
+                    ("owner-at-deadline", "owner", "dispatched", 1000, False),
+                    ("hand-prepared", "hand", "prepared", 999, False),
+                    ("hand-accepted", "hand", "accepted", 999, False),
+                    ("hand-failed", "hand", "failed", 999, False),
+                    ("hand-cancelled", "hand", "cancelled", 999, False),
+                    ("hand-uncertain", "hand", "dispatch_uncertain", 999, False),
+                    ("hand-returned", "hand", "returned", 999, False),
+                    ("hand-reported", "hand", "running", 999, True),
+                    ("hand-future", "hand", "running", 1001, False))):
                 action = dict(id=key, status=status, deadline=deadline, dispatch_epoch=1,
                               stall_reported=reported, workstream="delivery", sequence=index)
                 if side is not None:
@@ -536,6 +545,9 @@ class ActivationVisibilityTests(unittest.TestCase):
         impact = status["coordinator"]
         coverage = impact["watchdog_coverage"]
         self.assertEqual(["default-hand", "hand-overdue"], coverage["excluded_actions"])
+        self.assertEqual(["owner-overdue"], coverage["covered_actions"])
+        self.assertIn("covered=1, excluded=2; manager=covered;", coverage["summary"])
+        self.assertTrue(coverage["manager_covered"])
         self.assertFalse(coverage["future_default_covered"])
         self.assertIn("manager responsibility", coverage["summary"])
         self.assertIn("no scheduled hand watchdog", coverage["summary"])
@@ -581,7 +593,54 @@ class ActivationVisibilityTests(unittest.TestCase):
         self.assertEqual("hand", foreign["action_id"])
         self.assertEqual("hand", foreign["dispatch_owner"])
         self.assertTrue(foreign["excluded_from_owner_lane"])
-        self.assertFalse(rows["global"]["excluded_from_owner_lane"])
+        self.assertEqual("resolved", foreign["ownership_status"])
+        self.assertIsNone(rows["global"]["excluded_from_owner_lane"])
+        self.assertEqual("unmapped", rows["global"]["ownership_status"])
+        with patch.object(owner, "coordinator_activation_impact", side_effect=sqlite3.OperationalError):
+            unavailable = owner.activation_status(self.config_path)
+        self.assertFalse(unavailable["complete"])
+        for row in unavailable["unresolved_holds"]:
+            self.assertEqual(set(rows[row["op_id"]]), set(row))
+            self.assertEqual("coordinator_unavailable", row["ownership_status"])
+            self.assertIsNone(row["dispatch_owner"])
+            self.assertIsNone(row["excluded_from_owner_lane"])
+
+    def test_manager_coverage_and_execution_follow_shared_predicate(self):
+        with self.c.mutation("fixture", {}) as (_, state):
+            state["manager"] = dict(id="manager", deadline=999)
+        self.c.clock = lambda: 1000.0
+        original = Coordinator.watchdog_covers
+        def exclude_manager(state, action, dispatcher=None):
+            return action is not None and original(state, action, dispatcher)
+        with patch.object(Coordinator, "watchdog_covers", side_effect=exclude_manager):
+            with patch.object(owner.time, "time", return_value=1000.0):
+                impact = owner.coordinator_activation_impact(self.root, "owner")
+            self.assertFalse(impact["watchdog_coverage"]["manager_covered"])
+            self.assertIn("manager=excluded", impact["watchdog_coverage"]["summary"])
+            self.assertFalse(impact["manager"]["watchdog_will_report"])
+            self.assertEqual([], self.c.watchdog(dispatcher="owner"))
+            self.assertNotIn("stall_reported", self.c.snapshot()["manager"])
+        self.assertEqual(["manager-stall:manager"],
+                         [event["id"] for event in self.c.watchdog(dispatcher="owner")])
+
+    def test_hold_row_shape_for_missing_and_resolved_action(self):
+        with sqlite3.connect(self.root / "owner.sqlite3") as db:
+            db.execute("INSERT INTO operations(op_id,action_id,phase) VALUES(?,?,?)",
+                       ("missing-op", "gone", "intent"))
+            db.execute("INSERT INTO holds VALUES(?,?,?,?,?,?,?,?,?)",
+                       ("missing-op", "operation", "missing-op", "fixture_hold",
+                        1, 2, "evidence", None, None))
+        row = owner.activation_status(self.config_path)["unresolved_holds"][0]
+        self.assertEqual("action_missing", row["ownership_status"])
+        self.assertEqual("gone", row["action_id"])
+        self.assertIsNone(row["excluded_from_owner_lane"])
+        with self.c.mutation("fixture", {}) as (_, state):
+            state["actions"]["gone"] = dict(id="gone", status="prepared",
+                                            workstream="delivery", sequence=1)
+        resolved = owner.activation_status(self.config_path)["unresolved_holds"][0]
+        self.assertEqual(set(row), set(resolved))
+        self.assertEqual("resolved", resolved["ownership_status"])
+        self.assertFalse(resolved["excluded_from_owner_lane"])
 
     def test_empty_status_still_warns_about_future_shared_state_mutation(self):
         result = owner.activation_status(self.config_path)["coordinator"]
