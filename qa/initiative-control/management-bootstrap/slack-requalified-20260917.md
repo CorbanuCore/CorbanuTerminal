@@ -55,6 +55,33 @@ the path is usable going forward. Record the loss, do not repair it. The
 distinction is real, but "the number changed" is also true and I would rather
 point at it than have it found.
 
+## The 15-minute window, which nobody had written down
+
+My first alert sent. My second, 46 minutes later, did not — and I briefly read
+that as the path breaking again. It is not a defect; it is a property of the
+design that was never recorded, so here it is.
+
+`gate` requires `last_verified` within **900 seconds**, and `qualify` is the
+**only** thing that sets it. Nothing refreshes it — not the listener, not a
+successful send. So the receipted path is usable for fifteen minutes after a
+qualification and then closes.
+
+The important half is what that does *not* mean. The owner's attestation is
+**durable**; only the verification expires. Re-qualifying reuses Travis's
+recorded seven observations and his receipt, with a fresh `auth.test` and a live
+session — it does not need him again. So evidenced alerts can be sent
+unattended indefinitely, provided a listener is up and each send burst is
+preceded by a fresh `qualify`.
+
+That recipe is now `slack-alert.sh`: bring the listener up **on the pinned
+interpreter** (the ambient `python3` has no `slack_sdk`, which is what killed the
+child for two days), re-qualify, send. It retries the qualification a few times,
+because the listener bumps the lifecycle epoch as it settles and `qualify` pins
+the epoch it read when the payload was built — losing that race looks like a
+failure and is only a timing artifact.
+
+The second alert went out on that path: `state: sent`, key `76032ebf…`.
+
 ## What this does not prove
 
 The alert is `recorded`, with two queued and four answers still
