@@ -1,0 +1,5 @@
+{
+  "exit": 0,
+  "stdout": "gettimeofday=1789622074 realtime=1789622074 time=1789622074 monotonic=731465\n",
+  "stderr": ""
+}

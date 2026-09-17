@@ -1,0 +1,17 @@
+[
+  "Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.",
+  "Billed cost: unavailable \u2014 no settlement evidence",
+  "Logical requests may have attempts on other days; this UTC day is not their complete lifetime.",
+  "Snapshot is not current; newer activity is unverified",
+  "UTC admission interval: [1786320000000, 1786406400000) ms since Unix epoch",
+  "Read at: 1789626337603 ms UTC; store checkpoint: 1789626336979 ms UTC; maintenance lag: 624 ms",
+  "Estimated token cost for recorded attempts: $0.001420",
+  "Recorded attempts: 2",
+  "Known estimate exact USD: 0.00142",
+  "Estimate versus billed difference: unknown \u2014 no settlement evidence",
+  "Request 6e31b26b-db9a-4c95-b6c5-f895aa55d967",
+  "Request e7e9115e-5b5c-4eb6-8cc7-9ef32351a5e2",
+  "Back",
+  "Refresh",
+  "Close"
+]
