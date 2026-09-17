@@ -110,6 +110,464 @@ async fn finish_probe(mcp: &mut TestAppServer, call_id: &str) -> Result<usize> {
     .await?
 }
 
+// Append instead of overwriting so an automatic replay cannot look like one write.
+fn counted_permission_probe(path: &std::path::Path, call_id: &str) -> Result<String> {
+    app_test_support::create_shell_command_sse_response(
+        vec![
+            "python3".into(),
+            "-c".into(),
+            "import pathlib,sys; p=pathlib.Path(sys.argv[1]); p.open('a').write('executed\\n')"
+                .into(),
+            path.to_string_lossy().into_owned(),
+        ],
+        /*workdir*/ None,
+        Some(5000),
+        call_id,
+    )
+}
+
+fn assert_permission_effects(path: &std::path::Path, count: usize) -> Result<()> {
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => {
+            assert!(
+                count > 0,
+                "zero effects requires an absent marker: {}",
+                path.display()
+            );
+            bytes
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(error) => return Err(error.into()),
+    };
+    assert_eq!(bytes, b"executed\n".repeat(count), "{}", path.display());
+    Ok(())
+}
+
+async fn native_permission_fixture(
+    workspace: &std::path::Path,
+    script: Vec<String>,
+) -> Result<(TempDir, wiremock::MockServer, TestAppServer, String)> {
+    let server = create_mock_responses_server_sequence_unchecked(script).await;
+    let home = TempDir::new()?;
+    create_config_toml(home.path(), &server.uri())?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .build_initialized_with_timeout(Duration::from_secs(60))
+        .await?;
+    let request = mcp
+        .send_thread_start_request_with_auto_env(ThreadStartParams {
+            model: Some("mock-model".into()),
+            cwd: Some(workspace.to_string_lossy().into_owned()),
+            ..Default::default()
+        })
+        .await?;
+    let started: ThreadStartResponse =
+        timeout(DEFAULT_TIMEOUT, mcp.read_response(request)).await??;
+    Ok((home, server, mcp, started.thread.id))
+}
+
+async fn pending_permission_probe(mcp: &mut TestAppServer, call_id: &str) -> Result<RequestId> {
+    let request = timeout(DEFAULT_TIMEOUT, mcp.read_stream_until_request_message()).await??;
+    let codex_app_server_protocol::ServerRequest::CommandExecutionRequestApproval {
+        request_id,
+        params,
+    } = request
+    else {
+        anyhow::bail!("expected command approval for {call_id}")
+    };
+    assert_eq!(params.item_id, call_id);
+    Ok(request_id)
+}
+
+#[tokio::test]
+async fn thread_settings_f05_pending_decline_is_not_approval_or_replay() -> Result<()> {
+    pending_selection_case("decline", /*expected_old_effects*/ 0).await
+}
+
+#[tokio::test]
+async fn thread_settings_f05_pending_accept_runs_once_and_next_turn_is_full() -> Result<()> {
+    pending_selection_case("accept", /*expected_old_effects*/ 1).await
+}
+
+async fn pending_selection_case(decision: &str, expected_old_effects: usize) -> Result<()> {
+    use codex_app_server_protocol::AskForApproval;
+    let fixture = TempDir::new()?;
+    let old = fixture.path().join("old");
+    let new = fixture.path().join("new");
+    let (_home, server, mut mcp, thread) = native_permission_fixture(
+        fixture.path(),
+        vec![
+            counted_permission_probe(&old, "old")?,
+            create_final_assistant_message_sse_response("old done")?,
+            counted_permission_probe(&new, "new")?,
+            create_final_assistant_message_sse_response("new done")?,
+        ],
+    )
+    .await?;
+    confirm_permission(&mut mcp, &thread, AskForApproval::UnlessTrusted).await?;
+    assert!(!old.exists());
+    start_text_turn(&mut mcp, thread.clone()).await?;
+    let approval = pending_permission_probe(&mut mcp, "old").await?;
+    assert_permission_effects(&old, 0)?;
+    confirm_permission(&mut mcp, &thread, AskForApproval::Never).await?;
+    // A round trip after Applied establishes live backend progress while the
+    // original decision remains withheld. Any extra approvals remain buffered.
+    read_thread_with_turns(&mut mcp, &thread).await?;
+    assert_eq!(received_response_bodies(&server).await?.len(), 1);
+    assert_permission_effects(&old, 0)?;
+    mcp.send_response(approval, serde_json::json!({"decision": decision}))
+        .await?;
+    assert_eq!(
+        finish_probe(&mut mcp, "old").await?,
+        0,
+        "no reissued approval"
+    );
+    assert_permission_effects(&old, expected_old_effects)?;
+    assert_eq!(received_response_bodies(&server).await?.len(), 2);
+    start_text_turn(&mut mcp, thread).await?;
+    assert_eq!(finish_probe(&mut mcp, "new").await?, 0);
+    assert_permission_effects(&new, 1)?;
+    assert_permission_effects(&old, expected_old_effects)?;
+    assert_eq!(received_response_bodies(&server).await?.len(), 4);
+    Ok(())
+}
+
+fn permission_barrier(fixture: &std::path::Path) -> Result<String> {
+    app_test_support::create_shell_command_sse_response(
+        vec![
+            "python3".into(),
+            "-c".into(),
+            concat!(
+                "import pathlib,sys,time; p=pathlib.Path(sys.argv[1]); ",
+                "(p/'started').open('a').write('executed\\n'); deadline=time.monotonic()+50\n",
+                "while not (p/'release').exists() and time.monotonic()<deadline: time.sleep(.01)\n",
+                "assert (p/'release').exists(), 'fixture barrier expired'\n",
+                "(p/'finished').open('a').write('executed\\n')"
+            )
+            .into(),
+            fixture.to_string_lossy().into_owned(),
+        ],
+        Some(fixture),
+        Some(60000),
+        "in-flight",
+    )
+}
+
+async fn wait_permission_barrier(fixture: &std::path::Path) -> Result<()> {
+    timeout(DEFAULT_TIMEOUT, async {
+        while !fixture.join("started").exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .context("real operation did not start")?;
+    assert_permission_effects(&fixture.join("started"), 1)?;
+    assert_permission_effects(&fixture.join("finished"), 0)
+}
+
+#[tokio::test]
+async fn thread_settings_f06_f09_inflight_restricted_to_full_keeps_old_boundary() -> Result<()> {
+    inflight_permission_case(codex_app_server_protocol::AskForApproval::UnlessTrusted).await
+}
+
+#[tokio::test]
+async fn thread_settings_f06_f09_inflight_full_to_restricted_keeps_old_boundary() -> Result<()> {
+    inflight_permission_case(codex_app_server_protocol::AskForApproval::Never).await
+}
+
+async fn inflight_permission_case(
+    initial: codex_app_server_protocol::AskForApproval,
+) -> Result<()> {
+    use codex_app_server_protocol::AskForApproval;
+    let fixture = TempDir::new()?;
+    let continuation = fixture.path().join("continuation");
+    let next = fixture.path().join("next");
+    let (_home, server, mut mcp, thread) = native_permission_fixture(
+        fixture.path(),
+        vec![
+            permission_barrier(fixture.path())?,
+            counted_permission_probe(&continuation, "continuation")?,
+            create_final_assistant_message_sse_response("old done")?,
+            counted_permission_probe(&next, "next")?,
+            create_final_assistant_message_sse_response("new done")?,
+        ],
+    )
+    .await?;
+    confirm_permission(&mut mcp, &thread, initial).await?;
+    start_text_turn(&mut mcp, thread.clone()).await?;
+    if initial == AskForApproval::UnlessTrusted {
+        let approval = pending_permission_probe(&mut mcp, "in-flight").await?;
+        mcp.send_response(approval, serde_json::json!({"decision": "accept"}))
+            .await?;
+    }
+    wait_permission_barrier(fixture.path()).await?;
+    let selected = if initial == AskForApproval::Never {
+        AskForApproval::UnlessTrusted
+    } else {
+        AskForApproval::Never
+    };
+    confirm_permission(&mut mcp, &thread, selected).await?;
+    read_thread_with_turns(&mut mcp, &thread).await?;
+    assert_permission_effects(&fixture.path().join("started"), 1)?;
+    assert_permission_effects(&fixture.path().join("finished"), 0)?;
+    std::fs::write(fixture.path().join("release"), "continue")?;
+    let old_approvals = finish_probe(&mut mcp, "continuation").await?;
+    assert_eq!(
+        old_approvals,
+        usize::from(initial == AskForApproval::UnlessTrusted)
+    );
+    assert_permission_effects(&fixture.path().join("finished"), 1)?;
+    assert_permission_effects(&continuation, usize::from(initial == AskForApproval::Never))?;
+    start_text_turn(&mut mcp, thread).await?;
+    let next_approvals = finish_probe(&mut mcp, "next").await?;
+    assert_eq!(
+        next_approvals,
+        usize::from(selected == AskForApproval::UnlessTrusted)
+    );
+    assert_permission_effects(&next, usize::from(selected == AskForApproval::Never))?;
+    assert_permission_effects(&fixture.path().join("started"), 1)?;
+    assert_permission_effects(&fixture.path().join("finished"), 1)?;
+    assert_eq!(received_response_bodies(&server).await?.len(), 5);
+    Ok(())
+}
+
+#[tokio::test]
+async fn thread_settings_f07_rapid_conflicts_end_full() -> Result<()> {
+    rapid_permission_case(codex_app_server_protocol::AskForApproval::Never).await
+}
+
+#[tokio::test]
+async fn thread_settings_f07_rapid_conflicts_end_restricted() -> Result<()> {
+    rapid_permission_case(codex_app_server_protocol::AskForApproval::UnlessTrusted).await
+}
+
+async fn rapid_permission_case(
+    final_policy: codex_app_server_protocol::AskForApproval,
+) -> Result<()> {
+    use codex_app_server_protocol::AskForApproval;
+    let fixture = TempDir::new()?;
+    let probe = fixture.path().join("settled");
+    let (_home, server, mut mcp, thread) = native_permission_fixture(
+        fixture.path(),
+        vec![
+            permission_barrier(fixture.path())?,
+            create_final_assistant_message_sse_response("old done")?,
+            counted_permission_probe(&probe, "settled")?,
+            create_final_assistant_message_sse_response("new done")?,
+        ],
+    )
+    .await?;
+    confirm_permission(&mut mcp, &thread, final_policy).await?;
+    start_text_turn(&mut mcp, thread.clone()).await?;
+    if final_policy == AskForApproval::UnlessTrusted {
+        let approval = pending_permission_probe(&mut mcp, "in-flight").await?;
+        mcp.send_response(approval, serde_json::json!({"decision": "accept"}))
+            .await?;
+    }
+    wait_permission_barrier(fixture.path()).await?;
+    let opposite = if final_policy == AskForApproval::Never {
+        AskForApproval::UnlessTrusted
+    } else {
+        AskForApproval::Never
+    };
+    let mut requests = Vec::new();
+    // Send all three before reading any completion. The TUI refusal path is
+    // covered separately; this is the native protocol's ordered admission lane.
+    for policy in [final_policy, opposite, final_policy] {
+        requests.push(
+            mcp.send_thread_settings_update_request(ThreadSettingsUpdateParams {
+                thread_id: thread.clone(),
+                confirm: true,
+                approval_policy: Some(policy),
+                sandbox_policy: Some(if policy == AskForApproval::Never {
+                    SandboxPolicy::DangerFullAccess
+                } else {
+                    SandboxPolicy::ReadOnly {
+                        network_access: false,
+                    }
+                }),
+                ..Default::default()
+            })
+            .await?,
+        );
+    }
+    // Consume newest first; buffered older replies must not mutate the backend.
+    for request in requests.into_iter().rev() {
+        let result: ThreadSettingsUpdateResponse =
+            timeout(DEFAULT_TIMEOUT, mcp.read_response(request)).await??;
+        assert_eq!(
+            result,
+            ThreadSettingsUpdateResponse::Confirmed {
+                outcome: codex_app_server_protocol::ThreadSettingsUpdateOutcome::Applied,
+            }
+        );
+    }
+    assert_permission_effects(&fixture.path().join("started"), 1)?;
+    assert_permission_effects(&fixture.path().join("finished"), 0)?;
+    std::fs::write(fixture.path().join("release"), "continue")?;
+    assert_eq!(finish_probe(&mut mcp, "in-flight").await?, 0);
+    start_text_turn(&mut mcp, thread).await?;
+    assert_eq!(
+        finish_probe(&mut mcp, "settled").await?,
+        usize::from(final_policy == AskForApproval::UnlessTrusted)
+    );
+    assert_permission_effects(&probe, usize::from(final_policy == AskForApproval::Never))?;
+    assert_permission_effects(&fixture.path().join("started"), 1)?;
+    assert_permission_effects(&fixture.path().join("finished"), 1)?;
+    assert_eq!(received_response_bodies(&server).await?.len(), 4);
+    Ok(())
+}
+
+#[tokio::test]
+async fn thread_settings_f10_restart_effective_restricted_reports_probe_authority() -> Result<()> {
+    restart_settled_permission_case(codex_app_server_protocol::AskForApproval::UnlessTrusted).await
+}
+
+#[tokio::test]
+async fn thread_settings_f10_restart_effective_full_reports_probe_authority() -> Result<()> {
+    restart_settled_permission_case(codex_app_server_protocol::AskForApproval::Never).await
+}
+
+async fn restart_settled_permission_case(
+    initial: codex_app_server_protocol::AskForApproval,
+) -> Result<()> {
+    use codex_app_server_protocol::AskForApproval;
+    use codex_app_server_protocol::ThreadResumeParams;
+    use codex_app_server_protocol::ThreadResumeResponse;
+    let fixture = TempDir::new()?;
+    let workspace = fixture.path().join("workspace");
+    std::fs::create_dir(&workspace)?;
+    let old = fixture.path().join("old");
+    let next = fixture.path().join("resumed");
+    let (home, server, mut mcp, thread) = native_permission_fixture(
+        &workspace,
+        vec![
+            counted_permission_probe(&old, "old")?,
+            create_final_assistant_message_sse_response("completed before restart")?,
+        ],
+    )
+    .await?;
+    confirm_permission(&mut mcp, &thread, initial).await?;
+    start_text_turn(&mut mcp, thread.clone()).await?;
+    assert_eq!(
+        finish_probe(&mut mcp, "old").await?,
+        usize::from(initial != AskForApproval::Never)
+    );
+    assert_permission_effects(&old, usize::from(initial == AskForApproval::Never))?;
+    assert!(
+        timeout(DEFAULT_TIMEOUT, mcp.shutdown_gracefully())
+            .await??
+            .success()
+    );
+    assert_eq!(received_response_bodies(&server).await?.len(), 2);
+    server.reset().await;
+    responses::mount_sse_sequence(
+        &server,
+        vec![
+            counted_permission_probe(&next, "resumed")?,
+            create_final_assistant_message_sse_response("resumed done")?,
+        ],
+    )
+    .await;
+    let mut restarted = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .build_initialized_with_timeout(Duration::from_secs(60))
+        .await?;
+    let request = restarted
+        .send_thread_resume_request(ThreadResumeParams {
+            thread_id: thread.clone(),
+            ..Default::default()
+        })
+        .await?;
+    let resumed: ThreadResumeResponse =
+        timeout(DEFAULT_TIMEOUT, restarted.read_response(request)).await??;
+    assert_eq!(resumed.thread.id, thread);
+    // Test what resume actually reports, permitting a disclosed reset rather
+    // than requiring an invented persistence default. The probe is outside the
+    // workspace so a workspace reset cannot accidentally make it a safe write.
+    let permits_write = resumed.approval_policy == AskForApproval::Never
+        && resumed.sandbox == SandboxPolicy::DangerFullAccess;
+    assert_eq!(
+        received_response_bodies(&server).await?.len(),
+        0,
+        "no automatic replay"
+    );
+    start_text_turn(&mut restarted, thread).await?;
+    assert_eq!(
+        finish_probe(&mut restarted, "resumed").await?,
+        usize::from(resumed.approval_policy != AskForApproval::Never)
+    );
+    assert_permission_effects(&next, usize::from(permits_write))?;
+    assert_permission_effects(&old, usize::from(initial == AskForApproval::Never))?;
+    assert_eq!(received_response_bodies(&server).await?.len(), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn thread_settings_f10_restart_does_not_accept_pending_approval() -> Result<()> {
+    use codex_app_server_protocol::AskForApproval;
+    use codex_app_server_protocol::ThreadResumeParams;
+    use codex_app_server_protocol::ThreadResumeResponse;
+    let fixture = TempDir::new()?;
+    let old = fixture.path().join("old");
+    let next = fixture.path().join("resumed");
+    let (home, server, mut mcp, thread) =
+        native_permission_fixture(fixture.path(), vec![counted_permission_probe(&old, "old")?])
+            .await?;
+    confirm_permission(&mut mcp, &thread, AskForApproval::UnlessTrusted).await?;
+    start_text_turn(&mut mcp, thread.clone()).await?;
+    let _withheld = pending_permission_probe(&mut mcp, "old").await?;
+    assert_permission_effects(&old, 0)?;
+    assert!(
+        timeout(DEFAULT_TIMEOUT, mcp.shutdown_gracefully())
+            .await??
+            .success()
+    );
+    assert_permission_effects(&old, 0)?;
+    assert_eq!(received_response_bodies(&server).await?.len(), 1);
+    server.reset().await;
+    responses::mount_sse_sequence(
+        &server,
+        vec![
+            counted_permission_probe(&next, "resumed")?,
+            create_final_assistant_message_sse_response("resumed done")?,
+        ],
+    )
+    .await;
+    let mut restarted = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .build_initialized_with_timeout(Duration::from_secs(60))
+        .await?;
+    let request = restarted
+        .send_thread_resume_request(ThreadResumeParams {
+            thread_id: thread.clone(),
+            ..Default::default()
+        })
+        .await?;
+    let resumed: ThreadResumeResponse =
+        timeout(DEFAULT_TIMEOUT, restarted.read_response(request)).await??;
+    assert_eq!(resumed.thread.id, thread);
+    // No policy override is sent during resume: inspect the reported authority
+    // before testing it, without inventing a cross-process persistence default.
+    assert_ne!(
+        resumed.approval_policy,
+        AskForApproval::Never,
+        "recovery from an unresolved restricted approval must not silently increase authority"
+    );
+    assert_permission_effects(&old, 0)?;
+    assert_eq!(
+        received_response_bodies(&server).await?.len(),
+        0,
+        "no automatic replay"
+    );
+    start_text_turn(&mut restarted, thread).await?;
+    assert_eq!(finish_probe(&mut restarted, "resumed").await?, 1);
+    assert_permission_effects(&next, 0)?;
+    assert_permission_effects(&old, 0)?;
+    assert_eq!(received_response_bodies(&server).await?.len(), 2);
+    Ok(())
+}
+
 #[tokio::test]
 async fn thread_settings_confirmation_f04_restricts_work_steered_after_applied() -> Result<()> {
     use codex_app_server_protocol::AskForApproval;

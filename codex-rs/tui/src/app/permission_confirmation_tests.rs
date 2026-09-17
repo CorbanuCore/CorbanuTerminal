@@ -105,6 +105,110 @@ async fn permission_confirmation_native_requests_carry_effective_defaults() {
 }
 
 #[tokio::test]
+async fn permission_confirmation_f07_conflicts_are_refused_and_old_completion_cannot_win() {
+    Box::pin(async {
+        for order in [
+            [":danger-full-access", ":read-only", ":danger-full-access"],
+            [":read-only", ":danger-full-access", ":read-only"],
+        ] {
+            let (mut app, mut events, mut ops) =
+                super::super::tests::make_test_app_with_channels().await;
+            let mut server = crate::start_embedded_app_server_for_picker(&app.config)
+                .await
+                .unwrap();
+            let started = server.start_thread(&app.config).await.unwrap();
+            let thread = started.session.thread_id;
+            app.active_thread_id = Some(thread);
+            app.chat_widget.handle_thread_session(started.session);
+            // Establish the command-channel baseline before any selection.
+            // Session initialization may request ordinary metadata such as skills.
+            let startup_ops = std::iter::from_fn(|| ops.try_recv().ok()).collect::<Vec<_>>();
+            eprintln!("F07 pre-selection startup commands: {startup_ops:?}");
+            assert!(startup_ops.iter().all(|op| matches!(op,
+                crate::app_command::AppCommand::ListSkills { .. }
+            )), "unexpected pre-selection command: {startup_ops:?}");
+            let mut previous = None;
+            for profile in order {
+                while events.try_recv().is_ok() {}
+                let requested = ThreadSettingsUpdateParams {
+                    thread_id: thread.to_string(),
+                    permissions: Some(profile.into()),
+                    ..Default::default()
+                };
+                app.request_permission_confirmation(
+                    &mut server, requested.clone(), profile.into(), None,
+                );
+                let pending = app.pending_permission_confirmation.clone().unwrap();
+                let before = RuntimePermissionProfileOverride::from_config(&app.fresh_session_config());
+                if let Some(old) = previous {
+                    app.finish_permission_confirmation(old, PermissionConfirmationResult::Applied);
+                    assert_eq!(app.pending_permission_confirmation, Some(pending.clone()));
+                    assert_eq!(RuntimePermissionProfileOverride::from_config(&app.fresh_session_config()), before);
+                }
+                let conflicting = if profile == ":read-only" {
+                    ":danger-full-access"
+                } else {
+                    ":read-only"
+                };
+                app.request_permission_confirmation(
+                    &mut server,
+                    ThreadSettingsUpdateParams {
+                        permissions: Some(conflicting.into()),
+                        ..requested
+                    },
+                    "refused-conflict".into(),
+                    None,
+                );
+                assert_eq!(app.pending_permission_confirmation, Some(pending.clone()));
+                let mut messages = Vec::new();
+                tokio::time::timeout(std::time::Duration::from_secs(20), async {
+                    while app.pending_permission_confirmation.is_some() {
+                        tokio::select! {
+                            event = events.recv() => match event {
+                                Some(AppEvent::PermissionConfirmationCompleted { selection_id, result }) => {
+                                    assert!(matches!(result, PermissionConfirmationResult::Applied));
+                                    app.finish_permission_confirmation(selection_id, result);
+                                }
+                                Some(AppEvent::InsertHistoryCell(cell)) => {
+                                    messages.push(cell.display_lines(120).iter().map(ToString::to_string).collect::<Vec<_>>().join("\n"));
+                                }
+                                _ => {}
+                            },
+                            event = server.next_event() => {
+                                if let Some(codex_app_server_client::AppServerEvent::ServerNotification(notification)) = event {
+                                    app.handle_thread_event_now(ThreadBufferedEvent::Notification(notification));
+                                }
+                            }
+                        }
+                    }
+                }).await.unwrap();
+                while let Ok(event) = events.try_recv() {
+                    if let AppEvent::InsertHistoryCell(cell) = event {
+                        messages.push(cell.display_lines(120).iter().map(ToString::to_string).collect::<Vec<_>>().join("\n"));
+                    }
+                }
+                let messages = messages.join("\n");
+                assert!(messages.contains("A permission selection is still pending"));
+                assert!(!messages.contains("Permissions requested: refused-conflict"));
+                assert!(messages.contains(&format!("Permissions confirmed for new turns: {profile}")));
+                let settled = RuntimePermissionProfileOverride::from_config(&app.fresh_session_config());
+                if let Some(old) = previous {
+                    app.finish_permission_confirmation(old, PermissionConfirmationResult::Applied);
+                    assert!(app.pending_permission_confirmation.is_none());
+                    assert_eq!(RuntimePermissionProfileOverride::from_config(&app.fresh_session_config()), settled);
+                    assert!(events.try_recv().is_err(), "obsolete completion must not render another success");
+                }
+                assert_eq!(app.fresh_session_config().permissions.active_permission_profile().unwrap().id, profile);
+                let unexpected = ops.try_recv().ok();
+                assert!(unexpected.is_none(), "selection must not approve, interrupt or replay: {unexpected:?}");
+                previous = Some(pending.selection_id);
+            }
+            server.shutdown().await.unwrap();
+        }
+    }).await;
+}
+
+#[tokio::test]
 async fn permission_confirmation_hint_matches_retained_steer_and_latest_submission() {
     use crate::app_command::AppCommand;
     use codex_app_server_client::TypedRequestError;
