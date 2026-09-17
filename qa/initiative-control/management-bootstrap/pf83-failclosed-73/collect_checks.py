@@ -30,7 +30,6 @@ for name, digest in prior.items():
 record = dict(lanes=lanes, raw_log_sha256=logs, prior_raw_logs_match_recorded_digests=True,
               prerequisites_exit_code=json.loads((HERE / "prerequisites-command.json").read_text())["exit_code"],
               guest_contact=False, product_staged=False, functional_cases_executed=0,
-              guard_controls=json.loads((HERE / "guard-controls.json").read_text())["summary"],
-              python_syntax_files=9, bash_syntax_blocks=2)
+              guard_controls=json.loads((HERE / "guard-controls.json").read_text())["summary"])
 (HERE / "checks.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
 print(json.dumps(record, indent=2, sort_keys=True))

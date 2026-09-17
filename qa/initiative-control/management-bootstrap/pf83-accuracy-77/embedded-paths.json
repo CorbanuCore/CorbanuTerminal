@@ -1,0 +1,50 @@
+{
+  "binary_execution": false,
+  "files": [
+    {
+      "binary": "codex-code-mode-host",
+      "distinct_matching_path_strings": 618,
+      "examples": {
+        "account_toolchain": "/Users/Neo/.rustup/toolchains/1.95.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/lib/libcompiler_builtins-da5ac53f4a183f75.rlib",
+        "build_object": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/target/release/deps/codex_code_mode_host-7d9822e4a2dbd826.alloc-27f2e54513492a5b.alloc.1519c0c6343f008f-cgu.0.rcgu.o.rcgu.o",
+        "dependency_name_version": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/anstream-0.6.21/src/adapter/strip.rs",
+        "internal_source_filename": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/source/codex-rs/code-mode-host/src/lib.rs/@/"
+      },
+      "sha256": "ae25bd69782ecf167a2588d0b8368b53b9bae68d9ec2bed200f55e6598ef810c"
+    },
+    {
+      "binary": "corbanu",
+      "distinct_matching_path_strings": 4667,
+      "examples": {
+        "account_toolchain": "/Users/Neo/.rustup/toolchains/1.95.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/lib/libcompiler_builtins-da5ac53f4a183f75.rlib",
+        "build_object": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/target/release/deps/96ee75fa11f3eeb-ec99cc.codex_image_generation_extension-b8c4da7658c21a15.codex_image_generation_extension.a97217a9ef084ea5-cgu.0.rcgu.o.rcgu.o",
+        "dependency_name_version": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/addr2line-0.25.1/src/function.rs",
+        "internal_source_filename": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/source/codex-rs/agent-graph-store/src/lib.rs/@/"
+      },
+      "sha256": "483031eee7d1b4f978aa782b89164e4072f1533f2eea72a02e1428857254d6de"
+    },
+    {
+      "binary": "corbanu-acp",
+      "distinct_matching_path_strings": 10,
+      "examples": {
+        "account_toolchain": "/Users/Neo/.rustup/toolchains/1.95.0-aarch64-apple-darwin/lib/rustlib/src/rust/library/alloc/src/collections/btree/navigate.rs",
+        "build_object": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/target/release/deps/corbanu_acp-c81ea2df68f25c9e.alloc-27f2e54513492a5b.alloc.1519c0c6343f008f-cgu.0.rcgu.o.rcgu.o",
+        "dependency_name_version": null,
+        "internal_source_filename": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/source/codex-rs/cli/src/corbanu_acp_main.rs/@/"
+      },
+      "sha256": "36a35e03f3816bb067867eb46933da18c25662a2be81cd6bb138248b687ccea5"
+    },
+    {
+      "binary": "corbanu-walletd",
+      "distinct_matching_path_strings": 753,
+      "examples": {
+        "account_toolchain": "/Users/Neo/.rustup/toolchains/1.95.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/lib/libcompiler_builtins-da5ac53f4a183f75.rlib",
+        "build_object": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/target/release/deps/162bcb80eb8d9118-3527059b9.solana_compute_budget_interface-48cae730f95d1cff.solana_compute_budget_interface.a350525d9bef93f-cgu.0.rcgu.o.rcgu.o",
+        "dependency_name_version": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/anstream-0.6.21/src/adapter/strip.rs",
+        "internal_source_filename": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/source/codex-rs/keyring-store/src/lib.rs/@/"
+      },
+      "sha256": "3ec7539bcb6bdb0543e4c933f059a624b411dc5cc3895c730ed101a19e19066d"
+    }
+  ],
+  "method": "Read-only ASCII absolute build-path regex scan, not a secrets audit or complete metadata inventory"
+}
