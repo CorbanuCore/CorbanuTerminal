@@ -12231,6 +12231,116 @@ async fn deferred_input_does_not_interrupt_turn_local_sleep() {
 }
 
 #[tokio::test]
+async fn deferred_mail_does_not_interrupt_turn_local_sleep() {
+    for trigger_turn in [false, true] {
+        let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+        sess.spawn_task(
+            Arc::clone(&tc),
+            vec![],
+            NeverEndingTask {
+                kind: TaskKind::Regular,
+                listen_to_cancellation_token: true,
+            },
+        )
+        .await;
+        let turn_state = Arc::clone(&sess.active_turn.lock().await.as_ref().unwrap().turn_state);
+        let (mut activity_rx, activity) =
+            sess.input_queue.subscribe_activity(Some(&turn_state)).await;
+        assert_eq!(activity, None);
+        sess.update_settings(SessionSettingsUpdate {
+            approval_policy: Some(AskForApproval::UnlessTrusted),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        let mail = InterAgentCommunication::new(
+            AgentPath::root(),
+            AgentPath::root(),
+            vec![],
+            "deferred peer work".into(),
+            trigger_turn,
+        );
+        sess.input_queue
+            .enqueue_mailbox_communication_for_session(&sess, mail.clone(), None)
+            .await;
+        // Restoring authority must not release mail already bound to the next turn.
+        sess.update_settings(SessionSettingsUpdate {
+            approval_policy: Some(tc.approval_policy.value()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        assert!(!activity_rx.has_changed().unwrap());
+        assert_eq!(
+            sess.input_queue
+                .subscribe_activity(Some(&turn_state))
+                .await
+                .1,
+            None
+        );
+        assert_eq!(
+            sess.input_queue.subscribe_activity(None).await.1,
+            Some(InputQueueActivity::Mailbox)
+        );
+        let next_turn_state = Mutex::new(crate::state::TurnState::default());
+        assert_eq!(
+            sess.input_queue
+                .subscribe_activity(Some(&next_turn_state))
+                .await
+                .1,
+            Some(InputQueueActivity::Mailbox)
+        );
+        for consumable in [false, true] {
+            if consumable {
+                sess.input_queue
+                    .enqueue_mailbox_communication_for_session(&sess, mail.clone(), None)
+                    .await;
+                activity_rx.changed().await.unwrap();
+                assert_eq!(
+                    *activity_rx.borrow_and_update(),
+                    InputQueueActivity::Mailbox
+                );
+            }
+            let output = crate::tools::handlers::SleepHandler
+                .handle(ToolInvocation {
+                    session: Arc::clone(&sess),
+                    turn: Arc::clone(&tc),
+                    step_context: StepContext::for_test(Arc::clone(&tc)),
+                    cancellation_token: CancellationToken::new(),
+                    tracker: Arc::new(Mutex::new(TurnDiffTracker::new())),
+                    call_id: format!("mail-sleep-{trigger_turn}-{consumable}"),
+                    tool_name: codex_tools::ToolName::namespaced("clock", "sleep"),
+                    source: crate::tools::context::ToolCallSource::Direct,
+                    payload: ToolPayload::Function {
+                        arguments: json!({"duration_ms": 10}).to_string(),
+                    },
+                })
+                .await
+                .unwrap();
+            let expected = if consumable {
+                "Sleep interrupted by new input."
+            } else {
+                "Sleep completed."
+            };
+            assert!(
+                output.log_preview().contains(expected),
+                "{}",
+                output.log_preview()
+            );
+        }
+        assert_eq!(
+            sess.input_queue.get_pending_input(&sess.active_turn).await,
+            (vec![TurnInput::InterAgentCommunication(mail.clone())], None)
+        );
+        sess.abort_all_tasks(TurnAbortReason::Replaced).await;
+        assert_eq!(
+            sess.input_queue.drain_mailbox_input_items().await.0,
+            vec![TurnInput::InterAgentCommunication(mail)]
+        );
+    }
+}
+
+#[tokio::test]
 async fn abort_does_not_advance_unrelated_queue_only_mail() {
     let (sess, tc, _rx) = make_session_and_context_with_rx().await;
     sess.spawn_task(

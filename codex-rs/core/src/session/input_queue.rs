@@ -49,6 +49,7 @@ struct PendingMailboxCommunication {
     parent_turn_id: Option<String>,
     ready_for_admitted_turn: bool,
     deferred_for_turn: Option<String>,
+    deferred_turn_state: Option<std::sync::Weak<Mutex<TurnState>>>,
 }
 
 impl InputQueue {
@@ -91,7 +92,13 @@ impl InputQueue {
             || (turn_state.is_none() && !self.interrupted_deferred_input.lock().await.is_empty());
         let pending_activity = if has_pending_steer {
             Some(InputQueueActivity::Steer)
-        } else if self.has_pending_mailbox_items().await {
+        } else if self.mailbox_pending_mails.lock().await.iter().any(|mail| {
+            !turn_state.is_some_and(|turn_state| {
+                mail.deferred_turn_state
+                    .as_ref()
+                    .is_some_and(|deferred| std::ptr::eq(deferred.as_ptr(), turn_state))
+            })
+        }) {
             Some(InputQueueActivity::Mailbox)
         } else {
             None
@@ -111,6 +118,7 @@ impl InputQueue {
             .push_back(PendingMailboxCommunication {
                 ready_for_admitted_turn: communication.trigger_turn,
                 deferred_for_turn: None,
+                deferred_turn_state: None,
                 communication,
                 parent_turn_id,
             });
@@ -142,6 +150,11 @@ impl InputQueue {
                 !Session::authorization_matches(&state.session_configuration, &task.turn_context)
             })
             .map(|task| task.turn_context.sub_id.clone());
+        let notify_waiters = deferred_for_turn.is_none();
+        let deferred_turn_state = active_turn
+            .as_ref()
+            .filter(|_| deferred_for_turn.is_some())
+            .map(|turn| Arc::downgrade(&turn.turn_state));
         let ready_for_admitted_turn = communication.trigger_turn
             || active_turn
                 .as_ref()
@@ -155,10 +168,14 @@ impl InputQueue {
                 parent_turn_id,
                 ready_for_admitted_turn,
                 deferred_for_turn,
+                deferred_turn_state,
             });
         drop(state);
         drop(active_turn);
-        self.activity_tx.send_replace(InputQueueActivity::Mailbox);
+        // Deferred mail cannot interrupt a waiter in the turn that cannot consume it.
+        if notify_waiters {
+            self.activity_tx.send_replace(InputQueueActivity::Mailbox);
+        }
     }
 
     pub(crate) async fn has_pending_mailbox_items(&self) -> bool {
