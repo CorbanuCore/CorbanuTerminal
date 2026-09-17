@@ -322,6 +322,99 @@ class OwnerDaemonTests(unittest.TestCase):
         self.assertEqual([], self.sql("SELECT * FROM operations"))
 
 
+class ActivationVisibilityTests(unittest.TestCase):
+    setUp = OwnerDaemonTests.setUp
+    tearDown = OwnerDaemonTests.tearDown
+    child = OwnerDaemonTests.child
+    tick = OwnerDaemonTests.tick
+
+    def manual_claim(self):
+        from test_coordinator import CoordinatorTests
+        self.c.clock = lambda: 1000.0
+        CoordinatorTests.prepared(self, "manual")
+        return self.c.claim("manual")
+
+    def test_status_lists_in_flight_and_overdue_with_exact_watchdog_effects(self):
+        with self.c.mutation("fixture", {}) as (_, state):
+            for index, status in enumerate(("prepared", "dispatching", "dispatched",
+                                             "running", "dispatch_uncertain", "returned",
+                                             "accepted", "failed", "cancelled")):
+                state["actions"][status] = dict(id=status, status=status, deadline=999.0,
+                                               stall_reported=status == "running")
+            state["actions"]["boundary"] = dict(id="boundary", status="dispatching", deadline=1000.0)
+            state["actions"]["future"] = dict(id="future", status="running", deadline=1001.0)
+            for index, action in enumerate(state["actions"].values()):
+                action.update(workstream="delivery", sequence=index)
+            state["manager"] = dict(id="manual-manager", deadline=998.0)
+        before = {p.name: p.read_bytes() for p in self.root.iterdir() if p.is_file()}
+        with patch.object(owner.time, "time", return_value=1000.0):
+            status = owner.activation_status(self.config_path)
+        impact = status["coordinator"]
+        self.assertEqual(1000.0, impact["observed_at"])
+        self.assertEqual(self.c.snapshot()["revision"], impact["revision"])
+        rows = {row["id"]: row for row in impact["in_flight"]}
+        self.assertEqual({"dispatching", "dispatched", "running", "dispatch_uncertain",
+                          "returned", "boundary", "future"}, set(rows))
+        self.assertEqual(999.0, rows["dispatching"]["deadline"])
+        self.assertEqual("dispatch_uncertain", rows["dispatching"]["watchdog_status"])
+        self.assertEqual("dispatched", rows["dispatched"]["watchdog_status"])
+        self.assertTrue(rows["dispatching"]["watchdog_will_report"])
+        self.assertFalse(rows["running"]["watchdog_will_report"])
+        self.assertFalse(rows["dispatch_uncertain"]["watchdog_will_report"])
+        self.assertFalse(rows["returned"]["watchdog_will_report"])
+        self.assertEqual({"dispatching", "dispatched", "running", "dispatch_uncertain", "returned"},
+                         {row["id"] for row in impact["overdue"]})
+        self.assertFalse(rows["boundary"]["overdue"])
+        self.assertFalse(rows["future"]["overdue"])
+        self.assertEqual(998.0, impact["manager"]["deadline"])
+        self.assertTrue(impact["manager"]["watchdog_will_report"])
+        self.assertIn("fixture-only", impact["warning"])
+        self.assertIn("dispatch_uncertain", impact["warning"])
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir() if p.is_file()})
+
+    def test_empty_status_still_warns_about_future_shared_state_mutation(self):
+        result = owner.activation_status(self.config_path)["coordinator"]
+        self.assertEqual([], result["in_flight"])
+        self.assertEqual([], result["overdue"])
+        self.assertIsNone(result["manager"])
+        self.assertIn("not read-only", result["warning"])
+        self.assertIn("snapshot", result["warning"])
+
+    def test_manual_overdue_claim_does_not_refuse_arm_and_paused_tick_matches_warning(self):
+        claimed = self.manual_claim()
+        self.c.set_enabled(False, {"fixture_only": True})
+        before = self.c.snapshot()
+        result = owner.arm_owner(self.config_path, self.authority)
+        self.assertEqual("ARMED", result["state"])
+        row = result["coordinator"]["overdue"][0]
+        self.assertEqual(("manual", claimed["deadline"], "dispatch_uncertain"),
+                         (row["id"], row["deadline"], row["watchdog_status"]))
+        self.assertEqual(before, self.c.snapshot())
+        self.tick()
+        action = self.c.snapshot()["actions"]["manual"]
+        self.assertEqual("dispatch_uncertain", action["status"])
+        self.assertTrue(action["stall_reported"])
+
+    def test_cli_status_discloses_manual_deadline_and_help_warns_before_arming(self):
+        claimed = self.manual_claim()
+        result = self.child(None, "--activation-status", "--config", str(self.config_path))
+        self.assertEqual(0, result.returncode, result.stderr)
+        row = json.loads(result.stdout)["coordinator"]["overdue"][0]
+        self.assertEqual("manual", row["id"])
+        self.assertEqual(claimed["deadline"], row["deadline"])
+        help_text = " ".join(self.child(None, "--help").stdout.split())
+        self.assertIn("not read-only", help_text)
+        self.assertIn("--activation-status", help_text)
+
+    def test_status_does_not_recover_coordinator_journal(self):
+        journal = self.root / "coordinator.sqlite3-journal"
+        f.write_file(journal, b"fixture hot-journal marker")
+        before = {p.name: p.read_bytes() for p in self.root.iterdir() if p.is_file()}
+        with self.assertRaisesRegex(f.LaunchError, "coordinator_recovery_required"):
+            owner.activation_status(self.config_path)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir() if p.is_file()})
+
+
 class ArmingTests(unittest.TestCase):
     setUp = OwnerDaemonTests.setUp
     tearDown = OwnerDaemonTests.tearDown
@@ -435,7 +528,9 @@ class ArmingTests(unittest.TestCase):
         before = self.c.snapshot()
         result = owner.arm_owner(self.config_path, self.authority)
         self.assertEqual(dict(state="ARMED", generation=1,
-                              activation_digest=digest(self.authority)), result)
+                              activation_digest=digest(self.authority)),
+                         {key: value for key, value in result.items() if key != "coordinator"})
+        self.assertEqual([], result["coordinator"]["in_flight"])
         self.assertEqual(before, self.c.snapshot())
         self.assertEqual(self.authority, owner.load(self.root / "activation.json"))
         self.assertEqual("ACTIVE", self.tick()["state"])

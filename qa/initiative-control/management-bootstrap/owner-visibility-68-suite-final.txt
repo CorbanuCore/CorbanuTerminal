@@ -1,0 +1,47 @@
+............................................................................................................................................Refresh complete; live writeback disabled
+Verified export activated; private server refreshed; timer activation unchanged
+.....................................................................Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+....................../opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 429: 'Too Many Requests'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+.....................................................................................................................................................................................usage: python -m unittest [-h]
+
+Fixed guest runtime. Requires parent-enforced containment; provides no host
+isolation.
+
+options:
+  -h, --help  show this help message and exit
+Synthetic retained evidence: /private/tmp/isolated-transport-tests-oq7vcykz
+..................................................................................................................................................................................................................................................................................{"reason":"TimeoutExpired","state":"ERROR"}
+{"reason":"TimeoutExpired","state":"ERROR"}
+{"fixture_only":true,"manager":"empty","routing":"deferred","state":"ACTIVE","states":["RECOVERING","READY","ACTIVE"]}
+Refresh complete; live writeback disabled
+...................../opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 500: 'Internal Server Error'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+............/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 429: 'Too Many Requests'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+..................................................................
+----------------------------------------------------------------------
+Ran 785 tests in 440.148s
+
+OK
+Verified publication: manager @ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa · bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb · 2026-09-17T11:32:00+00:00
+Verified publication: manager @ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa · bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb · 2026-09-17T11:32:00+00:00

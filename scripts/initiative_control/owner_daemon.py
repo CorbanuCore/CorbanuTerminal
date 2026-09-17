@@ -193,6 +193,46 @@ def activation_store(config_path):
             yield root, db, meta
 
 
+def coordinator_activation_impact(root):
+    """Read one coordinator snapshot without running/recovering its watchdog."""
+    coordinator = ExistingCoordinator(root)
+    f.require(not any(Path(str(coordinator.path) + suffix).exists()
+                      for suffix in ("-journal", "-wal", "-shm")), "coordinator_recovery_required")
+    with coordinator.connection(readonly=True) as db:
+        row = db.execute("SELECT body FROM state WHERE id=1").fetchone()
+        f.require(row is not None, "uninitialized_state")
+        snapshot = f.strict_json(row[0])
+    observed_at = time.time()
+    in_flight = []
+    for action in sorted(snapshot["actions"].values(), key=lambda value: value["id"]):
+        if action["status"] not in {"dispatching", "dispatched", "running",
+                                    "dispatch_uncertain", "returned"}:
+            continue
+        overdue = action["deadline"] < observed_at
+        will_report = (overdue and not action.get("stall_reported", False)
+                       and action["status"] in {"dispatching", "dispatched", "running"})
+        in_flight.append(dict(id=action["id"], status=action["status"], deadline=action["deadline"],
+                              overdue=overdue, stall_reported=bool(action.get("stall_reported")),
+                              watchdog_will_report=will_report,
+                              watchdog_status="dispatch_uncertain" if will_report and
+                              action["status"] == "dispatching" else action["status"]))
+    manager = snapshot["manager"]
+    if manager is not None:
+        overdue = manager["deadline"] < observed_at
+        manager = dict(id=manager["id"], deadline=manager["deadline"], overdue=overdue,
+                       stall_reported=bool(manager.get("stall_reported")),
+                       watchdog_will_report=overdue and not manager.get("stall_reported", False))
+    return dict(observed_at=observed_at, revision=snapshot["revision"], enabled=snapshot["enabled"],
+                in_flight=in_flight, overdue=[row for row in in_flight if row["overdue"]],
+                manager=manager,
+                warning="Armed fixture-only operation is not read-only: admitted ticks can mutate the "
+                "shared coordinator even when dispatch is paused or a manager owns it. Watchdog marks "
+                "unreported overdue dispatching/dispatched/running actions stall_reported, changes "
+                "dispatching to dispatch_uncertain, and appends stall events; it also reports overdue "
+                "manager runs. Fixture processing can append events. This snapshot is advisory, not "
+                "an ownership gate or reservation; claims and deadlines can change before a tick.")
+
+
 def activation_status(config_path):
     with activation_store(config_path) as (root, _, meta):
         config = load(config_path)
@@ -200,7 +240,8 @@ def activation_status(config_path):
                     next_generation=meta["control_generation"] + 1,
                     config_digest=digest(config), package_digest=package_digest(),
                     scope="tmux-workers" if "transport" in config else "fixture-only",
-                    recovery_required=activation_pending(root), stored=meta)
+                    recovery_required=activation_pending(root), stored=meta,
+                    coordinator=coordinator_activation_impact(root))
 
 
 def arm_owner(config_path, authority):
@@ -222,6 +263,7 @@ def arm_owner(config_path, authority):
         f.require(meta["requested_mode"] == "off", "owner_already_armed")
         if os.path.lexists(root / "activation.json"):
             private_file(root / "activation.json")
+        impact = coordinator_activation_impact(root)
         f.write_json(root / "activation-transaction.json",
                      dict(authority=authority, previous_generation=meta["control_generation"]))
         f.write_json(root / "activation.json", authority)
@@ -231,7 +273,8 @@ def arm_owner(config_path, authority):
                     authority["revision"], digest(authority)))
         db.commit()
         remove_activation_intent(root)
-        return dict(state="ARMED", generation=authority["generation"], activation_digest=digest(authority))
+        return dict(state="ARMED", generation=authority["generation"], activation_digest=digest(authority),
+                    coordinator=impact)
 
 
 def disarm_owner(config_path, generation):
@@ -783,9 +826,12 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_mutually_exclusive_group()
     commands.add_argument("--run", action="store_true")
-    commands.add_argument("--arm", action="store_true")
+    commands.add_argument("--arm", action="store_true",
+                          help="arm shared coordinator mutation; fixture-only is not read-only; "
+                          "inspect --activation-status before arming")
     commands.add_argument("--disarm", action="store_true")
-    commands.add_argument("--activation-status", action="store_true")
+    commands.add_argument("--activation-status", action="store_true",
+                          help="inspect in-flight/overdue deadlines and watchdog effects without arming")
     parser.add_argument("--authority", type=Path)
     parser.add_argument("--generation", type=int)
     parser.add_argument("--config", type=Path)
