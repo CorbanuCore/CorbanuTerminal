@@ -2,6 +2,7 @@
 import gzip
 import hashlib
 import json
+import re
 from pathlib import Path
 import subprocess
 
@@ -27,14 +28,22 @@ for name in ("prerequisites", "core-default", "core-feature", "tui"):
     assert hashlib.sha256(data).hexdigest() == row["log_sha256"]
     assert row["base"] == base and row["exit"] == 0
     if name != "prerequisites":
-        assert row["run"] == row["passed"] > 0
+        summaries = re.findall(r"^\s*Summary .*?(\d+) tests? run: (.+)$", data.decode(), re.M)
+        assert len(summaries) == 1
+        run, details = summaries[0]
+        passed = re.search(r"(\d+) passed", details)
+        assert passed is not None
+        assert row["run"] == int(run) == row["passed"] == int(passed[1]) > 0
         assert not row["failure_lines"]
         assert b"Test isolation: disposable profile; native keyring disabled (debug lane)" in data
     lanes.append(row)
-assert [r["run"] for r in lanes[1:]] == [124, 127, 91]
-write("test-results.json", dict(lanes=lanes, total_executions=342,
+total_executions = sum(row["run"] for row in lanes[1:])
+write("test-results.json", dict(lanes=lanes, total_executions=total_executions,
                                failure_names=[], unique_test_count_claimed=False))
 semantic = load(here / "controls-04/semantic-results.json")
+plan = load(here / "controls-04/plan.json")
+assert [row["mutation"] for row in semantic["controls"]] == plan
+mutation_count = len(semantic["controls"])
 coverage = {}
 for index, row in enumerate(semantic["controls"]):
     key = row["mutation"]["check"]
@@ -45,7 +54,7 @@ for index, row in enumerate(semantic["controls"]):
     coverage.setdefault(key, []).append(index)
 assert len(coverage) == semantic["checks"] == 147
 write("monetary-coverage.json", dict(
-    checks=147, mutations=159, all_reached_and_failed_for_named_reason=True,
+    checks=len(coverage), mutations=mutation_count, all_reached_and_failed_for_named_reason=True,
     plan="controls-04/plan.json.gz", raw_results="controls-04/semantic-results.json.gz",
     check_to_zero_based_mutation_indices=coverage))
 prior = here.parent / "acct-readers-61"
@@ -58,7 +67,7 @@ for file in sorted(source.glob("*.txt.gz")):
     assert digest == load(prior / "viewport-content-digests.json")[file.name]
     bindings.append(dict(file=file.name, content_sha256=digest))
 assert len(bindings) == 45
-write("viewport-provenance.json", dict(base=base, unchanged_capture_count=45, bindings=bindings))
+write("viewport-provenance.json", dict(base=base, unchanged_capture_count=len(bindings), bindings=bindings))
 # Only direct evidence files in run directories, never fixture symlinks.
 # Preserve the original bytes inside gzip; do not revise historical attempts.
 for directory in sorted(here.iterdir()):
@@ -72,5 +81,5 @@ for directory in sorted(here.iterdir()):
                     target.write_bytes(gzip.compress(data, mtime=0))
                     assert gzip.decompress(target.read_bytes()) == data
                     file.unlink()
-print(json.dumps(dict(rust=342, monetary_checks=147, semantic_mutations=159,
-                      viewport_bindings=45)))
+print(json.dumps(dict(rust=total_executions, monetary_checks=len(coverage),
+                      semantic_mutations=mutation_count, viewport_bindings=len(bindings))))
