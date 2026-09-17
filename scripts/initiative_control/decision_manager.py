@@ -397,10 +397,12 @@ class ManagedListener:
     def __init__(self, store, binding, *, live=False):
         self.store, self.binding, self.live = store, a.identity(binding), live is True
         self.process, self.control, self.guard = None, None, None
+        self.failed_start_process = None
         self.operation = threading.RLock()
 
     def start(self, *, seconds=60, ongoing=False, restart_pin=None):
         with self.operation:
+            self.failed_start_process = None
             d.require(self.live and self.guard is None and (self.process is None or self.process.poll() is not None))
             d.require(type(ongoing) is bool and type(seconds) in (int, float) and 0 < seconds <= 60)
             self.stop()
@@ -421,6 +423,7 @@ class ManagedListener:
                 d.require(channel.read() == dict(type="runtime-owned"))  # Not connected/qualified/stopped.
                 return dict(state="starting")
             except BaseException:
+                self.failed_start_process = self.process  # Preserve startup death evidence across reaping.
                 self.stop()  # Retain the handle if actual death cannot be proved.
                 raise
             finally:
@@ -549,7 +552,15 @@ class ListenerSupervisor:
 
     def start(self, *, seconds, ongoing):
         d.require(self.flush_event())
-        result = self.manager.start(seconds=seconds, ongoing=ongoing)
+        try:
+            result = self.manager.start(seconds=seconds, ongoing=ongoing)
+        except BaseException:
+            if self.manager.failed_start_process is not None:
+                self.options, self.retry_at, self.pin = None, None, None
+                self.failed_start_process = self.manager.failed_start_process
+                if self.failed_start_process.poll() is not None:
+                    self.observe_exit(self.failed_start_process)
+            raise
         self.options = dict(seconds=seconds, ongoing=ongoing)
         self.deadline = None if ongoing else self.clock() + seconds
         self.restarts, self.retry_at, self.pin = 0, None, None
@@ -629,6 +640,24 @@ class ListenerSupervisor:
             value["state"] = "held"
         return validate_status(value)
 
+    def observe_exit(self, process):
+        """Retain only a proved return code; never exception text or child stderr."""
+        code = process.poll()
+        d.require(code is not None)
+        if self.exited_process is process:
+            return
+        self.pin = None
+        event = (("restart-refused", None, self.now()) if code == s.RESTART_REFUSED_EXIT
+                 else ("child-exit", code, self.now()))
+        if self.pending_event is None:
+            self.pending_event = event
+        else:
+            d.require(self.pending_exit is None)
+            self.pending_exit = event
+        self.exited_process = process
+        self.failed_start_process = None
+        self.flush_event()
+
     def tick(self):
         try:
             self._tick()
@@ -645,19 +674,7 @@ class ListenerSupervisor:
                     self.options is None or (code == 0 and self.deadline is not None
                                              and self.clock() >= self.deadline))
                 if not expected and self.exited_process is not process:
-                    # Attribute each observed exit to its handle before reaping.
-                    # Never replace a different process's pending observation.
-                    self.pin = None
-                    event = (("restart-refused", None, self.now()) if code == s.RESTART_REFUSED_EXIT
-                             else ("child-exit", code, self.now()))
-                    if self.pending_event is None:
-                        self.pending_event = event
-                    else:
-                        d.require(self.pending_exit is None)
-                        self.pending_exit = event
-                    self.exited_process = process
-                    self.failed_start_process = None
-                    self.flush_event()
+                    self.observe_exit(process)
                 elif expected:
                     self.options = None
                 self.manager.stop()
@@ -674,9 +691,11 @@ class ListenerSupervisor:
                     d.require(options["seconds"] > 0)
                 self.manager.start(**options, restart_pin=self.pin)
             except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
-                self.failed_start_process = self.manager.process
+                self.failed_start_process = self.manager.process or self.manager.failed_start_process
                 self.pending_event = ("restart-refused", None, self.now())
                 self.flush_event()
+                if self.failed_start_process is not None and self.failed_start_process.poll() is not None:
+                    self.observe_exit(self.failed_start_process)
         if self.manager.process is not None and self.clock() >= self.pointer_at:
             self.pointer_at = self.clock() + 1
             info = (self.manager.store.root / "alerts.json").stat()
@@ -751,16 +770,22 @@ def main(argv=None, *, credentials=None, observe_owner=None, stdin=None, stdout=
         return supervise_listener(store, data["binding"], live=args.live, stdin=stdin, stdout=stdout, now=clock)
     if args.operation == "listen":
         manager = ManagedListener(store, data["binding"], live=args.live)
+        # Share durable exit observation only; one-shot listen never runs retry/pointer ticks.
+        supervisor = ListenerSupervisor(manager, None, clock)
         try:
-            manager.start(ongoing=args.ongoing)
+            supervisor.start(seconds=60, ongoing=args.ongoing)
             while manager.process.poll() is None:
                 if select.select([channel.input], [], [], 0.1)[0]:
                     manager.stop()
                     break  # Owner EOF/input stops this one-shot listener; no detached ongoing process.
             if manager.process is not None:
+                if manager.process.returncode != 0:
+                    supervisor.options = None  # No restart authorization on this one-shot path.
+                    supervisor.observe_exit(manager.process)
                 d.require(manager.process.returncode == 0)
         finally:
             manager.stop()
+            supervisor.flush_event()
         result = project_status(store, clock(), True)
         Stdio(stdin, stdout).emit(dict(type="result", result=result))
         return result
