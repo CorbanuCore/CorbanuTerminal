@@ -526,10 +526,18 @@ def schedule_pins(python, runtime, config, expected_python):
             "config": str(private_file(config)), "config_sha256": f.file_digest(config)}
 
 
-def service(label):
+def installation_domain(receipt):
+    # Pre-domain receipts were installed exclusively into this user’s GUI domain.
+    domain = receipt.get("domain", f"gui/{os.getuid()}")
+    f.require(domain in (f"gui/{os.getuid()}", f"user/{os.getuid()}"), "invalid_domain")
+    return domain
+
+
+def service(label, domain=None):
     import re
+    domain = installation_domain({"domain": domain} if domain is not None else {})
     f.require(re.fullmatch(r"com\.corbanu\.initiative-owner(?:\.[a-zA-Z0-9-]+)?", label), "invalid_label")
-    result = subprocess.run(["/bin/launchctl", "print", f"gui/{os.getuid()}/{label}"],
+    result = subprocess.run(["/bin/launchctl", "print", f"{domain}/{label}"],
                             capture_output=True, text=True, timeout=5, env={})
     if result.returncode == 0:
         return "present", result.stdout
@@ -541,7 +549,7 @@ def service(label):
 def firing_source(root, receipt):
     """Fail closed: launchd diagnostics are not a stable API or activation authority."""
     try:
-        presence, output = service(receipt["label"])
+        presence, output = service(receipt["label"], installation_domain(receipt))
         lines = set(output.splitlines())
         if (presence != "present" or f"\tpid = {os.getpid()}" not in lines
                 or "\tstate = running" not in lines):
@@ -567,7 +575,7 @@ def observe_schedule(root, label="com.corbanu.initiative-owner"):
         if receipt:
             label = receipt["label"]
         result["installed"] = receipt is not None and receipt["phase"] != "uninstalled"
-        result["service"], output = service(label)
+        result["service"], output = service(label, installation_domain(receipt or {}))
         if receipt and result["service"] == "present":
             plist = root / "owner.plist"
             f.require(f"path = {plist}\n" in output and

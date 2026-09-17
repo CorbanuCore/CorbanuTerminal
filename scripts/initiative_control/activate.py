@@ -95,8 +95,10 @@ def owner_activation(args):
         receipt_path, plist = root / "installation.json", root / "owner.plist"
         previous = owner.load(receipt_path) if os.path.lexists(receipt_path) else None
         label = previous["label"] if previous else args.label
-        presence, output = owner.service(label)
-        target = f"gui/{os.getuid()}/{label}"
+        requested_domain = f"{getattr(args, 'domain', 'gui')}/{os.getuid()}"
+        domain = owner.installation_domain(previous or {"domain": requested_domain})
+        presence, output = owner.service(label, domain)
+        target = f"{domain}/{label}"
         if previous and presence == "present":
             f.require(f"path = {plist}\n" in output and
                       f.file_digest(owner.private_file(plist)) == previous["plist_sha256"],
@@ -105,7 +107,7 @@ def owner_activation(args):
             f.require(previous is not None, "installation_receipt_required")
             if presence == "present":
                 subprocess.run(["/bin/launchctl", "bootout", target], check=True, timeout=40, env={})
-            f.require(owner.service(label)[0] == "absent", "service_still_present")
+            f.require(owner.service(label, domain)[0] == "absent", "service_still_present")
             if plist.exists():
                 f.require(f.file_digest(owner.private_file(plist)) == previous["plist_sha256"], "plist_drift")
                 plist.unlink()
@@ -113,6 +115,7 @@ def owner_activation(args):
             f.write_json(receipt_path, previous)
             owner.publish_schedule(root)
             return
+        f.require(domain == requested_domain, "installation_domain_conflict")
         f.require(args.python and args.python_sha256 and args.runtime and args.config, "pins_required")
         f.require(args.label == label and type(args.interval) is int and 1 <= args.interval <= 30
                   and (args.interval == 30 or label.startswith("com.corbanu.initiative-owner.test-")),
@@ -140,13 +143,16 @@ def owner_activation(args):
                for key, value in job.items()}
         job.update(Label=label, Disabled=False, StartInterval=args.interval,
                    ThrottleInterval=0)
+        if domain.startswith("user/"):
+            job["LimitLoadToSessionType"] = "Background"
         job["ProgramArguments"] += ["--schedule", str(root)]
         job["EnvironmentVariables"] = {key: str(root) for key in
                                        ("HOME", "CODEX_HOME", "CORBANU_HOME", "PFTERMINAL_HOME")}
         raw = plistlib.dumps(job)
-        expected = dict(label=label, pins=pins, plist_sha256=hashlib.sha256(raw).hexdigest(),
+        expected = dict(label=label, domain=domain, pins=pins, plist_sha256=hashlib.sha256(raw).hexdigest(),
                         interval=args.interval, publish_state=str(args.publish_state))
         if previous:
+            previous = dict(previous, domain=owner.installation_domain(previous))
             f.require({key: previous[key] for key in expected} == expected, "installation_conflict")
             if presence == "present":
                 f.require(previous["phase"] == "installed", "installation_reconciliation_required")
@@ -160,9 +166,9 @@ def owner_activation(args):
                                                  hold=None, skipped=0, ticks=0, last_probe=None))
         f.write_file(plist, raw)
         f.write_json(receipt_path, dict(expected, phase="installing"))
-        subprocess.run(["/bin/launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)],
+        subprocess.run(["/bin/launchctl", "bootstrap", domain, str(plist)],
                        check=True, timeout=10, env={})
-        f.require(owner.service(label)[0] == "present", "installation_unobserved")
+        f.require(owner.service(label, domain)[0] == "present", "installation_unobserved")
         f.write_json(receipt_path, dict(expected, phase="installed"))
         subprocess.run(["/bin/launchctl", "kickstart", target], check=True, timeout=10, env={})
 
@@ -173,6 +179,7 @@ if __name__ == "__main__" and "--owner" in sys.argv:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--label")
     parser.add_argument("--confirm-live", action="store_true")
+    parser.add_argument("--domain", choices=("gui", "user"), default="gui")
     parser.add_argument("--publish-state", type=Path)
     parser.add_argument("--python", type=Path)
     parser.add_argument("--python-sha256")
