@@ -55,7 +55,13 @@ recheck beyond the issues in the brief.** The [repeatable audit](recheck.py) and
 receipts and 32 nested replay streams; gate log hashes/counts; and the current
 reference/baseline. The acceptance verifier also rechecks its numerical claims,
 mutation coverage, capture bindings and historical gate receipts.
-Manual review included the linked engineering, exclusion and residual records.
+The qualitative statement above is a manual reading by the round-92
+`acct-inventory-92` revise worker (`gpt-6-astra`, high; claim
+`7646a61f-2dc2-4079-b1be-59ceb49a796a`), not a computed audit result or a human
+sign-off. That reading included the linked engineering, exclusion and residual
+records. Round 95 removes the script's literal empty-defect field and the
+corresponding JSON member; neither scanned prose nor derived that verdict.
+No named human reader is evidenced in this record.
 The three historical package binaries remain explicitly unavailable; worded
 claims and authorization/qualification limitations remain disclosed, not waived.
 This is a bounded retained-evidence audit, not a proof of arbitrary prose or

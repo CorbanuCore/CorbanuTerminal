@@ -15,7 +15,7 @@
       "removed_lines": 0,
       "bytes": 16093,
       "lines": 213,
-      "sha256": "ac2fe444c1e515819b74899e217a8a62fc53a67eb2a83bf61ff6e42d1eaa80e3"
+      "sha256": "883581db559202edce2c85500e5ab33cb3b342313cf9fb94e8e823fc46e128fa"
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json",
@@ -24,7 +24,7 @@
       "removed_lines": 7,
       "bytes": 6049,
       "lines": 151,
-      "sha256": "6e771503adf10f42e53160f3bb21fd3181bc1f240144265aeaa93d78444f6514"
+      "sha256": "f6ae55c47ce1228c644fd0038b37c261effc22eb727f14b3147b9746eb9fe34d"
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guard-91/RETURN.md",
@@ -40,9 +40,9 @@
       "kind": "modified",
       "added_lines": 48,
       "removed_lines": 224,
-      "bytes": 18938,
-      "lines": 448,
-      "sha256": "d4eecafb2c6652897be24479e005d9ef945222fa78e38f6b141f3bcc354522f9"
+      "bytes": 19247,
+      "lines": 452,
+      "sha256": "bdb2c7e303f8b2bf03689037775781259631a8f919e5237e88101983ce594412"
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guard-91/simulation-final/baseline-optimized.stderr.txt",
@@ -139,16 +139,16 @@
       "kind": "modified",
       "added_lines": 19,
       "removed_lines": 5,
-      "bytes": 9302,
-      "lines": 224,
-      "sha256": "fd2472c03b54912bf6190d626180266c681e256c257052c0ab23c64f8e41eb99"
+      "bytes": 9891,
+      "lines": 238,
+      "sha256": "4db9a69f9a5212e06b074d896496b14ecdd9b8b1a81d2909853aa82e4bce40d1"
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-92/RETURN.md",
       "kind": "new",
-      "bytes": 7741,
-      "lines": 129,
-      "sha256": "5b9d70a3df3cdb5c9425f9d67c794ef7de6643c8892934699a0f6daf219552d2"
+      "bytes": 8151,
+      "lines": 135,
+      "sha256": "171dabb42e42dd38c34ea87f0dba0fec661b26e3769e230632f27c2fecce1247"
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-92/gate.py",
@@ -216,16 +216,16 @@
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-92/recheck.json",
       "kind": "new",
-      "bytes": 8424,
-      "lines": 213,
-      "sha256": "cb81f0b7a98af40d3db2da577c362551bc8917f7a98b0fdb10e609fff343da7b"
+      "bytes": 8371,
+      "lines": 212,
+      "sha256": "48007bab591e32ac3924d8652d8a8f5165ba5ad2b3f7c452e53dff6d27013419"
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-92/recheck.py",
       "kind": "new",
-      "bytes": 7565,
-      "lines": 138,
-      "sha256": "4d52b031ebb8ac87f922c8bbbe693cdcc4af69ddf0ca0abc5b0bd666672c9900"
+      "bytes": 7503,
+      "lines": 137,
+      "sha256": "a1b6f4a740c817dfacf0eb7fb257b5445ba1dc5ce824d8e41b4c0da05dec681a"
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-92/replay-results/landed-optimized.stderr.txt",
@@ -497,5 +497,9 @@
       "lines": 7,
       "sha256": "cf848f7dcf084d9cf95e412d23739c78f11f5430689431dc6567cf4dcd347b0a"
     }
-  ]
+  ],
+  "derive_95_refresh": {
+    "previous_inventory_sha256": "ce7979628660320acac0bc1274acc7d8d9c05ebd5a742133d39e4b6a5c37b27e",
+    "meaning": "Original base, membership and change counts remain historical. Current bytes, lines and hashes refreshed for the round-95 correction; no new execution inferred."
+  }
 }

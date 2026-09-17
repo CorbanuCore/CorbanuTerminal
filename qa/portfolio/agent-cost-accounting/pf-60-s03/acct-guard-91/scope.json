@@ -5,13 +5,13 @@
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md",
       "bytes": 16093,
-      "sha256": "ac2fe444c1e515819b74899e217a8a62fc53a67eb2a83bf61ff6e42d1eaa80e3",
+      "sha256": "883581db559202edce2c85500e5ab33cb3b342313cf9fb94e8e823fc46e128fa",
       "lines": 213
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json",
       "bytes": 6049,
-      "sha256": "6e771503adf10f42e53160f3bb21fd3181bc1f240144265aeaa93d78444f6514",
+      "sha256": "f6ae55c47ce1228c644fd0038b37c261effc22eb727f14b3147b9746eb9fe34d",
       "lines": 151
     },
     {
@@ -412,9 +412,9 @@
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/inventory-correction.json",
-      "bytes": 9302,
-      "sha256": "fd2472c03b54912bf6190d626180266c681e256c257052c0ab23c64f8e41eb99",
-      "lines": 224
+      "bytes": 9891,
+      "sha256": "4db9a69f9a5212e06b074d896496b14ecdd9b8b1a81d2909853aa82e4bce40d1",
+      "lines": 238
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt",
@@ -444,5 +444,9 @@
     "excluded_prefix": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guard-91/target/",
     "ignore_rule": ".gitignore: qa/portfolio/agent-cost-accounting/pf-60-s03/*/target/",
     "meaning": "Historical round-91 changed-file membership intersected with the committed tree; hashes describe the revised current files. Disposable clones and duplicate intermediate streams under target/ are ignored scratch. Retained receipts and raw streams are under replay-results/, simulation-initial/ and simulation-final/; absolute scratch paths in receipts are provenance, not promised committed artifacts. This is not an inventory of round-92 additions or integration-owned root .gitignore changes."
+  },
+  "derive_95_refresh": {
+    "previous_inventory_sha256": "d4eecafb2c6652897be24479e005d9ef945222fa78e38f6b141f3bcc354522f9",
+    "meaning": "Original base, membership and change counts remain historical. Current bytes, lines and hashes refreshed for the round-95 correction; no new execution inferred."
   }
 }

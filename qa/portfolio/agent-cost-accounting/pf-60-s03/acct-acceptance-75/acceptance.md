@@ -62,23 +62,6 @@ run after the retained comparison, but their combined results have no documented
 baseline: this mode always prints `BASELINE REFUSED` and returns three, whether
 local files agree, disagree or are absent. Its counts are diagnostic only and
 must not be cited as agreement with the retained baseline.
-Read exit codes in their command context; an evidence status inside a diagnostic
-tuple is not necessarily the final process exit. The following table also covers
-the historical test exit shown below.
-
-```text
-Code | Context and meaning | Reader action
-0 | Verifier: all retained evidence agrees, nothing unavailable, baseline matches. Replay helper: exact-output and control checks passed (its verifier may still exit 2). Test/build: success. | Check which command returned it; none establishes functional acceptance.
-2 | Verifier: documented baseline matches, but named evidence is unavailable. | Read UNAVAILABLE items and preserve their qualification limits; do not claim complete evidence.
-3 | Verifier: baseline drift/malformed baseline, or --local-package has no documented combined baseline. | Inspect DISAGREE/UNAVAILABLE and BASELINE DRIFT/REFUSED; repair evidence or review intentional contract changes before refreshing inventories/reference together. Local mode is diagnostic only.
-1 | Evidence status in actual counts/exit: at least one DISAGREE; the baseline guard turns this into final verifier exit 3. Replay helper: a raised check or execution error. An uncaught verifier error can also exit 1 without a final RESULT. | Follow the disagreement or traceback; restore/reconcile the evidence or fix the execution prerequisite and rerun. Never treat it as a match.
-100 | Historical nextest lane: unsuccessful test run, here the retained timeout. | Keep the failure open, inspect its raw log and investigate; later passing runs do not erase it.
-```
-
-Invalid command-line usage can return an argument-parser error with the same code
-as incomplete agreement. A traceback, usage error, or missing final `RESULT`
-is an execution failure, not the documented incomplete baseline.
-
 This baseline reproduces only while any change to the inventoried evidence set
 is accompanied by a refresh of the affected inventories and membership bindings.
 This includes edits, removals and additions, including a new file matching a
@@ -172,6 +155,23 @@ inventory totals, requires a reviewed update to the expected output and its
 digest in the same change. Until that happens, running the exact-output replay
 rejects the change even if the documented counts still match. Review must check the
 changed evidence and claims; replacing a reference is not proof they are true.
+
+Read exit codes in their command context; an evidence status inside a diagnostic
+tuple is not necessarily the final process exit. The following table also covers
+the historical test exit shown above.
+
+```text
+Code | Context and meaning | Reader action
+0 | Verifier: all retained evidence agrees, nothing unavailable, baseline matches. Replay helper: exact-output and control checks passed (its verifier may still exit 2). Test/build: success. | Check which command returned it; none establishes functional acceptance.
+2 | Verifier: documented baseline matches, but named evidence is unavailable. | Read UNAVAILABLE items and preserve their qualification limits; do not claim complete evidence.
+3 | Verifier: baseline drift/malformed baseline, or --local-package has no documented combined baseline. | Inspect DISAGREE/UNAVAILABLE and BASELINE DRIFT/REFUSED; repair evidence or review intentional contract changes before refreshing inventories/reference together. Local mode is diagnostic only.
+1 | Evidence status in actual counts/exit: at least one DISAGREE; the baseline guard turns this into final verifier exit 3. Replay helper: a raised check or execution error. An uncaught verifier error can also exit 1 without a final RESULT. | Follow the disagreement or traceback; restore/reconcile the evidence or fix the execution prerequisite and rerun. Never treat it as a match.
+100 | Historical nextest lane: unsuccessful test run, here the retained timeout. | Keep the failure open, inspect its raw log and investigate; later passing runs do not erase it.
+```
+
+Invalid command-line usage can return an argument-parser error with the same code
+as incomplete agreement. A traceback, usage error, or missing final `RESULT`
+is an execution failure, not the documented incomplete baseline.
 
 The numerical coverage guard checks for unmatched digit-form quantities outside
 fenced code and link targets, after removing matched claim spans and known

@@ -136,7 +136,7 @@
     "total_current_text_lines": 989
   },
   "note": "Preserves the prior inventory; round-76 scope/delta remain historical snapshots. This record supersedes their round-75 inventory digest, not their test evidence.",
-  "after_sha256": "6e771503adf10f42e53160f3bb21fd3181bc1f240144265aeaa93d78444f6514",
+  "after_sha256": "f6ae55c47ce1228c644fd0038b37c261effc22eb727f14b3147b9746eb9fe34d",
   "baseline_81_refresh": {
     "previous_after_sha256": "24009e07f2f604270a831e6b1f4c073dbb1c867f686a4dd5ad82ec301e97fcaa",
     "previous_after_totals": {
@@ -220,5 +220,19 @@
       "total_current_text_lines": 972
     },
     "reason": "Define evidence and process exits in the acceptance document; historical membership unchanged."
+  },
+  "derive_95_refresh": {
+    "previous_after_sha256": "6e771503adf10f42e53160f3bb21fd3181bc1f240144265aeaa93d78444f6514",
+    "previous_after_totals": {
+      "total_new_bytes": 58157,
+      "total_new_text_lines": 759,
+      "total_new_files": 15,
+      "total_modified_files": 3,
+      "total_modified_bytes": 16713,
+      "total_modified_text_lines": 230,
+      "total_current_bytes": 74870,
+      "total_current_text_lines": 989
+    },
+    "reason": "Move exit table after replay introduction; same bytes/lines totals and membership. No changed numeric claim or expected stdout."
   }
 }
