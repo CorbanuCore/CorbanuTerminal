@@ -135,9 +135,11 @@ packets fixed for the whole dispatch; changes require a fresh check. This wrappe
 does not grant admission or repair the absent case seam.
 
 Before the first functional case, the future execution owner must also satisfy
-[the round-82 per-case capture contract](../pf83-capture-82/runbook.md). Admission
-must demonstrate the observer, event ordering and raw-source capture needed by
-that contract. A successful staging preflight alone cannot establish those
+[the round-83 per-case capture and retention contract](../pf83-f09gap-83/runbook.md).
+The unrestricted stdout/stderr publisher here is not admitted for real capture;
+source isolation and the specified publication filter must be verified first.
+Admission must demonstrate the observer, event ordering and raw-source capture
+needed by that contract. A successful staging preflight alone cannot establish those
 capabilities or validate a functional result.
 
 ## Remaining owner asks

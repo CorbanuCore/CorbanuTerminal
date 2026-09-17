@@ -156,8 +156,10 @@ are an unsigned local qualification package, not a notarized release.
 ## Per-case captures and stop conditions
 
 Before any future case, apply the coordinator-only
-[round-82 capture contract and ordered capture steps](../pf83-capture-82/runbook.md)
-and freeze [its schema](../pf83-capture-82/evidence-contract.schema.json) by SHA-256.
+[round-83 capture amendments and retention rule](../pf83-f09gap-83/runbook.md)
+with the [round-82 ordered capture steps](../pf83-capture-82/runbook.md),
+and freeze [the round-83 schema](../pf83-f09gap-83/evidence-contract.schema.json)
+by SHA-256. Use its typed branch coverage and blocked-record format.
 This adds required per-case observations to the generic inventory below. Missing
 case-specific timelines make results unusable; generic screenshots or receipts
 cannot substitute. The current harness cannot produce these timelines through an
