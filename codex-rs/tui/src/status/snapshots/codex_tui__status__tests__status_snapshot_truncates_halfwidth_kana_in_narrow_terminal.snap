@@ -10,7 +10,25 @@ expression: sanitized
 │  Model:                ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟｶﾞ  │
 │  Model provider:       Ambient         │
 │  Directory: [[workspace]]              │
-│  Permissions:          Custom (workspa │
+│  Permissions:          Next turn:      │
+│                        Custom          │
+│                        (workspace      │
+│                        with network    │
+│                        access, Ask for │
+│                        approval)       │
+│                        A running       │
+│                        turn keeps      │
+│                        its captured    │
+│                        permissions     │
+│                        (not reported   │
+│                        here) and       │
+│                        granted         │
+│                        approvals.      │
+│                        Shared services │
+│                        keep their      │
+│                        existing        │
+│                        refresh         │
+│                        behavior.       │
 │  Security:             Requested       │
 │                        Permissive;     │
 │                        effective       │

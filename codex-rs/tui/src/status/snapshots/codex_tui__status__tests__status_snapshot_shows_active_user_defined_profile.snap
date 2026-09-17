@@ -4,18 +4,21 @@ expression: sanitized
 ---
 /status
 
-╭──────────────────────────────────────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v<V>)                                              │
-│                                                                          │
-│  Model:            gpt-5.1-codex-max                                     │
-│  Model provider:   Ambient                                               │
-│  Directory: [[workspace]]                                                │
-│  Permissions:      Profile locked (read-only, Ask for approval)          │
-│  Security:         Requested Permissive; effective protection unverified │
-│                    (/security)                                           │
-│  Agents.md:        <none>                                                │
-│                                                                          │
-│  Token usage:      0 total  (0 input + 0 output)                         │
-│  Context window:   100% left (0 used / 272K)                             │
-│  Limits:           data not available yet                                │
-╰──────────────────────────────────────────────────────────────────────────╯
+╭────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v<V>)                                                │
+│                                                                            │
+│  Model:            gpt-5.1-codex-max                                       │
+│  Model provider:   Ambient                                                 │
+│  Directory: [[workspace]]                                                  │
+│  Permissions:      Next turn: Profile locked (read-only, Ask for approval) │
+│                    A running turn keeps its captured permissions (not      │
+│                    reported here) and granted approvals. Shared services   │
+│                    keep their existing refresh behavior.                   │
+│  Security:         Requested Permissive; effective protection unverified   │
+│                    (/security)                                             │
+│  Agents.md:        <none>                                                  │
+│                                                                            │
+│  Token usage:      0 total  (0 input + 0 output)                           │
+│  Context window:   100% left (0 used / 272K)                               │
+│  Limits:           data not available yet                                  │
+╰────────────────────────────────────────────────────────────────────────────╯

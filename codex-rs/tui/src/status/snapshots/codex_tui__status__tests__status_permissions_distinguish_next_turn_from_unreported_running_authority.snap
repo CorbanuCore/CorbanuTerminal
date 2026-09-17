@@ -1,0 +1,11 @@
+---
+source: tui/src/status/tests.rs
+expression: "sections.join(\"\\n\\n\")"
+---
+Permissions:      Next turn: Full Access
+A running turn keeps its captured permissions (not reported here) and granted
+approvals. Shared services keep their existing refresh behavior.
+
+Permissions:      Next turn: Read Only (Ask for approval)
+A running turn keeps its captured permissions (not reported here) and granted
+approvals. Shared services keep their existing refresh behavior.

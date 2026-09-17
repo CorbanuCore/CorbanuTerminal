@@ -124,7 +124,15 @@ fn permission_confirmation_outcomes_are_explicit() {
     })
     .collect::<Vec<_>>()
     .join("\n\n");
-    insta::assert_snapshot!(messages);
+    insta::assert_snapshot!(messages, @r"
+    • Permissions confirmed for new turns: Full Access. If a running turn has different permissions, a prompt sent here is held until it finishes, then runs with the latest permissions. Running work, granted approvals and pending approvals are unchanged. Shared services keep their existing refresh behavior.
+
+    • Permissions unconfirmed: Full Access. This server does not provide application confirmation. The request may have been accepted. No automatic retry was made; reconnect to a server that supports confirmation to verify a new selection.
+
+    • Permission selection failed: Full Access. rejected by requirements The rejected selection was not saved as a future-turn override. Choose again after resolving the error.
+
+    • Permission outcome uncertain: Full Access. No automatic retry was made; running authority is unchanged. Reconnect and inspect session settings before choosing again. connection lost
+    ");
 }
 
 #[tokio::test]
@@ -299,7 +307,9 @@ async fn permission_confirmation_orders_profiles_and_newer_observations() {
                     })
                     .last()
                     .unwrap();
-                insta::assert_snapshot!("permission_confirmation_superseded", message);
+                insta::allow_duplicates! {
+                    insta::assert_snapshot!(message, @"• Permission request applied: old request. Newer settings govern new turns. If a running turn has different permissions, a prompt sent here is held until it finishes, then runs with the latest permissions. Running work, granted approvals and pending approvals are unchanged. Shared services keep their existing refresh behavior. Held initial input was restored without submission. Check /status for the latest next-turn settings.");
+                }
             }
         }
     }

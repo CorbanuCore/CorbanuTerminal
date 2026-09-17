@@ -4,19 +4,23 @@ expression: sanitized
 ---
 /status
 
-╭──────────────────────────────────────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v<V>)                                              │
-│                                                                          │
-│ Visit https://chatgpt.com/codex/settings/usage for up-to-date            │
-│ information on rate limits and credits                                   │
-│                                                                          │
-│  Model:         gpt-5.1-codex-max (reasoning none, summaries auto)       │
-│  Directory: [[workspace]]                                                │
-│  Permissions:   Custom (workspace with network access, Ask for approval) │
-│  Security:      Requested Permissive; effective protection unverified (/ │
-│                 security)                                                │
-│  Agents.md:     <none>                                                   │
-│  Account:       Enterprise (Automation)                                  │
-│                                                                          │
-│  Limits:        data not available yet                                   │
-╰──────────────────────────────────────────────────────────────────────────╯
+╭─────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v<V>)                                                 │
+│                                                                             │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date               │
+│ information on rate limits and credits                                      │
+│                                                                             │
+│  Model:         gpt-5.1-codex-max (reasoning none, summaries auto)          │
+│  Directory: [[workspace]]                                                   │
+│  Permissions:   Next turn: Custom (workspace with network access, Ask for   │
+│                 approval)                                                   │
+│                 A running turn keeps its captured permissions (not reported │
+│                 here) and granted approvals. Shared services keep their     │
+│                 existing refresh behavior.                                  │
+│  Security:      Requested Permissive; effective protection unverified (/    │
+│                 security)                                                   │
+│  Agents.md:     <none>                                                      │
+│  Account:       Enterprise (Automation)                                     │
+│                                                                             │
+│  Limits:        data not available yet                                      │
+╰─────────────────────────────────────────────────────────────────────────────╯

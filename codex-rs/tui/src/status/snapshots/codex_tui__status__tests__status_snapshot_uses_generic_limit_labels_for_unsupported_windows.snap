@@ -4,21 +4,25 @@ expression: sanitized
 ---
 /status
 
-╭──────────────────────────────────────────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v<V>)                                                  │
-│                                                                              │
-│  Model:                   gpt-5.1-codex-max                                  │
-│  Model provider:          Ambient                                            │
-│  Directory: [[workspace]]                                                    │
-│  Permissions:             Custom (workspace with network access, Ask for app │
-│  Security:                Requested Permissive; effective protection         │
-│                           unverified (/security)                             │
-│  Agents.md:               <none>                                             │
-│                                                                              │
-│  Token usage:             1.2K total  (800 input + 400 output)               │
-│  Context window:          100% left (1.2K used / 272K)                       │
-│  Usage limit:             [█████████████░░░░░░░] 65% left                    │
-│                           (resets 07:08 on 7 May)                            │
-│  Secondary usage limit:   [██████████░░░░░░░░░░] 50% left                    │
-│                           (resets 07:08 on 8 May)                            │
-╰──────────────────────────────────────────────────────────────────────────────╯
+╭─────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v<V>)                                                 │
+│                                                                             │
+│  Model:                   gpt-5.1-codex-max                                 │
+│  Model provider:          Ambient                                           │
+│  Directory: [[workspace]]                                                   │
+│  Permissions:             Next turn: Custom (workspace with network access, │
+│                           Ask for approval)                                 │
+│                           A running turn keeps its captured permissions     │
+│                           (not reported here) and granted approvals. Shared │
+│                           services keep their existing refresh behavior.    │
+│  Security:                Requested Permissive; effective protection        │
+│                           unverified (/security)                            │
+│  Agents.md:               <none>                                            │
+│                                                                             │
+│  Token usage:             1.2K total  (800 input + 400 output)              │
+│  Context window:          100% left (1.2K used / 272K)                      │
+│  Usage limit:             [█████████████░░░░░░░] 65% left                   │
+│                           (resets 07:08 on 7 May)                           │
+│  Secondary usage limit:   [██████████░░░░░░░░░░] 50% left                   │
+│                           (resets 07:08 on 8 May)                           │
+╰─────────────────────────────────────────────────────────────────────────────╯

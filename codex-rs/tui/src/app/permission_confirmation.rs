@@ -143,8 +143,16 @@ impl App {
         let (message, hint) = if matches!(result, PermissionConfirmationResult::Applied)
             && !pending.matches(self.chat_widget.config_ref())
         {
-            (format!("Permission request applied: {}. Newer settings are now active.", pending.label),
-                "Check current permissions before sending a new prompt. Held initial input was restored without submission.".into())
+            (
+                format!(
+                    "Permission request applied: {}. Newer settings govern new turns.",
+                    pending.label
+                ),
+                format!(
+                    "{} Held initial input was restored without submission. Check /status for the latest next-turn settings.",
+                    permission_continuation_hint()
+                ),
+            )
         } else {
             permission_confirmation_message(&pending.label, &result)
         };
@@ -153,14 +161,18 @@ impl App {
     }
 }
 
+fn permission_continuation_hint() -> &'static str {
+    "If a running turn has different permissions, a prompt sent here is held until it finishes, then runs with the latest permissions. Running work, granted approvals and pending approvals are unchanged. Shared services keep their existing refresh behavior."
+}
+
 fn permission_confirmation_message(
     label: &str,
     result: &PermissionConfirmationResult,
 ) -> (String, String) {
     match result {
         PermissionConfirmationResult::Applied => (
-            format!("Permissions applied for NEXT TURN: {label}."),
-            "Running command authority and pending approvals are unchanged. Let the current turn finish, or stop it with Esc, then send a new prompt. Shared services keep their existing refresh behavior.".into(),
+            format!("Permissions confirmed for new turns: {label}."),
+            permission_continuation_hint().into(),
         ),
         PermissionConfirmationResult::Unsupported => (
             format!("Permissions unconfirmed: {label}. This server does not provide application confirmation."),
