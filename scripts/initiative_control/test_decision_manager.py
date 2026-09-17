@@ -9,6 +9,7 @@ import select
 import subprocess
 import sys
 import tempfile
+import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -182,6 +183,192 @@ def cli_child(root, feed, endpoint):
     with patch("slack_sdk.WebClient", side_effect=lambda **kw: fixtures.WebClient(base_url=endpoint, **kw)):
         m.main(["dispatch", "--store", root, "--feed", feed, "--live"],
                credentials=lambda: ("fixture-bot", "fixture-app"), observe_owner=lambda: OWNER, now=lambda: NOW)
+
+
+class ListenerStartupTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.store = a.Store(self.root)
+        self.store.initialize()
+        s.initialize(self.store)
+        journal = self.store.read("transport")
+        journal.update(binding=PIN, last_verified=NOW)
+        self.store.write("transport", journal)
+        self.before = self.store.read("transport")
+        self.fence = (self.root / ".ingress.fence").read_bytes()
+
+    @contextmanager
+    def child_launch(self, handshake):
+        popen = subprocess.Popen
+        children = []
+        def launch(command, **kwargs):
+            self.assertEqual(kwargs["stderr"], subprocess.DEVNULL)
+            # Actual exec: -S removes SDK site-packages, or die before the frame.
+            command = ([command[0], "-S", *command[1:]] if handshake else
+                       [command[0], "-B", "-c", "import os; os._exit(31)"])
+            child = popen(command, **kwargs)
+            children.append(child)
+            return child
+        with patch.object(m.subprocess, "Popen", side_effect=launch):
+            yield children
+
+    def assert_recorded(self, code):
+        reopened = a.Store(self.root)
+        status = m.project_status(reopened, NOW, True)
+        self.assertEqual(status["listener_exits"], 1)
+        self.assertEqual(status["last_listener_exit"]["returncode"], code)
+        self.assertEqual(status["last_listener_exit"]["restart"], "held")
+        after = reopened.read("transport")
+        for field in ("ingress", "watermark", "binding", "gap_reviews", "lifecycle"):
+            self.assertEqual(after[field], self.before[field])
+        self.assertEqual((self.root / ".ingress.fence").read_bytes(), self.fence)
+
+    def test_one_shot_records_real_child_death_before_and_after_handshake(self):
+        for handshake in (False, True):
+            with self.subTest(handshake=handshake):
+                self.store.write("transport", self.before)
+                incoming, writer = os.pipe()
+                try:
+                    with (os.fdopen(incoming, "rb") as source, tempfile.TemporaryFile() as sink,
+                          self.child_launch(handshake) as children):
+                        os.write(writer, d.canonical(dict(binding=PIN)) + b"\n")
+                        with (patch.object(a, "retry_pending_pointers", side_effect=AssertionError("one-shot pointer send")),
+                              self.assertRaises(d.Invalid)):
+                            m.main(["listen", "--store", str(self.root), "--live"],
+                                   stdin=source, stdout=sink, now=lambda: NOW)
+                    self.assertEqual(len(children), 1)
+                    self.assertIsNotNone(children[0].returncode)
+                    self.assertTrue(children[0].stdout.closed)
+                    self.assert_recorded(1 if handshake else 31)
+                finally:
+                    os.close(writer)
+
+    def test_supervised_startup_death_retries_failed_record_without_duplicate(self):
+        manager = m.ManagedListener(self.store, PIN, live=True)
+        self.addCleanup(manager.stop)
+        supervisor = m.ListenerSupervisor(manager, None, lambda: NOW)
+        with self.child_launch(False) as children:
+            with patch.object(self.store, "write", side_effect=OSError("fixture disk")), self.assertRaises(d.Invalid):
+                supervisor.start(seconds=60, ongoing=True)
+        self.assertIsNone(manager.process)
+        self.assertIsNotNone(children[0].returncode)
+        self.assertEqual(supervisor.health()["state"], "unhealthy")
+        self.assertEqual(m.project_status(self.store, NOW, True)["listener_exits"], 0)
+        supervisor.tick()
+        supervisor.tick()
+        self.assert_recorded(31)
+        self.assertEqual(supervisor.health()["state"], "healthy")
+        self.assertIsNone(supervisor.retry_at)
+
+    def test_supervised_post_handshake_startup_death_is_observed(self):
+        manager = m.ManagedListener(self.store, PIN, live=True)
+        self.addCleanup(manager.stop)
+        supervisor = m.ListenerSupervisor(manager, None, lambda: NOW)
+        with self.child_launch(True):
+            supervisor.start(seconds=60, ongoing=True)
+        manager.process.wait(timeout=5)
+        supervisor.tick()
+        supervisor.tick()
+        self.assert_recorded(1)
+
+    def test_cli_keeps_fixed_redaction_and_records_import_failure(self):
+        marker = self.root / "sdk-import-blocked"
+        bootstrap = self.root / "isolated_cli.py"
+        bootstrap.write_text("""
+import os
+from pathlib import Path
+import runpy
+import subprocess
+import sys
+
+script = sys.argv.pop(1)
+sys.path.insert(0, str(Path(script).parent))
+marker = Path(__file__).with_name("sdk-import-blocked")
+def deny_external(event, args):
+    if event.startswith("socket."):
+        raise AssertionError("fixture network denied")
+    if event == "import" and args[0] == "slack_sdk":
+        marker.write_text("slack_sdk import denied: " + sys.argv[1])
+        raise ModuleNotFoundError("private fixture import detail", name="slack_sdk")
+sys.addaudithook(deny_external)
+popen = subprocess.Popen
+def launch(command, **kwargs):
+    assert command[:2] == [sys.executable, "-B"]
+    return popen([sys.executable, "-I", "-S", "-B", __file__, *command[2:]], **kwargs)
+subprocess.Popen = launch
+sys.argv[0] = script
+runpy.run_path(script, run_name="__main__")
+""")
+        # No ambient profiles, credentials, PYTHONPATH or site startup hooks.
+        # Synthetic tokens remain present to prove import denial precedes use.
+        env = {name: str(self.root) for name in
+               ("HOME", "CODEX_HOME", "CORBANU_HOME", "PFTERMINAL_HOME")}
+        env.update(CORBANU_SLACK_BOT_TOKEN="synthetic-never-use-bot",
+                   CORBANU_SLACK_APP_TOKEN="synthetic-never-use-app")
+        process = subprocess.Popen(
+            [sys.executable, "-I", "-S", "-B", str(bootstrap),
+             str(Path(m.__file__).resolve()), "listen", "--store", str(self.root), "--live"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+        try:
+            process.stdin.write(d.canonical(dict(binding=PIN)) + b"\n")
+            process.stdin.flush()  # Keep owner input open until the child dies.
+            process.wait(timeout=10)
+            output, error = process.communicate(timeout=2)
+            self.assertEqual((process.returncode, output, error),
+                             (1, b"", b"Slack operation held; inspect redacted status and retained evidence.\n"))
+            self.assertEqual(marker.read_text(), "slack_sdk import denied: _listen-child")
+            self.assert_recorded(1)
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.communicate(timeout=2)
+
+    def test_rejected_start_keeps_running_child_supervised(self):
+        manager = m.ManagedListener(self.store, PIN, live=True)
+        self.addCleanup(manager.stop)
+        supervisor = m.ListenerSupervisor(manager, None, lambda: NOW)
+        with self.child_launch(True):
+            supervisor.start(seconds=60, ongoing=True)
+        with self.assertRaises(d.Invalid):
+            supervisor.start(seconds=0, ongoing=True)
+        self.assertIsNotNone(supervisor.options)
+        manager.process.wait(timeout=5)
+        supervisor.tick()
+        self.assert_recorded(1)
+
+    def test_restart_child_death_before_handshake_is_not_lost_after_reap(self):
+        owner = s.Session(self.store)
+        owner.update("connected")
+        owner.release()
+        manager = m.ManagedListener(self.store, PIN, live=True)
+        self.addCleanup(manager.stop)
+        clock = [0]
+        supervisor = m.ListenerSupervisor(manager, None, lambda: NOW, lambda: clock[0])
+        with self.child_launch(True):
+            supervisor.start(seconds=60, ongoing=True)
+        manager.process.wait(timeout=5)
+        supervisor.tick()
+        self.assertEqual(supervisor.retry_at, 1)
+        clock[0] = 1
+        with self.child_launch(False):
+            supervisor.tick()
+        supervisor.tick()
+        events = self.store.read("transport")["listener_events"]
+        self.assertEqual([(event["kind"], event["returncode"]) for event in events],
+                         [("child-exit", 1), ("restart-refused", None), ("child-exit", 31)])
+        self.assertEqual(m.project_status(self.store, NOW, True)["listener_exits"], 2)
+        self.assertIsNone(supervisor.retry_at)
+        self.assertIsNone(manager.process)
+
+    def test_spawn_failure_does_not_invent_child_exit(self):
+        manager = m.ManagedListener(self.store, PIN, live=True)
+        supervisor = m.ListenerSupervisor(manager, None, lambda: NOW)
+        with patch.object(m.subprocess, "Popen", side_effect=OSError("fixture spawn")), self.assertRaises(OSError):
+            supervisor.start(seconds=60, ongoing=True)
+        self.assertIsNone(manager.failed_start_process)
+        self.assertEqual(m.project_status(self.store, NOW, True)["listener_exits"], 0)
 
 
 class ManagerTests(fixtures.LiveFixture):
@@ -1822,7 +2009,8 @@ class ManagerTests(fixtures.LiveFixture):
             self.assertGreater(s.ingress_count(self.store), journal["ingress"])
 
     def test_production_clock_advances_and_cli_has_no_frozen_time_override(self):
-        instants = [m.dt.datetime(2026, 9, 12, hour, tzinfo=m.dt.timezone.utc) for hour in (12, 13, 14)]
+        instants = [m.dt.datetime(2026, 9, 12, tzinfo=m.dt.timezone.utc) + m.dt.timedelta(hours=hour)
+                    for hour in range(24)]
         incoming, writer = os.pipe()
         reader, outgoing = os.pipe()
         seen = []
@@ -1839,7 +2027,8 @@ class ManagerTests(fixtures.LiveFixture):
                 m.main(["listen", "--store", str(self.root), "--live", "--ongoing"], stdin=source, stdout=sink)
         os.close(writer)
         os.close(reader)
-        self.assertEqual(seen, ["2026-09-12T12:00:00Z", "2026-09-12T13:00:00Z"])
+        self.assertEqual(len(seen), 2)
+        self.assertEqual((d.stamp(seen[1]) - d.stamp(seen[0])).total_seconds(), 3600)
         with patch("sys.stderr", io.StringIO()), self.assertRaises(SystemExit) as rejected:
             m.main(["status", "--store", str(self.root), "--now", NOW])
         self.assertEqual(rejected.exception.code, 2)
