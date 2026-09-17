@@ -322,6 +322,115 @@ class OwnerDaemonTests(unittest.TestCase):
         self.assertEqual([], self.sql("SELECT * FROM operations"))
 
 
+class ArmingPreviewTests(unittest.TestCase):
+    setUp = OwnerDaemonTests.setUp
+    tearDown = OwnerDaemonTests.tearDown
+    child = OwnerDaemonTests.child
+    sql = OwnerDaemonTests.sql
+    tick = OwnerDaemonTests.tick
+
+    def files(self):
+        return {str(p.relative_to(self.root)): (p.read_bytes(), p.stat().st_mtime_ns,
+                                               p.stat().st_mode)
+                for p in self.root.rglob("*") if p.is_file()}
+
+    def test_cli_preview_is_write_free_and_matches_arm(self):
+        authority = self.root / "decision.json"
+        f.write_json(authority, self.authority)
+        before = self.files()
+        result = self.child(None, "--arm", "--dry-run", "--config", str(self.config_path),
+                            "--authority", str(authority))
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        preview = json.loads(result.stdout)
+        self.assertEqual("WOULD_ARM", preview["state"])
+        self.assertEqual(before, self.files())
+        with patch.object(f, "write_json", side_effect=AssertionError("persistent write")), \
+                patch.object(owner, "remove_activation_intent", side_effect=AssertionError("unlink")):
+            owner.arm_owner(self.config_path, self.authority, dry_run=True)
+        owner.arm_owner(self.config_path, self.authority)
+        with closing(sqlite3.connect(self.root / "owner.sqlite3")) as db:
+            db.row_factory = sqlite3.Row
+            self.assertEqual(preview["arm"]["after"], dict(db.execute("SELECT * FROM meta").fetchone()))
+        self.assertEqual(preview["arm"]["activation_file"]["after"], owner.load(self.root / "activation.json"))
+        self.assertEqual("ACTIVE", self.tick()["state"])
+        effect = preview["first_admitted_tick"]
+        self.assertEqual(effect["owner_rows"]["operations"]["op_id"],
+                         self.sql("SELECT op_id FROM operations")[0][0])
+        self.assertTrue(all(Path(path).exists() for path in effect["files"]))
+
+    def test_preview_watchdog_matches_real_tick_including_manager_and_history(self):
+        with self.c.mutation("fixture", {}) as (_, state):
+            for index, status in enumerate(("dispatching", "dispatched", "running",
+                                            "dispatch_uncertain", "returned")):
+                state["actions"][status] = dict(id=status, status=status, deadline=1.0,
+                    dispatch_epoch=2, workstream="delivery", sequence=index)
+            state["manager"] = dict(id="manual-manager", deadline=1.0)
+        before = self.files()
+        preview = owner.arm_owner(self.config_path, self.authority, dry_run=True)["first_admitted_tick"]
+        self.assertEqual(before, self.files())
+        self.assertEqual("READY", preview["state"])
+        self.assertIsNone(preview["fixture_event"])
+        owner.arm_owner(self.config_path, self.authority)
+        self.assertEqual("READY", self.tick()["state"])
+        actual = self.c.snapshot()
+        for change in preview["coordinator_changes"]:
+            if change["path"][:3] == ["state", "1", "body"]:
+                current = actual
+                for key in change["path"][3:]:
+                    current = current[key]
+                self.assertEqual(change["after"], current)
+        with self.c.connection() as db:
+            for event in preview["watchdog_events"]:
+                self.assertEqual(event, json.loads(db.execute(
+                    "SELECT body FROM events WHERE id=?", (event["id"],)).fetchone()[0]))
+        self.assertEqual(4, len(preview["watchdog_events"]))
+
+    def test_preview_paused_and_held_skip_fixture_but_not_watchdog(self):
+        for held in (False, True):
+            with self.subTest(held=held):
+                if held:
+                    self.sql("INSERT INTO holds VALUES('fixture','global',NULL,'fixture',0,0,'x',NULL,NULL)")
+                self.c.set_enabled(False, {"fixture": True})
+                preview = owner.arm_owner(self.config_path, self.authority, dry_run=True)["first_admitted_tick"]
+                self.assertEqual("HOLD" if held else "READY", preview["state"])
+                self.assertEqual([], preview["files"])
+                self.assertIsNone(preview["fixture_event"])
+                self.assertEqual([], preview["coordinator_changes"])
+
+    def test_preview_shares_authority_and_drift_refusals_without_writes(self):
+        for changes, reason in (({"generation": 2}, "activation_generation_mismatch"),
+                                ({"scope": "tmux-workers"}, "activation_scope_mismatch"),
+                                ({"authority": ""}, "activation_authority_required")):
+            before = self.files()
+            for dry_run in (False, True):
+                with self.subTest(dry_run=dry_run, reason=reason), self.assertRaisesRegex(f.LaunchError, reason):
+                    owner.arm_owner(self.config_path, {**self.authority, **changes}, dry_run=dry_run)
+            self.assertEqual(before, self.files())
+        f.write_json(self.root / "activation-transaction.json", {"fixture": True})
+        before = self.files()
+        with self.assertRaisesRegex(f.LaunchError, "activation_recovery_required"):
+            owner.arm_owner(self.config_path, self.authority, dry_run=True)
+        self.assertEqual(before, self.files())
+
+    def test_preview_refuses_unsettled_operation_and_coordinator_journal(self):
+        self.sql("INSERT INTO operations(op_id,phase) VALUES('fixture','intent')")
+        before = self.files()
+        with self.assertRaisesRegex(f.LaunchError, "preview_requires_settled_operations"):
+            owner.arm_owner(self.config_path, self.authority, dry_run=True)
+        self.assertEqual(before, self.files())
+        self.sql("DELETE FROM operations")
+        f.write_file(self.root / "coordinator.sqlite3-journal", b"fixture")
+        before = self.files()
+        with self.assertRaisesRegex(f.LaunchError, "coordinator_recovery_required"):
+            owner.arm_owner(self.config_path, self.authority, dry_run=True)
+        self.assertEqual(before, self.files())
+
+    def test_preview_option_cannot_be_silently_ignored(self):
+        for args in (("--dry-run",), ("--run", "--dry-run"),
+                     ("--disarm", "--dry-run", "--config", str(self.config_path), "--generation", "0")):
+            self.assertEqual(2, self.child(None, *args).returncode)
+
+
 class ActivationVisibilityTests(unittest.TestCase):
     setUp = OwnerDaemonTests.setUp
     tearDown = OwnerDaemonTests.tearDown

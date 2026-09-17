@@ -167,7 +167,7 @@ def remove_activation_intent(root):
 
 
 @contextmanager
-def activation_store(config_path):
+def activation_store(config_path, readonly=False):
     # Disarm must remain possible after package/config drift. Only resolve the
     # existing store here; arm performs full live configuration validation.
     config = load(config_path)
@@ -177,14 +177,15 @@ def activation_store(config_path):
         path = private_file(root / "owner.sqlite3")
         f.require(not any(Path(str(path) + suffix).exists() for suffix in
                           ("-journal", "-wal", "-shm")), "owner_recovery_required")
-        with closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True)) as db:
+        mode = "ro" if readonly else "rw"
+        with closing(sqlite3.connect(path.as_uri() + "?mode=" + mode, uri=True)) as db:
             db.row_factory = sqlite3.Row
             db.execute("PRAGMA synchronous=FULL")
             f.require(db.execute("PRAGMA journal_mode").fetchone()[0] == "delete", "journal_mode")
             for table, columns in SCHEMA.items():
                 row = db.execute("SELECT sql FROM sqlite_master WHERE name=?", (table,)).fetchone()
                 f.require(row and row[0] == f"CREATE TABLE {table} ({columns})", "schema_drift")
-            db.execute("BEGIN IMMEDIATE")
+            db.execute("BEGIN" if readonly else "BEGIN IMMEDIATE")
             row = db.execute("SELECT * FROM meta WHERE singleton=1").fetchone()
             f.require(row is not None, "state_drift")
             meta = dict(row)
@@ -264,14 +265,137 @@ def activation_status(config_path):
     return result
 
 
-def arm_owner(config_path, authority):
+def preview_changes(before, after, path=()):
+    """JSON field deltas, including missing versus null, for an advisory preview."""
+    if isinstance(before, dict) and isinstance(after, dict):
+        changes = []
+        for key in sorted(before.keys() | after.keys()):
+            if key not in before:
+                changes.append(dict(path=[*path, key], operation="insert", after=after[key]))
+            elif key not in after:
+                changes.append(dict(path=[*path, key], operation="delete", before=before[key]))
+            else:
+                changes.extend(preview_changes(before[key], after[key], (*path, key)))
+        return changes
+    return [] if before == after else [dict(path=list(path), operation="update",
+                                            before=before, after=after)]
+
+
+def arming_preview(root, db, meta, config, authority, impact):
+    """All arm checks have passed; predict fixture effects using only RAM writes.
+
+    Deliberately refuse unsupported transport/replay previews instead of presenting
+    a partial plan as exact. These are preview limits, not new arming policy.
+    """
+    f.require("transport" not in config, "preview_requires_fixture_only")
+    f.require(not db.execute("SELECT 1 FROM operations WHERE phase IN ('intent','observed')").fetchone(),
+              "preview_requires_settled_operations")
+    after = dict(meta, requested_mode="armed", control_generation=authority["generation"],
+                 activation_decision_id=authority["decision_id"],
+                 activation_revision=authority["revision"], activation_digest=digest(authority))
+    request = dict(identity=digest([authority["generation"], "fixture-tick"]), fixture_only=True)
+    op_id = digest([authority["generation"], "fixture", request["identity"], None, None, "observe", 0])
+    source = ExistingCoordinator(root)
+    observed_at = time.time()
+    with closing(sqlite3.connect(":memory:", isolation_level=None)) as memory:
+        memory.row_factory = sqlite3.Row
+        # The source connection is read-only; backup writes solely into RAM.
+        with source.connection(readonly=True) as original:
+            original.execute("PRAGMA busy_timeout=250")
+            original.execute("BEGIN")
+            row = original.execute("SELECT body FROM state WHERE id=1").fetchone()
+            f.require(row is not None and f.strict_json(row[0])["revision"] == impact["revision"],
+                      "preview_coordinator_changed")
+            original.backup(memory)
+
+        class PreviewCoordinator(ExistingCoordinator):
+            def __init__(self):
+                self.clock = lambda: observed_at
+
+            @contextmanager
+            def connection(self, readonly=False):
+                try:
+                    yield memory
+                finally:
+                    # Match a real per-call connection's close/rollback semantics.
+                    if memory.in_transaction:
+                        memory.rollback()
+
+        def rows():
+            tables = {}
+            for table, key in (("state", "id"), ("events", "seq"), ("audit", "seq"),
+                               ("action_history", "id"), ("evidence", "digest"),
+                               ("sqlite_sequence", "name")):
+                tables[table] = {}
+                for row in memory.execute(f"SELECT * FROM {table}"):
+                    value = dict(row)
+                    if "body" in value:
+                        value["body"] = f.strict_json(value["body"])
+                    tables[table][str(value[key])] = value
+            return tables
+
+        coordinator = PreviewCoordinator()
+        before = rows()
+        watchdog = coordinator.watchdog()
+        held = bool(db.execute("SELECT 1 FROM holds WHERE resolved_at IS NULL").fetchone())
+        readiness = coordinator.readiness()
+        effect = not held and readiness in {"ready", "empty"} and not db.execute(
+            "SELECT 1 FROM operations WHERE op_id=?", (op_id,)).fetchone()
+        fixture = fixture_receipt(request) if effect else None
+        if fixture:
+            coordinator.event(fixture["event"])
+        changes = preview_changes(before, rows())
+    return dict(
+        state="WOULD_ARM", dry_run=True, generation=authority["generation"],
+        activation_digest=digest(authority), coordinator=impact,
+        arm=dict(
+            database=str(root / "owner.sqlite3"), table="meta", key=dict(singleton=1),
+            before=meta, after=after,
+            activation_file=dict(path=str(root / "activation.json"),
+                                 operation="replace" if (root / "activation.json").exists() else "create",
+                                 after=authority),
+            transient_files=[str(root / name) for name in
+                             ("activation-transaction.json.pending", "activation-transaction.json",
+                              "activation.json.pending", "owner.sqlite3-journal")],
+            intent=dict(authority=authority, previous_generation=meta["control_generation"])),
+        first_admitted_tick=dict(
+            observed_at=observed_at, coordinator_database=str(source.path),
+            coordinator_changes=changes, watchdog_events=watchdog,
+            state="HOLD" if held else "ACTIVE" if readiness in {"ready", "empty"} else "READY",
+            readiness=readiness, fixture_event=fixture["event"] if fixture else None,
+            owner_database=str(root / "owner.sqlite3"),
+            owner_rows=dict(
+                boots="INSERT boot_id=<new UUID>, owner_epoch=generation, host_boot_id, pid, "
+                      "process_start, package_digest, started_at; UPDATE stopped_at, stop_reason=tick_exit",
+                health=dict(component="watchdog", operation="INSERT OR REPLACE",
+                            after=dict(last_attempt_at="<tick time>", last_success_at="<tick time>",
+                                       consecutive_failures=0, next_probe_at=None, status="ok",
+                                       evidence_digest=digest(watchdog))),
+                operations=dict(op_id=op_id, final_phase="applied") if effect else None,
+                observations=dict(observation_id=op_id, op_id=op_id) if effect else None,
+                deliveries=dict(delivery_id=op_id, phase="applied") if effect else None),
+            files=[str(root / "runs" / op_id / name) for name in
+                   ("request.json", "receipt.json", "observations/1.json")] if effect else [],
+            transient_files=[str(root / "owner.sqlite3-journal")]
+                            + ([str(root / "coordinator.sqlite3-journal")] if changes else []),
+            warning="WATCHDOG/EVENT HISTORY IS NOT UNDONE BY DISARM. No worker launch in fixture-only scope."),
+        schedule="Arming neither fires a tick nor clears a latched schedule HOLD. "
+                 "An installed schedule must be explicitly recovered before kernel admission; "
+                 "held probes still update tick.json and publish owner-recurrence.json.",
+        limitations="Point-in-time advisory, not a reservation. Inspect while coordinator is quiescent; "
+                    "deadlines and state may change before admission. UUIDs, PIDs and wall times are "
+                    "allocated only by the actual tick. Schedule/service/pin health is separate; "
+                    "this preview does not clear or inspect its HOLD.")
+
+
+def arm_owner(config_path, authority, dry_run=False):
     """Explicit local authority; never installs a schedule or invokes transport.
 
     File + SQLite have no shared physical transaction. Both owner locks exclude
     readers; a durable intent fences admission across crashes, including a crash
     after the SQL commit. Only explicit disarm clears an interrupted transaction.
     """
-    with activation_store(config_path) as (root, db, meta):
+    with activation_store(config_path, readonly=dry_run) as (root, db, meta):
         f.require(not activation_pending(root), "activation_recovery_required")
         config = configuration(config_path)
         f.require(config["coordinator"] == str(root), "config_drift")
@@ -284,6 +408,8 @@ def arm_owner(config_path, authority):
         if os.path.lexists(root / "activation.json"):
             private_file(root / "activation.json")
         impact = coordinator_activation_impact(root)
+        if dry_run:
+            return arming_preview(root, db, meta, config, authority, impact)
         f.write_json(root / "activation-transaction.json",
                      dict(authority=authority, previous_generation=meta["control_generation"]))
         f.write_json(root / "activation.json", authority)
@@ -852,6 +978,8 @@ def main(argv=None):
     commands.add_argument("--disarm", action="store_true")
     commands.add_argument("--activation-status", action="store_true",
                           help="inspect in-flight/overdue deadlines and watchdog effects without arming")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="with --arm: validate and preview fixture-only changes without writing")
     parser.add_argument("--authority", type=Path)
     parser.add_argument("--generation", type=int)
     parser.add_argument("--config", type=Path)
@@ -861,6 +989,8 @@ def main(argv=None):
     parser.add_argument("--label", default="com.corbanu.initiative-owner")
     parser.add_argument("--publish-state", type=Path)
     args = parser.parse_args(argv)
+    if args.dry_run and not args.arm:
+        parser.error("--dry-run requires --arm")
     if args.arm or args.disarm or args.activation_status:
         if (args.config is None or args.schedule or args.recover is not None or args.observe
                 or args.publish_state or (args.arm and (args.authority is None or args.generation is not None))
@@ -870,7 +1000,7 @@ def main(argv=None):
             parser.error("activation commands require --config; --arm requires --authority; "
                          "--disarm requires --generation; schedule options cannot be combined")
         try:
-            result = (arm_owner(args.config, load(args.authority)) if args.arm else
+            result = (arm_owner(args.config, load(args.authority), dry_run=args.dry_run) if args.arm else
                       disarm_owner(args.config, args.generation) if args.disarm else
                       activation_status(args.config))
             print(encoded(result))

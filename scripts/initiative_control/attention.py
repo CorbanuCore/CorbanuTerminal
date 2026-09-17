@@ -200,6 +200,9 @@ def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=N
             result += f'<p>Recorded {esc(record["status"])} against question revision {answer["answered_revision"]}; {esc(answer["recorded_at"])}.</p>'
             for field in ("actor", "answer", "scope"):
                 result += f'<p><strong>{field.title()}</strong> {linked(answer[field])}</p>'
+        if record["revision"] in omitted.get(decision_id, set()):
+            result += (f'<p>Slack projection row for revision {record["revision"]}: omitted. '
+                       'The question observation below may refer to a different, answered revision.</p>')
         if slack is not None:
             question_revision = (record.get("resolution") or {}).get("answered_revision", record["revision"])
             rows = [row for row in slack["decisions"] if row["id"] == decision_id and row["revision"] == question_revision]
@@ -240,7 +243,7 @@ def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=N
             if omitted.get(decision["id"]):
                 count = len(omitted[decision["id"]])
                 body += (f'<p>Slack projection omits {count} older revision(s) for this decision. '
-                         'Full decision history remains below; omitted Slack detail is marked on each affected revision.</p>')
+                         'This counts omitted projection rows, each marked on its own revision below; question observations may refer to an answered revision.</p>')
             body += content(record, decision_id=decision["id"])
             for earlier in decision["revisions"][:-1]:
                 body += f'<details><summary>Retained revision {earlier["revision"]} (historical)</summary>' + content(earlier, decision_id=decision["id"]) + '</details>'
