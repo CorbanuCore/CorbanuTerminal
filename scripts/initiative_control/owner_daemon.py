@@ -130,6 +130,126 @@ def setup(config_path):
         os.close(directory)
 
 
+def validate_authority(authority, config):
+    f.require(type(authority) is dict and set(authority) == {
+        "decision_id", "revision", "authority", "scope", "generation",
+        "config_digest", "package_digest"}, "invalid_activation")
+    for key, reason in (("decision_id", "activation_decision_id_required"),
+                        ("authority", "activation_authority_required")):
+        f.require(isinstance(authority[key], str) and bool(authority[key].strip()), reason)
+    for key in ("revision", "generation"):
+        f.require(type(authority[key]) is int and authority[key] > 0,
+                  "activation_" + key + "_required")
+    f.require(authority["scope"] == ("tmux-workers" if "transport" in config else "fixture-only"),
+              "activation_scope_mismatch")
+    f.require(authority["config_digest"] == digest(config), "activation_config_mismatch")
+    f.require(authority["package_digest"] == package_digest(), "activation_package_mismatch")
+
+
+def activation_pending(root):
+    return any(os.path.lexists(root / name) for name in
+               ("activation-transaction.json", "activation-transaction.json.pending",
+                "activation.json.pending"))
+
+
+def remove_activation_intent(root):
+    # Called only after FULL-synchronous SQLite commit, with admission excluded.
+    for name in ("activation-transaction.json", "activation-transaction.json.pending",
+                 "activation.json.pending"):
+        path = root / name
+        if os.path.lexists(path):
+            private_file(path).unlink()
+    fd = os.open(root, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+@contextmanager
+def activation_store(config_path):
+    # Disarm must remain possible after package/config drift. Only resolve the
+    # existing store here; arm performs full live configuration validation.
+    config = load(config_path)
+    f.require(type(config) is dict and isinstance(config.get("coordinator"), str), "invalid_config")
+    root = f.private_dir(config["coordinator"])
+    with locked(root / "owner-daemon.lock"), locked(root / "owner-admission.lock"):
+        path = private_file(root / "owner.sqlite3")
+        f.require(not any(Path(str(path) + suffix).exists() for suffix in
+                          ("-journal", "-wal", "-shm")), "owner_recovery_required")
+        with closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True)) as db:
+            db.row_factory = sqlite3.Row
+            db.execute("PRAGMA synchronous=FULL")
+            f.require(db.execute("PRAGMA journal_mode").fetchone()[0] == "delete", "journal_mode")
+            for table, columns in SCHEMA.items():
+                row = db.execute("SELECT sql FROM sqlite_master WHERE name=?", (table,)).fetchone()
+                f.require(row and row[0] == f"CREATE TABLE {table} ({columns})", "schema_drift")
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT * FROM meta WHERE singleton=1").fetchone()
+            f.require(row is not None, "state_drift")
+            meta = dict(row)
+            f.require(meta["schema_version"] == 1 and type(meta["control_generation"]) is int
+                      and meta["control_generation"] >= 0, "state_drift")
+            yield root, db, meta
+
+
+def activation_status(config_path):
+    with activation_store(config_path) as (root, _, meta):
+        config = load(config_path)
+        return dict(state=meta["requested_mode"], generation=meta["control_generation"],
+                    next_generation=meta["control_generation"] + 1,
+                    config_digest=digest(config), package_digest=package_digest(),
+                    scope="tmux-workers" if "transport" in config else "fixture-only",
+                    recovery_required=activation_pending(root), stored=meta)
+
+
+def arm_owner(config_path, authority):
+    """Explicit local authority; never installs a schedule or invokes transport.
+
+    File + SQLite have no shared physical transaction. Both owner locks exclude
+    readers; a durable intent fences admission across crashes, including a crash
+    after the SQL commit. Only explicit disarm clears an interrupted transaction.
+    """
+    with activation_store(config_path) as (root, db, meta):
+        f.require(not activation_pending(root), "activation_recovery_required")
+        config = configuration(config_path)
+        f.require(config["coordinator"] == str(root), "config_drift")
+        f.require(meta["config_digest"] == digest(config)
+                  and meta["package_digest"] == package_digest(), "state_drift")
+        validate_authority(authority, config)
+        f.require(authority["generation"] == meta["control_generation"] + 1,
+                  "activation_generation_mismatch")
+        f.require(meta["requested_mode"] == "off", "owner_already_armed")
+        if os.path.lexists(root / "activation.json"):
+            private_file(root / "activation.json")
+        f.write_json(root / "activation-transaction.json",
+                     dict(authority=authority, previous_generation=meta["control_generation"]))
+        f.write_json(root / "activation.json", authority)
+        db.execute("UPDATE meta SET requested_mode='armed',control_generation=?,"
+                   "activation_decision_id=?,activation_revision=?,activation_digest=? WHERE singleton=1",
+                   (authority["generation"], authority["decision_id"],
+                    authority["revision"], digest(authority)))
+        db.commit()
+        remove_activation_intent(root)
+        return dict(state="ARMED", generation=authority["generation"], activation_digest=digest(authority))
+
+
+def disarm_owner(config_path, generation):
+    """Revoke admission, consume a generation and recover interrupted activation.
+
+    Retain activation.json as evidence. Existing processes and schedule HOLDs
+    are deliberately unaffected; this is revocation, not worker termination.
+    """
+    f.require(type(generation) is int and generation >= 0, "activation_generation_required")
+    with activation_store(config_path) as (root, db, meta):
+        f.require(generation == meta["control_generation"], "activation_generation_mismatch")
+        db.execute("UPDATE meta SET requested_mode='off',control_generation=? WHERE singleton=1",
+                   (generation + 1,))
+        db.commit()
+        remove_activation_intent(root)
+        return dict(state="OFF", generation=generation + 1)
+
+
 def fixture_receipt(request):
     return {"fixture_only": True, "request_digest": digest(request),
             "event": {"id": "owner-fixture:" + request["identity"], "fixture_only": True}}
@@ -162,15 +282,9 @@ class Kernel:
         f.require(meta["schema_version"] == 1 and meta["config_digest"] == digest(self.config)
                   and meta["package_digest"] == package_digest(), "state_drift")
         f.require(meta["requested_mode"] == "armed", "owner_off")
+        f.require(not activation_pending(self.root), "activation_recovery_required")
         authority = load(self.root / "activation.json")
-        f.require(set(authority) == {"decision_id", "revision", "authority", "scope",
-                                    "generation", "config_digest", "package_digest"},
-                  "invalid_activation")
-        f.require(isinstance(authority["authority"], str) and bool(authority["authority"].strip())
-                  and authority["scope"] == ("tmux-workers" if "transport" in self.config else "fixture-only")
-                  and type(authority["revision"]) is int and authority["revision"] > 0
-                  and type(authority["generation"]) is int and authority["generation"] > 0
-                  and bool(authority["decision_id"]), "activation_authority_required")
+        validate_authority(authority, self.config)
         f.require((meta["activation_decision_id"], meta["activation_revision"],
                    meta["activation_digest"], meta["control_generation"]) ==
                   (authority["decision_id"], authority["revision"], digest(authority),
@@ -667,7 +781,13 @@ def scheduled_tick(root, recover=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--run", action="store_true")
+    commands = parser.add_mutually_exclusive_group()
+    commands.add_argument("--run", action="store_true")
+    commands.add_argument("--arm", action="store_true")
+    commands.add_argument("--disarm", action="store_true")
+    commands.add_argument("--activation-status", action="store_true")
+    parser.add_argument("--authority", type=Path)
+    parser.add_argument("--generation", type=int)
     parser.add_argument("--config", type=Path)
     parser.add_argument("--schedule", type=Path)
     parser.add_argument("--recover")
@@ -675,6 +795,26 @@ def main(argv=None):
     parser.add_argument("--label", default="com.corbanu.initiative-owner")
     parser.add_argument("--publish-state", type=Path)
     args = parser.parse_args(argv)
+    if args.arm or args.disarm or args.activation_status:
+        if (args.config is None or args.schedule or args.recover is not None or args.observe
+                or args.publish_state or (args.arm and (args.authority is None or args.generation is not None))
+                or (not args.arm and args.authority is not None)
+                or (args.disarm and args.generation is None)
+                or (args.activation_status and args.generation is not None)):
+            parser.error("activation commands require --config; --arm requires --authority; "
+                         "--disarm requires --generation; schedule options cannot be combined")
+        try:
+            result = (arm_owner(args.config, load(args.authority)) if args.arm else
+                      disarm_owner(args.config, args.generation) if args.disarm else
+                      activation_status(args.config))
+            print(encoded(result))
+            return 0
+        except (f.LaunchError, Rejected, OSError, sqlite3.Error, ValueError, TypeError, KeyError) as exc:
+            reason = str(exc) if isinstance(exc, (f.LaunchError, Rejected)) else type(exc).__name__
+            print(encoded(dict(state="REFUSED", reason=reason)))
+            return 2
+    if args.authority is not None or args.generation is not None:
+        parser.error("--authority/--generation require an activation command")
     if args.observe:
         result = observe_schedule(args.schedule, args.label)
         if args.publish_state:
