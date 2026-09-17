@@ -40,6 +40,8 @@ def supervised_child(root, guard, control, mode, endpoint):
     if mode == "ignore-term":
         fixtures.signal.signal(fixtures.signal.SIGTERM, fixtures.signal.SIG_IGN)
     def run(runtime, stop, data):
+        if mode == "failure-record":
+            raise OSError("private-message xoxb-not-a-real-token https://private.invalid")
         if mode.startswith("refuse-"):
             store = a.Store(root)
             with s.locked(store) as journal:
@@ -551,8 +553,11 @@ class ManagerTests(fixtures.LiveFixture):
     def test_unbound_follower_reply_is_never_attributed_to_parent(self):
         key, row = self.uncertain_follower()
         self.callback(fixtures.payload("EvUnbound", thread_ts=row["parent"]["receipt"]["ts"]))
-        self.assertFalse(self.transport.active)
-        self.assertEqual(self.acks, [])
+        self.assertTrue(self.transport.active)
+        self.assertEqual(len(self.acks), 1)
+        self.assertEqual(self.store.read("transport")["held_human"]["EvUnbound"]["envelope"]["thread_ts"],
+                         row["parent"]["receipt"]["ts"])
+        self.assertEqual(self.store.read("transport")["hold"], "ingress-held")
         self.assertEqual(self.store.read("transport")["events"], {})
         self.assertEqual(self.store.read("replies")["events"], {})
 
@@ -898,6 +903,234 @@ class ManagerTests(fixtures.LiveFixture):
             if expected == 4:
                 supervisor.record("restart-refused")
 
+    def test_real_child_failure_record_survives_reap_and_projects_to_dashboard(self):
+        manager = m.ManagedListener(self.store, PIN, live=True)
+        self.addCleanup(manager.stop)
+        supervisor = m.ListenerSupervisor(manager, self.transport, lambda: NOW)
+        with fixture_child("failure-record", self.endpoint):
+            supervisor.start(seconds=60, ongoing=True)
+        manager.process.wait(timeout=5)
+        supervisor.tick()
+        event = self.store.read("transport")["listener_events"][-1]
+        self.assertEqual(event["failure"], s.failure_record("transport-io", "runtime"))
+        self.assertEqual(event["returncode"], 1)
+        self.assertIsNone(manager.process)
+        import decision_feed as feed
+        projected = feed.project_slack(self.feed_root, self.root, NOW, True)
+        health = feed.slack_health(dict(slack=projected), NOW)
+        self.assertEqual(health["last_listener_exit"], event)
+        self.assertNotIn("private-message", d.canonical(projected).decode())
+        self.assertNotIn("xoxb-", d.canonical(projected).decode())
+        supervisor.tick()
+        self.assertEqual(len(self.store.read("transport")["listener_events"]), 1)
+
+    def test_production_child_reports_missing_disposable_credentials_without_sdk_io(self):
+        self.owner.close()
+        manager = m.ManagedListener(self.store, PIN, live=True)
+        self.addCleanup(manager.stop)
+        supervisor = m.ListenerSupervisor(manager, self.transport, lambda: NOW)
+        popen = subprocess.Popen
+        def launch(command, **kwargs):
+            env = {key: value for key, value in os.environ.items()
+                   if key not in ("CORBANU_SLACK_BOT_TOKEN", "CORBANU_SLACK_APP_TOKEN")}
+            return popen(command, env=env, **kwargs)
+        with patch.object(m.subprocess, "Popen", side_effect=launch):
+            supervisor.start(seconds=60, ongoing=True)
+        manager.process.wait(timeout=5)
+        supervisor.tick()
+        event = self.store.read("transport")["listener_events"][-1]
+        self.assertEqual(event["failure"], s.failure_record(
+            "validation-failed", "credentials", callbacks=0, disconnect_marks=0, quarantined=0))
+        self.assertEqual(event["returncode"], 1)
+        self.assertEqual(self.messages, [])
+
+    def test_failure_before_handshake_survives_failed_start_cleanup(self):
+        manager = m.ManagedListener(self.store, PIN, live=True)
+        self.addCleanup(manager.stop)
+        supervisor = m.ListenerSupervisor(manager, self.transport, lambda: NOW)
+        popen = subprocess.Popen
+        def launch(command, **kwargs):
+            return popen([*command[:-1], "-1"], **kwargs)
+        with patch.object(m.subprocess, "Popen", side_effect=launch), self.assertRaises(d.Invalid):
+            supervisor.start(seconds=60, ongoing=True)
+        event = self.store.read("transport")["listener_events"][-1]
+        self.assertEqual(event["failure"], s.failure_record("transport-io", "bootstrap"))
+        self.assertEqual(event["returncode"], 1)
+        self.assertIsNone(manager.process)
+
+    def test_clean_child_exit_has_no_failure_but_nonzero_or_explicit_frame_does(self):
+        manager = m.ManagedListener(self.store, PIN)
+        reported = s.failure_record("transport-busy", "session-renew", 0, 3, 0)
+        cases = [(0, b"", None), (1, b"", s.failure_record("child-unreported", "supervisor")),
+                 (0, d.canonical(dict(type="listener-failure", failure=reported)), reported),
+                 (0, b"malformed", s.failure_record("child-unreported", "supervisor"))]
+        for code, raw, expected in cases:
+            with self.subTest(code=code, raw=bool(raw)):
+                child = subprocess.Popen([sys.executable, "-c",
+                    "import os,sys; os.write(1, bytes.fromhex(sys.argv[1])); sys.exit(int(sys.argv[2]))",
+                    raw.hex(), str(code)], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                child.wait(timeout=5)
+                try:
+                    self.assertEqual(manager.failure(child), expected)
+                finally:
+                    child.stdout.close()
+                self.assertEqual(manager.failure(child), expected)
+
+    def test_outstanding_count_age_and_review_recovery_on_manager_and_dashboard(self):
+        import decision_feed as feed
+        self.sending()
+        self.callback(fixtures.payload("EvPoison", subtype="message_deleted", deleted_ts="109.000001"))
+        at = (d.stamp(NOW) + s.dt.timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        fresh = dict(state="healthy", event_flush_failures=0, pending_events=0, observed_at=at, reason=None)
+        self.store.write("supervisor", dict(binding=PIN, health=fresh))
+        status = m.project_status(self.store, at, True)
+        projected = feed.project_slack(self.feed_root, self.root, at, True)
+        dashboard = feed.slack_health(dict(slack=projected), at)
+        for surface in (status, projected["status"], dashboard):
+            self.assertEqual(surface["state"], "held")
+            self.assertEqual(surface["supervisor_health"]["state"], "unhealthy")
+            self.assertEqual(surface["supervisor_health"]["reason"], "quarantined-intake")
+            self.assertEqual(surface["supervisor_health"]["quarantine"],
+                             dict(count=1, held=0, oldest_at=NOW, age_seconds=60))
+        later = (d.stamp(NOW) + s.dt.timedelta(seconds=120)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        aged = feed.slack_health(dict(slack=projected), later)["supervisor_health"]
+        self.assertEqual(aged["quarantine"]["age_seconds"], 120)
+        self.assertEqual(aged["reason"], "observation-stale")
+        self.review_gap()
+        self.assertIsNone(self.store.read("transport")["hold"])
+        recovered = feed.project_slack(self.feed_root, self.root, at, True)
+        for surface in (m.project_status(self.store, at, True), recovered["status"],
+                        feed.slack_health(dict(slack=recovered), at)):
+            self.assertEqual(surface["state"], "last-verified")
+            self.assertEqual(surface["supervisor_health"]["state"], "healthy")
+            self.assertNotIn("quarantine", surface["supervisor_health"])
+        self.transport.now = lambda: at
+        self.callback(fixtures.payload("EvNew", subtype="message_deleted", deleted_ts="110.000001"))
+        self.assertEqual(m.project_status(self.store, later, True)["supervisor_health"]["quarantine"],
+                         dict(count=1, held=0, oldest_at=at, age_seconds=60))
+
+    def test_legacy_quarantine_separates_unknown_history_from_outstanding(self):
+        self.sending()
+        self.callback(fixtures.payload("EvPoison", subtype="message_deleted", deleted_ts="109.000001"))
+        with s.locked(self.store) as journal:
+            journal["quarantine"] = dict(total=129, records=journal["quarantine"]["records"])
+            self.store.write("transport", journal)
+        legacy = m.project_status(self.store, NOW, True)["supervisor_health"]["quarantine"]
+        self.assertEqual(legacy, dict(count=1, held=0, oldest_at=NOW, age_seconds=0, unknown=128))
+        self.review_gap()
+        self.assertNotIn("quarantine", m.project_status(self.store, NOW, True)["supervisor_health"])
+
+    def test_reviewed_legacy_pruning_stays_unknown_after_unrelated_ingress(self):
+        import decision_feed as feed
+        self.sending()
+        self.callback(fixtures.payload("EvPoison", subtype="message_deleted", deleted_ts="109.000001"))
+        self.review_gap()
+        with s.locked(self.store) as journal:
+            # A pre-summary journal: the review remains durable, dispositions
+            # of missing records do not. No new quarantine follows the review.
+            journal["quarantine"] = dict(total=129, records=journal["quarantine"]["records"])
+            self.store.write("transport", journal)
+        self.store.write("supervisor", dict(binding=PIN, health=dict(
+            state="healthy", event_flush_failures=0, pending_events=0, observed_at=NOW, reason=None)))
+        for advanced in (False, True):
+            with self.subTest(advanced=advanced):
+                if advanced:
+                    self.callback(fixtures.payload("EvBot", user=PIN["bot"], bot_id=PIN["bot"], app_id=PIN["app"]))
+                projected = feed.project_slack(self.feed_root, self.root, NOW, True)
+                for surface in (m.project_status(self.store, NOW, True), projected["status"],
+                                feed.slack_health(dict(slack=projected), NOW)):
+                    self.assertEqual(surface["state"], "unknown")
+                    health = surface["supervisor_health"]
+                    self.assertEqual((health["state"], health["reason"]),
+                                     ("unknown", "quarantine-history-unknown"))
+                    self.assertEqual(health["quarantine"],
+                                     dict(count=0, held=0, oldest_at=None, age_seconds=None, unknown=128))
+                    m.validate_supervisor_health(health)
+        self.assertIsNone(self.store.read("transport")["hold"])
+        supervisor = m.ListenerSupervisor(m.ManagedListener(self.store, PIN), self.transport, lambda: NOW)
+        self.assertEqual(supervisor.status(True)["state"], "unknown")
+        self.assertEqual(supervisor.status(True)["supervisor_health"]["state"], "unknown")
+        later = (d.stamp(NOW) + s.dt.timedelta(seconds=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        aged = feed.slack_health(dict(slack=projected), later)["supervisor_health"]
+        self.assertEqual(aged["reason"], "observation-stale")
+        self.assertEqual(aged["quarantine"]["count"], 0)
+        self.assertEqual(aged["quarantine"]["unknown"], 128)
+        s.hold(self.store, "ingress-held")
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "held")
+        held = feed.project_slack(self.feed_root, self.root, NOW, True)
+        self.assertEqual(feed.slack_health(dict(slack=held), NOW)["state"], "held")
+
+    def test_supervisor_reason_precedes_quarantine_without_hiding_count(self):
+        import decision_feed as feed
+        self.sending()
+        self.callback(fixtures.payload("EvPoison", subtype="message_deleted", deleted_ts="109.000001"))
+        at = (d.stamp(NOW) + s.dt.timedelta(seconds=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        for reason, observation in (
+            ("observation-unavailable", None),
+            ("observation-stale", dict(state="healthy", event_flush_failures=0,
+                                      pending_events=0, observed_at=NOW, reason=None)),
+            ("event-flush-failed", dict(state="unhealthy", event_flush_failures=1,
+                                       pending_events=1, observed_at=at, reason="event-flush-failed")),
+        ):
+            with self.subTest(reason=reason):
+                self.store.write("supervisor", dict(binding=PIN, health=observation))
+                projected = feed.project_slack(self.feed_root, self.root, at, True)
+                for surface in (m.project_status(self.store, at, True), projected["status"],
+                                feed.slack_health(dict(slack=projected), at)):
+                    health = surface["supervisor_health"]
+                    self.assertEqual(health["reason"], reason)
+                    self.assertEqual(health["quarantine"]["count"], 1)
+                    self.assertEqual(health["quarantine"]["age_seconds"], 6)
+                    m.validate_supervisor_health(health)
+
+    def test_expired_history_is_not_outstanding_and_review_does_not_discard_held(self):
+        key, row = self.uncertain_follower()
+        self.callback(fixtures.payload("EvUnbound", thread_ts=row["parent"]["receipt"]["ts"]))
+        self.review_gap()
+        self.assertEqual(m.project_status(self.store, NOW, True)["supervisor_health"]["quarantine"]["held"], 1)
+        deadline = self.store.read("transport")["held_human"]["EvUnbound"]["expires_at"]
+        s.drain(self.store, now=deadline)
+        journal = self.store.read("transport")
+        self.assertEqual(journal["quarantine"]["records"][-1]["reason"], "unbound-expired")
+        self.assertNotIn("quarantine", m.project_status(self.store, deadline, True)["supervisor_health"])
+
+    def test_unbound_pending_count_is_projected_until_exact_binding(self):
+        import decision_feed as feed
+        key, row = self.uncertain_follower()
+        self.callback(fixtures.payload("EvUnbound", thread_ts=row["parent"]["receipt"]["ts"]))
+        projected = feed.project_slack(self.feed_root, self.root, NOW, True)
+        health = feed.slack_health(dict(slack=projected), NOW)
+        self.assertEqual(health["supervisor_health"]["quarantine"],
+                         dict(count=1, held=1, oldest_at=NOW, age_seconds=0))
+        a.reconcile(self.store, key, "details", self.transport.reconcile(row["details"]["request"]))
+        self.transport.bind_alert(key, a.inspect(self.store, key))
+        self.assertEqual(s.drain(self.store, now=NOW), 1)
+        self.assertEqual(self.store.read("replies")["events"]["EvUnbound"]["alert"], key)
+        self.assertNotIn("quarantine", m.project_status(self.store, NOW, True)["supervisor_health"])
+
+    def test_failure_frames_are_bounded_and_closed_vocabulary_only(self):
+        manager = m.ManagedListener(self.store, PIN)
+        frames = [
+            b"raw private-message",
+            d.canonical(dict(type="listener-failure", failure=dict(
+                s.failure_record("sdk-failed", "connect"), reason="private-message"))),
+            d.canonical(dict(type="listener-failure", failure=dict(
+                s.failure_record("sdk-failed", "connect"), traceback="private-message"))),
+            d.canonical(dict(type="listener-failure", failure=dict(
+                s.failure_record("sdk-failed", "connect"), callbacks=True))),
+            b"x" * 2048,
+        ]
+        for raw in frames:
+            with self.subTest(size=len(raw)):
+                child = subprocess.Popen([sys.executable, "-c",
+                    "import os,sys; os.write(1, bytes.fromhex(sys.argv[1])); sys.exit(1)", raw.hex()],
+                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                try:
+                    child.wait(timeout=5)
+                    self.assertEqual(manager.failure(child), s.failure_record("child-unreported", "supervisor"))
+                finally:
+                    child.stdout.close()
+
     def test_listener_incident_records_exit_and_three_unknown_arrivals(self):
         manager, supervisor, clock = self.watchdog()
         manager.process.kill()
@@ -1091,7 +1324,8 @@ class ManagerTests(fixtures.LiveFixture):
                 self.assertEqual(status["state"], "held")
                 self.assertEqual(status["supervisor_health"],
                     dict(state="unhealthy", event_flush_failures=second + 1, pending_events=1))
-                self.assertEqual(supervisor.pending_event, ("child-exit", -9, NOW))
+                self.assertEqual(supervisor.pending_event, ("child-exit", -9, NOW,
+                    s.failure_record("child-signalled", "supervisor")))
             incoming, writer = os.pipe()
             reader, outgoing = os.pipe()
             try:
@@ -1175,6 +1409,7 @@ class ManagerTests(fixtures.LiveFixture):
         self.assertEqual(recovered["listener_exits"], 1)
 
     def test_idle_supervisor_bounds_durable_writes_and_keeps_fresh_transitions(self):
+        (self.root / "supervisor.json").unlink()
         # No listener has ever started: exercise the real tick and durable Store path.
         second = [0]
         now = lambda: (d.stamp(NOW) + m.dt.timedelta(seconds=second[0])).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1223,7 +1458,47 @@ class ManagerTests(fixtures.LiveFixture):
         second[0] += 6
         self.assertEqual(m.read_supervisor_health(self.store, now(), PIN)["reason"], "observation-stale")
 
+    def test_supervisor_uncertainty_downgrades_fresh_projection_and_rendering(self):
+        import attention
+        import decision_feed as feed
+        self.sending()
+        fresh = dict(state="healthy", event_flush_failures=0, pending_events=0,
+                     observed_at=NOW, reason=None)
+        later = (d.stamp(NOW) + m.dt.timedelta(seconds=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        cases = (("healthy", NOW, "last-verified", None),
+                 ("stale", later, "stale", "observation-stale"),
+                 ("missing", NOW, "unknown", "observation-unavailable"),
+                 ("malformed", NOW, "unknown", "observation-unavailable"),
+                 ("unreadable", NOW, "unknown", "observation-unavailable"))
+        for label, at, state, reason in cases:
+            with self.subTest(label=label):
+                self.store.write("supervisor", dict(binding=PIN, health=fresh))
+                if label == "missing":
+                    (self.root / "supervisor.json").unlink()
+                elif label == "malformed":
+                    (self.root / "supervisor.json").write_text("{}")
+                read = a.Store.read
+                def checked_read(store, name):
+                    if label == "unreadable" and name == "supervisor":
+                        raise OSError("fixture unreadable observation")
+                    return read(store, name)
+                before = (self.root / "transport.json").read_bytes()
+                with patch.object(a.Store, "read", checked_read):
+                    status = m.project_status(self.store, at, True)
+                    projected = feed.project_slack(self.feed_root, self.root, at, True)
+                health = feed.slack_health(dict(slack=projected), at)
+                for surface in (status, projected["status"], health):
+                    self.assertEqual(surface["state"], state)
+                    self.assertEqual(surface["supervisor_health"]["reason"], reason)
+                rendered = attention.render_decisions(d.load_fixture(self.feed_root, at), at, [], {},
+                                                      slack=projected, slack_health=health)
+                self.assertIn("Slack observation: " + state + ";", rendered)
+                if reason is not None:
+                    self.assertNotIn("Slack observation: last-verified;", rendered)
+                self.assertEqual((self.root / "transport.json").read_bytes(), before)
+
     def test_supervisor_observation_missing_stale_or_unwritable_is_not_healthy(self):
+        (self.root / "supervisor.json").unlink()
         manager, supervisor, _ = self.watchdog()
         self.assertEqual(m.project_status(self.store, NOW, True)["supervisor_health"]["state"], "unknown")
         supervisor.tick()
@@ -1695,7 +1970,9 @@ class ManagerTests(fixtures.LiveFixture):
                     process = subprocess.Popen(command, pass_fds=(guard, reader), close_fds=True,
                                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     output, error = process.communicate(d.canonical(dict(binding=PIN, seconds=1, ongoing=False)) + b"\n", timeout=7)
-                    self.assertEqual((process.returncode, output, error), (1, b"", b""))
+                    self.assertEqual((process.returncode, error), (1, b""))
+                    expected = s.failure_record("transport-io", "bootstrap") if wrong == "root" else s.failure_record("validation-failed", "runtime")
+                    self.assertEqual(json.loads(output), dict(type="listener-failure", failure=expected))
                 finally:
                     for fd in (guard, reader, writer):
                         os.close(fd)

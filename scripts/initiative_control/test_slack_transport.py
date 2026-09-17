@@ -293,6 +293,11 @@ class LiveFixture(SlackFixture):
         self.owner = s.Session(self.store)
         self.owner.update("connected")  # Genuine lifetime owner, never a patched gate or fabricated lease.
         self.addCleanup(self.owner.release)
+        # Transport/renderer fixtures start with an explicit fresh supervisor
+        # observation. Missing-observation cases must remove this fixture fact.
+        self.store.write("supervisor", dict(binding=PIN, health=dict(
+            state="healthy", event_flush_failures=0, pending_events=0,
+            observed_at=NOW, reason=None)))
 
     def orphan(self, attempt="pf83-vm-key-20260915T103614Z"):
         request = dict(a.request_for(self.key, a.inspect(self.store, self.key), "parent"), attempt=attempt)
@@ -1120,8 +1125,11 @@ class TransportTests(LiveFixture):
         self.assertEqual(len(self.acks), 1)
         self.transport.active = True
         self.callback(payload("EvOther", thread_ts="199.000001"))
-        self.assertEqual(len(self.acks), 1)
+        self.assertEqual(len(self.acks), 2)
+        self.assertTrue(self.transport.active)
         with s.locked(self.store) as value:
+            self.assertEqual(value["held_human"]["EvOther"]["envelope"]["thread_ts"], "199.000001")
+            self.assertEqual(value["hold"], "ingress-held")
             self.assertEqual(value["watermark"], 1)
             self.assertEqual(value["events"]["Ev001"]["envelope"]["text"], "Five testers")
 
@@ -1365,12 +1373,456 @@ class TransportTests(LiveFixture):
         with s.locked(self.store) as value:
             self.assertEqual(value["watermark"], 3)
 
-    def test_wrong_envelopes_and_unknown_original_are_held_without_ack(self):
+    def unbind_fixture(self):
+        row = self.sending()
+        with s.locked(self.store) as value:
+            value["routes"].clear()
+            self.store.write("transport", value)
+        return row
+
+    def test_unbound_reply_survives_restart_and_binds_once_to_exact_thread(self):
+        row = self.unbind_fixture()
+        self.callback()
+        retained = self.store.read("transport")["held_human"]["Ev001"]
+        self.assertEqual(len(self.acks), 1)
+        self.assertEqual(self.store.read("transport")["events"], {})
+        self.assertEqual((d.stamp(retained["expires_at"]) - d.stamp(retained["arrived_at"])).total_seconds(), 900)
+        self.transport.now = lambda: "2026-09-12T12:01:00Z"
+        self.callback(envelope_id="redelivery")
+        self.assertEqual(self.store.read("transport")["held_human"]["Ev001"], retained)
+        restarted = s.Transport(a.Store(self.root), PIN, lambda: None, now=lambda: NOW)
+        restarted.bind_alert(self.key, row)
+        self.assertEqual(self.store.read("transport")["held_human"], {})
+        self.assertEqual(self.store.read("transport")["events"]["Ev001"]["alert"], self.key)
+        restarted.bind_alert(self.key, row)
+        self.assertEqual(s.drain(a.Store(self.root), now=NOW), 1)
+        self.assertEqual(s.drain(a.Store(self.root), now=NOW), 0)
+        self.assertEqual(self.store.read("transport")["watermark"], 1)
+        self.assertEqual(r.snapshot(self.store, self.key)["replies"]["Ev001"]["envelope"]["text"], "Five testers")
+
+    def test_unbound_replay_write_failure_retains_reply_and_conflicting_retry_is_not_acked(self):
+        row = self.unbind_fixture()
+        self.callback()
+        self.callback(payload(text="conflicting answer"))
+        self.assertEqual(len(self.acks), 1)
+        self.assertEqual(self.store.read("transport")["held_human"]["Ev001"]["envelope"]["text"], "Five testers")
+        with patch.object(self.store, "write", side_effect=OSError("fixture")):
+            with self.assertRaises(OSError):
+                self.transport.bind_alert(self.key, row)
+        journal = self.store.read("transport")
+        self.assertIn("Ev001", journal["held_human"])
+        self.assertEqual(journal["events"], {})
+        self.assertEqual(journal["routes"], {})
+        self.transport.bind_alert(self.key, row)
+        self.assertEqual(s.drain(self.store, now=NOW), 1)
+        self.assertEqual(s.fence_gap(self.store, self.store.read("transport")), 1)
+
+    def test_unbound_late_bound_details_message_is_quarantined_not_delivered(self):
+        row = self.unbind_fixture()
+        self.callback(payload(ts=row["details"]["receipt"]["ts"]))
+        self.transport.now = lambda: self.store.read("transport")["held_human"]["Ev001"]["expires_at"]
+        self.transport.bind_alert(self.key, row)
+        journal = self.store.read("transport")
+        self.assertEqual(journal["held_human"], {})
+        self.assertEqual(journal["events"], {})
+        self.assertEqual(journal["quarantine"]["records"][-1]["reason"], "invalid-message")
+
+    def test_unbound_edits_and_deletes_survive_until_binding(self):
+        row = self.unbind_fixture()
+        self.callback(payload("EvZ"))
+        self.callback(payload("EvA", subtype="message_changed", message=dict(user=PIN["human"], ts="101.000001",
+            thread_ts="100.000001", text="Ten testers", edited={"user": PIN["human"]}), event_ts="102.000001"))
+        self.callback(payload("EvB", subtype="message_deleted", user=None,
+                              deleted_ts="101.000001", event_ts="103.000001"))
+        self.assertEqual(len(self.store.read("transport")["held_human"]), 3)
+        self.transport.bind_alert(self.key, row)
+        self.assertEqual(s.drain(self.store, now=NOW), 3)
+        self.assertEqual({e["envelope"]["kind"] for e in self.store.read("replies")["events"].values()},
+                         {"message", "edit", "delete"})
+
+    def test_unbound_expiry_without_route_is_durable_and_cannot_be_resurrected(self):
+        row = self.unbind_fixture()
+        self.callback(payload(text="private held answer"))
+        deadline = self.store.read("transport")["held_human"]["Ev001"]["expires_at"]
+        self.transport.now = lambda: deadline
+        with patch.object(self.store, "write", side_effect=OSError("fixture")):
+            with self.assertRaises(OSError):
+                s.drain(self.store, now=deadline)
+        self.assertIn("Ev001", self.store.read("transport")["held_human"])
+        self.assertNotIn("quarantine", self.store.read("transport"))
+        self.assertEqual(s.drain(self.store, now=deadline), 0)
+        self.transport.bind_alert(self.key, row)
+        value = self.store.read("transport")
+        self.assertEqual(value["held_human"], {})
+        self.assertEqual(value["events"], {})
+        self.assertEqual(s.outstanding_quarantine(value), dict(count=0, oldest_at=None))
+        record = value["quarantine"]["records"][-1]
+        self.assertEqual((record["reason"], record["channel"], record["message_ts"], record["at"]),
+                         ("unbound-expired", PIN["channel"], "101.000001", deadline))
+        self.assertNotIn("private held answer", d.canonical(value).decode())
+        self.assertEqual(s.drain(self.store, now=deadline), 0)
+        self.assertEqual(self.store.read("transport")["quarantine"]["total"], 1)
+
+    def test_route_at_or_after_deadline_delivers_retained_reply_once(self):
+        row = self.unbind_fixture()
+        for index, delay in enumerate((0, 60)):
+            with self.subTest(delay=delay):
+                with s.locked(self.store) as journal:
+                    journal["routes"].clear()
+                    self.store.write("transport", journal)
+                key = "EvLate" + str(index)
+                self.callback(payload(key, ts=f"101.{index + 1:06d}"))
+                deadline = self.store.read("transport")["held_human"][key]["expires_at"]
+                at = (d.stamp(deadline) + s.dt.timedelta(seconds=delay)).strftime("%Y-%m-%dT%H:%M:%SZ")
+                self.transport.now = lambda: at
+                with patch.object(self.store, "write", side_effect=OSError("fixture")):
+                    with self.assertRaises(OSError):
+                        self.transport.bind_alert(self.key, row)
+                self.assertIn(key, self.store.read("transport")["held_human"])
+                self.transport.bind_alert(self.key, row)
+                self.assertEqual(s.drain(self.store, now=at), 1)
+                self.assertEqual(s.drain(self.store, now=at), 0)
+                self.assertIn(key, self.store.read("replies")["events"])
+                self.assertNotIn("quarantine", self.store.read("transport"))
+
+    def test_routed_reply_waits_for_queue_capacity_past_deadline(self):
+        row = self.unbind_fixture()
+        self.callback()
+        journal = self.store.read("transport")
+        journal["routes"]["100.000001"] = dict(alert=self.key, details=row["details"]["receipt"]["ts"])
+        journal["events"] = {str(index): dict(drained=False) for index in range(100)}
+        deadline = journal["held_human"]["Ev001"]["expires_at"]
+        s.settle_held(journal, deadline)
+        self.assertIn("Ev001", journal["held_human"])
+        self.assertNotIn("quarantine", journal)
+        journal["events"].clear()
+        s.settle_held(journal, deadline)
+        self.assertIn("Ev001", journal["events"])
+        self.assertFalse(journal["held_human"])
+
+    def test_outstanding_quarantine_survives_pruning_then_exact_review_clears_it(self):
         self.sending()
-        cases = [dict(payload(), team_id="TWRONG"), dict(payload(), api_app_id="AWRONG"), payload(user="UOTHER"),
-                 payload(text="x" * 17000), payload(subtype="message_deleted", deleted_ts="109.000001"),
-                 payload(subtype="message_changed", message=dict(user=PIN["human"], ts="101.000001", thread_ts="100.000001",
-                         text="Changed", edited={"user": "UOTHER"}))]
+        for index in range(130):
+            self.callback(payload("EvPoison" + str(index), subtype="message_deleted",
+                                  deleted_ts="109.000001"))
+        journal = self.store.read("transport")
+        self.assertEqual(len(journal["quarantine"]["records"]), 128)
+        self.assertEqual(s.outstanding_quarantine(journal), dict(count=130, oldest_at=NOW))
+        write = self.store.write
+        def fail_review(name, value):
+            if name == "transport" and value["gap_reviews"]:
+                raise OSError("fixture final review write")
+            return write(name, value)
+        with patch.object(self.store, "write", side_effect=fail_review):
+            with self.assertRaises(d.Invalid):
+                self.review_gap()
+        self.assertEqual(s.outstanding_quarantine(self.store.read("transport"))["count"], 130)
+        self.review_gap()
+        journal = self.store.read("transport")
+        self.assertEqual(s.outstanding_quarantine(journal), dict(count=0, oldest_at=None))
+        self.assertEqual(journal["quarantine"]["total"], 130)
+        later = (d.stamp(NOW) + s.dt.timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.transport.now = lambda: later
+        self.callback(payload("EvNew", subtype="message_deleted", deleted_ts="110.000001"))
+        self.assertEqual(s.outstanding_quarantine(self.store.read("transport")), dict(count=1, oldest_at=later))
+
+    def test_legacy_unknown_is_durable_and_exact_review_does_not_rearm(self):
+        self.sending()
+        self.callback(payload("EvOld", subtype="message_deleted", deleted_ts="109.000001"))
+        self.review_gap()
+        with s.locked(self.store) as journal:
+            journal["quarantine"] = dict(total=129, records=journal["quarantine"]["records"])
+            self.store.write("transport", journal)
+        expected = dict(count=0, oldest_at=None, unknown=128)
+        self.assertEqual(s.outstanding_quarantine(self.store.read("transport")), expected)
+        self.callback(payload("EvBot", user=PIN["bot"], bot_id=PIN["bot"], app_id=PIN["app"]))
+        self.assertEqual(s.outstanding_quarantine(self.store.read("transport")), expected)
+        self.assertIsNone(self.store.read("transport")["hold"])
+        self.callback(payload("EvNew", subtype="message_deleted", deleted_ts="110.000001"))
+        expected = dict(count=1, oldest_at=NOW, unknown=128)
+        self.assertEqual(self.store.read("transport")["quarantine"]["outstanding"], expected)
+        write = self.store.write
+        def fail_review(name, value):
+            if name == "transport" and len(value["gap_reviews"]) == 2:
+                raise OSError("fixture final legacy review write")
+            return write(name, value)
+        with patch.object(self.store, "write", side_effect=fail_review), self.assertRaises(d.Invalid):
+            self.review_gap()
+        self.assertEqual(s.outstanding_quarantine(self.store.read("transport")), expected)
+        self.review_gap()
+        # Reopen the durable store; unrelated arrivals and a fresh rejection
+        # must not resurrect the pruned prefix after successful review.
+        reopened = a.Store(self.root)
+        self.assertEqual(reopened.read("transport")["quarantine"]["outstanding"],
+                         dict(count=0, oldest_at=None))
+        self.callback(payload("EvAnotherBot", user=PIN["bot"], bot_id=PIN["bot"], app_id=PIN["app"]))
+        self.assertEqual(s.outstanding_quarantine(reopened.read("transport")), dict(count=0, oldest_at=None))
+        later = (d.stamp(NOW) + s.dt.timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.transport.now = lambda: later
+        self.callback(payload("EvLater", subtype="message_deleted", deleted_ts="111.000001"))
+        self.assertEqual(s.outstanding_quarantine(reopened.read("transport")), dict(count=1, oldest_at=later))
+        self.assertEqual(reopened.read("transport")["quarantine"]["total"], 131)
+
+    def quiet_legacy_unknown(self):
+        self.sending()
+        self.callback(payload("EvOld", subtype="message_deleted", deleted_ts="109.000001"))
+        self.review_gap()
+        with s.locked(self.store) as journal:
+            journal["quarantine"] = dict(total=129, records=journal["quarantine"]["records"])
+            self.store.write("transport", journal)
+        self.assertIsNone(journal["hold"])
+        self.assertEqual(s.fence_gap(self.store, journal), 0)
+        return dict(count=0, oldest_at=None, unknown=128)
+
+    def test_quiet_legacy_unknown_requires_explicit_review_and_clears_durably(self):
+        expected = self.quiet_legacy_unknown()
+        self.transport.qualify(ui_evidence())
+        self.assertEqual(s.outstanding_quarantine(self.store.read("transport")), expected)
+        self.assertEqual(len(self.store.read("transport")["gap_reviews"]), 1)
+        self.review_gap()
+        reopened = a.Store(self.root)
+        reviewed = reopened.read("transport")
+        self.assertEqual(len(reviewed["gap_reviews"]), 2)
+        self.assertEqual(reviewed["quarantine"]["outstanding"], dict(count=0, oldest_at=None))
+        self.assertEqual(reviewed["quarantine"]["total"], 129)
+        self.assertIsNone(reviewed["hold"])
+        self.callback(payload("EvBot", user=PIN["bot"], bot_id=PIN["bot"], app_id=PIN["app"]))
+        self.assertEqual(s.outstanding_quarantine(reopened.read("transport")), dict(count=0, oldest_at=None))
+        self.callback(payload("EvNew", subtype="message_deleted", deleted_ts="110.000001"))
+        self.assertEqual(s.outstanding_quarantine(reopened.read("transport")), dict(count=1, oldest_at=NOW))
+
+    def test_quiet_legacy_unknown_failed_review_write_preserves_unknown(self):
+        expected = self.quiet_legacy_unknown()
+        write = self.store.write
+        def fail_review(name, value):
+            if name == "transport" and len(value["gap_reviews"]) == 2:
+                raise OSError("fixture quiet legacy review write")
+            return write(name, value)
+        with patch.object(self.store, "write", side_effect=fail_review), self.assertRaises(d.Invalid):
+            self.review_gap()
+        reopened = a.Store(self.root)
+        self.assertEqual(s.outstanding_quarantine(reopened.read("transport")), expected)
+        self.assertEqual(len(reopened.read("transport")["gap_reviews"]), 1)
+        self.review_gap()
+        self.assertEqual(s.outstanding_quarantine(reopened.read("transport")), dict(count=0, oldest_at=None))
+
+    def test_quiet_legacy_unknown_rejects_inexact_explicit_reviews(self):
+        expected = self.quiet_legacy_unknown()
+        original = self.store.read("transport")
+        review = dict(watermark=original["watermark"], ingress=s.ingress_count(self.store),
+                      binding=d.digest(PIN), evidence="fixture-quiet-review", **self.session_review())
+        for field, invalid in (("watermark", review["watermark"] + 1),
+                               ("ingress", review["ingress"] + 1),
+                               ("binding", d.digest("wrong-binding")),
+                               ("session", "wrong-session"), ("epoch", review["epoch"] + 1),
+                               ("evidence", "")):
+            with self.subTest(field=field):
+                # Each attempt starts quiet, so an earlier refusal cannot make
+                # later attempts enter the pre-existing held-journal path.
+                self.store.write("transport", copy.deepcopy(original))
+                with self.assertRaises(d.Invalid):
+                    self.transport.qualify(ui_evidence(), dict(review, **{field: invalid}))
+                self.assertEqual(s.outstanding_quarantine(self.store.read("transport")), expected)
+                self.assertEqual(len(self.store.read("transport")["gap_reviews"]), 1)
+                self.assertEqual(self.store.read("transport"), original)
+
+    def test_invalid_review_does_not_pin_healthy_quiet_journal(self):
+        self.sending()
+        original = self.store.read("transport")
+        review = dict(watermark=original["watermark"], ingress=s.ingress_count(self.store),
+                      binding=d.digest(PIN), evidence="fixture-review", **self.session_review())
+        invalid_reviews = [dict(review, **{field: invalid}) for field, invalid in (
+            ("watermark", review["watermark"] + 1), ("ingress", review["ingress"] + 1),
+            ("binding", d.digest("wrong-binding")), ("session", "wrong-session"),
+            ("epoch", review["epoch"] + 1), ("evidence", ""))]
+        invalid_reviews += [{}, dict(review, extra=True)]
+        for invalid in invalid_reviews:
+            with self.subTest(review=invalid):
+                before = (self.root / "transport.json").read_bytes()
+                with patch.object(self.transport, "web", side_effect=AssertionError("auth before validation")):
+                    with self.assertRaises(d.Invalid):
+                        self.transport.qualify(ui_evidence(), invalid)
+                self.assertEqual((self.root / "transport.json").read_bytes(), before)
+                self.assertIsNone(self.transport.gate()["hold"])
+                self.transport.qualify(ui_evidence())
+                self.assertEqual(a.Store(self.root).read("transport"), original)
+
+    def test_qualifying_journal_recovers_only_with_exact_review(self):
+        self.sending()
+        # Reproduce the persisted result of the old invalid-review path.
+        with s.locked(self.store) as journal:
+            journal["hold"] = "qualifying"
+            self.store.write("transport", journal)
+        before = (self.root / "transport.json").read_bytes()
+        with patch.object(self.transport, "web", side_effect=AssertionError("auth without required review")):
+            with self.assertRaises(d.Invalid):
+                self.transport.qualify(ui_evidence())
+        self.assertEqual((self.root / "transport.json").read_bytes(), before)
+        later = (d.stamp(NOW) + s.dt.timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.transport.now = lambda: later
+        self.review_gap()
+        recovered = a.Store(self.root).read("transport")
+        self.assertIsNone(recovered["hold"])
+        self.assertEqual(recovered["last_verified"], later)
+        self.assertEqual(len(recovered["gap_reviews"]), 1)
+        self.assertEqual(recovered["gap_reviews"][0]["evidence"], "fixture-reviewed-gap")
+        self.assertIsNone(self.transport.gate()["hold"])
+
+    def test_review_rechecks_undrained_events_after_auth(self):
+        self.sending()
+        journal = self.store.read("transport")
+        review = dict(watermark=journal["watermark"], ingress=s.ingress_count(self.store),
+                      binding=d.digest(PIN), evidence="fixture-review", **self.session_review())
+        auth = self.transport.web().auth_test
+        def intervening_callback():
+            result = auth()
+            self.callback()
+            return result
+        with patch.object(self.transport.web(), "auth_test", side_effect=intervening_callback):
+            with self.assertRaises(d.Invalid):
+                self.transport.qualify(ui_evidence(), review)
+        after = self.store.read("transport")
+        self.assertEqual(after["gap_reviews"], journal["gap_reviews"])
+        self.assertEqual(after["last_verified"], journal["last_verified"])
+        self.assertIsNotNone(after["hold"])
+        self.assertGreater(s.ingress_count(self.store), review["ingress"])
+
+    def test_legacy_unknown_summary_rejects_invalid_counts(self):
+        self.sending()
+        self.callback(payload("EvPoison", subtype="message_deleted", deleted_ts="109.000001"))
+        original = self.store.read("transport")
+        for unknown in (-1, True, "1", 1, 2):
+            with self.subTest(unknown=unknown):
+                journal = copy.deepcopy(original)
+                journal["quarantine"]["outstanding"]["unknown"] = unknown
+                self.store.write("transport", journal)
+                with self.assertRaises(d.Invalid), s.locked(self.store):
+                    pass
+        self.store.write("transport", original)
+
+    def test_unbound_idle_renewal_records_expiry_without_new_callbacks(self):
+        self.unbind_fixture()
+        self.callback()
+        deadline = self.store.read("transport")["held_human"]["Ev001"]["expires_at"]
+        self.owner.now = lambda: deadline
+        self.owner.update("connected")
+        self.assertEqual(self.store.read("transport")["held_human"], {})
+        self.assertEqual(self.store.read("transport")["quarantine"]["records"][-1]["reason"], "unbound-expired")
+
+    def test_unbound_queue_full_and_write_failure_do_not_ack_or_drop_held_replies(self):
+        self.unbind_fixture()
+        with patch.object(self.store, "write", side_effect=OSError("fixture")):
+            self.callback()
+        self.assertEqual(self.acks, [])
+        self.assertNotIn("held_human", self.store.read("transport"))
+        self.transport.active = True
+        for index in range(s.HELD_HUMAN_LIMIT):
+            self.callback(payload("EvHeld" + str(index)))
+        retained = self.store.read("transport")["held_human"]
+        self.assertEqual(len(retained), 100)
+        self.callback(payload("EvOverflow"))
+        self.assertEqual(len(self.acks), 100)
+        self.assertFalse(self.transport.active)
+        self.assertEqual(self.store.read("transport")["held_human"], retained)
+        self.assertEqual(s.fence_gap(self.store, self.store.read("transport")), 1)
+
+    def test_unbound_invalid_author_and_content_are_never_retained_for_replay(self):
+        self.unbind_fixture()
+        self.callback(payload(bot_id="BOTHER"))
+        self.callback(payload(text="x" * 4001))
+        self.assertFalse(self.store.read("transport").get("held_human"))
+        self.assertEqual(self.store.read("transport")["quarantine"]["total"], 2)
+        self.assertEqual(len(self.acks), 2)
+
+    def test_poison_shapes_are_quarantined_and_following_human_reply_is_delivered(self):
+        self.sending()
+        cases = [
+            (payload(user="UOTHER"), "nonhuman-author", "other"),
+            (payload(subtype="message_deleted", deleted_ts="109.000001"), "unknown-delete", "unknown"),
+            (payload(subtype="message_changed", message=dict(user=PIN["human"], ts="101.000001",
+                thread_ts="100.000001", text="private-body", edited={"user": "UOTHER"})),
+                "invalid-message", "pinned-human"),
+            (payload(subtype="message_replied"), "unsupported-subtype", "pinned-human"),
+            (dict(payload(), event=None), "invalid-message", "unknown"),
+            (dict(payload(), event=[]), "invalid-message", "unknown"),
+            (payload(subtype="message_changed", message=None), "invalid-message", "unknown"),
+            (payload(subtype=[]), "invalid-message", "pinned-human"),
+            (payload(text="private-body" * 500), "invalid-message", "pinned-human"),
+        ]
+        for index, (event, reason, hint) in enumerate(cases):
+            with self.subTest(index=index):
+                self.callback(event, envelope_id="poison-" + str(index))
+                journal = self.store.read("transport")
+                self.assertTrue(self.transport.active)
+                self.assertEqual(len(self.acks), index + 1)
+                self.assertEqual(s.fence_gap(self.store, journal), 0)
+                record = journal["quarantine"]["records"][-1]
+                self.assertEqual((record["reason"], record["author_hint"]), (reason, hint))
+                self.assertEqual(record["ingress"], index + 1)
+                self.assertNotIn("private-body", d.canonical(journal["quarantine"]).decode())
+        self.callback(payload("EvAfterPoison"))
+        self.assertEqual(s.drain(self.store), 1)
+        self.assertEqual(list(r.snapshot(self.store, self.key)["replies"]), ["EvAfterPoison"])
+        journal = self.store.read("transport")
+        self.assertEqual(journal["quarantine"]["total"], len(cases))
+        self.assertEqual(journal["hold"], "ingress-held")
+        with self.assertRaises(d.Invalid):
+            self.transport.gate()  # Continuing intake does not grant decision/work authority.
+        self.review_gap()
+        self.transport.gate()
+        expected = dict(journal["quarantine"], outstanding=dict(count=0, oldest_at=None))
+        self.assertEqual(self.store.read("transport")["quarantine"], expected)
+
+    def test_quarantine_is_bounded_and_redelivery_does_not_starve_valid_intake(self):
+        self.sending()
+        event = payload("EvPoison", subtype="message_deleted", deleted_ts="109.000001")
+        for _ in range(131):
+            self.callback(event)
+        journal = self.store.read("transport")
+        self.assertEqual(journal["quarantine"]["total"], 131)
+        self.assertEqual(len(journal["quarantine"]["records"]), 128)
+        self.assertEqual(journal["quarantine"]["records"][0]["ingress"], 4)
+        self.assertEqual(len(self.acks), 131)
+        self.assertTrue(self.transport.active)
+        self.callback(payload("EvSurvived"))
+        self.assertEqual(s.drain(self.store), 1)
+
+    def test_quarantine_write_failure_never_acknowledges_or_covers_callback(self):
+        self.sending()
+        with patch.object(self.store, "write", side_effect=OSError("private-body")):
+            self.callback(payload(subtype="message_deleted", deleted_ts="109.000001"))
+        self.assertEqual(self.acks, [])
+        self.assertFalse(self.transport.active)
+        journal = self.store.read("transport")
+        self.assertNotIn("quarantine", journal)
+        self.assertEqual(s.fence_gap(self.store, journal), 1)
+        self.assertEqual(self.transport.failure_snapshot(),
+                         s.failure_record("transport-io", "callback-store", callbacks=1, disconnect_marks=0, quarantined=0))
+
+    @runtime_case
+    def test_three_fence_marks_can_be_cleanup_with_zero_callbacks(self):
+        self.owner.close()
+        before = s.ingress_count(self.store)
+        write = self.store.write
+        def fail_connected(name, value):
+            if name == "transport" and value["lifecycle"]["session"]["phase"] == "connected":
+                raise BlockingIOError("private fixture lock failure")
+            return write(name, value)
+        with patch.object(SocketModeClient, "connect"), \
+                patch.object(SocketModeClient, "is_connected", return_value=True), \
+                patch.object(self.store, "write", side_effect=fail_connected):
+            with self.assertRaises(BlockingIOError):
+                self.transport.listen(ongoing=True, runtime=self.runtime)
+        self.assertEqual(s.ingress_count(self.store) - before, 3)
+        self.assertEqual(self.store.read("transport")["ingress"], 0)
+        self.assertEqual(self.transport.failure_snapshot(),
+                         s.failure_record("transport-busy", "session-renew", callbacks=0, disconnect_marks=3, quarantined=0))
+        self.assertEqual(self.acks, [])
+
+    def test_wrong_envelopes_are_held_without_ack(self):
+        self.sending()
+        cases = [dict(payload(), team_id="TWRONG"), dict(payload(), api_app_id="AWRONG"),
+                 payload(text="x" * 17000)]
         for value in cases:
             self.transport.active = True  # Independent authenticated callback-seam trial.
             self.callback(value)

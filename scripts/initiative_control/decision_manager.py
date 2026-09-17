@@ -42,7 +42,10 @@ def validate_status(value):
         validate_supervisor_health(health)
     event = value.get("last_listener_exit")
     if event is not None:
-        d.shape(event, "kind at returncode restarts fence_count ingress_count fence_gap epoch restart")
+        d.shape(event, "kind at returncode restarts fence_count ingress_count fence_gap epoch restart"
+                + (" failure" if "failure" in event else ""))
+        if "failure" in event:
+            s.validate_failure(event["failure"])
         d.require((event["kind"] == "child-exit" and type(event["returncode"]) is int)
                   or (event["kind"] == "restart-refused" and event["returncode"] is None
                       and event["restart"] == "held"))
@@ -51,7 +54,7 @@ def validate_status(value):
         d.require(all(type(event[k]) is int and event[k] >= 0 for k in ("restarts", "ingress_count", "epoch")))
         d.require(all(event[k] is None or type(event[k]) is int and event[k] >= 0 for k in ("fence_count", "fence_gap")))
     d.require(type(value["schema"]) is int and value["schema"] == 1 and type(value["enabled"]) is bool)
-    d.require(value["state"] in ("off", "unqualified", "held", "last-verified", "stale"))
+    d.require(value["state"] in ("off", "unqualified", "held", "last-verified", "stale", "unknown"))
     if value["last_verified"] is not None:
         d.stamp(value["last_verified"])
     d.require(all(type(value[k]) is int and value[k] >= 0
@@ -85,33 +88,68 @@ def unacknowledged_answers(ledger, alerts, alert_key=None):
 
 
 def validate_supervisor_health(health):
-    extra = [key for key in ("observed_at", "reason") if key in health]
+    extra = [key for key in ("observed_at", "reason", "quarantine") if key in health]
     d.shape(health, ["state", "event_flush_failures", "pending_events"] + extra)
     d.require(type(health["event_flush_failures"]) is int and health["event_flush_failures"] >= 0)
     d.require(type(health["pending_events"]) is int and 0 <= health["pending_events"] <= 2)
     d.require(health["state"] in ("healthy", "unhealthy", "unknown"))
+    quarantined = 0
+    if "quarantine" in health:
+        intake = health["quarantine"]
+        d.shape(intake, "count held oldest_at age_seconds" + (" unknown" if "unknown" in intake else ""))
+        unknown = intake.get("unknown", 0)
+        d.require(type(unknown) is int and unknown >= 0)
+        d.require(not unknown or health["state"] != "healthy")
+        quarantined = intake["count"]
+        d.require(type(intake["count"]) is int and type(intake["held"]) is int
+                  and 0 <= intake["held"] <= intake["count"])
+        if intake["oldest_at"] is not None:
+            d.stamp(intake["oldest_at"])
+        d.require(intake["age_seconds"] is None or type(intake["age_seconds"]) is int and intake["age_seconds"] >= 0)
+        d.require(not quarantined or health["state"] == "unhealthy")
     if health["state"] != "unknown":
-        d.require(health["state"] == ("unhealthy" if health["event_flush_failures"] or health["pending_events"] else "healthy"))
+        d.require(health["state"] == ("unhealthy" if health["event_flush_failures"] or health["pending_events"] or quarantined else "healthy"))
     if health.get("observed_at") is not None:
         d.stamp(health["observed_at"])
     if "reason" in health:
-        d.require(health["reason"] in ("event-flush-failed", "event-unflushed", "observation-unavailable", "observation-stale", None))
+        d.require(health["reason"] in ("event-flush-failed", "event-unflushed", "observation-unavailable", "observation-stale", "quarantined-intake", "quarantine-history-unknown", None))
+
+
+def attach_quarantine(health, intake, now):
+    health = copy.deepcopy(health)
+    intake = copy.deepcopy(intake)
+    intake["age_seconds"] = (max(0, int((d.stamp(now) - d.stamp(intake["oldest_at"])).total_seconds()))
+                            if intake["oldest_at"] is not None else None)
+    health["quarantine"] = intake
+    if intake["count"]:
+        health["state"] = "unhealthy"
+        if health.get("reason") in (None, "quarantined-intake", "quarantine-history-unknown"):
+            health["reason"] = ("event-flush-failed" if health["event_flush_failures"] else
+                                "event-unflushed" if health["pending_events"] else "quarantined-intake")
+    elif intake.get("unknown") and health["state"] != "unhealthy":
+        health["state"] = "unknown"
+        if health.get("reason") is None:
+            health["reason"] = "quarantine-history-unknown"
+    return health
 
 
 def assess_supervisor_health(health, now):
     """Apply the same observation validity at projection and publication."""
     unknown = dict(state="unknown", event_flush_failures=0, pending_events=0,
                    observed_at=None, reason="observation-unavailable")
+    intake = None
     try:
         validate_supervisor_health(health)
+        intake = health.get("quarantine")
         age = (d.stamp(now) - d.stamp(health["observed_at"])).total_seconds()
         d.require(age >= 0)
-        # Never age an observed failure back into apparent health.
-        if age > 5 and health["state"] == "healthy":
-            return dict(unknown, observed_at=health["observed_at"], reason="observation-stale")
-        return copy.deepcopy(health)
+        # Intake must not keep a dead supervisor's observation fresh. Retain
+        # real flush failures, but age an intake-only failure like healthy data.
+        if age > 5 and not (health["event_flush_failures"] or health["pending_events"]):
+            health = dict(unknown, observed_at=health["observed_at"], reason="observation-stale")
+        return attach_quarantine(health, intake, now) if intake is not None else copy.deepcopy(health)
     except (OSError, ValueError, KeyError, TypeError):
-        return unknown
+        return attach_quarantine(unknown, intake, now) if intake is not None else unknown
 
 
 def read_supervisor_health(store, now, binding):
@@ -126,7 +164,27 @@ def read_supervisor_health(store, now, binding):
 
 
 def project_disclosure(value, store, journal, alerts, now=None):
-    value["supervisor_health"] = read_supervisor_health(store, now or utc_now(), journal["binding"])
+    now = now or utc_now()
+    health = read_supervisor_health(store, now, journal["binding"])
+    audit, held = s.outstanding_quarantine(journal), journal.get("held_human", {})
+    count = audit["count"] + len(held)
+    if count or audit.get("unknown"):
+        times = [entry["arrived_at"] for entry in held.values()]
+        if audit["oldest_at"] is not None:
+            times.append(audit["oldest_at"])
+        oldest = (None if audit["count"] and audit["oldest_at"] is None
+                  else min(times) if times else None)
+        intake = dict(count=count, held=len(held), oldest_at=oldest, age_seconds=None)
+        if audit.get("unknown"):
+            intake["unknown"] = audit["unknown"]
+        health = attach_quarantine(health, intake, now)
+        if count:
+            value["state"] = "held"
+        elif value["state"] == "last-verified":
+            value["state"] = "unknown"
+    if value["state"] == "last-verified" and health["state"] == "unknown":
+        value["state"] = "stale" if health.get("reason") == "observation-stale" else "unknown"
+    value["supervisor_health"] = health
     value["pending_pointers"] = len(a.pending_pointers(alerts))
     exits = [event for event in journal.get("listener_events", []) if event["kind"] == "child-exit"]
     pruned = journal.get("listener_events_pruned", {})
@@ -420,7 +478,11 @@ class ManagedListener:
                 if restart_pin is not None:
                     config["restart_pin"] = restart_pin
                 channel.emit(config)
-                d.require(channel.read() == dict(type="runtime-owned"))  # Not connected/qualified/stopped.
+                frame = channel.read()
+                if type(frame) is dict and frame.get("type") == "listener-failure":
+                    d.shape(frame, "type failure")
+                    self.process._listener_failure = copy.deepcopy(s.validate_failure(frame["failure"]))
+                d.require(frame == dict(type="runtime-owned"))  # Not connected/qualified/stopped.
                 return dict(state="starting")
             except BaseException:
                 self.failed_start_process = self.process  # Preserve startup death evidence across reaping.
@@ -430,6 +492,40 @@ class ManagedListener:
                 for fd in (guard, reader, writer):
                     if fd is not None:
                         os.close(fd)  # Never LOCK_UN: child inherited the locked open-file description.
+
+    def failure(self, process):
+        """One bounded frame on the owned stdout pipe, read only after proved death.
+
+        stderr stays discarded. Invalid/missing frames yield fixed fallback codes.
+        Cache before reaping closes stdout, including pre-handshake startup failures.
+        """
+        cached = getattr(process, "_listener_failure", None)
+        if type(cached) is dict:
+            return copy.deepcopy(cached)
+        if getattr(process, "_listener_clean_exit", False):
+            return None
+        code = process.poll()
+        d.require(type(code) is int)
+        reason = ("restart-refused" if code == s.RESTART_REFUSED_EXIT else
+                  "shutdown-timeout" if code == 72 else
+                  "child-signalled" if code < 0 else "child-unreported")
+        result = None if code == 0 else s.failure_record(reason, "supervisor")
+        try:
+            fd = process.stdout.fileno()
+            if select.select([fd], [], [], 0)[0]:
+                raw = os.read(fd, 1025)
+                if raw:
+                    result = s.failure_record(reason, "supervisor")
+                d.require(len(raw) <= 1024)
+                frame = json.loads(raw, object_pairs_hook=d.pairs)
+                d.shape(frame, "type failure")
+                d.require(frame["type"] == "listener-failure")
+                result = s.validate_failure(frame["failure"])
+        except (OSError, ValueError, TypeError, AttributeError, KeyError):
+            pass
+        process._listener_failure = copy.deepcopy(result)
+        process._listener_clean_exit = result is None
+        return copy.deepcopy(result)
 
     def stop(self):
         with self.operation:
@@ -448,6 +544,7 @@ class ManagedListener:
                         if action == process.kill:
                             raise
                 d.require(process.returncode is not None)
+                self.failure(process)
                 process.stdin.close()
                 process.stdout.close()
                 self.process = None
@@ -477,7 +574,7 @@ def listener_child(root, guard, control, *, run=None):
     No cleanup unlocks guard: even successful SDK close need not join all runners.
     os._exit and the parent's wait encompass every thread; no descendants allowed.
     """
-    code = 1
+    code, stage, transport, failure = 1, "bootstrap", None, None
     try:
         d.require(len({guard, control, 0, 1, 2}) == 5 and stat.S_ISFIFO(os.fstat(control).st_mode))
         os.set_inheritable(guard, False)
@@ -487,6 +584,7 @@ def listener_child(root, guard, control, *, run=None):
         d.shape(data, "binding seconds ongoing" + (" restart_pin" if "restart_pin" in data else ""))
         d.require(type(data["ongoing"]) is bool and type(data["seconds"]) in (int, float) and 0 < data["seconds"] <= 60)
         store = a.Store(root)
+        stage = "runtime"
         runtime = s._ChildRuntime(guard, store, a.identity(data["binding"]))
         def no_descendants(event, args):
             d.require(event not in {"subprocess.Popen", "os.fork", "os.forkpty", "os.posix_spawn", "os.exec"})
@@ -514,9 +612,22 @@ def listener_child(root, guard, control, *, run=None):
         code = 0
     except s.RestartRefused:
         code = s.RESTART_REFUSED_EXIT
-    except BaseException:
-        pass  # Never export raw SDK errors, URLs, credentials or callback data.
+        failure = s.failure_record("restart-refused", "session-start")
+    except BaseException as error:
+        if transport is not None:
+            transport.failed(error)
+            failure = transport.failure_snapshot()
+        else:
+            failure = s.failure_record(s.failure_reason(error), stage)
     finally:
+        if failure is None and transport is not None and transport.failure is not None:
+            failure = transport.failure_snapshot()
+        if failure is not None:
+            try:
+                # Fixed vocabulary and numeric counters only; one atomic, bounded pipe write.
+                os.write(1, d.canonical(dict(type="listener-failure", failure=failure)) + b"\n")
+            except BaseException:
+                pass  # Parent still records signal/timeout/unreported failure.
         os._exit(code)
 
 
@@ -570,7 +681,7 @@ class ListenerSupervisor:
         self.options, self.retry_at, self.pin = None, None, None
         self.manager.stop()
 
-    def record(self, kind, returncode=None, at=None):
+    def record(self, kind, returncode=None, at=None, failure=None):
         with self.manager.store.lock(), s.locked(self.manager.store) as journal:
             try:
                 fence = s.ingress_count(self.manager.store)
@@ -586,6 +697,8 @@ class ListenerSupervisor:
             event = dict(kind=kind, at=at if at is not None else self.now(), returncode=returncode, restarts=self.restarts,
                          fence_count=fence, ingress_count=journal["ingress"], fence_gap=gap,
                          epoch=journal["lifecycle"]["epoch"], restart="pending" if safe else "held")
+            if failure is not None:
+                event["failure"] = copy.deepcopy(s.validate_failure(failure))
             journal.setdefault("listener_events", []).append(event)
             journal["hold"] = journal["hold"] or "listener-exited"
             prune_listener_events(journal)
@@ -635,7 +748,10 @@ class ListenerSupervisor:
 
     def status(self, enabled):
         value = project_status(self.manager.store, self.now(), enabled)
-        value["supervisor_health"] = self.health()
+        health = self.health()
+        if "quarantine" in value.get("supervisor_health", {}):
+            health = attach_quarantine(health, value["supervisor_health"]["quarantine"], self.now())
+        value["supervisor_health"] = health
         if enabled and value["supervisor_health"]["state"] == "unhealthy":
             value["state"] = "held"
         return validate_status(value)
@@ -647,8 +763,9 @@ class ListenerSupervisor:
         if self.exited_process is process:
             return
         self.pin = None
-        event = (("restart-refused", None, self.now()) if code == s.RESTART_REFUSED_EXIT
-                 else ("child-exit", code, self.now()))
+        failure = self.manager.failure(process)
+        event = (("restart-refused", None, self.now(), failure) if code == s.RESTART_REFUSED_EXIT
+                 else ("child-exit", code, self.now(), failure))
         if self.pending_event is None:
             self.pending_event = event
         else:
