@@ -15,7 +15,7 @@ AGREE round-69 alone timing: 31.743s; target test raw PASS line agrees
 AGREE round-69 feature timing: 31.335s; target test raw PASS line agrees
 AGREE round-75 feature timing: 31.283s; target test raw PASS line agrees
 AGREE acct-controls-72 inventory: entries=55; current_bytes=350442; current_text_lines=6352; hashes agree
-AGREE acct-acceptance-75 inventory: entries=18; new_files=15; new_bytes=58157; new_text_lines=759; modified_files=3; modified_bytes=16713; modified_text_lines=230; current_bytes=74870; current_text_lines=989; full-file sizes, not diff lines
+AGREE acct-acceptance-75 inventory: entries=18; new_files=15; new_bytes=52280; new_text_lines=704; modified_files=3; modified_bytes=16713; modified_text_lines=230; current_bytes=68993; current_text_lines=934; full-file sizes, not diff lines
 AGREE inventory classifications and correction: 15 added paths and 3 modified paths against original base; round-72 changed entries=3
 AGREE package build evidence: build receipt and raw log agree; launch/functional acceptance not claimed
 UNAVAILABLE committed package codex: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/codex is not tracked; unavailable from a clean checkout; cannot re-derive bytes=607785336, mode=0555 or SHA-256

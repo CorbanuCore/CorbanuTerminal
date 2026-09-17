@@ -11,13 +11,19 @@ INTEGRATION_REF = "refs/heads/integrate/management-workstreams-20260911"
 REFERENCE_DIRECTORY = "acct-reference-88"
 
 
+def require(condition, detail):
+    if not condition:
+        raise AssertionError(detail)
+
+
 def assert_receipt(receipt):
-    assert receipt["stdout_matches_prior_replay"], "current integration output differs from pinned replay"
-    assert receipt["commit"] == receipt["source_tip_after"], "integration tip advanced during replay"
-    assert receipt["status_before"] == receipt["status_after"] == "", "checkout changed"
+    require(receipt["stdout_matches_prior_replay"],
+            "current integration output differs from pinned replay")
+    require(receipt["commit"] == receipt["source_tip_after"], "integration tip advanced during replay")
+    require(receipt["status_before"] == receipt["status_after"] == "", "checkout changed")
     for row in receipt["commands"]:
-        assert row["exit"] == row["expected_exit"], ("unexpected command exit", row)
-        assert row["stderr_empty"], ("command wrote stderr", row)
+        require(row["exit"] == row["expected_exit"], ("unexpected command exit", row))
+        require(row["stderr_empty"], ("command wrote stderr", row))
 
 
 def main():
@@ -35,8 +41,9 @@ def main():
     manifest_path = scope / REFERENCE_DIRECTORY / "reference.json"
     manifest = json.loads(git("show", f"{commit}:{manifest_path}"))
     reference = git("show", f"{commit}:{reference_path}")
-    assert manifest["schema"] == 1 and manifest["path"] == str(reference_path)
-    assert hashlib.sha256(reference).hexdigest() == manifest["sha256"], "reference digest differs"
+    require(manifest["schema"] == 1 and manifest["path"] == str(reference_path),
+            "reference schema or path differs")
+    require(hashlib.sha256(reference).hexdigest() == manifest["sha256"], "reference digest differs")
     output = here.parent / REFERENCE_DIRECTORY / "target"
     output.mkdir(parents=True, exist_ok=True)
     run = Path(tempfile.mkdtemp(prefix="current-tip-", dir=output))
@@ -44,9 +51,11 @@ def main():
     git("clone", "--shared", "--no-checkout", "--quiet", str(repo), str(clone))
     git("checkout", "--quiet", "--detach", commit, cwd=clone)
     before = git("status", "--porcelain", "--untracked-files=all", cwd=clone).decode()
-    assert before == ""
-    assert git("rev-parse", "HEAD", cwd=clone).decode().strip() == commit
-    assert not (clone / scope / "acct-fitness-76/package").exists()
+    require(before == "", "checkout starts dirty")
+    require(git("rev-parse", "HEAD", cwd=clone).decode().strip() == commit,
+            "checkout commit differs from resolved integration tip")
+    require(not (clone / scope / "acct-fitness-76/package").exists(),
+            "ignored local package present in checkout")
     receipts = []
     for name, script, expected in (
         ("acceptance", "acct-inventory-79/verify_acceptance.py", 2),

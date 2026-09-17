@@ -1,0 +1,16 @@
+{
+  "source_base": "e9d1df54f5b99786151cc1794ee78ec526072f48",
+  "reference_sha256": "0448345a1e9db7a844139960ae585127d03597bf0820e22c4de705b24c930aa5",
+  "baseline_exit": 2,
+  "verbatim_simulation_matches": true,
+  "bare_asserts_in_replay": 0,
+  "helper_exits": [
+    0,
+    0,
+    1,
+    1
+  ],
+  "receipt_controls_per_mode": 10,
+  "verifier_controls_per_helper_run": 13,
+  "all_changes_in_scope": true
+}

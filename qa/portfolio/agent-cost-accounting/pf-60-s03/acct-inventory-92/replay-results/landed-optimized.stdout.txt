@@ -1,0 +1,48 @@
+{
+  "integration_ref": "refs/heads/integrate/management-workstreams-20260911",
+  "commit": "181451ab79a59012f59d20668a4a621d31e0a0e2",
+  "source_tip_after": "181451ab79a59012f59d20668a4a621d31e0a0e2",
+  "clone": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guard-91/target/replay-5pp8sb_j/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/target/current-tip-_wt6i_jp/checkout",
+  "run_directory": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guard-91/target/replay-5pp8sb_j/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/target/current-tip-_wt6i_jp",
+  "status_before": "",
+  "status_after": "",
+  "full_checkout": true,
+  "copied_working_tree_files": false,
+  "package_absent": true,
+  "no_network": true,
+  "no_package_launch": true,
+  "reference_kind": "committed content; no historical commit pin",
+  "reference_source_commit": "181451ab79a59012f59d20668a4a621d31e0a0e2",
+  "reference": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt",
+  "reference_manifest": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/reference.json",
+  "reference_sha256": "25450ea3837dfc7624189eb89f7067fda71b76dbec21e2853122875f03dd1fce",
+  "stdout_matches_prior_replay": true,
+  "commands": [
+    {
+      "name": "acceptance",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py"
+      ],
+      "exit": 2,
+      "expected_exit": 2,
+      "stderr_empty": true,
+      "stdout_sha256": "25450ea3837dfc7624189eb89f7067fda71b76dbec21e2853122875f03dd1fce",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "controls",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/check_verifier.py"
+      ],
+      "exit": 0,
+      "expected_exit": 0,
+      "stderr_empty": true,
+      "stdout_sha256": "c1fe1f8870263b65be3f7a670b7a94f7c36e32f96c0f9701f79f6778f5e9cfe0",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}
