@@ -5,6 +5,30 @@ coordinator history, activation generations, schedule ticks and recovery evidenc
 Run it only after receiving this candidate and coordinating with the hand
 dispatcher. This worker did not inspect or access the live installation.
 
+Round 85 correction: the concurrent rehearsal proves real tmux/PTY and journal
+coordination with synthetic workers. It does **not** qualify real Corbanu rollout
+provenance, auth-link startup, model latency, ACK/START/RETURN or RETURN after pane
+death under two dispatchers. Those remain a separate real-binary, disposable-root
+qualification, or explicitly limited evidence from the first authorized promoted
+action. Do not call this recipe a fully qualified real-worker promotion.
+
+The deliberate watchdog policy is ownership-local: scheduled owner passes cover
+owner-owned actions; the manager must arrange stall detection for hand-owned
+actions, including every future default action. Manual `--hand-run` reports their
+stalls when admitted, but there is no scheduled hand watchdog. Disarm disables
+both lanes. This preserves the accepted hand ownership boundary and avoids
+mutating hand claims from the owner lane.
+
+Read the computed `coordinator.watchdog_coverage.summary` before executing the
+cutover using the received candidate's status reader. Its BEFORE line must say
+`new default actions=covered` for fixture-only operation. Before arming, and
+after promotion, it must say `new default actions=excluded; hand stall
+detection=manager responsibility (--hand-run is manual; no scheduled hand
+watchdog)`. Counts and exact IDs come from the current snapshot, never from
+this prose. The recipe prints BEFORE, BEFORE ARM and AFTER and validates these
+conditions. Predictions require an admitted tick reaching its watchdog; status
+alone does not prove admission or continued service health.
+
 Before the command, stop **new hand dispatch and raw key delivery** and let any
 in-progress delivery finish. Leave existing workers running. Finish/reconcile
 any outstanding manager cycle. Both sides must use the **same existing
@@ -32,7 +56,7 @@ tmux socket path below 100 bytes. Preserve each selected allocation's exact
 model/provider/effort/worktree and recorded `--yolo` policy. Do not substitute
 the rehearsal's synthetic worker.
 
-The following are exact commands; replace the five operator inputs with the
+The following are exact commands; replace the six operator inputs with the
 actual reviewed transport path, prepared action IDs and real activation
 decision. Their values cannot be honestly invented by this worker.
 
@@ -42,7 +66,7 @@ export OWNER80_ACTIONS='prepared-action-id-one prepared-action-id-two'
 export OWNER80_DECISION_ID='actual-tmux-promotion-decision-id'
 export OWNER80_DECISION_REVISION=1
 export OWNER80_AUTHORITY='actual named authority and authorization reference'
-export OWNER80_SCHEDULE='/Users/Neo/Library/Application Support/corbanu-owner-live'
+export OWNER80_SCHEDULE='/absolute/path/to/existing-owner-schedule'
 
 # Run from the received candidate checkout. Build the administrative interpreter
 # with only the pinned requirements; owner ticks keep the installed interpreter.
@@ -98,6 +122,12 @@ def run(script, *args, expected=0):
 # Existing runtime can disarm despite a later candidate/package change.
 status = run("owner_daemon.py", "--activation-status", "--config", config_path)
 assert status["complete"] and status["state"] == "armed"
+# Inspect with the received candidate too: the old installed status may predate
+# computed watchdog coverage. This read does not repin, arm or change history.
+before = owner.activation_status(config_path)
+assert before["complete"] and before["scope"] == "fixture-only"
+assert before["coordinator"]["watchdog_coverage"]["future_default_covered"]
+print("BEFORE: " + before["coordinator"]["watchdog_coverage"]["summary"], flush=True)
 run("owner_daemon.py", "--disarm", "--config", config_path, "--generation", status["generation"])
 run("activate.py", "--owner", "uninstall", "--root", root)
 
@@ -118,7 +148,7 @@ evidence.mkdir(mode=0o700)
 replacement = evidence / "config.json"
 config.update(transport=transport, package_digest=owner.package_digest())
 f.write_json(replacement, config)
-run("owner_daemon.py", "--reconfigure", replacement, "--config", config_path)
+run("owner_daemon.py", "--reconfigure", replacement, "--config", config_path, "--schedule", root)
 
 # Freeze the current exact action/claim/allocation/status map. Initial partition
 # includes EVERY pending action: selected prepared work to owner; all else hand.
@@ -144,6 +174,14 @@ status = run("owner_daemon.py", "--activation-status", "--config", config_path)
 assert status["complete"] and status["state"] == "off"
 assert {key for key, row in status["coordinator"]["ownership"].items()
         if row["owner"] == "owner"} == selected
+coverage = status["coordinator"]["watchdog_coverage"]
+assert not coverage["future_default_covered"]
+assert set(coverage["covered_actions"]) == selected
+print("BEFORE ARM: " + coverage["summary"], flush=True)
+# Every excluded action and all future default hand work require manager-owned
+# stall detection. --hand-run is one pass, not a recurring hand watchdog.
+print(json.dumps(dict(excluded=coverage["excluded_actions"],
+                      unresolved_holds=status["unresolved_holds"])), flush=True)
 decision = evidence / "activation.json"
 f.write_json(decision, dict(decision_id=os.environ["OWNER80_DECISION_ID"],
                            revision=int(os.environ["OWNER80_DECISION_REVISION"]),
@@ -164,7 +202,10 @@ run("owner_daemon.py", "--run", "--schedule", root, expected=2)
 run("owner_daemon.py", "--arm", "--config", config_path, "--authority", decision)
 run("owner_daemon.py", "--schedule", root, "--recover",
     "tmux promotion: shared ownership map inspected; manual raw delivery stopped; pins and allocations verified")
-run("owner_daemon.py", "--activation-status", "--config", config_path)
+after = run("owner_daemon.py", "--activation-status", "--config", config_path)
+assert after["complete"] and after["state"] == "armed" and after["scope"] == "tmux-workers"
+assert not after["coordinator"]["watchdog_coverage"]["future_default_covered"]
+print("AFTER: " + after["coordinator"]["watchdog_coverage"]["summary"], flush=True)
 print(json.dumps(dict(promotion_evidence=str(evidence), runtime=str(runtime),
                       python=str(python), config=str(config_path))))
 PY
@@ -194,6 +235,12 @@ At the cutover, inspect `coordinator.dispatch_control.revision/at` and every
 `coordinator.ownership` row: selected prepared work is owner-owned; existing
 hand claims keep their exact claim and allocation digest. Unassigned future
 actions default to hand. Both hand and daemon command paths use this same config.
+Inspect `coordinator.watchdog_coverage.excluded_actions`: their stall detection
+belongs to the manager. Check top-level `unresolved_holds`, including
+`excluded_from_owner_lane`; an excluded hold remains unresolved and blocks
+reconfiguration. Moving ownership or running schedule `--recover` does not
+resolve it. No hold-resolution command is implemented; do not edit SQLite to
+manufacture resolution or describe disarm as a complete scope rollback.
 
 During minutes 0–1, expect the first interval tick, a new owner boot and selected
 actions moving prepared → dispatching. During minutes 1–3, check actual ACK,

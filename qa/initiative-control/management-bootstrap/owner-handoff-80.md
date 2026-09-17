@@ -63,7 +63,10 @@ The first transcript remains separate from the final-tree replay.
   BUSY/skipped without pretending a tick was admitted or latching a hold.
 - Future actions default to **hand**. The daemon's launcher and watchdog skip
   hand actions. Action-local hand holds do not hold the owner lane; unknown
-  and global holds remain conservative. Status exposes every action's owner,
+  and global holds remain conservative. Round 85 adds computed watchdog coverage
+  and unresolved holds to activation status; hand stall detection belongs to the
+  manager, since `--hand-run` is manual and no recurring hand watchdog exists.
+  Status exposes every action's owner,
   claim, allocation and status plus the cutover revision/time/evidence.
 - Claim, dispatched, ACK, return and reconciliation mutations validate the
   dispatcher against the partition. Existing manual callers default to hand.
@@ -75,7 +78,9 @@ The first transcript remains separate from the final-tree replay.
   neither launches it nor creates `unowned_claim`. Transfer into the owner is
   refused as `handoff_requires_receipted_claim`; finish/reconcile it through the
   existing protocol and transfer new prepared work instead.
-- `--reconfigure REPLACEMENT` is explicit OFF-only config/package repinning,
+- Round 85 correction: `--reconfigure REPLACEMENT --schedule SCHEDULE` requires
+  the matching uninstalled receipt and absent service in both domains under the
+  installation lock. It is explicit OFF-only config/package repinning,
   preserving generations and history. Pending/held operations and active owner
   claims block it. An activation intent fences an interrupted update; explicit
   disarm remains the recovery path.

@@ -1,0 +1,79 @@
+{
+  "source": "owner-cutover-85-concurrent-first.jsonl",
+  "coverage": {
+    "condition": "On an admitted tick reaching the watchdog; OFF, refusal or earlier failure runs no watchdog.",
+    "covered_actions": [
+      "owner-work"
+    ],
+    "dispatcher": "owner",
+    "excluded_actions": [
+      "hand-work",
+      "overdue-hand"
+    ],
+    "future_default_covered": false,
+    "future_default_owner": "hand",
+    "hand_stall_detection": "manager responsibility (--hand-run is manual; no scheduled hand watchdog)",
+    "manager_covered": true,
+    "summary": "Owner watchdog on admitted ticks: covered=1, excluded=2; new default actions=excluded; hand stall detection=manager responsibility (--hand-run is manual; no scheduled hand watchdog)."
+  },
+  "before_deadline": {
+    "deadline": 1789657977.6227121,
+    "dispatch_owner": "hand",
+    "id": "overdue-hand",
+    "overdue": false,
+    "stall_reported": false,
+    "status": "dispatching",
+    "watchdog_covered": false,
+    "watchdog_status": "dispatching",
+    "watchdog_will_report": false
+  },
+  "after_deadline": {
+    "deadline": 1789657977.6227121,
+    "dispatch_owner": "hand",
+    "id": "overdue-hand",
+    "overdue": true,
+    "stall_reported": false,
+    "status": "dispatching",
+    "watchdog_covered": false,
+    "watchdog_status": "dispatching",
+    "watchdog_will_report": false
+  },
+  "owner_tick": {
+    "actions": {
+      "owner-work": "returned"
+    },
+    "dispatcher": "owner",
+    "fixture_only": false,
+    "ownership": {
+      "hand-work": "hand",
+      "overdue-hand": "hand",
+      "owner-work": "owner"
+    },
+    "routing": "tmux-workers",
+    "state": "ACTIVE",
+    "unresolved_holds": []
+  },
+  "manual_hand_tick": {
+    "actions": {
+      "hand-work": "returned",
+      "overdue-hand": "external_hand_claim"
+    },
+    "dispatcher": "hand",
+    "fixture_only": false,
+    "ownership": {
+      "hand-work": "hand",
+      "overdue-hand": "hand",
+      "owner-work": "owner"
+    },
+    "routing": "tmux-workers",
+    "state": "ACTIVE",
+    "unresolved_holds": []
+  },
+  "manual_stall_events": [
+    {
+      "action": "overdue-hand",
+      "id": "stall:overdue-hand:0",
+      "status": "dispatch_uncertain"
+    }
+  ]
+}

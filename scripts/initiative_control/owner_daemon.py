@@ -215,7 +215,7 @@ def activation_store(config_path, readonly=False):
             yield root, db, meta
 
 
-def coordinator_activation_impact(root):
+def coordinator_activation_impact(root, dispatcher=None):
     """Read one coordinator snapshot without running/recovering its watchdog."""
     coordinator = ExistingCoordinator(root)
     f.require(not any(Path(str(coordinator.path) + suffix).exists()
@@ -226,17 +226,37 @@ def coordinator_activation_impact(root):
         f.require(row is not None, "uninitialized_state")
         snapshot = f.strict_json(row[0])
     observed_at = time.time()
+    actions = sorted(snapshot["actions"].values(), key=lambda value: value["id"])
+    covered = [a["id"] for a in actions if coordinator.watchdog_covers(snapshot, a, dispatcher)]
+    excluded = [a["id"] for a in actions if not coordinator.watchdog_covers(snapshot, a, dispatcher)]
+    default_action = {}
+    future_covered = coordinator.watchdog_covers(snapshot, default_action, dispatcher)
+    coverage = dict(
+        dispatcher=dispatcher, covered_actions=covered, excluded_actions=excluded,
+        future_default_owner=coordinator.dispatch_owner(snapshot, default_action),
+        future_default_covered=future_covered, manager_covered=True,
+        condition="On an admitted tick reaching the watchdog; OFF, refusal or earlier failure runs no watchdog.",
+        hand_stall_detection="manager responsibility (--hand-run is manual; no scheduled hand watchdog)"
+        if dispatcher == "owner" and "dispatch_control" in snapshot else "covered by this watchdog",
+    )
+    coverage["summary"] = (
+        f"Owner watchdog on admitted ticks: covered={len(covered)}, excluded={len(excluded)}; "
+        f"new default actions={'covered' if future_covered else 'excluded'}; "
+        f"hand stall detection={coverage['hand_stall_detection']}."
+    )
     in_flight = []
-    for action in sorted(snapshot["actions"].values(), key=lambda value: value["id"]):
+    for action in actions:
         if action["status"] not in {"dispatching", "dispatched", "running",
                                     "dispatch_uncertain", "returned"}:
             continue
         overdue = action["deadline"] < observed_at
-        will_report = (overdue and not action.get("stall_reported", False)
+        covered_action = coordinator.watchdog_covers(snapshot, action, dispatcher)
+        will_report = (covered_action and overdue and not action.get("stall_reported", False)
                        and action["status"] in {"dispatching", "dispatched", "running"})
         in_flight.append(dict(id=action["id"], status=action["status"], deadline=action["deadline"],
                               overdue=overdue, stall_reported=bool(action.get("stall_reported")),
-                              watchdog_will_report=will_report,
+                              dispatch_owner=coordinator.dispatch_owner(snapshot, action),
+                              watchdog_covered=covered_action, watchdog_will_report=will_report,
                               watchdog_status="dispatch_uncertain" if will_report and
                               action["status"] == "dispatching" else action["status"]))
     manager = snapshot["manager"]
@@ -247,16 +267,27 @@ def coordinator_activation_impact(root):
                        watchdog_will_report=overdue and not manager.get("stall_reported", False))
     return dict(observed_at=observed_at, revision=snapshot["revision"], enabled=snapshot["enabled"],
                 in_flight=in_flight, overdue=[row for row in in_flight if row["overdue"]],
-                manager=manager, dispatch_control=snapshot.get("dispatch_control"),
+                manager=manager, watchdog_coverage=coverage,
+                dispatch_control=snapshot.get("dispatch_control"),
                 ownership={a["id"]: dict(owner=coordinator.dispatch_owner(snapshot, a),
                            claim=a.get("claim"), allocation_digest=a.get("allocation_digest"),
                            status=a["status"]) for a in snapshot["actions"].values()},
-                warning="Armed fixture-only operation is not read-only: admitted ticks can mutate the "
-                "shared coordinator even when dispatch is paused or a manager owns it. Watchdog marks "
-                "unreported overdue dispatching/dispatched/running actions stall_reported, changes "
-                "dispatching to dispatch_uncertain, and appends stall events; it also reports overdue "
-                "manager runs. Fixture processing can append events. This snapshot is advisory, not "
-                "an ownership gate or reservation; claims and deadlines can change before a tick.")
+                warning=coverage["summary"] + " Armed operation is not read-only. "
+                "For covered actions only, watchdog_will_report predicts unreported overdue "
+                "dispatching/dispatched/running stalls if an admitted tick reaches the watchdog; "
+                "dispatching becomes dispatch_uncertain. Manager stalls are covered in either lane. "
+                "Covered watchdog mutations can occur while dispatch is paused; "
+                "fixture-only processing can append events when dispatch is ready. "
+                "This snapshot is advisory, not an ownership gate or reservation; claims and "
+                "deadlines can change before a tick.")
+
+
+def unresolved_holds(db):
+    """Read receipts, including holds whose action is now in the other lane."""
+    return [dict(row) for row in db.execute(
+        "SELECT h.op_id,h.reason_code,h.first_seen,h.last_seen,o.action_id "
+        "FROM holds h LEFT JOIN operations o ON o.op_id=h.op_id "
+        "WHERE h.resolved_at IS NULL ORDER BY h.op_id")]
 
 
 def activation_status(config_path):
@@ -268,23 +299,32 @@ def activation_status(config_path):
                   config_digest=digest(config), package_digest=package_digest(),
                   scope="tmux-workers" if "transport" in config else "fixture-only",
                   recovery_required=activation_pending(root), coordinator=None,
-                  complete=False, unavailable={},
+                  complete=False, unavailable={}, unresolved_holds=None,
                   warning="Advisory independent reads, not an atomic snapshot or arming clearance. "
                   "Armed ticks can mutate shared coordinator watchdog and fixture events; "
                   "unavailable components must be inspected again while quiescent.")
     errors = (f.LaunchError, Rejected, OSError, sqlite3.Error, ValueError, TypeError, KeyError)
     try:
-        with activation_store(config_path) as (_, _, meta):
+        with activation_store(config_path) as (_, db, meta):
+            result["unresolved_holds"] = unresolved_holds(db)
             result.update(state=meta["requested_mode"], generation=meta["control_generation"],
                           next_generation=meta["control_generation"] + 1, stored=meta)
     except errors as exc:
         reason = str(exc) if isinstance(exc, (f.LaunchError, Rejected)) else type(exc).__name__
         result["unavailable"]["owner"] = dict(error=type(exc).__name__, reason=reason)
     try:
-        result["coordinator"] = coordinator_activation_impact(root)
+        result["coordinator"] = coordinator_activation_impact(root, "owner" if "transport" in config else None)
     except errors as exc:
         reason = str(exc) if isinstance(exc, (f.LaunchError, Rejected)) else type(exc).__name__
         result["unavailable"]["coordinator"] = dict(error=type(exc).__name__, reason=reason)
+    if result["coordinator"] is not None and result["unresolved_holds"] is not None:
+        ownership = result["coordinator"]["ownership"]
+        claims = {digest(["tmux", key, "claim"]): key for key in ownership}
+        for hold in result["unresolved_holds"]:
+            hold["action_id"] = hold["action_id"] or claims.get(hold["op_id"])
+            hold["dispatch_owner"] = ownership.get(hold["action_id"], {}).get("owner")
+            hold["excluded_from_owner_lane"] = (
+                "transport" in config and hold["dispatch_owner"] == "hand")
     result["complete"] = not result["unavailable"]
     return result
 
@@ -434,7 +474,7 @@ def arm_owner(config_path, authority, dry_run=False):
         f.require(meta["requested_mode"] == "off", "owner_already_armed")
         if os.path.lexists(root / "activation.json"):
             private_file(root / "activation.json")
-        impact = coordinator_activation_impact(root)
+        impact = coordinator_activation_impact(root, "owner" if "transport" in config else None)
         if "transport" in config:
             f.require(impact["dispatch_control"] is not None, "dispatch_handoff_required")
         if dry_run:
@@ -501,9 +541,29 @@ def handoff(config_path, request):
                     coordinator=str(root), assignments=request["assignments"])
 
 
-def reconfigure_owner(config_path, replacement):
-    """Explicit OFF-only repin; preserve journals, generations and history."""
-    with activation_store(config_path) as (root, db, meta):
+@contextmanager
+def uninstalled_schedule(config_path, schedule_root):
+    """Serialize with install/repin and bind the inspected receipt to this config."""
+    f.require(schedule_root is not None, "reconfigure_requires_schedule")
+    schedule_root = f.private_dir(schedule_root)
+    with locked(schedule_root / "installation.lock"):
+        receipt = load(schedule_root / "installation.json")
+        f.require(receipt["pins"]["config"] == str(private_file(config_path)),
+                  "reconfigure_schedule_config_mismatch")
+        f.require(receipt["phase"] == "uninstalled", "reconfigure_requires_uninstalled")
+        domain = installation_domain(receipt)
+        sibling = ("user" if domain.startswith("gui/") else "gui") + "/" + str(os.getuid())
+        for location in (domain, sibling):
+            presence, _ = service(receipt["label"], location)
+            f.require(presence == "absent" or
+                      (location == sibling and presence == "domain_absent"),
+                      "reconfigure_requires_absent_service")
+        yield
+
+
+def reconfigure_owner(config_path, replacement, schedule_root=None):
+    """OFF-only repin of a recorded, uninstalled schedule; preserve history."""
+    with uninstalled_schedule(config_path, schedule_root), activation_store(config_path) as (root, db, meta):
         f.require(meta["requested_mode"] == "off", "reconfigure_requires_off")
         config = configuration(replacement)
         f.require(config["coordinator"] == str(root), "coordinator_change_forbidden")
@@ -857,7 +917,7 @@ class Kernel:
         readiness = self.c.readiness()
         return {"state": "HOLD" if held else "READY" if readiness in {"paused", "owned"} else "ACTIVE",
                 "actions": outcomes, "routing": "tmux-workers", "fixture_only": False,
-                "dispatcher": self.dispatcher,
+                "dispatcher": self.dispatcher, "unresolved_holds": unresolved_holds(self.db),
                 "ownership": {a["id"]: self.c.dispatch_owner(snapshot, a)
                               for a in snapshot["actions"].values()}}
 
@@ -1090,7 +1150,8 @@ def main(argv=None):
     commands.add_argument("--run", action="store_true")
     commands.add_argument("--hand-run", action="store_true", help="one hand-owned TMUX pass using the shared journal")
     commands.add_argument("--handoff", type=Path, help="revision-bound ownership partition/transfer JSON")
-    commands.add_argument("--reconfigure", type=Path, help="OFF-only replacement config and package repin")
+    commands.add_argument("--reconfigure", type=Path,
+                          help="OFF-only config/package repin; requires --schedule with an uninstalled receipt")
     commands.add_argument("--arm", action="store_true",
                           help="arm shared coordinator mutation; fixture-only is not read-only; "
                           "inspect --activation-status before arming")
@@ -1111,14 +1172,17 @@ def main(argv=None):
     if args.dry_run and not args.arm:
         parser.error("--dry-run requires --arm")
     if args.handoff or args.reconfigure or args.hand_run:
-        if (args.config is None or args.schedule or args.recover is not None or args.observe
-                or args.publish_state or args.authority or args.generation is not None):
-            parser.error("handoff/reconfigure/hand-run require only --config and their own input")
+        if (args.config is None or (args.schedule is not None and not args.reconfigure)
+                or (args.reconfigure and args.schedule is None)
+                or args.recover is not None or args.observe or args.publish_state
+                or args.authority or args.generation is not None):
+            parser.error("handoff/hand-run require only --config and their input; "
+                         "reconfigure also requires --schedule")
         try:
             if args.handoff:
                 result = handoff(args.config, load(args.handoff))
             elif args.reconfigure:
-                result = reconfigure_owner(args.config, args.reconfigure)
+                result = reconfigure_owner(args.config, args.reconfigure, args.schedule)
             else:
                 result = Kernel(args.config, dispatcher="hand").tick()
             print(encoded(result))

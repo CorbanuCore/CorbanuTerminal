@@ -801,13 +801,18 @@ class Coordinator:
                 action["dispatch_epoch"] += 1
             self._event(db, {"id": f"dispatch-reconciled:{action_id}:{state['revision']}", "evidence": evidence})
 
+    @classmethod
+    def watchdog_covers(cls, state, action, dispatcher=None):
+        """The same ownership predicate serves execution and advisory coverage."""
+        return dispatcher is None or cls.dispatch_owner(state, action) in (None, dispatcher)
+
     def watchdog(self, dispatcher=None):
         """Report each stall once; never re-launch on timeout alone."""
         found = []
         snapshot = self.snapshot()
         now = self.clock()
         overdue = [a["id"] for a in snapshot["actions"].values()
-                   if (dispatcher is None or self.dispatch_owner(snapshot, a) in (None, dispatcher))
+                   if self.watchdog_covers(snapshot, a, dispatcher)
                    and a["status"] in {"dispatching", "dispatched", "running"}
                    and a["deadline"] < now and not a.get("stall_reported")]
         manager = snapshot["manager"]
@@ -822,7 +827,7 @@ class Coordinator:
                     found.append(event)
                 manager["stall_reported"] = True
             for action in state["actions"].values():
-                if ((dispatcher is not None and self.dispatch_owner(state, action) not in (None, dispatcher))
+                if (not self.watchdog_covers(state, action, dispatcher)
                         or action["status"] not in {"dispatching", "dispatched", "running"}
                         or action["deadline"] >= now or action.get("stall_reported")):
                     continue
