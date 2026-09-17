@@ -1,0 +1,143 @@
+{
+  "files": [
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/.gitignore",
+      "bytes": 153,
+      "lines": 5,
+      "sha256": "80ca5e311052046969f38edf93f8da573f08790469fef7a876856a171bedba06"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/REPRODUCE.md",
+      "bytes": 1963,
+      "lines": 31,
+      "sha256": "a419d9e53b48d0f2632147795d94b464e5c4ff7c2f1300601544e844a39cfe17"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/RETURN.md",
+      "bytes": 5917,
+      "lines": 99,
+      "sha256": "6784046ceca43b5d35d914ea243318d2c8d01021859664973e4fb30a0da165f0"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/attempts.json",
+      "bytes": 1397,
+      "lines": 39,
+      "sha256": "b39cc4a4ce27058dccbb35fee566624f5c40dde3414f21e27e0185fa0a673a3e"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/binary.json",
+      "bytes": 386,
+      "lines": 6,
+      "sha256": "ffa703eb4e6ff6c61f75d6f26637295bef9114f4227f9c346ee3b66242651e3a"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/collect_evidence.py",
+      "bytes": 4092,
+      "lines": 78,
+      "sha256": "9c2a417b43b173060cd99e6ab7421497825f1eac2054db705b9b95118edbb3e4"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/gates-01/core-default.log.gz",
+      "bytes": 4984,
+      "lines": null,
+      "sha256": "89bef12341fe1e38f92f236ec2cc3928461e1d00c6d188daf4bdb637687a732c"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/gates-01/core-feature.log.gz",
+      "bytes": 5064,
+      "lines": null,
+      "sha256": "98d38569a877950dc1cc699897068fbbdd7d65172d4b1f04f559fb375c66a816"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/gates-01/feature-binary.log.gz",
+      "bytes": 3132,
+      "lines": null,
+      "sha256": "6b9ce93330139bbb67b1bf73fc2a4075161a7a142aa7c439311de0fa065fbf84"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/gates-01/lanes.json",
+      "bytes": 2010,
+      "lines": 80,
+      "sha256": "54781adf950111d4f2342343654c77f6919e755a31a3362caff9d51d62425cd8"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/gates-01/prerequisites.log.gz",
+      "bytes": 3132,
+      "lines": null,
+      "sha256": "f87b8482dfd28a4e90223089ba7b1d14d4df81d87811fe5cc723a695e65c2977"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/gates-01/tui.log.gz",
+      "bytes": 6538,
+      "lines": null,
+      "sha256": "b8a085d72e9aeb4dfc68b069cce0a4dab95c7c4e0424e0671be17cb03f041512"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/inherited-disposition.md",
+      "bytes": 7383,
+      "lines": 78,
+      "sha256": "a522bf5642ec40801d3f93c808d9862a64bef46f496ec6bbcd2553ecda85a913"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/page-controls-01/baseline.json",
+      "bytes": 5331,
+      "lines": 164,
+      "sha256": "cf1e94e3b2c97ab04e98a940eb432e8493834216a376d8ab943522b03e18e80e"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/page-controls-01/pre-revision-audit.py",
+      "bytes": 9388,
+      "lines": 150,
+      "sha256": "cd60abdfaca79d65f7b9dcc8ff0066c25ce307818e7522b26bad36c54dfcb25a"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/page-controls-01/results.json",
+      "bytes": 37493,
+      "lines": 659,
+      "sha256": "537ee8cba51ae04ec578d9db6544f249ed0dd223e2ebe0d206472343470a71a0"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/page_controls.py",
+      "bytes": 4046,
+      "lines": 88,
+      "sha256": "828741b7d0e6c101280e42f328881770feb179f8626be41c495e68ce9d64b5bc"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/removal-controls-01/baseline.json",
+      "bytes": 5331,
+      "lines": 164,
+      "sha256": "cf1e94e3b2c97ab04e98a940eb432e8493834216a376d8ab943522b03e18e80e"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/removal-controls-01/pre-revision-audit.py",
+      "bytes": 7519,
+      "lines": 119,
+      "sha256": "175ac7dfb9a9d3c1bfa7df788f44459ef2cf1245cdac26b97bd06607144c5df7"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/removal-controls-01/results.json",
+      "bytes": 18535,
+      "lines": 286,
+      "sha256": "7757c057ead0e901422b81b069af2cef285020247b935dfb75dbe623d2f9c629"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/scope-recheck.json",
+      "bytes": 3750,
+      "lines": 110,
+      "sha256": "2fb9e60700db87751fa44a42f13476a44690f603a2729a0216084f5bba77d602"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/source-evidence.json",
+      "bytes": 25923,
+      "lines": 106,
+      "sha256": "3b59a552a5aa2606259aee9180e34cd6d72c6da0543e029435a9b4ec49b4b128"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/test-results.json",
+      "bytes": 1276,
+      "lines": 41,
+      "sha256": "ac8f1ad36789a2e9f272b309a534fccd6459dde04d2da5fe6f31dd05dbe22a89"
+    }
+  ],
+  "excludes": "self and scope; ignored regenerable mutations and plaintext logs; lossless gzip logs and complete result receipts retained"
+}

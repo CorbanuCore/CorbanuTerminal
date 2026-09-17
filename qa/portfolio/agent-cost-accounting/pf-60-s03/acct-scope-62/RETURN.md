@@ -72,6 +72,14 @@ page**, all audited; it is not folded into the original 15-page count. **Positiv
 measured-dollar comparisons remain 0.** Historical receipts/captures are unchanged;
 the old report's misleading “15 monetary pages” wording now points to the re-audit.
 
+**Round-64 correction:** the exact-USD predicate above did not reject every
+unexpected numeric page: another dollar/USD amount could appear on a navigation
+page without that line. The current audit binds all **24 page identities**:
+15 subtotal pages and nine pages that forbid numeric money. Missing/unexpected
+identities fail before receipt. [Round-64 controls](../acct-inherited-64/page-controls-01/results.json)
+reject 38 altered-page cases (34 accepted by this round's auditor); all 28
+original amount-removal cases still reject. Original receipts remain historical.
+
 ## TZ control
 
 The brief permits evaluating the old predicate **or omitting its field**. This

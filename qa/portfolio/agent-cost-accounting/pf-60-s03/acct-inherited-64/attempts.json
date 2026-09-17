@@ -1,0 +1,39 @@
+[
+  {
+    "run": "gates-01",
+    "exit": 0,
+    "result": "Prerequisites then default core 124/124, developer core 127/127, TUI 91/91, final feature binary. No native credential prompt observed."
+  },
+  {
+    "run": "page-controls-01",
+    "exit": 0,
+    "result": "24-page baseline; 38 rejections before receipt; frozen old auditor accepted 34."
+  },
+  {
+    "run": "removal-controls-01",
+    "exit": 0,
+    "result": "28 removals rejected; frozen pre-round-62 auditor accepts 26."
+  },
+  {
+    "run": "scope-recheck",
+    "exit": 0,
+    "result": "Re-audit of preserved round-62 evidence: four direct sampling attempts across three roots; USD 0.00284. Not new collection."
+  },
+  {
+    "run": "collect-evidence-attempt-01",
+    "exit": 1,
+    "error": "AssertionError: ('codex-rs/core/tests/suite/accounting_chat.rs', 477)",
+    "reason": "Excerpt end 486 exceeded 477-line source; failed before writing any receipt."
+  },
+  {
+    "run": "collect-evidence-attempt-02",
+    "exit": 1,
+    "error": "AssertionError: ('qa/portfolio/agent-cost-accounting/pf-60-s02/compact-late-import-receiving.md', 57)",
+    "reason": "Excerpt end 59 exceeded 57-line source; failed before writing any receipt."
+  },
+  {
+    "run": "collect-evidence-attempt-03",
+    "exit": 0,
+    "result": "Corrected bounds 477 and 57; 13 hashed source excerpts, actual gate results, lossless logs and exact binary hash."
+  }
+]
