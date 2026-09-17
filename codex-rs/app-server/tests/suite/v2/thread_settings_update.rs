@@ -483,15 +483,18 @@ async fn restart_settled_permission_case(
         timeout(DEFAULT_TIMEOUT, restarted.read_response(request)).await??;
     assert_eq!(resumed.thread.id, thread);
     if initial == AskForApproval::UnlessTrusted {
-        assert_ne!(
-            resumed.approval_policy,
-            AskForApproval::Never,
-            "restarting a restricted thread must not silently remove approval requirements"
-        );
-        assert_ne!(
-            resumed.sandbox,
-            SandboxPolicy::DangerFullAccess,
-            "restarting a restricted thread must not silently remove the sandbox"
+        // Require the known pre-restart authority, not merely the absence of
+        // full access: partial approval, filesystem or network escalation is
+        // also forbidden before deriving any probe expectation from the reply.
+        assert_eq!(
+            (&resumed.approval_policy, &resumed.sandbox),
+            (
+                &AskForApproval::UnlessTrusted,
+                &SandboxPolicy::ReadOnly {
+                    network_access: false,
+                },
+            ),
+            "restarting a restricted thread must retain the pre-restart authority"
         );
     }
     // Test what resume actually reports, permitting a disclosed reset rather
