@@ -199,6 +199,7 @@ def coordinator_activation_impact(root):
     f.require(not any(Path(str(coordinator.path) + suffix).exists()
                       for suffix in ("-journal", "-wal", "-shm")), "coordinator_recovery_required")
     with coordinator.connection(readonly=True) as db:
+        db.execute("PRAGMA busy_timeout=250")
         row = db.execute("SELECT body FROM state WHERE id=1").fetchone()
         f.require(row is not None, "uninitialized_state")
         snapshot = f.strict_json(row[0])
@@ -234,14 +235,31 @@ def coordinator_activation_impact(root):
 
 
 def activation_status(config_path):
-    with activation_store(config_path) as (root, _, meta):
-        config = load(config_path)
-        return dict(state=meta["requested_mode"], generation=meta["control_generation"],
-                    next_generation=meta["control_generation"] + 1,
-                    config_digest=digest(config), package_digest=package_digest(),
-                    scope="tmux-workers" if "transport" in config else "fixture-only",
-                    recovery_required=activation_pending(root), stored=meta,
-                    coordinator=coordinator_activation_impact(root))
+    """Independent advisory reads: unavailable state is unknown, never empty/off."""
+    config = load(config_path)
+    f.require(type(config) is dict and isinstance(config.get("coordinator"), str), "invalid_config")
+    root = f.private_dir(config["coordinator"])
+    result = dict(state=None, generation=None, next_generation=None, stored=None,
+                  config_digest=digest(config), package_digest=package_digest(),
+                  scope="tmux-workers" if "transport" in config else "fixture-only",
+                  recovery_required=activation_pending(root), coordinator=None,
+                  complete=False, unavailable={},
+                  warning="Advisory independent reads, not an atomic snapshot or arming clearance. "
+                  "Armed ticks can mutate shared coordinator watchdog and fixture events; "
+                  "unavailable components must be inspected again while quiescent.")
+    errors = (f.LaunchError, Rejected, OSError, sqlite3.Error, ValueError, TypeError, KeyError)
+    try:
+        with activation_store(config_path) as (_, _, meta):
+            result.update(state=meta["requested_mode"], generation=meta["control_generation"],
+                          next_generation=meta["control_generation"] + 1, stored=meta)
+    except errors as exc:
+        result["unavailable"]["owner"] = dict(error=type(exc).__name__, reason=str(exc))
+    try:
+        result["coordinator"] = coordinator_activation_impact(root)
+    except errors as exc:
+        result["unavailable"]["coordinator"] = dict(error=type(exc).__name__, reason=str(exc))
+    result["complete"] = not result["unavailable"]
+    return result
 
 
 def arm_owner(config_path, authority):

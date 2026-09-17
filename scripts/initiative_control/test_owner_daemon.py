@@ -410,9 +410,39 @@ class ActivationVisibilityTests(unittest.TestCase):
         journal = self.root / "coordinator.sqlite3-journal"
         f.write_file(journal, b"fixture hot-journal marker")
         before = {p.name: p.read_bytes() for p in self.root.iterdir() if p.is_file()}
-        with self.assertRaisesRegex(f.LaunchError, "coordinator_recovery_required"):
-            owner.activation_status(self.config_path)
+        result = owner.activation_status(self.config_path)
+        self.assertFalse(result["complete"])
+        self.assertEqual("off", result["state"])
+        self.assertIsNone(result["coordinator"])
+        self.assertEqual("coordinator_recovery_required", result["unavailable"]["coordinator"]["reason"])
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir() if p.is_file()})
+
+    def test_busy_coordinator_returns_partial_status_through_cli(self):
+        with closing(sqlite3.connect(self.c.path)) as db:
+            db.execute("BEGIN EXCLUSIVE")
+            result = self.child(None, "--activation-status", "--config", str(self.config_path))
+        self.assertEqual(0, result.returncode, result.stderr)
+        value = json.loads(result.stdout)
+        self.assertFalse(value["complete"])
+        self.assertEqual("off", value["state"])
+        self.assertEqual(0, value["generation"])
+        self.assertIsNone(value["coordinator"])
+        self.assertEqual("database is locked", value["unavailable"]["coordinator"]["reason"])
+
+    def test_busy_owner_still_reports_coordinator_and_unknown_owner(self):
+        with owner.locked(self.root / "owner-daemon.lock"):
+            result = owner.activation_status(self.config_path)
+        self.assertFalse(result["complete"])
+        self.assertIsNone(result["state"])
+        self.assertIsNone(result["generation"])
+        self.assertIsNone(result["stored"])
+        self.assertIn("owner", result["unavailable"])
+        self.assertEqual([], result["coordinator"]["in_flight"])
+
+    def test_complete_status_is_explicit(self):
+        result = owner.activation_status(self.config_path)
+        self.assertTrue(result["complete"])
+        self.assertEqual({}, result["unavailable"])
 
 
 class ArmingTests(unittest.TestCase):

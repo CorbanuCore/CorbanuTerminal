@@ -13,7 +13,13 @@ import decision_inspection as inspection
 
 ARTIFACT = "decision-feed.json"
 SLACK_FILE = "decision-slack-status.json"
-SLACK_LIMIT = 16384
+# Every feed revision includes these JSON keys/separators, even before values.
+# The 1 MiB admitted feed therefore bounds the number of possible retained rows.
+MIN_RECORD_BYTES = 1 + sum(len(d.canonical(key)) + 2 for key in d.FIELDS)
+MAX_SLACK_ROWS = d.MAX_BYTES // MIN_RECORD_BYTES
+SLACK_ROW_LIMIT = 1024  # ID <=80, digest=64, bounded revision/counters; ample headroom.
+SLACK_ENVELOPE_LIMIT = 16384
+SLACK_LIMIT = SLACK_ENVELOPE_LIMIT + MAX_SLACK_ROWS * (SLACK_ROW_LIMIT + 1)
 LIMIT = d.MAX_BYTES + SLACK_LIMIT + 256
 DELIVERY = {"off", "unknown", "not-requested", "pending", "sending", "uncertain", "failed", "sent", "cancelled"}
 
@@ -22,17 +28,22 @@ def validate_slack(value, feed, at):
     """A projection binds only existing question revisions, never grants authority."""
     import decision_manager as manager
     d.require(len(d.canonical(value)) <= SLACK_LIMIT and not d.SECRET.search(d.canonical(value).decode()))
-    d.shape(value, "schema assessed_at feed_digest status decisions")
+    # Match atomic_json's physical encoding as well as the canonical transport.
+    d.require(len((json.dumps(value, indent=2, sort_keys=True) + "\n").encode()) <= SLACK_LIMIT)
+    d.shape(value, "schema assessed_at feed_digest status decisions"
+            + (" omitted_revisions" if "omitted_revisions" in value else ""))
+    d.require(len(d.canonical({**value, "decisions": []})) <= SLACK_ENVELOPE_LIMIT)
     d.require(type(value["schema"]) is int and value["schema"] == 1 and feed is not None)
     d.require(d.stamp(value["assessed_at"]) <= d.stamp(clock(at)) and value["feed_digest"] == d.digest(feed))
     manager.validate_status(value["status"])
     d.require(value["status"]["enabled"] == (value["status"]["state"] != "off"))
     if value["status"]["last_verified"] is not None:
         d.require(d.stamp(value["status"]["last_verified"]) <= d.stamp(value["assessed_at"]))
-    d.require(type(value["decisions"]) is list and len(value["decisions"]) <= 100)
+    d.require(type(value["decisions"]) is list and len(value["decisions"]) <= MAX_SLACK_ROWS)
     records = {(item["id"], record["revision"]): record for item in feed["decisions"] for record in item["revisions"]}
     seen = set()
     for row in value["decisions"]:
+        d.require(len(d.canonical(row)) <= SLACK_ROW_LIMIT)
         d.shape(row, "id revision context_digest delivery pending replies")
         d.require(type(row["id"]) is str and re.fullmatch(d.ID, row["id"]) and type(row["revision"]) is int)
         key = (row["id"], row["revision"])
@@ -45,6 +56,11 @@ def validate_slack(value, feed, at):
         d.require(all(type(n) is int and 0 <= n <= 1000000 for n in row["replies"].values()))
         if not value["status"]["enabled"]:
             d.require(row["delivery"] == "off" and row["pending"] == 0 and not any(row["replies"].values()))
+    latest = {(item["id"], item["revisions"][-1]["revision"]) for item in feed["decisions"]}
+    d.require(latest <= seen)
+    if "omitted_revisions" in value:
+        d.require(type(value["omitted_revisions"]) is int
+                  and value["omitted_revisions"] == len(records) - len(seen))
     return copy.deepcopy(value)
 
 
@@ -63,11 +79,11 @@ def project_slack(state, store_path, at, enabled=False):
         events = ledger["events"]
         for item in feed["decisions"]:
             for record in item["revisions"]:
-                matching = [(key, alerts.alert(saved, key)) for key in saved
-                            if saved[key]["intent"]["feed_id"] == feed["feed_id"]
-                            and saved[key]["intent"]["decision_id"] == item["id"]
-                            and saved[key]["intent"]["record"] == record
-                            and saved[key]["intent"]["identity"] == binding]
+                candidates = [(key, alerts.alert(saved, key)) for key in saved
+                              if saved[key]["intent"]["feed_id"] == feed["feed_id"]
+                              and saved[key]["intent"]["decision_id"] == item["id"]
+                              and saved[key]["intent"]["record"] == record]
+                matching = [(key, row) for key, row in candidates if row["intent"]["identity"] == binding]
                 d.require(len(matching) <= 1)
                 delivery = "off" if not enabled else "unknown" if binding is None else "not-requested"
                 counts = {key: 0 for key in manager.COUNTS}
@@ -88,7 +104,21 @@ def project_slack(state, store_path, at, enabled=False):
                             name = event["state"].replace("-", "_")
                             d.require(name in counts)
                             counts[name] += 1
-                rows.append(dict(id=item["id"], revision=record["revision"], context_digest=d.digest(record), delivery=delivery, pending=pending, replies=counts))
+                # A superseded question may still await an answer, delivery,
+                # receiver ACK, or its Slack notice. Be conservative: cancellation
+                # alone cannot hide queued ingress or unfinished answer handoff.
+                # A different/missing binding cannot prove an older alert is
+                # resolved. Retain its row as unknown without attributing replies
+                # or delivery from that other identity to the current binding.
+                unresolved = len(candidates) != len(matching)
+                if matching:
+                    intents = [intent for intent in ledger["intents"].values() if intent["alert"] == key]
+                    unresolved = (unresolved or bool(pending) or bool(counts["unacknowledged_answers"])
+                                  or any(counts[name] for name in manager.COUNTS if name != "agent_acknowledged")
+                                  or any(notice["state"] != "sent" for notice in row.get("notices", {}).values())
+                                  or (not row["cancelled"] and (not intents or delivery != "sent")))
+                if record is item["revisions"][-1] or unresolved:
+                    rows.append(dict(id=item["id"], revision=record["revision"], context_digest=d.digest(record), delivery=delivery, pending=pending, replies=counts))
 
     if enabled:
         store = alerts.Store(store_path, lock_timeout=5)
@@ -131,7 +161,9 @@ def project_slack(state, store_path, at, enabled=False):
             feed = d.load_fixture(state, at)
             d.require(feed is not None)
             collect(feed, {}, {"events": {}, "intents": {}}, None, {})
-    result = validate_slack(dict(schema=1, assessed_at=at, feed_digest=d.digest(feed), status=status, decisions=rows), feed, at)
+    omitted = sum(len(item["revisions"]) for item in feed["decisions"]) - len(rows)
+    result = validate_slack(dict(schema=1, assessed_at=at, feed_digest=d.digest(feed), status=status,
+                                 decisions=rows, omitted_revisions=omitted), feed, at)
     # Cache only. A later feed change invalidates the pin rather than being merged.
     atomic_json(state / SLACK_FILE, result)
     return result
@@ -363,6 +395,11 @@ def render(snapshot, at, sprints, documents):
     body = render_decisions(snapshot["feed"], clock(at), sprints, documents, slack=snapshot.get("slack"), slack_health=slack_health(snapshot, at),
                             inspection=snapshot.get("inspection"), withheld_count=snapshot.get("withheld_count"))
     from html import escape
+    omitted = (snapshot.get("slack") or {}).get("omitted_revisions", 0)
+    if omitted:
+        body += (f"<p>Slack projection omits {omitted} older revision(s). "
+                 "Every latest decision revision is included; full decision history remains above. "
+                 "Older unresolved alerts are retained when Slack projection is enabled.</p>")
     recurrence = owner_health(snapshot.get("owner_recurrence"), at)
     def timestamp(value):
         return dt.datetime.fromtimestamp(value, dt.timezone.utc).isoformat() if value is not None else "unknown"

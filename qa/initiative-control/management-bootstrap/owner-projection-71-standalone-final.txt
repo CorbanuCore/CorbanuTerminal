@@ -1,0 +1,9 @@
+test_bound_never_drops_open_or_acknowledged_question_after_closed_history (__main__.ProjectionRegressionTests.test_bound_never_drops_open_or_acknowledged_question_after_closed_history) ... ok
+test_oversize_fails_before_cache_write_without_silent_row_truncation (__main__.ProjectionRegressionTests.test_oversize_fails_before_cache_write_without_silent_row_truncation) ... ok
+test_twenty_decisions_fifty_three_revisions_projects_within_bound (__main__.ProjectionRegressionTests.test_twenty_decisions_fifty_three_revisions_projects_within_bound) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.084s
+
+OK
+Synthetic 20-decision/53-revision projection: {'rows': 20, 'bytes': 6676}

@@ -23,6 +23,111 @@ REPO = control.HERE.parents[1]
 SPRINT = "docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md"
 
 
+def growing_feed():
+    value = fixture()
+    three = revision(revision(value))["decisions"][0]["revisions"]
+    value["decisions"] = [
+        dict(id=f"question-{index:02}", revisions=copy.deepcopy(three[:3 if index < 13 else 2]))
+        for index in range(20)
+    ]
+    return d.validate(value, NOW)
+
+
+class ProjectionRegressionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve())
+        self.addCleanup(self.tmp.cleanup)
+        self.state = Path(self.tmp.name)
+        import fable_launcher as f
+        f.write_file(self.state / ".decisions.fixture.lock", b"")
+
+    def save(self, value):
+        # Fixtures are fully validated; no live feed lineage is manufactured.
+        control.atomic_json(self.state / "decisions.fixture.json", d.validate(value, NOW))
+
+    def test_twenty_decisions_fifty_three_revisions_projects_within_bound(self):
+        value = growing_feed()
+        self.assertEqual(20, len(value["decisions"]))
+        self.assertEqual(53, sum(len(item["revisions"]) for item in value["decisions"]))
+        self.save(value)
+        result = transport.project_slack(self.state, None, NOW)
+        self.assertLessEqual(len(d.canonical(result)), transport.SLACK_LIMIT)
+        selected = {(row["id"], row["revision"]) for row in result["decisions"]}
+        for item in value["decisions"]:
+            self.assertIn((item["id"], item["revisions"][-1]["revision"]), selected, item["id"])
+
+    def test_bound_never_drops_open_or_acknowledged_question_after_closed_history(self):
+        value = fixture()
+        resolved = revision(value, "resolved")["decisions"][0]["revisions"]
+        value["decisions"] = [
+            dict(id=f"closed-{index:03}", revisions=copy.deepcopy(resolved))
+            for index in range(80)
+        ]
+        for status in ("open", "acknowledged"):
+            history = fixture()["decisions"][0]["revisions"] if status == "open" else revision(
+                fixture(), "acknowledged")["decisions"][0]["revisions"]
+            value["decisions"].append(dict(id="last-" + status, revisions=history))
+        self.save(value)
+        result = transport.project_slack(self.state, None, NOW)
+        self.assertLessEqual(len(d.canonical(result)), transport.SLACK_LIMIT)
+        selected = {(row["id"], row["revision"]) for row in result["decisions"]}
+        self.assertIn(("last-open", 1), selected, "latest open question missing")
+        self.assertIn(("last-acknowledged", 2), selected, "latest acknowledged question missing")
+
+
+
+
+class ProjectionBoundTests(unittest.TestCase):
+    setUp = ProjectionRegressionTests.setUp
+    save = ProjectionRegressionTests.save
+
+    def test_more_than_one_hundred_open_questions_survive_disk_and_export_bounds(self):
+        value = fixture()
+        history = value["decisions"][0]["revisions"]
+        value["decisions"] = [
+            dict(id=f"open-{index:03}", revisions=copy.deepcopy(history)) for index in range(130)
+        ]
+        self.save(value)
+        result = transport.project_slack(self.state, None, NOW)
+        self.assertGreater(len(d.canonical(result)), 16384)
+        self.assertLessEqual((self.state / transport.SLACK_FILE).stat().st_size, transport.SLACK_LIMIT)
+        self.assertEqual("valid", transport.read_slack(self.state, value, NOW)[0])
+        self.assertEqual(130, len(result["decisions"]))
+        for item in value["decisions"]:
+            self.assertIn(item["id"], {row["id"] for row in result["decisions"]})
+        raw, pin = transport.capture(self.state, NOW)
+        self.assertLessEqual(len(raw), transport.LIMIT)
+        self.assertEqual("valid", json.loads(raw)["slack_status"])
+        source = self.state / "export"
+        source.mkdir()
+        (source / transport.ARTIFACT).write_bytes(raw)
+        restored = transport.read_snapshot(source, {"decision_feed": pin}, NOW)
+        self.assertEqual(result, restored["slack"])
+
+    def test_omitted_history_is_disclosed_and_missing_latest_is_rejected(self):
+        value = growing_feed()
+        self.save(value)
+        result = transport.project_slack(self.state, None, NOW)
+        self.assertEqual(20, len(result["decisions"]))
+        self.assertEqual(33, result["omitted_revisions"])
+        page = transport.render(dict(feed=value, slack=result, slack_status="valid"), NOW, [], {})
+        self.assertIn("omits 33 older revision(s)", page)
+        result["decisions"].pop()
+        result["omitted_revisions"] += 1
+        with self.assertRaises(d.Invalid):
+            transport.validate_slack(result, value, NOW)
+
+    def test_overflow_still_preserves_last_cache_and_reads_as_invalid(self):
+        self.save(fixture())
+        transport.project_slack(self.state, None, NOW)
+        before = (self.state / transport.SLACK_FILE).read_bytes()
+        with patch.object(transport, "SLACK_LIMIT", 100):
+            with self.assertRaises(d.Invalid):
+                transport.project_slack(self.state, None, NOW)
+            self.assertEqual("invalid", transport.read_slack(self.state, fixture(), NOW)[0])
+        self.assertEqual(before, (self.state / transport.SLACK_FILE).read_bytes())
+
+
 class RecurrenceHealthTests(unittest.TestCase):
     def test_running_stalled_never_installed_and_unknown_are_separate_from_slack(self):
         at = d.stamp(NOW).timestamp()
@@ -708,6 +813,39 @@ from test_slack_transport import LiveFixture
 
 
 class SlackProjectionTests(LiveFixture):
+    def test_older_unanswered_alert_survives_after_projection_exceeds_old_bound(self):
+        self.sending()
+        changed = revision(self.feed)
+        history = fixture()["decisions"][0]["revisions"]
+        changed["decisions"] += [
+            dict(id=f"open-{index:03}", revisions=copy.deepcopy(history)) for index in range(130)
+        ]
+        d.save_fixture(self.feed_root, changed, d.digest(self.feed), NOW)
+        with patch("slack_sdk.WebClient", side_effect=AssertionError("no network")):
+            result = transport.project_slack(self.feed_root, self.root, NOW, True)
+        selected = {(row["id"], row["revision"]) for row in result["decisions"]}
+        self.assertIn(("choice-1", 1), selected, "older unanswered alert missing")
+        self.assertIn(("choice-1", 2), selected, "latest question missing")
+        self.assertIn(("open-129", 1), selected, "last open question missing")
+        self.assertGreater(len(d.canonical(result)), 16384)
+        self.assertEqual("valid", transport.read_slack(self.feed_root, changed, NOW)[0])
+
+
+    def test_missing_binding_keeps_old_alert_unknown_instead_of_omitting_it(self):
+        import slack_transport as slack
+        from contextlib import nullcontext
+        self.sending()
+        changed = revision(self.feed)
+        d.save_fixture(self.feed_root, changed, d.digest(self.feed), NOW)
+        with slack.locked(self.store) as journal:
+            unavailable = {**journal, "binding": None}
+        with patch.object(slack, "locked", return_value=nullcontext(unavailable)):
+            result = transport.project_slack(self.feed_root, self.root, NOW, True)
+        rows = {(row["id"], row["revision"]): row for row in result["decisions"]}
+        self.assertIn(("choice-1", 1), rows)
+        self.assertEqual("unknown", rows[("choice-1", 1)]["delivery"])
+        self.assertFalse(any(rows[("choice-1", 1)]["replies"].values()))
+
     def test_projection_observes_live_owner_and_lease_without_mutating_journals(self):
         import slack_transport as slack
         self.sending()

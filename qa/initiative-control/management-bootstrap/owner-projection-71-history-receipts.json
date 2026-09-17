@@ -1,0 +1,99 @@
+[
+  {
+    "receipt": "publication-one-shot-20260913T192240Z.receipt.txt",
+    "sha256": "01cc5f697f73928d17314f3a88cb623b7770021ed76e300a232a294f78df01a4",
+    "slack_states": [],
+    "revision_mentions": []
+  },
+  {
+    "receipt": "publication-one-shot-20260913T202504Z.receipt.txt",
+    "sha256": "5ebb90614043cff0107e6ab49e3f694e316c0c63b7af1e17be8b6afd2c94848a",
+    "slack_states": [],
+    "revision_mentions": []
+  },
+  {
+    "receipt": "publication-one-shot-20260913T203519Z.receipt.txt",
+    "sha256": "fd840dd409b9f3a44c12c077bf622cc876207afd625d1525c66aba9e92249b34",
+    "slack_states": [],
+    "revision_mentions": []
+  },
+  {
+    "receipt": "publication-one-shot-20260913T204616Z.receipt.txt",
+    "sha256": "85c8b9835caa53b96d6cd4d485c1dd5a21ec03ba4e358ef369457582429aba95",
+    "slack_states": [],
+    "revision_mentions": []
+  },
+  {
+    "receipt": "publication-one-shot-20260913T213715Z.receipt.txt",
+    "sha256": "6901b389ae43641d4e69be44c9a9acf2db78c41d609ffea2dc81d5ba642f53a8",
+    "slack_states": [],
+    "revision_mentions": []
+  },
+  {
+    "receipt": "publication-one-shot-20260913T220815Z.receipt.txt",
+    "sha256": "10c24db240ee6f239691650432609665649ad83e4d6cf1fe58e03a6cd05d404c",
+    "slack_states": [],
+    "revision_mentions": []
+  },
+  {
+    "receipt": "publication-one-shot-20260913T223809Z.receipt.txt",
+    "sha256": "fb2aa8784d15a83bf549f1f106227589dbed9383673bd7eff24008c70f3e58c3",
+    "slack_states": [],
+    "revision_mentions": []
+  },
+  {
+    "receipt": "publication-one-shot-20260914T041440Z.receipt.txt",
+    "sha256": "196a1ed049006b1eb593d4003ade05333197966947bdf924da993ae29cef9269",
+    "slack_states": [],
+    "revision_mentions": []
+  },
+  {
+    "receipt": "publication-one-shot-20260914T094348Z.receipt.txt",
+    "sha256": "424790ac53e7a653c766f4e3ce0465e015cce8fea27a0882783414dea2f143b6",
+    "slack_states": [
+      "stale"
+    ],
+    "revision_mentions": []
+  },
+  {
+    "receipt": "publication-one-shot-20260914T181341Z.receipt.txt",
+    "sha256": "ca6e80ffa08dff2fe7e9ca7391ef14b56b501451eaf661f567d20bf5817fe478",
+    "slack_states": [
+      "stale"
+    ],
+    "revision_mentions": [
+      "Decision feed revision: 34"
+    ]
+  },
+  {
+    "receipt": "publication-one-shot-20260914T213452Z.receipt.txt",
+    "sha256": "997190b2719ae06029a8121f5c89d2491dab370b4e9afbd12a5e2567b8263def",
+    "slack_states": [
+      "stale"
+    ],
+    "revision_mentions": [
+      "Decision feed revision: 38",
+      "Decision feed revision 38: PASS"
+    ]
+  },
+  {
+    "receipt": "publication-one-shot-20260914T233848Z.receipt.txt",
+    "sha256": "6b7d68ffcdde95eb049eaa4ea9f2e1cf86538ef90f49708630820c87337f727f",
+    "slack_states": [
+      "stale"
+    ],
+    "revision_mentions": [
+      "Decision feed revision: RPC 38; local unavailable"
+    ]
+  },
+  {
+    "receipt": "publication-one-shot-20260915T001535Z.receipt.txt",
+    "sha256": "1a3d30455c32f992ec13728581499a5e2af29e954876a4c31e29d669cc411ff0",
+    "slack_states": [
+      "last-verified"
+    ],
+    "revision_mentions": [
+      "Decision feed revision: 39"
+    ]
+  }
+]

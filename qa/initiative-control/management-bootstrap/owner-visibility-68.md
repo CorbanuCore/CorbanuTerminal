@@ -1,5 +1,12 @@
 # owner-visibility-68 — shared coordinator visibility; Slack scope blocker
 
+Follow-up: [owner-projection-71](owner-projection-71.md) fixes the two projection
+regressions and adds degrading activation status. The original standalone
+[reproduction](owner_visibility_68_feed_repro.py) remains runnable; the two
+failing-first cases are now also discoverable as
+`test_decision_feed.ProjectionRegressionTests`. Original round-68 logs below
+remain historical evidence, not final-tree results.
+
 Allocation digest: `41e9c5b600c479e4b29512f74461d1e9d284c8d46f6500be0ae4c6526ee71ea4`.
 Claim: `4e1181f7-30cf-475e-8cb5-0f2fce7778e1`.
 Verified frozen brief SHA-256:

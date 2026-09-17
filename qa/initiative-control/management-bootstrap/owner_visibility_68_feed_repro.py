@@ -1,4 +1,4 @@
-"""Unfixed Slack regressions retained in the allocated evidence directory.
+"""Round-68 failing-first reproduction; current regressions live in test_decision_feed.
 
 Run with checkout scripts/initiative_control on PYTHONPATH in the isolated venv.
 These are synthetic offline cases; they never read a live feed or Slack store.
@@ -63,7 +63,8 @@ class ProjectionRegressionTests(unittest.TestCase):
         result = feed.project_slack(self.state, None, NOW)
         self.assertLessEqual(len(d.canonical(result)), feed.SLACK_LIMIT)
         selected = {(row["id"], row["revision"]) for row in result["decisions"]}
-        self.assertTrue({("last-open", 1), ("last-acknowledged", 2)} <= selected)
+        self.assertIn(("last-open", 1), selected, "latest open question missing")
+        self.assertIn(("last-acknowledged", 2), selected, "latest acknowledged question missing")
 
     def test_oversize_fails_before_cache_write_without_silent_row_truncation(self):
         self.save(fixture())
@@ -78,11 +79,13 @@ class ProjectionRegressionTests(unittest.TestCase):
             observed.update(rows=len(result["decisions"]), bytes=len(d.canonical(result)))
             return validate(result, current, at)
 
-        with patch.object(feed, "validate_slack", side_effect=capture):
+        # Force overflow even after the retention fix; this remains a
+        # diagnostic of fail-closed cache writes, not the 20/53 regression.
+        with patch.object(feed, "validate_slack", side_effect=capture), patch.object(feed, "SLACK_LIMIT", 100):
             with self.assertRaises(d.Invalid):
                 feed.project_slack(self.state, None, NOW)
-        self.assertEqual(53, observed["rows"])
-        self.assertGreater(observed["bytes"], feed.SLACK_LIMIT)
+        self.assertEqual(20, observed["rows"])
+        self.assertGreater(observed["bytes"], 100)
         self.assertEqual(before, (self.state / feed.SLACK_FILE).read_bytes())
         print("Synthetic 20-decision/53-revision projection:", observed)
 
