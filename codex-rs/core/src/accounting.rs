@@ -1,4 +1,10 @@
 //! Native sampling ownership glue. Replay, exact money and retention stay in state.
+
+// Reject optimized release builds; the package entrypoint also rejects marked
+// developer binaries, including debug profiles such as dev-small.
+#[cfg(all(feature = "developer-accounting", not(debug_assertions)))]
+compile_error!("developer-accounting is debug-only and must not be enabled in distribution builds");
+
 use crate::config::AccountingMode;
 use codex_api::AnthropicTokenPresence;
 use codex_api::AnthropicUsagePatch;
@@ -30,6 +36,42 @@ pub(crate) mod responses;
 pub(crate) mod transport;
 #[path = "accounting_websocket.rs"]
 pub(crate) mod websocket;
+
+/// Build-time developer opt-in only; normal builds do not contain this selector.
+/// Existing collectors still enforce endpoint and authentication eligibility.
+#[cfg(feature = "developer-accounting")]
+pub(crate) fn developer_accounting_mode(
+    provider_id: &str,
+    provider: &codex_model_provider_info::ModelProviderInfo,
+) -> AccountingMode {
+    use codex_model_provider_info::WireApi;
+    // Retain a byte marker in executable data even when symbols are stripped.
+    // scripts/build_codex_package.py refuses any input carrying this marker.
+    std::hint::black_box(b"CORBANU_DEVELOPER_ACCOUNTING_NOT_FOR_DISTRIBUTION");
+    let scope = Uuid::new_v4();
+    let approved_endpoint = provider.base_url.clone().unwrap_or_else(|| {
+        match provider.wire_api {
+            WireApi::Anthropic => codex_model_provider_info::ANTHROPIC_BASE_URL,
+            WireApi::Responses | WireApi::Chat => "https://api.openai.com/v1",
+        }
+        .into()
+    });
+    match (provider_id, provider.wire_api) {
+        ("anthropic", WireApi::Anthropic) => AccountingMode::DirectAnthropic {
+            scope,
+            approved_endpoint,
+        },
+        ("openai", WireApi::Responses) => AccountingMode::DirectOpenAiResponses {
+            scope,
+            approved_endpoint,
+        },
+        ("openai", WireApi::Chat) => AccountingMode::DirectOpenAiChat {
+            scope,
+            approved_endpoint,
+        },
+        _ => AccountingMode::Disabled,
+    }
+}
 
 pub(crate) const FAILURE: &str =
     "Native Anthropic accounting failed; request stopped without a repair send";

@@ -12,6 +12,10 @@ path = "src/lib.rs"
 name = "codex-write-config-schema"
 path = "src/bin/config_schema.rs"
 
+[features]
+# Developer qualification only. Never enable in distributed builds.
+developer-accounting = []
+
 [lints]
 workspace = true
 

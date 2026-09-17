@@ -1,0 +1,18 @@
+{
+  "mode": "enabled",
+  "binary": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-20-artifacts/codex-enabled",
+  "sha256": "9c9dec0a44b6b33787f9fb548005ea4775dc8cdf3b4745127eedfedd2c77ac76",
+  "activation_symbol_count": 4,
+  "collector_control_symbol_count": 12,
+  "activation_symbols": [
+    "00000001046f5008 - 01 0000   FUN __ZN10codex_core10accounting25developer_accounting_mode17h81c564fefd4ff6a4E",
+    "00000001046f5008 T __ZN10codex_core10accounting25developer_accounting_mode17h81c564fefd4ff6a4E",
+    "0000000104f9e5c0 - 01 0000   FUN __ZN10codex_core10accounting25developer_accounting_mode28_$u7b$$u7b$closure$u7d$$u7d$17hee48138b9c7eced4E",
+    "0000000104f9e5c0 t __ZN10codex_core10accounting25developer_accounting_mode28_$u7b$$u7b$closure$u7d$$u7d$17hee48138b9c7eced4E"
+  ],
+  "control_sample": [
+    "00000001046f52b8 - 01 0000   FUN __ZN10codex_core10accounting8Sampling13start_request17h91a229edd11f7b36E",
+    "00000001046f52b8 T __ZN10codex_core10accounting8Sampling13start_request17h91a229edd11f7b36E"
+  ],
+  "limitations": "Tests these exact unstripped native artifacts only. Does not prove other targets, optimized/stripped builds, release packaging, feature-unified/all-features builds or absence of differently named equivalent code. Existing collector/install APIs remain compiled in by design."
+}

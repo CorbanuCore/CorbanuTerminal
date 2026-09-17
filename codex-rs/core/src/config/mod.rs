@@ -345,7 +345,7 @@ fn resolve_mcp_oauth_credentials_store_mode(
 #[cfg(test)]
 pub(crate) async fn test_config() -> Config {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    Config::load_from_base_config_with_overrides(
+    let mut config = Config::load_from_base_config_with_overrides(
         ConfigToml {
             model: Some("gpt-5.5".to_string()),
             ..Default::default()
@@ -354,7 +354,9 @@ pub(crate) async fn test_config() -> Config {
         AbsolutePathBuf::from_absolute_path(codex_home.path()).expect("temp dir should resolve"),
     )
     .await
-    .expect("load default test config")
+    .expect("load default test config");
+    config.accounting = AccountingMode::Disabled;
+    config
 }
 
 /// Application configuration loaded from disk and merged with overrides.
@@ -636,7 +638,8 @@ pub enum ThreadStoreConfig {
     InMemory { id: String },
 }
 
-/// Internal native embedding opt-in. Never loaded from TOML, environment or CLI.
+/// Internal native embedding opt-in; no accounting TOML, environment or CLI key.
+/// The non-default `developer-accounting` build also binds supported provider routes.
 /// The binding is local estimate provenance, not provider authorization.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum AccountingMode {
@@ -2041,7 +2044,7 @@ impl Config {
             .map(AbsolutePathBuf::try_from)
             .transpose()?;
 
-        Self::load_config_with_layer_stack(
+        let config = Self::load_config_with_layer_stack(
             LOCAL_FS.as_ref(),
             cfg,
             ConfigOverrides {
@@ -2058,7 +2061,16 @@ impl Config {
             refreshed_config.codex_home.clone(),
             config_layer_stack,
         )
-        .await
+        .await?;
+        // Qualification pins the approved route/scope, including explicit OFF.
+        // Changed routes are excluded or fail admission; start a new session to rebind.
+        #[cfg(feature = "developer-accounting")]
+        let config = {
+            let mut config = config;
+            config.accounting.clone_from(&self.accounting);
+            config
+        };
+        Ok(config)
     }
 
     /// This is the preferred way to create an instance of [Config].
@@ -4494,7 +4506,13 @@ impl Config {
         .map_err(std::io::Error::from)?;
         let otel = otel::resolve_config(cfg.otel.unwrap_or_default(), &mut startup_warnings);
         let config = Self {
+            #[cfg(not(feature = "developer-accounting"))]
             accounting: AccountingMode::Disabled,
+            #[cfg(feature = "developer-accounting")]
+            accounting: crate::accounting::developer_accounting_mode(
+                &model_provider_id,
+                &model_provider,
+            ),
             model,
             service_tier,
             review_model,
