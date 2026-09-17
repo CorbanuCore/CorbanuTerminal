@@ -4,6 +4,7 @@ The owner-supplied checker is a trusted-host interface, not an admission substit
 Without it or explicit guest-contact permission, full preflight exits nonzero.
 """
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
@@ -75,12 +76,19 @@ def run(args):
         stage.require(stage.sha(path) == args.owner_check_sha256, "owner checker digest mismatch")
         return args.owner_check_sha256
 
-    check("receiving_locations_and_fresh_outputs", receiving)
-    check("package_attestation_after_move",
-          lambda: dispatch_guard.verify(args.bundle, dispatch_guard.ATTESTATION))
-    check("actor_asset_allowlist", lambda: sorted(prepare_payload.selected(args.bundle)))
-    check("candidate_agreement_and_288_packet_hashes", lambda: dispatch_guard.check(
-        require_path(args.harness, "--harness"), args.packets, args.bundle))
+    receiving_ok = check("receiving_locations_and_fresh_outputs", receiving)
+
+    def at_receiving(operation):
+        stage.require(receiving_ok, "receiving location unverified; artifact check refused")
+        return operation()
+
+    check("package_attestation_after_move", lambda: at_receiving(
+        lambda: dispatch_guard.verify(args.bundle, dispatch_guard.ATTESTATION)))
+    check("actor_asset_allowlist", lambda: at_receiving(
+        lambda: sorted(prepare_payload.selected(args.bundle))))
+    check("candidate_agreement_and_288_packet_hashes", lambda: at_receiving(
+        lambda: dispatch_guard.check(
+            require_path(args.harness, "--harness"), args.packets, args.bundle)))
     check("pinned_public_host_key", host_key)
     check("ssh_identity_metadata", identity_file)
     checker_ok = check("owner_checker_identity", owner_checker)
@@ -111,20 +119,38 @@ def run(args):
 
     local_ok = all(row["status"] == "passed" for row in results)
 
+    identity_observation = {}
+
+    def record_identity(stdout, stderr, returncode):
+        # Exact returned bytes survive mismatches, SSH failure and invalid UTF-8.
+        identity_observation.update(
+            stdout_base64=base64.b64encode(stdout or b"").decode("ascii"),
+            stderr_base64=base64.b64encode(stderr or b"").decode("ascii"),
+            returncode=returncode)
+
     def guest():
         stage.require(args.contact_guest, "--contact-guest not supplied; no guest contact authorized")
         stage.require(local_ok, "local/owner prerequisites failed; guest contact suppressed")
         ssh = stage.ssh_command(args.key, HERE / "known_hosts")
-        result = subprocess.run(ssh + [stage.IDENTITY], stdin=subprocess.DEVNULL,
-                                capture_output=True, check=True, timeout=30)
-        stage.check_identity(result.stdout.decode("utf-8", errors="strict"))
-        return dict(uuid=stage.GUEST_UUID, system="Darwin arm64", uid=503,
-                    account="agent", macos="26.2")
+        try:
+            result = subprocess.run(ssh + [stage.IDENTITY], stdin=subprocess.DEVNULL,
+                                    capture_output=True, timeout=30)
+        except subprocess.TimeoutExpired as error:
+            record_identity(error.stdout, error.stderr, None)
+            identity_observation["timed_out"] = True
+            raise
+        record_identity(result.stdout, result.stderr, result.returncode)
+        stage.require(result.returncode == 0, "identity SSH exit " + str(result.returncode))
+        raw = result.stdout.decode("utf-8", errors="strict")
+        identity_observation["stdout"] = raw
+        stage.check_identity(raw)
+        return identity_observation
 
     check("live_ssh_host_uuid_os_arch_account_uid", guest)
     passed = all(row["status"] == "passed" for row in results)
     report = dict(checks=results, passed=passed, exit_code=0 if passed else 1,
                   upload_calls=0, packaged_binary_executed=False,
+                  guest_identity_observation=identity_observation,
                   guest_contact_attempted=local_ok and args.contact_guest)
     print(json.dumps(report, indent=2, sort_keys=True))
     return report["exit_code"]

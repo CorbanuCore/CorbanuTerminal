@@ -1,0 +1,253 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PF83 round-83 branch coverage and blocked records",
+  "description": "results.json: exact frozen manifest tuple coverage. Include blocked/not_exercised rows; no invented capture references. Retain every attempt; independent reviewer checks external evidence, authority acceptance and manifest completeness. See runbook.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version","contract_sha256","queue_manifest","coverage_manifest","records"],
+  "properties": {
+    "schema_version": {"const":1},
+    "contract_sha256": {"type":"string","pattern":"^[0-9a-f]{64}$"},
+    "queue_manifest": {"$ref":"#/$defs/evidence"},
+    "coverage_manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frozen_manifest","expected"],
+      "properties": {
+        "frozen_manifest": {"$ref":"#/$defs/evidence"},
+        "expected": {"type":"array","minItems":1,"uniqueItems":true,"items":{"$ref":"#/$defs/coverage_tuple"}}
+      }
+    },
+    "records": {"type":"array","minItems":1,"items":{"$ref":"#/$defs/result"}}
+  },
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact","sha256","locator","observed"],
+      "properties": {
+        "artifact": {"type":"string","minLength":1,"pattern":"^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"},
+        "sha256": {"type":"string","pattern":"^[0-9a-f]{64}$"},
+        "locator": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Exact JSONL sequence/line range, PTY byte range or frame ID; no vague whole-session citation."
+        },
+        "observed": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Actual observation, including contradictions and limits; never copied expectation."
+        }
+      }
+    },
+    "coverage_tuple": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case","branch","profile","repository","queue_variant","queue_packet_sha256"],
+      "properties": {
+        "case": {"enum":["F05","F06","F07","F08","F09"]},
+        "branch": {"type":"string","minLength":1},
+        "profile": {"enum":["fresh","existing","existing-named"]},
+        "repository": {"enum":["tensorcash","isometric"]},
+        "queue_variant": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "description": "Exact queue variant ID, bound to the frozen queue manifest; not an invented descriptive alias."
+        },
+        "queue_packet_sha256": {"type":"string","pattern":"^[0-9a-f]{64}$"}
+      },
+      "allOf": [
+        {
+          "if": {"properties":{"case":{"const":"F05"}}},
+          "then": {"properties":{"branch":{"enum":["withhold-decline","withhold-accept","offered-replacement"]}}}
+        },
+        {
+          "if": {"properties":{"case":{"const":"F06"}}},
+          "then": {"properties":{"branch":{"enum":["full-to-restricted","restricted-to-full-approved-slow"]}}}
+        },
+        {
+          "if": {"properties":{"case":{"const":"F07"}}},
+          "then": {
+            "properties": {"branch":{"enum":["full-restricted-full","restricted-full-restricted","open-confirmation-conflict"]}}
+          }
+        },
+        {
+          "if": {"properties":{"case":{"const":"F08"}}},
+          "then": {
+            "properties": {
+              "branch": {"enum":["cancel-from-restricted","cancel-from-full","failure-from-restricted","failure-from-full"]}
+            }
+          }
+        },
+        {
+          "if": {"properties":{"case":{"const":"F09"}}},
+          "then": {
+            "properties": {"branch":{"enum":["full-to-restricted","restricted-to-full","supported-deferred-change"]}}
+          }
+        }
+      ]
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case",
+        "branch",
+        "profile",
+        "repository",
+        "queue_variant",
+        "queue_packet_sha256",
+        "attempt_id",
+        "status",
+        "capture",
+        "missing_artifacts",
+        "prerequisites",
+        "coverage_gaps",
+        "last_checkpoint",
+        "retained_evidence",
+        "product_authority"
+      ],
+      "properties": {
+        "case": {"enum":["F05","F06","F07","F08","F09"]},
+        "branch": {"type":"string","minLength":1},
+        "profile": {"enum":["fresh","existing","existing-named"]},
+        "repository": {"enum":["tensorcash","isometric"]},
+        "queue_variant": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "description": "Exact queue variant ID, bound to the frozen queue manifest; not an invented descriptive alias."
+        },
+        "queue_packet_sha256": {"type":"string","pattern":"^[0-9a-f]{64}$"},
+        "attempt_id": {"type":"string","minLength":1},
+        "status": {"enum":["passed","failed","inconclusive","blocked","not_exercised","accepted_disposition"]},
+        "capture": {"oneOf":[{"type":"null"},{"$ref":"#/$defs/evidence"}]},
+        "missing_artifacts": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "capture-identity.json",
+              "pty.raw",
+              "keys.jsonl",
+              "observer.raw",
+              "approval-effects.jsonl",
+              "operation-boundary.jsonl",
+              "selection-order.jsonl",
+              "resolution-authority.jsonl",
+              "continuation-effects.jsonl",
+              "authority-probe",
+              "calibration",
+              "admission",
+              "capture.json"
+            ]
+          }
+        },
+        "prerequisites": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "admitted_executor",
+              "mediated_inference",
+              "approved_capture_interface",
+              "isolation_controls",
+              "pending_approval_route",
+              "operation_overlap",
+              "selection_conflict_route",
+              "cancel_route",
+              "exposed_failure_route",
+              "continuation_probe_route",
+              "observer_liveness",
+              "clock_ordering",
+              "synthetic_retention_boundary"
+            ]
+          }
+        },
+        "coverage_gaps": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "pre_state",
+              "transition",
+              "in_continuation_authority",
+              "post_state",
+              "negative_control",
+              "timeline",
+              "late_observation",
+              "original_branch",
+              "queue_variant",
+              "raw_evidence",
+              "retention"
+            ]
+          }
+        },
+        "last_checkpoint": {"type":"string","minLength":1},
+        "retained_evidence": {"type":"array","items":{"$ref":"#/$defs/evidence"}},
+        "product_authority": {
+          "oneOf": [
+            {"type":"null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name","decision","reason","record"],
+              "properties": {
+                "name": {"type":"string","minLength":1},
+                "decision": {"const":"accept_scope_disposition"},
+                "reason": {"type":"string","minLength":1},
+                "record": {"$ref":"#/$defs/evidence"}
+              }
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties":{"case":{"const":"F05"}}},
+          "then": {"properties":{"branch":{"enum":["withhold-decline","withhold-accept","offered-replacement"]}}}
+        },
+        {
+          "if": {"properties":{"case":{"const":"F06"}}},
+          "then": {"properties":{"branch":{"enum":["full-to-restricted","restricted-to-full-approved-slow"]}}}
+        },
+        {
+          "if": {"properties":{"case":{"const":"F07"}}},
+          "then": {
+            "properties": {"branch":{"enum":["full-restricted-full","restricted-full-restricted","open-confirmation-conflict"]}}
+          }
+        },
+        {
+          "if": {"properties":{"case":{"const":"F08"}}},
+          "then": {
+            "properties": {
+              "branch": {"enum":["cancel-from-restricted","cancel-from-full","failure-from-restricted","failure-from-full"]}
+            }
+          }
+        },
+        {
+          "if": {"properties":{"case":{"const":"F09"}}},
+          "then": {
+            "properties": {"branch":{"enum":["full-to-restricted","restricted-to-full","supported-deferred-change"]}}
+          }
+        },
+        {
+          "if": {"properties":{"status":{"enum":["passed","failed","inconclusive"]}}},
+          "then": {"properties":{"capture":{"$ref":"#/$defs/evidence"},"product_authority":{"type":"null"}}},
+          "else": {"properties":{"capture":{"type":"null"},"coverage_gaps":{"minItems":1}}}
+        },
+        {
+          "if": {"properties":{"status":{"const":"passed"}}},
+          "then": {
+            "properties": {"missing_artifacts":{"maxItems":0},"prerequisites":{"maxItems":0},"coverage_gaps":{"maxItems":0}}
+          }
+        },
+        {"if":{"properties":{"status":{"const":"blocked"}}},"then":{"properties":{"prerequisites":{"minItems":1}}}},
+        {
+          "if": {"properties":{"status":{"const":"accepted_disposition"}}},
+          "then": {"properties":{"product_authority":{"type":"object"}}},
+          "else": {"properties":{"product_authority":{"type":"null"}}}
+        }
+      ]
+    }
+  }
+}

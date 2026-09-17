@@ -155,6 +155,16 @@ are an unsigned local qualification package, not a notarized release.
 
 ## Per-case captures and stop conditions
 
+Before any future case, apply the coordinator-only
+[round-83 capture amendments and retention rule](../pf83-f09gap-83/runbook.md)
+with the [round-82 ordered capture steps](../pf83-capture-82/runbook.md),
+and freeze [the round-83 schema](../pf83-f09gap-83/evidence-contract.schema.json)
+by SHA-256. Use its typed branch coverage and blocked-record format.
+This adds required per-case observations to the generic inventory below. Missing
+case-specific timelines make results unusable; generic screenshots or receipts
+cannot substitute. The current harness cannot produce these timelines through an
+admitted case interface, so all F05–F09 executions remain blocked.
+
 Each TSV row uses a new write-once host evidence directory
 `D/evidence/<projected-case>/<profile>/<repository>/<case-id>/<attempt-id>/`.
 Preserve `intent.json`, `launch.json`, `package-verification-before.json`,

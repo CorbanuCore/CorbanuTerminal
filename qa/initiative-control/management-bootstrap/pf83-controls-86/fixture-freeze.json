@@ -1,0 +1,18 @@
+{
+  "allocation": "pf83-controls-86",
+  "allocation_digest": "407adaff2bf04455c9ac9e7849d5877ae7a31835114ac3cf8f0dbd4f6f6789bb",
+  "claim": "2b64bb8c-bd62-4b6e-95a9-8086fa643329",
+  "base_commit": "c7b8a9b5336ad91a525d4643f725434e457b9bdc",
+  "brief_sha256": "9b89ede775c8ad4ea75941ec79ae543456a8fe4640da75066467be8e55d5fcdc",
+  "authoring": "Hand-written case checkpoints, phase rows and branch pairs; no schema-derived fixture fields. Synthetic structural controls only.",
+  "original_cases_sha256": "c97bf701cd7aff2e26f08884f35dbc9a4fc33b1eef14eee6328d2ea1f1411726",
+  "round82_schema_sha256": "90d917a82807c6caa1a4b4553eeb489ca0c3a69b31f189b4b6b4b91d0a5a3342",
+  "files": {
+    "frozen_fixtures.py": "d4f9b4f531867ebbc6cda8422697864b16606a2d17ce1b2dc77566f8a5e1c5c0",
+    "branch-bindings.json": "17970976834f9f48760ee8cb3e0c1fc552005648fe3a5a48c1dde18894d97159",
+    "../pf83-f09gap-83/check_contract.py": "8007bf8e9fa90e1cf71229bd48a7e543b80c3a972afbab9d11b03c426a18192f",
+    "../pf83-f09gap-83/evidence-contract.schema.json": "aefbe6e9bd609e067c1457c73d7065bd7fefb9636aa6a906c36dab529aed1416",
+    "../pf83-f09gap-83/results.schema.json": "3e47eb22cb1603322075dbc30d48b7c2bdc4d8e3127330f87e1095cfe813a5ce",
+    "../pf83-f09gap-83/test_contract.py": "e43faee562b3ba7f934d22de2563d606033f474c328e5ad61fab54cf61a35b7f"
+  }
+}

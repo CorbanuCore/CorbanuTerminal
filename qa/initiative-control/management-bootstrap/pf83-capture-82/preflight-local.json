@@ -1,0 +1,70 @@
+{
+  "checks": [
+    {
+      "detail": "--receiving is required",
+      "name": "receiving_locations_and_fresh_outputs",
+      "status": "failed"
+    },
+    {
+      "detail": "receiving location unverified; artifact check refused",
+      "name": "package_attestation_after_move",
+      "status": "failed"
+    },
+    {
+      "detail": "receiving location unverified; artifact check refused",
+      "name": "actor_asset_allowlist",
+      "status": "failed"
+    },
+    {
+      "detail": "receiving location unverified; artifact check refused",
+      "name": "candidate_agreement_and_288_packet_hashes",
+      "status": "failed"
+    },
+    {
+      "detail": "7366c535a80863731b09bb21a628cece6bd5750b8af9ef5646c339d32217418b",
+      "name": "pinned_public_host_key",
+      "status": "passed"
+    },
+    {
+      "detail": "--key is required",
+      "name": "ssh_identity_metadata",
+      "status": "failed"
+    },
+    {
+      "detail": "--owner-check is required",
+      "name": "owner_checker_identity",
+      "status": "failed"
+    },
+    {
+      "detail": "owner checker unavailable or not pinned; no approval inferred",
+      "name": "executor_mediator_interface",
+      "status": "failed"
+    },
+    {
+      "detail": "owner checker unavailable or not pinned; no approval inferred",
+      "name": "owner_admission",
+      "status": "failed"
+    },
+    {
+      "detail": "owner checker unavailable or not pinned; no approval inferred",
+      "name": "live_pin_authorization_and_hashes",
+      "status": "failed"
+    },
+    {
+      "detail": "owner checker unavailable or not pinned; no approval inferred",
+      "name": "independent_reviewer_and_staging_authorization",
+      "status": "failed"
+    },
+    {
+      "detail": "--contact-guest not supplied; no guest contact authorized",
+      "name": "live_ssh_host_uuid_os_arch_account_uid",
+      "status": "failed"
+    }
+  ],
+  "exit_code": 1,
+  "guest_contact_attempted": false,
+  "guest_identity_observation": {},
+  "packaged_binary_executed": false,
+  "passed": false,
+  "upload_calls": 0
+}

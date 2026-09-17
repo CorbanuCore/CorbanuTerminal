@@ -1,0 +1,12 @@
+test_each_identity_difference_fails_and_preserves_observation (__main__.PreflightCapture.test_each_identity_difference_fails_and_preserves_observation) ... ok
+test_exact_observation_retained_on_success (__main__.PreflightCapture.test_exact_observation_retained_on_success) ... ok
+test_invalid_utf8_fails_without_losing_bytes (__main__.PreflightCapture.test_invalid_utf8_fails_without_losing_bytes) ... ok
+test_missing_receiving_refuses_all_artifact_checks_and_contact (__main__.PreflightCapture.test_missing_receiving_refuses_all_artifact_checks_and_contact) ... ok
+test_ssh_failure_preserves_output (__main__.PreflightCapture.test_ssh_failure_preserves_output) ... ok
+test_timeout_preserves_partial_output (__main__.PreflightCapture.test_timeout_preserves_partial_output) ... ok
+test_wrong_receiving_bundle_refuses_artifact_checks_and_contact (__main__.PreflightCapture.test_wrong_receiving_bundle_refuses_artifact_checks_and_contact) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.026s
+
+OK
