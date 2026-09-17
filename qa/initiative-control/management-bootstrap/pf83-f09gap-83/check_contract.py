@@ -48,12 +48,17 @@ def meta_validate():
     check_branch_bindings()
 
 
-def check_interval(row, turn, lower, upper):
-    if row["turn_or_session_id"] != turn or not lower < row["monotonic_ns"] < upper:
+def check_interval(row, turn, lower, upper=None, *, include_lower=False):
+    def inside(timestamp):
+        after_start = timestamp >= lower if include_lower else timestamp > lower
+        return after_start and (upper is None or timestamp < upper)
+
+    observed = row["monotonic_ns"]
+    if row["turn_or_session_id"] != turn or not inside(observed):
         raise ValueError("phase identity/order mismatch: " + row["phase"])
     for field in ("first_effect_ns", "approval_decision_ns"):
         timestamp = row[field]
-        if timestamp is not None and not lower < timestamp <= row["monotonic_ns"] < upper:
+        if timestamp is not None and (not inside(timestamp) or timestamp > observed):
             raise ValueError(row["phase"] + " " + field + " outside phase window")
 
 
@@ -79,7 +84,11 @@ def check_capture(document):
             if row["phase"] == "settled":
                 check_interval(row, settled, start, boundary)
             else:
-                check_interval(row, late, max(boundary, dwell), end)
+                # Dwell is a coverage milestone, not an exclusion of earlier evidence.
+                check_interval(row, late, boundary, end, include_lower=True)
+        if not any(row["phase"] == "late" and row["monotonic_ns"] > dwell
+                   for row in document["authority_observations"]):
+            raise ValueError("F07 requires a late observation after the frozen dwell")
         check_probe_labels(document)
     if document["case"] != "F09":
         return
@@ -89,16 +98,13 @@ def check_capture(document):
     if old == new or selected >= ended:
         raise ValueError("F09 requires distinct turns and selection before turn end")
     for row in document["authority_observations"]:
-        phase, timestamp = row["phase"], row["monotonic_ns"]
-        valid = {
-            "pre_change": row["turn_or_session_id"] == old and timestamp < selected,
-            "in_continuation": row["turn_or_session_id"] == old and selected < timestamp < ended,
-            "new_turn": row["turn_or_session_id"] == new and ended < timestamp,
-        }[phase]
-        if not valid:
-            raise ValueError("F09 phase identity/order mismatch: " + phase)
-        if phase == "in_continuation":
+        phase = row["phase"]
+        if phase == "pre_change":
+            check_interval(row, old, 0, selected, include_lower=True)
+        elif phase == "in_continuation":
             check_interval(row, old, selected, ended)
+        else:
+            check_interval(row, new, ended)
     # Repeated samples of the same probe are allowed within a phase only.
     check_probe_labels(document)
 

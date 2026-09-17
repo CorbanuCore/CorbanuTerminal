@@ -98,7 +98,9 @@ class ContractCounterexamples(unittest.TestCase):
     def test_effect_and_approval_must_be_inside_probe_window(self):
         for case, row_index, outside in (
             ("F07", 0, (4, 5, 11, 15, 16)),
-            ("F07", 1, (14, 15, 18, 21, 25, 26)),
+            ("F07", 1, (14, 21, 25, 26)),
+            ("F09", 0, (11, 15, 16)),
+            ("F09", 2, (24, 25, 31)),
             ("F09", 1, (14, 15, 21, 25, 26)),
         ):
             for field in ("first_effect_ns", "approval_decision_ns"):
@@ -109,6 +111,8 @@ class ContractCounterexamples(unittest.TestCase):
                         if field == "approval_decision_ns":
                             row.update(approval_id="probe-approval", approval_scope=row["phase"],
                                        approval_disposition="accepted")
+                        else:
+                            row.update(effect_count=1, marker_exists=True)
                         row[field] = timestamp
                         with self.assertRaisesRegex(ValueError, "outside phase window"):
                             contract.check_capture(doc)

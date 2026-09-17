@@ -1,0 +1,47 @@
+DELIBERATE IN-MEMORY MUTATION: results-enum
+Both mutated schemas meta-validate; unchanged fixtures must turn controls red.
+Mutated schema pair SHA-256: 0c702ddd6cdd8194ea5f0065bad959ce32417fcb7a7a7749c462de5da39e4ff1
+test_all_frozen_cases_and_branches_are_recordable (test_contract.ContractCounterexamples.test_all_frozen_cases_and_branches_are_recordable) ... ok
+test_complete_blocked_coverage_is_recordable (test_contract.ContractCounterexamples.test_complete_blocked_coverage_is_recordable) ... ok
+test_continuation_approval_and_effect_inside_window_are_recordable (test_contract.ContractCounterexamples.test_continuation_approval_and_effect_inside_window_are_recordable) ... ok
+test_effect_and_approval_must_be_inside_probe_window (test_contract.ContractCounterexamples.test_effect_and_approval_must_be_inside_probe_window) ... ok
+test_f07_acceptance_without_id_is_rejected (test_contract.ContractCounterexamples.test_f07_acceptance_without_id_is_rejected) ... ok
+test_f07_approval_fields_are_indispensable (test_contract.ContractCounterexamples.test_f07_approval_fields_are_indispensable) ... ok
+test_f07_approved_and_silent_effects_are_distinguishable (test_contract.ContractCounterexamples.test_f07_approved_and_silent_effects_are_distinguishable) ... ok
+test_f07_late_row_must_match_frozen_turn_and_window (test_contract.ContractCounterexamples.test_f07_late_row_must_match_frozen_turn_and_window) ... ok
+test_f07_settled_row_and_distinct_probes_are_bound (test_contract.ContractCounterexamples.test_f07_settled_row_and_distinct_probes_are_bound) ... ok
+test_f09_missing_continuation_is_rejected (test_contract.ContractCounterexamples.test_f09_missing_continuation_is_rejected) ... ok
+test_f09_new_turn_disguised_as_continuation_is_rejected (test_contract.ContractCounterexamples.test_f09_new_turn_disguised_as_continuation_is_rejected) ... ok
+test_f09_probe_before_selection_or_after_end_is_rejected (test_contract.ContractCounterexamples.test_f09_probe_before_selection_or_after_end_is_rejected) ... ok
+test_f09_retroactive_restriction_remains_recordable_failure (test_contract.ContractCounterexamples.test_f09_retroactive_restriction_remains_recordable_failure) ... ok
+test_frozen_observations_cannot_be_omitted (test_contract.ContractCounterexamples.test_frozen_observations_cannot_be_omitted) ... ok
+test_frozen_phase_and_artifact_requirements (test_contract.ContractCounterexamples.test_frozen_phase_and_artifact_requirements) ... ok
+test_meta_validation (test_contract.ContractCounterexamples.test_meta_validation) ... ok
+test_missing_result_and_erased_original_branch_are_rejected (test_contract.ContractCounterexamples.test_missing_result_and_erased_original_branch_are_rejected) ... ok
+test_round82_binding_matches_handwritten_cases (test_contract.ContractCounterexamples.test_round82_binding_matches_handwritten_cases) ... ok
+test_schema_branch_rename_or_drop_is_rejected (test_contract.ContractCounterexamples.test_schema_branch_rename_or_drop_is_rejected) ... ok
+test_unknown_and_wrong_case_branches_are_rejected (test_contract.ContractCounterexamples.test_unknown_and_wrong_case_branches_are_rejected) ... ok
+test_unspecified_blocker_and_unapproved_disposition_are_rejected (test_contract.ContractCounterexamples.test_unspecified_blocker_and_unapproved_disposition_are_rejected) ... ok
+test_capture_frozen_value_constraints (test_strength.StrengthControls.test_capture_frozen_value_constraints) ... ok
+test_f07_gap_and_dwell_boundary_are_recordable (test_strength.StrengthControls.test_f07_gap_and_dwell_boundary_are_recordable) ... ok
+test_f07_gap_only_cannot_replace_post_dwell_coverage (test_strength.StrengthControls.test_f07_gap_only_cannot_replace_post_dwell_coverage) ... ok
+test_f07_post_dwell_row_can_report_earlier_effect_or_approval (test_strength.StrengthControls.test_f07_post_dwell_row_can_report_earlier_effect_or_approval) ... ok
+test_f09_outer_phase_valid_effect_and_approval_are_recordable (test_strength.StrengthControls.test_f09_outer_phase_valid_effect_and_approval_are_recordable) ... ok
+test_results_frozen_fields_cannot_be_omitted (test_strength.StrengthControls.test_results_frozen_fields_cannot_be_omitted) ... ok
+test_results_frozen_value_constraints (test_strength.StrengthControls.test_results_frozen_value_constraints) ... 
+  test_results_frozen_value_constraints (test_strength.StrengthControls.test_results_frozen_value_constraints) (field='missing_artifacts', value=['unknown']) ... FAIL
+test_results_status_fixtures_are_recordable (test_strength.StrengthControls.test_results_status_fixtures_are_recordable) ... ok
+
+======================================================================
+FAIL: test_results_frozen_value_constraints (test_strength.StrengthControls.test_results_frozen_value_constraints) (field='missing_artifacts', value=['unknown'])
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-windows-90/test_strength.py", line 98, in test_results_frozen_value_constraints
+    with self.assertRaises(ValidationError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: ValidationError not raised
+
+----------------------------------------------------------------------
+Ran 29 tests in 4.659s
+
+FAILED (failures=1)

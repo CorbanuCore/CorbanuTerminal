@@ -1,0 +1,37 @@
+Frozen tested sources: 7 hashes unchanged
+Existing tracked changes (+ / -):
+19	13	qa/initiative-control/management-bootstrap/pf83-f09gap-83/check_contract.py
+2	2	qa/initiative-control/management-bootstrap/pf83-f09gap-83/evidence-contract.schema.json
+24	9	qa/initiative-control/management-bootstrap/pf83-f09gap-83/runbook.md
+5	1	qa/initiative-control/management-bootstrap/pf83-f09gap-83/test_contract.py
+New files (+ lines; changed-lines.txt excludes itself):
+2	0	qa/initiative-control/management-bootstrap/pf83-windows-90/.gitignore
+150	0	qa/initiative-control/management-bootstrap/pf83-windows-90/RETURN.md
+23	0	qa/initiative-control/management-bootstrap/pf83-windows-90/contract-controls-command.json
+34	0	qa/initiative-control/management-bootstrap/pf83-windows-90/contract-controls.log
+25	0	qa/initiative-control/management-bootstrap/pf83-windows-90/permission-confirmation-command.json
+575	0	qa/initiative-control/management-bootstrap/pf83-windows-90/permission-confirmation.log
+27	0	qa/initiative-control/management-bootstrap/pf83-windows-90/prerequisites-command.json
+410	0	qa/initiative-control/management-bootstrap/pf83-windows-90/prerequisites.log
+43	0	qa/initiative-control/management-bootstrap/pf83-windows-90/run_controls.py
+23	0	qa/initiative-control/management-bootstrap/pf83-windows-90/schema-meta-validation-command.json
+1	0	qa/initiative-control/management-bootstrap/pf83-windows-90/schema-meta-validation.log
+9	0	qa/initiative-control/management-bootstrap/pf83-windows-90/source-freeze.json
+141	0	qa/initiative-control/management-bootstrap/pf83-windows-90/test_strength.py
+25	0	qa/initiative-control/management-bootstrap/pf83-windows-90/thread-settings-command.json
+182	0	qa/initiative-control/management-bootstrap/pf83-windows-90/thread-settings.log
+11	0	qa/initiative-control/management-bootstrap/pf83-windows-90/validate.py
+50	0	qa/initiative-control/management-bootstrap/pf83-windows-90/validate_contracts.py
+25	0	qa/initiative-control/management-bootstrap/pf83-windows-90/weakened-capture-enum-command.json
+47	0	qa/initiative-control/management-bootstrap/pf83-windows-90/weakened-capture-enum.log
+25	0	qa/initiative-control/management-bootstrap/pf83-windows-90/weakened-capture-range-command.json
+47	0	qa/initiative-control/management-bootstrap/pf83-windows-90/weakened-capture-range.log
+25	0	qa/initiative-control/management-bootstrap/pf83-windows-90/weakened-capture-required-command.json
+47	0	qa/initiative-control/management-bootstrap/pf83-windows-90/weakened-capture-required.log
+25	0	qa/initiative-control/management-bootstrap/pf83-windows-90/weakened-results-enum-command.json
+47	0	qa/initiative-control/management-bootstrap/pf83-windows-90/weakened-results-enum.log
+25	0	qa/initiative-control/management-bootstrap/pf83-windows-90/weakened-results-range-command.json
+47	0	qa/initiative-control/management-bootstrap/pf83-windows-90/weakened-results-range.log
+25	0	qa/initiative-control/management-bootstrap/pf83-windows-90/weakened-results-required-command.json
+937	0	qa/initiative-control/management-bootstrap/pf83-windows-90/weakened-results-required.log
+New-file line total excluding this inventory: 3053

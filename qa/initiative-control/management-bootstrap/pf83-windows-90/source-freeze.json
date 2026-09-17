@@ -1,0 +1,9 @@
+{
+  "qa/initiative-control/management-bootstrap/pf83-windows-90/test_strength.py": "bd16df23faa3c8de19dbbb1a7f883d068030d3b634125ce337ba0000408f4bb9",
+  "qa/initiative-control/management-bootstrap/pf83-windows-90/run_controls.py": "d69bcdda1d14176ea66549f22ec7002d78620aa2ee3a8dd349c95d48dac58089",
+  "qa/initiative-control/management-bootstrap/pf83-controls-86/frozen_fixtures.py": "d4f9b4f531867ebbc6cda8422697864b16606a2d17ce1b2dc77566f8a5e1c5c0",
+  "qa/initiative-control/management-bootstrap/pf83-f09gap-83/check_contract.py": "6feb0d859f0d0a1e796ce0227125ba666cbc0555625647a4724b219edbc0d85a",
+  "qa/initiative-control/management-bootstrap/pf83-f09gap-83/test_contract.py": "058bdd17923ab077b1c264556cb350ec5ff83e5bc413815d55cecdaa55321a2c",
+  "qa/initiative-control/management-bootstrap/pf83-f09gap-83/evidence-contract.schema.json": "c52c4994e5da29ad52a266bcc9324f4d2f0e9453a48137a61b8e4f628134ad17",
+  "qa/initiative-control/management-bootstrap/pf83-f09gap-83/results.schema.json": "3e47eb22cb1603322075dbc30d48b7c2bdc4d8e3127330f87e1095cfe813a5ce"
+}

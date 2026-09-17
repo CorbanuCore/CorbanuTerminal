@@ -1,7 +1,8 @@
 # PF83 round 83 — refutable captures
 
-Round-86 revision: use the hardened schema/checker in this directory and the
-[frozen controls and current receipts](../pf83-controls-86/RETURN.md).
+Round-90 revision: use the hardened schema/checker in this directory and the
+[current controls and receipts](../pf83-windows-90/RETURN.md).
+[Round-86 fixtures and receipts](../pf83-controls-86/RETURN.md) remain historical.
 Round-83 logs/command receipts remain historical evidence at base commit
 `c7b8a9b5336ad91a525d4643f725434e457b9bdc`; they do not qualify this revision.
 
@@ -44,9 +45,16 @@ command authority; shared-service policy is not the same boundary. Unknown or
 ambiguous clock ordering blocks the claim. If the admitted interface cannot
 produce this observation, mark `continuation_probe_route` blocked.
 
-An `in_continuation` row's non-null `first_effect_ns` and
-`approval_decision_ns` must each be strictly inside
-`(selection_ack_ns, turn_ended_ns)`, and no later than its `monotonic_ns`.
+Every row's non-null `first_effect_ns` and `approval_decision_ns` must
+share its phase bounds and be no later than its `monotonic_ns`:
+`pre_change` uses `[0, selection_ack_ns)`, `in_continuation` uses
+`(selection_ack_ns, turn_ended_ns)`, and `new_turn` uses
+`(turn_ended_ns, monotonic_ns]`. The schema rejects negative clock values;
+zero is the clock origin, not an asserted start of the captured turn.
+The outer phases have no separately recorded turn-start/cutoff event; their
+observation timestamp bounds every reported decision/effect. Exact selection
+or end-boundary ties remain ambiguous for F09 and require raw retention plus
+an inconclusive/blocked claim, not phase relabeling.
 Null still means observed absence under continuous coverage. Outside-window
 events stay in raw evidence and make this probe insufficient; never drop an
 event or relabel it to claim the required window was exercised.
@@ -80,10 +88,17 @@ from raw capture, binding the window before the corresponding probes. The
 reviewer must compare these with the frozen plan rather than accept a window
 chosen retrospectively to fit results. Settled rows must belong to the settled
 turn strictly between settlement and its end. Late rows must belong to the
-distinct late turn strictly after BOTH the turn boundary and dwell deadline and
-before observation cutoff. Row, effect and approval-decision times share the
-phase window; decisions/effects cannot postdate the observation. Each phase has
-a distinct probe label. A later timestamp alone cannot satisfy late coverage.
+distinct late turn in `[turn_ended_ns, observation_ended_ns)`. This includes
+the complete turn-end-to-dwell interval and the dwell instant. A boundary-time
+row belongs to the distinct new turn by its independently observed identity;
+if clock uncertainty prevents that attribution, retain raw evidence and block
+the timing claim. Effects and approval decisions from that interval may appear
+in an early late row or in a later observation of the same probe. No event is
+excluded merely because it preceded dwell. At least one late row must still
+be strictly after the frozen dwell; early rows cannot replace that coverage.
+Row, effect and approval-decision times share the phase window;
+decisions/effects cannot postdate the observation. Each phase has a distinct
+probe label. Preserve continuous raw observation and disclose the finite cutoff.
 F06 and F08 timelines use the same command-approval disposition/scope/decision
 and first-effect columns, so their approval IDs cannot stand for acceptance.
 For every case, effect entries cite independent observer bytes and approval

@@ -425,7 +425,7 @@
               "observation_ended_ns": {"type":"integer","minimum":0},
               "source": {"$ref":"#/$defs/evidence"}
             },
-            "description": "Freeze dwell deadline, observation cutoff and turn identities before probes; cite actual settlement/boundary events and clock mapping. Settled rows belong to the settled turn after settlement and before its end; late rows belong to the distinct late turn after BOTH that boundary and the dwell deadline, before cutoff. check_contract.py enforces row, effect and approval-decision bounds; raw review verifies the frozen schedule and continuous coverage."
+            "description": "Freeze dwell deadline, observation cutoff and turn identities before probes; cite actual settlement/boundary events and clock mapping. Settled rows belong to the settled turn after settlement and before its end; late rows belong to the distinct late turn from that boundary (inclusive) until cutoff (exclusive), including the entire pre-dwell interval. Require at least one late observation strictly after dwell; earlier effects/approval decisions remain recordable in any late row. check_contract.py enforces row, effect and approval-decision bounds; raw review verifies the frozen schedule and continuous coverage."
           },
           "authority_observations": {
             "type": "array",
@@ -683,7 +683,7 @@
               "turn_ended_ns": {"type":"integer","minimum":0},
               "source": {"$ref":"#/$defs/evidence"}
             },
-            "description": "Clock mapping must establish these strict phase boundaries beyond uncertainty. The checker enforces same captured turn before/after selection and a distinct later new turn. Any non-null first_effect_ns and approval_decision_ns in an in_continuation row must also be strictly after selection_ack_ns and before turn_ended_ns, and no later than the observation timestamp. Independent reviewer verifies actual raw boundary events, including uncertainty."
+            "description": "Clock mapping must establish these strict phase boundaries beyond uncertainty. The checker enforces same captured turn before/after selection and a distinct later new turn. All non-null first_effect_ns and approval_decision_ns must share their row's phase bounds and not postdate its observation: pre_change is [0, selection_ack_ns), in_continuation is (selection_ack_ns, turn_ended_ns), and new_turn is (turn_ended_ns, observation timestamp]. Zero is the monotonic clock origin, not a claim of turn start. Independent reviewer verifies actual raw boundary events, including uncertainty."
           }
         },
         "required": ["authority_observations","continuation_window"]
