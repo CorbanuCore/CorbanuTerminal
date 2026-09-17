@@ -1799,6 +1799,26 @@ class RecurrenceTests(unittest.TestCase):
                         self.assertFalse((args.root / "owner.plist").exists())
                         self.assertEqual("uninstalled", owner.load(args.root / "installation.json")["phase"])
 
+    def test_uninstall_stale_publication_refuses_before_bootout(self):
+        import activate
+        args = self.installation()
+        service, command, calls = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+            self.arm()
+            pending = self.root / "owner-recurrence.json.pending"
+            f.write_file(pending, b"interrupted publication evidence")
+            paths = [args.root / "installation.json", args.root / "owner.plist",
+                     self.root / "owner.sqlite3", pending]
+            before = {str(p): p.read_bytes() for p in paths}
+            calls.clear()
+            args.owner = "uninstall"
+            with self.assertRaisesRegex(f.LaunchError, "stale_publication_pending"):
+                activate.owner_activation(args)
+            self.assertEqual([], calls)
+            self.assertEqual(before, {str(p): p.read_bytes() for p in paths})
+            self.assertEqual("armed", owner.activation_status(self.config_path)["state"])
+
     def test_uninstall_refuses_foreign_cross_domain_job_before_any_bootout(self):
         import activate
         args = self.installation()

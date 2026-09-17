@@ -16,6 +16,7 @@ import owner_daemon as owner
 from owner_tmux import Worker, freeze_worker_inputs
 from test_coordinator import seed
 from owner_handoff_80_rehearsal import FIXTURE, emit
+from test_owner_promotion_94 import fixture_manifest
 
 
 def main():
@@ -39,17 +40,21 @@ def main():
     cycle_inputs = dict(allocation="promotion", base_commit="a" * 40, brief_file=str(brief),
                         brief_sha256=f.file_digest(brief), model="fixture-model",
                         reasoning_effort="high", task="Read the frozen brief", worktree=str(worktree))
-    allocation["inputs"] = freeze_worker_inputs(cycle_inputs, provider="fixture", policy="--yolo")
-    allocation["inputs"].pop("allocation")
-    c.put_allocation("promotion", allocation, False, c.snapshot()["revision"], {"fixture": True})
-    c.event({"id": "promotion"})
-    packet = c.begin_manager()
-    action = dict(id="promotion-work", kind="repair", workstream="delivery", sprint="PF80",
-                  rationale="synthetic promotion rehearsal", timeout_seconds=180,
-                  inputs={"allocation": "promotion", **allocation["inputs"]},
-                  expected_revision=packet["state_revision"])
-    c.accept_decision(packet["manager_run"], dict(state_revision=packet["state_revision"], actions=[action]),
-                      {"fixture": True})
+    for key, inputs, replace in (
+        ("promotion-flat", cycle_inputs, False),
+        ("promotion-work", freeze_worker_inputs(cycle_inputs, provider="fixture", policy="--yolo"), True),
+    ):
+        allocation["inputs"] = {k: v for k, v in inputs.items() if k != "allocation"}
+        c.put_allocation("promotion", allocation, replace, c.snapshot()["revision"], {"fixture": True})
+        c.event({"id": key})
+        packet = c.begin_manager()
+        action = dict(id=key, kind="repair", workstream="delivery", sprint="PF80",
+                      rationale="synthetic promotion rehearsal", timeout_seconds=180,
+                      inputs={"allocation": "promotion", **allocation["inputs"]},
+                      expected_revision=packet["state_revision"])
+        c.accept_decision(packet["manager_run"],
+                          dict(state_revision=packet["state_revision"], actions=[action]),
+                          {"fixture": True})
     config_path = schedule / "config.json"
     config = dict(coordinator=str(state), worktrees=[str(worktree)],
                   package_digest=owner.package_digest(), manager_enabled=False)
@@ -79,7 +84,15 @@ def main():
             before = db.execute("SELECT COUNT(*) FROM audit").fetchone()[0]
         recipe = Path(__file__).with_name("owner-handoff-80-promotion.md").read_text()
         code = recipe.split("-B - <<'PY'\n", 1)[1].split("\nPY\n", 1)[0]
-        env = dict(PATH=f.SAFE_PATH, PYTHONPATH=str(Path(owner.__file__).parent), PYTHONDONTWRITEBYTECODE="1",
+        # Synthetic declarations exercise gate mechanics, not real inference.
+        # This file explicitly disclaims qualification and is never a live receipt.
+        proof = base / "synthetic-preflight.md"
+        f.write_file(proof, b"SYNTHETIC test declarations only; NO real qualification or human approval.")
+        preflight = base / "preflight.json"
+        f.write_json(preflight, fixture_manifest(proof, c.snapshot(), "promotion-flat",
+                                                 "promotion-work", owner.load(transport)))
+        env = dict(OWNER94_PREFLIGHT=str(preflight),
+                   PATH=f.SAFE_PATH, PYTHONPATH=str(Path(owner.__file__).parent), PYTHONDONTWRITEBYTECODE="1",
                    OWNER80_SCHEDULE=str(schedule), OWNER80_TRANSPORT=str(transport),
                    OWNER80_ACTIONS="promotion-work", OWNER80_DECISION_ID="synthetic-promotion",
                    OWNER80_DECISION_REVISION="1", OWNER80_AUTHORITY="disposable rehearsal only",

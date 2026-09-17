@@ -4,12 +4,14 @@ Round 93 preparation correction: use the explicit frozen-input bridge below
 before selecting actions. This recipe does not repair already-prepared actions
 in place. Receipt of the source change alone does not make flat actions runnable.
 
-Round 93 also observed a disposable uninstall publication failure on an existing
-`owner-recurrence.json.pending`. The recipe is corrected for allocation shape,
-but that separate cutover failure remains unresolved; see the
-[assertion audit](owner-shape-93-assertion-audit.md). Preserve the refusal and
-pending artifact if encountered. Do not delete publication evidence or blindly
-retry this procedure. No live promotion or real-worker qualification is claimed.
+Round 94 adds the mandatory [runnable preflight](owner-promotion-94-preflight.md).
+It evaluates prerequisites 1–5 before disarm, uninstall or source replacement.
+Any publication `*.pending` refuses as `stale_publication_pending`; quiesce
+publishers, preserve and inspect the pending artifact and last publication, then
+reconcile the interrupted write under integration-owner authority. Never delete
+evidence or blindly retry. The prior failed attempt remains in the
+[assertion audit](owner-shape-93-assertion-audit.md).
+No live promotion or real-worker qualification is claimed.
 
 This recipe changes the existing installation in place, preserving owner history,
 coordinator history, activation generations, schedule ticks and recovery evidence.
@@ -115,13 +117,15 @@ using the owner API and accept a fresh manager decision with a NEW action ID.
 Do not patch an action's inputs or reuse its old digest/claim. Future cycles need
 this bridge too; this worker cannot modify the external manager's preparation
 code. Already-frozen nested worker inputs remain supported, but duplicated flat
-model/effort/worktree/provider/policy must agree.
+model/reasoning_effort/worktree/provider/policy must agree. The flat field is
+`reasoning_effort`; the nested field is `worker.effort`.
 
-The following are exact commands; replace the six operator inputs with the
+The following are exact commands; replace the seven operator inputs with the
 actual reviewed transport path, prepared action IDs and real activation
 decision. Their values cannot be honestly invented by this worker.
 
 ```bash
+export OWNER94_PREFLIGHT=/absolute/path/to/reviewed-promotion-preflight.json
 export OWNER80_TRANSPORT=/absolute/path/to/reviewed-owner-transport.json
 export OWNER80_ACTIONS='prepared-action-id-one prepared-action-id-two'
 export OWNER80_DECISION_ID='actual-tmux-promotion-decision-id'
@@ -143,6 +147,17 @@ import fable_launcher as f
 import owner_daemon as owner
 from coordinator import TERMINAL, digest
 from manager_cycle import ExistingCoordinator
+
+sys.path.insert(0, str(Path("qa/initiative-control/management-bootstrap").resolve()))
+from owner_promotion_94_preflight import from_environment
+preflight = from_environment()
+print(json.dumps(dict(preflight=preflight)), flush=True)
+if not preflight["ok"]:
+    raise SystemExit(2)
+plan = preflight["plan"]
+assert plan["decision"]["decision_id"] == os.environ["OWNER80_DECISION_ID"]
+assert plan["decision"]["revision"] == int(os.environ["OWNER80_DECISION_REVISION"])
+assert plan["decision"]["authority"] == os.environ["OWNER80_AUTHORITY"]
 
 root = f.private_dir(os.environ["OWNER80_SCHEDULE"])
 receipt = owner.load(root / "installation.json")
@@ -222,6 +237,31 @@ assert not any(row["owner"] == "owner" and row["status"] not in
 # snapshot is advisory, so retain its refusal if a concurrent change intervenes.
 print("BEFORE: " + check_coverage(before, partitioned=False), flush=True)
 print(json.dumps(dict(before_status=before)), flush=True)
+# Stage and validate every known input BEFORE the first destructive effect.
+# This creates new evidence only; no existing installation file is replaced.
+assert status["generation"] == before["generation"] == plan["generation"]
+assert coordinator.snapshot()["revision"] == plan["revision"], "Preflight revision changed"
+evidence = root / ("promotion-80-" + str(time.time_ns()))
+evidence.mkdir(mode=0o700)
+replacement = evidence / "config.json"
+config = plan["config"]
+f.write_json(replacement, config)
+owner.configuration(replacement)
+request = evidence / "handoff.json"
+f.write_json(request, dict(expected_revision=plan["revision"], assignments=plan["assignments"],
+                          evidence=dict(decision=os.environ["OWNER80_DECISION_ID"],
+                                        authority=os.environ["OWNER80_AUTHORITY"],
+                                        manual_deliveries_quiesced=True,
+                                        single_coordinator=str(coordinator.directory))))
+decision = evidence / "activation.json"
+f.write_json(decision, plan["decision"])
+owner.validate_authority(owner.load(decision), config)
+# Recheck the entire gate at the effect boundary; keep dispatchers AND
+# publishers quiescent. Later command fences still detect races/OS failures.
+again = from_environment()
+print(json.dumps(dict(effect_boundary_preflight=again)), flush=True)
+if not again["ok"] or again["plan"] != plan:
+    raise SystemExit(2)
 run("owner_daemon.py", "--disarm", "--config", config_path, "--generation", status["generation"])
 run("activate.py", "--owner", "uninstall", "--root", root)
 
@@ -237,31 +277,10 @@ template = runtime / "com.corbanu.initiative-owner.plist.in"
 shutil.copyfile(source / template.name, template)
 template.chmod(0o600)
 
-evidence = root / ("promotion-80-" + str(time.time_ns()))
-evidence.mkdir(mode=0o700)
-replacement = evidence / "config.json"
-config.update(transport=transport, package_digest=owner.package_digest())
-f.write_json(replacement, config)
 run("owner_daemon.py", "--reconfigure", replacement, "--config", config_path, "--schedule", root)
 
-# Freeze the current exact action/claim/allocation/status map. Initial partition
-# includes EVERY pending action: selected prepared work to owner; all else hand.
-snapshot = coordinator.snapshot()
-assert snapshot["manager"] is None
-for key in selected:
-    assert snapshot["actions"][key]["status"] == "prepared"
-assignments = {
-    key: {**{field: action.get(field) for field in ("claim", "allocation_digest", "status")},
-          "from": coordinator.dispatch_owner(snapshot, action),
-          "to": "owner" if key in selected else "hand"}
-    for key, action in snapshot["actions"].items() if action["status"] not in TERMINAL
-}
-request = evidence / "handoff.json"
-f.write_json(request, dict(expected_revision=snapshot["revision"], assignments=assignments,
-                          evidence=dict(decision=os.environ["OWNER80_DECISION_ID"],
-                                        authority=os.environ["OWNER80_AUTHORITY"],
-                                        manual_deliveries_quiesced=True,
-                                        single_coordinator=str(coordinator.directory))))
+# Use the prevalidated exact map/revision. A concurrent mutation refuses rather
+# than silently accepting a different selection after destroying the old job.
 result = run("owner_daemon.py", "--handoff", request, "--config", config_path)
 assert result["state"] == "HANDED_OFF"
 status = run("owner_daemon.py", "--activation-status", "--config", config_path)
@@ -275,12 +294,7 @@ print("BEFORE ARM: " + check_coverage(status, partitioned=True), flush=True)
 # stall detection. --hand-run is one pass, not a recurring hand watchdog.
 print(json.dumps(dict(excluded=coverage["excluded_actions"],
                       unresolved_holds=status["unresolved_holds"])), flush=True)
-decision = evidence / "activation.json"
-f.write_json(decision, dict(decision_id=os.environ["OWNER80_DECISION_ID"],
-                           revision=int(os.environ["OWNER80_DECISION_REVISION"]),
-                           authority=os.environ["OWNER80_AUTHORITY"], scope="tmux-workers",
-                           generation=status["next_generation"], config_digest=digest(config),
-                           package_digest=owner.package_digest()))
+assert plan["decision"]["generation"] == status["next_generation"]
 
 # Repin only the OFF, uninstalled job. Preserve label/domain/cadence/publication.
 run("activate.py", "--owner", "install", "--repin", "--confirm-live",
@@ -291,7 +305,10 @@ run("activate.py", "--owner", "install", "--repin", "--confirm-live",
 
 # Establish/observe the OFF hold before arming; the installed kickstart may
 # already have done so. This does not dispatch a worker.
-run("owner_daemon.py", "--run", "--schedule", root, expected=2)
+off_tick = run("owner_daemon.py", "--run", "--schedule", root, expected=2)
+assert (off_tick.get("reason") == "owner_run_refused"
+        and owner.load(root / "tick.json").get("refusal") == "owner_off"), \
+    "Unexpected OFF tick refusal; retain evidence"
 run("owner_daemon.py", "--arm", "--config", config_path, "--authority", decision)
 run("owner_daemon.py", "--schedule", root, "--recover",
     "tmux promotion: shared ownership map inspected; manual raw delivery stopped; pins and allocations verified")

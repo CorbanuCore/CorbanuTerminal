@@ -128,6 +128,11 @@ def owner_activation(args):
                           f"unowned_service: {location}/{label}")
         if args.owner == "uninstall":
             f.require(previous is not None, "installation_receipt_required")
+            # Publication failure must not first be discovered after bootout.
+            owner.publication_preflight(previous["publish_state"])
+            if plist.exists():
+                f.require(f.file_digest(owner.private_file(plist)) == previous["plist_sha256"],
+                          "plist_drift")
             for location, (state, _) in observations.items():
                 if state == "present":
                     subprocess.run(["/bin/launchctl", "bootout", f"{location}/{label}"],

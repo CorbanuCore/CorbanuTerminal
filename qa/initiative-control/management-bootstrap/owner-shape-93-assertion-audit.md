@@ -94,6 +94,12 @@ status attempt and waits at most five seconds for a complete read.
 
 ## Required order before attempting live promotion
 
+Round 94 supersedes the sequence below with the six prerequisites and the
+[runnable five-item preflight](owner-promotion-94-preflight.md). It inserts the
+explicit stale-publication refusal before any disarm/uninstall, checks all known
+cutover inputs up front, and retains future-state command fences. The round 93
+failures and unknown-live findings above remain historical evidence.
+
 1. Integrate the named bridge into actual manager allocation preparation, with
    explicit authorized provider and policy. Preserve the seven task/runtime
    fields plus allocation ID; add the worker block before digest/acceptance.

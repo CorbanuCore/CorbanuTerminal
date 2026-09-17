@@ -1093,6 +1093,16 @@ def observe_schedule(root, label="com.corbanu.initiative-owner"):
     return result
 
 
+def publication_preflight(publish_state):
+    """Refuse an interrupted publisher before any destructive cutover effect."""
+    root = f.private_dir(publish_state)
+    f.require(not any(path.name.endswith(".pending") for path in root.iterdir()),
+              "stale_publication_pending: quiesce publishers; preserve and inspect "
+              "*.pending and the last publication; reconcile the interrupted "
+              "write under integration-owner authority before retrying")
+    return root
+
+
 def publish_schedule(root):
     receipt = load(root / "installation.json")
     f.write_json(f.private_dir(receipt["publish_state"]) / "owner-recurrence.json",
