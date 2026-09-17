@@ -1,0 +1,31 @@
+{
+  "lanes": {
+    "thread-settings": {
+      "run": 26,
+      "passed": 26,
+      "failed": 0,
+      "skipped": 1082,
+      "seconds": 31.526,
+      "failure_names": [],
+      "run_id": "2a90b3a8-56e3-4a4d-a1f6-5cd8fae3d2c7"
+    },
+    "permission-confirmation": {
+      "run": 12,
+      "passed": 12,
+      "failed": 0,
+      "skipped": 4161,
+      "seconds": 42.577,
+      "failure_names": [],
+      "run_id": "2296b8b0-9ab4-4cc5-9d12-b47c9e2a45ef"
+    }
+  },
+  "log_sha256": {
+    "thread-settings.log": "558b99d72d14c96cc916e21c08986a8d15a4c00a9a0e0cb079e7bf5410454548",
+    "permission-confirmation.log": "b9765c22f406613c367900377a62087b55baaa466e8ff69c96c75ced26b47c71",
+    "prerequisites.log": "9002dc8d8106c6fb8165ad408f3cfc52389f74a386cff0cb2761926744e56bf4"
+  },
+  "production_files_matching_freeze": 34,
+  "rust_files_changed": 0,
+  "guest_contact": false,
+  "functional_cases_executed": 0
+}

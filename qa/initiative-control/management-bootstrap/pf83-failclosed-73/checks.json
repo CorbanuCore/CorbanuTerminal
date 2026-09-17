@@ -1,0 +1,47 @@
+{
+  "bash_syntax_blocks": 2,
+  "functional_cases_executed": 0,
+  "guard_controls": {
+    "errors": 0,
+    "failures": 0,
+    "functional_cases_executed": 0,
+    "guest_contact": false,
+    "run": 8
+  },
+  "guest_contact": false,
+  "lanes": {
+    "permission-confirmation": {
+      "exit_code": 0,
+      "failed": 0,
+      "failure_names": [],
+      "passed": 12,
+      "run": 12,
+      "seconds": 38.709,
+      "skipped": 4161
+    },
+    "thread-settings": {
+      "exit_code": 0,
+      "failed": 0,
+      "failure_names": [],
+      "passed": 26,
+      "run": 26,
+      "seconds": 31.142,
+      "skipped": 1082
+    }
+  },
+  "prerequisites_exit_code": 0,
+  "prior_raw_logs_match_recorded_digests": true,
+  "product_staged": false,
+  "python_syntax_files": 9,
+  "raw_log_sha256": {
+    "pf83-failclosed-73/guard-controls.log": "08a4ca07c903c723c9fd5d9f9ac97b5ee1f954dd32a67fffb78a419479624914",
+    "pf83-failclosed-73/live-pin-refusal.log": "75a77086122268e15bb1717402ae67864d18a5de5840a815b17c51f0de4b7cc5",
+    "pf83-failclosed-73/permission-confirmation.log": "1cce52b957ca86c0685ae7efbb5a3d9fbc43e3c3d3726131f4fcda1571c86779",
+    "pf83-failclosed-73/prerequisites.log": "23afded3f7f093e641a95b8def3a7091bb0c5c9e8a965b564cf0dff7203ca5be",
+    "pf83-failclosed-73/regeneration.log": "b6e53c9bafa61bd9d694120c38ee4c6ffef79fc1db76ac68739777e17a29c543",
+    "pf83-failclosed-73/thread-settings.log": "d2624dea1ef12970e531e3d630faa4f44b90e1c5ed5bf7940e66f46b9af2e138",
+    "pf83-handoff-70/permission-confirmation.log": "b9765c22f406613c367900377a62087b55baaa466e8ff69c96c75ced26b47c71",
+    "pf83-handoff-70/prerequisites.log": "9002dc8d8106c6fb8165ad408f3cfc52389f74a386cff0cb2761926744e56bf4",
+    "pf83-handoff-70/thread-settings.log": "558b99d72d14c96cc916e21c08986a8d15a4c00a9a0e0cb079e7bf5410454548"
+  }
+}

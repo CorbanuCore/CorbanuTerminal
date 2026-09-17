@@ -1,0 +1,42 @@
+{
+  "archive_members": 16,
+  "archive_path": "artifacts/pf83-handoff-70.tar",
+  "archive_sha256": "3b1afa1c84666f5b3dbc1a514d89bfd138fb15bae9a3813c7b6f5f7d66298ff0",
+  "attestation_sha256": "9d33fcc21788a84c61011fe64a3607fc7569b390a260e5c19a7b9d3e6582ce27",
+  "coordinator_packets_staged": false,
+  "executed_cases": 0,
+  "extracted_identity": {
+    "attestation_sha256": "9d33fcc21788a84c61011fe64a3607fc7569b390a260e5c19a7b9d3e6582ce27",
+    "files": {
+      "codex-code-mode-host": {
+        "mode": 365,
+        "sha256": "ae25bd69782ecf167a2588d0b8368b53b9bae68d9ec2bed200f55e6598ef810c"
+      },
+      "corbanu": {
+        "mode": 365,
+        "sha256": "483031eee7d1b4f978aa782b89164e4072f1533f2eea72a02e1428857254d6de"
+      },
+      "corbanu-acp": {
+        "mode": 365,
+        "sha256": "36a35e03f3816bb067867eb46933da18c25662a2be81cd6bb138248b687ccea5"
+      },
+      "corbanu-walletd": {
+        "mode": 365,
+        "sha256": "3ec7539bcb6bdb0543e4c933f059a624b411dc5cc3895c730ed101a19e19066d"
+      }
+    },
+    "manifest_sha256": "32529d0a894503c021ff756ebc27a75555ab05ed2ec63dc47dc0d9d7bb878024",
+    "packaged_binary_executed": false,
+    "source_commit": "ae5981d2d7d762dfd6d54e0ac0967729bf88f082",
+    "source_tree": "834f57388066d33c27fdee6e3b234dec7fa0b0e6",
+    "verified_binaries": 4
+  },
+  "guest_contact": false,
+  "local_extraction_verified": true,
+  "packet_assets": [
+    "original-F01-F11.md",
+    "navigation.md"
+  ],
+  "runtime_case_dispatch": false,
+  "stage_inventory_sha256": "c2dede899f790055990ef62fa5199794a628f4d93f408b78d6175f5897201f30"
+}
