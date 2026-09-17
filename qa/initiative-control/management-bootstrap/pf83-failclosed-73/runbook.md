@@ -49,13 +49,47 @@ original packets or change their non-candidate fields. No live pin was changed
 in round 73, because that path and permission are outside this assignment.
 
 ```bash
-python3 -B "$Q/dispatch_guard.py" --harness "$H" --packets "$D/coordinator-packets" --bundle "$D/bundle" > "$D/candidate-preflight.json" || exit
-python3 -B "$Q/prepare_payload.py" "$D/bundle" "$D/actor-payload" > "$D/payload-preparation.json" || exit
 : "${PF83_SSH_IDENTITY:?owner must supply authorized SSH identity path}"
+: "${PF83_OWNER_CHECK:?owner must supply approved read-only prerequisite verifier}"
+: "${PF83_OWNER_CHECK_SHA256:?allocation must pin prerequisite verifier bytes}"
+python3 -B "$Q/preflight.py" --harness "$H" --packets "$D/coordinator-packets" --bundle "$D/bundle" --receiving "$D" --key "$PF83_SSH_IDENTITY" --owner-check "$PF83_OWNER_CHECK" --owner-check-sha256 "$PF83_OWNER_CHECK_SHA256" --contact-guest > "$D/staging-preflight.json" || exit
+python3 -B "$Q/prepare_payload.py" "$D/bundle" "$D/actor-payload" > "$D/payload-preparation.json" || exit
 python3 -B "$Q/stage.py" "$D/actor-payload/actor-assets.tar" "$D/actor-payload/receipt.json" --key "$PF83_SSH_IDENTITY" --known-hosts "$Q/known_hosts" --evidence "$D/staging-evidence" || exit
 ```
 
-`stage.py` is the staging precondition and upload in a single checked operation.
+Run `preflight.py` after the host move, regeneration and authorized pin update,
+before the first payload preparation or guest staging step. It reports every
+precondition and exits **1** if any fails, including missing owner inputs or
+suppressed live checks. It checks receiving paths/fresh outputs, attestation at
+the moved location, payload allowlist, all candidate/packet bindings, the pinned
+host key, identity-file metadata, owner prerequisites and live guest identity.
+It performs no copy, upload, pin write, product launch or case dispatch.
+Without arguments it provides a local diagnostic run that must fail while owner
+inputs are absent; a local diagnostic is never a successful staging preflight.
+
+The remaining owner inputs require an owner-supplied, allocation-hash-pinned,
+read-only verifier executable (`PF83_OWNER_CHECK`). This interface is not yet
+supplied and is itself a failing prerequisite. For each `--check` below it must
+exit nonzero when unmet; on success emit JSON with the matching `check`,
+`status: "passed"` and nonempty `evidence` references. The script passes the
+exact harness/bundle/packets/receiving paths, attestation and guest identity.
+Its approved implementation must verify, rather than merely assert:
+
+| Check | Evidence it must validate |
+| --- | --- |
+| `executor_mediator_interface` | Independent executor allocation; actual approved case interface and mediated inference; frozen launcher/runtime/driver hashes, session and budget. |
+| `owner_admission` | Fresh schema-2 package/runtime/policy/session-bound admission; actual actor-and-child filesystem/tool/process/IPC/network denials and positive package/PTY/private-state/profile/inference controls. |
+| `live_pin_authorization_and_hashes` | Explicit allocated-harness write permission and preserved before/after fixture bytes/hashes; after hash matches the live pin. |
+| `independent_reviewer_and_staging_authorization` | Named reviewer independent of implementer/executor; explicit guest/account/snapshot/path staging and read-only actor-access permission, including assessment of embedded binary metadata below. |
+
+Pin the verifier digest from the trusted allocation, not from an untrusted receipt.
+This helper contract does not supply the missing verifier, authorize a checker,
+prove independence, or replace admission/evidence review. Supplying a program
+that only returns success would not meet it. Live identity contact runs only with
+`--contact-guest` and all preceding checks passed. Preserve the report (including
+failed checks) in a fresh attempt; rerun after any input changes.
+
+`stage.py` repeats the staging identity precondition immediately before upload.
 It first validates the public host-key file against the frozen digest; SSH then
 requires that exact ed25519 host key, disables global known-host fallbacks and
 interactive authentication, and aborts on any SSH error. With stdin closed, it
@@ -67,9 +101,14 @@ The collector checks guest identity again and verifies every transferred file
 hash/mode and the exact directory set after extraction.
 
 The new payload includes exactly four package binaries, original F01–F11 cases,
-neutral navigation and a relative-name inventory. Host build paths, attestation,
-provenance, manifest, normalized packets, runtime source and gate logs remain on
-the trusted host; the collector is streamed and never stored under the actor root.
+neutral navigation and a relative-name inventory. Sidecar attestation, provenance,
+manifest, normalized packets, runtime source and gate-log files remain on the
+trusted host; the collector is streamed and never stored under the actor root.
+The packaged binaries still carry host build paths: these reveal the local account
+name `Neo`, volume/worktree and QA-round names, internal Rust source/module filenames,
+Rust 1.95.0 / aarch64-apple-darwin toolchain details, dependency names/versions and
+build-object names. Excluding sidecars does not remove that implementation metadata
+or establish code-blind isolation. The owner must assess this exposure before staging.
 The original relocatable bundle and attestation digest are unchanged and are
 verified on the host. Round-70 tar and its receipt remain historical host-only
 evidence and are prohibited as guest payloads. No new product tar was generated

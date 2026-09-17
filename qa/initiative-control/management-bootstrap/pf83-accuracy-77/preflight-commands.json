@@ -1,0 +1,26 @@
+{
+  "runs": [
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "qa/initiative-control/management-bootstrap/pf83-failclosed-73/preflight.py"
+      ],
+      "exit_code": 1,
+      "stdout": "preflight-local.json"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "qa/initiative-control/management-bootstrap/pf83-failclosed-73/preflight.py",
+        "--harness",
+        "/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915"
+      ],
+      "exit_code": 1,
+      "stdout": "preflight-existing-harness.json"
+    }
+  ],
+  "guest_contact": false,
+  "live_harness_modified": false
+}

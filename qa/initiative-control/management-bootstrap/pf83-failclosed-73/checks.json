@@ -1,5 +1,4 @@
 {
-  "bash_syntax_blocks": 2,
   "functional_cases_executed": 0,
   "guard_controls": {
     "errors": 0,
@@ -32,7 +31,6 @@
   "prerequisites_exit_code": 0,
   "prior_raw_logs_match_recorded_digests": true,
   "product_staged": false,
-  "python_syntax_files": 9,
   "raw_log_sha256": {
     "pf83-failclosed-73/guard-controls.log": "08a4ca07c903c723c9fd5d9f9ac97b5ee1f954dd32a67fffb78a419479624914",
     "pf83-failclosed-73/live-pin-refusal.log": "75a77086122268e15bb1717402ae67864d18a5de5840a815b17c51f0de4b7cc5",

@@ -60,7 +60,7 @@ def guarded(harness, packets, bundle, command):
     print(json.dumps(result), flush=True)
     if command:
         # The owner supplies the actual admitted interface; this does not create one.
-        return subprocess.run(command, cwd=harness, check=True).returncode
+        return subprocess.run(command, cwd=harness).returncode
     return 0
 
 
