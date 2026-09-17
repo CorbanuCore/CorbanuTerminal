@@ -1,5 +1,7 @@
 # PF-83 packaged F05–F09 runbook — pf83-packaged-63
 
+**Round-70 transport successor:** use [the relocatable handoff and execution runbook](pf83-handoff-70/runbook.md) for current package paths, attestation digest, mandatory packet regeneration, staging commands and guest identity checks. Its prepared archive was verified after local extraction; no guest staging or case execution occurred. The historical round-67 absolute-path staging instructions below are superseded. The preflight-only boundary and missing independent admission still block functional dispatch.
+
 **F04 post-Applied authority investigation: executor continuation refused. No separate F05–F09 refusal is established; acceptance of narrower F06–F09 partial attempts is unknown. F05's central withheld-approval question cannot be removed without removing the case.** The manager's [F04 authority receipt](pf83-f04-authority-20260916.md#why-it-stopped) records this exact text:
 
 > We take extra caution with cybersecurity requests. If you're a security
