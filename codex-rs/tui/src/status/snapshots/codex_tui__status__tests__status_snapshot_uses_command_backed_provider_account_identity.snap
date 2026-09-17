@@ -5,7 +5,7 @@ expression: sanitized
 /status
 
 ╭──────────────────────────────────────────────────────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v<VERSION>)                                                        │
+│  >_ Corbanu Terminal (v<V>)                                                              │
 │                                                                                          │
 │  Model:                claude-opus-5-plan                                                │
 │  Model provider:       Claude Plan                                                       │
