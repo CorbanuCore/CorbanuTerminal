@@ -1,0 +1,10 @@
+test_invalid_review_does_not_pin_healthy_quiet_journal (test_slack_transport.TransportTests.test_invalid_review_does_not_pin_healthy_quiet_journal) ... ok
+test_qualifying_journal_recovers_only_with_exact_review (test_slack_transport.TransportTests.test_qualifying_journal_recovers_only_with_exact_review) ... ok
+test_review_rechecks_undrained_events_after_auth (test_slack_transport.TransportTests.test_review_rechecks_undrained_events_after_auth) ... ok
+test_quiet_legacy_unknown_rejects_inexact_explicit_reviews (test_slack_transport.TransportTests.test_quiet_legacy_unknown_rejects_inexact_explicit_reviews) ... ok
+test_supervisor_uncertainty_downgrades_fresh_projection_and_rendering (test_decision_manager.ManagerTests.test_supervisor_uncertainty_downgrades_fresh_projection_and_rendering) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 7.236s
+
+OK

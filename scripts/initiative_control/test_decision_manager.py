@@ -1409,6 +1409,7 @@ class ManagerTests(fixtures.LiveFixture):
         self.assertEqual(recovered["listener_exits"], 1)
 
     def test_idle_supervisor_bounds_durable_writes_and_keeps_fresh_transitions(self):
+        (self.root / "supervisor.json").unlink()
         # No listener has ever started: exercise the real tick and durable Store path.
         second = [0]
         now = lambda: (d.stamp(NOW) + m.dt.timedelta(seconds=second[0])).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1457,7 +1458,47 @@ class ManagerTests(fixtures.LiveFixture):
         second[0] += 6
         self.assertEqual(m.read_supervisor_health(self.store, now(), PIN)["reason"], "observation-stale")
 
+    def test_supervisor_uncertainty_downgrades_fresh_projection_and_rendering(self):
+        import attention
+        import decision_feed as feed
+        self.sending()
+        fresh = dict(state="healthy", event_flush_failures=0, pending_events=0,
+                     observed_at=NOW, reason=None)
+        later = (d.stamp(NOW) + m.dt.timedelta(seconds=6)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        cases = (("healthy", NOW, "last-verified", None),
+                 ("stale", later, "stale", "observation-stale"),
+                 ("missing", NOW, "unknown", "observation-unavailable"),
+                 ("malformed", NOW, "unknown", "observation-unavailable"),
+                 ("unreadable", NOW, "unknown", "observation-unavailable"))
+        for label, at, state, reason in cases:
+            with self.subTest(label=label):
+                self.store.write("supervisor", dict(binding=PIN, health=fresh))
+                if label == "missing":
+                    (self.root / "supervisor.json").unlink()
+                elif label == "malformed":
+                    (self.root / "supervisor.json").write_text("{}")
+                read = a.Store.read
+                def checked_read(store, name):
+                    if label == "unreadable" and name == "supervisor":
+                        raise OSError("fixture unreadable observation")
+                    return read(store, name)
+                before = (self.root / "transport.json").read_bytes()
+                with patch.object(a.Store, "read", checked_read):
+                    status = m.project_status(self.store, at, True)
+                    projected = feed.project_slack(self.feed_root, self.root, at, True)
+                health = feed.slack_health(dict(slack=projected), at)
+                for surface in (status, projected["status"], health):
+                    self.assertEqual(surface["state"], state)
+                    self.assertEqual(surface["supervisor_health"]["reason"], reason)
+                rendered = attention.render_decisions(d.load_fixture(self.feed_root, at), at, [], {},
+                                                      slack=projected, slack_health=health)
+                self.assertIn("Slack observation: " + state + ";", rendered)
+                if reason is not None:
+                    self.assertNotIn("Slack observation: last-verified;", rendered)
+                self.assertEqual((self.root / "transport.json").read_bytes(), before)
+
     def test_supervisor_observation_missing_stale_or_unwritable_is_not_healthy(self):
+        (self.root / "supervisor.json").unlink()
         manager, supervisor, _ = self.watchdog()
         self.assertEqual(m.project_status(self.store, NOW, True)["supervisor_health"]["state"], "unknown")
         supervisor.tick()

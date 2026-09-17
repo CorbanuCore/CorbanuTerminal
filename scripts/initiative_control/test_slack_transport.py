@@ -293,6 +293,11 @@ class LiveFixture(SlackFixture):
         self.owner = s.Session(self.store)
         self.owner.update("connected")  # Genuine lifetime owner, never a patched gate or fabricated lease.
         self.addCleanup(self.owner.release)
+        # Transport/renderer fixtures start with an explicit fresh supervisor
+        # observation. Missing-observation cases must remove this fixture fact.
+        self.store.write("supervisor", dict(binding=PIN, health=dict(
+            state="healthy", event_flush_failures=0, pending_events=0,
+            observed_at=NOW, reason=None)))
 
     def orphan(self, attempt="pf83-vm-key-20260915T103614Z"):
         request = dict(a.request_for(self.key, a.inspect(self.store, self.key), "parent"), attempt=attempt)
@@ -1619,6 +1624,68 @@ class TransportTests(LiveFixture):
                     self.transport.qualify(ui_evidence(), dict(review, **{field: invalid}))
                 self.assertEqual(s.outstanding_quarantine(self.store.read("transport")), expected)
                 self.assertEqual(len(self.store.read("transport")["gap_reviews"]), 1)
+                self.assertEqual(self.store.read("transport"), original)
+
+    def test_invalid_review_does_not_pin_healthy_quiet_journal(self):
+        self.sending()
+        original = self.store.read("transport")
+        review = dict(watermark=original["watermark"], ingress=s.ingress_count(self.store),
+                      binding=d.digest(PIN), evidence="fixture-review", **self.session_review())
+        invalid_reviews = [dict(review, **{field: invalid}) for field, invalid in (
+            ("watermark", review["watermark"] + 1), ("ingress", review["ingress"] + 1),
+            ("binding", d.digest("wrong-binding")), ("session", "wrong-session"),
+            ("epoch", review["epoch"] + 1), ("evidence", ""))]
+        invalid_reviews += [{}, dict(review, extra=True)]
+        for invalid in invalid_reviews:
+            with self.subTest(review=invalid):
+                before = (self.root / "transport.json").read_bytes()
+                with patch.object(self.transport, "web", side_effect=AssertionError("auth before validation")):
+                    with self.assertRaises(d.Invalid):
+                        self.transport.qualify(ui_evidence(), invalid)
+                self.assertEqual((self.root / "transport.json").read_bytes(), before)
+                self.assertIsNone(self.transport.gate()["hold"])
+                self.transport.qualify(ui_evidence())
+                self.assertEqual(a.Store(self.root).read("transport"), original)
+
+    def test_qualifying_journal_recovers_only_with_exact_review(self):
+        self.sending()
+        # Reproduce the persisted result of the old invalid-review path.
+        with s.locked(self.store) as journal:
+            journal["hold"] = "qualifying"
+            self.store.write("transport", journal)
+        before = (self.root / "transport.json").read_bytes()
+        with patch.object(self.transport, "web", side_effect=AssertionError("auth without required review")):
+            with self.assertRaises(d.Invalid):
+                self.transport.qualify(ui_evidence())
+        self.assertEqual((self.root / "transport.json").read_bytes(), before)
+        later = (d.stamp(NOW) + s.dt.timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.transport.now = lambda: later
+        self.review_gap()
+        recovered = a.Store(self.root).read("transport")
+        self.assertIsNone(recovered["hold"])
+        self.assertEqual(recovered["last_verified"], later)
+        self.assertEqual(len(recovered["gap_reviews"]), 1)
+        self.assertEqual(recovered["gap_reviews"][0]["evidence"], "fixture-reviewed-gap")
+        self.assertIsNone(self.transport.gate()["hold"])
+
+    def test_review_rechecks_undrained_events_after_auth(self):
+        self.sending()
+        journal = self.store.read("transport")
+        review = dict(watermark=journal["watermark"], ingress=s.ingress_count(self.store),
+                      binding=d.digest(PIN), evidence="fixture-review", **self.session_review())
+        auth = self.transport.web().auth_test
+        def intervening_callback():
+            result = auth()
+            self.callback()
+            return result
+        with patch.object(self.transport.web(), "auth_test", side_effect=intervening_callback):
+            with self.assertRaises(d.Invalid):
+                self.transport.qualify(ui_evidence(), review)
+        after = self.store.read("transport")
+        self.assertEqual(after["gap_reviews"], journal["gap_reviews"])
+        self.assertEqual(after["last_verified"], journal["last_verified"])
+        self.assertIsNotNone(after["hold"])
+        self.assertGreater(s.ingress_count(self.store), review["ingress"])
 
     def test_legacy_unknown_summary_rejects_invalid_counts(self):
         self.sending()

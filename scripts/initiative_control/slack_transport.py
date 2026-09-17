@@ -746,6 +746,22 @@ class Transport:
                 and type(life["epoch"]) is int and life == dict(owner_file=life["owner_file"], session=None, epoch=0, history=[]))
             if session_pin is None and (value["binding"] is None or value["last_verified"] is None):
                 d.require(bootstrap)  # Never overwrite the sole evidence of a pre-qualification outage.
+            review_required = not bootstrap and (gap_review is not None or uncovered
+                                                   or previous_hold not in (None, "unqualified"))
+
+            def validate_review(journal):
+                d.shape(gap_review, "watermark binding evidence ingress session epoch")
+                d.require(session_pin is not None and (gap_review["session"], gap_review["epoch"]) == session_pin)
+                d.require(gap_review["watermark"] == journal["watermark"]
+                          and gap_review["binding"] == d.digest(self.binding))
+                d.require(gap_review["ingress"] == ingress)
+                a.token(gap_review["evidence"])
+                d.require(not any(not e["drained"] for e in journal["events"].values()))
+
+            # Reject bad owner input before persisting a hold or doing auth I/O.
+            # Validate again after I/O; never roll back intervening fault evidence.
+            if review_required:
+                validate_review(value)
             if bootstrap:
                 os.close(owner_file(self.store, value))
             value["hold"] = "qualifying"
@@ -767,14 +783,8 @@ class Transport:
                 os.close(owner_file(self.store, value))
             # An explicit exact review also clears legacy unknown history on a
             # quiet journal; requiring a fresh fault would strand that history.
-            if not bootstrap and (gap_review is not None or uncovered
-                                  or previous_hold not in (None, "unqualified")):
-                d.shape(gap_review, "watermark binding evidence ingress session epoch")
-                d.require(session_pin is not None and (gap_review["session"], gap_review["epoch"]) == session_pin)
-                d.require(gap_review["watermark"] == value["watermark"] and gap_review["binding"] == d.digest(pin))
-                d.require(gap_review["ingress"] == ingress)
-                a.token(gap_review["evidence"])
-                d.require(not any(not e["drained"] for e in value["events"].values()))
+            if review_required:
+                validate_review(value)
                 value["gap_reviews"].append(dict(gap_review, at=self.now()))
                 if "quarantine" in value:
                     value["quarantine"]["outstanding"] = dict(count=0, oldest_at=None)

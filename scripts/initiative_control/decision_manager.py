@@ -182,6 +182,8 @@ def project_disclosure(value, store, journal, alerts, now=None):
             value["state"] = "held"
         elif value["state"] == "last-verified":
             value["state"] = "unknown"
+    if value["state"] == "last-verified" and health["state"] == "unknown":
+        value["state"] = "stale" if health.get("reason") == "observation-stale" else "unknown"
     value["supervisor_health"] = health
     value["pending_pointers"] = len(a.pending_pointers(alerts))
     exits = [event for event in journal.get("listener_events", []) if event["kind"] == "child-exit"]
