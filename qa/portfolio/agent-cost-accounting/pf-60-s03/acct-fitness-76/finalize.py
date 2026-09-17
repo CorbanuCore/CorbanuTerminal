@@ -3,7 +3,8 @@
 Supersedes the original producer-tree finalizer. Does not rewrite historical
 test-results.json or inventories. The shared verifier checks present committed
 evidence and reports ignored package absence; --local-package also hashes any
-local package files. Exit 2 means incomplete evidence, not a passed package.
+local package files. This diagnostic mode returns 3: its combined results have
+no documented baseline and cannot claim baseline agreement or a passed package.
 """
 from pathlib import Path
 import runpy

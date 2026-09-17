@@ -58,8 +58,13 @@ package binaries cannot establish clean-checkout package availability. Exit stat
 is three when retained results differ from the documented baseline (or that
 baseline is malformed). It is two when the baseline matches but evidence is
 unavailable, or zero for complete agreement. Optional `--local-package` checks
-run after that comparison: local disagreement returns one unless retained
-baseline drift takes precedence; absent local files still return two.
+run after the retained comparison, but their combined results have no documented
+baseline: this mode always prints `BASELINE REFUSED` and returns three, whether
+local files agree, disagree or are absent. Its counts are diagnostic only and
+must not be cited as agreement with the retained baseline.
+This baseline reproduces only while every edit to an inventoried evidence file is
+accompanied by an inventory refresh. The retained evidence, verifier contract and
+historical Git objects must also remain available and consistent.
 The expected retained-evidence baseline is:
 
 ```text
@@ -77,6 +82,27 @@ The fenced result states the expected evidence exit before the baseline check;
 the last printed result carries the actual process exit. Legitimate changes must
 update this documented baseline.
 This expected baseline describes retained evidence, not complete qualification.
+
+**What Fable would be accepting:** this bounded revision makes the saved evidence
+reproducible under the stated conditions. It does not accept S03, clear the
+scope-zero finding or qualify a shipped inspector. There is no calendar expiry,
+but there is a condition on how long this claim stays true: keep the retained
+files, their refreshed inventories, the verifier contract and the required Git
+history together. An unrefreshed edit, missing file or history, changed claim or
+changed verifier contract can stop the baseline from matching. Refreshing an
+inventory alone does not justify a changed claim or remove a qualification gap.
+
+The [exact-output replay](../acct-selfcheck-84/check_current_tip.py) compares with
+[retained expected output](../acct-reference-88/expected.stdout.txt), bound by a
+[content digest](../acct-reference-88/reference.json) in the same candidate. It
+reads those committed bytes from the resolved integration tip; it has no old
+commit pin and never regenerates its expectation during verification. Landing
+this revision or advancing the tip with unrelated work does not expire the
+reference. An intentional change to verifier output, including refreshed
+inventory totals, requires a reviewed update to the expected output and its
+digest in the same change. Until that happens, the exact-output replay rejects
+the change even if the documented counts still match. Review must check the
+changed evidence and claims; replacing a reference is not proof they are true.
 
 The numerical coverage guard checks for unmatched digit-form quantities outside
 fenced code and link targets, after removing matched claim spans and known
