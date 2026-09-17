@@ -555,7 +555,8 @@ class ManagerTests(fixtures.LiveFixture):
         self.callback(fixtures.payload("EvUnbound", thread_ts=row["parent"]["receipt"]["ts"]))
         self.assertTrue(self.transport.active)
         self.assertEqual(len(self.acks), 1)
-        self.assertEqual(self.store.read("transport")["quarantine"]["records"][-1]["reason"], "unbound-human-thread")
+        self.assertEqual(self.store.read("transport")["held_human"]["EvUnbound"]["envelope"]["thread_ts"],
+                         row["parent"]["receipt"]["ts"])
         self.assertEqual(self.store.read("transport")["hold"], "ingress-held")
         self.assertEqual(self.store.read("transport")["events"], {})
         self.assertEqual(self.store.read("replies")["events"], {})
@@ -956,6 +957,61 @@ class ManagerTests(fixtures.LiveFixture):
         self.assertEqual(event["failure"], s.failure_record("transport-io", "bootstrap"))
         self.assertEqual(event["returncode"], 1)
         self.assertIsNone(manager.process)
+
+    def test_clean_child_exit_has_no_failure_but_nonzero_or_explicit_frame_does(self):
+        manager = m.ManagedListener(self.store, PIN)
+        reported = s.failure_record("transport-busy", "session-renew", 0, 3, 0)
+        cases = [(0, b"", None), (1, b"", s.failure_record("child-unreported", "supervisor")),
+                 (0, d.canonical(dict(type="listener-failure", failure=reported)), reported),
+                 (0, b"malformed", s.failure_record("child-unreported", "supervisor"))]
+        for code, raw, expected in cases:
+            with self.subTest(code=code, raw=bool(raw)):
+                child = subprocess.Popen([sys.executable, "-c",
+                    "import os,sys; os.write(1, bytes.fromhex(sys.argv[1])); sys.exit(int(sys.argv[2]))",
+                    raw.hex(), str(code)], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                child.wait(timeout=5)
+                try:
+                    self.assertEqual(manager.failure(child), expected)
+                finally:
+                    child.stdout.close()
+                self.assertEqual(manager.failure(child), expected)
+
+    def test_quarantine_count_age_and_held_state_survive_qualification_and_dashboard_projection(self):
+        import decision_feed as feed
+        self.sending()
+        self.callback(fixtures.payload("EvPoison", subtype="message_deleted", deleted_ts="109.000001"))
+        self.review_gap()
+        self.assertIsNone(self.store.read("transport")["hold"])
+        at = (d.stamp(NOW) + s.dt.timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        status = m.project_status(self.store, at, True)
+        projected = feed.project_slack(self.feed_root, self.root, at, True)
+        dashboard = feed.slack_health(dict(slack=projected), at)
+        for surface in (status, projected["status"], dashboard):
+            self.assertEqual(surface["state"], "held")
+            self.assertEqual(surface["supervisor_health"]["state"], "unhealthy")
+            self.assertEqual(surface["supervisor_health"]["quarantine"],
+                             dict(count=1, held=0, oldest_at=NOW, age_seconds=60))
+        later = (d.stamp(NOW) + s.dt.timedelta(seconds=120)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.assertEqual(feed.slack_health(dict(slack=projected), later)["supervisor_health"]["quarantine"]["age_seconds"], 120)
+        with s.locked(self.store) as journal:
+            journal["quarantine"] = dict(total=129, records=journal["quarantine"]["records"])
+            self.store.write("transport", journal)
+        legacy = m.project_status(self.store, at, True)["supervisor_health"]["quarantine"]
+        self.assertEqual(legacy, dict(count=129, held=0, oldest_at=None, age_seconds=None))
+
+    def test_unbound_pending_count_is_projected_until_exact_binding(self):
+        import decision_feed as feed
+        key, row = self.uncertain_follower()
+        self.callback(fixtures.payload("EvUnbound", thread_ts=row["parent"]["receipt"]["ts"]))
+        projected = feed.project_slack(self.feed_root, self.root, NOW, True)
+        health = feed.slack_health(dict(slack=projected), NOW)
+        self.assertEqual(health["supervisor_health"]["quarantine"],
+                         dict(count=1, held=1, oldest_at=NOW, age_seconds=0))
+        a.reconcile(self.store, key, "details", self.transport.reconcile(row["details"]["request"]))
+        self.transport.bind_alert(key, a.inspect(self.store, key))
+        self.assertEqual(s.drain(self.store, now=NOW), 1)
+        self.assertEqual(self.store.read("replies")["events"]["EvUnbound"]["alert"], key)
+        self.assertNotIn("quarantine", m.project_status(self.store, NOW, True)["supervisor_health"])
 
     def test_failure_frames_are_bounded_and_closed_vocabulary_only(self):
         manager = m.ManagedListener(self.store, PIN)

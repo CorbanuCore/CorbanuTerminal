@@ -88,17 +88,39 @@ def unacknowledged_answers(ledger, alerts, alert_key=None):
 
 
 def validate_supervisor_health(health):
-    extra = [key for key in ("observed_at", "reason") if key in health]
+    extra = [key for key in ("observed_at", "reason", "quarantine") if key in health]
     d.shape(health, ["state", "event_flush_failures", "pending_events"] + extra)
     d.require(type(health["event_flush_failures"]) is int and health["event_flush_failures"] >= 0)
     d.require(type(health["pending_events"]) is int and 0 <= health["pending_events"] <= 2)
     d.require(health["state"] in ("healthy", "unhealthy", "unknown"))
+    quarantined = 0
+    if "quarantine" in health:
+        intake = health["quarantine"]
+        d.shape(intake, "count held oldest_at age_seconds")
+        quarantined = intake["count"]
+        d.require(type(intake["count"]) is int and type(intake["held"]) is int
+                  and 0 <= intake["held"] <= intake["count"])
+        if intake["oldest_at"] is not None:
+            d.stamp(intake["oldest_at"])
+        d.require(intake["age_seconds"] is None or type(intake["age_seconds"]) is int and intake["age_seconds"] >= 0)
+        d.require(not quarantined or health["state"] == "unhealthy")
     if health["state"] != "unknown":
-        d.require(health["state"] == ("unhealthy" if health["event_flush_failures"] or health["pending_events"] else "healthy"))
+        d.require(health["state"] == ("unhealthy" if health["event_flush_failures"] or health["pending_events"] or quarantined else "healthy"))
     if health.get("observed_at") is not None:
         d.stamp(health["observed_at"])
     if "reason" in health:
-        d.require(health["reason"] in ("event-flush-failed", "event-unflushed", "observation-unavailable", "observation-stale", None))
+        d.require(health["reason"] in ("event-flush-failed", "event-unflushed", "observation-unavailable", "observation-stale", "quarantined-intake", None))
+
+
+def attach_quarantine(health, intake, now):
+    health = copy.deepcopy(health)
+    intake = copy.deepcopy(intake)
+    intake["age_seconds"] = (max(0, int((d.stamp(now) - d.stamp(intake["oldest_at"])).total_seconds()))
+                            if intake["oldest_at"] is not None else None)
+    health["quarantine"] = intake
+    if intake["count"]:
+        health.update(state="unhealthy", reason="quarantined-intake")
+    return health
 
 
 def assess_supervisor_health(health, now):
@@ -107,6 +129,8 @@ def assess_supervisor_health(health, now):
                    observed_at=None, reason="observation-unavailable")
     try:
         validate_supervisor_health(health)
+        if health.get("quarantine", {}).get("count"):
+            return attach_quarantine(health, health["quarantine"], now)
         age = (d.stamp(now) - d.stamp(health["observed_at"])).total_seconds()
         d.require(age >= 0)
         # Never age an observed failure back into apparent health.
@@ -129,7 +153,19 @@ def read_supervisor_health(store, now, binding):
 
 
 def project_disclosure(value, store, journal, alerts, now=None):
-    value["supervisor_health"] = read_supervisor_health(store, now or utc_now(), journal["binding"])
+    now = now or utc_now()
+    health = read_supervisor_health(store, now, journal["binding"])
+    audit, held = journal.get("quarantine", {}), journal.get("held_human", {})
+    count = audit.get("total", 0) + len(held)
+    if count:
+        times = [entry["arrived_at"] for entry in held.values()]
+        if audit.get("oldest_at") is not None:
+            times.append(audit["oldest_at"])
+        oldest = (None if audit.get("total", 0) and audit.get("oldest_at") is None
+                  else min(times) if times else None)
+        health = attach_quarantine(health, dict(count=count, held=len(held), oldest_at=oldest, age_seconds=None), now)
+        value["state"] = "held"
+    value["supervisor_health"] = health
     value["pending_pointers"] = len(a.pending_pointers(alerts))
     exits = [event for event in journal.get("listener_events", []) if event["kind"] == "child-exit"]
     pruned = journal.get("listener_events_pruned", {})
@@ -447,16 +483,20 @@ class ManagedListener:
         cached = getattr(process, "_listener_failure", None)
         if type(cached) is dict:
             return copy.deepcopy(cached)
+        if getattr(process, "_listener_clean_exit", False):
+            return None
         code = process.poll()
         d.require(type(code) is int)
         reason = ("restart-refused" if code == s.RESTART_REFUSED_EXIT else
                   "shutdown-timeout" if code == 72 else
                   "child-signalled" if code < 0 else "child-unreported")
-        result = s.failure_record(reason, "supervisor")
+        result = None if code == 0 else s.failure_record(reason, "supervisor")
         try:
             fd = process.stdout.fileno()
             if select.select([fd], [], [], 0)[0]:
                 raw = os.read(fd, 1025)
+                if raw:
+                    result = s.failure_record(reason, "supervisor")
                 d.require(len(raw) <= 1024)
                 frame = json.loads(raw, object_pairs_hook=d.pairs)
                 d.shape(frame, "type failure")
@@ -465,6 +505,7 @@ class ManagedListener:
         except (OSError, ValueError, TypeError, AttributeError, KeyError):
             pass
         process._listener_failure = copy.deepcopy(result)
+        process._listener_clean_exit = result is None
         return copy.deepcopy(result)
 
     def stop(self):
@@ -688,7 +729,10 @@ class ListenerSupervisor:
 
     def status(self, enabled):
         value = project_status(self.manager.store, self.now(), enabled)
-        value["supervisor_health"] = self.health()
+        health = self.health()
+        if "quarantine" in value.get("supervisor_health", {}):
+            health = attach_quarantine(health, value["supervisor_health"]["quarantine"], self.now())
+        value["supervisor_health"] = health
         if enabled and value["supervisor_health"]["state"] == "unhealthy":
             value["state"] = "held"
         return validate_status(value)

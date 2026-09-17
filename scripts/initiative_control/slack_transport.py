@@ -1,6 +1,7 @@
 """Explicit, bounded Slack SDK I/O. Credentials are injected, never journaled."""
 import copy
 from contextlib import contextmanager, nullcontext
+import datetime as dt
 import fcntl
 import hashlib
 import logging
@@ -23,6 +24,8 @@ QUIET.addHandler(logging.NullHandler())
 QUIET.propagate = False
 LEASE_NS = 5_000_000_000
 RESTART_REFUSED_EXIT = 73
+HELD_HUMAN_SECONDS = 900
+HELD_HUMAN_LIMIT = 100
 FAILURE_REASONS = {
     "transport-busy", "transport-io", "validation-failed", "sdk-failed",
     "restart-refused", "shutdown-timeout", "child-signalled", "child-unreported",
@@ -34,7 +37,7 @@ FAILURE_STAGES = {
 }
 QUARANTINE_REASONS = {
     "unknown-delete", "unbound-human-thread", "nonhuman-author",
-    "unsupported-subtype", "invalid-message",
+    "unsupported-subtype", "invalid-message", "unbound-expired",
 }
 
 
@@ -75,8 +78,8 @@ def normalized_require(condition, reason):
         raise NormalizationRejected(reason)
 
 
-def quarantine(value, payload, pin, offset, reason):
-    """Retain only fixed shape/author hints; neither content nor input identifiers."""
+def quarantine(value, payload, pin, offset, reason, now):
+    """Retain a bounded Slack locator and fixed hints, never message content."""
     event = payload.get("event")
     event = event if type(event) is dict else {}
     original = (event.get("message") if event.get("subtype") == "message_changed" else
@@ -87,12 +90,76 @@ def quarantine(value, payload, pin, offset, reason):
     subtype = event.get("subtype")
     shape = ({None: "message", "message_changed": "edit", "message_deleted": "delete"}.get(subtype, "other")
              if isinstance(subtype, (str, type(None))) else "other")
-    record = dict(reason=reason, ingress=offset, author_hint=hint, shape=shape)
+    timestamp = event.get("deleted_ts") if subtype == "message_deleted" else original.get("ts")
+    try:
+        timestamp = a.slack_ts(timestamp)
+    except (ValueError, TypeError):
+        timestamp = None
+    record = dict(reason=reason, ingress=offset, author_hint=hint, shape=shape,
+                  channel=pin["channel"], message_ts=timestamp, at=now)
+    append_quarantine(value, record)
+
+
+def append_quarantine(value, record):
+    d.stamp(record["at"])
     audit = value.setdefault("quarantine", dict(total=0, records=[]))
+    if not audit["total"]:
+        audit["oldest_at"] = record["at"]
     audit["total"] += 1
     audit["records"].append(record)
     del audit["records"][:-128]
     value["hold"] = "ingress-held"  # A possible answer needs review, never implicit authorization.
+
+
+def utc_now():
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def retain_human(value, event, offset, now):
+    """ACK only after durable retention; duplicates never extend the deadline."""
+    held = value.setdefault("held_human", {})
+    key = event["event_id"]
+    if key in held:
+        d.require(held[key]["envelope"] == event)
+        return
+    d.require(key not in value["events"] and len(held) < HELD_HUMAN_LIMIT)
+    expires = d.stamp(now) + dt.timedelta(seconds=HELD_HUMAN_SECONDS)
+    held[key] = dict(envelope=event, ingress=offset, arrived_at=now,
+                     expires_at=expires.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    value["hold"] = "ingress-held"
+
+
+def enqueue_event(value, event):
+    key = event["event_id"]
+    route = value["routes"][event["thread_ts"]]
+    d.require(event["message_ts"] not in (event["thread_ts"], route["details"]))
+    if key in value["events"]:
+        d.require(value["events"][key]["envelope"] == event)
+    else:
+        d.require(sum(not e["drained"] for e in value["events"].values()) < 100)
+        value["events"][key] = dict(alert=route["alert"], envelope=event, drained=False)
+        value["watermark"] += 1
+
+
+def settle_held(value, now):
+    """Caller persists expiry/replay atomically under the transport lock."""
+    held = value.get("held_human", {})
+    for key, entry in sorted(held.items(), key=lambda item: item[1]["ingress"]):
+        event = entry["envelope"]
+        expired = d.stamp(now) >= d.stamp(entry["expires_at"])
+        route = value["routes"].get(event["thread_ts"])
+        if not expired and route is None:
+            continue
+        invalid = route is not None and event["message_ts"] in (event["thread_ts"], route["details"])
+        if expired or invalid:
+            append_quarantine(value, dict(reason="unbound-expired" if expired else "invalid-message",
+                ingress=entry["ingress"], author_hint="pinned-human", shape=event["kind"],
+                channel=event["channel"], message_ts=event["message_ts"], at=now))
+        else:
+            if sum(not e["drained"] for e in value["events"].values()) >= 100:
+                continue  # Keep the original deadline; drain will retry after freeing capacity.
+            enqueue_event(value, event)
+        del held[key]
 
 
 class RestartRefused(d.Invalid):
@@ -212,14 +279,42 @@ def locked(store):
                 + (" runtime_guard" if "runtime_guard" in value else "")
                 + (" listener_events" if "listener_events" in value else "")
                 + (" listener_events_pruned" if "listener_events_pruned" in value else "")
-                + (" quarantine" if "quarantine" in value else ""))
+                + (" quarantine" if "quarantine" in value else "")
+                + (" held_human" if "held_human" in value else ""))
+        if "held_human" in value:
+            held = value["held_human"]
+            d.require(type(held) is dict and len(held) <= HELD_HUMAN_LIMIT)
+            for key, entry in held.items():
+                d.shape(entry, "envelope ingress arrived_at expires_at")
+                event = entry["envelope"]
+                d.shape(event, "event_id team channel user thread_ts message_ts event_ts kind text")
+                d.require(event["event_id"] == a.token(key))
+                d.require([event[k] for k in ("team", "channel", "user")] ==
+                          [value["binding"][k] for k in ("team", "channel", "human")])
+                for field in ("thread_ts", "message_ts", "event_ts"):
+                    a.slack_ts(event[field])
+                d.require(event["kind"] in ("message", "edit", "delete"))
+                if event["kind"] == "delete":
+                    d.require(event["text"] is None)
+                else:
+                    d.text(event["text"], limit=4000)
+                d.require(type(entry["ingress"]) is int and 0 < entry["ingress"] <= value["ingress"])
+                d.require((d.stamp(entry["expires_at"]) - d.stamp(entry["arrived_at"])).total_seconds() == HELD_HUMAN_SECONDS)
         if "quarantine" in value:
             audit = value["quarantine"]
-            d.shape(audit, "total records")
+            d.shape(audit, "total records" + (" oldest_at" if "oldest_at" in audit else ""))
+            if "oldest_at" in audit:
+                d.stamp(audit["oldest_at"])
             d.require(type(audit["records"]) is list and len(audit["records"]) <= 128)
             d.require(type(audit["total"]) is int and audit["total"] >= len(audit["records"]))
             for record in audit["records"]:
-                d.shape(record, "reason ingress author_hint shape")
+                d.shape(record, "reason ingress author_hint shape"
+                        + (" channel message_ts at" if "at" in record else ""))
+                if "at" in record:
+                    d.stamp(record["at"])
+                    d.require(record["channel"] == value["binding"]["channel"])
+                    if record["message_ts"] is not None:
+                        a.slack_ts(record["message_ts"])
                 d.require(record["reason"] in QUARANTINE_REASONS
                           and record["author_hint"] in ("unknown", "pinned-human", "other")
                           and record["shape"] in ("message", "edit", "delete", "other")
@@ -442,8 +537,9 @@ class Session:
     Failed durable lifecycle writes release ownership even if a hold cannot persist.
     Reconnect/renewal cannot clear a gap; expired renewal starts another held epoch.
     """
-    def __init__(self, store, *, restart_pin=None):
+    def __init__(self, store, *, restart_pin=None, now=utc_now):
         self.store, self.fd, self.id = store, None, uuid.uuid4().hex
+        self.now = now
         try:
             with locked(store) as journal:
                 loss_ready(journal)
@@ -481,6 +577,7 @@ class Session:
                     journal["hold"] = "outage-gap"
                     life["epoch"] += 1
                 session.update(phase=phase, renewed_ns=now)
+                settle_held(journal, self.now())
                 self.store.write("transport", journal)
         except BaseException:
             self.release()
@@ -758,10 +855,12 @@ class Transport:
         d.require(row["intent"]["identity"] == self.binding and row["parent"]["state"] == row["details"]["state"] == "sent")
         a.check_receipt(a.request_for(key, row, "parent"), row["parent"]["receipt"])
         with locked(self.store) as value:
+            d.require(value["binding"] == self.binding)
             thread = row["parent"]["receipt"]["ts"]
             route = dict(alert=key, details=row["details"]["receipt"]["ts"])
             d.require(value["routes"].get(thread) in (None, route))
             value["routes"][thread] = route
+            settle_held(value, self.now())
             self.store.write("transport", value)
 
     def callback(self, client, request):
@@ -780,25 +879,22 @@ class Transport:
                 d.require(value["binding"] == self.binding)
                 if offset != value["ingress"] + 1:
                     value["hold"] = "ingress-held"  # Resume intake, but never silently cover a missing event.
+                settle_held(value, self.now())
                 quarantined = False
                 try:
-                    event = normalize(payload, value, self.binding)
+                    event = normalize(payload, value, self.binding, allow_unbound=True)
                 except (ValueError, KeyError, TypeError, AttributeError) as error:
                     reason = error.reason if isinstance(error, NormalizationRejected) else "invalid-message"
-                    quarantine(value, payload, self.binding, offset, reason)
+                    quarantine(value, payload, self.binding, offset, reason, self.now())
                     quarantined = True
                     event = None
                 if event is not None:
-                    key = event["event_id"]
-                    entry = dict(alert=value["routes"][event["thread_ts"]]["alert"], envelope=event, drained=False)
-                    if key in value["events"]:
-                        d.require(value["events"][key]["envelope"] == event)
+                    if event["thread_ts"] not in value["routes"]:
+                        retain_human(value, event, offset, self.now())
                     else:
-                        d.require(sum(not e["drained"] for e in value["events"].values()) < 100)
-                        value["events"][key] = entry
-                        value["watermark"] += 1
-                        d.require(len(d.canonical(value)) <= 900000)
+                        enqueue_event(value, event)
                 value["ingress"] = offset
+                d.require(len(d.canonical(value)) <= 900000)
                 self.store.write("transport", value)
                 self.quarantined += int(quarantined)
             stage = "callback-ack"
@@ -850,7 +946,7 @@ class Transport:
         self.socket.on_error_listeners.append(disconnected)
         self.stage = "session-start"
         try:
-            owner = Session(self.store, restart_pin=restart_pin)
+            owner = Session(self.store, restart_pin=restart_pin, now=self.now)
         except BaseException:
             self.socket.close()
             raise
@@ -895,7 +991,7 @@ class Transport:
                     owner.close()
 
 
-def normalize(payload, value, pin):
+def normalize(payload, value, pin, *, allow_unbound=False):
     event = payload["event"]
     if event.get("type") != "message" or event.get("channel") != pin["channel"]:
         return None
@@ -905,15 +1001,18 @@ def normalize(payload, value, pin):
     if original.get("bot_id") == pin["bot"] and original.get("app_id") == pin["app"]:
         return None  # Authenticated pinned outbound echoes precede all human-candidate checks.
     message_ts = event.get("deleted_ts") if subtype == "message_deleted" else message.get("ts")
-    prior = [e["envelope"] for e in value["events"].values() if e["envelope"]["message_ts"] == message_ts]
+    candidates = list(value["events"].values()) + list(value.get("held_human", {}).values())
+    prior = [e["envelope"] for e in candidates if e["envelope"]["message_ts"] == message_ts]
     if subtype == "message_deleted":
         normalized_require(prior, "unknown-delete")  # Do not invent authorship or a deleting actor.
     thread = original.get("thread_ts") or (prior[0]["thread_ts"] if prior else None)
-    if thread not in value["routes"]:
-        normalized_require(not thread or original.get("user") != pin["human"], "unbound-human-thread")
-        return None
-    d.require(message_ts not in (thread, value["routes"][thread]["details"]))
     author = original.get("user") or (prior[0]["user"] if prior else None)
+    if thread not in value["routes"]:
+        if not thread or author != pin["human"]:
+            return None
+        normalized_require(allow_unbound, "unbound-human-thread")
+    else:
+        d.require(message_ts not in (thread, value["routes"][thread]["details"]))
     normalized_require(author == pin["human"] and not original.get("bot_id"), "nonhuman-author")
     kind = {None: "message", "message_changed": "edit", "message_deleted": "delete"}.get(subtype)
     normalized_require(kind is not None, "unsupported-subtype")
@@ -931,12 +1030,15 @@ def normalize(payload, value, pin):
     return result
 
 
-def drain(store, binding=None):
+def drain(store, binding=None, *, now=None):
     """Copy ingress first, release its lock before acquiring offline store ownership."""
     deadline, count = time.monotonic() + 30, 0
     with locked(store) as value:
         d.require(value["binding"] is not None and (binding is None or a.identity(binding) == value["binding"]))
         pin = copy.deepcopy(value["binding"])
+        if value.get("held_human"):
+            settle_held(value, now or utc_now())
+            store.write("transport", value)
         pending = [(k, copy.deepcopy(e)) for k, e in value["events"].items() if not e["drained"]][:10]
     for key, entry in pending:
         if time.monotonic() >= deadline:

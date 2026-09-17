@@ -1123,7 +1123,7 @@ class TransportTests(LiveFixture):
         self.assertEqual(len(self.acks), 2)
         self.assertTrue(self.transport.active)
         with s.locked(self.store) as value:
-            self.assertEqual(value["quarantine"]["records"][-1]["reason"], "unbound-human-thread")
+            self.assertEqual(value["held_human"]["EvOther"]["envelope"]["thread_ts"], "199.000001")
             self.assertEqual(value["hold"], "ingress-held")
             self.assertEqual(value["watermark"], 1)
             self.assertEqual(value["events"]["Ev001"]["envelope"]["text"], "Five testers")
@@ -1368,6 +1368,127 @@ class TransportTests(LiveFixture):
         with s.locked(self.store) as value:
             self.assertEqual(value["watermark"], 3)
 
+    def unbind_fixture(self):
+        row = self.sending()
+        with s.locked(self.store) as value:
+            value["routes"].clear()
+            self.store.write("transport", value)
+        return row
+
+    def test_unbound_reply_survives_restart_and_binds_once_to_exact_thread(self):
+        row = self.unbind_fixture()
+        self.callback()
+        retained = self.store.read("transport")["held_human"]["Ev001"]
+        self.assertEqual(len(self.acks), 1)
+        self.assertEqual(self.store.read("transport")["events"], {})
+        self.assertEqual((d.stamp(retained["expires_at"]) - d.stamp(retained["arrived_at"])).total_seconds(), 900)
+        self.transport.now = lambda: "2026-09-12T12:01:00Z"
+        self.callback(envelope_id="redelivery")
+        self.assertEqual(self.store.read("transport")["held_human"]["Ev001"], retained)
+        restarted = s.Transport(a.Store(self.root), PIN, lambda: None, now=lambda: NOW)
+        restarted.bind_alert(self.key, row)
+        self.assertEqual(self.store.read("transport")["held_human"], {})
+        self.assertEqual(self.store.read("transport")["events"]["Ev001"]["alert"], self.key)
+        restarted.bind_alert(self.key, row)
+        self.assertEqual(s.drain(a.Store(self.root), now=NOW), 1)
+        self.assertEqual(s.drain(a.Store(self.root), now=NOW), 0)
+        self.assertEqual(self.store.read("transport")["watermark"], 1)
+        self.assertEqual(r.snapshot(self.store, self.key)["replies"]["Ev001"]["envelope"]["text"], "Five testers")
+
+    def test_unbound_replay_write_failure_retains_reply_and_conflicting_retry_is_not_acked(self):
+        row = self.unbind_fixture()
+        self.callback()
+        self.callback(payload(text="conflicting answer"))
+        self.assertEqual(len(self.acks), 1)
+        self.assertEqual(self.store.read("transport")["held_human"]["Ev001"]["envelope"]["text"], "Five testers")
+        with patch.object(self.store, "write", side_effect=OSError("fixture")):
+            with self.assertRaises(OSError):
+                self.transport.bind_alert(self.key, row)
+        journal = self.store.read("transport")
+        self.assertIn("Ev001", journal["held_human"])
+        self.assertEqual(journal["events"], {})
+        self.assertEqual(journal["routes"], {})
+        self.transport.bind_alert(self.key, row)
+        self.assertEqual(s.drain(self.store, now=NOW), 1)
+        self.assertEqual(s.fence_gap(self.store, self.store.read("transport")), 1)
+
+    def test_unbound_late_bound_details_message_is_quarantined_not_delivered(self):
+        row = self.unbind_fixture()
+        self.callback(payload(ts=row["details"]["receipt"]["ts"]))
+        self.transport.bind_alert(self.key, row)
+        journal = self.store.read("transport")
+        self.assertEqual(journal["held_human"], {})
+        self.assertEqual(journal["events"], {})
+        self.assertEqual(journal["quarantine"]["records"][-1]["reason"], "invalid-message")
+
+    def test_unbound_edits_and_deletes_survive_until_binding(self):
+        row = self.unbind_fixture()
+        self.callback(payload("EvZ"))
+        self.callback(payload("EvA", subtype="message_changed", message=dict(user=PIN["human"], ts="101.000001",
+            thread_ts="100.000001", text="Ten testers", edited={"user": PIN["human"]}), event_ts="102.000001"))
+        self.callback(payload("EvB", subtype="message_deleted", user=None,
+                              deleted_ts="101.000001", event_ts="103.000001"))
+        self.assertEqual(len(self.store.read("transport")["held_human"]), 3)
+        self.transport.bind_alert(self.key, row)
+        self.assertEqual(s.drain(self.store, now=NOW), 3)
+        self.assertEqual({e["envelope"]["kind"] for e in self.store.read("replies")["events"].values()},
+                         {"message", "edit", "delete"})
+
+    def test_unbound_expiry_is_durable_content_free_and_precedes_late_binding(self):
+        row = self.unbind_fixture()
+        self.callback(payload(text="private held answer"))
+        deadline = self.store.read("transport")["held_human"]["Ev001"]["expires_at"]
+        self.transport.now = lambda: deadline
+        with patch.object(self.store, "write", side_effect=OSError("fixture")):
+            with self.assertRaises(OSError):
+                self.transport.bind_alert(self.key, row)
+        self.assertIn("Ev001", self.store.read("transport")["held_human"])
+        self.assertNotIn("quarantine", self.store.read("transport"))
+        self.transport.bind_alert(self.key, row)
+        value = self.store.read("transport")
+        self.assertEqual(value["held_human"], {})
+        self.assertEqual(value["events"], {})
+        record = value["quarantine"]["records"][-1]
+        self.assertEqual((record["reason"], record["channel"], record["message_ts"], record["at"]),
+                         ("unbound-expired", PIN["channel"], "101.000001", deadline))
+        self.assertNotIn("private held answer", d.canonical(value).decode())
+        self.assertEqual(s.drain(self.store, now=deadline), 0)
+        self.assertEqual(self.store.read("transport")["quarantine"]["total"], 1)
+
+    def test_unbound_idle_renewal_records_expiry_without_new_callbacks(self):
+        self.unbind_fixture()
+        self.callback()
+        deadline = self.store.read("transport")["held_human"]["Ev001"]["expires_at"]
+        self.owner.now = lambda: deadline
+        self.owner.update("connected")
+        self.assertEqual(self.store.read("transport")["held_human"], {})
+        self.assertEqual(self.store.read("transport")["quarantine"]["records"][-1]["reason"], "unbound-expired")
+
+    def test_unbound_queue_full_and_write_failure_do_not_ack_or_drop_held_replies(self):
+        self.unbind_fixture()
+        with patch.object(self.store, "write", side_effect=OSError("fixture")):
+            self.callback()
+        self.assertEqual(self.acks, [])
+        self.assertNotIn("held_human", self.store.read("transport"))
+        self.transport.active = True
+        for index in range(s.HELD_HUMAN_LIMIT):
+            self.callback(payload("EvHeld" + str(index)))
+        retained = self.store.read("transport")["held_human"]
+        self.assertEqual(len(retained), 100)
+        self.callback(payload("EvOverflow"))
+        self.assertEqual(len(self.acks), 100)
+        self.assertFalse(self.transport.active)
+        self.assertEqual(self.store.read("transport")["held_human"], retained)
+        self.assertEqual(s.fence_gap(self.store, self.store.read("transport")), 1)
+
+    def test_unbound_invalid_author_and_content_are_never_retained_for_replay(self):
+        self.unbind_fixture()
+        self.callback(payload(bot_id="BOTHER"))
+        self.callback(payload(text="x" * 4001))
+        self.assertFalse(self.store.read("transport").get("held_human"))
+        self.assertEqual(self.store.read("transport")["quarantine"]["total"], 2)
+        self.assertEqual(len(self.acks), 2)
+
     def test_poison_shapes_are_quarantined_and_following_human_reply_is_delivered(self):
         self.sending()
         cases = [
@@ -1377,7 +1498,6 @@ class TransportTests(LiveFixture):
                 thread_ts="100.000001", text="private-body", edited={"user": "UOTHER"})),
                 "invalid-message", "pinned-human"),
             (payload(subtype="message_replied"), "unsupported-subtype", "pinned-human"),
-            (payload(thread_ts="999.000001"), "unbound-human-thread", "pinned-human"),
             (dict(payload(), event=None), "invalid-message", "unknown"),
             (dict(payload(), event=[]), "invalid-message", "unknown"),
             (payload(subtype="message_changed", message=None), "invalid-message", "unknown"),
