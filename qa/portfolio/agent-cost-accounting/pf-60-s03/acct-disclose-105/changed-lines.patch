@@ -1,0 +1,52 @@
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md
+index d978d0f37..bddeb79fb 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md
+@@ -123,10 +123,13 @@ BASELINE DRIFT: expected counts/exit=(20, 0, 3, 2), unavailable=['committed pack
+ RESULT agreement=19 disagreement=1 unavailable=3 exit=3
+ ```
+ 
+-The manager reports that this record has been reviewed adversarially five times
+-before this revision; that count is supplied review history, not an independently
+-verified review roster or owner approval. The recurring defect was self-confirming
+-evidence: a check or claim appeared to validate more than it actually tested.
++The manager reports five independent automated adversarial reviews before the
++round-103 revision, run at `claude-opus-5-plan` with `high` effort, with author and
++reviewer separated and each review blocking receipt until its findings were
++answered; that count is supplied review history, not an independently verified
++review roster or owner approval. No human has reviewed this record. The recurring
++defect was self-confirming evidence: a check or claim appeared to validate more
++than it actually tested.
+ The retained correction trail shows how it was caught: inspecting the script
+ found a literal no-defect verdict and led to its removal and named manual-reader
+ attribution ([verdict correction](../acct-derive-95/RETURN.md)); running the operator blocks
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py
+index 3e2a51823..9e001c755 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py
+@@ -76,6 +76,10 @@ for name, destination, expected in cases:
+         raise RuntimeError(f"destination exit differs from expected: {row}")
+     if ("DESTINATION_ALLOWED" in result.stdout) != (expected == 0):
+         raise RuntimeError(f"destination checkpoint differs from expected: {row}")
++alias_records = [row for row in records if row["case"] == "alias-unignored-regression"]
++if len(alias_records) != 1 or "old_guard_exit" not in alias_records[0]:
++    raise RuntimeError("missing unique pinned alias-unignored-regression observation")
++observed_old, observed_new = alias_records[0]["old_guard_exit"], alias_records[0]["exit"]
+ record = dict(old_commit=old_commit, new_commit=new_commit,
+               old_note_sha256=hashlib.sha256(old.encode()).hexdigest(),
+               old_guard_sha256=hashlib.sha256(old_guard.encode()).hexdigest(),
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/RETURN.md b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/RETURN.md
+index 9b879aeb9..9764678b0 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/RETURN.md
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/RETURN.md
+@@ -65,8 +65,8 @@ The four destination refusals now consistently print `STOP:` before refusing:
+ | Refusal | Message after STOP: | Exit |
+ | --- | --- | --- |
+ | Older Python | destination guard requires Python 3.9 or newer. | 1 |
+-| Existing destination | destination already exists; preserve it and choose a new path. | 1 |
+-| Destination symlink (including dangling) | destination is a symlink; preserve it and choose a new path. | 1 |
++| Existing destination (including a symlink to an existing target) | destination already exists; preserve it and choose a new path. | 1 |
++| Dangling destination symlink | destination is a symlink; preserve it and choose a new path. | 1 |
+ | Failed inside-source ignore check | inside-source destination did not pass git check-ignore; choose an ignored path. | Git's nonzero status (1 observed for unignored paths) |
+ 
+ The already explicit relative-path refusal remains. [Checks](checks.json) retain

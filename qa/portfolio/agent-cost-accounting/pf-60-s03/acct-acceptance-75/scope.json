@@ -11,9 +11,9 @@
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md",
-      "bytes": 16093,
-      "sha256": "883581db559202edce2c85500e5ab33cb3b342313cf9fb94e8e823fc46e128fa",
-      "lines": 213,
+      "bytes": 18490,
+      "sha256": "6f50dd49303a3d128674b93348285ea58c8f69debdc865bf3eedd802fad86bc9",
+      "lines": 244,
       "kind": "new"
     },
     {
@@ -130,8 +130,8 @@
     }
   ],
   "self_excluded": true,
-  "total_new_bytes": 58157,
-  "total_new_text_lines": 759,
+  "total_new_bytes": 60554,
+  "total_new_text_lines": 790,
   "refresh": {
     "allocation": "acct-fitness-76",
     "checked_at_base": "1aadfc123592530f657794489249e954f5e3885a",
@@ -145,7 +145,13 @@
   "total_modified_files": 3,
   "total_modified_bytes": 16713,
   "total_modified_text_lines": 230,
-  "total_current_bytes": 74870,
-  "total_current_text_lines": 989,
-  "classification_basis": "kind means presence at the original round-75 base: absent=new, present=modified. Sizes and lines are current full-file sizes, not diff additions/deletions. Membership remains historical and excludes this inventory."
+  "total_current_bytes": 77267,
+  "total_current_text_lines": 1020,
+  "classification_basis": "kind means presence at the original round-75 base: absent=new, present=modified. Sizes and lines are current full-file sizes, not diff additions/deletions. Membership remains historical and excludes this inventory.",
+  "reconcile_107_refresh": {
+    "source_commit": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
+    "record": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/RETURN.md",
+    "previous_inventory_sha256": "cb8a70050303d4fc3c625b5baae9bb2d95bea7b7830196d43ca602caa1063a63",
+    "reason": "Review disclosure changed acceptance bytes; exact metadata identifiers were unmapped. Claims, historical membership, expected counts and qualification gaps are unchanged."
+  }
 }

@@ -1,0 +1,2 @@
+.gitignore:1:ignored/	/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/target/checks-lhvrpcoh/source/ignored/new
+DESTINATION_ALLOWED

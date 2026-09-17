@@ -1,0 +1,42 @@
+{
+  "lane": "core-default",
+  "command": [
+    "just",
+    "test",
+    "-p",
+    "codex-core",
+    "accounting"
+  ],
+  "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+  "base": "a8dfff98892e60aaa0d7f05321fd7e57b79cdc2a",
+  "environment": {
+    "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+    "CARGO_BUILD_JOBS": "2",
+    "CARGO_INCREMENTAL": "0",
+    "NEXTEST_TEST_THREADS": "4",
+    "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+    "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+  },
+  "exit": 0,
+  "isolation_banner": true,
+  "elapsed_seconds": 50.90640211105347,
+  "log_sha256": "de42a8e72a3591144dc255b17fb5f0a771c658162fe2506045c430d15442f5e7",
+  "failure_lines": [],
+  "target_test_lines": [
+    "SLOW [> 30.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+    "PASS [  31.735s] (124/124) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity"
+  ],
+  "summaries": [
+    [
+      "124",
+      "124 passed (1 slow), 3545 skipped"
+    ]
+  ],
+  "run": 124,
+  "passed": 124,
+  "failed": 0,
+  "timed_out": 0,
+  "flaky": 0,
+  "skipped": 3545,
+  "leaky": 0
+}

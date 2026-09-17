@@ -7,8 +7,18 @@ The brief SHA-256 matched
 `801cf69be07f97b1f2e3b539846627730a13249716615f2383fd62be1adcf94e`.
 Base and replayed candidate: `2903d37c60dff3b8bec469fcf82347729b53f7fd`.
 
-The [corrected operator note](../acct-derive-95/OPERATOR.md) and its
-[frozen executed copy](OPERATOR.executed.md) contain these decisions:
+At round 97, the corrected operator note and its
+[frozen executed copy](OPERATOR.executed.md) were identical and contained these
+decisions. The [live note](../acct-derive-95/OPERATOR.md) has since diverged:
+round 100 changed block 1's lexical destination check to resolved-path ancestry
+and ignore checks; round 102 added a Python-version refusal; round 103 added
+explicit destination-refusal messages. Blocks 2–6 remain
+byte-identical to the frozen copy. Later provenance/prerequisite prose also
+changed. All six-block execution claims and the final-note hash below refer
+only to `OPERATOR.executed.md`, not the live note. The live revision has not
+been executed as a complete six-block sequence; see
+[round 102](../acct-divergence-102/RETURN.md) for segment checks and fresh gates.
+The frozen decisions were:
 
 | Source-status case | Required action |
 | --- | --- |
@@ -34,7 +44,16 @@ Destination:
 `audit=${CORBANU_AUDIT_DIR:-"$PWD/$q/acct-criterion-97/target/audit-copy"}`.
 Set `CORBANU_AUDIT_DIR` to a new absolute path to relocate or repeat a run.
 Preserve earlier destinations/transcripts. Existing destinations are refused.
-Inside-source destinations must be ignored; outside-source destinations work.
+The frozen guard required an absolute, nonexistent destination that was not a
+symlink, and ran `git check-ignore -v` only when its literal spelling began
+with `$PWD/`. It did not resolve ancestry: an outside-spelled symlink alias into
+an unignored source directory could pass. This was not a guarantee that every
+physically inside-source destination was ignored. The stronger resolved-path
+check was a separate round-100 change, with segment evidence rather than this
+round's complete execution; no stronger guarantee is retroactively attributed
+to the frozen run. Any additional destination guarantee requires a separate
+integrator decision; round 103 changes this record and refusal diagnostics,
+not the destination acceptance criteria.
 The default path, relocated path, existing-destination refusal, and second run
 at a new path were all executed successfully with their expected exits.
 
@@ -44,7 +63,7 @@ raw stdout/stderr, and exits. [Results and receipts](results.json) bind each
 script/output by SHA-256; individual JSON receipts and lossless `.log.gz`
 files are retained. All 32 recorded attempts matched their expected exits.
 
-The final six blocks ran unchanged, each in a fresh
+The final six blocks from `OPERATOR.executed.md` ran unchanged, each in a fresh
 `bash --noprofile --norc` process. A fresh full-history source clone supplied
 the candidate; block 1 created another fresh detached audit clone at
 `acct-criterion-97/target/final-audit-copy`. The revised note was an external
@@ -52,7 +71,9 @@ frozen instruction, not copied over candidate files. The source deliberately
 contained an untracked synthetic text artifact and ignored scratch output.
 The transcript records refusal without assessment, then successful candidate
 replay with both omissions named. Separate tracked-edit and staged-cancellation
-fixtures both stopped. The final audit clone's tracked/untracked status was empty.
+fixtures both stopped. The final audit clone's `git status --porcelain
+--untracked-files=all` output was empty; ignored build and replay outputs were
+not included in that observation.
 
 Final note SHA-256:
 `d46df323a5d5538c6b4e8bddec84aa08266346d5cc827bc7ac5581d204457864`.

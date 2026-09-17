@@ -346,12 +346,14 @@ def coverage():
         text[start:end] = " " * (end - start)
     remaining = "".join(text)
     remaining = re.sub(r"\]\([^)]*\)|```.*?```", "", remaining, flags=re.S)
-    remaining = re.sub(r"PF-60(?:-S03)?|S03|P2|round[- ](?:66|69|72|75|76)",
+    # Exact metadata identifiers, not measured quantities or proof of review history.
+    remaining = re.sub(r"`claude-opus-5-plan`", "", remaining)
+    remaining = re.sub(r"PF-60(?:-S03)?|S03|P2|round[- ](?:66|69|72|75|76|103)\b",
                        "", remaining, flags=re.I)
     numbers = re.findall(r"\b\d+(?:\.\d+)?\b", remaining)
     require(not numbers, "unmapped numerical claims in acceptance.md: " + repr(numbers))
     return ("no unmatched digit-form quantities outside matched claim spans, fenced code and link targets; "
-            "known round/sprint/severity identifiers excluded; worded quantities and excluded regions not audited")
+            "known round/sprint/severity/model identifiers excluded; worded quantities and excluded regions not audited")
 
 
 def documented_baseline():

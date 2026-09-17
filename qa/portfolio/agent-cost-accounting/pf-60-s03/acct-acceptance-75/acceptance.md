@@ -84,11 +84,16 @@ The fenced result states the expected evidence exit before the baseline check;
 the last printed result carries the actual process exit. Legitimate changes must
 update this documented baseline.
 This expected baseline describes retained evidence, not complete qualification.
+The [worked shelf-life refresh](../acct-reconcile-107/RETURN.md) records the source
+commit, prior failures, evidence comparison and refreshed inventory/reference.
+It reaffirms the expected counts and named gaps; it does not clear a product
+finding. The exact review-model and revision identifiers are metadata exclusions,
+not measured quantities or verification of the manager's review history.
 
 **Recognizing an unrefreshed later edit:** in a disposable local checkout of the
 proposed QA files, append one newline to this acceptance document without
 refreshing its inventory. The claims are unchanged, but the inventoried bytes
-differ. [The recorded simulation](../acct-guard-91/simulation-final/simulation.json)
+differ. [The refreshed simulation](../acct-reconcile-107/simulation.json)
 runs the verifier normally and with Python optimization; both return three with
 empty stderr and this verbatim stdout. Restoring the file restores the baseline.
 This is a deliberately failing evidence-integrity control, not a product failure
@@ -118,10 +123,36 @@ AGREE package build evidence: build receipt and raw log agree; launch/functional
 UNAVAILABLE committed package codex: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/codex is not tracked; unavailable from a clean checkout; cannot re-derive bytes=607785336, mode=0555 or SHA-256
 UNAVAILABLE committed package codex-code-mode-host: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/codex-code-mode-host is not tracked; unavailable from a clean checkout; cannot re-derive bytes=93937576, mode=0555 or SHA-256
 UNAVAILABLE committed package rmcp_test_server: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/rmcp_test_server is not tracked; unavailable from a clean checkout; cannot re-derive bytes=11508704, mode=0555 or SHA-256
-AGREE acceptance numerical coverage: no unmatched digit-form quantities outside matched claim spans, fenced code and link targets; known round/sprint/severity identifiers excluded; worded quantities and excluded regions not audited
+AGREE acceptance numerical coverage: no unmatched digit-form quantities outside matched claim spans, fenced code and link targets; known round/sprint/severity/model identifiers excluded; worded quantities and excluded regions not audited
 BASELINE DRIFT: expected counts/exit=(20, 0, 3, 2), unavailable=['committed package codex', 'committed package codex-code-mode-host', 'committed package rmcp_test_server']; actual counts/exit=(19, 1, 3, 1), unavailable=['committed package codex', 'committed package codex-code-mode-host', 'committed package rmcp_test_server']
 RESULT agreement=19 disagreement=1 unavailable=3 exit=3
 ```
+
+The manager reports five independent automated adversarial reviews before the
+round-103 revision, run at `claude-opus-5-plan` with `high` effort, with author and
+reviewer separated and each review blocking receipt until its findings were
+answered; that count is supplied review history, not an independently verified
+review roster or owner approval. No human has reviewed this record. The recurring
+defect was self-confirming evidence: a check or claim appeared to validate more
+than it actually tested.
+The retained correction trail shows how it was caught: inspecting the script
+found a literal no-defect verdict and led to its removal and named manual-reader
+attribution ([verdict correction](../acct-derive-95/RETURN.md)); running the operator blocks
+in fresh shells exposed missing inputs and led to executable instructions and an
+explicit self-reference limit ([fresh-shell execution](../acct-operator-96/RETURN.md)); testing
+dirty-source and wrong-root cases replaced status display alone with refusal
+criteria and guards ([source-status criterion](../acct-criterion-97/RETURN.md)); an outside symlink
+counterexample exposed lexical ancestry checking, while comparing prose with
+its cited evidence exposed overstatements ([destination counterexample](../acct-final-100/RETURN.md));
+and comparing live note bytes and floating reproduction inputs with frozen
+receipts exposed an unsupported execution-equivalence claim and led to explicit
+divergence disclosure and pinned commits ([divergence correction](../acct-divergence-102/RETURN.md)).
+The present follow-up comparison found the remaining frozen-guard overclaim and
+literal exit summary: [current correction](../acct-guarantee-103/RETURN.md) narrows the claim,
+prints checked observations from both pinned guards, isolates the reproduction
+environment and makes refusal messages explicit. These corrections test the
+limits of this evidence record; they do not establish independent functional
+acceptance or authorize the owner's signature.
 
 **What Fable would be accepting:** this bounded revision makes the saved evidence
 reproducible under the stated conditions. It does not accept S03, clear the
@@ -175,7 +206,7 @@ is an execution failure, not the documented incomplete baseline.
 
 The numerical coverage guard checks for unmatched digit-form quantities outside
 fenced code and link targets, after removing matched claim spans and known
-round/sprint/severity identifiers. The dedicated baseline comparison checks the
+round/sprint/severity/model identifiers. The dedicated baseline comparison checks the
 fenced expected result and the exact unavailable-item names above. The numerical
 coverage guard does not audit other excluded regions, quantities written as
 words, or the truth of nonnumerical statements. Specific evidence checks match

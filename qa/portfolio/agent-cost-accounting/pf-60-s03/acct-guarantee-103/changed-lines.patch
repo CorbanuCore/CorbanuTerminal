@@ -1,0 +1,319 @@
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md
+index c583cd014..d978d0f37 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md
+@@ -123,6 +123,29 @@ BASELINE DRIFT: expected counts/exit=(20, 0, 3, 2), unavailable=['committed pack
+ RESULT agreement=19 disagreement=1 unavailable=3 exit=3
+ ```
+ 
++The manager reports that this record has been reviewed adversarially five times
++before this revision; that count is supplied review history, not an independently
++verified review roster or owner approval. The recurring defect was self-confirming
++evidence: a check or claim appeared to validate more than it actually tested.
++The retained correction trail shows how it was caught: inspecting the script
++found a literal no-defect verdict and led to its removal and named manual-reader
++attribution ([verdict correction](../acct-derive-95/RETURN.md)); running the operator blocks
++in fresh shells exposed missing inputs and led to executable instructions and an
++explicit self-reference limit ([fresh-shell execution](../acct-operator-96/RETURN.md)); testing
++dirty-source and wrong-root cases replaced status display alone with refusal
++criteria and guards ([source-status criterion](../acct-criterion-97/RETURN.md)); an outside symlink
++counterexample exposed lexical ancestry checking, while comparing prose with
++its cited evidence exposed overstatements ([destination counterexample](../acct-final-100/RETURN.md));
++and comparing live note bytes and floating reproduction inputs with frozen
++receipts exposed an unsupported execution-equivalence claim and led to explicit
++divergence disclosure and pinned commits ([divergence correction](../acct-divergence-102/RETURN.md)).
++The present follow-up comparison found the remaining frozen-guard overclaim and
++literal exit summary: [current correction](../acct-guarantee-103/RETURN.md) narrows the claim,
++prints checked observations from both pinned guards, isolates the reproduction
++environment and makes refusal messages explicit. These corrections test the
++limits of this evidence record; they do not establish independent functional
++acceptance or authorize the owner's signature.
++
+ **What Fable would be accepting:** this bounded revision makes the saved evidence
+ reproducible under the stated conditions. It does not accept S03, clear the
+ scope-zero finding or qualify a shipped inspector. There is no calendar expiry,
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json
+index f3fec40bc..b275104d2 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json
+@@ -11,9 +11,9 @@
+     },
+     {
+       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md",
+-      "bytes": 16093,
+-      "sha256": "883581db559202edce2c85500e5ab33cb3b342313cf9fb94e8e823fc46e128fa",
+-      "lines": 213,
++      "bytes": 17913,
++      "sha256": "473662b97512936c832d33c64233ca4ab50c4e5d73dd07f6fd88590d42afd6c5",
++      "lines": 236,
+       "kind": "new"
+     },
+     {
+@@ -130,8 +130,8 @@
+     }
+   ],
+   "self_excluded": true,
+-  "total_new_bytes": 58157,
+-  "total_new_text_lines": 759,
++  "total_new_bytes": 59977,
++  "total_new_text_lines": 782,
+   "refresh": {
+     "allocation": "acct-fitness-76",
+     "checked_at_base": "1aadfc123592530f657794489249e954f5e3885a",
+@@ -145,7 +145,7 @@
+   "total_modified_files": 3,
+   "total_modified_bytes": 16713,
+   "total_modified_text_lines": 230,
+-  "total_current_bytes": 74870,
+-  "total_current_text_lines": 989,
++  "total_current_bytes": 76690,
++  "total_current_text_lines": 1012,
+   "classification_basis": "kind means presence at the original round-75 base: absent=new, present=modified. Sizes and lines are current full-file sizes, not diff additions/deletions. Membership remains historical and excludes this inventory."
+ }
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/RETURN.md b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/RETURN.md
+index 4aad34557..b05495739 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/RETURN.md
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/RETURN.md
+@@ -11,7 +11,8 @@ At round 97, the corrected operator note and its
+ [frozen executed copy](OPERATOR.executed.md) were identical and contained these
+ decisions. The [live note](../acct-derive-95/OPERATOR.md) has since diverged:
+ round 100 changed block 1's lexical destination check to resolved-path ancestry
+-and ignore checks; round 102 added a Python-version refusal. Blocks 2–6 remain
++and ignore checks; round 102 added a Python-version refusal; round 103 added
++explicit destination-refusal messages. Blocks 2–6 remain
+ byte-identical to the frozen copy. Later provenance/prerequisite prose also
+ changed. All six-block execution claims and the final-note hash below refer
+ only to `OPERATOR.executed.md`, not the live note. The live revision has not
+@@ -43,7 +44,16 @@ Destination:
+ `audit=${CORBANU_AUDIT_DIR:-"$PWD/$q/acct-criterion-97/target/audit-copy"}`.
+ Set `CORBANU_AUDIT_DIR` to a new absolute path to relocate or repeat a run.
+ Preserve earlier destinations/transcripts. Existing destinations are refused.
+-Inside-source destinations must be ignored; outside-source destinations work.
++The frozen guard required an absolute, nonexistent destination that was not a
++symlink, and ran `git check-ignore -v` only when its literal spelling began
++with `$PWD/`. It did not resolve ancestry: an outside-spelled symlink alias into
++an unignored source directory could pass. This was not a guarantee that every
++physically inside-source destination was ignored. The stronger resolved-path
++check was a separate round-100 change, with segment evidence rather than this
++round's complete execution; no stronger guarantee is retroactively attributed
++to the frozen run. Any additional destination guarantee requires a separate
++integrator decision; round 103 changes this record and refusal diagnostics,
++not the destination acceptance criteria.
+ The default path, relocated path, existing-destination refusal, and second run
+ at a new path were all executed successfully with their expected exits.
+ 
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md
+index 42845f378..ddeba1d54 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md
+@@ -9,14 +9,19 @@ scope-zero finding and historical timeout. Treat recorded conclusions as claims.
+ [frozen note](../acct-criterion-97/OPERATOR.executed.md), not this later revision.
+ Since that freeze, only block 1 changed: round 100 replaced the lexical
+ inside-source destination check with resolved-path ancestry and ignore checks;
+-round 102 added the Python-version refusal. Blocks 2–6 remain byte-identical.
++round 102 added the Python-version refusal; round 103 added explicit `STOP:`
++messages for existing destinations, destination symlinks and failed inside-source
++ignore checks. Blocks 2–6 remain byte-identical.
+ The six-block verbatim execution claim applies only to the frozen round-97
+ bytes. This revision has destination-segment checks and separately run Rust
+ gates; it has no fresh complete six-block execution. See the
+ [divergence and reproduction evidence](../acct-divergence-102/RETURN.md).
+ 
+ **Get a clean copy.** Use Python 3.9 or newer, Git and Bash. The destination
+-guard refuses older Python 3 versions with `STOP:` and exit 1 before cloning.
++guard refuses older Python 3 versions, existing destinations and destination
++symlinks with `STOP:` and exit 1 before cloning. A failed inside-source
++`git check-ignore` also prints `STOP:` and preserves Git's nonzero exit.
++A relative destination retains its existing `STOP:` and exit 1.
+ Run this first block from the
+ root of the supplied repository. It records HEAD and creates a full-history,
+ detached clone of that commit. It does not copy the working tree.
+@@ -76,8 +81,14 @@ if test -n "$omitted"; then
+ fi
+ audit=${CORBANU_AUDIT_DIR:-"$PWD/$q/acct-criterion-97/target/audit-copy"}
+ case "$audit" in /*) ;; *) printf '%s\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac
+-test ! -e "$audit"
+-test ! -L "$audit"
++if test -e "$audit"; then
++    printf '%s\n' 'STOP: destination already exists; preserve it and choose a new path.'
++    exit 1
++fi
++if test -L "$audit"; then
++    printf '%s\n' 'STOP: destination is a symlink; preserve it and choose a new path.'
++    exit 1
++fi
+ python3 - "$PWD" "$audit" <<'PY'
+ import sys
+ 
+@@ -90,7 +101,10 @@ import subprocess
+ 
+ source, destination = (Path(value).resolve() for value in sys.argv[1:])
+ if destination.is_relative_to(source):
+-    sys.exit(subprocess.call(["git", "check-ignore", "-v", str(destination)]))
++    status = subprocess.call(["git", "check-ignore", "-v", str(destination)])
++    if status:
++        print("STOP: inside-source destination did not pass git check-ignore; choose an ignored path.")
++    sys.exit(status)
+ PY
+ git clone --no-local --no-checkout . "$audit"
+ git -C "$audit" checkout --detach "$candidate"
+@@ -235,7 +249,7 @@ raw stdout/stderr before retrying. Read the acceptance exit table: 3 means drift
+ or refused baseline; 1/traceback is failed execution/check; missing history/ref is
+ a prerequisite failure. The comparison reference is
+ `qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt`,
+-with digest `25450ea3837dfc7624189eb89f7067fda71b76dbec21e2853122875f03dd1fce`
++with digest `97316af06e636192bd1086eafae4bc7acb6c03b5faa95239adfd48096209db60`
+ in the adjacent `reference.json`, read from the candidate commit. Compare the
+ retained `acceptance.stdout.txt` against that file; compare candidate evidence
+ files and hashes with those in the supplied candidate SHA recorded at clone time.
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py
+index dbf0ad927..3e2a51823 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py
+@@ -17,11 +17,14 @@ note_path = str(note.relative_to(repo))
+ parser = argparse.ArgumentParser(description=__doc__)
+ parser.add_argument("--output", type=Path, help="New receipt path; existing files are refused.")
+ args = parser.parse_args()
+-raw = subprocess.check_output(["git", "show", new_commit + ":" + note_path], cwd=repo)
++# Match the current-note checker: do not inherit Git/profile configuration.
++env = dict(PATH=os.environ["PATH"], GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1",
++           GIT_TERMINAL_PROMPT="0", PYTHONDONTWRITEBYTECODE="1")
++raw = subprocess.check_output(["git", "show", new_commit + ":" + note_path], cwd=repo, env=env)
+ block = re.findall(r"^```sh\n(.*?)^```$", raw.decode(), re.M | re.S)[0]
+ guard = block[block.index("audit=${CORBANU_AUDIT_DIR"):block.index("git clone --no-local")]
+ old = subprocess.check_output(
+-    ["git", "show", old_commit + ":" + note_path], cwd=repo, text=True
++    ["git", "show", old_commit + ":" + note_path], cwd=repo, env=env, text=True
+ )
+ old_block = re.findall(r"^```sh\n(.*?)^```$", old, re.M | re.S)[0]
+ old_guard = old_block[old_block.index("audit=${CORBANU_AUDIT_DIR"):old_block.index("git clone --no-local")]
+@@ -30,7 +33,7 @@ scratch.mkdir(exist_ok=True)
+ root = Path(tempfile.mkdtemp(prefix="destination-", dir=scratch))
+ source = root / "source"
+ source.mkdir()
+-subprocess.run(["git", "init", "-q", str(source)], check=True)
++subprocess.run(["git", "init", "-q", str(source)], env=env, check=True)
+ (source / ".gitignore").write_text("ignored/\n")
+ (source / "ignored").mkdir()
+ alias = root / "outside-alias"
+@@ -49,35 +52,40 @@ for name, destination, expected in cases:
+     script = 'set -eu\nq=unused\n' + guard + "printf 'DESTINATION_ALLOWED\\n'\n"
+     result = subprocess.run(
+         ["bash", "--noprofile", "--norc", "-c", script],
+-        cwd=source, env=dict(os.environ, PWD=str(source), CORBANU_AUDIT_DIR=str(destination)),
++        cwd=source, env=dict(env, PWD=str(source), CORBANU_AUDIT_DIR=str(destination)),
+         text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+     )
+     row = dict(case=name, destination=str(destination), resolved=str(destination.resolve()),
+                expected_exit=expected, exit=result.returncode, stdout=result.stdout,
+                stderr=result.stderr, command=script)
+     records.append(row)
+-    assert result.returncode == expected, row
+-    assert ("DESTINATION_ALLOWED" in result.stdout) == (expected == 0), row
+     if name == "alias-unignored-regression":
+         previous = subprocess.run(
+             ["bash", "--noprofile", "--norc", "-c", "set -eu\nq=unused\n" + old_guard],
+-            cwd=source, env=dict(os.environ, PWD=str(source), CORBANU_AUDIT_DIR=str(destination)),
++            cwd=source, env=dict(env, PWD=str(source), CORBANU_AUDIT_DIR=str(destination)),
+             text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+         )
+         row["old_guard_exit"] = previous.returncode
+         row["old_guard_stdout"] = previous.stdout
+         row["old_guard_stderr"] = previous.stderr
+-        assert previous.returncode == 0, row
++        observed_old, observed_new = previous.returncode, result.returncode
++        print(f"Observed alias-unignored-regression: old={observed_old}/new={observed_new}", flush=True)
++        if (observed_old, observed_new) != (0, 1):
++            raise RuntimeError(f"pinned regression exits differ from expected (0, 1): {row}")
++    if result.returncode != expected:
++        raise RuntimeError(f"destination exit differs from expected: {row}")
++    if ("DESTINATION_ALLOWED" in result.stdout) != (expected == 0):
++        raise RuntimeError(f"destination checkpoint differs from expected: {row}")
+ record = dict(old_commit=old_commit, new_commit=new_commit,
+               old_note_sha256=hashlib.sha256(old.encode()).hexdigest(),
+               old_guard_sha256=hashlib.sha256(old_guard.encode()).hexdigest(),
+               new_guard_sha256=hashlib.sha256(guard.encode()).hexdigest(),
+               note_sha256=hashlib.sha256(raw).hexdigest(),
+               scope="Exact extracted destination segment, through the pre-clone guard; no clone/replay claim.",
+-              fixture=str(root), passed=len(records), cases=records)
++              environment=env, fixture=str(root), passed=len(records), cases=records)
+ output_path = args.output if args.output else root / "destination-results.json"
+ with output_path.open("x") as output:
+     json.dump(record, output, indent=2)
+     output.write("\n")
+-print(json.dumps({"passed": len(records), "old_alias_exit": 0, "new_alias_exit": 1,
++print(json.dumps({"passed": len(records), "old_alias_exit": observed_old, "new_alias_exit": observed_new,
+                   "receipt": str(output_path)}))
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/inventory-correction.json b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/inventory-correction.json
+index f35def085..5e10fdbaa 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/inventory-correction.json
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/inventory-correction.json
+@@ -126,17 +126,17 @@
+     }
+   },
+   "after_totals": {
+-    "total_new_bytes": 58157,
+-    "total_new_text_lines": 759,
++    "total_new_bytes": 59977,
++    "total_new_text_lines": 782,
+     "total_new_files": 15,
+     "total_modified_files": 3,
+     "total_modified_bytes": 16713,
+     "total_modified_text_lines": 230,
+-    "total_current_bytes": 74870,
+-    "total_current_text_lines": 989
++    "total_current_bytes": 76690,
++    "total_current_text_lines": 1012
+   },
+   "note": "Preserves the prior inventory; round-76 scope/delta remain historical snapshots. This record supersedes their round-75 inventory digest, not their test evidence.",
+-  "after_sha256": "f6ae55c47ce1228c644fd0038b37c261effc22eb727f14b3147b9746eb9fe34d",
++  "after_sha256": "cb8a70050303d4fc3c625b5baae9bb2d95bea7b7830196d43ca602caa1063a63",
+   "baseline_81_refresh": {
+     "previous_after_sha256": "24009e07f2f604270a831e6b1f4c073dbb1c867f686a4dd5ad82ec301e97fcaa",
+     "previous_after_totals": {
+@@ -234,5 +234,19 @@
+       "total_current_text_lines": 989
+     },
+     "reason": "Move exit table after replay introduction; same bytes/lines totals and membership. No changed numeric claim or expected stdout."
++  },
++  "guarantee_103_refresh": {
++    "previous_after_sha256": "f6ae55c47ce1228c644fd0038b37c261effc22eb727f14b3147b9746eb9fe34d",
++    "previous_after_totals": {
++      "total_new_bytes": 58157,
++      "total_new_text_lines": 759,
++      "total_new_files": 15,
++      "total_modified_files": 3,
++      "total_modified_bytes": 16713,
++      "total_modified_text_lines": 230,
++      "total_current_bytes": 74870,
++      "total_current_text_lines": 989
++    },
++    "reason": "Add the manager-attributed adversarial review history and concrete correction trail; no changed measured claims or membership. Only acceptance document bytes/lines/hash and derived totals change."
+   }
+ }
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt
+index 8fa8b305a..2a2566666 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt
+@@ -15,7 +15,7 @@ AGREE round-69 alone timing: 31.743s; target test raw PASS line agrees
+ AGREE round-69 feature timing: 31.335s; target test raw PASS line agrees
+ AGREE round-75 feature timing: 31.283s; target test raw PASS line agrees
+ AGREE acct-controls-72 inventory: entries=55; current_bytes=350442; current_text_lines=6352; hashes agree
+-AGREE acct-acceptance-75 inventory: entries=18; new_files=15; new_bytes=58157; new_text_lines=759; modified_files=3; modified_bytes=16713; modified_text_lines=230; current_bytes=74870; current_text_lines=989; full-file sizes, not diff lines
++AGREE acct-acceptance-75 inventory: entries=18; new_files=15; new_bytes=59977; new_text_lines=782; modified_files=3; modified_bytes=16713; modified_text_lines=230; current_bytes=76690; current_text_lines=1012; full-file sizes, not diff lines
+ AGREE inventory classifications and correction: 15 added paths and 3 modified paths against original base; round-72 changed entries=3
+ AGREE package build evidence: build receipt and raw log agree; launch/functional acceptance not claimed
+ UNAVAILABLE committed package codex: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/codex is not tracked; unavailable from a clean checkout; cannot re-derive bytes=607785336, mode=0555 or SHA-256
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/reference.json b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/reference.json
+index 7833fa656..f8860f075 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/reference.json
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/reference.json
+@@ -1,7 +1,7 @@
+ {
+   "schema": 1,
+   "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt",
+-  "sha256": "25450ea3837dfc7624189eb89f7067fda71b76dbec21e2853122875f03dd1fce",
++  "sha256": "97316af06e636192bd1086eafae4bc7acb6c03b5faa95239adfd48096209db60",
+   "contract": "Exact retained-evidence stdout, including inventory totals. Review intentional evidence/output changes and update this content digest and expected output together; verification never refreshes either.",
+   "evidence_exit": 2
+ }

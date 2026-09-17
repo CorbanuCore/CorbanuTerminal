@@ -1,0 +1,152 @@
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/RETURN.md b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/RETURN.md
+index 48b850d53..4aad34557 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/RETURN.md
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/RETURN.md
+@@ -7,8 +7,17 @@ The brief SHA-256 matched
+ `801cf69be07f97b1f2e3b539846627730a13249716615f2383fd62be1adcf94e`.
+ Base and replayed candidate: `2903d37c60dff3b8bec469fcf82347729b53f7fd`.
+ 
+-The [corrected operator note](../acct-derive-95/OPERATOR.md) and its
+-[frozen executed copy](OPERATOR.executed.md) contain these decisions:
++At round 97, the corrected operator note and its
++[frozen executed copy](OPERATOR.executed.md) were identical and contained these
++decisions. The [live note](../acct-derive-95/OPERATOR.md) has since diverged:
++round 100 changed block 1's lexical destination check to resolved-path ancestry
++and ignore checks; round 102 added a Python-version refusal. Blocks 2–6 remain
++byte-identical to the frozen copy. Later provenance/prerequisite prose also
++changed. All six-block execution claims and the final-note hash below refer
++only to `OPERATOR.executed.md`, not the live note. The live revision has not
++been executed as a complete six-block sequence; see
++[round 102](../acct-divergence-102/RETURN.md) for segment checks and fresh gates.
++The frozen decisions were:
+ 
+ | Source-status case | Required action |
+ | --- | --- |
+@@ -44,7 +53,7 @@ raw stdout/stderr, and exits. [Results and receipts](results.json) bind each
+ script/output by SHA-256; individual JSON receipts and lossless `.log.gz`
+ files are retained. All 32 recorded attempts matched their expected exits.
+ 
+-The final six blocks ran unchanged, each in a fresh
++The final six blocks from `OPERATOR.executed.md` ran unchanged, each in a fresh
+ `bash --noprofile --norc` process. A fresh full-history source clone supplied
+ the candidate; block 1 created another fresh detached audit clone at
+ `acct-criterion-97/target/final-audit-copy`. The revised note was an external
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md
+index a7a313d71..42845f378 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md
+@@ -5,7 +5,19 @@ independent functional acceptance, or permission to ship. Start by reading
+ [the acceptance decision](../acct-acceptance-75/acceptance.md), especially the open
+ scope-zero finding and historical timeout. Treat recorded conclusions as claims.
+ 
+-**Get a clean copy.** Use Python 3, Git and Bash. Run this first block from the
++**Execution provenance.** Round 97 executed the six blocks in its
++[frozen note](../acct-criterion-97/OPERATOR.executed.md), not this later revision.
++Since that freeze, only block 1 changed: round 100 replaced the lexical
++inside-source destination check with resolved-path ancestry and ignore checks;
++round 102 added the Python-version refusal. Blocks 2–6 remain byte-identical.
++The six-block verbatim execution claim applies only to the frozen round-97
++bytes. This revision has destination-segment checks and separately run Rust
++gates; it has no fresh complete six-block execution. See the
++[divergence and reproduction evidence](../acct-divergence-102/RETURN.md).
++
++**Get a clean copy.** Use Python 3.9 or newer, Git and Bash. The destination
++guard refuses older Python 3 versions with `STOP:` and exit 1 before cloning.
++Run this first block from the
+ root of the supplied repository. It records HEAD and creates a full-history,
+ detached clone of that commit. It does not copy the working tree.
+ 
+@@ -67,9 +79,14 @@ case "$audit" in /*) ;; *) printf '%s\n' 'STOP: CORBANU_AUDIT_DIR must be absolu
+ test ! -e "$audit"
+ test ! -L "$audit"
+ python3 - "$PWD" "$audit" <<'PY'
++import sys
++
++if sys.version_info < (3, 9):
++    print("STOP: destination guard requires Python 3.9 or newer.")
++    sys.exit(1)
++
+ from pathlib import Path
+ import subprocess
+-import sys
+ 
+ source, destination = (Path(value).resolve() for value in sys.argv[1:])
+ if destination.is_relative_to(source):
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/RETURN.md b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/RETURN.md
+index acb5ffe51..c6e60732a 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/RETURN.md
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/RETURN.md
+@@ -22,6 +22,22 @@ destination also have recorded expected results. This tests the destination
+ segment, not a fresh full clone/replay or six-block operator execution.
+ Historical frozen operator copies and their execution receipts are unchanged.
+ 
++Round-102 reproduction correction: `test_destination.py` now reads the old
++note from `967425cc72ea28b5f59ecc38a56419b7db6885e8` (the observed round-100
++base) and the revised note from `a8dfff98892e60aaa0d7f05321fd7e57b79cdc2a`
++(the committed round-100 result), rather than using floating HEAD/working bytes.
++It writes a fresh receipt under ignored scratch by default, or at a new
++`--output` path; it never overwrites this round's receipt. With Python 3.9 or
++newer, reproduce from the repository root with
++`python3 -B qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py`.
++Use an absolute script path when starting from another directory.
++The [round-102 receipt](../acct-divergence-102/pinned-destination-results.json)
++records both revisions and hashes and the fresh old=0/new=1 observation.
++This reproduces the historical destination-segment result only; it does not
++execute the current note or claim a complete operator replay. This amendment
++and helper edit postdate this round's `scope.json`/`final-check.json` hashes;
++those files remain historical receipts, not checks of the amended files.
++
+ The [round-97 RETURN](../acct-criterion-97/RETURN.md) now says:
+ 
+ > The final audit clone's `git status --porcelain --untracked-files=all` output
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py
+index d1f78860c..dbf0ad927 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py
+@@ -1,4 +1,5 @@
+ """Exercise the operator note's destination guard with real Git ignore rules."""
++import argparse
+ import hashlib
+ import json
+ import os
+@@ -9,11 +10,18 @@ import tempfile
+ 
+ here = Path(__file__).resolve().parent
+ note = here.parent / "acct-derive-95/OPERATOR.md"
+-raw = note.read_bytes()
++old_commit = "967425cc72ea28b5f59ecc38a56419b7db6885e8"
++new_commit = "a8dfff98892e60aaa0d7f05321fd7e57b79cdc2a"
++repo = here.parents[4]
++note_path = str(note.relative_to(repo))
++parser = argparse.ArgumentParser(description=__doc__)
++parser.add_argument("--output", type=Path, help="New receipt path; existing files are refused.")
++args = parser.parse_args()
++raw = subprocess.check_output(["git", "show", new_commit + ":" + note_path], cwd=repo)
+ block = re.findall(r"^```sh\n(.*?)^```$", raw.decode(), re.M | re.S)[0]
+ guard = block[block.index("audit=${CORBANU_AUDIT_DIR"):block.index("git clone --no-local")]
+ old = subprocess.check_output(
+-    ["git", "show", "HEAD:" + str(note.relative_to(here.parents[4]))], text=True
++    ["git", "show", old_commit + ":" + note_path], cwd=repo, text=True
+ )
+ old_block = re.findall(r"^```sh\n(.*?)^```$", old, re.M | re.S)[0]
+ old_guard = old_block[old_block.index("audit=${CORBANU_AUDIT_DIR"):old_block.index("git clone --no-local")]
+@@ -60,10 +68,16 @@ for name, destination, expected in cases:
+         row["old_guard_stdout"] = previous.stdout
+         row["old_guard_stderr"] = previous.stderr
+         assert previous.returncode == 0, row
+-record = dict(note_sha256=hashlib.sha256(raw).hexdigest(),
++record = dict(old_commit=old_commit, new_commit=new_commit,
++              old_note_sha256=hashlib.sha256(old.encode()).hexdigest(),
++              old_guard_sha256=hashlib.sha256(old_guard.encode()).hexdigest(),
++              new_guard_sha256=hashlib.sha256(guard.encode()).hexdigest(),
++              note_sha256=hashlib.sha256(raw).hexdigest(),
+               scope="Exact extracted destination segment, through the pre-clone guard; no clone/replay claim.",
+               fixture=str(root), passed=len(records), cases=records)
+-with (here / "destination-results.json").open("x") as output:
++output_path = args.output if args.output else root / "destination-results.json"
++with output_path.open("x") as output:
+     json.dump(record, output, indent=2)
+     output.write("\n")
+-print(json.dumps({"passed": len(records), "old_alias_exit": 0, "new_alias_exit": 1}))
++print(json.dumps({"passed": len(records), "old_alias_exit": 0, "new_alias_exit": 1,
++                  "receipt": str(output_path)}))
