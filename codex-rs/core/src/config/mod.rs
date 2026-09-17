@@ -350,7 +350,11 @@ pub(crate) async fn test_config() -> Config {
             model: Some("gpt-5.5".to_string()),
             ..Default::default()
         },
-        ConfigOverrides::default(),
+        ConfigOverrides {
+            #[cfg(feature = "developer-accounting")]
+            accounting: Some(AccountingMode::Disabled),
+            ..Default::default()
+        },
         AbsolutePathBuf::from_absolute_path(codex_home.path()).expect("temp dir should resolve"),
     )
     .await
@@ -2052,6 +2056,8 @@ impl Config {
                 // requirements and plugin configuration for this live thread.
                 model: self.model.clone(),
                 model_provider: Some(self.model_provider_id.clone()),
+                #[cfg(feature = "developer-accounting")]
+                accounting: Some(self.accounting.clone()),
                 codex_self_exe: self.codex_self_exe.clone(),
                 default_zsh_path,
                 ..Default::default()
@@ -2785,6 +2791,10 @@ fn apply_managed_filesystem_constraints(
 /// Optional overrides for user configuration (e.g., from CLI flags).
 #[derive(Default, Debug, Clone)]
 pub struct ConfigOverrides {
+    /// Preserve an embedding's explicit mode, including OFF, in developer builds.
+    /// This is not a TOML or command-line setting.
+    #[cfg(feature = "developer-accounting")]
+    pub accounting: Option<AccountingMode>,
     pub model: Option<String>,
     /// Permit an explicitly selected provider to replace an incompatible model
     /// with its catalog default. App-server clients opt into this behavior with
@@ -3489,6 +3499,8 @@ impl Config {
 
         // Destructure ConfigOverrides fully to ensure all overrides are applied.
         let ConfigOverrides {
+            #[cfg(feature = "developer-accounting")]
+            accounting,
             model,
             allow_provider_model_fallback,
             review_model: override_review_model,
@@ -4498,10 +4510,9 @@ impl Config {
             #[cfg(not(feature = "developer-accounting"))]
             accounting: AccountingMode::Disabled,
             #[cfg(feature = "developer-accounting")]
-            accounting: crate::accounting::developer_accounting_mode(
-                &model_provider_id,
-                &model_provider,
-            ),
+            accounting: accounting.unwrap_or_else(|| {
+                crate::accounting::developer_accounting_mode(&model_provider_id, &model_provider)
+            }),
             model,
             service_tier,
             review_model,

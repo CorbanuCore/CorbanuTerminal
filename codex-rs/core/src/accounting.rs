@@ -1,4 +1,10 @@
 //! Native sampling ownership glue. Replay, exact money and retention stay in state.
+
+// Distributed artifacts use the release profile (debug assertions disabled).
+// Keep developer collection confined to debug builds, even with --all-features.
+#[cfg(all(feature = "developer-accounting", not(debug_assertions)))]
+compile_error!("developer-accounting is debug-only and must not be enabled in distribution builds");
+
 use crate::config::AccountingMode;
 use codex_api::AnthropicTokenPresence;
 use codex_api::AnthropicUsagePatch;

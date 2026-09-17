@@ -25,11 +25,20 @@ const ENDPOINT: &str = "http://127.0.0.1:1/v1";
 #[tokio::test]
 async fn accounting_build_activation_uses_loaded_provider() -> anyhow::Result<()> {
     let home = tempfile::tempdir()?;
-    let config = crate::config::ConfigBuilder::default()
-        .codex_home(home.path().to_path_buf())
-        .cli_overrides(vec![("model_provider".into(), "anthropic".into())])
-        .build()
-        .await?;
+    let config = crate::config::Config::load_config_with_layer_stack(
+        codex_exec_server::LOCAL_FS.as_ref(),
+        codex_config::config_toml::ConfigToml {
+            model_provider: Some("anthropic".into()),
+            ..Default::default()
+        },
+        crate::config::ConfigOverrides {
+            cwd: Some(home.path().to_path_buf()),
+            ..Default::default()
+        },
+        AbsolutePathBuf::from_absolute_path(home.path())?,
+        codex_config::ConfigLayerStack::default(),
+    )
+    .await?;
     #[cfg(not(feature = "developer-accounting"))]
     assert_eq!(config.accounting, AccountingMode::Disabled);
     #[cfg(feature = "developer-accounting")]
@@ -38,6 +47,36 @@ async fn accounting_build_activation_uses_loaded_provider() -> anyhow::Result<()
         AccountingMode::DirectAnthropic { approved_endpoint, .. }
             if approved_endpoint == codex_model_provider_info::ANTHROPIC_BASE_URL
     ));
+    Ok(())
+}
+
+#[cfg(feature = "developer-accounting")]
+#[tokio::test]
+async fn accounting_developer_loader_override_survives_refresh() -> anyhow::Result<()> {
+    let home = tempfile::tempdir()?;
+    for mode in [
+        AccountingMode::Disabled,
+        AccountingMode::DirectOpenAiResponses {
+            scope: Uuid::new_v4(),
+            approved_endpoint: ENDPOINT.into(),
+        },
+    ] {
+        let config = crate::config::Config::load_config_with_layer_stack(
+            codex_exec_server::LOCAL_FS.as_ref(),
+            codex_config::config_toml::ConfigToml::default(),
+            crate::config::ConfigOverrides {
+                cwd: Some(home.path().to_path_buf()),
+                accounting: Some(mode.clone()),
+                ..Default::default()
+            },
+            AbsolutePathBuf::from_absolute_path(home.path())?,
+            codex_config::ConfigLayerStack::default(),
+        )
+        .await?;
+        assert_eq!(config.accounting, mode);
+        let refreshed = config.rebuild_preserving_session_layers(&config).await?;
+        assert_eq!(refreshed.accounting, mode);
+    }
     Ok(())
 }
 
@@ -280,7 +319,7 @@ async fn accounting_role_reload_preserves_internal_binding_without_changing_off_
             experimental_bearer_token: Some("synthetic".into()),
             ..ModelProviderInfo::create_anthropic_provider()
         };
-        config.accounting = AccountingMode::Disabled;
+        assert_eq!(config.accounting, AccountingMode::Disabled);
         if on {
             config.accounting = AccountingMode::DirectAnthropic {
                 scope: Uuid::new_v4(),
