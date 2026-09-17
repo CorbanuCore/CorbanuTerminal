@@ -14,10 +14,12 @@ The [acceptance disclosure](../acct-acceptance-75/acceptance.md) now reads:
 > answered; that count is supplied review history, not an independently verified
 > review roster or owner approval. No human has reviewed this record.
 
-The five local review launch scripts name that exact model and effort;
-[provenance](review-provenance.json) identifies them. The count, separation,
-receipt-blocking history and absence of human review remain manager-supplied
-history; this worker does not independently certify that roster.
+The earlier launch-script citation has been withdrawn during the
+[provenance reconciliation](../acct-reconcile-107/RETURN.md): neither script
+contents nor contemporaneous hashes were retained. The model, effort, count,
+separation, receipt-blocking history and absence of human review remain
+manager-supplied history, as the [provenance limitation](review-provenance.json)
+records; this worker does not independently certify that roster or runtime.
 
 The [corrected refusal table](../acct-guarantee-103/RETURN.md) is:
 

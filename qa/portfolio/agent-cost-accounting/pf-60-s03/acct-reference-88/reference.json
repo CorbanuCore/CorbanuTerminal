@@ -1,7 +1,12 @@
 {
   "schema": 1,
   "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt",
-  "sha256": "97316af06e636192bd1086eafae4bc7acb6c03b5faa95239adfd48096209db60",
+  "sha256": "c0c52beb096b3aeb4a54676e57356b3ac3b804f28ccdb42f49f07dfdc081eecc",
   "contract": "Exact retained-evidence stdout, including inventory totals. Review intentional evidence/output changes and update this content digest and expected output together; verification never refreshes either.",
-  "evidence_exit": 2
+  "evidence_exit": 2,
+  "refresh": {
+    "source_commit": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
+    "record": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/RETURN.md",
+    "previous_sha256": "97316af06e636192bd1086eafae4bc7acb6c03b5faa95239adfd48096209db60"
+  }
 }

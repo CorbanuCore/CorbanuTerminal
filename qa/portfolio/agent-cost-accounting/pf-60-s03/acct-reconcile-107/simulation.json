@@ -1,0 +1,40 @@
+{
+  "source_commit": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
+  "kind": "Disposable local checkout with proposed verifier/inventory/document bytes",
+  "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/target/before-checkout",
+  "mutation": "Append one newline to acceptance.md; run; restore exact original.",
+  "inputs_sha256": {
+    "acct-acceptance-75/acceptance.md": "6f50dd49303a3d128674b93348285ea58c8f69debdc865bf3eedd802fad86bc9",
+    "acct-acceptance-75/scope.json": "cc59f846a5c60310a787f0bab19a89f731bb82c1e7816f56ee0552023c9f0e5c",
+    "acct-inventory-79/inventory-correction.json": "460d6cb5f02724123db05d102c469af4fd274d791a430889da054686970809b4",
+    "acct-inventory-79/verify_acceptance.py": "ded2cd90fe9740a48885e4879b00b94744213682889f24a9b64fd7dce1b90e45"
+  },
+  "runs": [
+    {
+      "name": "drift-disposable",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py"
+      ],
+      "exit": 3,
+      "stderr_empty": true,
+      "stdout_sha256": "956c5ae2d1c67e3e65593af87e16630db5071adbbb70261c4fa3233074dba950"
+    },
+    {
+      "name": "drift-disposable-optimized",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "-O",
+        "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py"
+      ],
+      "exit": 3,
+      "stderr_empty": true,
+      "stdout_sha256": "956c5ae2d1c67e3e65593af87e16630db5071adbbb70261c4fa3233074dba950"
+    }
+  ],
+  "restored": true,
+  "initial_attempt": "simulation-working-tree.json",
+  "prior_attempt_note": "Initial working-tree control is retained separately; this replay proves the documented disposable-checkout workflow."
+}

@@ -1,0 +1,37 @@
+[
+  {
+    "case": "reported-identifiers",
+    "text": "round-103 revision at `claude-opus-5-plan`",
+    "accepted": true,
+    "expected": true,
+    "detail": "no unmatched digit-form quantities outside matched claim spans, fenced code and link targets; known round/sprint/severity/model identifiers excluded; worded quantities and excluded regions not audited"
+  },
+  {
+    "case": "adjacent-measurement",
+    "text": "round-103 revision at `claude-opus-5-plan`: 7 reviews",
+    "accepted": false,
+    "expected": false,
+    "detail": "unmapped numerical claims in acceptance.md: ['7']"
+  },
+  {
+    "case": "other-model",
+    "text": "`claude-opus-6-plan`",
+    "accepted": false,
+    "expected": false,
+    "detail": "unmapped numerical claims in acceptance.md: ['6']"
+  },
+  {
+    "case": "extended-revision",
+    "text": "round-1039",
+    "accepted": false,
+    "expected": false,
+    "detail": "unmapped numerical claims in acceptance.md: ['1039']"
+  },
+  {
+    "case": "unmapped-money",
+    "text": "USD 0.003",
+    "accepted": false,
+    "expected": false,
+    "detail": "unmapped numerical claims in acceptance.md: ['0.003']"
+  }
+]

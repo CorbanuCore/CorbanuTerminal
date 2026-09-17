@@ -126,17 +126,17 @@
     }
   },
   "after_totals": {
-    "total_new_bytes": 60554,
-    "total_new_text_lines": 790,
+    "total_new_bytes": 59977,
+    "total_new_text_lines": 782,
     "total_new_files": 15,
     "total_modified_files": 3,
     "total_modified_bytes": 16713,
     "total_modified_text_lines": 230,
-    "total_current_bytes": 77267,
-    "total_current_text_lines": 1020
+    "total_current_bytes": 76690,
+    "total_current_text_lines": 1012
   },
   "note": "Preserves the prior inventory; round-76 scope/delta remain historical snapshots. This record supersedes their round-75 inventory digest, not their test evidence.",
-  "after_sha256": "cc59f846a5c60310a787f0bab19a89f731bb82c1e7816f56ee0552023c9f0e5c",
+  "after_sha256": "cb8a70050303d4fc3c625b5baae9bb2d95bea7b7830196d43ca602caa1063a63",
   "baseline_81_refresh": {
     "previous_after_sha256": "24009e07f2f604270a831e6b1f4c073dbb1c867f686a4dd5ad82ec301e97fcaa",
     "previous_after_totals": {
@@ -248,10 +248,5 @@
       "total_current_text_lines": 989
     },
     "reason": "Add the manager-attributed adversarial review history and concrete correction trail; no changed measured claims or membership. Only acceptance document bytes/lines/hash and derived totals change."
-  },
-  "reconcile_107_refresh": {
-    "source_commit": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
-    "previous_after_sha256": "cb8a70050303d4fc3c625b5baae9bb2d95bea7b7830196d43ca602caa1063a63",
-    "record": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/RETURN.md"
   }
 }

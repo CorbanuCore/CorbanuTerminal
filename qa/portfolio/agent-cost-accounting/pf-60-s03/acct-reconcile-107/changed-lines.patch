@@ -1,0 +1,234 @@
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md
+index bddeb79fb..a55eb1d5e 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md
+@@ -84,11 +84,16 @@ The fenced result states the expected evidence exit before the baseline check;
+ the last printed result carries the actual process exit. Legitimate changes must
+ update this documented baseline.
+ This expected baseline describes retained evidence, not complete qualification.
++The [worked shelf-life refresh](../acct-reconcile-107/RETURN.md) records the source
++commit, prior failures, evidence comparison and refreshed inventory/reference.
++It reaffirms the expected counts and named gaps; it does not clear a product
++finding. The exact review-model and revision identifiers are metadata exclusions,
++not measured quantities or verification of the manager's review history.
+ 
+ **Recognizing an unrefreshed later edit:** in a disposable local checkout of the
+ proposed QA files, append one newline to this acceptance document without
+ refreshing its inventory. The claims are unchanged, but the inventoried bytes
+-differ. [The recorded simulation](../acct-guard-91/simulation-final/simulation.json)
++differ. [The refreshed simulation](../acct-reconcile-107/simulation.json)
+ runs the verifier normally and with Python optimization; both return three with
+ empty stderr and this verbatim stdout. Restoring the file restores the baseline.
+ This is a deliberately failing evidence-integrity control, not a product failure
+@@ -118,7 +123,7 @@ AGREE package build evidence: build receipt and raw log agree; launch/functional
+ UNAVAILABLE committed package codex: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/codex is not tracked; unavailable from a clean checkout; cannot re-derive bytes=607785336, mode=0555 or SHA-256
+ UNAVAILABLE committed package codex-code-mode-host: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/codex-code-mode-host is not tracked; unavailable from a clean checkout; cannot re-derive bytes=93937576, mode=0555 or SHA-256
+ UNAVAILABLE committed package rmcp_test_server: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/rmcp_test_server is not tracked; unavailable from a clean checkout; cannot re-derive bytes=11508704, mode=0555 or SHA-256
+-AGREE acceptance numerical coverage: no unmatched digit-form quantities outside matched claim spans, fenced code and link targets; known round/sprint/severity identifiers excluded; worded quantities and excluded regions not audited
++AGREE acceptance numerical coverage: no unmatched digit-form quantities outside matched claim spans, fenced code and link targets; known round/sprint/severity/model identifiers excluded; worded quantities and excluded regions not audited
+ BASELINE DRIFT: expected counts/exit=(20, 0, 3, 2), unavailable=['committed package codex', 'committed package codex-code-mode-host', 'committed package rmcp_test_server']; actual counts/exit=(19, 1, 3, 1), unavailable=['committed package codex', 'committed package codex-code-mode-host', 'committed package rmcp_test_server']
+ RESULT agreement=19 disagreement=1 unavailable=3 exit=3
+ ```
+@@ -201,7 +206,7 @@ is an execution failure, not the documented incomplete baseline.
+ 
+ The numerical coverage guard checks for unmatched digit-form quantities outside
+ fenced code and link targets, after removing matched claim spans and known
+-round/sprint/severity identifiers. The dedicated baseline comparison checks the
++round/sprint/severity/model identifiers. The dedicated baseline comparison checks the
+ fenced expected result and the exact unavailable-item names above. The numerical
+ coverage guard does not audit other excluded regions, quantities written as
+ words, or the truth of nonnumerical statements. Specific evidence checks match
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json
+index b275104d2..f4c3781ab 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json
+@@ -11,9 +11,9 @@
+     },
+     {
+       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md",
+-      "bytes": 17913,
+-      "sha256": "473662b97512936c832d33c64233ca4ab50c4e5d73dd07f6fd88590d42afd6c5",
+-      "lines": 236,
++      "bytes": 18490,
++      "sha256": "6f50dd49303a3d128674b93348285ea58c8f69debdc865bf3eedd802fad86bc9",
++      "lines": 244,
+       "kind": "new"
+     },
+     {
+@@ -130,8 +130,8 @@
+     }
+   ],
+   "self_excluded": true,
+-  "total_new_bytes": 59977,
+-  "total_new_text_lines": 782,
++  "total_new_bytes": 60554,
++  "total_new_text_lines": 790,
+   "refresh": {
+     "allocation": "acct-fitness-76",
+     "checked_at_base": "1aadfc123592530f657794489249e954f5e3885a",
+@@ -145,7 +145,13 @@
+   "total_modified_files": 3,
+   "total_modified_bytes": 16713,
+   "total_modified_text_lines": 230,
+-  "total_current_bytes": 76690,
+-  "total_current_text_lines": 1012,
+-  "classification_basis": "kind means presence at the original round-75 base: absent=new, present=modified. Sizes and lines are current full-file sizes, not diff additions/deletions. Membership remains historical and excludes this inventory."
++  "total_current_bytes": 77267,
++  "total_current_text_lines": 1020,
++  "classification_basis": "kind means presence at the original round-75 base: absent=new, present=modified. Sizes and lines are current full-file sizes, not diff additions/deletions. Membership remains historical and excludes this inventory.",
++  "reconcile_107_refresh": {
++    "source_commit": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
++    "record": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/RETURN.md",
++    "previous_inventory_sha256": "cb8a70050303d4fc3c625b5baae9bb2d95bea7b7830196d43ca602caa1063a63",
++    "reason": "Review disclosure changed acceptance bytes; exact metadata identifiers were unmapped. Claims, historical membership, expected counts and qualification gaps are unchanged."
++  }
+ }
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-disclose-105/RETURN.md b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-disclose-105/RETURN.md
+index 96157e9cd..8ee03668c 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-disclose-105/RETURN.md
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-disclose-105/RETURN.md
+@@ -14,10 +14,12 @@ The [acceptance disclosure](../acct-acceptance-75/acceptance.md) now reads:
+ > answered; that count is supplied review history, not an independently verified
+ > review roster or owner approval. No human has reviewed this record.
+ 
+-The five local review launch scripts name that exact model and effort;
+-[provenance](review-provenance.json) identifies them. The count, separation,
+-receipt-blocking history and absence of human review remain manager-supplied
+-history; this worker does not independently certify that roster.
++The earlier launch-script citation has been withdrawn during the
++[provenance reconciliation](../acct-reconcile-107/RETURN.md): neither script
++contents nor contemporaneous hashes were retained. The model, effort, count,
++separation, receipt-blocking history and absence of human review remain
++manager-supplied history, as the [provenance limitation](review-provenance.json)
++records; this worker does not independently certify that roster or runtime.
+ 
+ The [corrected refusal table](../acct-guarantee-103/RETURN.md) is:
+ 
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-disclose-105/review-provenance.json b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-disclose-105/review-provenance.json
+index 2b5f0e21e..1712f2f1c 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-disclose-105/review-provenance.json
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-disclose-105/review-provenance.json
+@@ -1,19 +1,17 @@
+ {
+-  "source": "Manager-reported history; runtime confirmed from the five local review launch scripts. Not a certification of reviewer independence, complete review roster, or owner approval.",
++  "source": "Manager-reported history only; not independent certification of runtime, reviewer independence, complete review roster, execution, or owner approval.",
+   "model": "claude-opus-5-plan",
+   "effort": "high",
+-  "launch_scripts": [
+-    "/private/tmp/frev.VLAVrr/run.sh",
+-    "/private/tmp/frev.uoC54z/run.sh",
+-    "/private/tmp/frev.UUgf2X/run.sh",
+-    "/private/tmp/frev.Vzp9nU/run.sh",
+-    "/private/tmp/frev.PlnDbi/run.sh"
+-  ],
+   "rounds": [
+     95,
+     96,
+     97,
+     100,
+     102
+-  ]
++  ],
++  "citation_withdrawal": {
++    "allocation": "acct-reconcile-107",
++    "source_commit": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
++    "reason": "Ephemeral launch scripts had no retained contents or contemporaneous hashes. Their paths are no longer cited as inspectable evidence. The earlier citation remains in Git history; no script execution or runtime is independently established by this record."
++  }
+ }
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/inventory-correction.json b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/inventory-correction.json
+index 5e10fdbaa..504f3bca2 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/inventory-correction.json
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/inventory-correction.json
+@@ -126,17 +126,17 @@
+     }
+   },
+   "after_totals": {
+-    "total_new_bytes": 59977,
+-    "total_new_text_lines": 782,
++    "total_new_bytes": 60554,
++    "total_new_text_lines": 790,
+     "total_new_files": 15,
+     "total_modified_files": 3,
+     "total_modified_bytes": 16713,
+     "total_modified_text_lines": 230,
+-    "total_current_bytes": 76690,
+-    "total_current_text_lines": 1012
++    "total_current_bytes": 77267,
++    "total_current_text_lines": 1020
+   },
+   "note": "Preserves the prior inventory; round-76 scope/delta remain historical snapshots. This record supersedes their round-75 inventory digest, not their test evidence.",
+-  "after_sha256": "cb8a70050303d4fc3c625b5baae9bb2d95bea7b7830196d43ca602caa1063a63",
++  "after_sha256": "cc59f846a5c60310a787f0bab19a89f731bb82c1e7816f56ee0552023c9f0e5c",
+   "baseline_81_refresh": {
+     "previous_after_sha256": "24009e07f2f604270a831e6b1f4c073dbb1c867f686a4dd5ad82ec301e97fcaa",
+     "previous_after_totals": {
+@@ -248,5 +248,10 @@
+       "total_current_text_lines": 989
+     },
+     "reason": "Add the manager-attributed adversarial review history and concrete correction trail; no changed measured claims or membership. Only acceptance document bytes/lines/hash and derived totals change."
++  },
++  "reconcile_107_refresh": {
++    "source_commit": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
++    "previous_after_sha256": "cb8a70050303d4fc3c625b5baae9bb2d95bea7b7830196d43ca602caa1063a63",
++    "record": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/RETURN.md"
+   }
+ }
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py
+index 76fc630ca..58bb1325c 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py
+@@ -346,12 +346,14 @@ def coverage():
+         text[start:end] = " " * (end - start)
+     remaining = "".join(text)
+     remaining = re.sub(r"\]\([^)]*\)|```.*?```", "", remaining, flags=re.S)
+-    remaining = re.sub(r"PF-60(?:-S03)?|S03|P2|round[- ](?:66|69|72|75|76)",
++    # Exact metadata identifiers, not measured quantities or proof of review history.
++    remaining = re.sub(r"`claude-opus-5-plan`", "", remaining)
++    remaining = re.sub(r"PF-60(?:-S03)?|S03|P2|round[- ](?:66|69|72|75|76|103)\b",
+                        "", remaining, flags=re.I)
+     numbers = re.findall(r"\b\d+(?:\.\d+)?\b", remaining)
+     require(not numbers, "unmapped numerical claims in acceptance.md: " + repr(numbers))
+     return ("no unmatched digit-form quantities outside matched claim spans, fenced code and link targets; "
+-            "known round/sprint/severity identifiers excluded; worded quantities and excluded regions not audited")
++            "known round/sprint/severity/model identifiers excluded; worded quantities and excluded regions not audited")
+ 
+ 
+ def documented_baseline():
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt
+index 2a2566666..0b994ce6b 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt
+@@ -15,12 +15,12 @@ AGREE round-69 alone timing: 31.743s; target test raw PASS line agrees
+ AGREE round-69 feature timing: 31.335s; target test raw PASS line agrees
+ AGREE round-75 feature timing: 31.283s; target test raw PASS line agrees
+ AGREE acct-controls-72 inventory: entries=55; current_bytes=350442; current_text_lines=6352; hashes agree
+-AGREE acct-acceptance-75 inventory: entries=18; new_files=15; new_bytes=59977; new_text_lines=782; modified_files=3; modified_bytes=16713; modified_text_lines=230; current_bytes=76690; current_text_lines=1012; full-file sizes, not diff lines
++AGREE acct-acceptance-75 inventory: entries=18; new_files=15; new_bytes=60554; new_text_lines=790; modified_files=3; modified_bytes=16713; modified_text_lines=230; current_bytes=77267; current_text_lines=1020; full-file sizes, not diff lines
+ AGREE inventory classifications and correction: 15 added paths and 3 modified paths against original base; round-72 changed entries=3
+ AGREE package build evidence: build receipt and raw log agree; launch/functional acceptance not claimed
+ UNAVAILABLE committed package codex: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/codex is not tracked; unavailable from a clean checkout; cannot re-derive bytes=607785336, mode=0555 or SHA-256
+ UNAVAILABLE committed package codex-code-mode-host: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/codex-code-mode-host is not tracked; unavailable from a clean checkout; cannot re-derive bytes=93937576, mode=0555 or SHA-256
+ UNAVAILABLE committed package rmcp_test_server: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/rmcp_test_server is not tracked; unavailable from a clean checkout; cannot re-derive bytes=11508704, mode=0555 or SHA-256
+-AGREE acceptance numerical coverage: no unmatched digit-form quantities outside matched claim spans, fenced code and link targets; known round/sprint/severity identifiers excluded; worded quantities and excluded regions not audited
++AGREE acceptance numerical coverage: no unmatched digit-form quantities outside matched claim spans, fenced code and link targets; known round/sprint/severity/model identifiers excluded; worded quantities and excluded regions not audited
+ BASELINE MATCH: documented counts, evidence exit and unavailable identities match
+ RESULT agreement=20 disagreement=0 unavailable=3 exit=2
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/reference.json b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/reference.json
+index f8860f075..f13402069 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/reference.json
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/reference.json
+@@ -1,7 +1,12 @@
+ {
+   "schema": 1,
+   "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt",
+-  "sha256": "97316af06e636192bd1086eafae4bc7acb6c03b5faa95239adfd48096209db60",
++  "sha256": "c0c52beb096b3aeb4a54676e57356b3ac3b804f28ccdb42f49f07dfdc081eecc",
+   "contract": "Exact retained-evidence stdout, including inventory totals. Review intentional evidence/output changes and update this content digest and expected output together; verification never refreshes either.",
+-  "evidence_exit": 2
++  "evidence_exit": 2,
++  "refresh": {
++    "source_commit": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
++    "record": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/RETURN.md",
++    "previous_sha256": "97316af06e636192bd1086eafae4bc7acb6c03b5faa95239adfd48096209db60"
++  }
+ }
