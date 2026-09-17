@@ -765,7 +765,10 @@ class Transport:
             if bootstrap:
                 d.require(value == initial)  # Auth I/O cannot hide intervening evidence or lifecycle changes.
                 os.close(owner_file(self.store, value))
-            if not bootstrap and (uncovered or previous_hold not in (None, "unqualified")):
+            # An explicit exact review also clears legacy unknown history on a
+            # quiet journal; requiring a fresh fault would strand that history.
+            if not bootstrap and (gap_review is not None or uncovered
+                                  or previous_hold not in (None, "unqualified")):
                 d.shape(gap_review, "watermark binding evidence ingress session epoch")
                 d.require(session_pin is not None and (gap_review["session"], gap_review["epoch"]) == session_pin)
                 d.require(gap_review["watermark"] == value["watermark"] and gap_review["binding"] == d.digest(pin))

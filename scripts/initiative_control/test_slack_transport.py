@@ -1558,6 +1558,68 @@ class TransportTests(LiveFixture):
         self.assertEqual(s.outstanding_quarantine(reopened.read("transport")), dict(count=1, oldest_at=later))
         self.assertEqual(reopened.read("transport")["quarantine"]["total"], 131)
 
+    def quiet_legacy_unknown(self):
+        self.sending()
+        self.callback(payload("EvOld", subtype="message_deleted", deleted_ts="109.000001"))
+        self.review_gap()
+        with s.locked(self.store) as journal:
+            journal["quarantine"] = dict(total=129, records=journal["quarantine"]["records"])
+            self.store.write("transport", journal)
+        self.assertIsNone(journal["hold"])
+        self.assertEqual(s.fence_gap(self.store, journal), 0)
+        return dict(count=0, oldest_at=None, unknown=128)
+
+    def test_quiet_legacy_unknown_requires_explicit_review_and_clears_durably(self):
+        expected = self.quiet_legacy_unknown()
+        self.transport.qualify(ui_evidence())
+        self.assertEqual(s.outstanding_quarantine(self.store.read("transport")), expected)
+        self.assertEqual(len(self.store.read("transport")["gap_reviews"]), 1)
+        self.review_gap()
+        reopened = a.Store(self.root)
+        reviewed = reopened.read("transport")
+        self.assertEqual(len(reviewed["gap_reviews"]), 2)
+        self.assertEqual(reviewed["quarantine"]["outstanding"], dict(count=0, oldest_at=None))
+        self.assertEqual(reviewed["quarantine"]["total"], 129)
+        self.assertIsNone(reviewed["hold"])
+        self.callback(payload("EvBot", user=PIN["bot"], bot_id=PIN["bot"], app_id=PIN["app"]))
+        self.assertEqual(s.outstanding_quarantine(reopened.read("transport")), dict(count=0, oldest_at=None))
+        self.callback(payload("EvNew", subtype="message_deleted", deleted_ts="110.000001"))
+        self.assertEqual(s.outstanding_quarantine(reopened.read("transport")), dict(count=1, oldest_at=NOW))
+
+    def test_quiet_legacy_unknown_failed_review_write_preserves_unknown(self):
+        expected = self.quiet_legacy_unknown()
+        write = self.store.write
+        def fail_review(name, value):
+            if name == "transport" and len(value["gap_reviews"]) == 2:
+                raise OSError("fixture quiet legacy review write")
+            return write(name, value)
+        with patch.object(self.store, "write", side_effect=fail_review), self.assertRaises(d.Invalid):
+            self.review_gap()
+        reopened = a.Store(self.root)
+        self.assertEqual(s.outstanding_quarantine(reopened.read("transport")), expected)
+        self.assertEqual(len(reopened.read("transport")["gap_reviews"]), 1)
+        self.review_gap()
+        self.assertEqual(s.outstanding_quarantine(reopened.read("transport")), dict(count=0, oldest_at=None))
+
+    def test_quiet_legacy_unknown_rejects_inexact_explicit_reviews(self):
+        expected = self.quiet_legacy_unknown()
+        original = self.store.read("transport")
+        review = dict(watermark=original["watermark"], ingress=s.ingress_count(self.store),
+                      binding=d.digest(PIN), evidence="fixture-quiet-review", **self.session_review())
+        for field, invalid in (("watermark", review["watermark"] + 1),
+                               ("ingress", review["ingress"] + 1),
+                               ("binding", d.digest("wrong-binding")),
+                               ("session", "wrong-session"), ("epoch", review["epoch"] + 1),
+                               ("evidence", "")):
+            with self.subTest(field=field):
+                # Each attempt starts quiet, so an earlier refusal cannot make
+                # later attempts enter the pre-existing held-journal path.
+                self.store.write("transport", copy.deepcopy(original))
+                with self.assertRaises(d.Invalid):
+                    self.transport.qualify(ui_evidence(), dict(review, **{field: invalid}))
+                self.assertEqual(s.outstanding_quarantine(self.store.read("transport")), expected)
+                self.assertEqual(len(self.store.read("transport")["gap_reviews"]), 1)
+
     def test_legacy_unknown_summary_rejects_invalid_counts(self):
         self.sending()
         self.callback(payload("EvPoison", subtype="message_deleted", deleted_ts="109.000001"))
