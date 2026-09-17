@@ -10,9 +10,9 @@
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md",
-      "bytes": 4772,
-      "sha256": "8e29bfa03f76d2e1b3d1848150abdc4d5b3443ecafb603f2b22a4a58c964d5f5",
-      "lines": 71
+      "bytes": 6252,
+      "sha256": "a901ced9deebb402025031ac621b53f0e017a8ca63a2e11ea92dce1ccc675251",
+      "lines": 57
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/commit-message.txt",
@@ -111,15 +111,5 @@
       "lines": 85
     }
   ],
-  "self_excluded": true,
-  "total_new_bytes": 63549,
-  "total_new_text_lines": 847,
-  "refresh": {
-    "allocation": "acct-fitness-76",
-    "checked_at_base": "1aadfc123592530f657794489249e954f5e3885a",
-    "original_inventory": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/acct-acceptance-75-scope-before.json",
-    "original_inventory_sha256": "a51e25cbc46e4509221bce53981033c62024c026c20f2a5fe5e7e950c6dc2651",
-    "meaning": "Original path membership/base/numstat are historical; listed byte sizes, lines and hashes describe the current files. No new test execution is inferred.",
-    "change_record": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/inventory-refresh.json"
-  }
+  "self_excluded": true
 }

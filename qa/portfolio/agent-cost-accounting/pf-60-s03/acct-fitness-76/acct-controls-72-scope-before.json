@@ -26,15 +26,15 @@
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/RETURN.md",
-      "bytes": 6251,
-      "lines": 102,
-      "sha256": "55c761960422d9abcb9f900f2f911b5b5d90a593721547a1dbb30d8c8511c103"
+      "bytes": 5417,
+      "lines": 90,
+      "sha256": "193f2c54a13ddc553d63e1d9c8d1c6bceffaffa7e70ef654dd4f3a93c9f7c35b"
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/acceptance-gap.md",
-      "bytes": 6357,
-      "lines": 43,
-      "sha256": "21ce106cc0f1d4267a56d672981e8a6279fe8427bf21de45870b8a4e3f6c650a"
+      "bytes": 6102,
+      "lines": 39,
+      "sha256": "19c9e2783fdf332660647692cf1f1caf276391cc75a97a92b0ecc1f66f3e762f"
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/controls-01/baseline-digest-bound.json",
@@ -320,9 +320,9 @@
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/summarize.py",
-      "bytes": 4105,
-      "lines": 85,
-      "sha256": "420e4a31be49b7f182bb0228006d9ec5f085f368921b4b5c66562da20b179616"
+      "bytes": 3569,
+      "lines": 76,
+      "sha256": "f6f574e5b17695c4ab8fee47b1aba2a73dd2fcda0ed4205118a59c0d602b0f5b"
     },
     {
       "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/test-results.json",
@@ -343,15 +343,7 @@
       "sha256": "4842d7623761ca1dcb99a4d46973a509bde2252c4025c48e8e778767285e98db"
     }
   ],
-  "total_new_bytes": 350442,
-  "total_new_text_lines": 6352,
-  "note": "Generated receipts, copied earlier auditors and authored helpers are enumerated separately by path; ignored build outputs and reproducible mutant copies excluded.",
-  "refresh": {
-    "allocation": "acct-fitness-76",
-    "checked_at_base": "1aadfc123592530f657794489249e954f5e3885a",
-    "original_inventory": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/acct-controls-72-scope-before.json",
-    "original_inventory_sha256": "83b7e0acd32674c01ba5aeb2f2b8f1258f11c92ca8c1463f943e2c691600e153",
-    "meaning": "Original path membership/base/numstat are historical; listed byte sizes, lines and hashes describe the current files. No new test execution is inferred.",
-    "change_record": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/inventory-refresh.json"
-  }
+  "total_new_bytes": 348817,
+  "total_new_text_lines": 6327,
+  "note": "Generated receipts, copied earlier auditors and authored helpers are enumerated separately by path; ignored build outputs and reproducible mutant copies excluded."
 }

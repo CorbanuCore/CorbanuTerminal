@@ -1,57 +1,71 @@
 # PF-60-S03: acceptance decision for Travis and Fable
 
-**Fit today for a developer to inspect recorded-request estimates within the
-reported coverage limits. I would not trust it as a complete bill for a run.**
-Settlement evidence is absent, some callers remain unqualified, and retention
-removes detail. Developer-only activation is authorized; shipping `/usage requests`
-is held. S03 is not accepted or ready for an unqualified human-test handoff.
+**Use the inspector only for estimates within a known session root: open P2
+scope-zero renders “No recorded attempts in this day; collection coverage
+unknown.” and “Known subtotal exact USD: 0” despite four priced attempts totaling
+USD 0.00284 in other roots in the same store that day, inviting a false day-wide
+zero conclusion; it is not fit for day-wide spend or complete-bill decisions.**
 
-Proven: the saved corpus reconciles 9 priced views (not 9 independent attempts),
-4 unknown-cost views and 2 zero-recorded views against explicit usage and frozen
-rates. [The inventory](../acct-controls-72/monetary-coverage.json) maps 147 named
-checks to 159 specifically failing diagnostic mutations.
-[Integrity controls](../acct-controls-72/controls-04/integrity-results.json.gz)
-reject changes to each of 24 JSON pages and 45 viewports.
-[Read-back controls](../acct-controls-72/readback-01/results.json) establish
-disjoint saved attempt/request/thread IDs and unchanged before/during store rows.
-[Fresh guarded gates](test-results.json) give exact core-default, core-feature
-and TUI counts. Product code is unchanged from `49e7d1b8c`.
+[The reproduced finding](../acct-scope-62/reader-findings.md) binds actual keys,
+store read-backs and root reopens. The title and secondary text name root and
+resolved descendants, so the entire page is not literally unqualified; the
+primary empty-state and zero fail to attach that scope to their conclusions.
+No scope-zero fix or accepted waiver exists. Developer-only activation is
+authorized; shipping `/usage requests` remains held. S03 is not accepted or ready
+for an unqualified human-test handoff.
 
-Limits: qualifying mode stops on digest mismatch before most monetary assertions;
-only diagnostic mode separates them. Hashes establish saved-content identity,
-not correctness or capture origin. Byte-identical empty pages do not identify
-the root/store population resolved. Existing captures and filtered tests cannot
-prove independent execution, current-package behavior or platform/live-repository
-coverage. Whole-store scan budgets can refuse small scopes; partial/expired
-ranges cannot supply complete totals. Withholding amounts and claims is honest;
-calling these gaps accepted waivers would not be. Fable must reconcile the
-[sprint's open items](../../../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md),
-including inherited S02 coverage, with current evidence. Older superseded
-findings must be dispositioned, not silently treated as current defects or passes.
+Proven: saved evidence reconciles 9 priced views (not 9 independent attempts),
+4 unknown-cost views and 2 zero-recorded views. The [coverage inventory](../acct-controls-72/monetary-coverage.json)
+maps 147 named checks to 159 failing diagnostic mutations. Integrity controls
+bind 24 JSON pages and 45 viewports; read-back controls distinguish saved IDs
+and unchanged store rows. Qualifying mode stops at digest failures before most
+monetary assertions; only diagnostic mode separates them. These are saved-corpus
+checks, not independent functional acceptance or measured provider bills.
 
-Fable already owns allocation, review-budget extensions and isolation provision;
-ordinary QA needs no renewed Travis approval. Costs below are **incremental effort
-estimates, not measured cost or approved spend**. Rates, remaining allowance and
-host availability are unconfirmed, so dollar cost is unquoted. Use synthetic
-profiles and mediated inference; live credentials/billing are not authorized.
+The [round-76 gates](../acct-fitness-76/test-results.json) report fresh default,
+feature and TUI counts plus a separate alone-feature replay. **Historical gate
+failure remains open as an unexplained intermittent timeout:** in round 66,
+`codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity`
+timed out twice in the feature lane, at 60.013s and 60.012s (126/127 passed,
+1 timed out, exit 100). Default passed in 58.790s. Round 69 passed alone in
+31.743s and in the full feature lane in 31.335s; round 75 passed in-lane in
+31.283s. [Attribution](../acct-bindings-69/timeout-attribution.md) supports load
+sensitivity but identifies no contended resource and excludes no intermittent
+defect. No causal fix, timeout relaxation or exemption occurred. Subsequent
+passes do not turn round 66 green; current replay details are in the linked receipt.
 
-| Required work / owner | Smallest first slice; remaining obligation | Estimated cost / action |
-| --- | --- | --- |
-| Independent design — **Fable assigns fresh-context designer** | Supply only intent, essential developer-only constraints and neutral screenshots outside checkout. Freeze original overview → request → attempt, unknown-cost and cancel/recovery proposals before comparison with existing tests; retain questions. Cover remaining affected paths afterward. | 30–60 min preparation + one 30–60 min design session. Charge existing review ledger; Fable records any extension without resetting prior usage. |
-| Independent execution/review — **Fable provisions; separate fresh executor runs; designer may review** | Qualify one enclosure: actual executor/child negative filesystem, tool, process/IPC, network and credential probes, plus positive package/PTY controls. Execute one frozen case with real keys on exact read-only package/helpers; retain schema-2 receipts. Finish all cases or obtain product dispositions; independent evidence review and handoff checker must pass. | 2–4 engineer-hours enclosure/package + 1–2 executor-hours first case/controls + one 30–60 min evidence review. Full cost depends on cases/defects. Fable allocates resources and obtains any paid-capacity/inference cap first. |
-| Live repositories — **Fable assigns independent executor and fixture operator** | Record paths/origins/base commits; create disposable worktrees. Start with one bounded TensorCash TUI request and inspect its estimate; then Isometric Game unless product authority accepts feature non-applicability. A release still owes both. Bind evidence to package/repository commits. | 1–2 hours per repository after setup, plus capped inference. Fable allocates endpoints/inputs; Travis decides exclusions. |
-| Platforms/profiles — **Fable assigns isolated host operators and executor** | First macOS: fresh and representative existing synthetic profiles, success and recovery/resume. Reuse overlapping case evidence. Enumerate Linux/Windows and native paths; execute or obtain explicit applicability decisions. Native qualification uses dedicated account/VM. | 1–2 hours per additional available platform after packaging; host/VM dollars unquoted. Fable provides matrix/hosts; Travis accepts exclusions. Unavailable infrastructure needs a separate estimate. |
-| Receiving and human acceptance — **Fable receives; Travis Good accepts** | Reconcile final-tree gates, sprint items, review dispositions and package provenance. After independent evidence passes, show Travis the exact candidate/workflow and limits; record dated accept/reject decision and digest. Archive/update plan only when closure conditions hold. | 30–60 min Fable reconciliation + 20–30 min Travis review; receiving-test machine time measured separately. Earlier explicitly authorized limited testing remains limited. |
+Other limits remain: absent settlement evidence; unqualified inherited callers;
+whole-store scan budgets that can refuse small scopes; partial/expired ranges
+without complete totals; incomplete independent package, platform/profile and
+live-repository proof. [Completed engineering preparation](../acct-fitness-76/engineering.md)
+now supplies the sprint reconciliation, neutral designer input, platform/profile
+matrix, exact evidence references and a local read-only developer package with
+hashed binaries. Preparation is not execution or acceptance.
+The [regenerated inventory](../acct-controls-72/scope.json) and
+[change record](../acct-fitness-76/inventory-refresh.json) disclose the three
+round-75 edits that invalidated round-72 digests.
 
-**Decision now:** Fable records assigned people, existing review allowance,
-first-slice time caps, hosts and any paid-spend cap. Travis decides requested
-applicability/limitation exceptions and later gives named acceptance. These
-first slices overlap; their estimates are not a full-acceptance quote. No new
-runtime scope, migration, release or push is requested.
+**Owner decisions only:**
 
-Routine evidence correction under PF-60 / in-progress PF-60-S03. Product heading
-**Product measurement**: “No commercial performance numbers have been supplied.”
-[Policy](../../../../../AGENTS.md) and
-[code-blind procedure](../../../../code-blind-functional/README.md) own the gates.
-This QA-only lane supplies corrected records and assigned checks; actor/host
-allocation, canonical sprint edits and human sign-off need the owners above.
+- Fable may accept or reject this bounded QA revision for integration under the
+  existing allocation. This does not close S03 or authorize shipping.
+- Travis may explicitly accept a named limited-test boundary or applicability
+  exclusion when presented with its exact cases and gaps; none is requested or
+  presumed by this revision. Full named acceptance remains due after qualification.
+- New settlement/persistence scope, a change to developer-only activation, or paid
+  live-provider use requires its specific product/spend authorization before that
+  work. This revision requests none of those expansions.
+
+Routine preparation, assigning independent actors, provisioning the enclosure,
+and running already-authorized synthetic QA are engineering execution under
+Fable's existing authority, not permission questions for Travis. Remaining
+execution and the scope boundaries that prevent this worker from completing it
+are explicit in the engineering record; they are not owner approval requests.
+No new dollar-spend estimate is asserted without rates or capacity inputs.
+
+Routine evidence correction under active PF-60 / in-progress PF-60-S03; exact
+product heading **Product measurement**, excerpt “No commercial performance
+numbers have been supplied.” Product/Rust code is unchanged. This documentation
+revision adds no user behavior and is not a functional handoff; the independent
+functional gate remains due for S03. Canonical sprint/plan updates are outside
+this worker's writable QA scope. No release or push is authorized.
