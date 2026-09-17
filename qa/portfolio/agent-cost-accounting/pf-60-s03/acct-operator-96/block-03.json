@@ -1,0 +1,33 @@
+{
+  "block": 3,
+  "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-operator-96/target/audit-copy",
+  "command": [
+    "bash",
+    "--noprofile",
+    "--norc",
+    "-x",
+    "-c",
+    "set -eu\nq=qa/portfolio/agent-cost-accounting/pf-60-s03\nexport CARGO_TARGET_DIR=\"$PWD/$q/acct-operator-96/target/cargo\"\nexport NEXTEST_TEST_THREADS=4 CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0\nexport CARGO_PROFILE_DEV_DEBUG_ASSERTIONS=true CARGO_PROFILE_TEST_DEBUG_ASSERTIONS=true\ngit check-ignore -v \"$CARGO_TARGET_DIR\"\ncat docs/development/test-isolation.md\ncd codex-rs\ncargo fetch --locked\ncargo build --locked --offline -p codex-cli --bin codex -p codex-rmcp-client -p codex-code-mode-host --bins\n"
+  ],
+  "note_sha256": "632c78b084d7145d5dc406e0d8a96e0d12eea30a4d85a46129526928abd76140",
+  "script_sha256": "2aa04a0beee04f44b6816d9d48d46ed5da13325973dab377a84b9e14bc814e73",
+  "exit": 0,
+  "elapsed_seconds": 469.16944313049316,
+  "log_sha256": "afe074ba1b6ea55ed413e1e9851e06228ec49fe9dcd50256dc10aabf1d6a4e4e",
+  "environment_keys": [
+    "CARGO_HOME",
+    "CARGO_TERM_COLOR",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "LC_ALL",
+    "PATH",
+    "PYTHONDONTWRITEBYTECODE",
+    "RUSTUP_HOME",
+    "TERM",
+    "TMPDIR"
+  ],
+  "fresh_shell": true,
+  "shell_variables_from_previous_block": false
+}
