@@ -263,6 +263,7 @@ pub enum SteerInputError {
     NoActiveTurn(Vec<UserInput>),
     ExpectedTurnMismatch { expected: String, actual: String },
     ActiveTurnNotSteerable { turn_kind: NonSteerableTurnKind },
+    AuthorizationChanged(Vec<UserInput>),
     EmptyInput,
 }
 
@@ -289,6 +290,10 @@ impl SteerInputError {
                     }),
                 }
             }
+            Self::AuthorizationChanged(_) => ErrorEvent {
+                message: "Permissions changed since this turn started. Wait for it to finish or stop it, then submit your message again.".to_string(),
+                codex_error_info: Some(CodexErrorInfo::BadRequest),
+            },
             Self::EmptyInput => ErrorEvent {
                 message: "input must not be empty".to_string(),
                 codex_error_info: Some(CodexErrorInfo::BadRequest),
@@ -4318,6 +4323,21 @@ impl Session {
         self.send_event(turn_context, event).await;
     }
 
+    // Compare execution authority directly. User-layer reloads, model settings and
+    // config provenance cannot affect this check.
+    pub(super) fn authorization_matches(
+        current: &SessionConfiguration,
+        captured: &TurnContext,
+    ) -> bool {
+        current.approval_policy.value() == captured.approval_policy.value()
+            && current
+                .permission_profile()
+                .materialize_project_roots_with_workspace_roots(&current.primary_workspace_roots())
+                == captured.permission_profile
+            && current.approvals_reviewer == captured.config.approvals_reviewer
+            && current.windows_sandbox_level == captured.windows_sandbox_level
+    }
+
     /// Inject additional user input into the currently active turn.
     ///
     /// Returns the active turn id when accepted.
@@ -4370,10 +4390,15 @@ impl Session {
             return Err(SteerInputError::EmptyInput);
         }
 
-        let additional_context_input = {
-            let mut state = self.state.lock().await;
-            state.additional_context.merge(additional_context)
-        };
+        // Serialize authorization comparison and admission with settings updates.
+        // A new context cannot re-sandbox existing exec sessions: steered work
+        // could still send them instructions through write_stdin. Refuse admission
+        // instead of changing running work or revoking an already granted approval.
+        let mut state = self.state.lock().await;
+        if !Self::authorization_matches(&state.session_configuration, &active_task.turn_context) {
+            return Err(SteerInputError::AuthorizationChanged(input));
+        }
+        let additional_context_input = state.additional_context.merge(additional_context);
 
         if let Some(responsesapi_client_metadata) = responsesapi_client_metadata {
             active_task
@@ -4397,6 +4422,7 @@ impl Session {
                 pending_input,
             )
             .await;
+        drop(state);
         Ok(active_turn_id.clone())
     }
 
@@ -4409,6 +4435,7 @@ impl Session {
         input: Vec<UserInput>,
         additional_context: BTreeMap<String, AdditionalContextEntry>,
         client_user_message_id: Option<String>,
+        final_output_json_schema: Option<Value>,
     ) -> Result<String, SteerInputError> {
         let mut active = self.active_turn.lock().await;
         let Some(active_turn) = active.as_mut() else {
@@ -4438,7 +4465,11 @@ impl Session {
             client_id: client_user_message_id,
         });
         self.input_queue
-            .extend_pending_input_for_turn_state(active_turn.turn_state.as_ref(), pending_input)
+            .defer_input_for_turn_state(
+                active_turn.turn_state.as_ref(),
+                pending_input,
+                final_output_json_schema,
+            )
             .await;
         Ok(active_task.turn_context.sub_id.clone())
     }

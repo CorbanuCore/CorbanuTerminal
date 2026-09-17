@@ -111,7 +111,6 @@ async fn finish_probe(mcp: &mut TestAppServer, call_id: &str) -> Result<usize> {
 }
 
 #[tokio::test]
-#[ignore = "PF-83 F04: reproduces an unauthorized-behaviour expectation; un-ignore with the product decision"]
 async fn thread_settings_confirmation_f04_restricts_work_steered_after_applied() -> Result<()> {
     use codex_app_server_protocol::AskForApproval;
     use codex_app_server_protocol::JSONRPCMessage;
@@ -287,6 +286,150 @@ async fn thread_settings_confirmation_f04_restricts_work_steered_after_applied()
 }
 
 #[tokio::test]
+async fn thread_settings_inject_items_waits_for_latest_authorization() -> Result<()> {
+    use codex_app_server_protocol::AskForApproval;
+    use codex_app_server_protocol::ServerRequest;
+    use codex_app_server_protocol::ThreadInjectItemsParams;
+    use codex_app_server_protocol::ThreadInjectItemsResponse;
+
+    let fixture = TempDir::new()?;
+    let marker = fixture.path().join("marker");
+    let server = create_mock_responses_server_sequence_unchecked(vec![
+        write_probe(&marker, "pending")?,
+        create_final_assistant_message_sse_response("old turn done")?,
+        create_final_assistant_message_sse_response("new turn done")?,
+    ])
+    .await;
+    let home = TempDir::new()?;
+    create_config_toml(home.path(), &server.uri())?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .build_initialized_with_timeout(Duration::from_secs(60))
+        .await?;
+    let thread = start_thread(&mut mcp).await?.thread;
+    confirm_permission(&mut mcp, &thread.id, AskForApproval::UnlessTrusted).await?;
+    start_text_turn(&mut mcp, thread.id.clone()).await?;
+    let ServerRequest::CommandExecutionRequestApproval { request_id, .. } =
+        timeout(DEFAULT_TIMEOUT, mcp.read_stream_until_request_message()).await??
+    else {
+        anyhow::bail!("expected pending approval")
+    };
+    confirm_permission(&mut mcp, &thread.id, AskForApproval::Never).await?;
+    let injected = "injected only after authorization changed";
+    let request = mcp
+        .send_thread_inject_items_request(ThreadInjectItemsParams {
+            thread_id: thread.id.clone(),
+            items: vec![serde_json::json!({
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": injected}]
+            })],
+        })
+        .await?;
+    let _: ThreadInjectItemsResponse =
+        timeout(DEFAULT_TIMEOUT, mcp.read_response(request)).await??;
+    // The pending approval keeps its original authority and can still be declined.
+    mcp.send_response(request_id, serde_json::json!({"decision": "decline"}))
+        .await?;
+    assert_eq!(finish_probe(&mut mcp, "pending").await?, 0);
+    assert!(!marker.exists());
+    let before = received_response_bodies(&server).await?;
+    assert_eq!(before.len(), 2);
+    assert!(
+        before
+            .iter()
+            .all(|body| !body.to_string().contains(injected)),
+        "thread/injectItems must not admit work into a superseded turn"
+    );
+    start_text_turn(&mut mcp, thread.id).await?;
+    assert_eq!(finish_probe(&mut mcp, "unused").await?, 0);
+    let after = received_response_bodies(&server).await?;
+    assert_eq!(after.len(), 3);
+    assert!(
+        after[2].to_string().contains(injected),
+        "deferred items must survive"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn thread_settings_authorization_boundary_returns_input_and_discriminator() -> Result<()> {
+    use codex_app_server_protocol::AskForApproval;
+    use codex_app_server_protocol::ServerRequest;
+    let fixture = TempDir::new()?;
+    let server = create_mock_responses_server_sequence_unchecked(vec![
+        write_probe(&fixture.path().join("marker"), "pending")?,
+        create_final_assistant_message_sse_response("done")?,
+    ])
+    .await;
+    let home = TempDir::new()?;
+    create_config_toml(home.path(), &server.uri())?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .build_initialized_with_timeout(Duration::from_secs(60))
+        .await?;
+    let thread = start_thread(&mut mcp).await?.thread;
+    confirm_permission(&mut mcp, &thread.id, AskForApproval::UnlessTrusted).await?;
+    let request = mcp
+        .send_turn_start_request(TurnStartParams {
+            thread_id: thread.id.clone(),
+            input: vec![V2UserInput::Text {
+                text: "hold pending approval".into(),
+                text_elements: vec![],
+            }],
+            ..Default::default()
+        })
+        .await?;
+    let TurnStartResponse { turn } = mcp.read_response(request).await?;
+    let ServerRequest::CommandExecutionRequestApproval { request_id, .. } =
+        timeout(DEFAULT_TIMEOUT, mcp.read_stream_until_request_message()).await??
+    else {
+        anyhow::bail!("expected pending approval")
+    };
+    confirm_permission(&mut mcp, &thread.id, AskForApproval::Never).await?;
+    let request = mcp
+        .send_turn_steer_request(codex_app_server_protocol::TurnSteerParams {
+            thread_id: thread.id,
+            expected_turn_id: turn.id,
+            input: vec![
+                V2UserInput::Text {
+                    text: "retain this input".into(),
+                    text_elements: vec![],
+                },
+                V2UserInput::LocalImage {
+                    path: fixture.path().join("unread.png"),
+                    detail: None,
+                },
+            ],
+            client_user_message_id: None,
+            responsesapi_client_metadata: None,
+            additional_context: None,
+        })
+        .await?;
+    let error = timeout(
+        DEFAULT_TIMEOUT,
+        mcp.read_stream_until_error_message(RequestId::Integer(request)),
+    )
+    .await??;
+    let data = error.error.data.context("discriminated boundary error")?;
+    assert_eq!(data["code"], "authorizationChanged");
+    assert_eq!(data["inputDisposition"], "returned");
+    assert_eq!(
+        data["input"],
+        serde_json::json!([{
+            "type": "text", "text": "retain this input", "text_elements": []
+        }, {
+            "type": "localImage", "path": fixture.path().join("unread.png"), "detail": null
+        }])
+    );
+    mcp.send_response(request_id, serde_json::json!({"decision": "decline"}))
+        .await?;
+    assert_eq!(finish_probe(&mut mcp, "pending").await?, 0);
+    assert!(!fixture.path().join("marker").exists());
+    Ok(())
+}
+
+#[tokio::test]
 async fn thread_settings_confirmation_next_turn_tightening_and_loosening() -> Result<()> {
     use codex_app_server_protocol::AskForApproval;
     let home = TempDir::new()?;
@@ -385,6 +528,93 @@ async fn thread_settings_confirmation_preserves_pending_approval() -> Result<()>
     assert_eq!(finish_probe(&mut mcp, "next").await?, 0);
     assert_eq!(std::fs::read_to_string(marker)?, "executed");
     Ok(())
+}
+
+// An approved process crosses a settings update at a filesystem barrier. The
+// next scripted command belongs to the original work, not to a steered message.
+async fn preserve_running_authority_after_confirmation(
+    final_policy: codex_app_server_protocol::AskForApproval,
+) -> Result<()> {
+    use codex_app_server_protocol::AskForApproval;
+    use codex_app_server_protocol::ServerRequest;
+    let fixture = TempDir::new()?;
+    let ready = fixture.path().join("ready");
+    let release = fixture.path().join("release");
+    let completed = fixture.path().join("completed");
+    let probe = fixture.path().join("probe");
+    let barrier = app_test_support::create_shell_command_sse_response(
+        vec![
+            "python3".into(),
+            "-c".into(),
+            "import pathlib,sys,time; pathlib.Path(sys.argv[1]).touch(); deadline=time.monotonic()+50\nwhile not pathlib.Path(sys.argv[2]).exists() and time.monotonic()<deadline: time.sleep(.01)\nassert pathlib.Path(sys.argv[2]).exists(); pathlib.Path(sys.argv[3]).write_text('approved work completed')".into(),
+            ready.to_string_lossy().into_owned(),
+            release.to_string_lossy().into_owned(),
+            completed.to_string_lossy().into_owned(),
+        ],
+        /*workdir*/ None,
+        Some(60000),
+        "approved-barrier",
+    )?;
+    let server = create_mock_responses_server_sequence_unchecked(vec![
+        barrier,
+        write_probe(&probe, "original-work-follow-up")?,
+        create_final_assistant_message_sse_response("done")?,
+    ])
+    .await;
+    let home = TempDir::new()?;
+    create_config_toml(home.path(), &server.uri())?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .build_initialized_with_timeout(Duration::from_secs(60))
+        .await?;
+    let thread = start_thread(&mut mcp).await?.thread;
+    confirm_permission(&mut mcp, &thread.id, AskForApproval::UnlessTrusted).await?;
+    start_text_turn(&mut mcp, thread.id.clone()).await?;
+    let ServerRequest::CommandExecutionRequestApproval { request_id, params } =
+        timeout(DEFAULT_TIMEOUT, mcp.read_stream_until_request_message()).await??
+    else {
+        anyhow::bail!("expected barrier approval");
+    };
+    assert_eq!(params.item_id, "approved-barrier");
+    mcp.send_response(request_id, serde_json::json!({"decision": "accept"}))
+        .await?;
+    timeout(DEFAULT_TIMEOUT, async {
+        while !ready.exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .context("approved process did not reach barrier")?;
+    confirm_permission(&mut mcp, &thread.id, AskForApproval::Never).await?;
+    if final_policy != AskForApproval::Never {
+        confirm_permission(&mut mcp, &thread.id, final_policy).await?;
+    }
+    assert!(!completed.exists(), "process must still be at the barrier");
+    std::fs::write(&release, "continue")?;
+    assert_eq!(finish_probe(&mut mcp, "original-work-follow-up").await?, 1);
+    assert_eq!(
+        std::fs::read_to_string(completed)?,
+        "approved work completed"
+    );
+    assert!(
+        !probe.exists(),
+        "original work keeps its approval requirement"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn thread_settings_confirmation_loosening_preserves_running_work_authority() -> Result<()> {
+    preserve_running_authority_after_confirmation(codex_app_server_protocol::AskForApproval::Never)
+        .await
+}
+
+#[tokio::test]
+async fn thread_settings_confirmation_tightening_preserves_granted_approval() -> Result<()> {
+    preserve_running_authority_after_confirmation(
+        codex_app_server_protocol::AskForApproval::UnlessTrusted,
+    )
+    .await
 }
 
 #[tokio::test]

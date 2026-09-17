@@ -1,0 +1,12 @@
+diff --git a/codex-rs/core/src/codex_thread.rs b/codex-rs/core/src/codex_thread.rs
+--- a/codex-rs/core/src/codex_thread.rs
++++ b/codex-rs/core/src/codex_thread.rs
+@@ -478,7 +478,7 @@
+         &self,
+         items: Vec<ResponseItem>,
+     ) -> Result<(), Vec<ResponseItem>> {
+-        self.session.inject_if_running(items).await
++        self.session.inject_extension_if_running(items).await
+     }
+ 
+     /// Starts an automatic regular turn with model-visible items only when idle

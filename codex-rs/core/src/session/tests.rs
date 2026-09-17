@@ -11565,6 +11565,1175 @@ async fn steer_input_returns_active_turn_id() {
 }
 
 #[tokio::test]
+async fn steer_input_rejects_changed_authorization_without_mutating_active_work() {
+    let updates = [
+        SessionSettingsUpdate {
+            approval_policy: Some(AskForApproval::UnlessTrusted),
+            ..Default::default()
+        },
+        SessionSettingsUpdate {
+            permission_profile: Some(PermissionProfile::Disabled),
+            ..Default::default()
+        },
+        SessionSettingsUpdate {
+            approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
+            ..Default::default()
+        },
+    ];
+    for update in updates {
+        let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+        let captured = (
+            tc.approval_policy.value(),
+            tc.permission_profile.clone(),
+            tc.config.approvals_reviewer,
+        );
+        sess.spawn_task(
+            Arc::clone(&tc),
+            Vec::new(),
+            NeverEndingTask {
+                kind: TaskKind::Regular,
+                listen_to_cancellation_token: false,
+            },
+        )
+        .await;
+        sess.update_settings(update).await.expect("update settings");
+        let error = sess
+            .steer_input(
+                vec![UserInput::Text {
+                    text: "new work".into(),
+                    text_elements: Vec::new(),
+                }],
+                /*additional_context*/ Default::default(),
+                Some(&tc.sub_id),
+                /*client_user_message_id*/ None,
+                /*responsesapi_client_metadata*/ None,
+            )
+            .await
+            .expect_err("changed authorization must refuse admission");
+        assert_eq!(
+            error,
+            SteerInputError::AuthorizationChanged(vec![UserInput::Text {
+                text: "new work".into(),
+                text_elements: Vec::new(),
+            }])
+        );
+        assert_eq!(
+            error.to_error_event().message,
+            "Permissions changed since this turn started. Wait for it to finish or stop it, then submit your message again."
+        );
+        assert_eq!(
+            sess.input_queue.get_pending_input(&sess.active_turn).await,
+            (Vec::new(), None)
+        );
+        let active = sess.active_turn.lock().await;
+        let task = active.as_ref().unwrap().task.as_ref().unwrap();
+        assert!(Arc::ptr_eq(&task.turn_context, &tc));
+        assert_eq!(
+            (
+                tc.approval_policy.value(),
+                tc.permission_profile.clone(),
+                tc.config.approvals_reviewer,
+            ),
+            captured
+        );
+    }
+}
+
+#[tokio::test]
+async fn steer_input_accepts_unchanged_authorization_after_settings_update() {
+    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        Vec::new(),
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: false,
+        },
+    )
+    .await;
+    sess.update_settings(SessionSettingsUpdate {
+        approval_policy: Some(tc.approval_policy.value()),
+        reasoning_summary: Some(ReasoningSummaryConfig::Detailed),
+        ..Default::default()
+    })
+    .await
+    .expect("no-op authorization and unrelated setting update");
+    assert_eq!(
+        sess.steer_input(
+            vec![UserInput::Text {
+                text: "new work".into(),
+                text_elements: Vec::new(),
+            }],
+            /*additional_context*/ Default::default(),
+            Some(&tc.sub_id),
+            /*client_user_message_id*/ None,
+            /*responsesapi_client_metadata*/ None,
+        )
+        .await,
+        Ok(tc.sub_id.clone())
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn authorization_changed_defer_race_starts_fresh_turn_without_error() {
+    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        Vec::new(),
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: false,
+        },
+    )
+    .await;
+
+    sess.update_settings(SessionSettingsUpdate {
+        approval_policy: Some(AskForApproval::UnlessTrusted),
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    while rx.try_recv().is_ok() {}
+
+    let deferred_input = vec![UserInput::Text {
+        text: "run after compact race".to_string(),
+        text_elements: Vec::new(),
+    }];
+    let (reached_tx, reached_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+    super::handlers::set_active_turn_not_steerable_defer_hook_for_test(reached_tx, release_rx);
+
+    let schema = json!({"type": "object", "properties": {"answer": {"type": "string"}}, "required": ["answer"], "additionalProperties": false});
+    let handler_schema = schema.clone();
+    let handler_session = Arc::clone(&sess);
+    let handler_input = deferred_input.clone();
+    let handler = tokio::spawn(async move {
+        super::handlers::user_input_or_turn_inner(
+            &handler_session,
+            "deferred-race-input".to_string(),
+            Op::UserInput {
+                items: handler_input,
+                final_output_json_schema: Some(handler_schema),
+                responsesapi_client_metadata: None,
+                additional_context: Default::default(),
+                thread_settings: ThreadSettingsOverrides::default(),
+            },
+            /*client_user_message_id*/ None,
+            /*parent_turn_id*/ None,
+        )
+        .await;
+    });
+
+    reached_rx
+        .await
+        .expect("handler should reach the pre-defer race hook");
+    sess.on_task_finished(Arc::clone(&tc), /*task_result*/ Ok(None))
+        .await;
+
+    let compact_complete = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+        .await
+        .expect("expected compact turn complete event")
+        .expect("channel open");
+    assert!(matches!(
+        compact_complete.msg,
+        EventMsg::TurnComplete(TurnCompleteEvent { turn_id, .. }) if turn_id == tc.sub_id
+    ));
+
+    sess.update_settings(SessionSettingsUpdate {
+        approval_policy: Some(AskForApproval::Never),
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    release_tx.send(()).expect("handler release receiver open");
+    handler.await.expect("handler task should not panic");
+
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        let event = tokio::time::timeout(remaining, rx.recv())
+            .await
+            .expect("expected fresh turn start without error")
+            .expect("channel open");
+        match event.msg {
+            EventMsg::Error(err) => panic!("defer race should not emit an error: {err:?}"),
+            EventMsg::TurnStarted(TurnStartedEvent { turn_id, .. }) => {
+                assert_ne!(turn_id, tc.sub_id);
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    expect_user_message_item_started(&rx, &deferred_input).await;
+    assert_eq!(
+        sess.active_turn
+            .lock()
+            .await
+            .as_ref()
+            .unwrap()
+            .task
+            .as_ref()
+            .unwrap()
+            .turn_context
+            .approval_policy
+            .value(),
+        AskForApproval::Never
+    );
+
+    assert_eq!(
+        sess.active_turn
+            .lock()
+            .await
+            .as_ref()
+            .unwrap()
+            .task
+            .as_ref()
+            .unwrap()
+            .turn_context
+            .final_output_json_schema,
+        Some(schema)
+    );
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
+
+#[tokio::test]
+async fn authorization_changed_mail_waits_for_turn_boundary() {
+    for trigger_turn in [false, true] {
+        let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+        sess.spawn_task(
+            Arc::clone(&tc),
+            Vec::new(),
+            NeverEndingTask {
+                kind: TaskKind::Regular,
+                listen_to_cancellation_token: true,
+            },
+        )
+        .await;
+        sess.update_settings(SessionSettingsUpdate {
+            approval_policy: Some(AskForApproval::UnlessTrusted),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        let mail = InterAgentCommunication::new(
+            AgentPath::root(),
+            AgentPath::root(),
+            vec![],
+            "deferred peer work".into(),
+            trigger_turn,
+        );
+        super::handlers::inter_agent_communication(
+            &sess,
+            "mail".into(),
+            mail.clone(),
+            Some("parent".into()),
+        )
+        .await;
+        // Reopening delivery or restoring the old selection must not release deferred mail.
+        sess.update_settings(SessionSettingsUpdate {
+            approval_policy: Some(tc.approval_policy.value()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        sess.input_queue
+            .accept_mailbox_delivery_for_current_turn(&sess.active_turn, &tc.sub_id)
+            .await;
+        assert!(!sess.input_queue.has_pending_input(&sess.active_turn).await);
+        assert_eq!(
+            sess.input_queue.get_pending_input(&sess.active_turn).await,
+            (vec![], None)
+        );
+        sess.input_queue.mark_mailbox_ready_for_next_turn().await;
+        assert_eq!(
+            sess.input_queue.get_pending_input(&sess.active_turn).await,
+            (vec![], None)
+        );
+        sess.abort_all_tasks(TurnAbortReason::Replaced).await;
+        assert_eq!(
+            sess.input_queue.drain_ready_mailbox_input_items().await,
+            (
+                vec![TurnInput::InterAgentCommunication(mail)],
+                trigger_turn.then(|| "parent".into())
+            )
+        );
+        sess.abort_all_tasks(TurnAbortReason::Replaced).await;
+    }
+}
+
+#[tokio::test]
+async fn authorization_changed_injection_preserves_items_until_completion() {
+    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        vec![],
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+    sess.update_settings(SessionSettingsUpdate {
+        approval_policy: Some(AskForApproval::UnlessTrusted),
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    let item = ResponseItem::Message {
+        id: None,
+        role: "user".into(),
+        content: vec![ContentItem::InputText {
+            text: "extension work".into(),
+        }],
+        phase: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let history_before = sess.clone_history().await.raw_items().to_vec();
+    sess.inject_extension_if_running(vec![item.clone()])
+        .await
+        .unwrap();
+    assert_eq!(sess.clone_history().await.raw_items(), history_before);
+    assert!(!sess.input_queue.has_pending_input(&sess.active_turn).await);
+    assert_eq!(
+        sess.input_queue.get_pending_input(&sess.active_turn).await,
+        (vec![], None)
+    );
+    let turn_state = sess
+        .active_turn
+        .lock()
+        .await
+        .as_ref()
+        .unwrap()
+        .turn_state
+        .clone();
+    assert_eq!(
+        sess.input_queue
+            .take_pending_input_for_turn_state(&turn_state)
+            .await,
+        vec![(TurnInput::ResponseItem(item), None)]
+    );
+    sess.abort_all_tasks(TurnAbortReason::Replaced).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn authorization_changed_public_injection_waits_for_later_model_turn() -> anyhow::Result<()> {
+    assert_authorization_changed_model_admission(None).await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn authorization_changed_natural_completion_preserves_model_output_schema()
+-> anyhow::Result<()> {
+    assert_authorization_changed_model_admission(Some(json!({
+        "type": "object",
+        "properties": {"answer": {"type": "string"}},
+        "required": ["answer"],
+        "additionalProperties": false
+    })))
+    .await
+}
+
+async fn assert_authorization_changed_model_admission(
+    schema: Option<serde_json::Value>,
+) -> anyhow::Result<()> {
+    use core_test_support::responses::ev_function_call_with_namespace;
+    use core_test_support::streaming_sse::StreamingSseChunk;
+    use core_test_support::streaming_sse::start_streaming_sse_server;
+
+    let (release, gate) = tokio::sync::oneshot::channel();
+    let (server, _completions) = start_streaming_sse_server(vec![
+        vec![StreamingSseChunk {
+            gate: Some(gate),
+            body: sse(vec![
+                ev_response_created("old-tool"),
+                ev_function_call_with_namespace(
+                    "boundary-sleep",
+                    "clock",
+                    "sleep",
+                    r#"{"duration_ms": 1}"#,
+                ),
+                ev_completed("old-tool"),
+            ]),
+        }],
+        vec![StreamingSseChunk {
+            gate: None,
+            body: sse(vec![
+                ev_response_created("old-end"),
+                ev_completed("old-end"),
+            ]),
+        }],
+        vec![StreamingSseChunk {
+            gate: None,
+            body: sse(vec![
+                ev_response_created("new-end"),
+                ev_completed("new-end"),
+            ]),
+        }],
+    ])
+    .await;
+    let test = test_codex()
+        .with_model("gpt-5.4")
+        .with_config(|config| {
+            config
+                .features
+                .enable(Feature::CurrentTimeReminder)
+                .unwrap();
+            config
+                .current_time_reminder
+                .get_or_insert_with(Default::default)
+                .sleep_tool = true;
+        })
+        .build_with_streaming_server(&server)
+        .await?;
+    test.codex
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "initial turn".into(),
+                text_elements: vec![],
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                approval_policy: Some(AskForApproval::Never),
+                ..Default::default()
+            },
+        })
+        .await?;
+    tokio::time::timeout(Duration::from_secs(10), server.wait_for_request_count(1)).await?;
+    test.codex
+        .submit(Op::ThreadSettings {
+            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                approval_policy: Some(AskForApproval::UnlessTrusted),
+                ..Default::default()
+            },
+        })
+        .await?;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::ThreadSettingsApplied(applied)
+            if applied.thread_settings.approval_policy == AskForApproval::UnlessTrusted)
+    })
+    .await;
+    let injected = "pf83 new work must wait for current authorization";
+    if schema.is_some() {
+        test.codex
+            .submit(Op::UserInput {
+                items: vec![UserInput::Text {
+                    text: injected.into(),
+                    text_elements: vec![],
+                }],
+                final_output_json_schema: schema.clone(),
+                responsesapi_client_metadata: None,
+                additional_context: Default::default(),
+                thread_settings: Default::default(),
+            })
+            .await?;
+        // Queue ordering makes this acknowledgement a barrier after user-input admission.
+        test.codex
+            .submit(Op::ThreadSettings {
+                thread_settings: Default::default(),
+            })
+            .await?;
+        wait_for_event(&test.codex, |event| {
+            matches!(event, EventMsg::ThreadSettingsApplied(_))
+        })
+        .await;
+    } else {
+        test.codex
+            .inject_if_running(vec![ResponseItem::Message {
+                id: None,
+                role: "user".into(),
+                content: vec![ContentItem::InputText {
+                    text: injected.into(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            }])
+            .await
+            .expect("public injection accepted for later delivery");
+    }
+    release.send(()).expect("release old model stream");
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+    if schema.is_none() {
+        // Response-item injection records at completion; it does not start another turn.
+        test.codex
+            .submit(Op::UserInput {
+                items: vec![UserInput::Text {
+                    text: "read deferred items".into(),
+                    text_elements: vec![],
+                }],
+                final_output_json_schema: None,
+                responsesapi_client_metadata: None,
+                additional_context: Default::default(),
+                thread_settings: Default::default(),
+            })
+            .await?;
+    }
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+    let bodies: Vec<serde_json::Value> = server
+        .requests()
+        .await
+        .iter()
+        .map(|body| serde_json::from_slice(body).expect("model request JSON"))
+        .collect();
+    assert_eq!(bodies.len(), 3);
+    assert!(
+        bodies[..2]
+            .iter()
+            .all(|body| !body["input"].to_string().contains(injected)),
+        "new work entered the superseded turn"
+    );
+    assert!(
+        bodies[2]["input"].to_string().contains(injected),
+        "deferred work was lost"
+    );
+    if let Some(schema) = schema {
+        assert_eq!(bodies[2]["text"]["format"]["schema"], schema);
+    }
+    test.codex.submit(Op::Shutdown).await?;
+    server.shutdown().await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn authorization_changed_user_input_runs_after_completion_with_latest_permissions() {
+    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        vec![],
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: false,
+        },
+    )
+    .await;
+    sess.update_settings(SessionSettingsUpdate {
+        approval_policy: Some(AskForApproval::UnlessTrusted),
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    let items = vec![UserInput::Text {
+        text: "keep my follow-up".into(),
+        text_elements: vec![],
+    }];
+    super::handlers::user_input_or_turn_inner(
+        &sess,
+        "deferred".into(),
+        Op::UserInput {
+            items: items.clone(),
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        },
+        Some("client-delivery".into()),
+        None,
+    )
+    .await;
+    assert!(!sess.input_queue.has_pending_input(&sess.active_turn).await);
+    assert_eq!(
+        sess.input_queue.get_pending_input(&sess.active_turn).await,
+        (vec![], None)
+    );
+    while rx.try_recv().is_ok() {}
+    sess.on_task_finished(Arc::clone(&tc), Ok(None)).await;
+    expect_user_message_item_started(&rx, &items).await;
+    let active = sess.active_turn.lock().await;
+    let next = &active.as_ref().unwrap().task.as_ref().unwrap().turn_context;
+    assert_ne!(next.sub_id, tc.sub_id);
+    assert_eq!(next.approval_policy.value(), AskForApproval::UnlessTrusted);
+    drop(active);
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
+
+#[tokio::test]
+async fn authorization_changed_deferred_input_survives_interrupt() {
+    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        vec![],
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+    let items = vec![UserInput::Text {
+        text: "keep after interrupt".into(),
+        text_elements: vec![],
+    }];
+    sess.defer_user_input_until_active_turn_finished(
+        items.clone(),
+        Default::default(),
+        Some("client".into()),
+        None,
+    )
+    .await
+    .unwrap();
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+    assert!(sess.input_queue.has_pending_input(&sess.active_turn).await);
+    assert_eq!(
+        sess.input_queue.subscribe_activity(None).await.1,
+        Some(InputQueueActivity::Steer)
+    );
+    assert_eq!(
+        sess.input_queue
+            .get_pending_input_for_task_start(&sess.active_turn)
+            .await,
+        (vec![], None)
+    );
+    assert_eq!(
+        sess.input_queue.next_interrupted_deferred_input().await,
+        (
+            TurnInput::UserInput {
+                content: items,
+                client_id: Some("client".into())
+            },
+            None
+        )
+    );
+    assert!(!sess.input_queue.has_pending_input(&sess.active_turn).await);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn authorization_changed_interrupted_input_wakes_fresh_admission() {
+    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        vec![],
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+    sess.update_settings(SessionSettingsUpdate {
+        approval_policy: Some(AskForApproval::UnlessTrusted),
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    let items = vec![UserInput::Text {
+        text: "resume my deferred message".into(),
+        text_elements: vec![],
+    }];
+    let schema = json!({"type": "object", "properties": {"answer": {"type": "string"}}, "required": ["answer"], "additionalProperties": false});
+    super::handlers::user_input_or_turn_inner(
+        &sess,
+        "defer-with-schema".into(),
+        Op::UserInput {
+            items: items.clone(),
+            final_output_json_schema: Some(schema.clone()),
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        },
+        Some("interrupted-client".into()),
+        None,
+    )
+    .await;
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+    expect_user_message_item_started(&rx, &items).await;
+    let active = sess.active_turn.lock().await;
+    let next = &active.as_ref().unwrap().task.as_ref().unwrap().turn_context;
+    assert_ne!(next.sub_id, tc.sub_id);
+    assert_eq!(next.approval_policy.value(), AskForApproval::UnlessTrusted);
+    assert_eq!(next.final_output_json_schema, Some(schema));
+    drop(active);
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
+
+#[tokio::test]
+async fn interrupted_input_cannot_be_spliced_into_review_task() {
+    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        vec![],
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+    let items = vec![UserInput::Text {
+        text: "deferred user work".into(),
+        text_elements: vec![],
+    }];
+    sess.defer_user_input_until_active_turn_finished(items.clone(), Default::default(), None, None)
+        .await
+        .unwrap();
+    sess.abort_all_tasks(TurnAbortReason::Replaced).await;
+    let review = sess.new_default_turn().await;
+    sess.spawn_task(
+        Arc::clone(&review),
+        vec![],
+        NeverEndingTask {
+            kind: TaskKind::Review,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+    assert_eq!(
+        sess.input_queue.get_pending_input(&sess.active_turn).await,
+        (vec![], None)
+    );
+    let (TurnInput::UserInput { content, client_id }, _) =
+        sess.input_queue.next_interrupted_deferred_input().await
+    else {
+        panic!("expected retained user input")
+    };
+    super::handlers::user_input_or_turn_inner(
+        &sess,
+        "re-admit".into(),
+        Op::UserInput {
+            items: content,
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        },
+        client_id,
+        None,
+    )
+    .await;
+    assert_eq!(
+        sess.input_queue.get_pending_input(&sess.active_turn).await,
+        (vec![], None)
+    );
+    let active = sess.active_turn.lock().await;
+    let turn_state = &active.as_ref().unwrap().turn_state;
+    assert_eq!(
+        sess.input_queue
+            .subscribe_activity(Some(turn_state))
+            .await
+            .1,
+        None
+    );
+    assert_eq!(
+        sess.input_queue
+            .take_pending_input_for_turn_state(turn_state)
+            .await,
+        vec![(
+            TurnInput::UserInput {
+                content: items,
+                client_id: None,
+            },
+            None,
+        )]
+    );
+    drop(active);
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
+
+#[tokio::test]
+async fn deferred_input_does_not_interrupt_turn_local_sleep() {
+    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        vec![],
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+    let active = sess.active_turn.lock().await;
+    let turn_state = Arc::clone(&active.as_ref().unwrap().turn_state);
+    drop(active);
+    let (mut activity_rx, activity) = sess.input_queue.subscribe_activity(Some(&turn_state)).await;
+    assert_eq!(activity, None);
+    sess.defer_user_input_until_active_turn_finished(
+        vec![UserInput::Text {
+            text: "later turn".into(),
+            text_elements: vec![],
+        }],
+        Default::default(),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    // Test both turn-local deferral and the interrupted session FIFO.
+    for interrupted in [false, true] {
+        if interrupted {
+            let active = sess.active_turn.lock().await;
+            sess.input_queue
+                .clear_pending(active.as_ref().unwrap())
+                .await;
+            drop(active);
+            assert!(sess.input_queue.has_pending_input(&sess.active_turn).await);
+        }
+        assert!(!activity_rx.has_changed().unwrap());
+        assert_eq!(
+            sess.input_queue
+                .subscribe_activity(Some(&turn_state))
+                .await
+                .1,
+            None
+        );
+        let output = crate::tools::handlers::SleepHandler
+            .handle(ToolInvocation {
+                session: Arc::clone(&sess),
+                turn: Arc::clone(&tc),
+                step_context: StepContext::for_test(Arc::clone(&tc)),
+                cancellation_token: CancellationToken::new(),
+                tracker: Arc::new(Mutex::new(TurnDiffTracker::new())),
+                call_id: format!("deferred-sleep-{interrupted}"),
+                tool_name: codex_tools::ToolName::namespaced("clock", "sleep"),
+                source: crate::tools::context::ToolCallSource::Direct,
+                payload: ToolPayload::Function {
+                    arguments: json!({"duration_ms": 10}).to_string(),
+                },
+            })
+            .await
+            .unwrap();
+        assert!(
+            output.log_preview().contains("Sleep completed."),
+            "{}",
+            output.log_preview()
+        );
+    }
+    // Consumable input still wakes the same subscription.
+    sess.input_queue
+        .extend_pending_input_and_accept_mailbox_delivery_for_turn_state(
+            &turn_state,
+            vec![TurnInput::UserInput {
+                content: vec![UserInput::Text {
+                    text: "this turn".into(),
+                    text_elements: vec![],
+                }],
+                client_id: None,
+            }],
+        )
+        .await;
+    activity_rx.changed().await.unwrap();
+    assert_eq!(*activity_rx.borrow_and_update(), InputQueueActivity::Steer);
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
+
+#[tokio::test]
+async fn deferred_mail_does_not_interrupt_turn_local_sleep() {
+    for trigger_turn in [false, true] {
+        let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+        sess.spawn_task(
+            Arc::clone(&tc),
+            vec![],
+            NeverEndingTask {
+                kind: TaskKind::Regular,
+                listen_to_cancellation_token: true,
+            },
+        )
+        .await;
+        let turn_state = Arc::clone(&sess.active_turn.lock().await.as_ref().unwrap().turn_state);
+        let (mut activity_rx, activity) =
+            sess.input_queue.subscribe_activity(Some(&turn_state)).await;
+        assert_eq!(activity, None);
+        sess.update_settings(SessionSettingsUpdate {
+            approval_policy: Some(AskForApproval::UnlessTrusted),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        let mail = InterAgentCommunication::new(
+            AgentPath::root(),
+            AgentPath::root(),
+            vec![],
+            "deferred peer work".into(),
+            trigger_turn,
+        );
+        sess.input_queue
+            .enqueue_mailbox_communication_for_session(&sess, mail.clone(), None)
+            .await;
+        // Restoring authority must not release mail already bound to the next turn.
+        sess.update_settings(SessionSettingsUpdate {
+            approval_policy: Some(tc.approval_policy.value()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        assert!(!activity_rx.has_changed().unwrap());
+        assert_eq!(
+            sess.input_queue
+                .subscribe_activity(Some(&turn_state))
+                .await
+                .1,
+            None
+        );
+        assert_eq!(
+            sess.input_queue.subscribe_activity(None).await.1,
+            Some(InputQueueActivity::Mailbox)
+        );
+        let next_turn_state = Mutex::new(crate::state::TurnState::default());
+        assert_eq!(
+            sess.input_queue
+                .subscribe_activity(Some(&next_turn_state))
+                .await
+                .1,
+            Some(InputQueueActivity::Mailbox)
+        );
+        for consumable in [false, true] {
+            if consumable {
+                sess.input_queue
+                    .enqueue_mailbox_communication_for_session(&sess, mail.clone(), None)
+                    .await;
+                activity_rx.changed().await.unwrap();
+                assert_eq!(
+                    *activity_rx.borrow_and_update(),
+                    InputQueueActivity::Mailbox
+                );
+            }
+            let output = crate::tools::handlers::SleepHandler
+                .handle(ToolInvocation {
+                    session: Arc::clone(&sess),
+                    turn: Arc::clone(&tc),
+                    step_context: StepContext::for_test(Arc::clone(&tc)),
+                    cancellation_token: CancellationToken::new(),
+                    tracker: Arc::new(Mutex::new(TurnDiffTracker::new())),
+                    call_id: format!("mail-sleep-{trigger_turn}-{consumable}"),
+                    tool_name: codex_tools::ToolName::namespaced("clock", "sleep"),
+                    source: crate::tools::context::ToolCallSource::Direct,
+                    payload: ToolPayload::Function {
+                        arguments: json!({"duration_ms": 10}).to_string(),
+                    },
+                })
+                .await
+                .unwrap();
+            let expected = if consumable {
+                "Sleep interrupted by new input."
+            } else {
+                "Sleep completed."
+            };
+            assert!(
+                output.log_preview().contains(expected),
+                "{}",
+                output.log_preview()
+            );
+        }
+        assert_eq!(
+            sess.input_queue.get_pending_input(&sess.active_turn).await,
+            (vec![TurnInput::InterAgentCommunication(mail.clone())], None)
+        );
+        sess.abort_all_tasks(TurnAbortReason::Replaced).await;
+        assert_eq!(
+            sess.input_queue.drain_mailbox_input_items().await.0,
+            vec![TurnInput::InterAgentCommunication(mail)]
+        );
+    }
+}
+
+#[tokio::test]
+async fn abort_does_not_advance_unrelated_queue_only_mail() {
+    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+    sess.spawn_task(
+        tc,
+        vec![],
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+    let mail = InterAgentCommunication::new(
+        AgentPath::root(),
+        AgentPath::root(),
+        vec![],
+        "queue only".into(),
+        false,
+    );
+    sess.input_queue
+        .enqueue_mailbox_communication_for_session(&sess, mail, None)
+        .await;
+    sess.abort_all_tasks(TurnAbortReason::Replaced).await;
+    assert_eq!(
+        sess.input_queue.drain_ready_mailbox_input_items().await,
+        (vec![], None)
+    );
+    assert!(sess.input_queue.has_pending_mailbox_items().await);
+}
+
+#[tokio::test]
+async fn authorization_changed_turn_receives_code_mode_notify_and_user_shell_output() {
+    struct CaptureDelegate(
+        std::sync::Mutex<Option<Arc<dyn codex_code_mode::CodeModeSessionDelegate>>>,
+    );
+    impl codex_code_mode::CodeModeSessionProvider for CaptureDelegate {
+        fn create_session<'a>(
+            &'a self,
+            delegate: Arc<dyn codex_code_mode::CodeModeSessionDelegate>,
+        ) -> codex_code_mode::CodeModeSessionProviderFuture<'a> {
+            *self.0.lock().unwrap() = Some(delegate);
+            Box::pin(async {
+                Err("fixture captures the delegate without starting a JavaScript VM".into())
+            })
+        }
+    }
+    let (sess, mut tc, rx) = make_session_and_context_with_rx().await;
+    {
+        let turn = Arc::get_mut(&mut tc).unwrap();
+        turn.model_info.tool_mode = Some(codex_protocol::openai_models::ToolMode::CodeMode);
+        turn.code_mode_available = true;
+    }
+    let provider = Arc::new(CaptureDelegate(std::sync::Mutex::new(None)));
+    let service =
+        crate::tools::code_mode::CodeModeService::new(provider.clone(), &tc.config.features);
+    let step = StepContext::for_test(Arc::clone(&tc));
+    let _worker = service
+        .start_turn_worker(
+            &sess,
+            Arc::clone(&step),
+            Arc::clone(&step.tool_router),
+            Arc::new(Mutex::new(TurnDiffTracker::new())),
+        )
+        .expect("code-mode worker");
+    assert!(
+        service
+            .execute(codex_code_mode::ExecuteRequest {
+                tool_call_id: "notify-call".into(),
+                enabled_tools: vec![],
+                source: String::new(),
+                yield_time_ms: None,
+                max_output_tokens: None,
+            })
+            .await
+            .is_err()
+    );
+    let delegate = provider.0.lock().unwrap().clone().unwrap();
+    sess.spawn_task(
+        Arc::clone(&tc),
+        vec![],
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+    sess.update_settings(SessionSettingsUpdate {
+        approval_policy: Some(AskForApproval::UnlessTrusted),
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    let cell = codex_code_mode::CellId::new("notify-cell".into());
+    service.mark_cell_ready_for_dispatch(&cell);
+    tokio::time::timeout(
+        StdDuration::from_secs(5),
+        delegate.notify(
+            "notify-call".into(),
+            cell,
+            "pf83-notify-output".into(),
+            CancellationToken::new(),
+        ),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    execute_user_shell_command(
+        Arc::clone(&sess),
+        Arc::clone(&tc),
+        "echo pf83-shell-output".into(),
+        CancellationToken::new(),
+        UserShellCommandMode::ActiveTurnAuxiliary,
+    )
+    .await;
+    loop {
+        let event = rx.recv().await.unwrap();
+        if let EventMsg::ExecCommandEnd(event) = event.msg {
+            assert_eq!(event.exit_code, 0);
+            assert_eq!(event.stdout.trim(), "pf83-shell-output");
+            break;
+        }
+    }
+    let (pending, _) = sess.input_queue.get_pending_input(&sess.active_turn).await;
+    assert_eq!(pending.len(), 2);
+    assert_eq!(
+        pending[0],
+        TurnInput::ResponseItem(ResponseItem::CustomToolCallOutput {
+            id: None,
+            call_id: "notify-call".into(),
+            name: Some("exec".into()),
+            output: codex_protocol::models::FunctionCallOutputPayload::from_text(
+                "pf83-notify-output".into()
+            ),
+            internal_chat_message_metadata_passthrough: None,
+        })
+    );
+    let TurnInput::ResponseItem(shell_output) = &pending[1] else {
+        panic!("shell output missing")
+    };
+    assert!(
+        serde_json::to_string(shell_output)
+            .unwrap()
+            .contains("pf83-shell-output")
+    );
+    let active = sess.active_turn.lock().await;
+    assert!(
+        sess.input_queue
+            .take_pending_input_for_turn_state(&active.as_ref().unwrap().turn_state)
+            .await
+            .is_empty()
+    );
+    assert_eq!(
+        active
+            .as_ref()
+            .unwrap()
+            .task
+            .as_ref()
+            .unwrap()
+            .turn_context
+            .approval_policy
+            .value(),
+        tc.approval_policy.value()
+    );
+    drop(active);
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
+
+#[tokio::test]
+async fn steer_input_accepts_runtime_user_layer_reload() {
+    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        vec![],
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+    let home = sess.codex_home().await;
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(
+        home.join(CONFIG_TOML_FILE),
+        "[apps.calendar]\nenabled = false\n",
+    )
+    .unwrap();
+    let next_config = load_latest_config_for_session(&sess).await;
+    sess.refresh_runtime_config(next_config).await;
+    assert_eq!(
+        sess.steer_input(
+            vec![UserInput::Text {
+                text: "after reload".into(),
+                text_elements: vec![]
+            }],
+            Default::default(),
+            Some(&tc.sub_id),
+            None,
+            None
+        )
+        .await,
+        Ok(tc.sub_id.clone())
+    );
+    sess.abort_all_tasks(TurnAbortReason::Replaced).await;
+}
+
+#[tokio::test]
 async fn abort_empty_active_turn_preserves_pending_input() {
     let (sess, _tc, _rx) = make_session_and_context_with_rx().await;
     let pending_item = ResponseItem::Message {
@@ -11595,7 +12764,7 @@ async fn abort_empty_active_turn_preserves_pending_input() {
         sess.input_queue
             .take_pending_input_for_turn_state(turn_state.as_ref())
             .await,
-        vec![TurnInput::ResponseItem(pending_item)]
+        vec![(TurnInput::ResponseItem(pending_item), None)]
     );
 }
 

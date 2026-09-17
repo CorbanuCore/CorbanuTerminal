@@ -1055,6 +1055,7 @@ impl TurnRequestProcessor {
             return Err(error);
         }
 
+        let returned_input = params.input.clone();
         let mapped_items: Vec<CoreInputItem> = params
             .input
             .into_iter()
@@ -1119,6 +1120,22 @@ impl TurnRequestProcessor {
                             message,
                             data,
                             Some(AnalyticsJsonRpcError::TurnSteer(turn_steer_error)),
+                        )
+                    }
+                    SteerInputError::AuthorizationChanged(_) => {
+                        tracing::info!(
+                            boundary = "authorizationChanged",
+                            input_disposition = "returned",
+                            "turn/steer admission refused"
+                        );
+                        (
+                            "Permissions changed since this turn started. Wait for it to finish or stop it, then submit your message again.".to_string(),
+                            Some(serde_json::json!({
+                                "code": "authorizationChanged",
+                                "inputDisposition": "returned",
+                                "input": returned_input,
+                            })),
+                            None,
                         )
                     }
                     SteerInputError::EmptyInput => (
