@@ -1,0 +1,37 @@
+[
+  {
+    "run": "gates-01",
+    "exit": 0,
+    "result": "prerequisites; 124/124 default,127/127 feature,91/91 TUI; feature binary"
+  },
+  {
+    "run": "coverage-run-01",
+    "exit": 0,
+    "result": "28 new-check rejections; no old-check execution yet"
+  },
+  {
+    "run": "coverage-run-02",
+    "exit": 1,
+    "result": "Harness incorrectly expected old audit to accept narrow subtotal omission; old narrow-specific assertion rejected. Preserved partial receipts; no final result claimed."
+  },
+  {
+    "run": "coverage-run-03",
+    "exit": 0,
+    "result": "28 new-check rejections; old auditor accepts 26 and rejects 2 already-bound narrow cases"
+  },
+  {
+    "run": "scope-run-01",
+    "exit": 0,
+    "result": "4 collected priced same-day attempts across 3 roots; fresh-reader zero reproduced; seven priced pages"
+  },
+  {
+    "run": "scope-audit",
+    "exit": 0,
+    "result": "Independent USD 0.00284 store/day and exact seven-page reconciliation"
+  },
+  {
+    "run": "p3-negative-controls",
+    "exit": 0,
+    "result": "Six negatives; fresh TZ-stripped binary PID; four preserved positive controls. No old_check_passes field for TZ."
+  }
+]

@@ -13,11 +13,14 @@ run = Path(sys.argv[1]).resolve()
 output = Path(sys.argv[2]).resolve()
 assert not output.exists()
 checks = []
-def rejects(name, call, old_check_passes=True):
+def rejects(name, call, old_check_passes=None):
     try:
         call()
     except AssertionError as error:
-        checks.append(dict(case=name,rejected=True,old_check_passes=old_check_passes,error=str(error)))
+        result = dict(case=name,rejected=True,error=str(error))
+        if old_check_passes is not None:
+            result["old_check_passes"] = old_check_passes
+        checks.append(result)
     else:
         raise AssertionError("Negative control accepted: "+name)
 
@@ -28,16 +31,18 @@ for name,day in [("mixed-day","2026-11-01"),("deleted-history-after-retention","
     # Prior assertion only required the refusal and absence of a subtotal.
     assert "compacted history lost request/provider attribution" in wrong
     assert "Known subtotal exact USD:" not in wrong
-    rejects(name+"-wrong-day",lambda:assert_day(wrong,day))
+    rejects(name+"-wrong-day",lambda:assert_day(wrong,day),old_check_passes=True)
     missing = text.replace("Requested UTC day: "+day,"Requested day omitted")
-    rejects(name+"-missing-day",lambda:assert_day(missing,day))
+    assert "compacted history lost request/provider attribution" in missing
+    assert "Known subtotal exact USD:" not in missing
+    rejects(name+"-missing-day",lambda:assert_day(missing,day),old_check_passes=True)
 
 lines = json.loads((run/"mixed-compact-hour-selected.json").read_text())
 text = " ".join(lines)
 assert_compact_hour(text)
 wrong = text.replace(COMPACT_HOUR,"History unavailable.")
 assert "Known subtotal exact USD:" not in wrong
-rejects("compact-hour-explanation-removed",lambda:assert_compact_hour(wrong))
+rejects("compact-hour-explanation-removed",lambda:assert_compact_hour(wrong),old_check_passes=True)
 
 # Deliberately launch the same product with TZ removed. The constructor runs
 # within the version process too; no Python-local conversion supplies its result.

@@ -231,7 +231,12 @@ empty day, both actually rendered as:
 > No recorded attempts in this day; collection coverage unknown.  
 > Known subtotal exact USD: 0
 
-Those zero-attempt controls contain no Request link and zero known/unknown counts.
+Those pages contain no Request link and zero known/unknown counts **within the
+selected root**. Round 62 identifies the never-prompted page as a P2 scope-zero
+finding, not a clean day-wide zero control: other roots in the same store have
+collected usage on the requested day. See the [deliberate four-priced-attempt
+reproduction and corrected original counts](../acct-scope-62/reader-findings.md).
+The original captures remain unchanged.
 
 **Verdict:** no-usage is distinguished from no recorded attempts. Neither is a
 measured zero bill. The standalone zero subtotal can still mislead; suggested

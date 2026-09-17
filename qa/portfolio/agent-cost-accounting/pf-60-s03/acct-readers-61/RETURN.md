@@ -10,8 +10,10 @@ SHA-256 **f78a1cc8a433030d3f50d91cfd415946e5fe3dd4e08e69d5c9644244c0d018bb**.
 
 **Three P3 checks corrected; 26 boundary cases, six rejecting controls and four
 positive product-process timezone controls pass. All six reader categories have
-actual-key evidence and explicit verdicts; 15 monetary pages pass independent
-arithmetic. Rust gates pass 342/342.** Missing-price next steps and mixed-provider
+actual-key evidence and explicit verdicts. Round-62 correction: **9 priced page
+reconciliations, 4 unknown-cost pages and 2 zero-recorded pages**, not 15 priced
+reconciliations. The [bound re-audit](../acct-scope-62/coverage-run-03/baseline.json)
+supersedes the old receipt’s undifferentiated count. Rust gates pass 342/342.** Missing-price next steps and mixed-provider
 completeness remain gaps; this is not a declaration that the reader-facing
 requirements or sprint are complete.
 
@@ -89,7 +91,7 @@ fixture cleanup/control, not a proposed user database repair. The stale case
 separately changes only the evidence marker to `[]`; readback proves Refresh
 does not repair it. Restoring the original marker recovers the same estimate.
 
-[Final reader audit: 15 numeric pages](reader-audit.json),
+[Historical reader audit: 15 subtotal-bearing pages, only 9 priced](reader-audit.json),
 [final reader cases](reader-run-05/reader-cases.json),
 [emitted requests](reader-run-05/emissions.json),
 [exact binary/driver manifest](reader-run-05/manifest.json).

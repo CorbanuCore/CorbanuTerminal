@@ -1,0 +1,9 @@
+{
+  "commit": "defa10a2dd00b6d4f8b91d54978b480c75a2b0e4",
+  "binary": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target/debug/codex",
+  "binary_sha256": "f78a1cc8a433030d3f50d91cfd415946e5fe3dd4e08e69d5c9644244c0d018bb",
+  "driver_sha256": "b9d2749a8cb6df589da5118835ef937db5cb0d6e18b47dad4524b75fa236f40d",
+  "reader_helpers_sha256": "2bc369ac18b98e71cb5b2f72bdf05316b764e118cd5f1f7b5bd74f9b6e083744",
+  "qualification": "Code-aware developer reproduction, not independent acceptance",
+  "isolation": "Synthetic HOME/profile, debug native-keyring denial, OS loopback-only network"
+}
