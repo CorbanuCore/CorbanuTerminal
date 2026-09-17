@@ -1,0 +1,4 @@
+{
+  "base": "gettimeofday=1789625470 realtime=1789625470 time=1789625470 monotonic=731261\n",
+  "shifted": "gettimeofday=1789621871 realtime=1789621871 time=1789621871 monotonic=731262\n"
+}

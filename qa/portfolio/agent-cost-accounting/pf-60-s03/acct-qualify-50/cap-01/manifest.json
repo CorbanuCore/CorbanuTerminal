@@ -1,0 +1,11 @@
+{
+  "binary": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target/debug/codex",
+  "driver_sha256": "e083bbe2dafb604cc4f32af1267f7de89f4baedef5b1fcaab39f6435834e8301",
+  "sha256": "f78a1cc8a433030d3f50d91cfd415946e5fe3dd4e08e69d5c9644244c0d018bb",
+  "commit": "8b968c94b1384e14379b610249d3b88f41b684c2",
+  "mode": "cap",
+  "fixture": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-50/cap-01/fixture",
+  "clock_offset_seconds": 0,
+  "isolation": "synthetic profile and minimal HOME/env; debug keyring denial; OS loopback-only network; code-aware developer execution",
+  "catalog_override": "Only tool_mode, use_responses_lite and multi_agent_version overridden; price authority remains bundled"
+}
