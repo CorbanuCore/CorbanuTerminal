@@ -167,30 +167,46 @@ def sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
+OWNER_PUBLICATION_SECONDS = 30 * 60
+OWNER_FRESH_SECONDS = 2 * OWNER_PUBLICATION_SECONDS
+
+
 def owner_health(value, at):
-    """Service observations expire independently of publisher refreshes."""
+    """Coarse published observation, never a claim of current process liveness."""
     unknown = dict(state="unknown", reason="observation-unavailable", age=None)
     try:
-        d.shape(value, "observed_at service installed started_at completed_at last_success hold reason")
+        d.shape(value, "observed_at service installed started_at completed_at last_success hold reason "
+                "previous_success interval errors consecutive_errors last_error")
+        d.require(type(value["interval"]) is int and 1 <= value["interval"] <= 30)
+        d.require(all(type(value[k]) is int and value[k] >= 0 for k in ("errors", "consecutive_errors")))
+        d.require(value["last_error"] is None or isinstance(value["last_error"], str)
+                  and value["last_error"].isidentifier() and len(value["last_error"]) <= 80)
         d.require(value["service"] in {"present", "absent", "unknown"} and type(value["installed"]) is bool)
         d.require(value["reason"] in {None, "observation-unavailable"}
                   and value["hold"] in {None, "owner_run_refused", "interrupted_tick"})
-        for key in ("observed_at", "started_at", "completed_at", "last_success"):
+        for key in ("observed_at", "started_at", "completed_at", "last_success", "previous_success"):
             d.require(value[key] is None and key != "observed_at" or
                       type(value[key]) in (int, float) and 0 <= value[key] < 1e11)
         now = d.stamp(clock(at)).timestamp()
         if value["reason"] or value["service"] == "unknown":
             return unknown
-        if not 0 <= now - int(value["observed_at"]) <= 90:
+        if not 0 <= now - int(value["observed_at"]) <= OWNER_FRESH_SECONDS:
             return dict(unknown, reason="observation-stale")
         if not value["installed"]:
             return dict(state="never-installed", reason="verified-service-absence", age=None) if value["service"] == "absent" else dict(unknown, reason="installation-unrecorded")
         completion, start = value["completed_at"], value["started_at"]
-        age = now - int(completion if completion is not None else start) if completion is not None or start is not None else None
+        age = value["observed_at"] - (completion if completion is not None else start) if completion is not None or start is not None else None
+        previous, success, interval = value["previous_success"], value["last_success"], value["interval"]
+        recurring = (previous is not None and success is not None and
+                     interval * 0.5 <= success - previous <= interval * 1.5 and
+                     0 <= value["observed_at"] - success <= interval * 3)
         reason = value["hold"] or ("service-absent" if value["service"] == "absent" else
-                                  "tick-overdue" if age is None or not 0 <= age <= 90 else None)
-        return dict(state="stalled" if reason else "running", reason=reason, age=age,
-                    last_completion=completion, last_success=value["last_success"])
+                                  value["last_error"] if value["consecutive_errors"] else
+                                  "tick-overdue" if age is None or not 0 <= age <= interval * 3 else
+                                  "recurrence-unproven" if not recurring else None)
+        return dict(state="stalled" if reason else "recurring-at-observation", reason=reason, age=age,
+                    errors=value["errors"], consecutive_errors=value["consecutive_errors"],
+                    last_completion=completion, last_success=success)
     except (ValueError, TypeError, KeyError):
         return unknown
 
@@ -349,7 +365,8 @@ def render(snapshot, at, sprints, documents):
              escape(f'Snapshot: {recurrence["state"]}; reason: {recurrence["reason"] or "fresh service and tick"}; '
                     f'tick age (seconds): {recurrence["age"]}; last completion: {timestamp(recurrence.get("last_completion"))}; '
                     f'last success: {timestamp(recurrence.get("last_success"))}. '
-                    f'Observed: {timestamp(observed)}; current state is unknown after '
-                    f'{timestamp(observed + 90 if observed is not None else None)}.') + '</p></section>')
+                    f'Errors: {recurrence.get("errors", 0)}; consecutive: {recurrence.get("consecutive_errors", 0)}. '
+                    f'Observed: {timestamp(observed)}; coarse 30-minute publication, not live status; expires '
+                    f'{timestamp(observed + OWNER_FRESH_SECONDS if observed is not None else None)}.') + '</p></section>')
     return body.replace('<section id="decisions">',
                         f'<section id="decisions" class="notice attention" data-assessed-at="{assessed}" data-fresh-seconds="{d.FRESH_SECONDS}">', 1).replace('<details', '<details class="attention-item"')

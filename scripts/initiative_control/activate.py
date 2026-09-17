@@ -81,6 +81,12 @@ def owner_activation(args):
     import plistlib
     import owner_daemon as owner
     import fable_launcher as f
+    if args.owner == "install":
+        f.require(bool(args.label), "explicit_label_required")
+        f.require(args.label != "com.corbanu.initiative-owner" or
+                  getattr(args, "confirm_live", False), "live_confirmation_required")
+        f.require(args.publish_state is not None, "publish_state_required")
+        f.private_dir(args.publish_state)
     root = f.private_dir(args.root)
     lock = f.no_links(root / "installation.lock")
     if not lock.exists():
@@ -105,6 +111,7 @@ def owner_activation(args):
                 plist.unlink()
             previous["phase"] = "uninstalled"
             f.write_json(receipt_path, previous)
+            owner.publish_schedule(root)
             return
         f.require(args.python and args.python_sha256 and args.runtime and args.config, "pins_required")
         f.require(args.label == label and type(args.interval) is int and 1 <= args.interval <= 30
@@ -132,13 +139,13 @@ def owner_activation(args):
         job = {key: [resolve(v) for v in value] if isinstance(value, list) else resolve(value)
                for key, value in job.items()}
         job.update(Label=label, Disabled=False, StartInterval=args.interval,
-                   ThrottleInterval=min(30, args.interval))
+                   ThrottleInterval=0)
         job["ProgramArguments"] += ["--schedule", str(root)]
         job["EnvironmentVariables"] = {key: str(root) for key in
                                        ("HOME", "CODEX_HOME", "CORBANU_HOME", "PFTERMINAL_HOME")}
         raw = plistlib.dumps(job)
         expected = dict(label=label, pins=pins, plist_sha256=hashlib.sha256(raw).hexdigest(),
-                        interval=args.interval)
+                        interval=args.interval, publish_state=str(args.publish_state))
         if previous:
             f.require({key: previous[key] for key in expected} == expected, "installation_conflict")
             if presence == "present":
@@ -164,7 +171,9 @@ if __name__ == "__main__" and "--owner" in sys.argv:
     parser = argparse.ArgumentParser(description="Explicit launchd owner recurrence activation")
     parser.add_argument("--owner", choices=("install", "uninstall"), required=True)
     parser.add_argument("--root", type=Path, required=True)
-    parser.add_argument("--label", default="com.corbanu.initiative-owner")
+    parser.add_argument("--label")
+    parser.add_argument("--confirm-live", action="store_true")
+    parser.add_argument("--publish-state", type=Path)
     parser.add_argument("--python", type=Path)
     parser.add_argument("--python-sha256")
     parser.add_argument("--runtime", type=Path)

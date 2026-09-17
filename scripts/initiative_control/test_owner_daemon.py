@@ -762,7 +762,7 @@ class RecurrenceTests(unittest.TestCase):
         python = Path(sys.executable).resolve()
         return Namespace(owner="install", root=schedule, label="com.corbanu.initiative-owner.test-unit",
                          python=python, python_sha256=f.file_digest(python), runtime=runtime,
-                         config=self.config_path, interval=2)
+                         config=self.config_path, interval=2, publish_state=self.root, confirm_live=False)
 
     def install(self, args):
         import activate
@@ -802,6 +802,7 @@ class RecurrenceTests(unittest.TestCase):
             self.assertEqual(str(args.python), job["ProgramArguments"][0])
             self.assertIn("-S", job["ProgramArguments"])
             self.assertEqual(2, job["StartInterval"])
+            self.assertLess(job["ThrottleInterval"], job["StartInterval"])
             self.assertEqual(30, job["ExitTimeOut"])
             self.assertEqual("HOLD", owner.scheduled_tick(args.root)["state"])
             args.owner = "uninstall"
@@ -883,6 +884,75 @@ class RecurrenceTests(unittest.TestCase):
             with self.assertRaisesRegex(f.LaunchError, "installation_conflict"):
                 activate.owner_activation(args)
         self.assertEqual(["bootstrap", "kickstart"], calls)
+
+    def test_bare_install_and_implicit_live_reinstall_have_no_effect(self):
+        import activate
+        args = self.installation()
+        with patch.object(owner, "service", side_effect=AssertionError("service touched")):
+            for label, reason in ((None, "explicit_label_required"),
+                                  ("com.corbanu.initiative-owner", "live_confirmation_required")):
+                args.label = label
+                with self.assertRaisesRegex(f.LaunchError, reason):
+                    activate.owner_activation(args)
+                self.assertEqual([], list(args.root.iterdir()))
+        args.confirm_live = True
+        args.interval = 30
+        service, command, calls = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+            args.label = None
+            with self.assertRaisesRegex(f.LaunchError, "explicit_label_required"):
+                activate.owner_activation(args)
+        self.assertEqual(["bootstrap", "kickstart"], calls)
+
+    def test_transient_timeout_is_counted_published_and_retried_without_recovery(self):
+        import activate
+        args = self.installation()
+        service, command, _ = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+            with patch.object(owner.Kernel, "tick", side_effect=subprocess.TimeoutExpired("ps", 2)):
+                self.assertEqual(2, owner.main(["--run", "--schedule", str(args.root)]))
+                self.assertEqual(2, owner.main(["--run", "--schedule", str(args.root)]))
+            status = owner.load(args.root / "tick.json")
+            self.assertIsNone(status["hold"])
+            self.assertEqual((2, 2, "TimeoutExpired"), (status["errors"],
+                             status["consecutive_errors"], status["last_error"]))
+            published = owner.load(self.root / "owner-recurrence.json")
+            self.assertEqual(2, published["errors"])
+            self.arm()
+            self.assertEqual(0, owner.main(["--run", "--schedule", str(args.root)]))
+            status = owner.load(args.root / "tick.json")
+            self.assertEqual((2, 0, None), (status["errors"],
+                             status["consecutive_errors"], status["last_error"]))
+            self.assertIsNone(status["previous_success"])
+            owner.scheduled_tick(args.root)
+            self.assertEqual(status["last_success"],
+                             owner.load(args.root / "tick.json")["previous_success"])
+
+    def test_coordinator_refusal_latches_instead_of_retrying(self):
+        import activate
+        args = self.installation()
+        service, command, _ = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+        with patch.object(owner.Kernel, "tick", side_effect=owner.Rejected("state refused")) as tick:
+            self.assertEqual("owner_run_refused", owner.scheduled_tick(args.root)["reason"])
+            self.assertEqual("owner_run_refused", owner.scheduled_tick(args.root)["reason"])
+            self.assertEqual(1, tick.call_count)
+
+    def test_uninstalled_receipt_publishes_verified_absence(self):
+        import activate
+        import decision_feed
+        args = self.installation()
+        service, command, _ = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+            args.owner = "uninstall"
+            activate.owner_activation(args)
+            value = owner.load(self.root / "owner-recurrence.json")
+            self.assertFalse(value["installed"])
+            self.assertEqual("never-installed", decision_feed.owner_health(value, f.now())["state"])
 
     def test_service_absence_is_verified_and_observation_failure_stays_unknown(self):
         root = Path(self.tmp.name)

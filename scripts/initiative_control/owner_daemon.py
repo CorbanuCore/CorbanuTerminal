@@ -12,7 +12,7 @@ import time
 import uuid
 
 import fable_launcher as f
-from coordinator import digest, encoded
+from coordinator import Rejected, digest, encoded
 from manager_cycle import ExistingCoordinator
 
 WORKER_KINDS = frozenset({"implement", "revise", "review", "design", "functional_test",
@@ -541,27 +541,37 @@ def service(label):
 def observe_schedule(root, label="com.corbanu.initiative-owner"):
     result = dict(observed_at=time.time(), service="unknown", installed=False,
                   started_at=None, completed_at=None, last_success=None, hold=None,
-                  reason="observation-unavailable")
+                  reason="observation-unavailable", previous_success=None, interval=30,
+                  errors=0, consecutive_errors=0, last_error=None)
     try:
         root = f.private_dir(root)
         receipt = load(root / "installation.json") if os.path.lexists(root / "installation.json") else None
         f.require(receipt is not None or not os.path.lexists(root / "tick.json"), "installation_receipt_missing")
         if receipt:
             label = receipt["label"]
-        result["installed"] = receipt is not None
+        result["installed"] = receipt is not None and receipt["phase"] != "uninstalled"
         result["service"], output = service(label)
         if receipt and result["service"] == "present":
             plist = root / "owner.plist"
             f.require(f"path = {plist}\n" in output and
                       f.file_digest(private_file(plist)) == receipt["plist_sha256"], "unowned_service")
         if receipt:
+            result["interval"] = receipt["interval"]
             status = load(root / "tick.json")
+            result.update({key: status.get(key, result[key]) for key in
+                           ("previous_success", "errors", "consecutive_errors", "last_error")})
             result.update({key: status[key] for key in
                            ("started_at", "completed_at", "last_success", "hold")})
         result["reason"] = None
     except Exception:
         result.update(service="unknown", reason="observation-unavailable")
     return result
+
+
+def publish_schedule(root):
+    receipt = load(root / "installation.json")
+    f.write_json(f.private_dir(receipt["publish_state"]) / "owner-recurrence.json",
+                 observe_schedule(root))
 
 
 def scheduled_tick(root, recover=None):
@@ -574,7 +584,8 @@ def scheduled_tick(root, recover=None):
             f.require(isinstance(recover, str) and 0 < len(recover.strip()) <= 1000, "recovery_evidence_required")
             artifact(root, "recovery/" + str(uuid.uuid4()) + ".json",
                      {"at": time.time(), "evidence": recover, "previous": status})
-            status.update(hold=None, started_at=None, completed_at=None)
+            status.update(hold=None, started_at=None, completed_at=None,
+                          last_success=None, previous_success=None)
             f.write_json(root / "tick.json", status)
             return {"state": "RECOVERED"}
         if status["started_at"] is not None and status["completed_at"] is None:
@@ -591,14 +602,21 @@ def scheduled_tick(root, recover=None):
             f.require(schedule_pins(Path(pins["python"]), Path(pins["runtime"]),
                                     Path(pins["config"]), pins["python_sha256"]) == pins, "schedule_pin_drift")
             result = Kernel(Path(pins["config"])).tick()
-        except Exception:
+        except (f.LaunchError, Rejected):
             result = {"state": "HOLD", "reason": "owner_run_refused"}
+        except Exception as exc:
+            result = {"state": "ERROR", "reason": type(exc).__name__}
         status["completed_at"] = time.time()
         if result.get("reason") == "owner_run_refused":
             status.update(hold="owner_run_refused", first_refusal=status.get("first_refusal") or time.time(),
                           last_refusal=time.time())
+        elif result.get("reason"):
+            status.update(errors=status.get("errors", 0) + 1,
+                          consecutive_errors=status.get("consecutive_errors", 0) + 1,
+                          last_error=result["reason"], previous_success=None)
         else:
-            status["last_success"] = status["completed_at"]
+            status.update(previous_success=status.get("last_success") if not status.get("consecutive_errors") else None,
+                          last_success=status["completed_at"], consecutive_errors=0, last_error=None)
         status["ticks"] += 1
         f.write_json(root / "tick.json", status)
         artifact(root, "ticks/" + str(uuid.uuid4()) + ".json", status)
@@ -626,7 +644,10 @@ def main(argv=None):
         return 0
     try:
         if args.schedule:
-            result = scheduled_tick(args.schedule, args.recover)
+            try:
+                result = scheduled_tick(args.schedule, args.recover)
+            finally:
+                publish_schedule(args.schedule)
             print(encoded(result))
             return 2 if result.get("reason") else 0
         f.require(args.config is not None and args.recover is None, "config_required")

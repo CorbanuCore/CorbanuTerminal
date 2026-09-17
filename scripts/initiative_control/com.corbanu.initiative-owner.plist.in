@@ -22,7 +22,7 @@
     <key>KeepAlive</key><false/>
     <!-- Activation explicitly kickstarts once; missed intervals are not replayed. -->
     <key>StartInterval</key><integer>30</integer>
-    <key>ThrottleInterval</key><integer>30</integer>
+    <key>ThrottleInterval</key><integer>0</integer>
     <key>ExitTimeOut</key><integer>30</integer>
     <key>ProcessType</key><string>Background</string>
     <key>Umask</key><integer>63</integer>
