@@ -13,6 +13,16 @@ fn status_header_version_normalization_preserves_frame_across_releases() {
 }
 
 #[test]
+fn status_update_version_normalization_preserves_frame_across_releases() {
+    let expected = "│ Update available! <V> -> 9.9.9            │\n";
+    for version in ["0.1.9", "0.1.42", "0.1.100", "1.0.0-rc.1"] {
+        let notice = format!("Update available! {version} -> 9.9.9");
+        let rendered = format!("│ {notice:42}│\n");
+        assert_eq!(normalize_header_version(&rendered, version), expected);
+    }
+}
+
+#[test]
 fn status_version_normalization_preserves_flush_frames() {
     for version in ["0.1.9", "0.1.42", "0.1.100", "1.0.0-rc.1"] {
         for padding in 0..=3 {
