@@ -794,12 +794,9 @@ class Kernel:
         return state
 
     def worker_action(self, adapter, action):
-        from owner_tmux import Worker
+        from owner_tmux import Worker, worker_runtime
         f.require(action["kind"] in WORKER_KINDS, "unsupported_worker_kind")
-        inputs = action["inputs"]
-        runtime = inputs["worker"]
-        f.require(set(runtime) == {"model", "provider", "effort", "worktree", "policy"}
-                  and runtime["policy"] == "--yolo", "recorded_yolo_required")
+        runtime = worker_runtime(action["inputs"])
         f.require(runtime["worktree"] in self.config["worktrees"], "unallocated_worktree")
         # Freeze the same action assignment used by NativeOwner, including scope.
         assignment = encoded({k: action[k] for k in
@@ -1094,6 +1091,16 @@ def observe_schedule(root, label="com.corbanu.initiative-owner"):
     except Exception:
         result.update(service="unknown", reason="observation-unavailable")
     return result
+
+
+def publication_preflight(publish_state):
+    """Refuse an interrupted publisher before any destructive cutover effect."""
+    root = f.private_dir(publish_state)
+    f.require(not any(path.name.endswith(".pending") for path in root.iterdir()),
+              "stale_publication_pending: quiesce publishers; preserve and inspect "
+              "*.pending and the last publication; reconcile the interrupted "
+              "write under integration-owner authority before retrying")
+    return root
 
 
 def publish_schedule(root):

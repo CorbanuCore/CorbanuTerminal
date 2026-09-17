@@ -1,0 +1,14 @@
+test_bad_revision_and_missing_authority_refuse (test_owner_promotion_94.PromotionTests.test_bad_revision_and_missing_authority_refuse) ... ok
+test_cli_reports_nonzero_with_all_item_names (test_owner_promotion_94.PromotionTests.test_cli_reports_nonzero_with_all_item_names) ... ok
+test_each_of_five_items_names_unmet_condition (test_owner_promotion_94.PromotionTests.test_each_of_five_items_names_unmet_condition) ... ok
+test_existing_schedule_hold_is_not_silently_recovered (test_owner_promotion_94.PromotionTests.test_existing_schedule_hold_is_not_silently_recovered) ... ok
+test_limited_route_requires_named_acceptance_and_stays_limited (test_owner_promotion_94.PromotionTests.test_limited_route_requires_named_acceptance_and_stays_limited) ... ok
+test_positive_readonly_gate (test_owner_promotion_94.PromotionTests.test_positive_readonly_gate) ... ok
+test_recipe_stale_publication_preserves_every_existing_file (test_owner_promotion_94.PromotionTests.test_recipe_stale_publication_preserves_every_existing_file) ... ok
+test_unapplied_operation_refuses_before_disarm (test_owner_promotion_94.PromotionTests.test_unapplied_operation_refuses_before_disarm) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.802s
+
+OK
+{"rehearsal": "stale_publication", "recipe_exit": 2, "disarms": 0, "uninstalls": 0, "launchctl_mutations": 0, "files_unchanged": 49, "admission": "armed", "installation": "installed", "pending_preserved": true, "real_inference": false}

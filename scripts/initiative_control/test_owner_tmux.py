@@ -101,6 +101,54 @@ def record(kind, **payload):
     return {"type": kind, "payload": payload}
 
 
+class WorkerInputTests(unittest.TestCase):
+    def inputs(self):
+        return dict(allocation="cycle", base_commit="a" * 40, brief_file="/tmp/brief.json",
+                    brief_sha256="b" * 64, model="gpt-6-astra", reasoning_effort="high",
+                    task="Read the frozen brief", worktree="/tmp/worktree")
+
+    def test_bridge_preserves_cycle_fields_and_is_idempotent(self):
+        inputs = self.inputs()
+        original = copy.deepcopy(inputs)
+        frozen = t.freeze_worker_inputs(inputs, provider="openai", policy="--yolo")
+        self.assertEqual(original, inputs)
+        self.assertEqual(inputs, {k: v for k, v in frozen.items() if k != "worker"})
+        self.assertEqual(dict(model="gpt-6-astra", provider="openai", effort="high",
+                              worktree="/tmp/worktree", policy="--yolo"), t.worker_runtime(frozen))
+        self.assertEqual(frozen, t.freeze_worker_inputs(frozen, provider="openai", policy="--yolo"))
+        t.worker_runtime(frozen)["model"] = "changed"
+        self.assertEqual("gpt-6-astra", frozen["worker"]["model"])
+
+    def test_flat_inputs_cannot_silently_infer_provider_or_policy(self):
+        with self.assertRaisesRegex(f.LaunchError, "recorded_worker_runtime_required"):
+            t.worker_runtime(self.inputs())
+
+    def test_conflicting_duplicate_runtime_is_refused(self):
+        frozen = t.freeze_worker_inputs(self.inputs(), provider="openai", policy="--yolo")
+        for key in ("model", "reasoning_effort", "worktree", "provider", "policy"):
+            with self.subTest(key=key):
+                changed = copy.deepcopy(frozen)
+                changed[key] = "different"
+                with self.assertRaisesRegex(f.LaunchError, "conflicting_worker_runtime"):
+                    t.worker_runtime(changed)
+        with self.assertRaisesRegex(f.LaunchError, "conflicting_worker_runtime"):
+            t.freeze_worker_inputs(frozen, provider="another", policy="--yolo")
+
+    def test_invalid_binding_is_refused_before_freezing(self):
+        for field, value in (("model", ""), ("model", "bad\\nmodel"),
+                             ("reasoning_effort", None), ("worktree", "relative")):
+            with self.subTest(field=field, value=value):
+                inputs = self.inputs()
+                inputs[field] = value
+                with self.assertRaises(f.LaunchError):
+                    t.freeze_worker_inputs(inputs, provider="openai", policy="--yolo")
+        for provider, policy in ((None, "--yolo"), ("", "--yolo"), ("openai", "untrusted")):
+            with self.assertRaises(f.LaunchError):
+                t.freeze_worker_inputs(self.inputs(), provider=provider, policy=policy)
+        with self.assertRaisesRegex(f.LaunchError, "missing_cycle_runtime"):
+            t.freeze_worker_inputs({}, provider="openai", policy="--yolo")
+
+
 class TmuxTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="ot-", dir=Path("/tmp").resolve())
