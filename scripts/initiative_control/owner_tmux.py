@@ -56,6 +56,44 @@ def validate(config):
     return config
 
 
+def worker_runtime(inputs):
+    """Validate only recorded runtime; never infer provider or execution policy."""
+    runtime = inputs.get("worker")
+    f.require(isinstance(runtime, dict)
+              and set(runtime) == {"model", "provider", "effort", "worktree", "policy"}
+              and runtime["policy"] == "--yolo", "recorded_worker_runtime_required")
+    f.require(all(isinstance(value, str) and value for value in runtime.values()),
+              "invalid_worker_runtime")
+    f.require(all(re.fullmatch(r"[A-Za-z0-9_.:/-]+", runtime[key])
+                  for key in ("model", "provider", "effort")), "invalid_runtime_identifier")
+    f.require(Path(runtime["worktree"]).is_absolute(), "absolute_worktree_required")
+    for flat, nested in (("model", "model"), ("reasoning_effort", "effort"),
+                         ("worktree", "worktree"), ("provider", "provider"), ("policy", "policy")):
+        f.require(flat not in inputs or inputs[flat] == runtime[nested],
+                  "conflicting_worker_runtime")
+    return copy.deepcopy(runtime)
+
+
+def freeze_worker_inputs(inputs, *, provider, policy):
+    """Bridge cycle inputs BEFORE allocation registration and decision acceptance.
+
+    Callers supply explicit authority for provider/policy. Existing frozen
+    allocations/actions must be replaced/reprepared through the coordinator.
+    The returned worker block is part of the allocation digest and exact inputs.
+    """
+    f.require(isinstance(inputs, dict)
+              and all(key in inputs for key in ("model", "reasoning_effort", "worktree")),
+              "missing_cycle_runtime")
+    result = copy.deepcopy(inputs)
+    runtime = dict(model=inputs["model"], provider=provider,
+                   effort=inputs["reasoning_effort"], worktree=inputs["worktree"], policy=policy)
+    f.require("worker" not in result or result["worker"] == runtime,
+              "conflicting_worker_runtime")
+    result["worker"] = runtime
+    worker_runtime(result)
+    return result
+
+
 def provenance(records, binding, prompts, ack):
     """Only correlated completed rollout turns count; pane echoes never authorize."""
     result = {"session_id": None, "thread_id": None, "ack": False, "returned": None,

@@ -794,12 +794,9 @@ class Kernel:
         return state
 
     def worker_action(self, adapter, action):
-        from owner_tmux import Worker
+        from owner_tmux import Worker, worker_runtime
         f.require(action["kind"] in WORKER_KINDS, "unsupported_worker_kind")
-        inputs = action["inputs"]
-        runtime = inputs["worker"]
-        f.require(set(runtime) == {"model", "provider", "effort", "worktree", "policy"}
-                  and runtime["policy"] == "--yolo", "recorded_yolo_required")
+        runtime = worker_runtime(action["inputs"])
         f.require(runtime["worktree"] in self.config["worktrees"], "unallocated_worktree")
         # Freeze the same action assignment used by NativeOwner, including scope.
         assignment = encoded({k: action[k] for k in

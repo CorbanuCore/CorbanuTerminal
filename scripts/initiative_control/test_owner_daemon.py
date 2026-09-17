@@ -1008,7 +1008,7 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.fake.start()
         self.addCleanup(self.fake.stop)
 
-    def prepared(self, key="one", kind="repair", **runtime_changes):
+    def prepared(self, key="one", kind="repair", cycle_inputs=None, **runtime_changes):
         allocation = seed()[2]["bootstrap"]
         allocation["kinds"] = [kind]
         if kind == "complete_sprint":
@@ -1018,6 +1018,8 @@ class WorkerLifecycleTests(unittest.TestCase):
         allocation["inputs"]["worker"] = {
             "model": "fixture-model", "provider": "fixture", "effort": "high",
             "worktree": str(self.root), "policy": "--yolo", **runtime_changes}
+        if cycle_inputs is not None:
+            allocation["inputs"] = cycle_inputs
         self.c.put_allocation(key, allocation, False, self.c.snapshot()["revision"], {"fixture": True})
         self.c.event({"id": "prepare-" + key})
         packet = self.c.begin_manager()
@@ -1045,6 +1047,41 @@ class WorkerLifecycleTests(unittest.TestCase):
                           "acknowledged", "start", "working", "return_observed", "returned"}, set(effects))
         self.assertEqual({"applied"}, set(effects.values()))
         self.assertEqual([("work-turn",)], self.sql("SELECT active_turn_id FROM processes"))
+
+    def test_cycle_bridge_is_frozen_through_claim_and_return(self):
+        self.configure()
+        flat = dict(base_commit="a" * 40, brief_file=str(self.root / "brief.json"),
+                    brief_sha256="b" * 64, model="gpt-6-astra", reasoning_effort="high",
+                    task="Read the frozen brief", worktree=str(self.root))
+        frozen = tmux.freeze_worker_inputs(flat, provider="openai", policy="--yolo")
+        self.prepared(cycle_inputs=frozen)
+        before = self.c.snapshot()
+        action = before["actions"]["one"]
+        self.assertEqual({"allocation": "one", **frozen}, action["inputs"])
+        self.assertEqual(digest(before["allocations"]["one"]), action["allocation_digest"])
+        self.assertEqual("returned", self.tick()["actions"]["one"])
+        current = self.c.snapshot()["actions"]["one"]
+        self.assertEqual(action["inputs"], current["inputs"])
+        self.assertEqual(action["allocation_digest"], current["allocation_digest"])
+        self.assertEqual([("gpt-6-astra", "openai", "high", str(self.root))],
+                         self.sql("SELECT model,provider,effort,worktree FROM processes"))
+        self.assertEqual([("one", "launch"), ("one", "prompt"), ("one", "start")], FakeWorker.events)
+
+    def test_unbridged_or_conflicting_cycle_is_not_claimed(self):
+        self.configure()
+        flat = dict(model="gpt-6-astra", reasoning_effort="high", worktree=str(self.root))
+        self.prepared("flat", cycle_inputs=flat)
+        conflicting = tmux.freeze_worker_inputs(flat, provider="openai", policy="--yolo")
+        conflicting["model"] = "another-model"
+        self.prepared("conflict", cycle_inputs=conflicting)
+        self.assertEqual({"flat": "HOLD", "conflict": "HOLD"}, self.tick()["actions"])
+        for action in self.c.snapshot()["actions"].values():
+            self.assertEqual("prepared", action["status"])
+            self.assertIsNone(action.get("claim"))
+        self.assertEqual([], FakeWorker.events)
+        self.assertEqual([], self.sql("SELECT * FROM operations"))
+        self.assertEqual({"recorded_worker_runtime_required", "conflicting_worker_runtime"},
+                         {row[0] for row in self.sql("SELECT reason_code FROM holds")})
 
     def test_non_worker_actions_remain_unclaimed_across_healthy_ticks(self):
         self.configure()

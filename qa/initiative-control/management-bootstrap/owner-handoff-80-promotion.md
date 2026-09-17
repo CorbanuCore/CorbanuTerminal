@@ -1,5 +1,16 @@
 # owner-handoff-80 — live promotion commands (NOT EXECUTED)
 
+Round 93 preparation correction: use the explicit frozen-input bridge below
+before selecting actions. This recipe does not repair already-prepared actions
+in place. Receipt of the source change alone does not make flat actions runnable.
+
+Round 93 also observed a disposable uninstall publication failure on an existing
+`owner-recurrence.json.pending`. The recipe is corrected for allocation shape,
+but that separate cutover failure remains unresolved; see the
+[assertion audit](owner-shape-93-assertion-audit.md). Preserve the refusal and
+pending artifact if encountered. Do not delete publication evidence or blindly
+retry this procedure. No live promotion or real-worker qualification is claimed.
+
 This recipe changes the existing installation in place, preserving owner history,
 coordinator history, activation generations, schedule ticks and recovery evidence.
 Run it only after receiving this candidate and coordinating with the hand
@@ -78,6 +89,34 @@ tmux socket path below 100 bytes. Preserve each selected allocation's exact
 model/provider/effort/worktree and recorded `--yolo` policy. Do not substitute
 the rehearsal's synthetic worker.
 
+Before registering each worker allocation, the manager's preparation code must
+call the received candidate's named bridge. Supply provider and policy from the
+actual allocation authority, never from a model-name guess or the active profile:
+
+```python
+from owner_tmux import freeze_worker_inputs
+# cycle_inputs is the exact original eight-field action input object.
+bound = freeze_worker_inputs(cycle_inputs, provider=authorized_provider,
+                            policy=authorized_policy)  # must explicitly be "--yolo"
+allocation_id = bound.pop("allocation")
+allocation["inputs"] = bound
+coordinator.put_allocation(allocation_id, allocation, replace=replace_existing,
+                           expected_revision=coordinator.snapshot()["revision"],
+                           evidence=actual_preparation_authority)
+# The next accepted manager decision must copy the registered inputs exactly:
+action_inputs = {"allocation": allocation_id, **allocation["inputs"]}
+```
+
+Keep the brief SHA, base, task and other cycle values unchanged. The worker block
+is included in the allocation digest and exact accepted action inputs. Replacing
+a registered allocation cancels its old prepared actions and is refused while
+it has active reservations. Finish/reconcile active work first, then replace
+using the owner API and accept a fresh manager decision with a NEW action ID.
+Do not patch an action's inputs or reuse its old digest/claim. Future cycles need
+this bridge too; this worker cannot modify the external manager's preparation
+code. Already-frozen nested worker inputs remain supported, but duplicated flat
+model/effort/worktree/provider/policy must agree.
+
 The following are exact commands; replace the six operator inputs with the
 actual reviewed transport path, prepared action IDs and real activation
 decision. Their values cannot be honestly invented by this worker.
@@ -113,7 +152,7 @@ python, runtime, config_path = map(Path, (pins["python"], pins["runtime"], pins[
 config = owner.load(config_path)
 assert "transport" not in config, "This recipe expects the currently armed fixture-only installation"
 transport = owner.load(Path(os.environ["OWNER80_TRANSPORT"]))
-from owner_tmux import validate
+from owner_tmux import validate, worker_runtime
 validate(transport)
 selected = set(os.environ["OWNER80_ACTIONS"].split())
 assert selected, "Name at least one already-authorized prepared worker action"
@@ -123,8 +162,13 @@ assert snapshot["manager"] is None, "Finish/reconcile the existing hand manager 
 for key in selected:
     action = snapshot["actions"][key]
     assert action["status"] == "prepared" and action["kind"] in owner.WORKER_KINDS
-    assert action["inputs"]["worker"]["worktree"] in config["worktrees"]
-    assert action["inputs"]["worker"]["policy"] == "--yolo"
+    bound = worker_runtime(action["inputs"])
+    assert bound["worktree"] in config["worktrees"]
+    assert action["allocation_digest"] == digest(snapshot["allocations"][action["inputs"]["allocation"]])
+    assert action["inputs"] == {"allocation": action["inputs"]["allocation"],
+                                **snapshot["allocations"][action["inputs"]["allocation"]]["inputs"]}
+    coordinator._executable(snapshot, action)
+    coordinator._resources_available(snapshot, action)
 assert snapshot["enabled"], "Dispatch must already be authorized and enabled"
 
 env = dict(PATH=f.SAFE_PATH, PYTHONDONTWRITEBYTECODE="1",
@@ -169,6 +213,13 @@ assert status["complete"] and status["state"] == "armed"
 # computed watchdog coverage. This read does not repin, arm or change history.
 before = owner.activation_status(config_path)
 assert before["complete"] and before["scope"] == "fixture-only"
+assert not before["recovery_required"], "Reconcile interrupted activation before promotion"
+assert before["unresolved_holds"] == [], "Reconfiguration refuses ANY unresolved hold"
+assert not any(row["owner"] == "owner" and row["status"] not in
+               {"prepared", "accepted", "failed", "cancelled"}
+               for row in before["coordinator"]["ownership"].values()), "Settle existing owner claims"
+# The OFF reconfigure command also checks every operation is applied; a status
+# snapshot is advisory, so retain its refusal if a concurrent change intervenes.
 print("BEFORE: " + check_coverage(before, partitioned=False), flush=True)
 print(json.dumps(dict(before_status=before)), flush=True)
 run("owner_daemon.py", "--disarm", "--config", config_path, "--generation", status["generation"])

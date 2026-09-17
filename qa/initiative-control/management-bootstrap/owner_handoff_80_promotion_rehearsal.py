@@ -13,7 +13,7 @@ import activate
 from coordinator import Coordinator, digest
 import fable_launcher as f
 import owner_daemon as owner
-from owner_tmux import Worker
+from owner_tmux import Worker, freeze_worker_inputs
 from test_coordinator import seed
 from owner_handoff_80_rehearsal import FIXTURE, emit
 
@@ -34,8 +34,13 @@ def main():
     c.set_enabled(True, {"fixture": True})
     allocation = seed()[2]["bootstrap"]
     allocation["timeout_seconds"] = 180
-    allocation["inputs"]["worker"] = dict(model="fixture-model", provider="fixture", effort="high",
-                                           worktree=str(worktree), policy="--yolo")
+    brief = base / "brief.json"
+    f.write_json(brief, {"task": "synthetic promotion probe"})
+    cycle_inputs = dict(allocation="promotion", base_commit="a" * 40, brief_file=str(brief),
+                        brief_sha256=f.file_digest(brief), model="fixture-model",
+                        reasoning_effort="high", task="Read the frozen brief", worktree=str(worktree))
+    allocation["inputs"] = freeze_worker_inputs(cycle_inputs, provider="fixture", policy="--yolo")
+    allocation["inputs"].pop("allocation")
     c.put_allocation("promotion", allocation, False, c.snapshot()["revision"], {"fixture": True})
     c.event({"id": "promotion"})
     packet = c.begin_manager()
@@ -87,7 +92,16 @@ def main():
         while c.snapshot()["actions"]["promotion-work"]["status"] != "returned":
             assert time.monotonic() < end, "promoted recurring owner did not finish work"
             time.sleep(0.2)
-        status = owner.activation_status(config_path)
+        # Returned is committed before the tick releases its owner lock. Status
+        # is advisory and can be unavailable in that interval; preserve attempts.
+        end = time.monotonic() + 5
+        while True:
+            status = owner.activation_status(config_path)
+            emit("post_return_status", status=status)
+            if status["complete"]:
+                break
+            assert time.monotonic() < end, "post-return status remained unavailable"
+            time.sleep(0.1)
         assert status["scope"] == "tmux-workers" and status["generation"] == 3
         assert status["coordinator"]["ownership"]["promotion-work"]["owner"] == "owner"
         with c.connection() as db:
