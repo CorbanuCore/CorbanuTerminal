@@ -101,15 +101,20 @@ def owner_activation(args):
         def observe(location):
             try:
                 return owner.service(label, location)
-            except Exception as exc:
+            except (OSError, subprocess.SubprocessError) as exc:
                 raise f.LaunchError(f"service_observation_unavailable: {location}/{label}") from exc
         observations = {location: observe(location) for location in domains}
+        def sibling_observation():
+            state, detail = observations[domains[1]]
+            return dict(domain=domains[1], state=state,
+                        reason=detail if state == "domain_absent" else None)
         presence, output = observations[domain]
+        f.require(presence != "domain_absent", f"service_observation_unavailable: {domain}/{label}")
         target = f"{domain}/{label}"
         if args.owner == "install":
             for location, (state, _) in observations.items():
                 if location != domain or not previous:
-                    f.require(state == "absent", f"service_conflict: {location}/{label}")
+                    f.require(state in {"absent", "domain_absent"}, f"service_conflict: {location}/{label}")
         # A manual move can leave a job outside its receipt's domain.
         # Validate every loaded instance before removing any of them.
         for location, (state, output) in observations.items():
@@ -124,12 +129,14 @@ def owner_activation(args):
                     subprocess.run(["/bin/launchctl", "bootout", f"{location}/{label}"],
                                    check=True, timeout=40, env={})
             for location in domains:
-                f.require(observe(location)[0] == "absent",
+                observations[location] = observe(location)
+                allowed = {"absent", "domain_absent"} if location != domain else {"absent"}
+                f.require(observations[location][0] in allowed,
                           f"service_still_present: {location}/{label}")
             if plist.exists():
                 f.require(f.file_digest(owner.private_file(plist)) == previous["plist_sha256"], "plist_drift")
                 plist.unlink()
-            previous["phase"] = "uninstalled"
+            previous.update(phase="uninstalled", sibling_observation=sibling_observation())
             f.write_json(receipt_path, previous)
             owner.publish_schedule(root)
             return
@@ -174,6 +181,8 @@ def owner_activation(args):
             f.require({key: previous[key] for key in expected} == expected, "installation_conflict")
             if presence == "present":
                 f.require(previous["phase"] == "installed", "installation_reconciliation_required")
+                previous["sibling_observation"] = sibling_observation()
+                f.write_json(receipt_path, previous)
                 return
             f.require(previous["phase"] == "uninstalled", "installation_reconciliation_required")
         else:
@@ -183,11 +192,11 @@ def owner_activation(args):
             f.write_json(root / "tick.json", dict(started_at=None, completed_at=None, last_success=None,
                                                  hold=None, skipped=0, ticks=0, last_probe=None))
         f.write_file(plist, raw)
-        f.write_json(receipt_path, dict(expected, phase="installing"))
+        f.write_json(receipt_path, dict(expected, phase="installing", sibling_observation=sibling_observation()))
         subprocess.run(["/bin/launchctl", "bootstrap", domain, str(plist)],
                        check=True, timeout=10, env={})
         f.require(owner.service(label, domain)[0] == "present", "installation_unobserved")
-        f.write_json(receipt_path, dict(expected, phase="installed"))
+        f.write_json(receipt_path, dict(expected, phase="installed", sibling_observation=sibling_observation()))
         subprocess.run(["/bin/launchctl", "kickstart", target], check=True, timeout=10, env={})
 
 

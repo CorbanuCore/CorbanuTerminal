@@ -947,6 +947,88 @@ class RecurrenceTests(unittest.TestCase):
             self.assertEqual(before, (args.root / "installation.json").read_bytes())
             self.assertNotIn("bootout", calls)
 
+    def test_missing_sibling_domain_allows_install_reinstall_and_uninstall(self):
+        import activate
+        args = self.installation()
+        real_service = owner.service
+        for kind in ("gui", "user"):
+            with self.subTest(domain=kind):
+                args.domain, args.owner = kind, "install"
+                args.root = Path(self.tmp.name) / kind
+                args.root.mkdir(mode=0o700)
+                sibling = f"{'user' if kind == 'gui' else 'gui'}/{os.getuid()}"
+                descriptor = "uid" if kind == "gui" else "user gui"
+                diagnostic = f"Could not find domain for {descriptor}: {os.getuid()}"
+                service, command, calls = self.install(args)
+                with service as observed, command:
+                    normal = observed.side_effect
+                    def missing(label, domain=None):
+                        if domain == sibling:
+                            result = subprocess.CompletedProcess([], 112, "", f"Bad request.\n{diagnostic}\n")
+                            with patch.object(subprocess, "run", return_value=result):
+                                return real_service(label, domain)
+                        return normal(label, domain)
+                    observed.side_effect = missing
+                    for action in ("install", "install", "uninstall"):
+                        args.owner = action
+                        activate.owner_activation(args)
+                        receipt = owner.load(args.root / "installation.json")
+                        self.assertEqual(dict(domain=sibling, state="domain_absent", reason=diagnostic),
+                                         receipt["sibling_observation"])
+                    self.assertEqual("uninstalled", receipt["phase"])
+                    self.assertEqual(["bootstrap", "kickstart", "bootout"], calls)
+                    self.assertFalse((args.root / "owner.plist").exists())
+
+    def test_missing_selected_domain_refuses_before_install_writes(self):
+        import activate
+        args = self.installation()
+        for kind in ("gui", "user"):
+            args.domain = kind
+            with self.subTest(domain=kind), patch.object(
+                    owner, "service", return_value=("domain_absent", "missing")):
+                with self.assertRaisesRegex(f.LaunchError, "service_observation_unavailable"):
+                    activate.owner_activation(args)
+                self.assertEqual(["installation.lock"], [p.name for p in args.root.iterdir()])
+
+    def test_service_distinguishes_domain_absence_from_unreadable_domain(self):
+        label = "com.corbanu.initiative-owner.test-domain"
+        for kind, descriptor in (("gui", "user gui"), ("user", "uid")):
+            domain = f"{kind}/{os.getuid()}"
+            missing = f"Could not find domain for {descriptor}: {os.getuid()}"
+            for code, stderr, expected in (
+                    (112, f"Bad request.\n{missing}\n", ("domain_absent", missing)),
+                    (113, f'Could not find service "{label}" in domain\n', ("absent", "")),
+                    (1, "Could not print domain: 1: Operation not permitted\n", None),
+                    (112, f"{missing}0\n", None),
+                    (1, missing, None),
+                    (112, "Bad request.\n", None)):
+                with self.subTest(domain=kind, code=code, stderr=stderr), patch.object(
+                        subprocess, "run", return_value=subprocess.CompletedProcess([], code, "", stderr)):
+                    if expected:
+                        self.assertEqual(expected, owner.service(label, domain))
+                    else:
+                        with self.assertRaisesRegex(f.LaunchError, "service_observation_unavailable"):
+                            owner.service(label, domain)
+
+    def test_missing_domain_preserves_unknown_schedule_observation(self):
+        args = self.installation()
+        with patch.object(owner, "service", return_value=("domain_absent", "missing")):
+            observed = owner.observe_schedule(args.root, args.label)
+        self.assertEqual("unknown", observed["service"])
+        self.assertEqual("observation-unavailable", observed["reason"])
+
+    def test_invalid_label_is_not_remapped_to_observation_failure(self):
+        import activate
+        args = self.installation()
+        args.label = "not-an-owner-label"
+        with patch.object(subprocess, "run") as run:
+            with self.assertRaisesRegex(f.LaunchError, "^invalid_label$"):
+                activate.owner_activation(args)
+            for label in (None, 42, "com.corbanu.initiative-owner/bad"):
+                with self.assertRaisesRegex(f.LaunchError, "^invalid_label$"):
+                    owner.service(label)
+            run.assert_not_called()
+
     def test_uninstall_requires_verified_absence_in_other_domain_after_bootout(self):
         import activate
         args = self.installation()

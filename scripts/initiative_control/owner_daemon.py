@@ -536,14 +536,19 @@ def installation_domain(receipt):
 def service(label, domain=None):
     import re
     domain = installation_domain({"domain": domain} if domain is not None else {})
-    f.require(re.fullmatch(r"com\.corbanu\.initiative-owner(?:\.[a-zA-Z0-9-]+)?", label), "invalid_label")
+    f.require(isinstance(label, str) and
+              re.fullmatch(r"com\.corbanu\.initiative-owner(?:\.[a-zA-Z0-9-]+)?", label), "invalid_label")
     result = subprocess.run(["/bin/launchctl", "print", f"{domain}/{label}"],
                             capture_output=True, text=True, timeout=5, env={})
     if result.returncode == 0:
         return "present", result.stdout
     if result.returncode == 113 and f'Could not find service "{label}"' in result.stderr:
         return "absent", ""
-    raise f.LaunchError("service_observation_unavailable")
+    kind, uid = domain.split("/")
+    missing = f"Could not find domain for {'user gui' if kind == 'gui' else 'uid'}: {uid}"
+    if result.returncode == 112 and missing in result.stderr.splitlines():
+        return "domain_absent", missing
+    raise f.LaunchError(f"service_observation_unavailable: {domain}/{label}")
 
 
 def firing_source(root, receipt):
@@ -576,6 +581,7 @@ def observe_schedule(root, label="com.corbanu.initiative-owner"):
             label = receipt["label"]
         result["installed"] = receipt is not None and receipt["phase"] != "uninstalled"
         result["service"], output = service(label, installation_domain(receipt or {}))
+        f.require(result["service"] != "domain_absent", "service_observation_unavailable")
         if receipt and result["service"] == "present":
             plist = root / "owner.plist"
             f.require(f"path = {plist}\n" in output and
