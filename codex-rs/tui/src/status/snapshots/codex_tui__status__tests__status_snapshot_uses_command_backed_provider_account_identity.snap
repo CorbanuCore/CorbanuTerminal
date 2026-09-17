@@ -4,20 +4,18 @@ expression: sanitized
 ---
 /status
 
-╭─────────────────────────────────────────────────────────────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v<V>)                                                                     │
-│                                                                                                 │
-│  Model:                claude-opus-5-plan                                                       │
-│  Model provider:       Claude Plan                                                              │
-│  Directory: [[workspace]]                                                                       │
-│  Permissions:          Next turn: Custom (workspace with network access, Ask for approval)      │
-│                        A running turn keeps its captured permissions (not reported here) and    │
-│                        granted approvals. Shared services keep their existing refresh behavior. │
-│  Security:             Requested Permissive; effective protection unverified (/security)        │
-│  Agents.md:            <none>                                                                   │
-│  Account:              Claude Plan account connected                                            │
-│  Collaboration mode:   Default                                                                  │
-│                                                                                                 │
-│  Token usage:          0 total  (0 input + 0 output)                                            │
-│  Limits:               data not available yet                                                   │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭────────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v<V>)                                                                │
+│                                                                                            │
+│  Model:                claude-opus-5-plan                                                  │
+│  Model provider:       Claude Plan                                                         │
+│  Directory: [[workspace]]                                                                  │
+│  Permissions:          Next turn: Custom (workspace with network access, Ask for approval) │
+│  Security:             Requested Permissive; effective protection unverified (/security)   │
+│  Agents.md:            <none>                                                              │
+│  Account:              Claude Plan account connected                                       │
+│  Collaboration mode:   Default                                                             │
+│                                                                                            │
+│  Token usage:          0 total  (0 input + 0 output)                                       │
+│  Limits:               data not available yet                                              │
+╰────────────────────────────────────────────────────────────────────────────────────────────╯

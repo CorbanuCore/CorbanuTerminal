@@ -11,9 +11,6 @@ expression: sanitized
 │  Model provider:   Ambient                                               │
 │  Directory: [[workspace]]                                                │
 │  Permissions:      Next turn: Workspace (Ask for approval)               │
-│                    A running turn keeps its captured permissions (not    │
-│                    reported here) and granted approvals. Shared services │
-│                    keep their existing refresh behavior.                 │
 │  Security:         Requested Permissive; effective protection unverified │
 │                    (/security)                                           │
 │  Agents.md:        <none>                                                │

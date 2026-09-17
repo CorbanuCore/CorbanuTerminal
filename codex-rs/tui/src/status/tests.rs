@@ -280,7 +280,7 @@ fn permissions_text_for(config: &Config) -> Option<String> {
 }
 
 #[tokio::test]
-async fn status_permissions_distinguish_next_turn_from_unreported_running_authority() {
+async fn status_permissions_compact_next_turn_label_at_narrow_widths() {
     let temp_home = TempDir::new().expect("temp home");
     let mut config = test_config(&temp_home).await;
     let mut sections = Vec::new();
@@ -322,19 +322,29 @@ async fn status_permissions_distinguish_next_turn_from_unreported_running_author
             /*collaboration_mode*/ None,
             /*reasoning_effort_override*/ None,
         );
-        // Both loosening and tightening must label session settings as next-turn
-        // authority, without inventing a snapshot for an already-running task.
-        let lines = render_lines(&cell.display_lines(100));
-        let section = lines
-            .iter()
-            .skip_while(|line| !line.contains("Permissions:"))
-            .take_while(|line| !line.contains("Security:"))
-            .map(|line| line.trim_matches(['│', ' ']))
-            .collect::<Vec<_>>()
-            .join("\n");
-        sections.push(section);
+        // The renderer has no running-turn snapshot: retain the scope qualifier
+        // without an unconditional paragraph or a guessed authority comparison.
+        for width in [42, 46, 70, 100] {
+            let lines = render_lines(&cell.display_lines(width));
+            assert!(lines.iter().all(|line| line.width() <= usize::from(width)));
+            let section = lines
+                .iter()
+                .skip_while(|line| !line.contains("Permissions:"))
+                .take_while(|line| !line.contains("Security:"))
+                .map(|line| line.trim_matches(['│', ' ']))
+                .collect::<Vec<_>>();
+            assert!(section.len() <= 4, "width {width}: {section:?}");
+            sections.push(format!(
+                "width {width}: {} lines\n{}",
+                section.len(),
+                section.join("\n")
+            ));
+        }
     }
-    insta::assert_snapshot!(sections.join("\n\n"));
+    insta::assert_snapshot!(
+        "status_permissions_distinguish_next_turn_from_unreported_running_authority",
+        sections.join("\n\n")
+    );
 }
 
 #[tokio::test]

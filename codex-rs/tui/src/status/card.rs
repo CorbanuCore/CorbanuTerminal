@@ -868,10 +868,6 @@ impl HistoryCell for StatusHistoryCell {
                     .map(|line| formatter.continuation(vec![Span::from(line.into_owned())])),
             );
         }
-        lines.extend(textwrap::wrap(
-            "A running turn keeps its captured permissions (not reported here) and granted approvals. Shared services keep their existing refresh behavior.",
-            value_width.max(1),
-        ).into_iter().map(|line| formatter.continuation(vec![Span::from(line.into_owned())])));
         let mut security_lines = textwrap::wrap(&self.security, value_width.max(1)).into_iter();
         if let Some(first) = security_lines.next() {
             lines.push(formatter.line("Security", vec![Span::from(first.into_owned())]));

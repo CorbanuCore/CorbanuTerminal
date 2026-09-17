@@ -104,6 +104,142 @@ async fn permission_confirmation_native_requests_carry_effective_defaults() {
     .await;
 }
 
+#[tokio::test]
+async fn permission_confirmation_hint_matches_retained_steer_and_latest_submission() {
+    use crate::app_command::AppCommand;
+    use codex_app_server_client::TypedRequestError;
+    use codex_app_server_protocol::JSONRPCErrorError;
+    use codex_app_server_protocol::ServerNotification;
+    use codex_app_server_protocol::Turn;
+    use codex_app_server_protocol::TurnCompletedNotification;
+    use codex_app_server_protocol::TurnStartedNotification;
+    use codex_app_server_protocol::TurnStatus;
+
+    let (mut app, mut events, mut ops) = super::super::tests::make_test_app_with_channels().await;
+    let thread_id = ThreadId::new();
+    app.active_thread_id = Some(thread_id);
+    app.chat_widget
+        .handle_thread_session(super::super::tests::test_thread_session(
+            thread_id,
+            app.config.cwd.to_path_buf(),
+        ));
+    let turn = |status| Turn {
+        id: "captured-turn".into(),
+        items_view: codex_app_server_protocol::TurnItemsView::Full,
+        items: Vec::new(),
+        status,
+        error: None,
+        started_at: None,
+        completed_at: None,
+        duration_ms: None,
+    };
+    app.chat_widget.handle_server_notification(
+        ServerNotification::TurnStarted(TurnStartedNotification {
+            thread_id: thread_id.to_string(),
+            turn: turn(TurnStatus::InProgress),
+        }),
+        None,
+    );
+    app.chat_widget
+        .set_permission_profile_with_active_profile(
+            PermissionProfile::Disabled,
+            Some(ActivePermissionProfile::new(":danger-full-access")),
+        )
+        .unwrap();
+    app.chat_widget.set_approval_policy(AskForApproval::Never);
+    let pending = PendingPermissionConfirmation {
+        observed: true,
+        label: "Full Access".into(),
+        requested: ThreadSettingsUpdateParams {
+            permissions: Some(":danger-full-access".into()),
+            ..Default::default()
+        },
+        ..pending_confirmation(thread_id)
+    };
+    let selection_id = pending.selection_id;
+    app.pending_permission_confirmation = Some(pending);
+    while events.try_recv().is_ok() {}
+    while ops.try_recv().is_ok() {}
+    app.finish_permission_confirmation(selection_id, PermissionConfirmationResult::Applied);
+    let rendered_hint = std::iter::from_fn(|| events.try_recv().ok())
+        .filter_map(|event| match event {
+            AppEvent::InsertHistoryCell(cell) => Some(cell.display_lines(80)),
+            _ => None,
+        })
+        .flatten()
+        .map(|line| line.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let prompt = "retain this prompt through the authority change";
+    app.chat_widget
+        .restore_user_message_to_composer(crate::chatwidget::UserMessage::from(prompt));
+    app.chat_widget
+        .handle_key_event(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Enter,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+    let attempted = std::iter::from_fn(|| ops.try_recv().ok())
+        .find_map(|op| match op {
+            AppCommand::UserTurn { items, .. } => Some(items),
+            _ => None,
+        })
+        .expect("prompt attempts steering while the turn runs");
+    app.note_thread_steer_failure(
+        thread_id,
+        TypedRequestError::Server {
+            method: "turn/steer".into(),
+            source: JSONRPCErrorError {
+                code: -32600,
+                message: "authorization changed".into(),
+                data: Some(serde_json::json!({"code": "authorizationChanged"})),
+            },
+        },
+    );
+    let held = app.chat_widget.queued_user_message_texts();
+    assert!(!app.chat_widget.maybe_send_next_queued_input());
+    assert!(
+        ops.try_recv().is_err(),
+        "held input must not submit during the running turn"
+    );
+
+    // A subsequent selection must govern the retained prompt, not its send-time settings.
+    app.chat_widget
+        .set_permission_profile_with_active_profile(
+            PermissionProfile::read_only(),
+            Some(ActivePermissionProfile::read_only()),
+        )
+        .unwrap();
+    app.chat_widget
+        .set_approval_policy(AskForApproval::OnRequest);
+    app.chat_widget.handle_server_notification(
+        ServerNotification::TurnCompleted(TurnCompletedNotification {
+            thread_id: thread_id.to_string(),
+            turn: turn(TurnStatus::Completed),
+        }),
+        None,
+    );
+    let submitted = std::iter::from_fn(|| ops.try_recv().ok())
+        .filter_map(|op| match op {
+            AppCommand::UserTurn {
+                items,
+                approval_policy,
+                active_permission_profile,
+                ..
+            } => Some((items, approval_policy, active_permission_profile)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    // One contract assertion couples the visible claim to retention and exactly-once replay.
+    assert_eq!(
+        (rendered_hint.contains("a prompt sent here is held until it finishes, then runs with the latest permissions"),
+         held, submitted, app.chat_widget.queued_user_message_texts()),
+        (true, vec![prompt.to_string()],
+         vec![(attempted, AskForApproval::OnRequest, Some(ActivePermissionProfile::read_only()))],
+         Vec::<String>::new()),
+    );
+}
+
 #[test]
 fn permission_confirmation_outcomes_are_explicit() {
     let messages = [
