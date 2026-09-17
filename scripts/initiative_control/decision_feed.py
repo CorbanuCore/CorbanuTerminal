@@ -78,6 +78,8 @@ def project_slack(state, store_path, at, enabled=False):
     def collect(feed, saved, ledger, binding, ingress):
         events = ledger["events"]
         for item in feed["decisions"]:
+            answered = {record["resolution"]["answered_revision"] for record in item["revisions"]
+                        if record["resolution"] is not None}
             for record in item["revisions"]:
                 candidates = [(key, alerts.alert(saved, key)) for key in saved
                               if saved[key]["intent"]["feed_id"] == feed["feed_id"]
@@ -117,7 +119,7 @@ def project_slack(state, store_path, at, enabled=False):
                                   or any(counts[name] for name in manager.COUNTS if name != "agent_acknowledged")
                                   or any(notice["state"] != "sent" for notice in row.get("notices", {}).values())
                                   or (not row["cancelled"] and (not intents or delivery != "sent")))
-                if record is item["revisions"][-1] or unresolved:
+                if record is item["revisions"][-1] or record["revision"] in answered or unresolved:
                     rows.append(dict(id=item["id"], revision=record["revision"], context_digest=d.digest(record), delivery=delivery, pending=pending, replies=counts))
 
     if enabled:
@@ -398,7 +400,8 @@ def render(snapshot, at, sprints, documents):
     omitted = (snapshot.get("slack") or {}).get("omitted_revisions", 0)
     if omitted:
         body += (f"<p>Slack projection omits {omitted} older revision(s). "
-                 "Every latest decision revision is included; full decision history remains above. "
+                 "Every latest decision revision and every answered question revision is included in new projections; "
+                 "full decision history remains above. "
                  "Older unresolved alerts are retained when Slack projection is enabled.</p>")
     recurrence = owner_health(snapshot.get("owner_recurrence"), at)
     def timestamp(value):

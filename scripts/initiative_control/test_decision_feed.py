@@ -56,6 +56,13 @@ class ProjectionRegressionTests(unittest.TestCase):
         for item in value["decisions"]:
             self.assertIn((item["id"], item["revisions"][-1]["revision"]), selected, item["id"])
 
+    def test_historical_resolutions_also_retain_their_answered_revisions(self):
+        value = revision(revision(revision(revision(fixture(), "resolved"))), "resolved")
+        self.save(value)
+        result = transport.project_slack(self.state, None, NOW)
+        self.assertEqual({1, 4, 5}, {row["revision"] for row in result["decisions"]})
+        self.assertEqual(2, result["omitted_revisions"])
+
     def test_bound_never_drops_open_or_acknowledged_question_after_closed_history(self):
         value = fixture()
         resolved = revision(value, "resolved")["decisions"][0]["revisions"]
@@ -813,6 +820,37 @@ from test_slack_transport import LiveFixture
 
 
 class SlackProjectionTests(LiveFixture):
+    def test_resolved_decision_slack_line_survives_omission_with_slack_on(self):
+        self.check_resolved_decision_after_omission(True)
+
+    def test_resolved_decision_slack_line_survives_omission_with_slack_off(self):
+        self.check_resolved_decision_after_omission(False)
+
+    def check_resolved_decision_after_omission(self, enabled):
+        # A cancelled, fully settled alert must survive because a resolution
+        # cites it, not because it has outstanding transport obligations.
+        with self.store.lock():
+            saved = self.store.read("alerts")
+            saved[self.key].update(cancelled=True, reason="cancelled")
+            self.store.write("alerts", saved)
+        intermediate = revision(self.feed)
+        d.save_fixture(self.feed_root, intermediate, d.digest(self.feed), NOW)
+        changed = revision(intermediate, "resolved")
+        changed["decisions"][0]["revisions"][-1]["resolution"]["answered_revision"] = 1
+        d.save_fixture(self.feed_root, changed, d.digest(intermediate), NOW)
+        with patch("slack_sdk.WebClient", side_effect=AssertionError("no network")):
+            result = transport.project_slack(self.feed_root, self.root if enabled else None, NOW, enabled)
+        rows = {row["revision"]: row for row in result["decisions"]}
+        self.assertEqual({1, 3}, set(rows), "answered revision must survive; unrelated history may be omitted")
+        self.assertEqual(1, result["omitted_revisions"])
+        delivery = "cancelled" if enabled else "off"
+        self.assertEqual(delivery, rows[1]["delivery"])
+        page = transport.render(dict(feed=changed, slack=result, slack_status="valid"), NOW, [], {})
+        card = page.split('id="decision-choice-1"', 1)[1].split("<details>", 1)[0]
+        self.assertIn("Slack — question revision 1</strong> Alert: " + delivery + "; awaiting processing: 0", card)
+        self.assertNotIn("Slack status for this question revision: unknown", card)
+        self.assertIn("omits 1 older revision(s) for this decision", card)
+
     def test_older_unanswered_alert_survives_after_projection_exceeds_old_bound(self):
         self.sending()
         changed = revision(self.feed)

@@ -427,7 +427,7 @@ class ActivationVisibilityTests(unittest.TestCase):
         self.assertEqual("off", value["state"])
         self.assertEqual(0, value["generation"])
         self.assertIsNone(value["coordinator"])
-        self.assertEqual("database is locked", value["unavailable"]["coordinator"]["reason"])
+        self.assertEqual("OperationalError", value["unavailable"]["coordinator"]["reason"])
 
     def test_busy_owner_still_reports_coordinator_and_unknown_owner(self):
         with owner.locked(self.root / "owner-daemon.lock"):
@@ -438,6 +438,28 @@ class ActivationVisibilityTests(unittest.TestCase):
         self.assertIsNone(result["stored"])
         self.assertIn("owner", result["unavailable"])
         self.assertEqual([], result["coordinator"]["in_flight"])
+
+    def test_partial_status_cli_redacts_untrusted_error_details(self):
+        import io
+        from contextlib import redirect_stdout
+        for component, operation in (("owner", "activation_store"),
+                                     ("coordinator", "coordinator_activation_impact")):
+            for error in (OSError("private-path-canary"), sqlite3.OperationalError("private-statement-canary"),
+                          ValueError("private-value-canary"), TypeError("private-type-canary"),
+                          KeyError("private-key-canary"), f.LaunchError("owner_busy"),
+                          owner.Rejected("coordinator_recovery_required")):
+                with self.subTest(component=component, error=type(error).__name__):
+                    output = io.StringIO()
+                    with patch.object(owner, operation, side_effect=error), redirect_stdout(output):
+                        code = owner.main(["--activation-status", "--config", str(self.config_path)])
+                    self.assertEqual(0, code)
+                    value = json.loads(output.getvalue())
+                    self.assertFalse(value["complete"])
+                    expected = str(error) if isinstance(error, (f.LaunchError, owner.Rejected)) else type(error).__name__
+                    self.assertEqual(dict(error=type(error).__name__, reason=expected),
+                                     value["unavailable"][component])
+                    self.assertNotIn("canary", output.getvalue())
+                    self.assertIsNotNone(value["coordinator"] if component == "owner" else value["state"])
 
     def test_complete_status_is_explicit(self):
         result = owner.activation_status(self.config_path)

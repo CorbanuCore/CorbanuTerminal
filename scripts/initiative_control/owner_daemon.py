@@ -253,11 +253,13 @@ def activation_status(config_path):
             result.update(state=meta["requested_mode"], generation=meta["control_generation"],
                           next_generation=meta["control_generation"] + 1, stored=meta)
     except errors as exc:
-        result["unavailable"]["owner"] = dict(error=type(exc).__name__, reason=str(exc))
+        reason = str(exc) if isinstance(exc, (f.LaunchError, Rejected)) else type(exc).__name__
+        result["unavailable"]["owner"] = dict(error=type(exc).__name__, reason=reason)
     try:
         result["coordinator"] = coordinator_activation_impact(root)
     except errors as exc:
-        result["unavailable"]["coordinator"] = dict(error=type(exc).__name__, reason=str(exc))
+        reason = str(exc) if isinstance(exc, (f.LaunchError, Rejected)) else type(exc).__name__
+        result["unavailable"]["coordinator"] = dict(error=type(exc).__name__, reason=reason)
     result["complete"] = not result["unavailable"]
     return result
 
