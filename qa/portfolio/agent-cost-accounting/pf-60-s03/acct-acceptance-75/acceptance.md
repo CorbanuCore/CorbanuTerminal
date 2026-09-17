@@ -123,10 +123,13 @@ BASELINE DRIFT: expected counts/exit=(20, 0, 3, 2), unavailable=['committed pack
 RESULT agreement=19 disagreement=1 unavailable=3 exit=3
 ```
 
-The manager reports that this record has been reviewed adversarially five times
-before this revision; that count is supplied review history, not an independently
-verified review roster or owner approval. The recurring defect was self-confirming
-evidence: a check or claim appeared to validate more than it actually tested.
+The manager reports five independent automated adversarial reviews before the
+round-103 revision, run at `claude-opus-5-plan` with `high` effort, with author and
+reviewer separated and each review blocking receipt until its findings were
+answered; that count is supplied review history, not an independently verified
+review roster or owner approval. No human has reviewed this record. The recurring
+defect was self-confirming evidence: a check or claim appeared to validate more
+than it actually tested.
 The retained correction trail shows how it was caught: inspecting the script
 found a literal no-defect verdict and led to its removal and named manual-reader
 attribution ([verdict correction](../acct-derive-95/RETURN.md)); running the operator blocks

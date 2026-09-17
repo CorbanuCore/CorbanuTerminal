@@ -65,8 +65,8 @@ The four destination refusals now consistently print `STOP:` before refusing:
 | Refusal | Message after STOP: | Exit |
 | --- | --- | --- |
 | Older Python | destination guard requires Python 3.9 or newer. | 1 |
-| Existing destination | destination already exists; preserve it and choose a new path. | 1 |
-| Destination symlink (including dangling) | destination is a symlink; preserve it and choose a new path. | 1 |
+| Existing destination (including a symlink to an existing target) | destination already exists; preserve it and choose a new path. | 1 |
+| Dangling destination symlink | destination is a symlink; preserve it and choose a new path. | 1 |
 | Failed inside-source ignore check | inside-source destination did not pass git check-ignore; choose an ignored path. | Git's nonzero status (1 observed for unignored paths) |
 
 The already explicit relative-path refusal remains. [Checks](checks.json) retain

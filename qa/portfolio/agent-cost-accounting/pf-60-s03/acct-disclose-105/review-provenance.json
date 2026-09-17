@@ -1,0 +1,19 @@
+{
+  "source": "Manager-reported history; runtime confirmed from the five local review launch scripts. Not a certification of reviewer independence, complete review roster, or owner approval.",
+  "model": "claude-opus-5-plan",
+  "effort": "high",
+  "launch_scripts": [
+    "/private/tmp/frev.VLAVrr/run.sh",
+    "/private/tmp/frev.uoC54z/run.sh",
+    "/private/tmp/frev.UUgf2X/run.sh",
+    "/private/tmp/frev.Vzp9nU/run.sh",
+    "/private/tmp/frev.PlnDbi/run.sh"
+  ],
+  "rounds": [
+    95,
+    96,
+    97,
+    100,
+    102
+  ]
+}

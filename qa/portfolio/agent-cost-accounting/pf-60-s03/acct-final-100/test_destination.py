@@ -76,6 +76,10 @@ for name, destination, expected in cases:
         raise RuntimeError(f"destination exit differs from expected: {row}")
     if ("DESTINATION_ALLOWED" in result.stdout) != (expected == 0):
         raise RuntimeError(f"destination checkpoint differs from expected: {row}")
+alias_records = [row for row in records if row["case"] == "alias-unignored-regression"]
+if len(alias_records) != 1 or "old_guard_exit" not in alias_records[0]:
+    raise RuntimeError("missing unique pinned alias-unignored-regression observation")
+observed_old, observed_new = alias_records[0]["old_guard_exit"], alias_records[0]["exit"]
 record = dict(old_commit=old_commit, new_commit=new_commit,
               old_note_sha256=hashlib.sha256(old.encode()).hexdigest(),
               old_guard_sha256=hashlib.sha256(old_guard.encode()).hexdigest(),
