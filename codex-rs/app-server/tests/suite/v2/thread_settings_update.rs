@@ -286,6 +286,70 @@ async fn thread_settings_confirmation_f04_restricts_work_steered_after_applied()
 }
 
 #[tokio::test]
+async fn thread_settings_authorization_boundary_returns_input_and_discriminator() -> Result<()> {
+    use codex_app_server_protocol::AskForApproval;
+    use codex_app_server_protocol::ServerRequest;
+    let fixture = TempDir::new()?;
+    let server = create_mock_responses_server_sequence_unchecked(vec![
+        write_probe(&fixture.path().join("marker"), "pending")?,
+        create_final_assistant_message_sse_response("done")?,
+    ])
+    .await;
+    let home = TempDir::new()?;
+    create_config_toml(home.path(), &server.uri())?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .build_initialized_with_timeout(Duration::from_secs(60))
+        .await?;
+    let thread = start_thread(&mut mcp).await?.thread;
+    confirm_permission(&mut mcp, &thread.id, AskForApproval::UnlessTrusted).await?;
+    let request = mcp
+        .send_turn_start_request(TurnStartParams {
+            thread_id: thread.id.clone(),
+            input: vec![V2UserInput::Text {
+                text: "hold pending approval".into(),
+                text_elements: vec![],
+            }],
+            ..Default::default()
+        })
+        .await?;
+    let TurnStartResponse { turn } = mcp.read_response(request).await?;
+    let ServerRequest::CommandExecutionRequestApproval { request_id, .. } =
+        timeout(DEFAULT_TIMEOUT, mcp.read_stream_until_request_message()).await??
+    else {
+        anyhow::bail!("expected pending approval")
+    };
+    confirm_permission(&mut mcp, &thread.id, AskForApproval::Never).await?;
+    let request = mcp
+        .send_turn_steer_request(codex_app_server_protocol::TurnSteerParams {
+            thread_id: thread.id,
+            expected_turn_id: turn.id,
+            input: vec![V2UserInput::Text {
+                text: "retain this input".into(),
+                text_elements: vec![],
+            }],
+            client_user_message_id: None,
+            responsesapi_client_metadata: None,
+            additional_context: None,
+        })
+        .await?;
+    let error = timeout(
+        DEFAULT_TIMEOUT,
+        mcp.read_stream_until_error_message(RequestId::Integer(request)),
+    )
+    .await??;
+    let data = error.error.data.context("discriminated boundary error")?;
+    assert_eq!(data["code"], "authorizationChanged");
+    assert_eq!(data["inputDisposition"], "returned");
+    assert_eq!(data["input"][0]["text"], "retain this input");
+    mcp.send_response(request_id, serde_json::json!({"decision": "decline"}))
+        .await?;
+    assert_eq!(finish_probe(&mut mcp, "pending").await?, 0);
+    assert!(!fixture.path().join("marker").exists());
+    Ok(())
+}
+
+#[tokio::test]
 async fn thread_settings_confirmation_next_turn_tightening_and_loosening() -> Result<()> {
     use codex_app_server_protocol::AskForApproval;
     let home = TempDir::new()?;

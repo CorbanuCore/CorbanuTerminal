@@ -289,7 +289,14 @@ pub(super) async fn user_input_or_turn_inner(
             )
             .await;
         }
-        Err(SteerInputError::ActiveTurnNotSteerable { .. }) => {
+        Err(
+            err @ (SteerInputError::AuthorizationChanged(_)
+            | SteerInputError::ActiveTurnNotSteerable { .. }),
+        ) => {
+            let items = match err {
+                SteerInputError::AuthorizationChanged(items) => items,
+                _ => items,
+            };
             #[cfg(test)]
             active_turn_not_steerable_defer_hook_for_test().await;
 
@@ -305,6 +312,7 @@ pub(super) async fn user_input_or_turn_inner(
                     current_context.session_telemetry.user_prompt(&items);
                 }
                 Err(SteerInputError::NoActiveTurn(items)) => {
+                    let current_context = sess.new_default_turn_with_sub_id(sub_id.clone()).await;
                     if let Some(id) = parent_turn_id {
                         current_context.turn_metadata_state.set_parent_turn_id(id);
                     }
@@ -403,7 +411,7 @@ pub async fn inter_agent_communication(
     let trigger_turn = communication.trigger_turn;
     sess.input_queue
         .enqueue_mailbox_communication_for_session(
-            &sess.active_turn,
+            sess,
             communication,
             parent_turn_id.filter(|_| trigger_turn),
         )

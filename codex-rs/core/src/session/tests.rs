@@ -11610,7 +11610,13 @@ async fn steer_input_rejects_changed_authorization_without_mutating_active_work(
             )
             .await
             .expect_err("changed authorization must refuse admission");
-        assert_eq!(error, SteerInputError::AuthorizationChanged);
+        assert_eq!(
+            error,
+            SteerInputError::AuthorizationChanged(vec![UserInput::Text {
+                text: "new work".into(),
+                text_elements: Vec::new(),
+            }])
+        );
         assert_eq!(
             error.to_error_event().message,
             "Permissions changed since this turn started. Wait for it to finish or stop it, then submit your message again."
@@ -11666,6 +11672,359 @@ async fn steer_input_accepts_unchanged_authorization_after_settings_update() {
         .await,
         Ok(tc.sub_id.clone())
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn authorization_changed_defer_race_starts_fresh_turn_without_error() {
+    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        Vec::new(),
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: false,
+        },
+    )
+    .await;
+
+    sess.update_settings(SessionSettingsUpdate {
+        approval_policy: Some(AskForApproval::UnlessTrusted),
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    while rx.try_recv().is_ok() {}
+
+    let deferred_input = vec![UserInput::Text {
+        text: "run after compact race".to_string(),
+        text_elements: Vec::new(),
+    }];
+    let (reached_tx, reached_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+    super::handlers::set_active_turn_not_steerable_defer_hook_for_test(reached_tx, release_rx);
+
+    let handler_session = Arc::clone(&sess);
+    let handler_input = deferred_input.clone();
+    let handler = tokio::spawn(async move {
+        super::handlers::user_input_or_turn_inner(
+            &handler_session,
+            "deferred-race-input".to_string(),
+            Op::UserInput {
+                items: handler_input,
+                final_output_json_schema: None,
+                responsesapi_client_metadata: None,
+                additional_context: Default::default(),
+                thread_settings: ThreadSettingsOverrides::default(),
+            },
+            /*client_user_message_id*/ None,
+            /*parent_turn_id*/ None,
+        )
+        .await;
+    });
+
+    reached_rx
+        .await
+        .expect("handler should reach the pre-defer race hook");
+    sess.on_task_finished(Arc::clone(&tc), /*task_result*/ Ok(None))
+        .await;
+
+    let compact_complete = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+        .await
+        .expect("expected compact turn complete event")
+        .expect("channel open");
+    assert!(matches!(
+        compact_complete.msg,
+        EventMsg::TurnComplete(TurnCompleteEvent { turn_id, .. }) if turn_id == tc.sub_id
+    ));
+
+    sess.update_settings(SessionSettingsUpdate {
+        approval_policy: Some(AskForApproval::Never),
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    release_tx.send(()).expect("handler release receiver open");
+    handler.await.expect("handler task should not panic");
+
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        let event = tokio::time::timeout(remaining, rx.recv())
+            .await
+            .expect("expected fresh turn start without error")
+            .expect("channel open");
+        match event.msg {
+            EventMsg::Error(err) => panic!("defer race should not emit an error: {err:?}"),
+            EventMsg::TurnStarted(TurnStartedEvent { turn_id, .. }) => {
+                assert_ne!(turn_id, tc.sub_id);
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    expect_user_message_item_started(&rx, &deferred_input).await;
+    assert_eq!(
+        sess.active_turn
+            .lock()
+            .await
+            .as_ref()
+            .unwrap()
+            .task
+            .as_ref()
+            .unwrap()
+            .turn_context
+            .approval_policy
+            .value(),
+        AskForApproval::Never
+    );
+
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
+
+#[tokio::test]
+async fn authorization_changed_mail_waits_for_turn_boundary() {
+    for trigger_turn in [false, true] {
+        let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+        sess.spawn_task(
+            Arc::clone(&tc),
+            Vec::new(),
+            NeverEndingTask {
+                kind: TaskKind::Regular,
+                listen_to_cancellation_token: true,
+            },
+        )
+        .await;
+        sess.update_settings(SessionSettingsUpdate {
+            approval_policy: Some(AskForApproval::UnlessTrusted),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        let mail = InterAgentCommunication::new(
+            AgentPath::root(),
+            AgentPath::root(),
+            vec![],
+            "deferred peer work".into(),
+            trigger_turn,
+        );
+        super::handlers::inter_agent_communication(
+            &sess,
+            "mail".into(),
+            mail.clone(),
+            Some("parent".into()),
+        )
+        .await;
+        // Reopening delivery or restoring the old selection must not release deferred mail.
+        sess.update_settings(SessionSettingsUpdate {
+            approval_policy: Some(tc.approval_policy.value()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        sess.input_queue
+            .accept_mailbox_delivery_for_current_turn(&sess.active_turn, &tc.sub_id)
+            .await;
+        assert!(!sess.input_queue.has_pending_input(&sess.active_turn).await);
+        assert_eq!(
+            sess.input_queue.get_pending_input(&sess.active_turn).await,
+            (vec![], None)
+        );
+        sess.input_queue.mark_mailbox_ready_for_next_turn().await;
+        assert_eq!(
+            sess.input_queue.get_pending_input(&sess.active_turn).await,
+            (vec![], None)
+        );
+        sess.abort_all_tasks(TurnAbortReason::Replaced).await;
+        assert_eq!(
+            sess.input_queue.drain_ready_mailbox_input_items().await,
+            (
+                vec![TurnInput::InterAgentCommunication(mail)],
+                trigger_turn.then(|| "parent".into())
+            )
+        );
+        sess.abort_all_tasks(TurnAbortReason::Replaced).await;
+    }
+}
+
+#[tokio::test]
+async fn authorization_changed_injection_preserves_items_until_completion() {
+    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        vec![],
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+    sess.update_settings(SessionSettingsUpdate {
+        approval_policy: Some(AskForApproval::UnlessTrusted),
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    let item = ResponseItem::Message {
+        id: None,
+        role: "user".into(),
+        content: vec![ContentItem::InputText {
+            text: "extension work".into(),
+        }],
+        phase: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let history_before = sess.clone_history().await.raw_items().to_vec();
+    sess.inject_no_new_turn(vec![item.clone()], Some(&tc)).await;
+    assert_eq!(sess.clone_history().await.raw_items(), history_before);
+    assert!(!sess.input_queue.has_pending_input(&sess.active_turn).await);
+    assert_eq!(
+        sess.input_queue.get_pending_input(&sess.active_turn).await,
+        (vec![], None)
+    );
+    let turn_state = sess
+        .active_turn
+        .lock()
+        .await
+        .as_ref()
+        .unwrap()
+        .turn_state
+        .clone();
+    assert_eq!(
+        sess.input_queue
+            .take_pending_input_for_turn_state(&turn_state)
+            .await,
+        vec![TurnInput::ResponseItem(item)]
+    );
+    sess.abort_all_tasks(TurnAbortReason::Replaced).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn authorization_changed_user_input_runs_after_completion_with_latest_permissions() {
+    let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        vec![],
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: false,
+        },
+    )
+    .await;
+    sess.update_settings(SessionSettingsUpdate {
+        approval_policy: Some(AskForApproval::UnlessTrusted),
+        ..Default::default()
+    })
+    .await
+    .unwrap();
+    let items = vec![UserInput::Text {
+        text: "keep my follow-up".into(),
+        text_elements: vec![],
+    }];
+    super::handlers::user_input_or_turn_inner(
+        &sess,
+        "deferred".into(),
+        Op::UserInput {
+            items: items.clone(),
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        },
+        Some("client-delivery".into()),
+        None,
+    )
+    .await;
+    assert!(!sess.input_queue.has_pending_input(&sess.active_turn).await);
+    assert_eq!(
+        sess.input_queue.get_pending_input(&sess.active_turn).await,
+        (vec![], None)
+    );
+    while rx.try_recv().is_ok() {}
+    sess.on_task_finished(Arc::clone(&tc), Ok(None)).await;
+    expect_user_message_item_started(&rx, &items).await;
+    let active = sess.active_turn.lock().await;
+    let next = &active.as_ref().unwrap().task.as_ref().unwrap().turn_context;
+    assert_ne!(next.sub_id, tc.sub_id);
+    assert_eq!(next.approval_policy.value(), AskForApproval::UnlessTrusted);
+    drop(active);
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
+
+#[tokio::test]
+async fn authorization_changed_deferred_input_survives_interrupt() {
+    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        vec![],
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+    let items = vec![UserInput::Text {
+        text: "keep after interrupt".into(),
+        text_elements: vec![],
+    }];
+    sess.defer_user_input_until_active_turn_finished(
+        items.clone(),
+        Default::default(),
+        Some("client".into()),
+    )
+    .await
+    .unwrap();
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+    assert_eq!(
+        sess.input_queue
+            .get_pending_input_for_task_start(&sess.active_turn)
+            .await,
+        (
+            vec![TurnInput::UserInput {
+                content: items,
+                client_id: Some("client".into())
+            }],
+            None
+        )
+    );
+}
+
+#[tokio::test]
+async fn steer_input_accepts_runtime_user_layer_reload() {
+    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        vec![],
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+    let home = sess.codex_home().await;
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(
+        home.join(CONFIG_TOML_FILE),
+        "[apps.calendar]\nenabled = false\n",
+    )
+    .unwrap();
+    let next_config = load_latest_config_for_session(&sess).await;
+    sess.refresh_runtime_config(next_config).await;
+    assert_eq!(
+        sess.steer_input(
+            vec![UserInput::Text {
+                text: "after reload".into(),
+                text_elements: vec![]
+            }],
+            Default::default(),
+            Some(&tc.sub_id),
+            None,
+            None
+        )
+        .await,
+        Ok(tc.sub_id.clone())
+    );
+    sess.abort_all_tasks(TurnAbortReason::Replaced).await;
 }
 
 #[tokio::test]

@@ -24,6 +24,18 @@ impl Session {
         let mut active = self.active_turn.lock().await;
         match active.as_mut() {
             Some(active_turn) => {
+                let state = self.state.lock().await;
+                if active_turn.task.as_ref().is_some_and(|task| {
+                    !Self::authorization_matches(&state.session_configuration, &task.turn_context)
+                }) {
+                    self.input_queue
+                        .defer_input_for_turn_state(
+                            active_turn.turn_state.as_ref(),
+                            input.into_iter().map(TurnInput::ResponseItem).collect(),
+                        )
+                        .await;
+                    return Ok(());
+                }
                 self.input_queue
                     .extend_pending_input_and_accept_mailbox_delivery_for_turn_state(
                         active_turn.turn_state.as_ref(),

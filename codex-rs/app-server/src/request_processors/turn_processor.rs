@@ -1121,11 +1121,22 @@ impl TurnRequestProcessor {
                             Some(AnalyticsJsonRpcError::TurnSteer(turn_steer_error)),
                         )
                     }
-                    SteerInputError::AuthorizationChanged => (
-                        "Permissions changed since this turn started. Wait for it to finish or stop it, then submit your message again.".to_string(),
-                        None,
-                        None,
-                    ),
+                    SteerInputError::AuthorizationChanged(input) => {
+                        tracing::info!(
+                            boundary = "authorizationChanged",
+                            input_disposition = "returned",
+                            "turn/steer admission refused"
+                        );
+                        (
+                            "Permissions changed since this turn started. Wait for it to finish or stop it, then submit your message again.".to_string(),
+                            Some(serde_json::json!({
+                                "code": "authorizationChanged",
+                                "inputDisposition": "returned",
+                                "input": input,
+                            })),
+                            None,
+                        )
+                    }
                     SteerInputError::EmptyInput => (
                         "input must not be empty".to_string(),
                         None,
