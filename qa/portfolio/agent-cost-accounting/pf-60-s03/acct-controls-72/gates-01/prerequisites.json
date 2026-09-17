@@ -1,0 +1,33 @@
+{
+  "lane": "prerequisites",
+  "command": [
+    "cargo",
+    "build",
+    "--locked",
+    "--offline",
+    "-p",
+    "codex-cli",
+    "--bin",
+    "codex",
+    "-p",
+    "codex-rmcp-client",
+    "-p",
+    "codex-code-mode-host",
+    "--bins"
+  ],
+  "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+  "base": "17371d192e52de71ad7efde9088cb47b6ae3a049",
+  "environment": {
+    "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+    "CARGO_BUILD_JOBS": "2",
+    "CARGO_INCREMENTAL": "0",
+    "NEXTEST_TEST_THREADS": "4",
+    "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+    "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+  },
+  "exit": 0,
+  "elapsed_seconds": 3.5420479774475098,
+  "log_sha256": "47fe6a9c7f952c20de4b33061abf75205eb439125a41f7d42b2cefa8b92d789e",
+  "failure_lines": [],
+  "target_test_lines": []
+}

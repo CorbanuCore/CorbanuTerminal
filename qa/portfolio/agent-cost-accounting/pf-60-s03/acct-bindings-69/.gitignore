@@ -1,0 +1,5 @@
+# Regenerable mutation copies; consolidated exits and errors are retained.
+/page-controls-*/*/
+/priced-controls-*/*/
+/removal-controls-*/*/
+/gates-*/*.log

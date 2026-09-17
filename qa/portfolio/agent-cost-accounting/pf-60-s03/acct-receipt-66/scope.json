@@ -1,0 +1,304 @@
+{
+  "base": "270a6644e01d780ef93f8715dd0051481643dc7d",
+  "scope": "qa/portfolio/agent-cost-accounting/pf-60-s03/",
+  "tracked_added": 146,
+  "tracked_deleted": 41,
+  "tracked_changes": [
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/REPRODUCE.md",
+      "added": 8,
+      "deleted": 3
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/RETURN.md",
+      "added": 16,
+      "deleted": 5
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/inherited-disposition.md",
+      "added": 37,
+      "deleted": 7
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/page_controls.py",
+      "added": 44,
+      "deleted": 4
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/RETURN.md",
+      "added": 12,
+      "deleted": 9
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py",
+      "added": 14,
+      "deleted": 6
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/reader-findings.md",
+      "added": 5,
+      "deleted": 4
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/RETURN.md",
+      "added": 10,
+      "deleted": 3
+    }
+  ],
+  "files": [
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/REPRODUCE.md",
+      "status": "modified",
+      "bytes": 2345,
+      "sha256": "40def83524575f72defb78660c550c8d48821828a0c54c07d3cf8d19dd123ff7",
+      "text_lines": 36
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/RETURN.md",
+      "status": "modified",
+      "bytes": 6679,
+      "sha256": "8975dae42c187042a69de25f6ac3e650dbad99c8c32cb04a2acda1a3f8860950",
+      "text_lines": 110
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/inherited-disposition.md",
+      "status": "modified",
+      "bytes": 9450,
+      "sha256": "3e30a620058f2e1ccb1417e7205985df4b81c93025eda8c895b90ddcfba3b89a",
+      "text_lines": 108
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inherited-64/page_controls.py",
+      "status": "modified",
+      "bytes": 5903,
+      "sha256": "bb06baa4f8bd8de8dbc10ca6516b8e81b307a723e2d2346798e554a6c912c6db",
+      "text_lines": 128
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/RETURN.md",
+      "status": "modified",
+      "bytes": 12206,
+      "sha256": "094a5ee3ea588c3e09952f7bbba45816e9a46c9ef998834afadf2cecc25b4c56",
+      "text_lines": 169
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/audit_readers.py",
+      "status": "modified",
+      "bytes": 10314,
+      "sha256": "28224b4a7c1785768b5ac75f8558a1bfb293edac3914f94afa31b03366059a2b",
+      "text_lines": 169
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/nonmonetary-page-digests.json",
+      "status": "new",
+      "bytes": 831,
+      "sha256": "5f2f253ddf52855afa110812963ed226f8fc6fb24be81034cfbf774472fa7567",
+      "text_lines": 11
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/reader-findings.md",
+      "status": "modified",
+      "bytes": 14122,
+      "sha256": "53151eaa201fc35c286887c6c22593d756a8653fd3f6936b28299e5dea455bb5",
+      "text_lines": 279
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/.gitignore",
+      "status": "new",
+      "bytes": 143,
+      "sha256": "a4f1b15f672f2b591b0365a0b8f78c065342995de1404d8c2b57777d50b83262",
+      "text_lines": 4
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/REPRODUCE.md",
+      "status": "new",
+      "bytes": 2364,
+      "sha256": "38f6607e9b8a30ffd33edde0e8031e0e3890561d4919eb5fa74953d91549819f",
+      "text_lines": 37
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/RETURN.md",
+      "status": "new",
+      "bytes": 7600,
+      "sha256": "0758dbde68e857cd1b101c76be4d841418f5c83127d242f5f80a0e26bae96ad5",
+      "text_lines": 129
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/capture-bindings.json",
+      "status": "new",
+      "bytes": 4653,
+      "sha256": "0bce41616123609f78eba83890d71cca4882801f8bc90a8296bb51ca2e6d503a",
+      "text_lines": 73
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/freeze_evidence.py",
+      "status": "new",
+      "bytes": 4650,
+      "sha256": "d1cd098fdc70fdccfc6e8a1f3fb5c13e81251d5bed4cd8f97a114193ec09758a",
+      "text_lines": 93
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/gate.py",
+      "status": "new",
+      "bytes": 1772,
+      "sha256": "6b21c71893073aa5e0262b36e33fe2658c25d6742283f1d1bf3b16bcbf8189ed",
+      "text_lines": 41
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/gates-01/core-default.json",
+      "status": "new",
+      "bytes": 644,
+      "sha256": "4adcd8acdc5082dfdafe2f28fb881369513e90365fe0376306ee0ff2777a83af",
+      "text_lines": 21
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/gates-01/core-default.log.gz",
+      "status": "new",
+      "bytes": 5018,
+      "sha256": "e1229b97e484d7bff78c918d1002e718546f4f1ab22c8a4ae45ebe4169c3a424",
+      "text_lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/gates-01/core-feature.json",
+      "status": "new",
+      "bytes": 703,
+      "sha256": "e91544d294417b7da9b289f975929759f4c187edae435c056b6ea07b7a38c348",
+      "text_lines": 23
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/gates-01/core-feature.log.gz",
+      "status": "new",
+      "bytes": 22895,
+      "sha256": "bfae3462853649cd1d870eb8f418d1c5835837e25059f7941e4a43b872ccb892",
+      "text_lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/gates-01/prerequisites.json",
+      "status": "new",
+      "bytes": 736,
+      "sha256": "82134f5a8b5e4b6e26b90bc89c72b57540ebd417dd1086166eac32d3cec56b91",
+      "text_lines": 27
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/gates-01/prerequisites.log.gz",
+      "status": "new",
+      "bytes": 3132,
+      "sha256": "ee72e02ecb8ebf54e5a4a1831f005d3d0ffdff65405268b69c8c57e7f1f4e688",
+      "text_lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/gates-01/tui.json",
+      "status": "new",
+      "bytes": 629,
+      "sha256": "7c0885060653f4b7dd085bf0cffb398498e5b9889349b8a7599162f6ab669114",
+      "text_lines": 21
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/gates-01/tui.log.gz",
+      "status": "new",
+      "bytes": 6555,
+      "sha256": "a7305fc1a89ea7e221294634c760863b3c480b7520285e5cbbe9f095e6cc2ee0",
+      "text_lines": null
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/next-step-source.json",
+      "status": "new",
+      "bytes": 7627,
+      "sha256": "3b81fc57561a34e600f199150f732e6dde8c131bb5374479bec900492f13e832",
+      "text_lines": 61
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/next-step.md",
+      "status": "new",
+      "bytes": 8159,
+      "sha256": "693155d0ea7f6330b2888a632956b946eda4723e32d14252538f80fe8419d8f1",
+      "text_lines": 121
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/page-controls-01/baseline.json",
+      "status": "new",
+      "bytes": 5331,
+      "sha256": "cf1e94e3b2c97ab04e98a940eb432e8493834216a376d8ab943522b03e18e80e",
+      "text_lines": 164
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/page-controls-01/old-baseline.json",
+      "status": "new",
+      "bytes": 5023,
+      "sha256": "89d2f35d5970bb5b78232097e2a94eeb1c9f25b2ff171b07bb3f53f2826845a9",
+      "text_lines": 152
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/page-controls-01/pre-revision-audit.py",
+      "status": "new",
+      "bytes": 9388,
+      "sha256": "cd60abdfaca79d65f7b9dcc8ff0066c25ce307818e7522b26bad36c54dfcb25a",
+      "text_lines": 150
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/page-controls-01/results.json",
+      "status": "new",
+      "bytes": 76435,
+      "sha256": "35267459c5c79ba76c22f39493e6aa094f28af2eacc9b7247509779a34fcad64",
+      "text_lines": 1529
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/page-controls-01/round-64-audit.py",
+      "status": "new",
+      "bytes": 9990,
+      "sha256": "bb7ab5271c35f6f4d407e759d7cd1c1a23863c3d591925a925cd3f0a884f2e91",
+      "text_lines": 161
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/page-controls-01/round64-baseline.json",
+      "status": "new",
+      "bytes": 5331,
+      "sha256": "cf1e94e3b2c97ab04e98a940eb432e8493834216a376d8ab943522b03e18e80e",
+      "text_lines": 164
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/removal-controls-01/baseline.json",
+      "status": "new",
+      "bytes": 5331,
+      "sha256": "cf1e94e3b2c97ab04e98a940eb432e8493834216a376d8ab943522b03e18e80e",
+      "text_lines": 164
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/removal-controls-01/pre-revision-audit.py",
+      "status": "new",
+      "bytes": 7519,
+      "sha256": "175ac7dfb9a9d3c1bfa7df788f44459ef2cf1245cdac26b97bd06607144c5df7",
+      "text_lines": 119
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/removal-controls-01/results.json",
+      "status": "new",
+      "bytes": 18531,
+      "sha256": "eeed2b7b21e48cad0210bff3dd6cfd3f618baae29a9c82590d8b3a0fd3f1ce6d",
+      "text_lines": 286
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/scope-recheck.json",
+      "status": "new",
+      "bytes": 3750,
+      "sha256": "2fb9e60700db87751fa44a42f13476a44690f603a2729a0216084f5bba77d602",
+      "text_lines": 110
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-receipt-66/test-results.json",
+      "status": "new",
+      "bytes": 4678,
+      "sha256": "08e74fdbd406e5f7f4aa5a7c41c63ed61745ed63370d2d32b553f43e5eaffa18",
+      "text_lines": 132
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/RETURN.md",
+      "status": "modified",
+      "bytes": 9357,
+      "sha256": "ae98ab9e591c89455114e3a0f5fa97f2e301d5930befd2ce312005841edaa5f3",
+      "text_lines": 152
+    }
+  ],
+  "scope_pass": true,
+  "inventory_excludes": "This scope.json to avoid a self-hash; ignored regenerable fixture directories/build artifacts and uncompressed logs also excluded."
+}

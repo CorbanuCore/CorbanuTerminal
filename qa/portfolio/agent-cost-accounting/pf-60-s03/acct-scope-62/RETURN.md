@@ -15,12 +15,19 @@ is unchanged. It is not product acceptance or an assertion that PF-60-S03 is don
 ## Scope-zero finding and the four attempts
 
 In the same synthetic store, four actual collected/priced requests on August 10
-across three roots independently total **USD 0.00284**. A fresh session asking
-`/usage requests 2026-08-10` renders exactly:
+across three roots independently total **USD 0.00284**. This is round 62's
+population, not the separate [round-61 fresh-session control](../acct-readers-61/RETURN.md).
+A fresh session asking `/usage requests 2026-08-10` includes these rendered
+lines (excerpt in page order; [complete transcription](../acct-inherited-64/inherited-disposition.md#existing-collection-cross-check-and-exact-reader-text)):
 
 > No recorded attempts in this day; collection coverage unknown.
-> Known subtotal exact USD: 0
+> Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
+> Billed cost: unavailable — no settlement evidence
+> Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+> UTC admission interval: [1786320000000, 1786406400000) ms since Unix epoch
+> Read at: 1786363200000 ms UTC; store checkpoint: 1786363200000 ms UTC; maintenance lag: 0 ms
 > 90-day wall-clock detail cutoff: Some(1778587200000); aggregate day floor at checkpoint: 20311; oldest recorded day: None
+> Known subtotal exact USD: 0
 
 | Attempt | Root | Exact estimated USD |
 | --- | --- | ---: |
@@ -71,6 +78,14 @@ The new scope reproduction separately adds **7 priced pages and 1 scoped-zero
 page**, all audited; it is not folded into the original 15-page count. **Positive
 measured-dollar comparisons remain 0.** Historical receipts/captures are unchanged;
 the old report's misleading “15 monetary pages” wording now points to the re-audit.
+
+**Round-64 correction:** the exact-USD predicate above did not reject every
+unexpected numeric page: another dollar/USD amount could appear on a navigation
+page without that line. The current audit binds all **24 page identities**:
+15 subtotal pages and nine pages that forbid numeric money. Missing/unexpected
+identities fail before receipt. [Round-64 controls](../acct-inherited-64/page-controls-01/results.json)
+reject 38 altered-page cases (34 accepted by this round's auditor); all 28
+original amount-removal cases still reject. Original receipts remain historical.
 
 ## TZ control
 

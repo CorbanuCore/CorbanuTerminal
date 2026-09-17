@@ -1,0 +1,204 @@
+{
+  "lanes": [
+    {
+      "lane": "alone-feature",
+      "command": [
+        "just",
+        "test",
+        "-p",
+        "codex-core",
+        "suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+        "--features",
+        "codex-core/developer-accounting"
+      ],
+      "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+      "base": "a06048a8a4cd1422c9ef80dcef5503ee297d8d4c",
+      "environment": {
+        "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_INCREMENTAL": "0",
+        "NEXTEST_TEST_THREADS": "4",
+        "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+        "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+      },
+      "exit": 0,
+      "elapsed_seconds": 35.832870960235596,
+      "log_sha256": "c543f0125990e1d3ace65e2fe721ffb7bed054ccefbfb92615c406dad3477671",
+      "failure_lines": [],
+      "target_test_lines": [
+        "SLOW [> 30.000s] (\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+        "PASS [  31.743s] (1/1) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity"
+      ],
+      "summaries": [],
+      "run": 1,
+      "suite_seconds": 31.766,
+      "summary": "1 passed (1 slow), 3671 skipped",
+      "passed": 1,
+      "failed": 0,
+      "timed_out": 0,
+      "flaky": 0,
+      "skipped": 3671,
+      "leaky": 0,
+      "target_test_outcomes": [
+        {
+          "status": "PASS",
+          "seconds": 31.743
+        }
+      ]
+    },
+    {
+      "lane": "core-feature",
+      "command": [
+        "just",
+        "test",
+        "-p",
+        "codex-core",
+        "accounting",
+        "--features",
+        "codex-core/developer-accounting"
+      ],
+      "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+      "base": "a06048a8a4cd1422c9ef80dcef5503ee297d8d4c",
+      "environment": {
+        "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_INCREMENTAL": "0",
+        "NEXTEST_TEST_THREADS": "4",
+        "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+        "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+      },
+      "exit": 0,
+      "elapsed_seconds": 47.08894109725952,
+      "log_sha256": "3e04e63e5388cfefec7443517d3faf012a2c2e47e1a390ad79dc5a1738c4313f",
+      "failure_lines": [],
+      "target_test_lines": [
+        "SLOW [> 30.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+        "PASS [  31.335s] (127/127) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity"
+      ],
+      "summaries": [
+        [
+          "127",
+          "127 passed (1 slow), 3545 skipped"
+        ]
+      ],
+      "run": 127,
+      "passed": 127,
+      "failed": 0,
+      "timed_out": 0,
+      "flaky": 0,
+      "skipped": 3545,
+      "leaky": 0,
+      "suite_seconds": 45.654,
+      "summary": "127 passed (1 slow), 3545 skipped",
+      "target_test_outcomes": [
+        {
+          "status": "PASS",
+          "seconds": 31.335
+        }
+      ]
+    },
+    {
+      "lane": "core-default",
+      "command": [
+        "just",
+        "test",
+        "-p",
+        "codex-core",
+        "accounting"
+      ],
+      "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+      "base": "a06048a8a4cd1422c9ef80dcef5503ee297d8d4c",
+      "environment": {
+        "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_INCREMENTAL": "0",
+        "NEXTEST_TEST_THREADS": "4",
+        "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+        "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+      },
+      "exit": 0,
+      "elapsed_seconds": 48.40116906166077,
+      "log_sha256": "83a0ad02b12a7f193cf6d9acbe765b4c1d774831ade1a089829366335a383d04",
+      "failure_lines": [],
+      "target_test_lines": [
+        "SLOW [> 30.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+        "PASS [  31.650s] (124/124) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity"
+      ],
+      "summaries": [
+        [
+          "124",
+          "124 passed (1 slow), 3545 skipped"
+        ]
+      ],
+      "run": 124,
+      "passed": 124,
+      "failed": 0,
+      "timed_out": 0,
+      "flaky": 0,
+      "skipped": 3545,
+      "leaky": 0,
+      "suite_seconds": 46.287,
+      "summary": "124 passed (1 slow), 3545 skipped",
+      "target_test_outcomes": [
+        {
+          "status": "PASS",
+          "seconds": 31.65
+        }
+      ]
+    },
+    {
+      "lane": "tui",
+      "command": [
+        "just",
+        "test",
+        "-p",
+        "codex-tui",
+        "usage"
+      ],
+      "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+      "base": "a06048a8a4cd1422c9ef80dcef5503ee297d8d4c",
+      "environment": {
+        "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_INCREMENTAL": "0",
+        "NEXTEST_TEST_THREADS": "4",
+        "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+        "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+      },
+      "exit": 0,
+      "elapsed_seconds": 3.762929916381836,
+      "log_sha256": "7cd21c5a6e63a10ac1fcd73b77da74bc5f9d50fcf82f4fc7450e3f15596c4089",
+      "failure_lines": [],
+      "target_test_lines": [],
+      "summaries": [
+        [
+          "91",
+          "91 passed, 4078 skipped"
+        ]
+      ],
+      "run": 91,
+      "passed": 91,
+      "failed": 0,
+      "timed_out": 0,
+      "flaky": 0,
+      "skipped": 4078,
+      "leaky": 0,
+      "suite_seconds": 1.24,
+      "summary": "91 passed, 4078 skipped",
+      "target_test_outcomes": []
+    }
+  ],
+  "required_lane_executions": 342,
+  "required_lane_passed": 342,
+  "prior_feature_log": "acct-receipt-66/gates-01/core-feature.log.gz",
+  "prior_feature_log_sha256": "9d882957251ce791fd6a7cd78c6fba0f46d7bb8f111d182effbd2ecda75d015a",
+  "prior_target_test_lines": [
+    "SLOW [> 30.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+    "TRY 1 TRMNTG [> 60.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+    "TRY 1 TMT [  60.013s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+    "TRY 2 SLOW [> 30.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+    "TRY 2 TRMNTG [> 60.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+    "TRY 2 TMT [  60.012s] (127/127) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity"
+  ],
+  "interpretation": "Required lane counts overlap; the isolated replay is one additional execution, not an additional distinct test. Built-in retries are included in raw logs, not added to test counts."
+}

@@ -1,0 +1,110 @@
+{
+  "passed": true,
+  "new_attempts": [
+    {
+      "attempt_id": "cd95c387-e1c2-46ec-99fe-65ad38c17b2c",
+      "request_id": "59f8bca5-7f29-485a-8522-010e3b6c5f44",
+      "thread_id": "019feb8b-4200-76f1-9b4c-60c4ffdd807b",
+      "turn": "019feb8b-4200-76f1-9b4c-60f5e209f949",
+      "retry_of": null,
+      "provider": "openai",
+      "model": "gpt-5.6-sol",
+      "scope": "6aec8769-609f-48bf-ab36-58a64065238d",
+      "dialect": "Inclusive",
+      "dispatched_at_ms": 1786363200000
+    },
+    {
+      "attempt_id": "de749048-449c-49c8-86fc-dc4f478663e7",
+      "request_id": "d74b3265-c673-4999-9d45-27251ba0e3d1",
+      "thread_id": "019feb8b-4200-76f1-9b4c-60c4ffdd807b",
+      "turn": "019feb8b-4200-73c1-b811-cd046aa4adf8",
+      "retry_of": null,
+      "provider": "openai",
+      "model": "gpt-5.6-sol",
+      "scope": "7c9cd1b8-eeb2-4164-8974-a6c020e7c5f7",
+      "dialect": "Inclusive",
+      "dispatched_at_ms": 1786363200000
+    },
+    {
+      "attempt_id": "05a7c6e3-9589-475f-8481-dcc40695f8f2",
+      "request_id": "863e1e33-357b-48aa-8dd5-ea2b33f700f4",
+      "thread_id": "019feb8b-4200-7b50-a9f0-88b2f8955f4e",
+      "turn": "019feb8b-4200-7b50-a9f0-88ee76ab1946",
+      "retry_of": null,
+      "provider": "openai",
+      "model": "gpt-5.6-sol",
+      "scope": "c4605c67-cf07-4a89-aa78-46b52c995def",
+      "dialect": "Inclusive",
+      "dispatched_at_ms": 1786363200000
+    },
+    {
+      "attempt_id": "89ee3e05-2ad8-4b89-b38c-470e72432863",
+      "request_id": "637edffd-c59f-4ce5-a561-ed472fd6abd7",
+      "thread_id": "019feb8b-4200-7790-9681-077c69d95463",
+      "turn": "019feb8b-4200-7790-9681-07acb022d6d0",
+      "retry_of": null,
+      "provider": "openai",
+      "model": "gpt-5.6-sol",
+      "scope": "231fdd15-bfd0-4790-b751-78c18daa6636",
+      "dialect": "Inclusive",
+      "dispatched_at_ms": 1786363200000
+    }
+  ],
+  "priced_attempt_count": 4,
+  "root_count": 3,
+  "per_attempt_usd": "0.00071",
+  "store_day_known_usd": "0.00284",
+  "priced_page_count": 7,
+  "priced_pages": [
+    "root-a-control",
+    "root-a-control-Request-1-Attempt-1",
+    "root-a-control-Request-2-Attempt-1",
+    "root-b-control",
+    "root-b-control-Request-1-Attempt-1",
+    "root-c-control",
+    "root-c-control-Request-1-Attempt-1"
+  ],
+  "zero_recorded_page_count": 1,
+  "measured_dollar_comparisons": 0,
+  "scope_zero_reproduced": true,
+  "store_unchanged": true,
+  "original_run_collected_attempts": [
+    {
+      "attempt": "6b671f36-55d4-4a42-ae64-c539e64f3d34",
+      "thread": "019fe13e-8a00-74b2-8c24-6db5933f874b",
+      "day": "2026-08-08",
+      "model": "gpt-5.6-sol",
+      "price_snapshot_present": true,
+      "usage_present": true,
+      "complete_estimate_usd": "0.00071"
+    },
+    {
+      "attempt": "f00a2eba-eeb2-40b4-95aa-f42752260380",
+      "thread": "019fe13e-8a00-74b2-8c24-6db5933f874b",
+      "day": "2026-08-10",
+      "model": "gpt-5.6-sol",
+      "price_snapshot_present": true,
+      "usage_present": true,
+      "complete_estimate_usd": "0.00071"
+    },
+    {
+      "attempt": "a206d847-73f3-4643-9140-a6ed82b3fe8f",
+      "thread": "019feb8b-4200-7f10-8a6c-805906e0145d",
+      "day": "2026-08-10",
+      "model": "gpt-6-astra",
+      "price_snapshot_present": false,
+      "usage_present": true,
+      "complete_estimate_usd": null
+    },
+    {
+      "attempt": "06ff0e1c-b6ad-49ff-b87c-32ce8cf8497a",
+      "thread": "019feb8b-4200-7801-a186-da6a56f4df44",
+      "day": "2026-08-10",
+      "model": "gpt-5.6-sol",
+      "price_snapshot_present": true,
+      "usage_present": false,
+      "complete_estimate_usd": null
+    }
+  ],
+  "original_run_correction": "4 store attempts total; 3 on August 10; only 1 priced with usage on that day. Fourth August-10 emission is uncollected reader_local."
+}

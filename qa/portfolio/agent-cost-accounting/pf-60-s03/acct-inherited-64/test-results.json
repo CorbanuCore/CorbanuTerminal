@@ -1,0 +1,41 @@
+{
+  "base_commit": "49fac26d01fdc172d6300fd72cad8037d0c6e351",
+  "lanes": [
+    {
+      "lane": "core-default",
+      "run": 124,
+      "passed": 124,
+      "failure_lines": [],
+      "summary": "124 passed (1 slow), 3545 skipped",
+      "exit": 0,
+      "log_sha256": "e05c159e71ef8dacc7de5b641bb191c940da145edbe1e0260cb33d3958fe9fb8"
+    },
+    {
+      "lane": "core-feature",
+      "run": 127,
+      "passed": 127,
+      "failure_lines": [],
+      "summary": "127 passed (1 slow), 3545 skipped",
+      "exit": 0,
+      "log_sha256": "4d7dba19367e298ec2c08732273cbec0fb827bd22648fbdb4b0a42b7168e975a"
+    },
+    {
+      "lane": "tui",
+      "run": 91,
+      "passed": 91,
+      "failure_lines": [],
+      "summary": "91 passed, 4078 skipped",
+      "exit": 0,
+      "log_sha256": "cd41dc5131f6b7231773fbf0f866bd9b52b56814a86f699bdada05c1c849245a"
+    }
+  ],
+  "total_executions": 342,
+  "passed": 342,
+  "failed": 0,
+  "note": "Lane executions overlap between default and feature builds; not 342 unique test names.",
+  "environment": {
+    "NEXTEST_TEST_THREADS": "4",
+    "CARGO_BUILD_JOBS": "2",
+    "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target"
+  }
+}
