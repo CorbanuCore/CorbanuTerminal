@@ -1,0 +1,13 @@
+test_identity_positive_and_other_mismatches (__main__.Guards.test_identity_positive_and_other_mismatches) ... ok
+test_matching_identity_reaches_only_mock_upload (__main__.Guards.test_matching_identity_reaches_only_mock_upload) ... ok
+test_payload_allowlist_excludes_source_and_provenance (__main__.Guards.test_payload_allowlist_excludes_source_and_provenance) ... ok
+test_pin_parser_does_not_execute (__main__.Guards.test_pin_parser_does_not_execute) ... ok
+test_ssh_host_rejection_aborts (__main__.Guards.test_ssh_host_rejection_aborts) ... ok
+test_stale_candidate_refuses_dispatch_and_matching_pin_passes (__main__.Guards.test_stale_candidate_refuses_dispatch_and_matching_pin_passes) ... ok
+test_wrong_host_key_transfers_nothing (__main__.Guards.test_wrong_host_key_transfers_nothing) ... ok
+test_wrong_uuid_transfers_nothing (__main__.Guards.test_wrong_uuid_transfers_nothing) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.960s
+
+OK

@@ -3,8 +3,8 @@
 The round-67 four-binary package can now move without changing its attestation.
 This round prepares transport and coordinator packet bindings. **Functional dispatch
 is still blocked:** the current boundary only implements preflight, no admitted
-independent executor/mediator receipt is supplied, and the current guest identity
-has not been confirmed. This runbook does not authorize repairing or bypassing
+independent executor/mediator receipt is supplied, and live identity verification remains pending (round 73 now has the owner-supplied
+host key and UUID). This runbook does not authorize repairing or bypassing
 those boundaries. No guest contact, staging, packaged launch or case occurred.
 
 Routine QA preparation for product heading **Permission selection confirmation —
@@ -23,7 +23,8 @@ In the commands below, run from the assigned checkout root:
 set -euo pipefail
 R=/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916
 P="$R/qa/initiative-control/management-bootstrap/pf83-handoff-70"
-H=/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915
+: "${PF83_HARNESS:?supply the allocated harness root}"
+H="$PF83_HARNESS"
 A=9d33fcc21788a84c61011fe64a3607fc7569b390a260e5c19a7b9d3e6582ce27
 M=32529d0a894503c021ff756ebc27a75555ab05ed2ec63dc47dc0d9d7bb878024
 T=3b1afa1c84666f5b3dbc1a514d89bfd138fb15bae9a3813c7b6f5f7d66298ff0
@@ -80,17 +81,19 @@ F05–F09 selected subset. The other 92 are outside this handoff.
 
 Mandatory first step of the future execution round, after host handoff below:
 regenerate into a new destination and compare the resulting inventory. This
-makes packet refresh executable rather than relying on a live pin patch:
+regenerates packets but is insufficient alone: the round-73 sequence also requires
+an authorized live pin update and a successful dispatch guard:
 
 ```bash
-python3 -B "$P/rebind_packets.py" "$D/coordinator-packets" "$D/bundle" "$A"
+python3 -B "$P/rebind_packets.py" --harness "$H" "$D/coordinator-packets" "$D/bundle" "$A"
 cmp "$P/packet-bindings.tsv" "$D/coordinator-packets/packet-bindings.tsv"
 cmp "$P/packet-rebinding.json" "$D/coordinator-packets/packet-rebinding.json"
 ```
 
 Stop on any mismatch or occupied output; do not overwrite an old attempt.
-The historical `fixtures.py:CANDIDATE`, normalized design, packets and
-`macos_adapter.py` remain unchanged. Do not run that adapter: it resolves
+The live `fixtures.py:CANDIDATE` is still stale and must be updated only after
+owner permission; round 73 refuses dispatch until it exactly matches all rebound
+packets. The historical normalized design, packets and `macos_adapter.py` remain unchanged. Do not run that adapter: it resolves
 absolute attestation paths, uses its stale source pin and stages all 380
 source-informed packets/amendments. The exact transport below consumes the
 verified bundle directly; it neither changes nor disables that old verifier.
@@ -120,60 +123,15 @@ seams/navigation mean blocked/not exercised, never assumed passes.
 F04's recorded refusal is not a proven F05–F09 refusal, nor permission to reroute
 a refused case. Existing F01–F11 residuals remain open.
 
-## Exact host handoff and future guest staging commands
+## Host handoff and guest staging — superseded by round 73
 
-**Commands in this section are prepared, not executed in round 70.** The next
-allocation must include H and explicitly permit guest staging. Use a fresh
-receiving directory; every command fails closed on an occupied path or mismatch:
-
-```bash
-D="$H/pf83-handoff-70-receiving"
-mkdir -m 700 "$D"
-cp -cpR "$P/artifacts/handoff-root" "$D/bundle"
-cp -p "$P/artifacts/pf83-handoff-70.tar" "$D/package.tar"
-python3 -B "$P/verify_bundle.py" "$D/bundle" "$A" > "$D/host-package-check.json"
-python3 -c 'import hashlib,sys; assert hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest()==sys.argv[2]' "$D/package.tar" "$T"
-mkdir -m 700 "$D/evidence"
-```
-
-Perform the mandatory packet regeneration above now. Before contact, the manager
-must supply `PF83_KNOWN_HOSTS` (approved host-key pin file path) and
-`PF83_GUEST_UUID` from the trusted VM inventory. Neither value was supplied
-to round 70. Do not derive the expected UUID from the same unverified SSH reply.
-The recorded identity-file path is used only by SSH, never read/copied/printed.
-The current VM/snapshot and unprivileged account must have allocation authority.
-
-```bash
-: "${PF83_KNOWN_HOSTS:?manager must supply approved host-key pin file}"
-: "${PF83_GUEST_UUID:?manager must supply trusted guest hardware UUID}"
-KEY=/private/tmp/fmgr.Q1SIYZ/pf83-vm/id_ed25519
-python3 -c 'import re,stat,sys; from pathlib import Path; assert re.fullmatch(r"[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12}",sys.argv[1]); assert stat.S_IMODE(Path(sys.argv[2]).stat().st_mode)==0o600' "$PF83_GUEST_UUID" "$KEY"
-SSH=(/usr/bin/ssh -F /dev/null -T -i "$KEY"
-  -o BatchMode=yes -o IdentitiesOnly=yes
-  -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no
-  -o ForwardAgent=no -o ClearAllForwardings=yes -o UpdateHostKeys=no
-  -o ControlMaster=no -o ControlPath=none -o StrictHostKeyChecking=yes
-  -o "UserKnownHostsFile=$PF83_KNOWN_HOSTS" -o ConnectTimeout=5
-  agent@192.168.64.3)
-G="/Users/agent/pf83-preflight-$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
-# Check authenticated machine/account before creating any guest files.
-"${SSH[@]}" '/usr/bin/uname -sm && /usr/bin/id -u && /usr/bin/id -un && /usr/sbin/ioreg -rd1 -c IOPlatformExpertDevice' > "$D/evidence/guest-identity-before.txt"
-python3 -c 'import re,sys; s=open(sys.argv[1]).read(); assert s.startswith("Darwin arm64\n503\nagent\n"); assert re.search(r"\x22IOPlatformUUID\x22 = \x22([^\x22]+)\x22",s).group(1)==sys.argv[2]' "$D/evidence/guest-identity-before.txt" "$PF83_GUEST_UUID"
-"${SSH[@]}" "umask 077 && mkdir '$G' && /usr/bin/tar -xpf - -C '$G'" < "$D/package.tar" > "$D/evidence/stage.stdout" 2> "$D/evidence/stage.stderr"
-# Trusted collector: exact transferred inventory, source/package identity and UUID.
-"${SSH[@]}" "/usr/bin/python3 -I -B - '$G' '$I' '$A' '$PF83_GUEST_UUID'" < "$P/guest_check.py" > "$D/evidence/guest-package-check.json" 2> "$D/evidence/guest-package-check.stderr"
-printf '%s\n' "$G" > "$D/guest-root.txt"
-```
-
-Only the generated G and validated UUID are interpolated into the remote command;
-before using these commands require UUID in canonical hex-and-hyphen form and
-KEY mode 0600. The strict host-key check must succeed without accepting a new key.
-Copying to this uid-owned guest root is transport only; it does not establish
-read-only or code-blind isolation. Restrict actor visibility to package and neutral
-packet assets under the admitted boundary; provenance/runtime/evidence remain
-trusted-collector-only. Confirm actual helper paths/digests and system shell/search
-availability. Only after admission may the exact packaged `corbanu --version`
-and real PTY controls run. Do not run a release binary on the operator host.
+The round-70 full-bundle tar includes host build provenance and must remain
+host-only. Do not upload it to the actor root. The old staging builder now
+refuses execution. The [round-73 runbook](../pf83-failclosed-73/runbook.md) replaces
+this section with an actor-assets-only payload, explicit identity preconditions,
+the owner-supplied host key and UUID, and a mandatory candidate-disagreement
+dispatch guard. It also lists the remaining owner actions. No guest operation
+was performed in either preparation round.
 
 ## Remaining admission and execution prerequisites
 

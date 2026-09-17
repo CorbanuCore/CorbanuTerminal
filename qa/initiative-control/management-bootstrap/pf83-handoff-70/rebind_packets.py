@@ -8,12 +8,12 @@ from pathlib import Path
 from verify_bundle import sha, verify
 
 HERE = Path(__file__).resolve().parent
-HARNESS = Path("/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915")
 INDEX = HERE.parent / "pf83-packaged-63-case-inputs.tsv"
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--harness", required=True, type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("bundle", type=Path)
     parser.add_argument("attestation_sha256")
@@ -37,7 +37,7 @@ def main():
     writer = csv.writer(output, delimiter="\t", lineterminator="\n")
     writer.writerow(["projected_case", "source_sha256", "sha256", "packet_path", "all_mapped_cases"])
     for row in rows:
-        original = HARNESS / row["harness_relative_packet_path"]
+        original = args.harness / row["harness_relative_packet_path"]
         assert sha(original) == row["sha256"]
         prior = json.loads(original.read_bytes())
         assert prior["candidate"]["commit"] == "e3bd579bf4e0c7c58ad863af2a9c6098e2297f98"
