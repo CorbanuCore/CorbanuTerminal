@@ -10,12 +10,15 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 
 here = Path(__file__).resolve().parent
 repo = here.parents[4]
 scope = here.parent.relative_to(repo)
-clone = here / "target/checkout-01"
-assert not clone.exists(), "preserve prior attempts; choose a fresh checkout name"
+(here / "target").mkdir(exist_ok=True)
+run_directory = Path(tempfile.mkdtemp(prefix="controls-", dir=here / "target"))
+clone = run_directory / "checkout"
+print("Run directory:", run_directory, flush=True)
 environment = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull,
                    GIT_TERMINAL_PROMPT="0")
 def command(args, cwd=repo):
@@ -36,7 +39,7 @@ for name in sorted(set(changed + untracked)):
         destination.unlink()
 command(["git", "add", "--", str(scope)], clone)
 command(["git", "-c", "user.name=Evidence Check", "-c", "user.email=evidence.invalid@example.invalid",
-         "-c", "commit.gpgsign=false", "commit", "--quiet", "--no-verify",
+         "-c", "commit.gpgsign=false", "commit", "--allow-empty", "--quiet", "--no-verify",
          "-m", "Temporary allocation evidence snapshot; not an integration commit"], clone)
 assert command(["git", "status", "--porcelain"], clone).stdout == ""
 assert not (clone / scope / "acct-fitness-76/package").exists()
@@ -46,8 +49,8 @@ results = []
 def run(name, args, expected, fragment):
     result = subprocess.run([sys.executable, "-B", *args], cwd=clone, env=environment,
                             capture_output=True, text=True)
-    (here / (name + ".stdout.txt")).write_text(result.stdout)
-    (here / (name + ".stderr.txt")).write_text(result.stderr)
+    (run_directory / (name + ".stdout.txt")).write_text(result.stdout)
+    (run_directory / (name + ".stderr.txt")).write_text(result.stderr)
     passed = result.returncode == expected and fragment in result.stdout and not result.stderr
     results.append(dict(case=name, exit=result.returncode, expected_exit=expected, passed=passed,
                         stdout_sha256=hashlib.sha256(result.stdout.encode()).hexdigest()))
@@ -82,8 +85,9 @@ receipt = dict(
     kind="clean sparse Git checkout of proposed QA snapshot, then independent corruption controls",
     source_base=command(["git", "rev-parse", "HEAD"]).stdout.strip(),
     snapshot=command(["git", "rev-parse", "HEAD"], clone).stdout.strip(),
+    run_directory=str(run_directory),
     ignored_package_absent=True, clean_before_and_after=True,
     no_network=True, no_package_launch=True, cases=results,
 )
-(here / "verifier-checks.json").write_text(json.dumps(receipt, indent=2) + "\n")
+(run_directory / "verifier-checks.json").write_text(json.dumps(receipt, indent=2) + "\n")
 print(json.dumps(receipt, indent=2))

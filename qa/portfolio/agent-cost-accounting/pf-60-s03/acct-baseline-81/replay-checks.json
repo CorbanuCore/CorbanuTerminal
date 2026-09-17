@@ -1,0 +1,49 @@
+{
+  "snapshot": "0809790fd80f7bbc85a4a4826ac5fb78e1ed0c0c",
+  "runs": [
+    {
+      "index": 1,
+      "run_directory": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-8nt8oz42",
+      "exit": 0,
+      "cases": 5,
+      "source_clean": true
+    },
+    {
+      "index": 2,
+      "run_directory": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-vi5y5xf5",
+      "exit": 0,
+      "cases": 5,
+      "source_clean": true
+    }
+  ],
+  "tracked_output_hashes_before": {
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/corrupt-viewport.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/missing-log.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/clean-finalizer.stdout.txt": "ee4d4d64a6c4b3dc159120416e6500e3094447bed06b712417373838ef8938c6",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/wrong-claim.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/clean-checkout.stdout.txt": "55d4196ae42003bff51712ab436db37231369641cfb768f10b5543f2195e638b",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/missing-log.stdout.txt": "feab5ba1ddda06d7ca3158d91c0638b5ebe3b99ea68e1e153ef63458a92b98fd",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/corrupt-viewport.stdout.txt": "2259b3032d44f905deee411ce00e972534e55d37228907304a778d804f4cb035",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/clean-checkout.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/acceptance-output.txt": "55d4196ae42003bff51712ab436db37231369641cfb768f10b5543f2195e638b",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/wrong-claim.stdout.txt": "c0fa1f36c294dc1cd32e151efde354b19bc7488b9a2c50132d5016e03a163387",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/clean-finalizer.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "tracked_output_hashes_after": {
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/corrupt-viewport.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/missing-log.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/clean-finalizer.stdout.txt": "ee4d4d64a6c4b3dc159120416e6500e3094447bed06b712417373838ef8938c6",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/wrong-claim.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/clean-checkout.stdout.txt": "55d4196ae42003bff51712ab436db37231369641cfb768f10b5543f2195e638b",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/missing-log.stdout.txt": "feab5ba1ddda06d7ca3158d91c0638b5ebe3b99ea68e1e153ef63458a92b98fd",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/corrupt-viewport.stdout.txt": "2259b3032d44f905deee411ce00e972534e55d37228907304a778d804f4cb035",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/clean-checkout.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/acceptance-output.txt": "55d4196ae42003bff51712ab436db37231369641cfb768f10b5543f2195e638b",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/wrong-claim.stdout.txt": "c0fa1f36c294dc1cd32e151efde354b19bc7488b9a2c50132d5016e03a163387",
+    "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-5v67gfar/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/clean-finalizer.stderr.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "preserved_existing_outputs": true,
+  "derived_count_control": "14 new / 2 modified",
+  "clean_after": true,
+  "independent_functional_acceptance": false
+}

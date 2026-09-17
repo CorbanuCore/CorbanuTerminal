@@ -289,8 +289,11 @@ def inventory_kinds():
     if result.returncode:
         raise FileNotFoundError("original round-75 base Git tree absent (for example a shallow clone); kinds cannot be re-derived")
     names = set(result.stdout.splitlines())
+    counts = {"new": 0, "modified": 0}
     for row in document["files"]:
-        require(row["kind"] == ("modified" if row["path"] in names else "new"), row["path"] + " kind")
+        kind = "modified" if row["path"] in names else "new"
+        require(row["kind"] == kind, row["path"] + " kind")
+        counts[kind] += 1
     original = load(SCOPE / "acct-fitness-76/acct-controls-72-scope-before.json")
     old = {r["path"]: r["sha256"] for r in original["new_files_excluding_this_inventory"]}
     current = load(SCOPE / "acct-controls-72/scope.json")["new_files_excluding_this_inventory"]
@@ -300,7 +303,8 @@ def inventory_kinds():
     correction = load(HERE / "inventory-correction.json")
     require(digest(data(SCOPE / "acct-acceptance-75/scope.json")) == correction["after_sha256"],
             "inventory correction digest")
-    return f"15 added paths and 3 modified paths against original base; round-72 changed entries={changes}"
+    return (f"{counts['new']} added paths and {counts['modified']} modified paths against original base; "
+            f"round-72 changed entries={changes}")
 
 
 def package_log():
@@ -332,7 +336,7 @@ def package_file(row, local=False):
 
 
 def coverage():
-    # Only quantities are covered by checks. Strip navigational/identity numbers explicitly.
+    # Detect unmatched digits only; worded quantities and excluded regions are not audited.
     text = list(DOCUMENT)
     for start, end in CLAIMS:
         text[start:end] = " " * (end - start)
@@ -342,7 +346,8 @@ def coverage():
                        "", remaining, flags=re.I)
     numbers = re.findall(r"\b\d+(?:\.\d+)?\b", remaining)
     require(not numbers, "unmapped numerical claims in acceptance.md: " + repr(numbers))
-    return "all numerical quantities in acceptance.md mapped; round/sprint/severity identifiers excluded"
+    return ("no unmatched digit-form quantities outside matched claim spans, fenced code and link targets; "
+            "known round/sprint/severity identifiers excluded; worded quantities and excluded regions not audited")
 
 
 def main():
