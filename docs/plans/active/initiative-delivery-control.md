@@ -71,6 +71,18 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/slack-registration-20260912"
     branch: "integrate/slack-registration-20260912"
     base_commit: "4b9904d306dd8a3c35b9f6d43291ebaed905cccf"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917"
+    branch: "bootstrap/owner-recurrence-20260917"
+    base_commit: "08db99fff46fd22c582fbea0240fa379a42242e7"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/slack-listener-20260916"
+    branch: "bootstrap/slack-listener-20260916"
+    base_commit: "061cb260348258af5886e1ed21c40d51953cf297"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tui-snapshot-rot-20260916"
+    branch: "bootstrap/tui-snapshot-rot-20260916"
+    base_commit: "788a87f24c872b60a6ee2dd2221f82be0a1ca012"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-cli-fences-20260916"
+    branch: "bootstrap/tasknode-cli-fences-20260916"
+    base_commit: "582b622647f406f8bfb424baff11dda0c2a5ef7d"
 ---
 
 # 3. Task Node integration and delivery control
