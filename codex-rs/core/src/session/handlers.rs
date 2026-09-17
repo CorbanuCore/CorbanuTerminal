@@ -305,6 +305,7 @@ pub(super) async fn user_input_or_turn_inner(
                     items.clone(),
                     additional_context.clone(),
                     client_user_message_id.clone(),
+                    current_context.final_output_json_schema.clone(),
                 )
                 .await
             {
@@ -859,11 +860,11 @@ pub(super) async fn submission_loop(
                 Ok(sub) => sub,
                 Err(_) => break,
             },
-            input = sess.input_queue.next_interrupted_deferred_input() => {
+            (input, final_output_json_schema) = sess.input_queue.next_interrupted_deferred_input() => {
                 let (op, client_user_message_id) = match input {
                     TurnInput::UserInput { content, client_id } => (Op::UserInput {
                         items: content,
-                        final_output_json_schema: None,
+                        final_output_json_schema,
                         responsesapi_client_metadata: None,
                         additional_context: Default::default(),
                         thread_settings: Default::default(),

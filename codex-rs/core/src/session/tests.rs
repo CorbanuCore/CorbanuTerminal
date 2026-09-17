@@ -11988,6 +11988,7 @@ async fn authorization_changed_deferred_input_survives_interrupt() {
         items.clone(),
         Default::default(),
         Some("client".into()),
+        None,
     )
     .await
     .unwrap();
@@ -12005,10 +12006,13 @@ async fn authorization_changed_deferred_input_survives_interrupt() {
     );
     assert_eq!(
         sess.input_queue.next_interrupted_deferred_input().await,
-        TurnInput::UserInput {
-            content: items,
-            client_id: Some("client".into())
-        }
+        (
+            TurnInput::UserInput {
+                content: items,
+                client_id: Some("client".into())
+            },
+            None
+        )
     );
     assert!(!sess.input_queue.has_pending_input(&sess.active_turn).await);
 }
@@ -12035,19 +12039,28 @@ async fn authorization_changed_interrupted_input_wakes_fresh_admission() {
         text: "resume my deferred message".into(),
         text_elements: vec![],
     }];
-    sess.defer_user_input_until_active_turn_finished(
-        items.clone(),
-        Default::default(),
+    let schema = json!({"type": "object", "properties": {"answer": {"type": "string"}}, "required": ["answer"], "additionalProperties": false});
+    super::handlers::user_input_or_turn_inner(
+        &sess,
+        "defer-with-schema".into(),
+        Op::UserInput {
+            items: items.clone(),
+            final_output_json_schema: Some(schema.clone()),
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        },
         Some("interrupted-client".into()),
+        None,
     )
-    .await
-    .unwrap();
+    .await;
     sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
     expect_user_message_item_started(&rx, &items).await;
     let active = sess.active_turn.lock().await;
     let next = &active.as_ref().unwrap().task.as_ref().unwrap().turn_context;
     assert_ne!(next.sub_id, tc.sub_id);
     assert_eq!(next.approval_policy.value(), AskForApproval::UnlessTrusted);
+    assert_eq!(next.final_output_json_schema, Some(schema));
     drop(active);
     sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
 }
@@ -12068,7 +12081,7 @@ async fn interrupted_input_cannot_be_spliced_into_review_task() {
         text: "deferred user work".into(),
         text_elements: vec![],
     }];
-    sess.defer_user_input_until_active_turn_finished(items.clone(), Default::default(), None)
+    sess.defer_user_input_until_active_turn_finished(items.clone(), Default::default(), None, None)
         .await
         .unwrap();
     sess.abort_all_tasks(TurnAbortReason::Replaced).await;
@@ -12086,7 +12099,7 @@ async fn interrupted_input_cannot_be_spliced_into_review_task() {
         sess.input_queue.get_pending_input(&sess.active_turn).await,
         (vec![], None)
     );
-    let TurnInput::UserInput { content, client_id } =
+    let (TurnInput::UserInput { content, client_id }, _) =
         sess.input_queue.next_interrupted_deferred_input().await
     else {
         panic!("expected retained user input")
@@ -12116,7 +12129,7 @@ async fn interrupted_input_cannot_be_spliced_into_review_task() {
             .subscribe_activity(Some(turn_state))
             .await
             .1,
-        Some(InputQueueActivity::Steer)
+        None
     );
     assert_eq!(
         sess.input_queue
@@ -12128,6 +12141,92 @@ async fn interrupted_input_cannot_be_spliced_into_review_task() {
         }]
     );
     drop(active);
+    sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+}
+
+#[tokio::test]
+async fn deferred_input_does_not_interrupt_turn_local_sleep() {
+    let (sess, tc, _rx) = make_session_and_context_with_rx().await;
+    sess.spawn_task(
+        Arc::clone(&tc),
+        vec![],
+        NeverEndingTask {
+            kind: TaskKind::Regular,
+            listen_to_cancellation_token: true,
+        },
+    )
+    .await;
+    let active = sess.active_turn.lock().await;
+    let turn_state = Arc::clone(&active.as_ref().unwrap().turn_state);
+    drop(active);
+    let (mut activity_rx, activity) = sess.input_queue.subscribe_activity(Some(&turn_state)).await;
+    assert_eq!(activity, None);
+    sess.defer_user_input_until_active_turn_finished(
+        vec![UserInput::Text {
+            text: "later turn".into(),
+            text_elements: vec![],
+        }],
+        Default::default(),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    // Test both turn-local deferral and the interrupted session FIFO.
+    for interrupted in [false, true] {
+        if interrupted {
+            let active = sess.active_turn.lock().await;
+            sess.input_queue
+                .clear_pending(active.as_ref().unwrap())
+                .await;
+            drop(active);
+            assert!(sess.input_queue.has_pending_input(&sess.active_turn).await);
+        }
+        assert!(!activity_rx.has_changed().unwrap());
+        assert_eq!(
+            sess.input_queue
+                .subscribe_activity(Some(&turn_state))
+                .await
+                .1,
+            None
+        );
+        let output = crate::tools::handlers::SleepHandler
+            .handle(ToolInvocation {
+                session: Arc::clone(&sess),
+                turn: Arc::clone(&tc),
+                step_context: StepContext::for_test(Arc::clone(&tc)),
+                cancellation_token: CancellationToken::new(),
+                tracker: Arc::new(Mutex::new(TurnDiffTracker::new())),
+                call_id: format!("deferred-sleep-{interrupted}"),
+                tool_name: codex_tools::ToolName::namespaced("clock", "sleep"),
+                source: crate::tools::context::ToolCallSource::Direct,
+                payload: ToolPayload::Function {
+                    arguments: json!({"duration_ms": 10}).to_string(),
+                },
+            })
+            .await
+            .unwrap();
+        assert!(
+            output.log_preview().contains("Sleep completed."),
+            "{}",
+            output.log_preview()
+        );
+    }
+    // Consumable input still wakes the same subscription.
+    sess.input_queue
+        .extend_pending_input_and_accept_mailbox_delivery_for_turn_state(
+            &turn_state,
+            vec![TurnInput::UserInput {
+                content: vec![UserInput::Text {
+                    text: "this turn".into(),
+                    text_elements: vec![],
+                }],
+                client_id: None,
+            }],
+        )
+        .await;
+    activity_rx.changed().await.unwrap();
+    assert_eq!(*activity_rx.borrow_and_update(), InputQueueActivity::Steer);
     sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
 }
 

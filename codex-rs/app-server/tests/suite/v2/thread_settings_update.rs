@@ -286,6 +286,73 @@ async fn thread_settings_confirmation_f04_restricts_work_steered_after_applied()
 }
 
 #[tokio::test]
+async fn thread_settings_inject_items_waits_for_latest_authorization() -> Result<()> {
+    use codex_app_server_protocol::AskForApproval;
+    use codex_app_server_protocol::ServerRequest;
+    use codex_app_server_protocol::ThreadInjectItemsParams;
+    use codex_app_server_protocol::ThreadInjectItemsResponse;
+
+    let fixture = TempDir::new()?;
+    let marker = fixture.path().join("marker");
+    let server = create_mock_responses_server_sequence_unchecked(vec![
+        write_probe(&marker, "pending")?,
+        create_final_assistant_message_sse_response("old turn done")?,
+        create_final_assistant_message_sse_response("new turn done")?,
+    ])
+    .await;
+    let home = TempDir::new()?;
+    create_config_toml(home.path(), &server.uri())?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .build_initialized_with_timeout(Duration::from_secs(60))
+        .await?;
+    let thread = start_thread(&mut mcp).await?.thread;
+    confirm_permission(&mut mcp, &thread.id, AskForApproval::UnlessTrusted).await?;
+    start_text_turn(&mut mcp, thread.id.clone()).await?;
+    let ServerRequest::CommandExecutionRequestApproval { request_id, .. } =
+        timeout(DEFAULT_TIMEOUT, mcp.read_stream_until_request_message()).await??
+    else {
+        anyhow::bail!("expected pending approval")
+    };
+    confirm_permission(&mut mcp, &thread.id, AskForApproval::Never).await?;
+    let injected = "injected only after authorization changed";
+    let request = mcp
+        .send_thread_inject_items_request(ThreadInjectItemsParams {
+            thread_id: thread.id.clone(),
+            items: vec![serde_json::json!({
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": injected}]
+            })],
+        })
+        .await?;
+    let _: ThreadInjectItemsResponse =
+        timeout(DEFAULT_TIMEOUT, mcp.read_response(request)).await??;
+    // The pending approval keeps its original authority and can still be declined.
+    mcp.send_response(request_id, serde_json::json!({"decision": "decline"}))
+        .await?;
+    assert_eq!(finish_probe(&mut mcp, "pending").await?, 0);
+    assert!(!marker.exists());
+    let before = received_response_bodies(&server).await?;
+    assert_eq!(before.len(), 2);
+    assert!(
+        before
+            .iter()
+            .all(|body| !body.to_string().contains(injected)),
+        "thread/injectItems must not admit work into a superseded turn"
+    );
+    start_text_turn(&mut mcp, thread.id).await?;
+    assert_eq!(finish_probe(&mut mcp, "unused").await?, 0);
+    let after = received_response_bodies(&server).await?;
+    assert_eq!(after.len(), 3);
+    assert!(
+        after[2].to_string().contains(injected),
+        "deferred items must survive"
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn thread_settings_authorization_boundary_returns_input_and_discriminator() -> Result<()> {
     use codex_app_server_protocol::AskForApproval;
     use codex_app_server_protocol::ServerRequest;

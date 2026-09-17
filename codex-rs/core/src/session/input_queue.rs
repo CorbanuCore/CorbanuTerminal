@@ -32,7 +32,7 @@ pub(crate) enum InputQueueActivity {
 #[derive(Default)]
 pub(crate) struct TurnInputQueue {
     items: Vec<TurnInput>,
-    deferred: Vec<TurnInput>,
+    deferred: Vec<(TurnInput, Option<serde_json::Value>)>,
 }
 
 /// Session-scoped pending input storage and active-turn mailbox delivery coordination.
@@ -40,7 +40,7 @@ pub(crate) struct InputQueue {
     activity_tx: watch::Sender<InputQueueActivity>,
     mailbox_pending_mails: Mutex<VecDeque<PendingMailboxCommunication>>,
     capacity_wait_scheduled: AtomicBool,
-    interrupted_deferred_input: Mutex<VecDeque<TurnInput>>,
+    interrupted_deferred_input: Mutex<VecDeque<(TurnInput, Option<serde_json::Value>)>>,
     interrupted_input_ready: tokio::sync::Notify,
 }
 
@@ -86,8 +86,9 @@ impl InputQueue {
         } else {
             false
         };
-        let has_pending_steer =
-            has_pending_steer || !self.interrupted_deferred_input.lock().await.is_empty();
+        // Turn-local waiters cannot consume input still waiting for re-admission.
+        let has_pending_steer = has_pending_steer
+            || (turn_state.is_none() && !self.interrupted_deferred_input.lock().await.is_empty());
         let pending_activity = if has_pending_steer {
             Some(InputQueueActivity::Steer)
         } else if self.has_pending_mailbox_items().await {
@@ -261,12 +262,13 @@ impl InputQueue {
                 .await
                 .extend(std::mem::take(&mut turn_state.pending_input.deferred));
             self.interrupted_input_ready.notify_one();
-            self.activity_tx.send_replace(InputQueueActivity::Steer);
         }
     }
 
     /// Interrupted input returns to submission admission, never directly to a task's queue.
-    pub(crate) async fn next_interrupted_deferred_input(&self) -> TurnInput {
+    pub(crate) async fn next_interrupted_deferred_input(
+        &self,
+    ) -> (TurnInput, Option<serde_json::Value>) {
         loop {
             let ready = self.interrupted_input_ready.notified();
             if let Some(input) = self.interrupted_deferred_input.lock().await.pop_front() {
@@ -347,8 +349,13 @@ impl InputQueue {
         &self,
         turn_state: &Mutex<TurnState>,
         input: Vec<TurnInput>,
+        final_output_json_schema: Option<serde_json::Value>,
     ) {
-        turn_state.lock().await.pending_input.deferred.extend(input);
+        turn_state.lock().await.pending_input.deferred.extend(
+            input
+                .into_iter()
+                .map(|input| (input, final_output_json_schema.clone())),
+        );
     }
 
     pub(crate) async fn take_pending_input_for_turn_state(
@@ -357,7 +364,13 @@ impl InputQueue {
     ) -> Vec<TurnInput> {
         let mut state = turn_state.lock().await;
         let mut input = std::mem::take(&mut state.pending_input.items);
-        input.append(&mut state.pending_input.deferred);
+        input.extend(
+            state
+                .pending_input
+                .deferred
+                .drain(..)
+                .map(|(input, _)| input),
+        );
         input
     }
 
@@ -486,7 +499,6 @@ impl TurnInputQueue {
     fn has_user_input(&self) -> bool {
         self.items
             .iter()
-            .chain(&self.deferred)
             .any(|input| matches!(input, TurnInput::UserInput { .. }))
     }
 }

@@ -4435,6 +4435,7 @@ impl Session {
         input: Vec<UserInput>,
         additional_context: BTreeMap<String, AdditionalContextEntry>,
         client_user_message_id: Option<String>,
+        final_output_json_schema: Option<Value>,
     ) -> Result<String, SteerInputError> {
         let mut active = self.active_turn.lock().await;
         let Some(active_turn) = active.as_mut() else {
@@ -4464,7 +4465,11 @@ impl Session {
             client_id: client_user_message_id,
         });
         self.input_queue
-            .defer_input_for_turn_state(active_turn.turn_state.as_ref(), pending_input)
+            .defer_input_for_turn_state(
+                active_turn.turn_state.as_ref(),
+                pending_input,
+                final_output_json_schema,
+            )
             .await;
         Ok(active_task.turn_context.sub_id.clone())
     }
