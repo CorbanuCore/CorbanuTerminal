@@ -1,0 +1,253 @@
+{
+  "environment": {
+    "PATH": "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-final9-20260910/codex-path:/Users/Neo/.local/bin:/Users/Neo/.local/bin:/Users/Neo/.yarn/bin:/Users/Neo/.local/bin:/opt/homebrew/opt/postgresql@17/bin:/opt/homebrew/opt/postgresql@17/bin:/opt/homebrew/opt/postgresql@17/bin:/Users/Neo/.codeium/windsurf/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/Neo/bin/g8:/Users/Neo/bin/cs:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/opt/X11/bin://Applications/Topaz Photo AI.app/Contents/Resources/bin:/Library/Apple/usr/bin:/usr/local/MacGPG2/bin:/Library/TeX/texbin:/Applications/Wireshark.app/Contents/MacOS:/private/tmp/cacctgua103.XBNKYJ/home/tmp/arg0/codex-arg0MBNgVa:/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-final9-20260910/codex-path:/Volumes/CorbanuDrive/Corbanu/.codex-work/resume-fix.q96t3X/integration-package/codex-path:/Users/Neo/.local/bin:/Users/Neo/.yarn/bin:/opt/homebrew/opt/postgresql@17/bin:/Users/Neo/.codeium/windsurf/bin:/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/home/tmp/arg0/codex-arg0h2L9mn:/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/rustup/toolchains/1.95.0-aarch64-apple-darwin/bin:/Users/Neo/.cargo/bin:/Users/Neo/gcloud/google-cloud-sdk/bin:/Users/Neo/.lmstudio/bin:/Users/Neo/llama.cpp/build/bin:/Users/Neo/.lmstudio/bin:/Users/Neo/llama.cpp/build/bin:/Users/Neo/.lmstudio/bin",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_TERMINAL_PROMPT": "0",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "synthetic_ambient_overrides": {
+    "PATH": "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-final9-20260910/codex-path:/Users/Neo/.local/bin:/Users/Neo/.local/bin:/Users/Neo/.yarn/bin:/Users/Neo/.local/bin:/opt/homebrew/opt/postgresql@17/bin:/opt/homebrew/opt/postgresql@17/bin:/opt/homebrew/opt/postgresql@17/bin:/Users/Neo/.codeium/windsurf/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/Neo/bin/g8:/Users/Neo/bin/cs:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/opt/X11/bin://Applications/Topaz Photo AI.app/Contents/Resources/bin:/Library/Apple/usr/bin:/usr/local/MacGPG2/bin:/Library/TeX/texbin:/Applications/Wireshark.app/Contents/MacOS:/private/tmp/cacctgua103.XBNKYJ/home/tmp/arg0/codex-arg0MBNgVa:/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-final9-20260910/codex-path:/Volumes/CorbanuDrive/Corbanu/.codex-work/resume-fix.q96t3X/integration-package/codex-path:/Users/Neo/.local/bin:/Users/Neo/.yarn/bin:/opt/homebrew/opt/postgresql@17/bin:/Users/Neo/.codeium/windsurf/bin:/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/home/tmp/arg0/codex-arg0h2L9mn:/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/rustup/toolchains/1.95.0-aarch64-apple-darwin/bin:/Users/Neo/.cargo/bin:/Users/Neo/gcloud/google-cloud-sdk/bin:/Users/Neo/.lmstudio/bin:/Users/Neo/llama.cpp/build/bin:/Users/Neo/.lmstudio/bin:/Users/Neo/llama.cpp/build/bin:/Users/Neo/.lmstudio/bin",
+    "GIT_CONFIG_GLOBAL": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/target/checks-lhvrpcoh/bad-config",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_TERMINAL_PROMPT": "0",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "GIT_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/target/checks-lhvrpcoh/absent-git-dir",
+    "GIT_WORK_TREE": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/target/checks-lhvrpcoh/wrong-tree",
+    "GIT_INDEX_FILE": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/target/checks-lhvrpcoh/absent-index",
+    "GIT_CONFIG_COUNT": "1",
+    "GIT_CONFIG_KEY_0": "core.excludesFile",
+    "GIT_CONFIG_VALUE_0": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/target/checks-lhvrpcoh/ignore-all",
+    "BASH_ENV": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/target/checks-lhvrpcoh/bad-shell"
+  },
+  "witness_sha256": "fa45f8d6a6bfe29119e5bf350259cf4e2e95204060444ceb257c1ca353f46786",
+  "note_sha256": "d6248f0729acdad25a553b33963705f209df940cd812de235ee862623b4b8df9",
+  "frozen_sha256": "d46df323a5d5538c6b4e8bddec84aa08266346d5cc827bc7ac5581d204457864",
+  "identical_blocks": [
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "scope": "Destination segments only; version branches simulated on installed Python. No complete operator replay.",
+  "runs": [
+    {
+      "name": "witness-clean",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py",
+        "--output",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/witness-clean.json"
+      ],
+      "exit": 0,
+      "stdout": "Observed alias-unignored-regression: old=0/new=1\n{\"passed\": 7, \"old_alias_exit\": 0, \"new_alias_exit\": 1, \"receipt\": \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/witness-clean.json\"}\n",
+      "stderr": "",
+      "expected_exit": 0
+    },
+    {
+      "name": "witness-ambient-git",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py",
+        "--output",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/witness-ambient-git.json"
+      ],
+      "exit": 0,
+      "stdout": "Observed alias-unignored-regression: old=0/new=1\n{\"passed\": 7, \"old_alias_exit\": 0, \"new_alias_exit\": 1, \"receipt\": \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/witness-ambient-git.json\"}\n",
+      "stderr": "",
+      "expected_exit": 0
+    },
+    {
+      "name": "witness-mismatch",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "-c",
+        "import sys; p=sys.argv.pop(1); exec(compile(sys.stdin.read(), p, 'exec'), {'__file__': p, '__name__': '__main__'})",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py",
+        "--output",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/target/checks-lhvrpcoh/witness-mismatch.json"
+      ],
+      "exit": 1,
+      "stdout": "Observed alias-unignored-regression: old=1/new=1\n",
+      "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import sys; p=sys.argv.pop(1); exec(compile(sys.stdin.read(), p, 'exec'), {'__file__': p, '__name__': '__main__'})\n                                   ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py\", line 74, in <module>\n    raise RuntimeError(f\"pinned regression exits differ from expected (0, 1): {row}\")\nRuntimeError: pinned regression exits differ from expected (0, 1): {'case': 'alias-unignored-regression', 'destination': '/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-ilb4ro8p/outside-alias/unignored', 'resolved': '/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-ilb4ro8p/source/unignored', 'expected_exit': 1, 'exit': 1, 'stdout': '', 'stderr': '', 'command': 'set -eu\\nq=unused\\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\\ncase \"$audit\" in /*) ;; *) printf \\'%s\\\\n\\' \\'STOP: CORBANU_AUDIT_DIR must be absolute.\\'; exit 1 ;; esac\\ntest ! -e \"$audit\"\\ntest ! -L \"$audit\"\\npython3 - \"$PWD\" \"$audit\" <<\\'PY\\'\\nfrom pathlib import Path\\nimport subprocess\\nimport sys\\n\\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\\nif destination.is_relative_to(source):\\n    sys.exit(subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)]))\\nPY\\nprintf \\'DESTINATION_ALLOWED\\\\n\\'\\n', 'old_guard_exit': 1, 'old_guard_stdout': '', 'old_guard_stderr': ''}\n",
+      "expected_exit": 1
+    },
+    {
+      "name": "witness-mismatch-optimized",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "-O",
+        "-c",
+        "import sys; p=sys.argv.pop(1); exec(compile(sys.stdin.read(), p, 'exec'), {'__file__': p, '__name__': '__main__'})",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py",
+        "--output",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/target/checks-lhvrpcoh/witness-mismatch-optimized.json"
+      ],
+      "exit": 1,
+      "stdout": "Observed alias-unignored-regression: old=1/new=1\n",
+      "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import sys; p=sys.argv.pop(1); exec(compile(sys.stdin.read(), p, 'exec'), {'__file__': p, '__name__': '__main__'})\n                                   ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py\", line 74, in <module>\n    raise RuntimeError(f\"pinned regression exits differ from expected (0, 1): {row}\")\nRuntimeError: pinned regression exits differ from expected (0, 1): {'case': 'alias-unignored-regression', 'destination': '/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-3nv_kpdi/outside-alias/unignored', 'resolved': '/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/target/destination-3nv_kpdi/source/unignored', 'expected_exit': 1, 'exit': 1, 'stdout': '', 'stderr': '', 'command': 'set -eu\\nq=unused\\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\\ncase \"$audit\" in /*) ;; *) printf \\'%s\\\\n\\' \\'STOP: CORBANU_AUDIT_DIR must be absolute.\\'; exit 1 ;; esac\\ntest ! -e \"$audit\"\\ntest ! -L \"$audit\"\\npython3 - \"$PWD\" \"$audit\" <<\\'PY\\'\\nfrom pathlib import Path\\nimport subprocess\\nimport sys\\n\\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\\nif destination.is_relative_to(source):\\n    sys.exit(subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)]))\\nPY\\nprintf \\'DESTINATION_ALLOWED\\\\n\\'\\n', 'old_guard_exit': 1, 'old_guard_stdout': '', 'old_guard_stderr': ''}\n",
+      "expected_exit": 1
+    },
+    {
+      "name": "guard-direct-unignored",
+      "command": [
+        "bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\nif test -e \"$audit\"; then\n    printf '%s\\n' 'STOP: destination already exists; preserve it and choose a new path.'\n    exit 1\nfi\nif test -L \"$audit\"; then\n    printf '%s\\n' 'STOP: destination is a symlink; preserve it and choose a new path.'\n    exit 1\nfi\npython3 - \"$PWD\" \"$audit\" <<'PY'\nimport sys\n\nif sys.version_info < (3, 9):\n    print(\"STOP: destination guard requires Python 3.9 or newer.\")\n    sys.exit(1)\n\nfrom pathlib import Path\nimport subprocess\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    status = subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)])\n    if status:\n        print(\"STOP: inside-source destination did not pass git check-ignore; choose an ignored path.\")\n    sys.exit(status)\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n"
+      ],
+      "exit": 1,
+      "stdout": "STOP: inside-source destination did not pass git check-ignore; choose an ignored path.\n",
+      "stderr": "",
+      "expected_exit": 1
+    },
+    {
+      "name": "guard-alias-unignored",
+      "command": [
+        "bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\nif test -e \"$audit\"; then\n    printf '%s\\n' 'STOP: destination already exists; preserve it and choose a new path.'\n    exit 1\nfi\nif test -L \"$audit\"; then\n    printf '%s\\n' 'STOP: destination is a symlink; preserve it and choose a new path.'\n    exit 1\nfi\npython3 - \"$PWD\" \"$audit\" <<'PY'\nimport sys\n\nif sys.version_info < (3, 9):\n    print(\"STOP: destination guard requires Python 3.9 or newer.\")\n    sys.exit(1)\n\nfrom pathlib import Path\nimport subprocess\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    status = subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)])\n    if status:\n        print(\"STOP: inside-source destination did not pass git check-ignore; choose an ignored path.\")\n    sys.exit(status)\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n"
+      ],
+      "exit": 1,
+      "stdout": "STOP: inside-source destination did not pass git check-ignore; choose an ignored path.\n",
+      "stderr": "",
+      "expected_exit": 1
+    },
+    {
+      "name": "guard-dotdot-unignored",
+      "command": [
+        "bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\nif test -e \"$audit\"; then\n    printf '%s\\n' 'STOP: destination already exists; preserve it and choose a new path.'\n    exit 1\nfi\nif test -L \"$audit\"; then\n    printf '%s\\n' 'STOP: destination is a symlink; preserve it and choose a new path.'\n    exit 1\nfi\npython3 - \"$PWD\" \"$audit\" <<'PY'\nimport sys\n\nif sys.version_info < (3, 9):\n    print(\"STOP: destination guard requires Python 3.9 or newer.\")\n    sys.exit(1)\n\nfrom pathlib import Path\nimport subprocess\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    status = subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)])\n    if status:\n        print(\"STOP: inside-source destination did not pass git check-ignore; choose an ignored path.\")\n    sys.exit(status)\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n"
+      ],
+      "exit": 1,
+      "stdout": "STOP: inside-source destination did not pass git check-ignore; choose an ignored path.\n",
+      "stderr": "",
+      "expected_exit": 1
+    },
+    {
+      "name": "guard-existing-destination",
+      "command": [
+        "bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\nif test -e \"$audit\"; then\n    printf '%s\\n' 'STOP: destination already exists; preserve it and choose a new path.'\n    exit 1\nfi\nif test -L \"$audit\"; then\n    printf '%s\\n' 'STOP: destination is a symlink; preserve it and choose a new path.'\n    exit 1\nfi\npython3 - \"$PWD\" \"$audit\" <<'PY'\nimport sys\n\nif sys.version_info < (3, 9):\n    print(\"STOP: destination guard requires Python 3.9 or newer.\")\n    sys.exit(1)\n\nfrom pathlib import Path\nimport subprocess\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    status = subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)])\n    if status:\n        print(\"STOP: inside-source destination did not pass git check-ignore; choose an ignored path.\")\n    sys.exit(status)\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n"
+      ],
+      "exit": 1,
+      "stdout": "STOP: destination already exists; preserve it and choose a new path.\n",
+      "stderr": "",
+      "expected_exit": 1
+    },
+    {
+      "name": "guard-dangling-symlink",
+      "command": [
+        "bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\nif test -e \"$audit\"; then\n    printf '%s\\n' 'STOP: destination already exists; preserve it and choose a new path.'\n    exit 1\nfi\nif test -L \"$audit\"; then\n    printf '%s\\n' 'STOP: destination is a symlink; preserve it and choose a new path.'\n    exit 1\nfi\npython3 - \"$PWD\" \"$audit\" <<'PY'\nimport sys\n\nif sys.version_info < (3, 9):\n    print(\"STOP: destination guard requires Python 3.9 or newer.\")\n    sys.exit(1)\n\nfrom pathlib import Path\nimport subprocess\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    status = subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)])\n    if status:\n        print(\"STOP: inside-source destination did not pass git check-ignore; choose an ignored path.\")\n    sys.exit(status)\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n"
+      ],
+      "exit": 1,
+      "stdout": "STOP: destination is a symlink; preserve it and choose a new path.\n",
+      "stderr": "",
+      "expected_exit": 1
+    },
+    {
+      "name": "guard-relative",
+      "command": [
+        "bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\nif test -e \"$audit\"; then\n    printf '%s\\n' 'STOP: destination already exists; preserve it and choose a new path.'\n    exit 1\nfi\nif test -L \"$audit\"; then\n    printf '%s\\n' 'STOP: destination is a symlink; preserve it and choose a new path.'\n    exit 1\nfi\npython3 - \"$PWD\" \"$audit\" <<'PY'\nimport sys\n\nif sys.version_info < (3, 9):\n    print(\"STOP: destination guard requires Python 3.9 or newer.\")\n    sys.exit(1)\n\nfrom pathlib import Path\nimport subprocess\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    status = subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)])\n    if status:\n        print(\"STOP: inside-source destination did not pass git check-ignore; choose an ignored path.\")\n    sys.exit(status)\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n"
+      ],
+      "exit": 1,
+      "stdout": "STOP: CORBANU_AUDIT_DIR must be absolute.\n",
+      "stderr": "",
+      "expected_exit": 1
+    },
+    {
+      "name": "guard-direct-ignored",
+      "command": [
+        "bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\nif test -e \"$audit\"; then\n    printf '%s\\n' 'STOP: destination already exists; preserve it and choose a new path.'\n    exit 1\nfi\nif test -L \"$audit\"; then\n    printf '%s\\n' 'STOP: destination is a symlink; preserve it and choose a new path.'\n    exit 1\nfi\npython3 - \"$PWD\" \"$audit\" <<'PY'\nimport sys\n\nif sys.version_info < (3, 9):\n    print(\"STOP: destination guard requires Python 3.9 or newer.\")\n    sys.exit(1)\n\nfrom pathlib import Path\nimport subprocess\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    status = subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)])\n    if status:\n        print(\"STOP: inside-source destination did not pass git check-ignore; choose an ignored path.\")\n    sys.exit(status)\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n"
+      ],
+      "exit": 0,
+      "stdout": ".gitignore:1:ignored/\t/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/target/checks-lhvrpcoh/source/ignored/new\nDESTINATION_ALLOWED\n",
+      "stderr": "",
+      "expected_exit": 0
+    },
+    {
+      "name": "guard-alias-ignored",
+      "command": [
+        "bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\nif test -e \"$audit\"; then\n    printf '%s\\n' 'STOP: destination already exists; preserve it and choose a new path.'\n    exit 1\nfi\nif test -L \"$audit\"; then\n    printf '%s\\n' 'STOP: destination is a symlink; preserve it and choose a new path.'\n    exit 1\nfi\npython3 - \"$PWD\" \"$audit\" <<'PY'\nimport sys\n\nif sys.version_info < (3, 9):\n    print(\"STOP: destination guard requires Python 3.9 or newer.\")\n    sys.exit(1)\n\nfrom pathlib import Path\nimport subprocess\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    status = subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)])\n    if status:\n        print(\"STOP: inside-source destination did not pass git check-ignore; choose an ignored path.\")\n    sys.exit(status)\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n"
+      ],
+      "exit": 0,
+      "stdout": ".gitignore:1:ignored/\t/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/target/checks-lhvrpcoh/source/ignored/new\nDESTINATION_ALLOWED\n",
+      "stderr": "",
+      "expected_exit": 0
+    },
+    {
+      "name": "guard-external",
+      "command": [
+        "bash",
+        "--noprofile",
+        "--norc",
+        "-c",
+        "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\nif test -e \"$audit\"; then\n    printf '%s\\n' 'STOP: destination already exists; preserve it and choose a new path.'\n    exit 1\nfi\nif test -L \"$audit\"; then\n    printf '%s\\n' 'STOP: destination is a symlink; preserve it and choose a new path.'\n    exit 1\nfi\npython3 - \"$PWD\" \"$audit\" <<'PY'\nimport sys\n\nif sys.version_info < (3, 9):\n    print(\"STOP: destination guard requires Python 3.9 or newer.\")\n    sys.exit(1)\n\nfrom pathlib import Path\nimport subprocess\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    status = subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)])\n    if status:\n        print(\"STOP: inside-source destination did not pass git check-ignore; choose an ignored path.\")\n    sys.exit(status)\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n"
+      ],
+      "exit": 0,
+      "stdout": "DESTINATION_ALLOWED\n",
+      "stderr": "",
+      "expected_exit": 0
+    },
+    {
+      "name": "guard-version-8",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "-c",
+        "import sys; sys.version_info = (3, 8, 0); exec(compile(sys.stdin.read(), '<guard>', 'exec'))",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/target/checks-lhvrpcoh/source",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/target/checks-lhvrpcoh/external"
+      ],
+      "exit": 1,
+      "stdout": "STOP: destination guard requires Python 3.9 or newer.\n",
+      "stderr": "",
+      "expected_exit": 1
+    },
+    {
+      "name": "guard-version-9",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "-c",
+        "import sys; sys.version_info = (3, 9, 0); exec(compile(sys.stdin.read(), '<guard>', 'exec'))",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/target/checks-lhvrpcoh/source",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guarantee-103/target/checks-lhvrpcoh/external"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "",
+      "expected_exit": 0
+    }
+  ]
+}

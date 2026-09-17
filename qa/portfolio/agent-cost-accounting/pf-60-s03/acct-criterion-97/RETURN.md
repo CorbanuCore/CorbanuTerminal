@@ -11,7 +11,8 @@ At round 97, the corrected operator note and its
 [frozen executed copy](OPERATOR.executed.md) were identical and contained these
 decisions. The [live note](../acct-derive-95/OPERATOR.md) has since diverged:
 round 100 changed block 1's lexical destination check to resolved-path ancestry
-and ignore checks; round 102 added a Python-version refusal. Blocks 2–6 remain
+and ignore checks; round 102 added a Python-version refusal; round 103 added
+explicit destination-refusal messages. Blocks 2–6 remain
 byte-identical to the frozen copy. Later provenance/prerequisite prose also
 changed. All six-block execution claims and the final-note hash below refer
 only to `OPERATOR.executed.md`, not the live note. The live revision has not
@@ -43,7 +44,16 @@ Destination:
 `audit=${CORBANU_AUDIT_DIR:-"$PWD/$q/acct-criterion-97/target/audit-copy"}`.
 Set `CORBANU_AUDIT_DIR` to a new absolute path to relocate or repeat a run.
 Preserve earlier destinations/transcripts. Existing destinations are refused.
-Inside-source destinations must be ignored; outside-source destinations work.
+The frozen guard required an absolute, nonexistent destination that was not a
+symlink, and ran `git check-ignore -v` only when its literal spelling began
+with `$PWD/`. It did not resolve ancestry: an outside-spelled symlink alias into
+an unignored source directory could pass. This was not a guarantee that every
+physically inside-source destination was ignored. The stronger resolved-path
+check was a separate round-100 change, with segment evidence rather than this
+round's complete execution; no stronger guarantee is retroactively attributed
+to the frozen run. Any additional destination guarantee requires a separate
+integrator decision; round 103 changes this record and refusal diagnostics,
+not the destination acceptance criteria.
 The default path, relocated path, existing-destination refusal, and second run
 at a new path were all executed successfully with their expected exits.
 

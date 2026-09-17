@@ -123,6 +123,29 @@ BASELINE DRIFT: expected counts/exit=(20, 0, 3, 2), unavailable=['committed pack
 RESULT agreement=19 disagreement=1 unavailable=3 exit=3
 ```
 
+The manager reports that this record has been reviewed adversarially five times
+before this revision; that count is supplied review history, not an independently
+verified review roster or owner approval. The recurring defect was self-confirming
+evidence: a check or claim appeared to validate more than it actually tested.
+The retained correction trail shows how it was caught: inspecting the script
+found a literal no-defect verdict and led to its removal and named manual-reader
+attribution ([verdict correction](../acct-derive-95/RETURN.md)); running the operator blocks
+in fresh shells exposed missing inputs and led to executable instructions and an
+explicit self-reference limit ([fresh-shell execution](../acct-operator-96/RETURN.md)); testing
+dirty-source and wrong-root cases replaced status display alone with refusal
+criteria and guards ([source-status criterion](../acct-criterion-97/RETURN.md)); an outside symlink
+counterexample exposed lexical ancestry checking, while comparing prose with
+its cited evidence exposed overstatements ([destination counterexample](../acct-final-100/RETURN.md));
+and comparing live note bytes and floating reproduction inputs with frozen
+receipts exposed an unsupported execution-equivalence claim and led to explicit
+divergence disclosure and pinned commits ([divergence correction](../acct-divergence-102/RETURN.md)).
+The present follow-up comparison found the remaining frozen-guard overclaim and
+literal exit summary: [current correction](../acct-guarantee-103/RETURN.md) narrows the claim,
+prints checked observations from both pinned guards, isolates the reproduction
+environment and makes refusal messages explicit. These corrections test the
+limits of this evidence record; they do not establish independent functional
+acceptance or authorize the owner's signature.
+
 **What Fable would be accepting:** this bounded revision makes the saved evidence
 reproducible under the stated conditions. It does not accept S03, clear the
 scope-zero finding or qualify a shipped inspector. There is no calendar expiry,

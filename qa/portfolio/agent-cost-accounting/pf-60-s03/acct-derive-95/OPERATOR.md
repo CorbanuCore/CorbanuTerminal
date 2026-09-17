@@ -9,14 +9,19 @@ scope-zero finding and historical timeout. Treat recorded conclusions as claims.
 [frozen note](../acct-criterion-97/OPERATOR.executed.md), not this later revision.
 Since that freeze, only block 1 changed: round 100 replaced the lexical
 inside-source destination check with resolved-path ancestry and ignore checks;
-round 102 added the Python-version refusal. Blocks 2–6 remain byte-identical.
+round 102 added the Python-version refusal; round 103 added explicit `STOP:`
+messages for existing destinations, destination symlinks and failed inside-source
+ignore checks. Blocks 2–6 remain byte-identical.
 The six-block verbatim execution claim applies only to the frozen round-97
 bytes. This revision has destination-segment checks and separately run Rust
 gates; it has no fresh complete six-block execution. See the
 [divergence and reproduction evidence](../acct-divergence-102/RETURN.md).
 
 **Get a clean copy.** Use Python 3.9 or newer, Git and Bash. The destination
-guard refuses older Python 3 versions with `STOP:` and exit 1 before cloning.
+guard refuses older Python 3 versions, existing destinations and destination
+symlinks with `STOP:` and exit 1 before cloning. A failed inside-source
+`git check-ignore` also prints `STOP:` and preserves Git's nonzero exit.
+A relative destination retains its existing `STOP:` and exit 1.
 Run this first block from the
 root of the supplied repository. It records HEAD and creates a full-history,
 detached clone of that commit. It does not copy the working tree.
@@ -76,8 +81,14 @@ if test -n "$omitted"; then
 fi
 audit=${CORBANU_AUDIT_DIR:-"$PWD/$q/acct-criterion-97/target/audit-copy"}
 case "$audit" in /*) ;; *) printf '%s\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac
-test ! -e "$audit"
-test ! -L "$audit"
+if test -e "$audit"; then
+    printf '%s\n' 'STOP: destination already exists; preserve it and choose a new path.'
+    exit 1
+fi
+if test -L "$audit"; then
+    printf '%s\n' 'STOP: destination is a symlink; preserve it and choose a new path.'
+    exit 1
+fi
 python3 - "$PWD" "$audit" <<'PY'
 import sys
 
@@ -90,7 +101,10 @@ import subprocess
 
 source, destination = (Path(value).resolve() for value in sys.argv[1:])
 if destination.is_relative_to(source):
-    sys.exit(subprocess.call(["git", "check-ignore", "-v", str(destination)]))
+    status = subprocess.call(["git", "check-ignore", "-v", str(destination)])
+    if status:
+        print("STOP: inside-source destination did not pass git check-ignore; choose an ignored path.")
+    sys.exit(status)
 PY
 git clone --no-local --no-checkout . "$audit"
 git -C "$audit" checkout --detach "$candidate"
@@ -235,7 +249,7 @@ raw stdout/stderr before retrying. Read the acceptance exit table: 3 means drift
 or refused baseline; 1/traceback is failed execution/check; missing history/ref is
 a prerequisite failure. The comparison reference is
 `qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt`,
-with digest `25450ea3837dfc7624189eb89f7067fda71b76dbec21e2853122875f03dd1fce`
+with digest `97316af06e636192bd1086eafae4bc7acb6c03b5faa95239adfd48096209db60`
 in the adjacent `reference.json`, read from the candidate commit. Compare the
 retained `acceptance.stdout.txt` against that file; compare candidate evidence
 files and hashes with those in the supplied candidate SHA recorded at clone time.

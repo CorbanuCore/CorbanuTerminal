@@ -1,0 +1,1 @@
+STOP: destination is a symlink; preserve it and choose a new path.

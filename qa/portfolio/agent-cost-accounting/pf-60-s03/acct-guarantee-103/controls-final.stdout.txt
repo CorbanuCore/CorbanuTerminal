@@ -1,0 +1,104 @@
+Run directory: /Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-7wxuu46g
+{
+  "kind": "clean sparse Git checkout of proposed QA snapshot, then independent corruption controls",
+  "source_base": "2731b5e8868cb7222e4fedef3493ab977ecc79db",
+  "snapshot": "67fa42aefc66d60090b73dc2d324a99f62b1b2fd",
+  "run_directory": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-7wxuu46g",
+  "ignored_package_absent": true,
+  "clean_before_and_after": true,
+  "no_network": true,
+  "no_package_launch": true,
+  "cases": [
+    {
+      "case": "clean-checkout",
+      "exit": 2,
+      "expected_exit": 2,
+      "passed": true,
+      "stdout_sha256": "97316af06e636192bd1086eafae4bc7acb6c03b5faa95239adfd48096209db60"
+    },
+    {
+      "case": "clean-finalizer",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "e90ef9e125ab488ef8f725093771037288bd41142702c57d4e65bc3ef6667cdf"
+    },
+    {
+      "case": "local-package-absent-refusal",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "e90ef9e125ab488ef8f725093771037288bd41142702c57d4e65bc3ef6667cdf"
+    },
+    {
+      "case": "wrong-claim",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "434f23a0d639c90b14ad4b08f5724ff14a47cb0c8aa77f89a167721abafcef52"
+    },
+    {
+      "case": "corrupt-viewport",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "450e37b45399c04a7d2e979d06156af0f446bea91881e39307655f04fe97705f"
+    },
+    {
+      "case": "missing-log",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "60d459aefce2e57f8855182b36b4735a03f588094761a7434ec622f2ef4755e5"
+    },
+    {
+      "case": "baseline-count",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "c4b73d1fbfcac1221f559fd911a11ca117bd82d606bb7f15e3953da5875318b1"
+    },
+    {
+      "case": "baseline-identity",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "2746710eb8c0edde4210b72fd9ca2e87933b1d4cba1ac7b878b04a648567339c"
+    },
+    {
+      "case": "baseline-exit",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "4301c2bdcaa10c41dbfed220c96bc27b0c63c3726e2d48eb4c4d42076f6cd421"
+    },
+    {
+      "case": "baseline-missing",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "5c75e83d4c867b831aa63a6b9d1dc289584abbd9d758c8bb8fc7f0cdb1ccd480"
+    },
+    {
+      "case": "baseline-duplicate",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "2b2ecc2f0e0d762fed6500c159a51a9e4276058e9baa9dfc02db1887bf169b8e"
+    },
+    {
+      "case": "local-package-disagreement",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "0d06e98b6cccebe31127eb89f7ed2778665a2266a9b465f91208783dd03269f3"
+    },
+    {
+      "case": "local-package-agreement-refusal",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "981aa95ca77d7f54ccfe8f8049de3c46019b437d466af005ebb05003d6f6eaa3"
+    }
+  ]
+}
