@@ -5,7 +5,19 @@ independent functional acceptance, or permission to ship. Start by reading
 [the acceptance decision](../acct-acceptance-75/acceptance.md), especially the open
 scope-zero finding and historical timeout. Treat recorded conclusions as claims.
 
-**Get a clean copy.** Use Python 3, Git and Bash. Run this first block from the
+**Execution provenance.** Round 97 executed the six blocks in its
+[frozen note](../acct-criterion-97/OPERATOR.executed.md), not this later revision.
+Since that freeze, only block 1 changed: round 100 replaced the lexical
+inside-source destination check with resolved-path ancestry and ignore checks;
+round 102 added the Python-version refusal. Blocks 2–6 remain byte-identical.
+The six-block verbatim execution claim applies only to the frozen round-97
+bytes. This revision has destination-segment checks and separately run Rust
+gates; it has no fresh complete six-block execution. See the
+[divergence and reproduction evidence](../acct-divergence-102/RETURN.md).
+
+**Get a clean copy.** Use Python 3.9 or newer, Git and Bash. The destination
+guard refuses older Python 3 versions with `STOP:` and exit 1 before cloning.
+Run this first block from the
 root of the supplied repository. It records HEAD and creates a full-history,
 detached clone of that commit. It does not copy the working tree.
 
@@ -67,9 +79,14 @@ case "$audit" in /*) ;; *) printf '%s\n' 'STOP: CORBANU_AUDIT_DIR must be absolu
 test ! -e "$audit"
 test ! -L "$audit"
 python3 - "$PWD" "$audit" <<'PY'
+import sys
+
+if sys.version_info < (3, 9):
+    print("STOP: destination guard requires Python 3.9 or newer.")
+    sys.exit(1)
+
 from pathlib import Path
 import subprocess
-import sys
 
 source, destination = (Path(value).resolve() for value in sys.argv[1:])
 if destination.is_relative_to(source):

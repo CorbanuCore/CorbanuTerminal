@@ -7,8 +7,17 @@ The brief SHA-256 matched
 `801cf69be07f97b1f2e3b539846627730a13249716615f2383fd62be1adcf94e`.
 Base and replayed candidate: `2903d37c60dff3b8bec469fcf82347729b53f7fd`.
 
-The [corrected operator note](../acct-derive-95/OPERATOR.md) and its
-[frozen executed copy](OPERATOR.executed.md) contain these decisions:
+At round 97, the corrected operator note and its
+[frozen executed copy](OPERATOR.executed.md) were identical and contained these
+decisions. The [live note](../acct-derive-95/OPERATOR.md) has since diverged:
+round 100 changed block 1's lexical destination check to resolved-path ancestry
+and ignore checks; round 102 added a Python-version refusal. Blocks 2–6 remain
+byte-identical to the frozen copy. Later provenance/prerequisite prose also
+changed. All six-block execution claims and the final-note hash below refer
+only to `OPERATOR.executed.md`, not the live note. The live revision has not
+been executed as a complete six-block sequence; see
+[round 102](../acct-divergence-102/RETURN.md) for segment checks and fresh gates.
+The frozen decisions were:
 
 | Source-status case | Required action |
 | --- | --- |
@@ -44,7 +53,7 @@ raw stdout/stderr, and exits. [Results and receipts](results.json) bind each
 script/output by SHA-256; individual JSON receipts and lossless `.log.gz`
 files are retained. All 32 recorded attempts matched their expected exits.
 
-The final six blocks ran unchanged, each in a fresh
+The final six blocks from `OPERATOR.executed.md` ran unchanged, each in a fresh
 `bash --noprofile --norc` process. A fresh full-history source clone supplied
 the candidate; block 1 created another fresh detached audit clone at
 `acct-criterion-97/target/final-audit-copy`. The revised note was an external

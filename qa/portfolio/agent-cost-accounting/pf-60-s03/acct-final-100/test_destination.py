@@ -1,4 +1,5 @@
 """Exercise the operator note's destination guard with real Git ignore rules."""
+import argparse
 import hashlib
 import json
 import os
@@ -9,11 +10,18 @@ import tempfile
 
 here = Path(__file__).resolve().parent
 note = here.parent / "acct-derive-95/OPERATOR.md"
-raw = note.read_bytes()
+old_commit = "967425cc72ea28b5f59ecc38a56419b7db6885e8"
+new_commit = "a8dfff98892e60aaa0d7f05321fd7e57b79cdc2a"
+repo = here.parents[4]
+note_path = str(note.relative_to(repo))
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--output", type=Path, help="New receipt path; existing files are refused.")
+args = parser.parse_args()
+raw = subprocess.check_output(["git", "show", new_commit + ":" + note_path], cwd=repo)
 block = re.findall(r"^```sh\n(.*?)^```$", raw.decode(), re.M | re.S)[0]
 guard = block[block.index("audit=${CORBANU_AUDIT_DIR"):block.index("git clone --no-local")]
 old = subprocess.check_output(
-    ["git", "show", "HEAD:" + str(note.relative_to(here.parents[4]))], text=True
+    ["git", "show", old_commit + ":" + note_path], cwd=repo, text=True
 )
 old_block = re.findall(r"^```sh\n(.*?)^```$", old, re.M | re.S)[0]
 old_guard = old_block[old_block.index("audit=${CORBANU_AUDIT_DIR"):old_block.index("git clone --no-local")]
@@ -60,10 +68,16 @@ for name, destination, expected in cases:
         row["old_guard_stdout"] = previous.stdout
         row["old_guard_stderr"] = previous.stderr
         assert previous.returncode == 0, row
-record = dict(note_sha256=hashlib.sha256(raw).hexdigest(),
+record = dict(old_commit=old_commit, new_commit=new_commit,
+              old_note_sha256=hashlib.sha256(old.encode()).hexdigest(),
+              old_guard_sha256=hashlib.sha256(old_guard.encode()).hexdigest(),
+              new_guard_sha256=hashlib.sha256(guard.encode()).hexdigest(),
+              note_sha256=hashlib.sha256(raw).hexdigest(),
               scope="Exact extracted destination segment, through the pre-clone guard; no clone/replay claim.",
               fixture=str(root), passed=len(records), cases=records)
-with (here / "destination-results.json").open("x") as output:
+output_path = args.output if args.output else root / "destination-results.json"
+with output_path.open("x") as output:
     json.dump(record, output, indent=2)
     output.write("\n")
-print(json.dumps({"passed": len(records), "old_alias_exit": 0, "new_alias_exit": 1}))
+print(json.dumps({"passed": len(records), "old_alias_exit": 0, "new_alias_exit": 1,
+                  "receipt": str(output_path)}))

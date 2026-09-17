@@ -22,6 +22,22 @@ destination also have recorded expected results. This tests the destination
 segment, not a fresh full clone/replay or six-block operator execution.
 Historical frozen operator copies and their execution receipts are unchanged.
 
+Round-102 reproduction correction: `test_destination.py` now reads the old
+note from `967425cc72ea28b5f59ecc38a56419b7db6885e8` (the observed round-100
+base) and the revised note from `a8dfff98892e60aaa0d7f05321fd7e57b79cdc2a`
+(the committed round-100 result), rather than using floating HEAD/working bytes.
+It writes a fresh receipt under ignored scratch by default, or at a new
+`--output` path; it never overwrites this round's receipt. With Python 3.9 or
+newer, reproduce from the repository root with
+`python3 -B qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py`.
+Use an absolute script path when starting from another directory.
+The [round-102 receipt](../acct-divergence-102/pinned-destination-results.json)
+records both revisions and hashes and the fresh old=0/new=1 observation.
+This reproduces the historical destination-segment result only; it does not
+execute the current note or claim a complete operator replay. This amendment
+and helper edit postdate this round's `scope.json`/`final-check.json` hashes;
+those files remain historical receipts, not checks of the amended files.
+
 The [round-97 RETURN](../acct-criterion-97/RETURN.md) now says:
 
 > The final audit clone's `git status --porcelain --untracked-files=all` output
