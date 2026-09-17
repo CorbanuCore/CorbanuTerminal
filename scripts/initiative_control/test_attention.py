@@ -162,6 +162,26 @@ class DecisionRenderingTests(unittest.TestCase):
                         self.assertIn("Slack status for this question revision: unknown", current)
                         self.assertNotIn("settled history", current)
 
+    def test_omission_count_matches_own_revision_marks_with_answered_indirection(self):
+        from test_decisions import revision
+        value = revision(revision(revision(revision(self.value, "resolved"))), "resolved")
+        records = value["decisions"][0]["revisions"]
+        records[1]["resolution"]["answered_revision"] = 1
+        records[4]["resolution"]["answered_revision"] = 3
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                slack = dict(status=dict(enabled=enabled), omitted_revisions=2, decisions=[
+                    dict(id="choice-1", revision=rev, delivery="off", pending=0, replies={})
+                    for rev in (1, 3, 5)])
+                page = attention.render_decisions(value, self.now, self.sprints,
+                                                   self.documents, slack=slack)
+                self.assertIn("omits 2 older revision(s) for this decision", page)
+                self.assertEqual(2, page.count("Slack projection row for revision "))
+                for rev in (2, 4):
+                    self.assertIn(f"Slack projection row for revision {rev}: omitted.", page)
+                self.assertIn("Slack — question revision 1</strong> Alert: off", page)
+                self.assertNotIn("Slack — question revision 1: omitted", page)
+
     def test_dec001_005_full_context_exact_summary_links_and_purity(self):
         record = self.value["decisions"][0]["revisions"][0]
         second = "docs/sprints/current/second.md"

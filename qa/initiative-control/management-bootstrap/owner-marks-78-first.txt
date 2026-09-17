@@ -1,0 +1,54 @@
+test_cli_preview_is_write_free_and_matches_arm (test_owner_daemon.ArmingPreviewTests.test_cli_preview_is_write_free_and_matches_arm) ... FAIL
+test_preview_option_cannot_be_silently_ignored (test_owner_daemon.ArmingPreviewTests.test_preview_option_cannot_be_silently_ignored) ... ok
+test_preview_paused_and_held_skip_fixture_but_not_watchdog (test_owner_daemon.ArmingPreviewTests.test_preview_paused_and_held_skip_fixture_but_not_watchdog) ... ok
+test_preview_refuses_unsettled_operation_and_coordinator_journal (test_owner_daemon.ArmingPreviewTests.test_preview_refuses_unsettled_operation_and_coordinator_journal) ... ok
+test_preview_shares_authority_and_drift_refusals_without_writes (test_owner_daemon.ArmingPreviewTests.test_preview_shares_authority_and_drift_refusals_without_writes) ... ok
+test_preview_watchdog_matches_real_tick_including_manager_and_history (test_owner_daemon.ArmingPreviewTests.test_preview_watchdog_matches_real_tick_including_manager_and_history) ... ok
+test_dec001_005_full_context_exact_summary_links_and_purity (test_attention.DecisionRenderingTests.test_dec001_005_full_context_exact_summary_links_and_purity) ... ok
+test_dec001_single_open_decision_has_no_duplicate_index (test_attention.DecisionRenderingTests.test_dec001_single_open_decision_has_no_duplicate_index) ... ok
+test_dec002_full_page_flow_and_dec025_sticky_index_styles (test_attention.DecisionRenderingTests.test_dec002_full_page_flow_and_dec025_sticky_index_styles) ... ok
+test_dec006_007_019_notices_separate_acknowledged_unresolved (test_attention.DecisionRenderingTests.test_dec006_007_019_notices_separate_acknowledged_unresolved) ... ok
+test_dec008_014_freshness_unknown_and_mixed_age (test_attention.DecisionRenderingTests.test_dec008_014_freshness_unknown_and_mixed_age) ... ok
+test_dec015_018_resolution_anchors_history_and_no_actions (test_attention.DecisionRenderingTests.test_dec015_018_resolution_anchors_history_and_no_actions) ... ok
+test_dec020_historical_identity_and_missing_context (test_attention.DecisionRenderingTests.test_dec020_historical_identity_and_missing_context) ... ok
+test_dec021_escape_and_reject_canaries_even_in_retained_history (test_attention.DecisionRenderingTests.test_dec021_escape_and_reject_canaries_even_in_retained_history) ... ok
+test_dec025_index_only_lists_open_records_and_retains_safe_links (test_attention.DecisionRenderingTests.test_dec025_index_only_lists_open_records_and_retains_safe_links) ... ok
+test_dec025_long_context_keeps_all_owners_in_index_and_full_cards (test_attention.DecisionRenderingTests.test_dec025_long_context_keeps_all_owners_in_index_and_full_cards) ... ok
+test_f01_empty_unknown_and_resolved_have_no_age_target (test_attention.DecisionRenderingTests.test_f01_empty_unknown_and_resolved_have_no_age_target) ... ok
+test_f01_oldest_target_uses_open_history_and_preserves_dates (test_attention.DecisionRenderingTests.test_f01_oldest_target_uses_open_history_and_preserves_dates) ... ok
+test_omission_count_matches_own_revision_marks_with_answered_indirection (test_attention.DecisionRenderingTests.test_omission_count_matches_own_revision_marks_with_answered_indirection) ... 
+  test_omission_count_matches_own_revision_marks_with_answered_indirection (test_attention.DecisionRenderingTests.test_omission_count_matches_own_revision_marks_with_answered_indirection) (enabled=False) ... FAIL
+  test_omission_count_matches_own_revision_marks_with_answered_indirection (test_attention.DecisionRenderingTests.test_omission_count_matches_own_revision_marks_with_answered_indirection) (enabled=True) ... FAIL
+test_omitted_settled_history_is_distinct_from_unavailable_status (test_attention.DecisionRenderingTests.test_omitted_settled_history_is_distinct_from_unavailable_status) ... ok
+
+======================================================================
+FAIL: test_cli_preview_is_write_free_and_matches_arm (test_owner_daemon.ArmingPreviewTests.test_cli_preview_is_write_free_and_matches_arm)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 343, in test_cli_preview_is_write_free_and_matches_arm
+    self.assertEqual(0, result.returncode, result.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 0 != 2 : 
+
+======================================================================
+FAIL: test_omission_count_matches_own_revision_marks_with_answered_indirection (test_attention.DecisionRenderingTests.test_omission_count_matches_own_revision_marks_with_answered_indirection) (enabled=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_attention.py", line 178, in test_omission_count_matches_own_revision_marks_with_answered_indirection
+    self.assertIn("omits 2 older revision(s) for this decision", page)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'omits 2 older revision(s) for this decision' not found in '<section id="decisions"><h2>Needs your decision</h2><p>Slack observation: unknown; assessed unknown; last verified never. This is a saved observation, not a live connection or work authorization. If held or stale, answer in the manager task.</p><p>Unknown: decision input unavailable; open count unknown.</p></section>'
+
+======================================================================
+FAIL: test_omission_count_matches_own_revision_marks_with_answered_indirection (test_attention.DecisionRenderingTests.test_omission_count_matches_own_revision_marks_with_answered_indirection) (enabled=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_attention.py", line 178, in test_omission_count_matches_own_revision_marks_with_answered_indirection
+    self.assertIn("omits 2 older revision(s) for this decision", page)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'omits 2 older revision(s) for this decision' not found in '<section id="decisions"><h2>Needs your decision</h2><p>Slack observation: unknown; assessed unknown; last verified never. This is a saved observation, not a live connection or work authorization. If held or stale, answer in the manager task.</p><p>Unknown: decision input unavailable; open count unknown.</p></section>'
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.412s
+
+FAILED (failures=3)
