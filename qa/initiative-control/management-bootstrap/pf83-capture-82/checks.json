@@ -1,0 +1,55 @@
+{
+  "allocation": "pf83-capture-82",
+  "base_commit": "2b03d5f01e36ac2434f164fa9ab2b3fe40d65fd3",
+  "brief_sha256": "252d09f4fc6cf96853da0e1da809e51e43c68d87ab096cdfbfc14d55693ad2ac",
+  "lanes": {
+    "thread-settings": {
+      "run": 26,
+      "passed": 26,
+      "failed": 0,
+      "skipped": 1082,
+      "failure_names": [],
+      "exit_code": 0
+    },
+    "permission-confirmation": {
+      "run": 12,
+      "passed": 12,
+      "failed": 0,
+      "skipped": 4161,
+      "failure_names": [],
+      "exit_code": 0
+    }
+  },
+  "prerequisites_exit_code": 0,
+  "local_controls": {
+    "run": 7,
+    "passed": 7,
+    "failed": 0,
+    "failure_names": [],
+    "log": "preflight-controls.log"
+  },
+  "preflight": {
+    "exit_code": 1,
+    "checked": 12,
+    "passed": 1,
+    "failed": 11,
+    "guest_contact_attempted": false
+  },
+  "syntax_parsed": [
+    "validate.py",
+    "test_preflight.py",
+    "../pf83-failclosed-73/preflight.py"
+  ],
+  "schema_json_parsed": true,
+  "schema_draft_meta_validation": "not run: jsonschema not installed in host Python",
+  "contract_sha256": "90d917a82807c6caa1a4b4553eeb489ca0c3a69b31f189b4b6b4b91d0a5a3342",
+  "raw_log_sha256": {
+    "thread-settings.log": "4ab9073daed645d57da1bbfc4c310e79f3df524f1d7a7ffb3d2b578236bc10e4",
+    "prerequisites.log": "e69d5d53c817f96d56061e2cdce5132c9851941a202a2ca200a2c98246715e56",
+    "permission-confirmation.log": "5940d71bc295cb9e6c80e3337cb509ab682cdd27661109d048413953f315837d",
+    "preflight-controls.log": "4dde5501620d66fdd53f8c66508b680f32d59999b52fd060a3a7ff833c32b885"
+  },
+  "functional_cases_executed": 0,
+  "guest_contact": false,
+  "staging": false
+}

@@ -66,6 +66,14 @@ host key, identity-file metadata, owner prerequisites and live guest identity.
 It performs no copy, upload, pin write, product launch or case dispatch.
 Without arguments it provides a local diagnostic run that must fail while owner
 inputs are absent; a local diagnostic is never a successful staging preflight.
+Round 82 makes the receiving-location check a prerequisite for all three artifact
+checks: missing `--receiving`, wrong receiving paths or occupied outputs explicitly
+refuse package/allowlist/packet checks instead of verifying the in-repo defaults.
+The live identity report retains exact stdout/stderr bytes as base64, exit status
+and decoded stdout when available, including mismatch/failure/timeout observations.
+`stage.check_identity` compares those observed bytes to the frozen expectations;
+a differing platform, architecture, UID, account, version or UUID fails the check.
+The returned identity detail is the observation, not a copy of expected constants.
 
 The remaining owner inputs require an owner-supplied, allocation-hash-pinned,
 read-only verifier executable (`PF83_OWNER_CHECK`). This interface is not yet
@@ -125,6 +133,12 @@ before invoking the supplied command; disagreement raises an error and invokes
 nothing. Record stdout/stderr and exit status per attempt. Keep the harness and
 packets fixed for the whole dispatch; changes require a fresh check. This wrapper
 does not grant admission or repair the absent case seam.
+
+Before the first functional case, the future execution owner must also satisfy
+[the round-82 per-case capture contract](../pf83-capture-82/runbook.md). Admission
+must demonstrate the observer, event ordering and raw-source capture needed by
+that contract. A successful staging preflight alone cannot establish those
+capabilities or validate a functional result.
 
 ## Remaining owner asks
 
