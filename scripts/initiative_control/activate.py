@@ -97,17 +97,35 @@ def owner_activation(args):
         label = previous["label"] if previous else args.label
         requested_domain = f"{getattr(args, 'domain', 'gui')}/{os.getuid()}"
         domain = owner.installation_domain(previous or {"domain": requested_domain})
-        presence, output = owner.service(label, domain)
+        domains = (domain, f"{'user' if domain.startswith('gui/') else 'gui'}/{os.getuid()}")
+        def observe(location):
+            try:
+                return owner.service(label, location)
+            except Exception as exc:
+                raise f.LaunchError(f"service_observation_unavailable: {location}/{label}") from exc
+        observations = {location: observe(location) for location in domains}
+        presence, output = observations[domain]
         target = f"{domain}/{label}"
-        if previous and presence == "present":
-            f.require(f"path = {plist}\n" in output and
-                      f.file_digest(owner.private_file(plist)) == previous["plist_sha256"],
-                      "unowned_service")
+        if args.owner == "install":
+            for location, (state, _) in observations.items():
+                if location != domain or not previous:
+                    f.require(state == "absent", f"service_conflict: {location}/{label}")
+        # A manual move can leave a job outside its receipt's domain.
+        # Validate every loaded instance before removing any of them.
+        for location, (state, output) in observations.items():
+            if previous and state == "present":
+                f.require(f"path = {plist}\n" in output and
+                          f.file_digest(owner.private_file(plist)) == previous["plist_sha256"],
+                          f"unowned_service: {location}/{label}")
         if args.owner == "uninstall":
             f.require(previous is not None, "installation_receipt_required")
-            if presence == "present":
-                subprocess.run(["/bin/launchctl", "bootout", target], check=True, timeout=40, env={})
-            f.require(owner.service(label, domain)[0] == "absent", "service_still_present")
+            for location, (state, _) in observations.items():
+                if state == "present":
+                    subprocess.run(["/bin/launchctl", "bootout", f"{location}/{label}"],
+                                   check=True, timeout=40, env={})
+            for location in domains:
+                f.require(observe(location)[0] == "absent",
+                          f"service_still_present: {location}/{label}")
             if plist.exists():
                 f.require(f.file_digest(owner.private_file(plist)) == previous["plist_sha256"], "plist_drift")
                 plist.unlink()

@@ -764,25 +764,25 @@ class RecurrenceTests(unittest.TestCase):
                          python=python, python_sha256=f.file_digest(python), runtime=runtime,
                          config=self.config_path, interval=2, publish_state=self.root, confirm_live=False)
 
-    def install(self, args):
+    def install(self, args, loaded=None):
         import activate
-        present = False
+        loaded = {} if loaded is None else loaded
         calls = []
         real_run = subprocess.run
 
         def run(argv, **kwargs):
-            nonlocal present
             if argv[0] != "/bin/launchctl":
                 return real_run(argv, **kwargs)
             calls.append(argv[1])
             if argv[1] == "bootstrap":
-                present = True
+                loaded[argv[2]] = Path(argv[3])
             elif argv[1] == "bootout":
-                present = False
+                loaded.pop(argv[2].rsplit("/", 1)[0], None)
             return subprocess.CompletedProcess(argv, 0)
 
         def service(label, domain=None):
-            return ("present", f"path = {args.root / 'owner.plist'}\n") if present else ("absent", "")
+            domain = domain or f"gui/{os.getuid()}"
+            return ("present", f"path = {loaded[domain]}\n") if domain in loaded else ("absent", "")
 
         return patch.object(owner, "service", side_effect=service), patch.object(subprocess, "run", side_effect=run), calls
 
@@ -849,6 +849,125 @@ class RecurrenceTests(unittest.TestCase):
                     self.assertIn(["/bin/launchctl", "bootout", f"{domain}/{args.label}"],
                                   [call.args[0] for call in commands.call_args_list])
                     observed.assert_called_with(args.label, domain)
+
+    def test_fresh_install_refuses_same_label_in_either_domain_before_writes(self):
+        import activate
+        args = self.installation()
+        for selected in ("gui", "user"):
+            args.domain = selected
+            for occupied in ("gui", "user"):
+                domain = f"{occupied}/{os.getuid()}"
+                loaded = {domain: Path(self.tmp.name) / "other.plist"}
+                service, command, calls = self.install(args, loaded)
+                with self.subTest(selected=selected, occupied=occupied), service, command:
+                    with self.assertRaisesRegex(f.LaunchError, f"service_conflict: {domain}/{args.label}"):
+                        activate.owner_activation(args)
+                    self.assertEqual([], calls)
+                    self.assertEqual(["installation.lock"], [p.name for p in args.root.iterdir()])
+
+    def test_reinstall_refuses_new_conflict_without_changing_receipt(self):
+        import activate
+        args = self.installation()
+        loaded = {}
+        service, command, calls = self.install(args, loaded)
+        with service, command:
+            activate.owner_activation(args)
+            before = (args.root / "installation.json").read_bytes()
+            other = f"user/{os.getuid()}"
+            loaded[other] = args.root / "owner.plist"
+            with self.assertRaisesRegex(f.LaunchError, f"service_conflict: {other}/{args.label}"):
+                activate.owner_activation(args)
+            self.assertEqual(before, (args.root / "installation.json").read_bytes())
+            self.assertEqual(["bootstrap", "kickstart"], calls)
+
+    def test_uninstall_removes_owned_cross_domain_instances_including_orphan(self):
+        import activate
+        args = self.installation()
+        for selected in ("gui", "user"):
+            for orphan in (False, True):
+                with self.subTest(selected=selected, orphan=orphan):
+                    args.domain, args.owner = selected, "install"
+                    args.root = Path(self.tmp.name) / f"{selected}-{orphan}"
+                    args.root.mkdir(mode=0o700)
+                    loaded = {}
+                    service, command, calls = self.install(args, loaded)
+                    with service, command:
+                        activate.owner_activation(args)
+                        if orphan:
+                            loaded.clear()
+                        other = "user" if selected == "gui" else "gui"
+                        loaded[f"{other}/{os.getuid()}"] = args.root / "owner.plist"
+                        args.owner = "uninstall"
+                        activate.owner_activation(args)
+                        activate.owner_activation(args)
+                        self.assertEqual({}, loaded)
+                        self.assertEqual(1 if orphan else 2, calls.count("bootout"))
+                        self.assertFalse((args.root / "owner.plist").exists())
+                        self.assertEqual("uninstalled", owner.load(args.root / "installation.json")["phase"])
+
+    def test_uninstall_refuses_foreign_cross_domain_job_before_any_bootout(self):
+        import activate
+        args = self.installation()
+        loaded = {}
+        service, command, calls = self.install(args, loaded)
+        with service, command:
+            activate.owner_activation(args)
+            before = (args.root / "installation.json").read_bytes()
+            other = f"user/{os.getuid()}"
+            loaded[other] = Path(self.tmp.name) / "other.plist"
+            args.owner = "uninstall"
+            with self.assertRaisesRegex(f.LaunchError, f"unowned_service: {other}/{args.label}"):
+                activate.owner_activation(args)
+            self.assertEqual(before, (args.root / "installation.json").read_bytes())
+            self.assertTrue((args.root / "owner.plist").exists())
+            self.assertEqual(2, len(loaded))
+            self.assertNotIn("bootout", calls)
+
+    def test_unavailable_cross_domain_observation_blocks_install_and_uninstall(self):
+        import activate
+        args = self.installation()
+        service, command, calls = self.install(args)
+        with service as observed, command:
+            normal = observed.side_effect
+            def unavailable(label, domain=None):
+                if domain == f"user/{os.getuid()}":
+                    raise subprocess.TimeoutExpired("launchctl", 5)
+                return normal(label, domain)
+            observed.side_effect = unavailable
+            with self.assertRaisesRegex(f.LaunchError, f"service_observation_unavailable: user/{os.getuid()}"):
+                activate.owner_activation(args)
+            self.assertEqual([], calls)
+            observed.side_effect = normal
+            activate.owner_activation(args)
+            before = (args.root / "installation.json").read_bytes()
+            args.owner = "uninstall"
+            observed.side_effect = unavailable
+            with self.assertRaisesRegex(f.LaunchError, "service_observation_unavailable"):
+                activate.owner_activation(args)
+            self.assertEqual(before, (args.root / "installation.json").read_bytes())
+            self.assertNotIn("bootout", calls)
+
+    def test_uninstall_requires_verified_absence_in_other_domain_after_bootout(self):
+        import activate
+        args = self.installation()
+        loaded = {}
+        service, command, calls = self.install(args, loaded)
+        with service as observed, command:
+            activate.owner_activation(args)
+            other = f"user/{os.getuid()}"
+            loaded[other] = args.root / "owner.plist"
+            normal = observed.side_effect
+            def surviving(label, domain=None):
+                if domain == other:
+                    return "present", f"path = {args.root / 'owner.plist'}\n"
+                return normal(label, domain)
+            observed.side_effect = surviving
+            args.owner = "uninstall"
+            with self.assertRaisesRegex(f.LaunchError, f"service_still_present: {other}/{args.label}"):
+                activate.owner_activation(args)
+            self.assertEqual("installed", owner.load(args.root / "installation.json")["phase"])
+            self.assertTrue((args.root / "owner.plist").exists())
+            self.assertEqual(2, calls.count("bootout"))
 
     def test_legacy_gui_receipt_remains_observable_and_reinstallable(self):
         import activate
