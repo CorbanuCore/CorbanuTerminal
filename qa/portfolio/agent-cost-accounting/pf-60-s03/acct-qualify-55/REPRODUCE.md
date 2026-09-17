@@ -14,8 +14,9 @@ accounting checkout and shared by all lanes.
    Choose a new output directory; existing attempts are never overwritten.
    The pinned Python dependencies must be cached for offline use.
 4. Run `python3 qa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-55/verify_utc_alignment.py`
-   to reproduce the old UTC-label receipt from the historical PTY selections.
-5. Run `python3 qa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-55/audit.py PATH-TO-COMPLETED-RUN`
+   to write utc-alignment-regenerated.json in acct-qualify-55 and compare its
+   bytes with the untouched historical UTC-label receipt; mismatch fails.
+5. Run `python3 qa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-55/audit.py PATH-TO-COMPLETED-RUN NEW-RECEIPT.json`
    for exact Decimal equality across all rendered numeric pages.
 6. Run `python3 qa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-55/summarize.py`
    to preserve closed lane logs and refresh the inventory.
@@ -28,7 +29,11 @@ digest. Every expected amount is independent Decimal arithmetic from loopback
 server emissions and hardcoded rates. Read-back prices are used only to check
 binding against those constants. Expected membership uses the server's unique
 input counts, model, and chosen exact UTC timestamp; IDs are observed through
-the rendered request/attempt pages and never supply expected costs.
+the rendered request/attempt pages and never supply expected costs. The numeric
+audit uses the driver-recorded windows in results.json for membership and checks
+rendered bucket labels against them, without trusting results.passed. Arithmetic
+is independent of storage; native identity and ancestry are established using
+store reads, so this is not an independent proof of ancestry.
 
 The exact clock freezes Rust wall-clock timestamps, not monotonic timers.
 gettimeofday remains real because parking_lot uses it for kernel absolute wait

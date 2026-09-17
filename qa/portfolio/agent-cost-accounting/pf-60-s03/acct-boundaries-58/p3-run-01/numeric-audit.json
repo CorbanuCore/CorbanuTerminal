@@ -1,0 +1,10 @@
+{
+  "exact_numeric_pages_checked": 48,
+  "bucket_labels_checked": 48,
+  "buckets": 8,
+  "groups": 4,
+  "unknown_causes": 5,
+  "passed": true,
+  "expected_source": "wire counts, fixed rates, driver-recorded windows; no results.passed gate",
+  "limitation": "Membership expectations are driver-derived; store reads establish fixture identity/ancestry, not independent ancestry truth."
+}

@@ -28,6 +28,7 @@ prior = prior.replace('timeout=.04', 'timeout=.01')
 exec(compile(prior, str(prior_path), "exec"))
 sample_utc = "2026-08-30T23:00:00Z"
 active_model = "gpt-5.6-sol"
+USAGE["checkpoint"] = USAGE["root"]
 summary = {"buckets": [], "groups": [], "unknown_causes": [], "partial": []}
 expected = []
 all_attempt_ids = set()
@@ -119,7 +120,7 @@ def bucket(group, start, end, windows, label):
         rows = [r for r in expected if r["kind"]!="orphan" and epoch(a)<=epoch(r["fixture_utc"])<epoch(b)]
         assert_metrics(text, rows)
         members = detail_members(name, rows)
-        summary["buckets"].append(dict(group=group, start=a, end=b, exact_usd=str(cost(rows)),
+        summary["buckets"].append(dict(page=name, group=group, start=a, end=b, exact_usd=str(cost(rows)),
                                        members=members, excluded_emissions=[
                                            r["emission"] for r in expected if r["kind"]!="orphan" and r not in rows]))
         send("\x1b")
@@ -159,8 +160,8 @@ try:
     for a,s in bindings:
         a,s = json.loads(a),json.loads(s)
         assert tuple(Decimal(s["rates"][k]) for k in ["noncached","read","output"])==tuple(map(Decimal,RATE[a["model"]]))
-    # A current checkpoint at Oct 2 makes both historical calendar months complete.
-    phase = "orphan"
+    # Selected-root checkpoint at Oct 2 lies outside every compared range.
+    phase = "checkpoint"
     sample("checkpoint", "2026-10-02T12:00:00Z", "gpt-5.6-sol", root)
     launch("inspect", root)
     child.delaybeforesend = 0
@@ -234,6 +235,7 @@ try:
         ("source-without-edge",source(root),None),
     ]
     for label,src,parent in faults:
+        stop()
         with sqlite3.connect(database()) as db:
             db.execute("DELETE FROM thread_spawn_edges WHERE child_thread_id=?",(orphan,))
             db.execute("UPDATE threads SET source=? WHERE id=?",(src,orphan))
@@ -241,8 +243,19 @@ try:
                 values=dict(zip(columns,edge))
                 values.update(parent_thread_id=parent,child_thread_id=orphan)
                 db.execute("INSERT INTO thread_spawn_edges ("+",".join(columns)+") VALUES ("+",".join("?" for _ in columns)+")",list(values.values()))
-        command("/usage requests 2026-09-01")
         name="unknown-"+label
+        launch(name+"-fresh-inspect", root)
+        child.delaybeforesend = 0
+        # Read the actual committed cause immediately before issuing the UI command.
+        with sqlite3.connect(database()) as db:
+            actual_source = db.execute("SELECT source FROM threads WHERE id=?", (orphan,)).fetchone()[0]
+            actual_edges = db.execute("SELECT parent_thread_id FROM thread_spawn_edges WHERE child_thread_id=?", (orphan,)).fetchall()
+        assert actual_source == src and actual_edges == ([(parent,)] if parent else []), label
+        readback = dict(cause=label, thread=orphan, source=actual_source,
+                        edge_parents=[r[0] for r in actual_edges], inspect_pid=child.pid,
+                        read_at_monotonic_ns=time.monotonic_ns())
+        save(name+"-store-readback.json", readback)
+        command("/usage requests 2026-09-01")
         text=page(name)
         rows=[r for r in expected if r["kind"]=="root" and r["fixture_utc"]=="2026-09-01T00:00:00Z"]
         assert_metrics(text,rows)
@@ -255,7 +268,8 @@ try:
         unknown=[r for r in expected if r["kind"]=="orphan"]
         require(detail,"Thread: "+orphan,label)
         require(detail,"Known subtotal exact USD: "+format(cost(unknown),"f"),label)
-        summary["unknown_causes"].append(dict(cause=label,source=src,edge_parent=parent,
+        summary["unknown_causes"].append(dict(cause=label,source=src,edge_parent=parent,readback=readback,
+            start="2026-09-01T00:00:00Z",end="2026-09-02T00:00:00Z",
             unknown_emissions=[r["emission"] for r in unknown],unknown_exact_usd=str(cost(unknown)),
             root_members=root_members,root_exact_usd=str(cost(rows))))
         send("\x1b")
