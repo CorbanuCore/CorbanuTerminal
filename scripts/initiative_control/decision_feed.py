@@ -175,12 +175,17 @@ def owner_health(value, at):
     """Coarse published observation, never a claim of current process liveness."""
     unknown = dict(state="unknown", reason="observation-unavailable", age=None)
     try:
+        value = dict(firing="unknown", publication_errors=0, last_publication_error=None) | value
         d.shape(value, "observed_at service installed started_at completed_at last_success hold reason "
-                "previous_success interval errors consecutive_errors last_error")
+                "previous_success interval errors consecutive_errors last_error firing "
+                "publication_errors last_publication_error")
+        d.require(value["firing"] in {"interval", "manual", "other", "unknown"})
         d.require(type(value["interval"]) is int and 1 <= value["interval"] <= 30)
-        d.require(all(type(value[k]) is int and value[k] >= 0 for k in ("errors", "consecutive_errors")))
-        d.require(value["last_error"] is None or isinstance(value["last_error"], str)
-                  and value["last_error"].isidentifier() and len(value["last_error"]) <= 80)
+        d.require(all(type(value[k]) is int and value[k] >= 0 for k in
+                      ("errors", "consecutive_errors", "publication_errors")))
+        for key in ("last_error", "last_publication_error"):
+            d.require(value[key] is None or isinstance(value[key], str)
+                      and value[key].isidentifier() and len(value[key]) <= 80)
         d.require(value["service"] in {"present", "absent", "unknown"} and type(value["installed"]) is bool)
         d.require(value["reason"] in {None, "observation-unavailable"}
                   and value["hold"] in {None, "owner_run_refused", "interrupted_tick"})
@@ -192,12 +197,14 @@ def owner_health(value, at):
             return unknown
         if not 0 <= now - int(value["observed_at"]) <= OWNER_FRESH_SECONDS:
             return dict(unknown, reason="observation-stale")
+        publication = {key: value[key] for key in ("publication_errors", "last_publication_error")}
         if not value["installed"]:
-            return dict(state="never-installed", reason="verified-service-absence", age=None) if value["service"] == "absent" else dict(unknown, reason="installation-unrecorded")
+            return dict(state="never-installed", reason=value["hold"] or "verified-service-absence",
+                        age=None, **publication) if value["service"] == "absent" else dict(unknown, reason="installation-unrecorded")
         completion, start = value["completed_at"], value["started_at"]
         age = value["observed_at"] - (completion if completion is not None else start) if completion is not None or start is not None else None
         previous, success, interval = value["previous_success"], value["last_success"], value["interval"]
-        recurring = (previous is not None and success is not None and
+        recurring = (value["firing"] == "interval" and previous is not None and success is not None and
                      interval * 0.5 <= success - previous <= interval * 1.5 and
                      0 <= value["observed_at"] - success <= interval * 3)
         reason = value["hold"] or ("service-absent" if value["service"] == "absent" else
@@ -206,7 +213,7 @@ def owner_health(value, at):
                                   "recurrence-unproven" if not recurring else None)
         return dict(state="stalled" if reason else "recurring-at-observation", reason=reason, age=age,
                     errors=value["errors"], consecutive_errors=value["consecutive_errors"],
-                    last_completion=completion, last_success=success)
+                    last_completion=completion, last_success=success, **publication)
     except (ValueError, TypeError, KeyError):
         return unknown
 
@@ -366,6 +373,8 @@ def render(snapshot, at, sprints, documents):
                     f'tick age (seconds): {recurrence["age"]}; last completion: {timestamp(recurrence.get("last_completion"))}; '
                     f'last success: {timestamp(recurrence.get("last_success"))}. '
                     f'Errors: {recurrence.get("errors", 0)}; consecutive: {recurrence.get("consecutive_errors", 0)}. '
+                    f'Publication failures: {recurrence.get("publication_errors", 0)}; '
+                    f'last publication error: {recurrence.get("last_publication_error") or "none"}. '
                     f'Observed: {timestamp(observed)}; coarse 30-minute publication, not live status; expires '
                     f'{timestamp(observed + OWNER_FRESH_SECONDS if observed is not None else None)}.') + '</p></section>')
     return body.replace('<section id="decisions">',

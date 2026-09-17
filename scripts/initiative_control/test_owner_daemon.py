@@ -927,8 +927,7 @@ class RecurrenceTests(unittest.TestCase):
                              status["consecutive_errors"], status["last_error"]))
             self.assertIsNone(status["previous_success"])
             owner.scheduled_tick(args.root)
-            self.assertEqual(status["last_success"],
-                             owner.load(args.root / "tick.json")["previous_success"])
+            self.assertIsNone(owner.load(args.root / "tick.json")["previous_success"])
 
     def test_coordinator_refusal_latches_instead_of_retrying(self):
         import activate
@@ -953,6 +952,99 @@ class RecurrenceTests(unittest.TestCase):
             value = owner.load(self.root / "owner-recurrence.json")
             self.assertFalse(value["installed"])
             self.assertEqual("never-installed", decision_feed.owner_health(value, f.now())["state"])
+
+    def test_only_two_attributed_interval_runs_prove_recurrence(self):
+        import activate
+        import decision_feed
+        args = self.installation()
+        service, command, _ = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+        receipt = owner.load(args.root / "installation.json")
+        base = f"\tpath = {args.root / 'owner.plist'}\n\tstate = running\n"
+        at = __import__("time").time()
+        self.arm()
+        # Manual process cannot borrow an interval job's PID, and a pending
+        # interval is not the immediate cause of a kickstart.
+        for pid, reason, expected in (
+                (os.getpid() + 1, "interval", "manual"),
+                (os.getpid(), "non-ipc demand", "other"),
+                (os.getpid(), "interval", "interval"),
+                (os.getpid(), "new-unknown-reason", "other")):
+            output = base + f"\tpid = {pid}\n\timmediate reason = {reason}\n\tpended nondemand spawn = interval\n"
+            with self.subTest(expected=expected), patch.object(owner, "service", return_value=("present", output)):
+                self.assertEqual(expected, owner.firing_source(args.root, receipt))
+                for when in (at - 2, at):
+                    with patch.object(owner.time, "time", return_value=when):
+                        owner.scheduled_tick(args.root)
+                status = owner.load(args.root / "tick.json")
+                health = decision_feed.owner_health(owner.observe_schedule(args.root), f.now())
+                self.assertEqual("recurring-at-observation" if expected == "interval" else "stalled", health["state"])
+                self.assertEqual(at - 2 if expected == "interval" else None, status["previous_success"])
+        with patch.object(owner, "service", side_effect=TimeoutError):
+            self.assertEqual("unknown", owner.firing_source(args.root, receipt))
+        with patch.object(owner, "service", return_value=("present", base + f"\tpid = {os.getpid()}\n\timmediate reason = interval\n")):
+            receipt["plist_sha256"] = "0" * 64
+            self.assertEqual("unknown", owner.firing_source(args.root, receipt))
+
+    def test_uninstalled_refusal_remains_in_record_and_rendering(self):
+        import activate
+        import decision_feed
+        args = self.installation()
+        service, command, _ = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+            owner.scheduled_tick(args.root)
+            before = owner.load(args.root / "tick.json")
+            args.owner = "uninstall"
+            activate.owner_activation(args)
+            self.assertEqual(before, owner.load(args.root / "tick.json"))
+            value = owner.load(self.root / "owner-recurrence.json")
+            health = decision_feed.owner_health(value, f.now())
+            self.assertEqual(("never-installed", "owner_run_refused"), (health["state"], health["reason"]))
+
+    def test_publisher_failure_preserves_tick_outcome_and_projects_separate_history(self):
+        import activate
+        import decision_feed
+        from contextlib import redirect_stdout
+        from io import StringIO
+        args = self.installation()
+        service, command, _ = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+            self.arm()
+            for refused in (False, True):
+                failure = f.LaunchError("fixture refusal") if refused else None
+                with patch.object(owner.Kernel, "tick", side_effect=failure, return_value={"state": "ACTIVE"}):
+                    with patch.object(owner, "publish_schedule", side_effect=OSError("private detail")), redirect_stdout(StringIO()) as stdout:
+                        self.assertEqual(2 if refused else 3, owner.main(["--run", "--schedule", str(args.root)]))
+                result = json.loads(stdout.getvalue())
+                self.assertEqual("HOLD" if refused else "ACTIVE", result["state"])
+                self.assertEqual("owner_run_refused" if refused else None, result.get("reason"))
+                self.assertEqual("OSError", result["publication_error"])
+                self.assertTrue(result["publication_recorded"])
+                self.assertNotIn("private detail", stdout.getvalue())
+                status = owner.load(args.root / "tick.json")
+                self.assertEqual("owner_run_refused" if refused else None, status["hold"])
+                self.assertIsNotNone(status["last_success"])
+                owner.publish_schedule(args.root)
+                value = owner.load(self.root / "owner-recurrence.json")
+                self.assertEqual(2 if refused else 1, value["publication_errors"])
+                page = decision_feed.render(dict(schema=1, status="missing", feed=None, owner_recurrence=value), f.now(), [], {})
+                self.assertIn("Publication failures:", page)
+                self.assertIn("OSError", page)
+
+    def test_publisher_and_local_recording_failure_do_not_relabel_success(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        with patch.object(owner, "scheduled_tick", return_value={"state": "ACTIVE"}), \
+             patch.object(owner, "publish_schedule", side_effect=OSError), \
+             patch.object(owner, "locked", side_effect=OSError), redirect_stdout(StringIO()) as stdout:
+            self.assertEqual(3, owner.main(["--run", "--schedule", "/missing-fixture"]))
+        result = json.loads(stdout.getvalue())
+        self.assertEqual("ACTIVE", result["state"])
+        self.assertNotIn("reason", result)
+        self.assertFalse(result["publication_recorded"])
 
     def test_service_absence_is_verified_and_observation_failure_stays_unknown(self):
         root = Path(self.tmp.name)

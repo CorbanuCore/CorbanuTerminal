@@ -28,10 +28,15 @@ class RecurrenceHealthTests(unittest.TestCase):
         at = d.stamp(NOW).timestamp()
         value = dict(observed_at=at, service="present", installed=True, started_at=at - 10,
                      completed_at=at - 9, last_success=at - 9, hold=None, reason=None,
-                     previous_success=at - 39, interval=30, errors=0, consecutive_errors=0, last_error=None)
+                     previous_success=at - 39, interval=30, errors=0, consecutive_errors=0, last_error=None, firing="interval")
         for expected, changes, reason in (
                 ("recurring-at-observation", {}, None),
                 ("stalled", {"previous_success": None}, "recurrence-unproven"),
+                ("stalled", {"firing": "manual"}, "recurrence-unproven"),
+                ("stalled", {"firing": "other"}, "recurrence-unproven"),
+                ("stalled", {"firing": "unknown"}, "recurrence-unproven"),
+                ("never-installed", {"installed": False, "service": "absent",
+                                     "hold": "owner_run_refused"}, "owner_run_refused"),
                 ("stalled", {"previous_success": at - 10}, "recurrence-unproven"),
                 ("stalled", {"previous_success": at - 99}, "recurrence-unproven"),
                 ("stalled", {"errors": 1, "consecutive_errors": 1, "last_error": "TimeoutExpired"}, "TimeoutExpired"),
@@ -61,7 +66,7 @@ class RecurrenceHealthTests(unittest.TestCase):
         at = d.stamp(NOW).timestamp()
         value = dict(observed_at=at + 0.8, service="present", installed=True, started_at=at,
                      completed_at=at + 0.5, last_success=at + 0.5, hold=None, reason=None,
-                     previous_success=at - 29.5, interval=30, errors=0, consecutive_errors=0, last_error=None)
+                     previous_success=at - 29.5, interval=30, errors=0, consecutive_errors=0, last_error=None, firing="interval")
         self.assertEqual("recurring-at-observation", transport.owner_health(value, NOW)["state"])
         value["observed_at"] += 1
         self.assertEqual("unknown", transport.owner_health(value, NOW)["state"])
@@ -70,7 +75,7 @@ class RecurrenceHealthTests(unittest.TestCase):
         at = d.stamp(NOW).timestamp()
         value = dict(observed_at=at, service="present", installed=True, started_at=at - 80,
                      completed_at=None, last_success=None, hold=None, reason=None,
-                     previous_success=None, interval=30, errors=0, consecutive_errors=0, last_error=None)
+                     previous_success=None, interval=30, errors=0, consecutive_errors=0, last_error=None, firing="interval")
         self.assertEqual("recurrence-unproven", transport.owner_health(value, NOW)["reason"])
         value["started_at"] = at - 91
         self.assertEqual("stalled", transport.owner_health(value, NOW)["state"])
@@ -82,7 +87,7 @@ class FeedTests(unittest.TestCase):
         at = d.stamp(NOW).timestamp()
         value = dict(observed_at=at, service="present", installed=True, started_at=at - 2,
                      completed_at=at - 1, last_success=at - 1, hold=None, reason=None,
-                     previous_success=at - 31, interval=30, errors=0, consecutive_errors=0, last_error=None)
+                     previous_success=at - 31, interval=30, errors=0, consecutive_errors=0, last_error=None, firing="interval")
         control.atomic_json(self.state / "owner-recurrence.json", value)
         target, pin = self.bundle()
         snapshot = transport.read_snapshot(target / "source", pin, NOW)

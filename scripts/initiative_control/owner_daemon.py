@@ -538,11 +538,28 @@ def service(label):
     raise f.LaunchError("service_observation_unavailable")
 
 
+def firing_source(root, receipt):
+    """Fail closed: launchd diagnostics are not a stable API or activation authority."""
+    try:
+        presence, output = service(receipt["label"])
+        lines = set(output.splitlines())
+        if (presence != "present" or f"\tpid = {os.getpid()}" not in lines
+                or "\tstate = running" not in lines):
+            return "manual"
+        f.require(f"path = {root / 'owner.plist'}\n" in output and
+                  f.file_digest(private_file(root / "owner.plist")) == receipt["plist_sha256"],
+                  "unowned_service")
+        return "interval" if "\timmediate reason = interval" in lines else "other"
+    except Exception:
+        return "unknown"
+
+
 def observe_schedule(root, label="com.corbanu.initiative-owner"):
     result = dict(observed_at=time.time(), service="unknown", installed=False,
                   started_at=None, completed_at=None, last_success=None, hold=None,
                   reason="observation-unavailable", previous_success=None, interval=30,
-                  errors=0, consecutive_errors=0, last_error=None)
+                  errors=0, consecutive_errors=0, last_error=None, firing="unknown",
+                  publication_errors=0, last_publication_error=None)
     try:
         root = f.private_dir(root)
         receipt = load(root / "installation.json") if os.path.lexists(root / "installation.json") else None
@@ -559,7 +576,8 @@ def observe_schedule(root, label="com.corbanu.initiative-owner"):
             result["interval"] = receipt["interval"]
             status = load(root / "tick.json")
             result.update({key: status.get(key, result[key]) for key in
-                           ("previous_success", "errors", "consecutive_errors", "last_error")})
+                           ("previous_success", "errors", "consecutive_errors", "last_error",
+                            "firing", "publication_errors", "last_publication_error")})
             result.update({key: status[key] for key in
                            ("started_at", "completed_at", "last_success", "hold")})
         result["reason"] = None
@@ -595,7 +613,8 @@ def scheduled_tick(root, recover=None):
             status["last_probe"] = time.time()
             f.write_json(root / "tick.json", status)
             return {"state": "HOLD", "reason": status["hold"]}
-        status.update(started_at=time.time(), completed_at=None)
+        previous_firing = status.get("firing")
+        status.update(started_at=time.time(), completed_at=None, firing=firing_source(root, receipt))
         f.write_json(root / "tick.json", status)
         try:
             pins = receipt["pins"]
@@ -615,7 +634,8 @@ def scheduled_tick(root, recover=None):
                           consecutive_errors=status.get("consecutive_errors", 0) + 1,
                           last_error=result["reason"], previous_success=None)
         else:
-            status.update(previous_success=status.get("last_success") if not status.get("consecutive_errors") else None,
+            status.update(previous_success=status.get("last_success") if not status.get("consecutive_errors")
+                          and previous_firing == status["firing"] == "interval" else None,
                           last_success=status["completed_at"], consecutive_errors=0, last_error=None)
         status["ticks"] += 1
         f.write_json(root / "tick.json", status)
@@ -646,10 +666,23 @@ def main(argv=None):
         if args.schedule:
             try:
                 result = scheduled_tick(args.schedule, args.recover)
-            finally:
+            except (f.LaunchError, OSError, sqlite3.Error, ValueError, TypeError, KeyError):
+                result = {"state": "HOLD", "reason": "owner_run_refused"}
+            try:
                 publish_schedule(args.schedule)
+            except Exception as exc:
+                result = dict(result, publication_error=type(exc).__name__, publication_recorded=False)
+                try:
+                    with locked(args.schedule / "tick.lock"):
+                        status = load(args.schedule / "tick.json")
+                        status.update(publication_errors=status.get("publication_errors", 0) + 1,
+                                      last_publication_error=type(exc).__name__)
+                        f.write_json(args.schedule / "tick.json", status)
+                        result["publication_recorded"] = True
+                except Exception:
+                    pass  # stdout still reports both outcomes if local recording also fails.
             print(encoded(result))
-            return 2 if result.get("reason") else 0
+            return 2 if result.get("reason") else 3 if result.get("publication_error") else 0
         f.require(args.config is not None and args.recover is None, "config_required")
         kernel = Kernel(args.config)
         # Configuration selects only built-in adapters; default remains the fixture.
