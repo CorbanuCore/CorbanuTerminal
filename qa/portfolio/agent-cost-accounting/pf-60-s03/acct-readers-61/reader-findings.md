@@ -232,10 +232,11 @@ empty day, both actually rendered as:
 > Known subtotal exact USD: 0
 
 Those pages contain no Request link and zero known/unknown counts **within the
-selected root**. Round 62 identifies the never-prompted page as a P2 scope-zero
-finding, not a clean day-wide zero control: other roots in the same store have
-collected usage on the requested day. See the [deliberate four-priced-attempt
-reproduction and corrected original counts](../acct-scope-62/reader-findings.md).
+selected root**. This round's never-prompted capture is a fresh-session control;
+it establishes no day-wide amount. The P2 scope/coverage wording concern remains
+open. The [separate round-62 reproduction](../acct-scope-62/reader-findings.md)
+provides its own other-root population and arithmetic, not values measured by
+this capture. Both captures request August 10; they are distinct executions.
 The original captures remain unchanged.
 
 **Verdict:** no-usage is distinguished from no recorded attempts. Neither is a

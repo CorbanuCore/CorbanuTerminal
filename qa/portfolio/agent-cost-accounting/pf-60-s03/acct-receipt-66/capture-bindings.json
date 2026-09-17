@@ -1,0 +1,73 @@
+{
+  "captures": [
+    {
+      "allocation": "acct-readers-61",
+      "requested_utc_day": "2026-08-10",
+      "selected": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/reader-run-05/never-prompted-selected.json",
+      "selected_sha256": "cb01c7c7fdc7e4872d760318224460f6a79120b9c2c2e8409dfdb23f9c347465",
+      "viewport": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/reader-run-05/never-prompted.txt.gz",
+      "viewport_sha256": "e40aa441137f8f956d17b726e035d3f0ea510a0b3dc5f847511868bfb2a51c7e",
+      "rows": [
+        "No recorded attempts in this day; collection coverage unknown.",
+        "Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.",
+        "Billed cost: unavailable \u2014 no settlement evidence",
+        "Logical requests may have attempts on other days; this UTC day is not their complete lifetime.",
+        "UTC admission interval: [1786320000000, 1786406400000) ms since Unix epoch",
+        "Read at: 1786363200000 ms UTC; store checkpoint: 1786363200000 ms UTC; maintenance lag: 0 ms",
+        "90-day wall-clock detail cutoff: Some(1778587200000); aggregate day floor at checkpoint: 20311; oldest recorded day: None",
+        "Known subtotal exact USD: 0",
+        "Input: 0 known + unknown in 0 attempts",
+        "Noncached input (derived for inclusive input): 0 known + unknown in 0 attempts",
+        "Cache read: 0 known + unknown in 0 attempts",
+        "Cache write: 0 known + unknown in 0 attempts",
+        "Output: 0 known + unknown in 0 attempts",
+        "Reasoning (subset, not separately billed): 0 known + unknown in 0 attempts",
+        "Total (not separately billed): 0 known + unknown in 0 attempts",
+        "Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.",
+        "Unknown parent population: 0 attempts, excluded from root total",
+        "Estimate versus billed difference: unknown \u2014 no settlement evidence",
+        "Root's own attempts",
+        "Descendant attempts",
+        "Unknown provider/model attribution",
+        "Unknown parent population",
+        "Refresh",
+        "Close"
+      ]
+    },
+    {
+      "allocation": "acct-scope-62",
+      "requested_utc_day": "2026-08-10",
+      "selected": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/fresh-scope-zero-selected.json",
+      "selected_sha256": "cb01c7c7fdc7e4872d760318224460f6a79120b9c2c2e8409dfdb23f9c347465",
+      "viewport": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/scope-run-01/fresh-scope-zero.txt.gz",
+      "viewport_sha256": "e40aa441137f8f956d17b726e035d3f0ea510a0b3dc5f847511868bfb2a51c7e",
+      "rows": [
+        "No recorded attempts in this day; collection coverage unknown.",
+        "Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.",
+        "Billed cost: unavailable \u2014 no settlement evidence",
+        "Logical requests may have attempts on other days; this UTC day is not their complete lifetime.",
+        "UTC admission interval: [1786320000000, 1786406400000) ms since Unix epoch",
+        "Read at: 1786363200000 ms UTC; store checkpoint: 1786363200000 ms UTC; maintenance lag: 0 ms",
+        "90-day wall-clock detail cutoff: Some(1778587200000); aggregate day floor at checkpoint: 20311; oldest recorded day: None",
+        "Known subtotal exact USD: 0",
+        "Input: 0 known + unknown in 0 attempts",
+        "Noncached input (derived for inclusive input): 0 known + unknown in 0 attempts",
+        "Cache read: 0 known + unknown in 0 attempts",
+        "Cache write: 0 known + unknown in 0 attempts",
+        "Output: 0 known + unknown in 0 attempts",
+        "Reasoning (subset, not separately billed): 0 known + unknown in 0 attempts",
+        "Total (not separately billed): 0 known + unknown in 0 attempts",
+        "Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.",
+        "Unknown parent population: 0 attempts, excluded from root total",
+        "Estimate versus billed difference: unknown \u2014 no settlement evidence",
+        "Root's own attempts",
+        "Descendant attempts",
+        "Unknown provider/model attribution",
+        "Unknown parent population",
+        "Refresh",
+        "Close"
+      ]
+    }
+  ],
+  "note": "Distinct capture paths; identical selected rows do not bind identical attempt populations. Actual wall-clock capture dates are not asserted."
+}

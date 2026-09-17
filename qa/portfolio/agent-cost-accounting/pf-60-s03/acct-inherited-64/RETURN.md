@@ -18,8 +18,10 @@ acceptance, release or sprint closure is claimed.
 
 1. [Round-61 RETURN](../acct-readers-61/RETURN.md) now records its never-prompted
    zero as a surviving **P2 scope/coverage misread**, including correction of
-   the reader-verdict table. The fresh root's zero excludes four priced attempts
-   in three other roots; it is not a clean day-wide zero.
+   the reader-verdict table. Round 66 corrects that amendment: round 61's
+   fresh-session zero establishes no day-wide amount. The separate round-62
+   capture supplies the four-priced-attempt reproduction; its amount cannot
+   be attached to round 61's control.
 2. [Reader audit](../acct-readers-61/audit_readers.py) now binds all **24 exact
    page identities** before writing a receipt: nine priced, four unknown-cost,
    two zero-recorded and nine nonmonetary pages. Every required subtotal is
@@ -38,6 +40,12 @@ still reject all exact/displayed omissions. Baseline remains **9 priced page
 reconciliations, 4 unknown-cost pages, 2 scoped-zero pages**; these are views,
 not 15 distinct priced attempts. The mutants are QA copies, not product output.
 
+**Round-66 correction:** the checker above used only three currency patterns.
+The [new replay](../acct-receipt-66/page-controls-01/results.json) adds 36 amounts
+outside that key set, asserts the original 34 acceptances separately, and binds
+complete nonmonetary-page content. All 74 revised cases reject; both earlier
+auditors accept all 36 new cases. The 38-case numbers above remain historical.
+
 ## Inherited qualification decision
 
 **Chosen item: none.** Gateway economics lacks admitted gateway attempts and
@@ -53,9 +61,12 @@ exclusion tests, and the accepted import receipt. No item is silently discharged
 The preserved direct-sampling collection independently reconciles:
 **(80×5 + 20×0.5 + 10×30)/1,000,000 = USD 0.00071 per attempt;
 four attempts = USD 0.00284.** [Re-audit](scope-recheck.json) binds the stored
-evidence and seven priced pages. The actual fresh-root text is “No recorded
-attempts in this day; collection coverage unknown.” and “Known subtotal exact
-USD: 0”. This is the surviving P2, not proof of zero inherited cost.
+evidence and seven priced pages. The actual round-62 fresh-root text includes “No recorded
+attempts in this day; collection coverage unknown.”, “Collection coverage:
+unknown; recorded root and resolved descendants only. Unknown parent population
+excluded.” and “Known subtotal exact USD: 0”. See the corrected complete
+transcription in the disposition. This is the surviving P2, not proof of zero
+inherited cost or an amount belonging to round 61's capture.
 
 **Unproven:** all four inherited workflows, complete application coverage,
 two-collected-provider UI reconciliation, positive measured/billed comparison,

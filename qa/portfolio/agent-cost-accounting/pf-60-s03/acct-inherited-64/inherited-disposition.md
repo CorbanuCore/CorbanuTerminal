@@ -47,15 +47,39 @@ is an output subset, not an extra charge. This is independent estimate arithmeti
 for direct sampling, **not** arithmetic for one of the inherited items.
 No invented amount is assigned to any of those four items.
 
-The preserved [fresh-root selection](../acct-scope-62/scope-run-01/fresh-scope-zero-selected.json)
-contains exactly:
+Round-66 transcription correction: the preserved round-62
+[fresh-root selection](../acct-scope-62/scope-run-01/fresh-scope-zero-selected.json)
+and [viewport sequence](../acct-scope-62/scope-run-01/fresh-scope-zero.txt.gz)
+show the following title, requested day and all selected rows, in order. These
+rows span scrolling viewports; this is not a claim that they fit on one screen.
+Selection arrows, app chrome, blank padding and the navigation footer are omitted.
 
+> Recorded requests — root and descendants
+> Requested UTC day: 2026-08-10
 > No recorded attempts in this day; collection coverage unknown.
-> Known subtotal exact USD: 0
-
-The same inspector also states:
-
+> Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
 > Billed cost: unavailable — no settlement evidence
+> Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+> UTC admission interval: [1786320000000, 1786406400000) ms since Unix epoch
+> Read at: 1786363200000 ms UTC; store checkpoint: 1786363200000 ms UTC; maintenance lag: 0 ms
+> 90-day wall-clock detail cutoff: Some(1778587200000); aggregate day floor at checkpoint: 20311; oldest recorded day: None
+> Known subtotal exact USD: 0
+> Input: 0 known + unknown in 0 attempts
+> Noncached input (derived for inclusive input): 0 known + unknown in 0 attempts
+> Cache read: 0 known + unknown in 0 attempts
+> Cache write: 0 known + unknown in 0 attempts
+> Output: 0 known + unknown in 0 attempts
+> Reasoning (subset, not separately billed): 0 known + unknown in 0 attempts
+> Total (not separately billed): 0 known + unknown in 0 attempts
+> Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+> Unknown parent population: 0 attempts, excluded from root total
+> Estimate versus billed difference: unknown — no settlement evidence
+> Root's own attempts
+> Descendant attempts
+> Unknown provider/model attribution
+> Unknown parent population
+> Refresh
+> Close
 
 Those are existing real-key observations, rechecked rather than newly executed.
 The zero excludes the other roots and is the retained **P2 scope/coverage
@@ -76,3 +100,9 @@ qualify the auditor's checks, not the unimplemented product workflows.
 No new TUI run, independent code-blind acceptance, live-repository/platform
 qualification, human acceptance or release is claimed. All prior residuals,
 including two-collected-provider and settlement comparison, remain open.
+
+Round 66 supplies a [concrete proposed next slice](../acct-receipt-66/next-step.md):
+collect and inspect direct-Responses-WS startup prewarm with explicit unknown
+cost. It separates product collection/identity/persistence/UI work from QA and
+names the later economic prerequisite. This proposal does not change any of
+the qualification verdicts above.

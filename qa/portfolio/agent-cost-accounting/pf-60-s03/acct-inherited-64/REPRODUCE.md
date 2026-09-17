@@ -5,9 +5,14 @@ prefix paths below with `qa/portfolio/agent-cost-accounting/pf-60-s03/`.
 Use fresh output names; never overwrite an earlier receipt.
 
 1. `python3 -B acct-inherited-64/page_controls.py acct-inherited-64/NEW-PAGE-CONTROLS`
-   runs the preserved round-61 capture baseline and 38 identity/amount mutants
-   against the frozen base and revised auditors. Require 24 baseline identities,
-   38 revised rejections, 34 prior acceptances, and no revised success receipts.
+   now runs the preserved round-61 baseline and 74 identity/content mutants.
+   It asserts 24 baseline identities, all 74 revised rejections with no success
+   receipt, and exactly 34 prior acceptances in the original 38-case group.
+   The additional 36 cases evade every round-64 currency pattern and must be
+   accepted by both frozen earlier auditors (rounds 62 and 64). Total round-62
+   acceptances must be 70. Expected page digests bind the preserved capture's
+   complete nonmonetary content; this is not a general money parser. Round-66
+   replay artifacts are separate; the original 38-case receipt is historical.
 2. `python3 -B acct-scope-62/coverage_controls.py acct-inherited-64/NEW-REMOVALS`
    requires all 28 prior amount-removal counterexamples to reject.
 3. `python3 -B acct-scope-62/audit_scope.py acct-scope-62/scope-run-01

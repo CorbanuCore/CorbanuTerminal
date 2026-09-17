@@ -17,14 +17,17 @@ supersedes the old receipt’s undifferentiated count. Rust gates pass 342/342.*
 completeness remain gaps; this is not a declaration that the reader-facing
 requirements or sprint are complete.
 
-**Round-64 receipt correction:** the never-prompted zero is a **P2
-scope/coverage misread**, not a clean day-wide zero control. Round 62 reproduced
-four priced attempts across three other roots on August 10, independently
-totaling USD 0.00284, while the fresh root rendered “No recorded attempts in
-this day; collection coverage unknown.” and “Known subtotal exact USD: 0”.
-That zero describes only this session and its resolved descendants. The finding
-survives this receipt; no product fix or approval is claimed.
-[Reproduction and proposed wording](../acct-scope-62/reader-findings.md).
+**Round-66 correction of the round-64 amendment:** this round's
+[never-prompted capture](reader-run-05/never-prompted-selected.json) is a
+fresh-session control for August 10 with zero recorded attempts in the selected
+root and resolved descendants. It renders “No recorded attempts in this day;
+collection coverage unknown.”, “Collection coverage: unknown; recorded root and
+resolved descendants only. Unknown parent population excluded.” and “Known
+subtotal exact USD: 0”. It establishes no day-wide amount or other-root total.
+The **P2 scope/coverage wording concern remains open**. The separate
+[round-62 reproduction](../acct-scope-62/RETURN.md#scope-zero-finding-and-the-four-attempts)
+binds its own other-root population and arithmetic; neither belongs to this
+capture. No product fix or approval is claimed.
 
 [Preflight/classification](PREFLIGHT.md), [reproduction](REPRODUCE.md),
 [full reader text, arithmetic and verdicts](reader-findings.md).
@@ -78,7 +81,7 @@ and proposed replacement wording wherever the reader could be misled.
 | Missing price / unavailable backend | Missing price: “Estimated token cost: unknown”; “Known estimated token cost: $0.000000 + unknown costs”; “Price: unavailable — no dispatch-time price snapshot”. Backend: “Unavailable — accounting evidence is corrupt, incompatible or could not be read. Refresh to retry; no repair performed.” | Missing-price total is unknown, not zero; isolated zero subtotal can mislead and there is no useful price-recovery next step. Backend failure withholds money and supplies an explicit retry action. |
 | Narrow screen | 64×24 real resize retains “Estimated token cost for recorded attempts: $0.000710”, “Known subtotal exact USD: 0.00071” and “Billed cost: unavailable — no settlement evidence” | At this width, amount and qualifiers survive wrapping and request/attempt navigation. No new amount/scope ambiguity beyond the wide view. |
 | Mixed providers | Actual OpenAI + reader_local requests in one root/day; page shows “Estimated token cost for recorded attempts: $0.000710”, “Provider: openai; Model: gpt-5.6-sol”, generic “Collection coverage: unknown” | Correct collected component, incomplete mixed-provider run. Custom request is absent with no specific omission warning: a reader could take the displayed amount for the whole day/run. |
-| No usage at all | “Estimated token cost: unknown”; “Full recorded estimate: unavailable (1 of 1 attempts incomplete)”; “Input: 0 known + unknown in 1 attempts”; “Known subtotal exact USD: 0” | Missing usage is not measured zero. The overview warns clearly, but a copied zero subtotal can mislead. The never-prompted zero is now a **P2 scope/coverage misread**, independently reproduced in round 62; it does not prove a day-wide zero. The empty-day statement is scoped to this root. |
+| No usage at all | “Estimated token cost: unknown”; “Full recorded estimate: unavailable (1 of 1 attempts incomplete)”; “Input: 0 known + unknown in 1 attempts”; “Known subtotal exact USD: 0” | Missing usage is not measured zero. The overview warns clearly, but a copied zero subtotal can mislead. The never-prompted capture is a fresh-session control with zero recorded attempts scoped to its root; it establishes no day-wide amount. The **P2 scope/coverage wording concern** remains open; round 62 is a separate reproduction with its own population. |
 | Stale estimate | “Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.”; “Billed cost: unavailable — no settlement evidence” | No amount is shown, so this cannot be mistaken for a measured amount. “Need refresh” is confusing because the button only rereads; a clearer persistent-error next step is needed. |
 
 Independent arithmetic for every priced Sol request:
