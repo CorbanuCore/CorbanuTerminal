@@ -11,23 +11,61 @@ use codex_protocol::config_types::ModeKind;
 use codex_protocol::models::ResponseItem;
 use std::sync::Arc;
 
+enum InjectionSource {
+    RunningTurn,
+    Extension,
+}
+
+impl crate::codex_thread::CodexThread {
+    /// Admits extension work separately from outputs produced by the running turn.
+    pub async fn inject_extension_if_running(
+        &self,
+        input: Vec<ResponseItem>,
+    ) -> Result<(), Vec<ResponseItem>> {
+        self.session.inject_extension_if_running(input).await
+    }
+}
+
 impl Session {
+    pub async fn inject_if_running(
+        &self,
+        input: Vec<ResponseItem>,
+    ) -> Result<(), Vec<ResponseItem>> {
+        self.inject_running_items(input, InjectionSource::RunningTurn)
+            .await
+    }
+
+    pub(crate) async fn inject_extension_if_running(
+        &self,
+        input: Vec<ResponseItem>,
+    ) -> Result<(), Vec<ResponseItem>> {
+        self.inject_running_items(input, InjectionSource::Extension)
+            .await
+    }
+
     /// Returns the input if there is no active turn to inject into.
     #[expect(
         clippy::await_holding_invalid_type,
         reason = "active turn checks and turn state updates must remain atomic"
     )]
-    pub async fn inject_if_running(
+    async fn inject_running_items(
         &self,
         input: Vec<ResponseItem>,
+        source: InjectionSource,
     ) -> Result<(), Vec<ResponseItem>> {
         let mut active = self.active_turn.lock().await;
         match active.as_mut() {
             Some(active_turn) => {
                 let state = self.state.lock().await;
-                if active_turn.task.as_ref().is_some_and(|task| {
-                    !Self::authorization_matches(&state.session_configuration, &task.turn_context)
-                }) {
+                if matches!(source, InjectionSource::Extension)
+                    && active_turn.task.as_ref().is_some_and(|task| {
+                        task.kind != crate::state::TaskKind::Regular
+                            || !Self::authorization_matches(
+                                &state.session_configuration,
+                                &task.turn_context,
+                            )
+                    })
+                {
                     self.input_queue
                         .defer_input_for_turn_state(
                             active_turn.turn_state.as_ref(),

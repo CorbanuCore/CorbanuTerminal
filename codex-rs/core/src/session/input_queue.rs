@@ -40,7 +40,8 @@ pub(crate) struct InputQueue {
     activity_tx: watch::Sender<InputQueueActivity>,
     mailbox_pending_mails: Mutex<VecDeque<PendingMailboxCommunication>>,
     capacity_wait_scheduled: AtomicBool,
-    interrupted_deferred_input: Mutex<Vec<TurnInput>>,
+    interrupted_deferred_input: Mutex<VecDeque<TurnInput>>,
+    interrupted_input_ready: tokio::sync::Notify,
 }
 
 struct PendingMailboxCommunication {
@@ -57,7 +58,8 @@ impl InputQueue {
             activity_tx,
             mailbox_pending_mails: Mutex::new(VecDeque::new()),
             capacity_wait_scheduled: AtomicBool::new(false),
-            interrupted_deferred_input: Mutex::new(Vec::new()),
+            interrupted_deferred_input: Mutex::new(VecDeque::new()),
+            interrupted_input_ready: tokio::sync::Notify::new(),
         }
     }
 
@@ -84,6 +86,8 @@ impl InputQueue {
         } else {
             false
         };
+        let has_pending_steer =
+            has_pending_steer || !self.interrupted_deferred_input.lock().await.is_empty();
         let pending_activity = if has_pending_steer {
             Some(InputQueueActivity::Steer)
         } else if self.has_pending_mailbox_items().await {
@@ -251,11 +255,25 @@ impl InputQueue {
         let mut turn_state = active_turn.turn_state.lock().await;
         turn_state.clear_pending_waiters();
         turn_state.pending_input.items.clear();
-        self.interrupted_deferred_input
-            .lock()
-            .await
-            .append(&mut turn_state.pending_input.deferred);
-        self.mark_mailbox_ready_for_next_turn().await;
+        if !turn_state.pending_input.deferred.is_empty() {
+            self.interrupted_deferred_input
+                .lock()
+                .await
+                .extend(std::mem::take(&mut turn_state.pending_input.deferred));
+            self.interrupted_input_ready.notify_one();
+            self.activity_tx.send_replace(InputQueueActivity::Steer);
+        }
+    }
+
+    /// Interrupted input returns to submission admission, never directly to a task's queue.
+    pub(crate) async fn next_interrupted_deferred_input(&self) -> TurnInput {
+        loop {
+            let ready = self.interrupted_input_ready.notified();
+            if let Some(input) = self.interrupted_deferred_input.lock().await.pop_front() {
+                return input;
+            }
+            ready.await;
+        }
     }
 
     pub(crate) async fn defer_mailbox_delivery_to_next_turn(
@@ -383,10 +401,6 @@ impl InputQueue {
             "task start must precede task installation"
         );
         let (mailbox_items, parent_turn_id) = self.drain_ready_mailbox_input_items().await;
-        let mut pending_input = pending_input;
-        pending_input.extend(std::mem::take(
-            &mut *self.interrupted_deferred_input.lock().await,
-        ));
         if pending_input.is_empty() {
             (mailbox_items, parent_turn_id)
         } else {
@@ -434,6 +448,9 @@ impl InputQueue {
         reason = "active turn checks and turn state reads must remain atomic"
     )]
     pub(crate) async fn has_pending_input(&self, active_turn: &Mutex<Option<ActiveTurn>>) -> bool {
+        if !self.interrupted_deferred_input.lock().await.is_empty() {
+            return true;
+        }
         let (has_turn_pending_input, accepts_mailbox_delivery, turn_id) = {
             let active = active_turn.lock().await;
             match active.as_ref() {
@@ -469,6 +486,7 @@ impl TurnInputQueue {
     fn has_user_input(&self) -> bool {
         self.items
             .iter()
+            .chain(&self.deferred)
             .any(|input| matches!(input, TurnInput::UserInput { .. }))
     }
 }

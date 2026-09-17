@@ -312,7 +312,20 @@ pub(super) async fn user_input_or_turn_inner(
                     current_context.session_telemetry.user_prompt(&items);
                 }
                 Err(SteerInputError::NoActiveTurn(items)) => {
-                    let current_context = sess.new_default_turn_with_sub_id(sub_id.clone()).await;
+                    let Ok(current_context) = sess
+                        .new_turn_with_sub_id(
+                            sub_id.clone(),
+                            SessionSettingsUpdate {
+                                final_output_json_schema: Some(
+                                    current_context.final_output_json_schema.clone(),
+                                ),
+                                ..Default::default()
+                            },
+                        )
+                        .await
+                    else {
+                        return;
+                    };
                     if let Some(id) = parent_turn_id {
                         current_context.turn_metadata_state.set_parent_turn_id(id);
                     }
@@ -840,7 +853,41 @@ pub(super) async fn submission_loop(
 ) {
     // To break out of this loop, send Op::Shutdown.
     let mut shutdown_received = false;
-    while let Ok(sub) = rx_sub.recv().await {
+    loop {
+        let sub = tokio::select! {
+            sub = rx_sub.recv() => match sub {
+                Ok(sub) => sub,
+                Err(_) => break,
+            },
+            input = sess.input_queue.next_interrupted_deferred_input() => {
+                let (op, client_user_message_id) = match input {
+                    TurnInput::UserInput { content, client_id } => (Op::UserInput {
+                        items: content,
+                        final_output_json_schema: None,
+                        responsesapi_client_metadata: None,
+                        additional_context: Default::default(),
+                        thread_settings: Default::default(),
+                    }, client_id),
+                    TurnInput::ResponseItem(item) => {
+                        if let Err(items) = sess.inject_extension_if_running(vec![item]).await {
+                            let context = sess.new_default_turn().await;
+                            sess.record_conversation_items(&context, &items).await;
+                        }
+                        continue;
+                    }
+                    TurnInput::InterAgentCommunication(communication) => (
+                        Op::InterAgentCommunication { communication }, None,
+                    ),
+                };
+                Submission {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    op,
+                    parent_turn_id: None,
+                    client_user_message_id,
+                    trace: None,
+                }
+            }
+        };
         debug!(?sub, "Submission");
         let dispatch_span = submission_dispatch_span(&sub);
         let should_exit = async {

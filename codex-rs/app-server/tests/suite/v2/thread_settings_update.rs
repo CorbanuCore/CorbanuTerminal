@@ -324,10 +324,16 @@ async fn thread_settings_authorization_boundary_returns_input_and_discriminator(
         .send_turn_steer_request(codex_app_server_protocol::TurnSteerParams {
             thread_id: thread.id,
             expected_turn_id: turn.id,
-            input: vec![V2UserInput::Text {
-                text: "retain this input".into(),
-                text_elements: vec![],
-            }],
+            input: vec![
+                V2UserInput::Text {
+                    text: "retain this input".into(),
+                    text_elements: vec![],
+                },
+                V2UserInput::LocalImage {
+                    path: fixture.path().join("unread.png"),
+                    detail: None,
+                },
+            ],
             client_user_message_id: None,
             responsesapi_client_metadata: None,
             additional_context: None,
@@ -341,7 +347,14 @@ async fn thread_settings_authorization_boundary_returns_input_and_discriminator(
     let data = error.error.data.context("discriminated boundary error")?;
     assert_eq!(data["code"], "authorizationChanged");
     assert_eq!(data["inputDisposition"], "returned");
-    assert_eq!(data["input"][0]["text"], "retain this input");
+    assert_eq!(
+        data["input"],
+        serde_json::json!([{
+            "type": "text", "text": "retain this input", "text_elements": []
+        }, {
+            "type": "localImage", "path": fixture.path().join("unread.png"), "detail": null
+        }])
+    );
     mcp.send_response(request_id, serde_json::json!({"decision": "decline"}))
         .await?;
     assert_eq!(finish_probe(&mut mcp, "pending").await?, 0);
