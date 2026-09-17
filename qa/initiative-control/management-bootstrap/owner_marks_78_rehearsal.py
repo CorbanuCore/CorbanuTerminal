@@ -152,7 +152,7 @@ def main():
         emit("disarm_delta", changes=owner.preview_changes(before, capture()))
         stopped = capture()
         wait_for("disarmed_interval_refused", lambda tick: tick["ticks"] > second["ticks"]
-                 and tick["hold"] == "owner_run_refused")
+                 and tick["hold"] == "owner_run_refused" and tick.get("refusal") == "owner_off")
         assert capture() == stopped
         cli("--activation-status", "--config", str(config_path))
         emit("revocation_verified", state="OFF", generation=2, retained_activation=True,
