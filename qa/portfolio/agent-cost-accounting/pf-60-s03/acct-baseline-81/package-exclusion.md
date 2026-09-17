@@ -1,6 +1,20 @@
 # Package exclusion
 
 The three binaries are deliberately excluded local debug build products.
+
+Attribution clarified on September 17, 2026 by the `acct-selfcheck-84`
+`gpt-6-astra` high revise worker: retaining this exclusion is my own engineering
+judgement in this QA lane. The earlier round-76 staging script and ignore rule
+show the choice, but the retained record does not identify its original human
+or agent decider or decision time. I cannot retrospectively attribute that choice
+to Travis or Fable. This dated statement owns the present decision only.
+The reasoning is to retain a small, repository-verifiable manifest/build receipt
+instead of adding roughly six hundred eighty MiB of unsigned local debug outputs
+that have not qualified an independent executor. This saves repository storage;
+it does not make the missing bytes verified or waive final-package acceptance.
+Providing a retained exact package with accessible immutable artifact storage
+would close availability; a later rebuild alone cannot prove historical identity.
+
 The repository rule is [`acct-fitness-76/.gitignore`](../acct-fitness-76/.gitignore),
 whose first line is `/package/`; the
 [engineering record](../acct-fitness-76/engineering.md) identifies the staged

@@ -63,23 +63,57 @@ acceptance = clone / scope / "acct-acceptance-75/acceptance.md"
 original = acceptance.read_bytes()
 try:
     acceptance.write_bytes(original.replace(b"maps 147 named checks", b"maps 148 named checks"))
-    run("wrong-claim", [verifier], 1, "DISAGREE mutation coverage: mutation/check counts differ")
+    run("wrong-claim", [verifier], 3, "DISAGREE mutation coverage: mutation/check counts differ")
 finally:
     acceptance.write_bytes(original)
 viewport = clone / scope / "acct-readers-61/reader-run-05/narrow.txt.gz"
 original = viewport.read_bytes()
 try:
     viewport.write_bytes(gzip.compress(gzip.decompress(original) + b"changed", mtime=0))
-    run("corrupt-viewport", [verifier], 1, "DISAGREE capture bindings: narrow.txt.gz viewport digest")
+    run("corrupt-viewport", [verifier], 3, "DISAGREE capture bindings: narrow.txt.gz viewport digest")
 finally:
     viewport.write_bytes(original)
 log = clone / scope / "acct-fitness-76/gates-01/core-default.log.gz"
 original = log.read_bytes()
 try:
     log.unlink()
-    run("missing-log", [verifier], 2, "UNAVAILABLE round-76 core-default:")
+    run("missing-log", [verifier], 3, "RESULT agreement=18 disagreement=0 unavailable=5 exit=3")
 finally:
     log.write_bytes(original)
+# Refresh the inventory after document mutations to isolate baseline comparison
+# from the independent acceptance-file digest check.
+inventory = clone / scope / "acct-acceptance-75/scope.json"
+correction = clone / scope / "acct-inventory-79/inventory-correction.json"
+originals = {path: path.read_bytes() for path in (acceptance, inventory, correction)}
+for name, old, new, fragment in (
+    ("baseline-count", b"agreement=20", b"agreement=21", "actual counts/exit=(20, 0, 3, 2)"),
+    ("baseline-identity", b"`committed package codex`",
+     b"`committed package other`", "actual counts/exit=(20, 0, 3, 2)"),
+    ("baseline-exit", b"unavailable=3 exit=2", b"unavailable=3 exit=0",
+     "invalid baseline evidence exit"),
+    ("baseline-missing", b"The expected retained-evidence baseline is:",
+     b"The former retained-evidence baseline was:", "acceptance claim missing or ambiguous"),
+    ("baseline-duplicate", b"`committed package codex-code-mode-host`",
+     b"`committed package codex`", "invalid baseline unavailable list"),
+):
+    try:
+        assert old in originals[acceptance]
+        acceptance.write_bytes(originals[acceptance].replace(old, new))
+        command([sys.executable, "-B", str(scope / "acct-selfcheck-84/refresh_inventory.py")], clone)
+        run(name, [verifier], 3, "BASELINE DRIFT: " + fragment if name in
+            ("baseline-exit", "baseline-duplicate") else fragment)
+    finally:
+        for path, raw in originals.items():
+            path.write_bytes(raw)
+# Optional local artifacts do not alter the retained-evidence baseline.
+package = clone / scope / "acct-fitness-76/package"
+package.mkdir()
+try:
+    (package / "codex").write_bytes(b"synthetic wrong-size package; never launched")
+    run("local-package-disagreement", [verifier, "--local-package"], 1,
+        "RESULT agreement=20 disagreement=1 unavailable=5 exit=1")
+finally:
+    shutil.rmtree(package)
 assert command(["git", "status", "--porcelain"], clone).stdout == ""
 receipt = dict(
     kind="clean sparse Git checkout of proposed QA snapshot, then independent corruption controls",

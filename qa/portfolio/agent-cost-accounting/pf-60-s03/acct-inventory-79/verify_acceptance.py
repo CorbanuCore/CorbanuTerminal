@@ -1,5 +1,6 @@
 """Read-only acceptance reconciliation. Python stdlib + Git; no tests/builds/network.
-Exit 0: agreement; 1: disagreement; 2: unavailable evidence without disagreement.
+Exit 0: complete agreement; 1: optional local-package disagreement;
+2: unavailable evidence with retained baseline matching; 3: baseline drift/invalidity.
 Default excludes ignored/untracked evidence so local packages cannot hide clone gaps.
 --local-package additionally verifies any staged package files, without launching them.
 """
@@ -20,6 +21,7 @@ TEST = "suite::accounting_responses_ws_recovery::accounting_responses_ws_native_
 LABELS = (("passed", "passed"), ("failed", "failed"), ("timed_out", "timed out"),
           ("flaky", "flaky"), ("skipped", "skipped"), ("leaky", "leaky"))
 RESULTS = []
+UNAVAILABLE = []
 CLAIMS = []
 TRACKED = set()
 
@@ -58,6 +60,8 @@ def check(name, fn):
     except (ValueError, KeyError, TypeError, AssertionError, OSError, EOFError) as exc:
         state, detail = "DISAGREE", str(exc)
     RESULTS.append(state)
+    if state == "UNAVAILABLE":
+        UNAVAILABLE.append(name)
     print(f"{state} {name}: {detail}")
 
 
@@ -350,6 +354,30 @@ def coverage():
             "known round/sprint/severity identifiers excluded; worded quantities and excluded regions not audited")
 
 
+def documented_baseline():
+    """Compare the default retained run before optional local-package checks."""
+    expected = match(
+        r"The expected retained-evidence baseline is:\s*```text\n"
+        r"RESULT agreement=(\d+) disagreement=(\d+) unavailable=(\d+) exit=(\d+)\n```"
+    )
+    item_claim = match(r"The only expected unavailable items are (.*?)[,]?\s*all under")
+    items = re.findall(r"`([^`]+)`", item_claim[1])
+    # Reject malformed lists, including unquoted extra items and duplicate labels.
+    prose = re.sub(r"`[^`]+`|\band\b|[,\s]", "", item_claim[1])
+    require(not prose and len(items) == len(set(items)), "invalid baseline unavailable list")
+    expected_counts = tuple(map(int, expected.group(1, 2, 3, 4)))
+    require(len(items) == expected_counts[2], "baseline list/count mismatch")
+    require(expected_counts[1] == 0, "baseline cannot authorize disagreement")
+    require(expected_counts[3] == (2 if items else 0), "invalid baseline evidence exit")
+    counts = tuple(RESULTS.count(key) for key in ("AGREE", "DISAGREE", "UNAVAILABLE"))
+    evidence_exit = 1 if counts[1] else 2 if counts[2] else 0
+    actual = (*counts, evidence_exit)
+    require(actual == expected_counts and sorted(UNAVAILABLE) == sorted(items),
+            f"expected counts/exit={expected_counts}, unavailable={sorted(items)}; "
+            f"actual counts/exit={actual}, unavailable={sorted(UNAVAILABLE)}")
+    return "documented counts, evidence exit and unavailable identities match"
+
+
 def main():
     global TRACKED, DOCUMENT
     parser = argparse.ArgumentParser(description=__doc__)
@@ -378,17 +406,26 @@ def main():
         check(name + " inventory", lambda name=name: inventory(name))
     check("inventory classifications and correction", inventory_kinds)
     check("package build evidence", package_log)
+    local_rows = []
     try:
         manifest = load(SCOPE / "acct-fitness-76/package-manifest.json")
         for row in manifest["files"]:
             check("committed package " + Path(row["path"]).name, lambda row=row: package_file(row))
             if args.local_package:
-                check("local package " + Path(row["path"]).name, lambda row=row: package_file(row, True))
+                local_rows.append(row)
     except (OSError, ValueError, KeyError) as exc:
         check("package manifest", lambda: (_ for _ in ()).throw(exc))
     check("acceptance numerical coverage", coverage)
+    drift = False
+    try:
+        print("BASELINE MATCH: " + documented_baseline())
+    except (ValueError, KeyError, TypeError) as exc:
+        drift = True
+        print("BASELINE DRIFT: " + str(exc))
+    for row in local_rows:
+        check("local package " + Path(row["path"]).name, lambda row=row: package_file(row, True))
     counts = {key: RESULTS.count(key) for key in ("AGREE", "DISAGREE", "UNAVAILABLE")}
-    status = 1 if counts["DISAGREE"] else 2 if counts["UNAVAILABLE"] else 0
+    status = 3 if drift else 1 if counts["DISAGREE"] else 2 if counts["UNAVAILABLE"] else 0
     print(f"RESULT agreement={counts['AGREE']} disagreement={counts['DISAGREE']} unavailable={counts['UNAVAILABLE']} exit={status}")
     return status
 

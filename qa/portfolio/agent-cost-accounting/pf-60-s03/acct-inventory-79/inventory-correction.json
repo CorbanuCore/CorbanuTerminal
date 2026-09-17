@@ -126,17 +126,17 @@
     }
   },
   "after_totals": {
-    "total_new_bytes": 48919,
-    "total_new_text_lines": 653,
+    "total_new_bytes": 49726,
+    "total_new_text_lines": 664,
     "total_new_files": 15,
     "total_modified_files": 3,
     "total_modified_bytes": 16713,
     "total_modified_text_lines": 230,
-    "total_current_bytes": 65632,
-    "total_current_text_lines": 883
+    "total_current_bytes": 66439,
+    "total_current_text_lines": 894
   },
   "note": "Preserves the prior inventory; round-76 scope/delta remain historical snapshots. This record supersedes their round-75 inventory digest, not their test evidence.",
-  "after_sha256": "b4a0da055f3299cdd1157a6e6cfd4a6a5a2100824d964d79727a302a462b0fff",
+  "after_sha256": "6f24f7a00d72f3fe5fb53e264fc9716a3cea3c0a2f990838432fe821f188998c",
   "baseline_81_refresh": {
     "previous_after_sha256": "24009e07f2f604270a831e6b1f4c073dbb1c867f686a4dd5ad82ec301e97fcaa",
     "previous_after_totals": {
@@ -150,5 +150,19 @@
       "total_current_text_lines": 862
     },
     "reason": "Acceptance baseline and bounded coverage disclosure added; historical path membership unchanged."
+  },
+  "selfcheck_84_refresh": {
+    "previous_after_sha256": "b4a0da055f3299cdd1157a6e6cfd4a6a5a2100824d964d79727a302a462b0fff",
+    "previous_after_totals": {
+      "total_new_bytes": 48919,
+      "total_new_text_lines": 653,
+      "total_new_files": 15,
+      "total_modified_files": 3,
+      "total_modified_bytes": 16713,
+      "total_modified_text_lines": 230,
+      "total_current_bytes": 65632,
+      "total_current_text_lines": 883
+    },
+    "reason": "Enforce the documented baseline and disclose worded-quantity residual; membership unchanged."
   }
 }
