@@ -52,13 +52,19 @@ def run(name, args, expected, fragment):
     (run_directory / (name + ".stdout.txt")).write_text(result.stdout)
     (run_directory / (name + ".stderr.txt")).write_text(result.stderr)
     passed = result.returncode == expected and fragment in result.stdout and not result.stderr
+    if "--local-package" in args or name == "clean-finalizer":
+        passed = passed and "BASELINE REFUSED:" in result.stdout
+        passed = passed and not any(line.startswith("BASELINE MATCH:")
+                                    for line in result.stdout.splitlines())
     results.append(dict(case=name, exit=result.returncode, expected_exit=expected, passed=passed,
                         stdout_sha256=hashlib.sha256(result.stdout.encode()).hexdigest()))
     assert passed, (name, result.returncode, result.stdout, result.stderr)
 
 run("clean-checkout", [verifier], 2, "RESULT agreement=20 disagreement=0 unavailable=3 exit=2")
-run("clean-finalizer", [str(scope / "acct-fitness-76/finalize.py")], 2,
-    "RESULT agreement=20 disagreement=0 unavailable=6 exit=2")
+run("clean-finalizer", [str(scope / "acct-fitness-76/finalize.py")], 3,
+    "RESULT agreement=20 disagreement=0 unavailable=6 exit=3")
+run("local-package-absent-refusal", [verifier, "--local-package"], 3,
+    "BASELINE REFUSED: --local-package has no documented combined baseline")
 acceptance = clone / scope / "acct-acceptance-75/acceptance.md"
 original = acceptance.read_bytes()
 try:
@@ -110,9 +116,27 @@ package = clone / scope / "acct-fitness-76/package"
 package.mkdir()
 try:
     (package / "codex").write_bytes(b"synthetic wrong-size package; never launched")
-    run("local-package-disagreement", [verifier, "--local-package"], 1,
-        "RESULT agreement=20 disagreement=1 unavailable=5 exit=1")
+    run("local-package-disagreement", [verifier, "--local-package"], 3,
+        "RESULT agreement=20 disagreement=1 unavailable=5 exit=3")
 finally:
+    shutil.rmtree(package)
+# Even exact local matches are diagnostic: use inert synthetic bytes, never binaries.
+manifest_path = clone / scope / "acct-fitness-76/package-manifest.json"
+original = manifest_path.read_bytes()
+package.mkdir()
+try:
+    manifest = json.loads(original)
+    for row in manifest["files"]:
+        path = clone / row["path"]
+        raw = b"synthetic package; never launched"
+        path.write_bytes(raw)
+        path.chmod(0o555)
+        row.update(bytes=len(raw), mode="0555", sha256=hashlib.sha256(raw).hexdigest())
+    manifest_path.write_text(json.dumps(manifest))
+    run("local-package-agreement-refusal", [verifier, "--local-package"], 3,
+        "RESULT agreement=23 disagreement=0 unavailable=3 exit=3")
+finally:
+    manifest_path.write_bytes(original)
     shutil.rmtree(package)
 assert command(["git", "status", "--porcelain"], clone).stdout == ""
 receipt = dict(

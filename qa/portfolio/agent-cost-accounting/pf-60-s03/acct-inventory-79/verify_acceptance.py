@@ -1,6 +1,6 @@
 """Read-only acceptance reconciliation. Python stdlib + Git; no tests/builds/network.
-Exit 0: complete agreement; 1: optional local-package disagreement;
-2: unavailable evidence with retained baseline matching; 3: baseline drift/invalidity.
+Exit 0: complete agreement; 2: unavailable evidence with retained baseline matching;
+3: baseline drift/invalidity or refusal of undocumented local-package agreement.
 Default excludes ignored/untracked evidence so local packages cannot hide clone gaps.
 --local-package additionally verifies any staged package files, without launching them.
 """
@@ -418,14 +418,18 @@ def main():
     check("acceptance numerical coverage", coverage)
     drift = False
     try:
-        print("BASELINE MATCH: " + documented_baseline())
+        detail = documented_baseline()
+        print(("RETAINED BASELINE MATCH: " if args.local_package else "BASELINE MATCH: ") + detail)
     except (ValueError, KeyError, TypeError) as exc:
         drift = True
         print("BASELINE DRIFT: " + str(exc))
     for row in local_rows:
         check("local package " + Path(row["path"]).name, lambda row=row: package_file(row, True))
     counts = {key: RESULTS.count(key) for key in ("AGREE", "DISAGREE", "UNAVAILABLE")}
-    status = 3 if drift else 1 if counts["DISAGREE"] else 2 if counts["UNAVAILABLE"] else 0
+    if args.local_package:
+        print("BASELINE REFUSED: --local-package has no documented combined baseline; "
+              "local results are diagnostic only")
+    status = 3 if drift or args.local_package else 1 if counts["DISAGREE"] else 2 if counts["UNAVAILABLE"] else 0
     print(f"RESULT agreement={counts['AGREE']} disagreement={counts['DISAGREE']} unavailable={counts['UNAVAILABLE']} exit={status}")
     return status
 

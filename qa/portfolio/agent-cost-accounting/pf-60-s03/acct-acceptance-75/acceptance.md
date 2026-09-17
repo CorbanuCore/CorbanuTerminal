@@ -58,8 +58,10 @@ package binaries cannot establish clean-checkout package availability. Exit stat
 is three when retained results differ from the documented baseline (or that
 baseline is malformed). It is two when the baseline matches but evidence is
 unavailable, or zero for complete agreement. Optional `--local-package` checks
-run after that comparison: local disagreement returns one unless retained
-baseline drift takes precedence; absent local files still return two.
+run after the retained comparison, but their combined results have no documented
+baseline: this mode always prints `BASELINE REFUSED` and returns three, whether
+local files agree, disagree or are absent. Its counts are diagnostic only and
+must not be cited as agreement with the retained baseline.
 The expected retained-evidence baseline is:
 
 ```text
