@@ -741,5 +741,165 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.assertEqual([], FakeWorker.events)
 
 
+class RecurrenceTests(unittest.TestCase):
+    setUp = OwnerDaemonTests.setUp
+    tearDown = OwnerDaemonTests.tearDown
+    sql = OwnerDaemonTests.sql
+    arm = OwnerDaemonTests.arm
+
+    def installation(self):
+        import shutil
+        from argparse import Namespace
+        runtime = Path(self.tmp.name) / "runtime"
+        runtime.mkdir(mode=0o700)
+        for source in CLI.parent.glob("*.py"):
+            if not source.name.startswith("test_"):
+                target = runtime / source.name
+                shutil.copyfile(source, target)
+                target.chmod(0o600)
+        schedule = Path(self.tmp.name) / "schedule"
+        schedule.mkdir(mode=0o700)
+        python = Path(sys.executable).resolve()
+        return Namespace(owner="install", root=schedule, label="com.corbanu.initiative-owner.test-unit",
+                         python=python, python_sha256=f.file_digest(python), runtime=runtime,
+                         config=self.config_path, interval=2)
+
+    def install(self, args):
+        import activate
+        present = False
+        calls = []
+        real_run = subprocess.run
+
+        def run(argv, **kwargs):
+            nonlocal present
+            if argv[0] != "/bin/launchctl":
+                return real_run(argv, **kwargs)
+            calls.append(argv[1])
+            if argv[1] == "bootstrap":
+                present = True
+            elif argv[1] == "bootout":
+                present = False
+            return subprocess.CompletedProcess(argv, 0)
+
+        def service(label):
+            return ("present", f"path = {args.root / 'owner.plist'}\n") if present else ("absent", "")
+
+        return patch.object(owner, "service", side_effect=service), patch.object(subprocess, "run", side_effect=run), calls
+
+    def test_install_twice_and_uninstall_preserve_latch_and_remove_service(self):
+        import activate
+        import plistlib
+        args = self.installation()
+        service, command, calls = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+            raw = (args.root / "installation.json").read_bytes()
+            activate.owner_activation(args)
+            self.assertEqual(raw, (args.root / "installation.json").read_bytes())
+            self.assertEqual(["bootstrap", "kickstart"], calls)
+            job = plistlib.loads((args.root / "owner.plist").read_bytes())
+            self.assertNotRegex(repr(job), r"@(PINNED_PYTHON|PRIVATE_RUNTIME|PRIVATE_CONFIG|PRIVATE_LOGS)@")
+            self.assertEqual(str(args.python), job["ProgramArguments"][0])
+            self.assertIn("-S", job["ProgramArguments"])
+            self.assertEqual(2, job["StartInterval"])
+            self.assertEqual(30, job["ExitTimeOut"])
+            self.assertEqual("HOLD", owner.scheduled_tick(args.root)["state"])
+            args.owner = "uninstall"
+            activate.owner_activation(args)
+            activate.owner_activation(args)
+            self.assertEqual(1, calls.count("bootout"))
+            self.assertFalse((args.root / "owner.plist").exists())
+            self.assertEqual("uninstalled", owner.load(args.root / "installation.json")["phase"])
+            self.assertEqual("owner_run_refused", owner.load(args.root / "tick.json")["hold"])
+
+    def test_hold_probes_never_enter_kernel_until_explicit_recovery(self):
+        import activate
+        args = self.installation()
+        service, command, _ = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+        owner.scheduled_tick(args.root)
+        before = owner.load(args.root / "tick.json")
+        with patch.object(owner, "Kernel", side_effect=AssertionError("kernel entered")):
+            self.assertEqual("HOLD", owner.scheduled_tick(args.root)["state"])
+            self.assertEqual("HOLD", owner.scheduled_tick(args.root)["state"])
+        after = owner.load(args.root / "tick.json")
+        self.assertEqual(before["first_refusal"], after["first_refusal"])
+        self.assertEqual(2, after["skipped"])
+        self.arm()
+        self.assertEqual("RECOVERED", owner.scheduled_tick(args.root, "fixture authority repaired")["state"])
+        self.assertEqual("ACTIVE", owner.scheduled_tick(args.root)["state"])
+        self.assertEqual(1, len(list((args.root / "recovery").glob("*.json"))))
+        self.assertEqual(1, len(self.sql("SELECT * FROM boots")))
+
+    def test_overlapping_and_interrupted_ticks_do_not_enter_kernel(self):
+        import activate
+        args = self.installation()
+        service, command, _ = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+        with owner.locked(args.root / "tick.lock"), self.assertRaises(BlockingIOError):
+            owner.scheduled_tick(args.root)
+        status = owner.load(args.root / "tick.json")
+        status.update(started_at=1, completed_at=None)
+        f.write_json(args.root / "tick.json", status)
+        with patch.object(owner, "Kernel", side_effect=AssertionError("kernel entered")):
+            self.assertEqual("interrupted_tick", owner.scheduled_tick(args.root)["reason"])
+
+    def test_runtime_drift_latches_and_per_action_hold_does_not(self):
+        import activate
+        args = self.installation()
+        service, command, _ = self.install(args)
+        with service, command:
+            activate.owner_activation(args)
+        with patch.object(owner.Kernel, "tick", return_value={"state": "HOLD", "actions": {"one": "HOLD"}}):
+            owner.scheduled_tick(args.root)
+            owner.scheduled_tick(args.root)
+        self.assertIsNone(owner.load(args.root / "tick.json")["hold"])
+        (args.runtime / "owner_daemon.py").write_text("# changed\n")
+        with patch.object(owner, "Kernel", side_effect=AssertionError("kernel entered")):
+            self.assertEqual("owner_run_refused", owner.scheduled_tick(args.root)["reason"])
+
+    def test_unsafe_runtime_python_and_conflicting_install_refused(self):
+        import activate
+        args = self.installation()
+        service, command, calls = self.install(args)
+        with service, command:
+            args.python_sha256 = "0" * 64
+            with self.assertRaisesRegex(f.LaunchError, "python_pin_mismatch"):
+                activate.owner_activation(args)
+            args.python_sha256 = f.file_digest(args.python)
+            args.runtime.chmod(0o755)
+            with self.assertRaises(f.LaunchError):
+                activate.owner_activation(args)
+            args.runtime.chmod(0o700)
+            source = args.runtime / "owner_daemon.py"
+            source.chmod(0o644)
+            with self.assertRaises(f.LaunchError):
+                activate.owner_activation(args)
+            source.chmod(0o600)
+            activate.owner_activation(args)
+            args.interval = 3
+            with self.assertRaisesRegex(f.LaunchError, "installation_conflict"):
+                activate.owner_activation(args)
+        self.assertEqual(["bootstrap", "kickstart"], calls)
+
+    def test_service_absence_is_verified_and_observation_failure_stays_unknown(self):
+        root = Path(self.tmp.name)
+        with patch.object(owner, "service", return_value=("absent", "")):
+            value = owner.observe_schedule(root)
+            self.assertEqual("absent", value["service"])
+            self.assertFalse(value["installed"])
+            (root / "installation.json").symlink_to(root / "missing-receipt")
+            self.assertEqual("unknown", owner.observe_schedule(root)["service"])
+            (root / "installation.json").unlink()
+            f.write_json(root / "tick.json", {})
+            self.assertEqual("unknown", owner.observe_schedule(root)["service"])
+        with patch.object(owner, "service", side_effect=TimeoutError):
+            value = owner.observe_schedule(root)
+            self.assertEqual("unknown", value["service"])
+            self.assertEqual("observation-unavailable", value["reason"])
+
+
 if __name__ == "__main__":
     unittest.main()

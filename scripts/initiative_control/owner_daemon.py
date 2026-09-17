@@ -508,16 +508,128 @@ class Kernel:
                 self.db = None
 
 
+def schedule_pins(python, runtime, config, expected_python):
+    f.require(Path(python).is_absolute() and Path(runtime).is_absolute()
+              and Path(config).is_absolute(), "absolute_paths_required")
+    python = f.no_links(python)
+    f.private_dir(Path(config).parent)
+    info = python.stat()
+    f.require(python.is_absolute() and stat.S_ISREG(info.st_mode)
+              and info.st_uid in {0, os.getuid()} and not info.st_mode & 0o022, "unsafe_python")
+    runtime = f.private_dir(runtime)
+    f.require(f.file_digest(python) == expected_python, "python_pin_mismatch")
+    return {"python": str(python), "python_sha256": expected_python,
+            "version": subprocess.check_output([str(python), "-E", "-s", "-S", "--version"],
+                                              timeout=5, env={}).decode().strip(),
+            "runtime": str(runtime), "files": {p.name: f.file_digest(private_file(p))
+                                              for p in sorted(runtime.iterdir())},
+            "config": str(private_file(config)), "config_sha256": f.file_digest(config)}
+
+
+def service(label):
+    import re
+    f.require(re.fullmatch(r"com\.corbanu\.initiative-owner(?:\.[a-zA-Z0-9-]+)?", label), "invalid_label")
+    result = subprocess.run(["/bin/launchctl", "print", f"gui/{os.getuid()}/{label}"],
+                            capture_output=True, text=True, timeout=5, env={})
+    if result.returncode == 0:
+        return "present", result.stdout
+    if result.returncode == 113 and f'Could not find service "{label}"' in result.stderr:
+        return "absent", ""
+    raise f.LaunchError("service_observation_unavailable")
+
+
+def observe_schedule(root, label="com.corbanu.initiative-owner"):
+    result = dict(observed_at=time.time(), service="unknown", installed=False,
+                  started_at=None, completed_at=None, last_success=None, hold=None,
+                  reason="observation-unavailable")
+    try:
+        root = f.private_dir(root)
+        receipt = load(root / "installation.json") if os.path.lexists(root / "installation.json") else None
+        f.require(receipt is not None or not os.path.lexists(root / "tick.json"), "installation_receipt_missing")
+        if receipt:
+            label = receipt["label"]
+        result["installed"] = receipt is not None
+        result["service"], output = service(label)
+        if receipt and result["service"] == "present":
+            plist = root / "owner.plist"
+            f.require(f"path = {plist}\n" in output and
+                      f.file_digest(private_file(plist)) == receipt["plist_sha256"], "unowned_service")
+        if receipt:
+            status = load(root / "tick.json")
+            result.update({key: status[key] for key in
+                           ("started_at", "completed_at", "last_success", "hold")})
+        result["reason"] = None
+    except Exception:
+        result.update(service="unknown", reason="observation-unavailable")
+    return result
+
+
+def scheduled_tick(root, recover=None):
+    root = f.private_dir(root)
+    with locked(root / "tick.lock"):
+        receipt = load(root / "installation.json")
+        f.require(receipt["phase"] == "installed", "schedule_not_installed")
+        status = load(root / "tick.json")
+        if recover is not None:
+            f.require(isinstance(recover, str) and 0 < len(recover.strip()) <= 1000, "recovery_evidence_required")
+            artifact(root, "recovery/" + str(uuid.uuid4()) + ".json",
+                     {"at": time.time(), "evidence": recover, "previous": status})
+            status.update(hold=None, started_at=None, completed_at=None)
+            f.write_json(root / "tick.json", status)
+            return {"state": "RECOVERED"}
+        if status["started_at"] is not None and status["completed_at"] is None:
+            status["hold"] = status["hold"] or "interrupted_tick"
+        if status["hold"]:
+            status["skipped"] += 1
+            status["last_probe"] = time.time()
+            f.write_json(root / "tick.json", status)
+            return {"state": "HOLD", "reason": status["hold"]}
+        status.update(started_at=time.time(), completed_at=None)
+        f.write_json(root / "tick.json", status)
+        try:
+            pins = receipt["pins"]
+            f.require(schedule_pins(Path(pins["python"]), Path(pins["runtime"]),
+                                    Path(pins["config"]), pins["python_sha256"]) == pins, "schedule_pin_drift")
+            result = Kernel(Path(pins["config"])).tick()
+        except Exception:
+            result = {"state": "HOLD", "reason": "owner_run_refused"}
+        status["completed_at"] = time.time()
+        if result.get("reason") == "owner_run_refused":
+            status.update(hold="owner_run_refused", first_refusal=status.get("first_refusal") or time.time(),
+                          last_refusal=time.time())
+        else:
+            status["last_success"] = status["completed_at"]
+        status["ticks"] += 1
+        f.write_json(root / "tick.json", status)
+        artifact(root, "ticks/" + str(uuid.uuid4()) + ".json", status)
+        return result
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--config", type=Path)
+    parser.add_argument("--schedule", type=Path)
+    parser.add_argument("--recover")
+    parser.add_argument("--observe", action="store_true")
+    parser.add_argument("--label", default="com.corbanu.initiative-owner")
+    parser.add_argument("--publish-state", type=Path)
     args = parser.parse_args(argv)
-    if not args.run:
+    if args.observe:
+        result = observe_schedule(args.schedule, args.label)
+        if args.publish_state:
+            f.write_json(f.private_dir(args.publish_state) / "owner-recurrence.json", result)
+        print(encoded(result))
+        return 0
+    if not args.run and args.recover is None:
         print('{"state":"OFF"}')
         return 0
     try:
-        f.require(args.config is not None, "config_required")
+        if args.schedule:
+            result = scheduled_tick(args.schedule, args.recover)
+            print(encoded(result))
+            return 2 if result.get("reason") else 0
+        f.require(args.config is not None and args.recover is None, "config_required")
         kernel = Kernel(args.config)
         # Configuration selects only built-in adapters; default remains the fixture.
         print(encoded(kernel.tick()))

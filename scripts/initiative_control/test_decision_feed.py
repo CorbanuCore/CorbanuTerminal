@@ -23,7 +23,72 @@ REPO = control.HERE.parents[1]
 SPRINT = "docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md"
 
 
+class RecurrenceHealthTests(unittest.TestCase):
+    def test_running_stalled_never_installed_and_unknown_are_separate_from_slack(self):
+        at = d.stamp(NOW).timestamp()
+        value = dict(observed_at=at, service="present", installed=True, started_at=at - 10,
+                     completed_at=at - 9, last_success=at - 9, hold=None, reason=None)
+        for expected, changes, reason in (
+                ("running", {}, None),
+                ("stalled", {"hold": "owner_run_refused"}, "owner_run_refused"),
+                ("stalled", {"started_at": at - 91, "completed_at": None}, "tick-overdue"),
+                ("stalled", {"service": "absent"}, "service-absent"),
+                ("never-installed", {"installed": False, "service": "absent"}, "verified-service-absence"),
+                ("unknown", {"observed_at": at - 91}, "observation-stale"),
+                ("unknown", {"service": "unknown", "reason": "observation-unavailable"}, "observation-unavailable")):
+            with self.subTest(expected=expected, changes=changes):
+                snapshot = dict(schema=1, status="missing", feed=None, owner_recurrence={**value, **changes})
+                health = transport.health(snapshot, {}, NOW)
+                self.assertEqual(expected, health["owner_recurrence"]["state"])
+                self.assertEqual(reason, health["owner_recurrence"]["reason"])
+                self.assertEqual("unrecorded", health["slack"]["state"])
+                page = transport.render(snapshot, NOW, [], {})
+                self.assertIn("Owner recurrence", page)
+                self.assertIn(expected, page)
+                if reason:
+                    self.assertIn(reason, page)
+
+    def test_unavailable_malformed_and_unrecorded_observations_are_unknown(self):
+        for value in (None, {}, {"reason": "<script>private</script>"}):
+            self.assertEqual("unknown", transport.owner_health(value, NOW)["state"])
+
+    def test_subsecond_observations_match_the_dashboard_second_precision(self):
+        at = d.stamp(NOW).timestamp()
+        value = dict(observed_at=at + 0.8, service="present", installed=True, started_at=at,
+                     completed_at=at + 0.5, last_success=at + 0.5, hold=None, reason=None)
+        self.assertEqual("running", transport.owner_health(value, NOW)["state"])
+        value["observed_at"] += 1
+        self.assertEqual("unknown", transport.owner_health(value, NOW)["state"])
+
+    def test_a_first_inflight_tick_has_only_ninety_seconds(self):
+        at = d.stamp(NOW).timestamp()
+        value = dict(observed_at=at, service="present", installed=True, started_at=at - 80,
+                     completed_at=None, last_success=None, hold=None, reason=None)
+        self.assertEqual("running", transport.owner_health(value, NOW)["state"])
+        value["started_at"] = at - 91
+        self.assertEqual("stalled", transport.owner_health(value, NOW)["state"])
+
+
 class FeedTests(unittest.TestCase):
+    def test_owner_health_survives_pinned_export_and_expires_without_retiming(self):
+        self.save(self.value)
+        at = d.stamp(NOW).timestamp()
+        value = dict(observed_at=at, service="present", installed=True, started_at=at - 2,
+                     completed_at=at - 1, last_success=at - 1, hold=None, reason=None)
+        control.atomic_json(self.state / "owner-recurrence.json", value)
+        target, pin = self.bundle()
+        snapshot = transport.read_snapshot(target / "source", pin, NOW)
+        self.assertEqual(value, snapshot["owner_recurrence"])
+        self.assertEqual("running", transport.health(snapshot, pin, NOW)["owner_recurrence"]["state"])
+        self.assertEqual("unknown", transport.health(snapshot, pin, LATER)["owner_recurrence"]["state"])
+        self.assertEqual("observation-stale", transport.health(snapshot, pin, LATER)["owner_recurrence"]["reason"])
+        control.atomic_json(self.state / "owner-recurrence.json", {**value, "hold": "owner_run_refused"})
+        with self.assertRaisesRegex(ValueError, "changed"):
+            transport.verify_input(self.state, pin, NOW)
+        control.atomic_json(self.state / "owner-recurrence.json", {"private": "DO-NOT-EXPORT"})
+        raw, _ = transport.capture(self.state, NOW)
+        self.assertNotIn(b"DO-NOT-EXPORT", raw)
+
     def test_follows_and_outstanding_projection_survive_pinned_transfer(self):
         follower = copy.deepcopy(self.value["decisions"][0])
         follower.update(id="choice-2", follows="choice-1")

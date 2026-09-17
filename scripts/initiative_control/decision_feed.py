@@ -167,6 +167,34 @@ def sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
+def owner_health(value, at):
+    """Service observations expire independently of publisher refreshes."""
+    unknown = dict(state="unknown", reason="observation-unavailable", age=None)
+    try:
+        d.shape(value, "observed_at service installed started_at completed_at last_success hold reason")
+        d.require(value["service"] in {"present", "absent", "unknown"} and type(value["installed"]) is bool)
+        d.require(value["reason"] in {None, "observation-unavailable"}
+                  and value["hold"] in {None, "owner_run_refused", "interrupted_tick"})
+        for key in ("observed_at", "started_at", "completed_at", "last_success"):
+            d.require(value[key] is None and key != "observed_at" or
+                      type(value[key]) in (int, float) and 0 <= value[key] < 1e11)
+        now = d.stamp(clock(at)).timestamp()
+        if value["reason"] or value["service"] == "unknown":
+            return unknown
+        if not 0 <= now - int(value["observed_at"]) <= 90:
+            return dict(unknown, reason="observation-stale")
+        if not value["installed"]:
+            return dict(state="never-installed", reason="verified-service-absence", age=None) if value["service"] == "absent" else dict(unknown, reason="installation-unrecorded")
+        completion, start = value["completed_at"], value["started_at"]
+        age = now - int(completion if completion is not None else start) if completion is not None or start is not None else None
+        reason = value["hold"] or ("service-absent" if value["service"] == "absent" else
+                                  "tick-overdue" if age is None or not 0 <= age <= 90 else None)
+        return dict(state="stalled" if reason else "running", reason=reason, age=age,
+                    last_completion=completion, last_success=value["last_success"])
+    except (ValueError, TypeError, KeyError):
+        return unknown
+
+
 def capture(state, at):
     """Only the fixed private fixture is input; errors never export its contents."""
     feed, status, observed, partial = None, "invalid", [], None
@@ -203,6 +231,16 @@ def capture(state, at):
         snapshot.update(schema=3, inspection=partial[0], withheld_count=partial[1])
     elif slack_status != "absent":
         snapshot.update(schema=2, slack_status=slack_status, slack=slack_value)
+    try:
+        import owner_daemon as owner
+        recurrence = owner.load(d.fixture_root(state) / "owner-recurrence.json")
+        if owner_health(recurrence, at)["reason"] != "observation-unavailable":
+            snapshot["owner_recurrence"] = recurrence
+        else:
+            snapshot["owner_recurrence"] = None
+    except Exception:
+        pass
+    observed.append(snapshot.get("owner_recurrence"))
     raw = d.canonical(snapshot)
     return raw, record(snapshot, sha(raw), d.digest(observed))
 
@@ -238,7 +276,8 @@ def read_snapshot(repo, manifest, at):
         snapshot = json.loads(raw, object_pairs_hook=d.pairs)
         d.require(type(snapshot["schema"]) is int and snapshot["schema"] == pin["schema"])
         extension = {1: "", 2: " slack_status slack", 3: " inspection withheld_count"}
-        d.shape(snapshot, "schema status feed" + extension[snapshot["schema"]])
+        d.shape(snapshot, "schema status feed" + extension[snapshot["schema"]] +
+                (" owner_recurrence" if "owner_recurrence" in snapshot else ""))
         d.require(snapshot["status"] in ("valid", "missing", "invalid"))
         if snapshot["schema"] == 3:
             d.require(snapshot["status"] == "invalid" and snapshot["feed"] is None)
@@ -263,7 +302,8 @@ def read_snapshot(repo, manifest, at):
 def health(snapshot, manifest, at):
     view = d.project(snapshot["feed"], clock(at))
     feed = view["feed"] or {}
-    return dict(slack=slack_health(snapshot, at), state=view["state"], input_status=snapshot["status"],
+    return dict(slack=slack_health(snapshot, at), owner_recurrence=owner_health(snapshot.get("owner_recurrence"), at),
+                state=view["state"], input_status=snapshot["status"],
                 feed_id=feed.get("feed_id"), revision=feed.get("revision"),
                 assessed_at=feed.get("assessed_at"),
                 digest=manifest.get("decision_feed", {}).get("digest"),
@@ -299,5 +339,17 @@ def render(snapshot, at, sprints, documents):
     assessed = feed["assessed_at"] if feed else ""
     body = render_decisions(snapshot["feed"], clock(at), sprints, documents, slack=snapshot.get("slack"), slack_health=slack_health(snapshot, at),
                             inspection=snapshot.get("inspection"), withheld_count=snapshot.get("withheld_count"))
+    from html import escape
+    recurrence = owner_health(snapshot.get("owner_recurrence"), at)
+    def timestamp(value):
+        return dt.datetime.fromtimestamp(value, dt.timezone.utc).isoformat() if value is not None else "unknown"
+    observed = ((snapshot.get("owner_recurrence") or {}).get("observed_at")
+                if recurrence["reason"] != "observation-unavailable" else None)
+    body += ('<section id="owner-recurrence"><h2>Owner recurrence</h2><p>' +
+             escape(f'Snapshot: {recurrence["state"]}; reason: {recurrence["reason"] or "fresh service and tick"}; '
+                    f'tick age (seconds): {recurrence["age"]}; last completion: {timestamp(recurrence.get("last_completion"))}; '
+                    f'last success: {timestamp(recurrence.get("last_success"))}. '
+                    f'Observed: {timestamp(observed)}; current state is unknown after '
+                    f'{timestamp(observed + 90 if observed is not None else None)}.') + '</p></section>')
     return body.replace('<section id="decisions">',
                         f'<section id="decisions" class="notice attention" data-assessed-at="{assessed}" data-fresh-seconds="{d.FRESH_SECONDS}">', 1).replace('<details', '<details class="attention-item"')
