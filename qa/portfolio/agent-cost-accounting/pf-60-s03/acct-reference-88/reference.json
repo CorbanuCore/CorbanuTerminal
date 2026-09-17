@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt",
-  "sha256": "7c0be95732e992bdb92da90ec1868df60a102fb83a35109b4717d03825135190",
+  "sha256": "0448345a1e9db7a844139960ae585127d03597bf0820e22c4de705b24c930aa5",
   "contract": "Exact retained-evidence stdout, including inventory totals. Review intentional evidence/output changes and update this content digest and expected output together; verification never refreshes either.",
   "evidence_exit": 2
 }

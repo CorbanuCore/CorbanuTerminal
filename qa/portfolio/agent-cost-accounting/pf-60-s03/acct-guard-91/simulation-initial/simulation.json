@@ -1,0 +1,68 @@
+{
+  "source_base": "e9d1df54f5b99786151cc1794ee78ec526072f48",
+  "run_directory": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guard-91/target/unrefreshed-qn743sit",
+  "mutation": "append one newline to acceptance.md",
+  "inventory_unchanged": true,
+  "restored": true,
+  "no_network": true,
+  "no_package_launch": true,
+  "cases": [
+    {
+      "case": "baseline",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py"
+      ],
+      "exit": 2,
+      "stderr_empty": true,
+      "stdout_sha256": "01e5e447498a31581d2413c788d32ec18c12cb3fd4777893ac2050c2657f1573"
+    },
+    {
+      "case": "baseline-optimized",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "-O",
+        "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py"
+      ],
+      "exit": 2,
+      "stderr_empty": true,
+      "stdout_sha256": "01e5e447498a31581d2413c788d32ec18c12cb3fd4777893ac2050c2657f1573"
+    },
+    {
+      "case": "unrefreshed-edit",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py"
+      ],
+      "exit": 3,
+      "stderr_empty": true,
+      "stdout_sha256": "ca54b063c1dfa15c87a283a2a90a82cb1df4246db672eb89f67d23b987d9364d"
+    },
+    {
+      "case": "unrefreshed-edit-optimized",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "-O",
+        "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py"
+      ],
+      "exit": 3,
+      "stderr_empty": true,
+      "stdout_sha256": "ca54b063c1dfa15c87a283a2a90a82cb1df4246db672eb89f67d23b987d9364d"
+    },
+    {
+      "case": "restored",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py"
+      ],
+      "exit": 2,
+      "stderr_empty": true,
+      "stdout_sha256": "01e5e447498a31581d2413c788d32ec18c12cb3fd4777893ac2050c2657f1573"
+    }
+  ]
+}

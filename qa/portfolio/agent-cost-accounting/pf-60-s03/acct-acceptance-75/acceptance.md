@@ -62,9 +62,11 @@ run after the retained comparison, but their combined results have no documented
 baseline: this mode always prints `BASELINE REFUSED` and returns three, whether
 local files agree, disagree or are absent. Its counts are diagnostic only and
 must not be cited as agreement with the retained baseline.
-This baseline reproduces only while every edit to an inventoried evidence file is
-accompanied by an inventory refresh. The retained evidence, verifier contract and
-historical Git objects must also remain available and consistent.
+This baseline reproduces only while any change to the inventoried evidence set
+is accompanied by a refresh of the affected inventories and membership bindings.
+This includes edits, removals and additions, including a new file matching a
+membership glob. The retained evidence, verifier contract and historical Git
+objects must also remain available and consistent.
 The expected retained-evidence baseline is:
 
 ```text
@@ -83,16 +85,66 @@ the last printed result carries the actual process exit. Legitimate changes must
 update this documented baseline.
 This expected baseline describes retained evidence, not complete qualification.
 
+**Recognizing an unrefreshed later edit:** in a disposable local checkout of the
+proposed QA files, append one newline to this acceptance document without
+refreshing its inventory. The claims are unchanged, but the inventoried bytes
+differ. [The recorded simulation](../acct-guard-91/simulation-final/simulation.json)
+runs the verifier normally and with Python optimization; both return three with
+empty stderr and this verbatim stdout. Restoring the file restores the baseline.
+This is a deliberately failing evidence-integrity control, not a product failure
+or a new acceptance baseline.
+
+```text
+Acceptance reconciliation: retained evidence only; no new functional qualification.
+AGREE scope-zero: priced_attempts=4; USD=0.00284; fresh_root_rendered_USD=0; selected quote revisions only
+AGREE priced-page counts: priced=9; unknown_cost=4; zero_recorded=2; derived from bound page contents
+AGREE mutation coverage: named_checks=147; failing_diagnostic_mutations=159; each named reason reached
+AGREE capture bindings: JSON_pages=24; viewports=45; content SHA-256 agrees
+AGREE round-76 prerequisites: build exit=0; raw log SHA-256 agrees
+AGREE round-76 core-default: passed/run=124/124; skipped=3545; failed=0; timed_out=0; flaky=0; leaky=0; exit=0; failure_names=[]
+AGREE round-76 alone-feature: passed/run=1/1; skipped=3671; failed=0; timed_out=0; flaky=0; leaky=0; exit=0; failure_names=[]
+AGREE round-76 core-feature: passed/run=127/127; skipped=3545; failed=0; timed_out=0; flaky=0; leaky=0; exit=0; failure_names=[]
+AGREE round-76 tui: passed/run=91/91; skipped=4078; failed=0; timed_out=0; flaky=0; leaky=0; exit=0; failure_names=[]
+AGREE round-76 aggregate: gate_executions=342; gate_passed=342; alone_executions=1; overlapping test sets
+AGREE round-66 historical timeout: TRY durations=60.013,60.012s; passed/run=126/127; timed_out=1; exit=100; test=suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity; cause remains unproven
+AGREE round-66 default timing: 58.790s; target test raw PASS line agrees
+AGREE round-69 alone timing: 31.743s; target test raw PASS line agrees
+AGREE round-69 feature timing: 31.335s; target test raw PASS line agrees
+AGREE round-75 feature timing: 31.283s; target test raw PASS line agrees
+AGREE acct-controls-72 inventory: entries=55; current_bytes=350442; current_text_lines=6352; hashes agree
+DISAGREE acct-acceptance-75 inventory: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md bytes/lines/SHA-256 differ
+AGREE inventory classifications and correction: 15 added paths and 3 modified paths against original base; round-72 changed entries=3
+AGREE package build evidence: build receipt and raw log agree; launch/functional acceptance not claimed
+UNAVAILABLE committed package codex: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/codex is not tracked; unavailable from a clean checkout; cannot re-derive bytes=607785336, mode=0555 or SHA-256
+UNAVAILABLE committed package codex-code-mode-host: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/codex-code-mode-host is not tracked; unavailable from a clean checkout; cannot re-derive bytes=93937576, mode=0555 or SHA-256
+UNAVAILABLE committed package rmcp_test_server: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/rmcp_test_server is not tracked; unavailable from a clean checkout; cannot re-derive bytes=11508704, mode=0555 or SHA-256
+AGREE acceptance numerical coverage: no unmatched digit-form quantities outside matched claim spans, fenced code and link targets; known round/sprint/severity identifiers excluded; worded quantities and excluded regions not audited
+BASELINE DRIFT: expected counts/exit=(20, 0, 3, 2), unavailable=['committed package codex', 'committed package codex-code-mode-host', 'committed package rmcp_test_server']; actual counts/exit=(19, 1, 3, 1), unavailable=['committed package codex', 'committed package codex-code-mode-host', 'committed package rmcp_test_server']
+RESULT agreement=19 disagreement=1 unavailable=3 exit=3
+```
+
 **What Fable would be accepting:** this bounded revision makes the saved evidence
 reproducible under the stated conditions. It does not accept S03, clear the
 scope-zero finding or qualify a shipped inspector. There is no calendar expiry,
 but there is a condition on how long this claim stays true: keep the retained
 files, their refreshed inventories, the verifier contract and the required Git
-history together. An unrefreshed edit, missing file or history, changed claim or
-changed verifier contract can stop the baseline from matching. Refreshing an
-inventory alone does not justify a changed claim or remove a qualification gap.
+history together. An unrefreshed edit, removal or addition to the inventoried
+set (including a new file matching a membership glob), missing history, changed
+claim or changed verifier contract can stop the baseline from matching.
+Refreshing an inventory alone does not justify a changed claim or remove a
+qualification gap.
 
-The [exact-output replay](../acct-selfcheck-84/check_current_tip.py) compares with
+The [exact-output replay](../acct-selfcheck-84/check_current_tip.py) is a separate
+manual check a reader may run; the acceptance verification command above does
+not invoke it, and it is not an automatic acceptance or CI gate. Run it explicitly
+from the repository root after the candidate has landed on the integration ref:
+
+```sh
+python3 -B qa/portfolio/agent-cost-accounting/pf-60-s03/acct-selfcheck-84/check_current_tip.py
+```
+
+When invoked, it uses explicit raises that remain active under Python optimization
+and compares with
 [retained expected output](../acct-reference-88/expected.stdout.txt), bound by a
 [content digest](../acct-reference-88/reference.json) in the same candidate. It
 reads those committed bytes from the resolved integration tip; it has no old
@@ -100,8 +152,8 @@ commit pin and never regenerates its expectation during verification. Landing
 this revision or advancing the tip with unrelated work does not expire the
 reference. An intentional change to verifier output, including refreshed
 inventory totals, requires a reviewed update to the expected output and its
-digest in the same change. Until that happens, the exact-output replay rejects
-the change even if the documented counts still match. Review must check the
+digest in the same change. Until that happens, running the exact-output replay
+rejects the change even if the documented counts still match. Review must check the
 changed evidence and claims; replacing a reference is not proof they are true.
 
 The numerical coverage guard checks for unmatched digit-form quantities outside
