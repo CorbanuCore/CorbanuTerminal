@@ -66,7 +66,15 @@ audit=${CORBANU_AUDIT_DIR:-"$PWD/$q/acct-criterion-97/target/audit-copy"}
 case "$audit" in /*) ;; *) printf '%s\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac
 test ! -e "$audit"
 test ! -L "$audit"
-case "$audit" in "$PWD"/*) git check-ignore -v "$audit" ;; esac
+python3 - "$PWD" "$audit" <<'PY'
+from pathlib import Path
+import subprocess
+import sys
+
+source, destination = (Path(value).resolve() for value in sys.argv[1:])
+if destination.is_relative_to(source):
+    sys.exit(subprocess.call(["git", "check-ignore", "-v", str(destination)]))
+PY
 git clone --no-local --no-checkout . "$audit"
 git -C "$audit" checkout --detach "$candidate"
 audit=$(cd "$audit" && pwd -P)

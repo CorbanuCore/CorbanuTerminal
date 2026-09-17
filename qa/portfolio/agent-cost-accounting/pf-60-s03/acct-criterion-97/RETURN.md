@@ -52,7 +52,9 @@ frozen instruction, not copied over candidate files. The source deliberately
 contained an untracked synthetic text artifact and ignored scratch output.
 The transcript records refusal without assessment, then successful candidate
 replay with both omissions named. Separate tracked-edit and staged-cancellation
-fixtures both stopped. The final audit clone's tracked/untracked status was empty.
+fixtures both stopped. The final audit clone's `git status --porcelain
+--untracked-files=all` output was empty; ignored build and replay outputs were
+not included in that observation.
 
 Final note SHA-256:
 `d46df323a5d5538c6b4e8bddec84aa08266346d5cc827bc7ac5581d204457864`.

@@ -1,0 +1,192 @@
+{
+  "base": "967425cc72ea28b5f59ecc38a56419b7db6885e8",
+  "scope": "qa/portfolio/agent-cost-accounting/pf-60-s03/",
+  "all_changes_within_scope": true,
+  "diff_check_exit": 0,
+  "parsed_python_files": [
+    "finalize.py",
+    "gate.py",
+    "test_destination.py"
+  ],
+  "shell_blocks_syntax_checked": 6,
+  "destination_cases_passed": 7,
+  "lanes": [
+    {
+      "lane": "prerequisites",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "-p",
+        "codex-cli",
+        "--bin",
+        "codex",
+        "-p",
+        "codex-rmcp-client",
+        "-p",
+        "codex-code-mode-host",
+        "--bins"
+      ],
+      "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+      "base": "967425cc72ea28b5f59ecc38a56419b7db6885e8",
+      "environment": {
+        "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_INCREMENTAL": "0",
+        "NEXTEST_TEST_THREADS": "4",
+        "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+        "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+      },
+      "exit": 0,
+      "isolation_banner": false,
+      "elapsed_seconds": 3.653964042663574,
+      "log_sha256": "03c553ed94466556213b71e59936de87cf9dc6feb17b99eb3cf8f5d260ae247d",
+      "failure_lines": [],
+      "target_test_lines": []
+    },
+    {
+      "lane": "core-default",
+      "command": [
+        "just",
+        "test",
+        "-p",
+        "codex-core",
+        "accounting"
+      ],
+      "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+      "base": "967425cc72ea28b5f59ecc38a56419b7db6885e8",
+      "environment": {
+        "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_INCREMENTAL": "0",
+        "NEXTEST_TEST_THREADS": "4",
+        "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+        "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+      },
+      "exit": 0,
+      "isolation_banner": true,
+      "elapsed_seconds": 49.4281108379364,
+      "log_sha256": "08c910adf9580a96ec50c16afbc2605fb7975cd349921f82ca2604a006f9623f",
+      "failure_lines": [],
+      "target_test_lines": [
+        "SLOW [> 30.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+        "PASS [  31.849s] (124/124) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity"
+      ],
+      "summaries": [
+        [
+          "124",
+          "124 passed (1 slow), 3545 skipped"
+        ]
+      ],
+      "run": 124,
+      "passed": 124,
+      "failed": 0,
+      "timed_out": 0,
+      "flaky": 0,
+      "skipped": 3545,
+      "leaky": 0
+    },
+    {
+      "lane": "core-feature",
+      "command": [
+        "just",
+        "test",
+        "-p",
+        "codex-core",
+        "accounting",
+        "--features",
+        "codex-core/developer-accounting"
+      ],
+      "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+      "base": "967425cc72ea28b5f59ecc38a56419b7db6885e8",
+      "environment": {
+        "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_INCREMENTAL": "0",
+        "NEXTEST_TEST_THREADS": "4",
+        "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+        "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+      },
+      "exit": 0,
+      "isolation_banner": true,
+      "elapsed_seconds": 49.73220610618591,
+      "log_sha256": "ec666bff2edb11651a119cbb6203aa66b15a8b6489c30dcb02b4b8b1f4d3ce5c",
+      "failure_lines": [],
+      "target_test_lines": [
+        "SLOW [> 30.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+        "PASS [  31.928s] (127/127) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity"
+      ],
+      "summaries": [
+        [
+          "127",
+          "127 passed (1 slow), 3545 skipped"
+        ]
+      ],
+      "run": 127,
+      "passed": 127,
+      "failed": 0,
+      "timed_out": 0,
+      "flaky": 0,
+      "skipped": 3545,
+      "leaky": 0
+    },
+    {
+      "lane": "tui",
+      "command": [
+        "just",
+        "test",
+        "-p",
+        "codex-tui",
+        "usage"
+      ],
+      "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+      "base": "967425cc72ea28b5f59ecc38a56419b7db6885e8",
+      "environment": {
+        "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_INCREMENTAL": "0",
+        "NEXTEST_TEST_THREADS": "4",
+        "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+        "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+      },
+      "exit": 0,
+      "isolation_banner": true,
+      "elapsed_seconds": 3.639387845993042,
+      "log_sha256": "92905c877246a926d9d2a38028fca249e3b6fb6eb7551ff9b8038b208502e2cf",
+      "failure_lines": [],
+      "target_test_lines": [],
+      "summaries": [
+        [
+          "91",
+          "91 passed, 4078 skipped"
+        ]
+      ],
+      "run": 91,
+      "passed": 91,
+      "failed": 0,
+      "timed_out": 0,
+      "flaky": 0,
+      "skipped": 4078,
+      "leaky": 0
+    }
+  ],
+  "scope_paths_before_generated_receipts": [
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/RETURN.md",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/RETURN.md",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/destination-results.json",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/finalize.py",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gate.py",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gates-01/core-default.json",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gates-01/core-default.log.gz",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gates-01/core-feature.json",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gates-01/core-feature.log.gz",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gates-01/prerequisites.json",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gates-01/prerequisites.log.gz",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gates-01/tui.json",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gates-01/tui.log.gz",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/prose-review.md",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py"
+  ]
+}
