@@ -7,6 +7,12 @@ Brief SHA-256 verified before other work:
 `7c955be6f054c2efac080fa3bfdef98ab83e36f93edb525e412239dc4af4be0d`.
 Clean launch HEAD matched `17371d192e52de71ad7efde9088cb47b6ae3a049`.
 
+**Commit-message correction (round 75).** The message of `49e7d1b8c`
+overstates qualifying-mode independence. See the exact
+[correction](../acct-acceptance-75/commit-message.txt): qualifying mode still
+checks digests before most monetary assertions and stops on a digest mismatch.
+Only the explicit diagnostic mode bypasses digests.
+
 **Semantic coverage repaired.** The default auditor still requires digest binding;
 explicit `--semantics-only` evaluates monetary assertions without digest checks.
 It reports diagnostic-only status and zero content bindings. Monetary failures
@@ -19,10 +25,16 @@ targeted mutation.
 mapped to a reached, specifically failed mutation in the
 [159-case plan](controls-04/plan.json.gz) and
 [raw results](controls-04/semantic-results.json.gz).
-Coverage includes every page's exact/displayed count and value, each component's
-displayed and exact amount independently, rates, unknown/incomplete costs,
-missing-price/no-usage states, refused amounts, narrow qualifiers, token
-metrics, emitted arithmetic and native price bindings.
+Coverage checks exact-subtotal occurrence counts and values on 15 named pages:
+9 priced, 4 unknown-cost and 2 zero-recorded pages. It checks one displayed
+subtotal and its value on the 13 priced/unknown-cost pages; the two zero-recorded
+pages must have no displayed subtotal (their display-value check is vacuous).
+Other named checks cover component amounts on 3 priced attempt pages, rates,
+unknown/incomplete costs, missing-price/no-usage states, refused amounts on
+3 pages, narrow qualifiers, token metrics, emitted arithmetic and native price
+bindings. It does not check exact/displayed subtotals on all 24 JSON pages,
+arbitrary monetary text, every viewport's monetary meaning, or billed dollars;
+content hashes bind those saved artifacts but do not establish their correctness.
 All 147 checks execute on each semantic mutant; its intended check ID must be
 in the failure list. [The existing 28 removal controls](removal-controls-02/results.json.gz)
 now require exact-count/display-count semantic failures, not generic rejection.

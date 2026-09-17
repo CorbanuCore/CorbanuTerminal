@@ -1,5 +1,9 @@
 # PF-60-S03 acceptance gap — sprint citation
 
+Round-75 follow-through: [owner acceptance work order](../acct-acceptance-75/acceptance.md)
+adds effort estimates and separates existing manager authority from human decisions.
+The historical gap inventory below remains evidence of the round-72 handoff.
+
 Status at allocation acct-controls-72: **not accepted; no unqualified human-test
 handoff**. This allocation repairs internal evidence validation only. Its
 mutation results and guarded Rust gates do not qualify an interactive workflow.
