@@ -11911,9 +11911,194 @@ async fn authorization_changed_injection_preserves_items_until_completion() {
         sess.input_queue
             .take_pending_input_for_turn_state(&turn_state)
             .await,
-        vec![TurnInput::ResponseItem(item)]
+        vec![(TurnInput::ResponseItem(item), None)]
     );
     sess.abort_all_tasks(TurnAbortReason::Replaced).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn authorization_changed_public_injection_waits_for_later_model_turn() -> anyhow::Result<()> {
+    assert_authorization_changed_model_admission(None).await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn authorization_changed_natural_completion_preserves_model_output_schema()
+-> anyhow::Result<()> {
+    assert_authorization_changed_model_admission(Some(json!({
+        "type": "object",
+        "properties": {"answer": {"type": "string"}},
+        "required": ["answer"],
+        "additionalProperties": false
+    })))
+    .await
+}
+
+async fn assert_authorization_changed_model_admission(
+    schema: Option<serde_json::Value>,
+) -> anyhow::Result<()> {
+    use core_test_support::responses::ev_function_call_with_namespace;
+    use core_test_support::streaming_sse::StreamingSseChunk;
+    use core_test_support::streaming_sse::start_streaming_sse_server;
+
+    let (release, gate) = tokio::sync::oneshot::channel();
+    let (server, _completions) = start_streaming_sse_server(vec![
+        vec![StreamingSseChunk {
+            gate: Some(gate),
+            body: sse(vec![
+                ev_response_created("old-tool"),
+                ev_function_call_with_namespace(
+                    "boundary-sleep",
+                    "clock",
+                    "sleep",
+                    r#"{"duration_ms": 1}"#,
+                ),
+                ev_completed("old-tool"),
+            ]),
+        }],
+        vec![StreamingSseChunk {
+            gate: None,
+            body: sse(vec![
+                ev_response_created("old-end"),
+                ev_completed("old-end"),
+            ]),
+        }],
+        vec![StreamingSseChunk {
+            gate: None,
+            body: sse(vec![
+                ev_response_created("new-end"),
+                ev_completed("new-end"),
+            ]),
+        }],
+    ])
+    .await;
+    let test = test_codex()
+        .with_model("gpt-5.4")
+        .with_config(|config| {
+            config
+                .features
+                .enable(Feature::CurrentTimeReminder)
+                .unwrap();
+            config
+                .current_time_reminder
+                .get_or_insert_with(Default::default)
+                .sleep_tool = true;
+        })
+        .build_with_streaming_server(&server)
+        .await?;
+    test.codex
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "initial turn".into(),
+                text_elements: vec![],
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                approval_policy: Some(AskForApproval::Never),
+                ..Default::default()
+            },
+        })
+        .await?;
+    tokio::time::timeout(Duration::from_secs(10), server.wait_for_request_count(1)).await?;
+    test.codex
+        .submit(Op::ThreadSettings {
+            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+                approval_policy: Some(AskForApproval::UnlessTrusted),
+                ..Default::default()
+            },
+        })
+        .await?;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::ThreadSettingsApplied(applied)
+            if applied.thread_settings.approval_policy == AskForApproval::UnlessTrusted)
+    })
+    .await;
+    let injected = "pf83 new work must wait for current authorization";
+    if schema.is_some() {
+        test.codex
+            .submit(Op::UserInput {
+                items: vec![UserInput::Text {
+                    text: injected.into(),
+                    text_elements: vec![],
+                }],
+                final_output_json_schema: schema.clone(),
+                responsesapi_client_metadata: None,
+                additional_context: Default::default(),
+                thread_settings: Default::default(),
+            })
+            .await?;
+        // Queue ordering makes this acknowledgement a barrier after user-input admission.
+        test.codex
+            .submit(Op::ThreadSettings {
+                thread_settings: Default::default(),
+            })
+            .await?;
+        wait_for_event(&test.codex, |event| {
+            matches!(event, EventMsg::ThreadSettingsApplied(_))
+        })
+        .await;
+    } else {
+        test.codex
+            .inject_if_running(vec![ResponseItem::Message {
+                id: None,
+                role: "user".into(),
+                content: vec![ContentItem::InputText {
+                    text: injected.into(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            }])
+            .await
+            .expect("public injection accepted for later delivery");
+    }
+    release.send(()).expect("release old model stream");
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+    if schema.is_none() {
+        // Response-item injection records at completion; it does not start another turn.
+        test.codex
+            .submit(Op::UserInput {
+                items: vec![UserInput::Text {
+                    text: "read deferred items".into(),
+                    text_elements: vec![],
+                }],
+                final_output_json_schema: None,
+                responsesapi_client_metadata: None,
+                additional_context: Default::default(),
+                thread_settings: Default::default(),
+            })
+            .await?;
+    }
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
+    let bodies: Vec<serde_json::Value> = server
+        .requests()
+        .await
+        .iter()
+        .map(|body| serde_json::from_slice(body).expect("model request JSON"))
+        .collect();
+    assert_eq!(bodies.len(), 3);
+    assert!(
+        bodies[..2]
+            .iter()
+            .all(|body| !body["input"].to_string().contains(injected)),
+        "new work entered the superseded turn"
+    );
+    assert!(
+        bodies[2]["input"].to_string().contains(injected),
+        "deferred work was lost"
+    );
+    if let Some(schema) = schema {
+        assert_eq!(bodies[2]["text"]["format"]["schema"], schema);
+    }
+    test.codex.submit(Op::Shutdown).await?;
+    server.shutdown().await;
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -12135,10 +12320,13 @@ async fn interrupted_input_cannot_be_spliced_into_review_task() {
         sess.input_queue
             .take_pending_input_for_turn_state(turn_state)
             .await,
-        vec![TurnInput::UserInput {
-            content: items,
-            client_id: None,
-        }]
+        vec![(
+            TurnInput::UserInput {
+                content: items,
+                client_id: None,
+            },
+            None,
+        )]
     );
     drop(active);
     sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
@@ -12576,7 +12764,7 @@ async fn abort_empty_active_turn_preserves_pending_input() {
         sess.input_queue
             .take_pending_input_for_turn_state(turn_state.as_ref())
             .await,
-        vec![TurnInput::ResponseItem(pending_item)]
+        vec![(TurnInput::ResponseItem(pending_item), None)]
     );
 }
 

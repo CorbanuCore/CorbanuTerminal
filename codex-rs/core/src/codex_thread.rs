@@ -471,14 +471,14 @@ impl CodexThread {
 
     /// Injects model-visible items into the currently active turn.
     ///
-    /// This is the thread-level bridge to `Session::inject_if_running` for
-    /// callers that only hold a `CodexThread`.
+    /// New work is deferred until the turn boundary if the active task cannot
+    /// admit it under the latest authorization.
     /// It returns the unchanged items when this thread has no active turn.
     pub async fn inject_if_running(
         &self,
         items: Vec<ResponseItem>,
     ) -> Result<(), Vec<ResponseItem>> {
-        self.session.inject_if_running(items).await
+        self.session.inject_extension_if_running(items).await
     }
 
     /// Starts an automatic regular turn with model-visible items only when idle

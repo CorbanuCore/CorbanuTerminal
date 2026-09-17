@@ -378,16 +378,13 @@ impl InputQueue {
     pub(crate) async fn take_pending_input_for_turn_state(
         &self,
         turn_state: &Mutex<TurnState>,
-    ) -> Vec<TurnInput> {
+    ) -> Vec<(TurnInput, Option<serde_json::Value>)> {
         let mut state = turn_state.lock().await;
-        let mut input = std::mem::take(&mut state.pending_input.items);
-        input.extend(
-            state
-                .pending_input
-                .deferred
-                .drain(..)
-                .map(|(input, _)| input),
-        );
+        let mut input: Vec<_> = std::mem::take(&mut state.pending_input.items)
+            .into_iter()
+            .map(|input| (input, None))
+            .collect();
+        input.append(&mut state.pending_input.deferred);
         input
     }
 
