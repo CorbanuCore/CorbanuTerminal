@@ -1,5 +1,7 @@
 # RETURN — pf83-packaged-63
 
+Round-67 correction: this is the historical round-63 return. The runbook now links the built package and its attestation; current package/pin status is recorded in `pf83-package-67/`. Historical round-63 test counts and missing-build observations below are not new round-67 results.
+
 Action `pf83-packaged-63`; allocation digest `ee5c594ceac4c83cf95a18901d758caf9f5df16eb9619af48bc6693ab25ae0e6`; claim `6ba50ff7-38e5-4662-87e8-1252be170a93`; runtime `gpt-6-astra high`.
 Brief read first; SHA-256 verified `a53813dc3d7cb4b67d49e84cb051a70d9aa8556be29a9df924b6dab347be0c01`. Initial clean HEAD/base `c2505dd1f4c9f7a34c58892a448a01992966c75e`, tree `76fefb07c6eaebaa751ae128402bebb688c43750`, worktree `/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916`.
 
@@ -23,9 +25,9 @@ In the [production freeze](pf83-exit-61-production-freeze.md):
 
 ## Runbook and refusal
 
-[Packaged F05–F09 runbook](pf83-packaged-63-runbook.md) supplies the current source pin/four-file package recipe, host/guest identity checks, per-case environment and exact original headings, current harness/credential prerequisites, all 27 negative-control categories and 13 positives, write-once evidence paths, exact-byte sealing, and immediate stop conditions. It is coordinator-only and must not contaminate the blind executor with prior findings. [Case-input TSV](pf83-packaged-63-case-inputs.tsv) pins all **288** existing source-informed mapped packets (F05 8; F06 8; F07 16; F08 40; F09 216); they do not replace the five original human cases or count as executions.
+[Packaged F05–F09 runbook](pf83-packaged-63-runbook.md) supplies the current source pin/four-file package recipe, host/guest identity checks, per-case environment and exact original headings, current harness/credential prerequisites, all 27 negative-control categories and 13 positives, write-once evidence paths, exact-byte sealing, and immediate stop conditions. It is coordinator-only and must not contaminate the blind executor with prior findings. [Case-input TSV](pf83-packaged-63-case-inputs.tsv) pins **288** source-informed packet paths in the F05–F09 projection of a many-to-many map (F05 8; F06 8; F07 16; F08 40; F09 216). `G03-FR`, `G03-RF`, `G12`/`G13`, and `G08`/`G17` also map to F04, F03, F02, and F10 respectively, as disclosed in the added `all_mapped_cases` column. These are not exclusive case ownership, replacements for the five originals, or executions.
 
-The runbook begins with the recorded refusal: “We take extra caution with cybersecurity requests. If you're a security professional, you may be able to apply for Trusted Access.” It concerned continuing/repeating the F04 post-Applied protected-write investigation. The receipt does not preserve the exact triggering prompt or separate refusals for F05–F09. Fable's later repetitions are not new independent executor acceptance.
+The runbook records the scoped F04 refusal: “We take extra caution with cybersecurity requests. If you're a security professional, you may be able to apply for Trusted Access.” It concerned continuing/repeating the F04 post-Applied protected-write investigation. The receipt does not preserve the exact triggering prompt or separate refusals for F05–F09. Fable's later repetitions are not new independent executor acceptance.
 
 F06–F09 have candid narrower **partial** usability/continuity attempts; acceptance by the refusing model is unknown. F05's central withheld-approval question cannot be removed without removing the case. No complete original case is cleared by reframing; behavioral probes, omitted branches and all isolation prerequisites remain explicit. No attempt or evasion was made.
 

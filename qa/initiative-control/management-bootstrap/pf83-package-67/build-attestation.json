@@ -1,0 +1,72 @@
+{
+  "argv": [
+    "/Users/Neo/.rustup/toolchains/1.95.0-aarch64-apple-darwin/bin/cargo",
+    "build",
+    "--release",
+    "--locked",
+    "--bin",
+    "corbanu",
+    "--bin",
+    "corbanu-acp",
+    "--bin",
+    "corbanu-walletd",
+    "--bin",
+    "codex-code-mode-host"
+  ],
+  "shell_command": "/Users/Neo/.rustup/toolchains/1.95.0-aarch64-apple-darwin/bin/cargo build --release --locked --bin corbanu --bin corbanu-acp --bin corbanu-walletd --bin codex-code-mode-host",
+  "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/source/codex-rs",
+  "environment": {
+    "PATH": "/Users/Neo/.rustup/toolchains/1.95.0-aarch64-apple-darwin/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    "HOME": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/build-home",
+    "TMPDIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/tmp",
+    "CARGO_HOME": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/cargo-home",
+    "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/target",
+    "XDG_CACHE_HOME": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/cache"
+  },
+  "source_before": {
+    "commit": "ae5981d2d7d762dfd6d54e0ac0967729bf88f082",
+    "tree": "834f57388066d33c27fdee6e3b234dec7fa0b0e6",
+    "status": ""
+  },
+  "toolchain": {
+    "cargo": {
+      "path": "/Users/Neo/.rustup/toolchains/1.95.0-aarch64-apple-darwin/bin/cargo",
+      "sha256": "c512bff73c86143b557463f021d0c3d5b0490d97d65040ba59ea2b3427784758",
+      "version": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)\nrelease: 1.95.0\ncommit-hash: f2d3ce0bd7f24a49f8f72d9000448f8838c4e850\ncommit-date: 2026-03-21\nhost: aarch64-apple-darwin\nlibgit2: 1.9.2 (sys:0.20.4 vendored)\nlibcurl: 8.7.1 (sys:0.4.83+curl-8.15.0 system ssl:(SecureTransport) LibreSSL/3.3.6)\nssl: OpenSSL 3.5.4 30 Sep 2025\nos: Mac OS 26.6.2 [64-bit]"
+    },
+    "rustc": {
+      "path": "/Users/Neo/.rustup/toolchains/1.95.0-aarch64-apple-darwin/bin/rustc",
+      "sha256": "b829b733131d4e1673eeebd1f34d06ae1e9ff4977b051313cf42e2a9e79ecf1c",
+      "version": "rustc 1.95.0 (59807616e 2026-04-14)\nbinary: rustc\ncommit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860\ncommit-date: 2026-04-14\nhost: aarch64-apple-darwin\nrelease: 1.95.0\nLLVM version: 22.1.2"
+    }
+  },
+  "started_ns": 1789642836740575000,
+  "offline": false,
+  "script": {
+    "path": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/build_native.py",
+    "sha256": "52ed24c9a8b2a523a7b6b53dfbe8a05f7bd2b40f97a9236c9542909f3e5343ae"
+  },
+  "cache_seed": "/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/increment-27/build",
+  "cache_method": "APFS clone copies; no profiles or credentials",
+  "recipe_origin": {
+    "path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915/increment-26/build_native.py",
+    "sha256": "f45fe3c3909b71eafa1912ec72da786d09750c1a4c1337e8fa89c7e18afad57f"
+  },
+  "exit_code": 0,
+  "finished_ns": 1789643626540532000,
+  "source_after": {
+    "commit": "ae5981d2d7d762dfd6d54e0ac0967729bf88f082",
+    "tree": "834f57388066d33c27fdee6e3b234dec7fa0b0e6",
+    "status": ""
+  },
+  "binary": {
+    "path": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/corbanu",
+    "sha256": "483031eee7d1b4f978aa782b89164e4072f1533f2eea72a02e1428857254d6de"
+  },
+  "package": {
+    "path": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package",
+    "manifest": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package-manifest.json",
+    "manifest_sha256": "32529d0a894503c021ff756ebc27a75555ab05ed2ec63dc47dc0d9d7bb878024"
+  },
+  "verification": "Exact four-file regular executable inventory, hashes and modes checked; live harness pin unchanged (outside write scope)."
+}
