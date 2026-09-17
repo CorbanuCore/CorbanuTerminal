@@ -274,10 +274,43 @@ class ListenerStartupTests(unittest.TestCase):
         self.assert_recorded(1)
 
     def test_cli_keeps_fixed_redaction_and_records_import_failure(self):
+        marker = self.root / "sdk-import-blocked"
+        bootstrap = self.root / "isolated_cli.py"
+        bootstrap.write_text("""
+import os
+from pathlib import Path
+import runpy
+import subprocess
+import sys
+
+script = sys.argv.pop(1)
+sys.path.insert(0, str(Path(script).parent))
+marker = Path(__file__).with_name("sdk-import-blocked")
+def deny_external(event, args):
+    if event.startswith("socket."):
+        raise AssertionError("fixture network denied")
+    if event == "import" and args[0] == "slack_sdk":
+        marker.write_text("slack_sdk import denied: " + sys.argv[1])
+        raise ModuleNotFoundError("private fixture import detail", name="slack_sdk")
+sys.addaudithook(deny_external)
+popen = subprocess.Popen
+def launch(command, **kwargs):
+    assert command[:2] == [sys.executable, "-B"]
+    return popen([sys.executable, "-I", "-S", "-B", __file__, *command[2:]], **kwargs)
+subprocess.Popen = launch
+sys.argv[0] = script
+runpy.run_path(script, run_name="__main__")
+""")
+        # No ambient profiles, credentials, PYTHONPATH or site startup hooks.
+        # Synthetic tokens remain present to prove import denial precedes use.
+        env = {name: str(self.root) for name in
+               ("HOME", "CODEX_HOME", "CORBANU_HOME", "PFTERMINAL_HOME")}
+        env.update(CORBANU_SLACK_BOT_TOKEN="synthetic-never-use-bot",
+                   CORBANU_SLACK_APP_TOKEN="synthetic-never-use-app")
         process = subprocess.Popen(
-            [sys.executable, "-S", "-B", str(Path(m.__file__).resolve()), "listen",
-             "--store", str(self.root), "--live"],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            [sys.executable, "-I", "-S", "-B", str(bootstrap),
+             str(Path(m.__file__).resolve()), "listen", "--store", str(self.root), "--live"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
         try:
             process.stdin.write(d.canonical(dict(binding=PIN)) + b"\n")
             process.stdin.flush()  # Keep owner input open until the child dies.
@@ -285,6 +318,7 @@ class ListenerStartupTests(unittest.TestCase):
             output, error = process.communicate(timeout=2)
             self.assertEqual((process.returncode, output, error),
                              (1, b"", b"Slack operation held; inspect redacted status and retained evidence.\n"))
+            self.assertEqual(marker.read_text(), "slack_sdk import denied: _listen-child")
             self.assert_recorded(1)
         finally:
             if process.poll() is None:

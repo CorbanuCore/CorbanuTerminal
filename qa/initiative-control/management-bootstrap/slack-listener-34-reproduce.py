@@ -11,7 +11,6 @@ from unittest.mock import patch
 import decision_alerts as a
 import decision_manager as m
 
-LIVE = Path("/Volumes/CorbanuDrive/Corbanu/.codex-work/initiative-control.oGQGyA/state/slack-operator")
 FILES = ("transport.json", "alerts.json", "replies.json", "supervisor.json",
          ".slack.lock", ".transport.lock", ".ingress.fence", ".listener.owner.lock", ".listener.runtime.lock")
 
@@ -47,18 +46,21 @@ def child():
 
 
 def main():
-    destination = Path(sys.argv[1])
+    if len(sys.argv) != 3:
+        raise SystemExit("usage: slack-listener-34-reproduce.py DESTINATION SOURCE_STORE")
+    destination, source_store = (Path(value).resolve() for value in sys.argv[1:])
+    if destination == source_store or source_store in destination.parents:
+        raise SystemExit("destination must be outside the source store")
     destination.mkdir(mode=0o700)
-    before = fingerprints(LIVE)
+    before = fingerprints(source_store)
     for name in before:
-        shutil.copyfile(LIVE / name, destination / name)
+        shutil.copyfile(source_store / name, destination / name)
         os.chmod(destination / name, 0o600)
     store = a.Store(destination)
     journal = store.read("transport")
-    print(json.dumps(dict(source="live-read-only", ingress=journal["ingress"],
-                          fence=(LIVE / ".ingress.fence").stat().st_size,
-                          watermark=journal["watermark"], epoch=journal["lifecycle"]["epoch"],
-                          listener_exits=m.project_status(a.Store(LIVE), m.utc_now(), True)["listener_exits"])))
+    print(json.dumps(dict(source="copy-before", ingress=journal["ingress"],
+                          fence=(destination / ".ingress.fence").stat().st_size,
+                          watermark=journal["watermark"], epoch=journal["lifecycle"]["epoch"])))
     # Copied inodes differ; relocate only the two birth pins in the COPY.
     for name, pin in ((".listener.runtime.lock", journal["runtime_guard"]),
                       (".listener.owner.lock", journal["lifecycle"])):
@@ -87,9 +89,9 @@ def main():
     print(json.dumps(dict(source="copy-after", listener_exits=m.project_status(store, m.utc_now(), True)["listener_exits"],
                           protected_unchanged=all(after[key] == journal[key] for key in protected),
                           fence_unchanged=hashlib.sha256((destination / ".ingress.fence").read_bytes()).hexdigest() == before[".ingress.fence"],
-                          live_unchanged=fingerprints(LIVE) == before)))
+                          live_unchanged=fingerprints(source_store) == before)))
     (destination.parent / "live-before.json").write_text(json.dumps(before))
 
 
 if __name__ == "__main__":
-    child() if sys.argv[1] == "child" else main()
+    child() if sys.argv[1:2] == ["child"] else main()
