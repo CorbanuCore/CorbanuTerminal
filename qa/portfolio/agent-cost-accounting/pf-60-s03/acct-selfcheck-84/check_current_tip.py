@@ -1,4 +1,4 @@
-"""Replay acceptance at the resolved integration tip, with an asserted pinned reference."""
+"""Replay the integration tip against committed, content-bound expected output."""
 import hashlib
 import json
 import os
@@ -8,7 +8,7 @@ import sys
 import tempfile
 
 INTEGRATION_REF = "refs/heads/integrate/management-workstreams-20260911"
-REFERENCE_COMMIT = "dfd5c09bfd2b37eeaa3e00443b176e34d0c991a9"
+REFERENCE_DIRECTORY = "acct-reference-88"
 
 
 def assert_receipt(receipt):
@@ -16,7 +16,8 @@ def assert_receipt(receipt):
     assert receipt["commit"] == receipt["source_tip_after"], "integration tip advanced during replay"
     assert receipt["status_before"] == receipt["status_after"] == "", "checkout changed"
     for row in receipt["commands"]:
-        assert row["exit"] == row["expected_exit"] and row["stderr_empty"], row
+        assert row["exit"] == row["expected_exit"], ("unexpected command exit", row)
+        assert row["stderr_empty"], ("command wrote stderr", row)
 
 
 def main():
@@ -30,9 +31,13 @@ def main():
         return subprocess.check_output(["git", *args], cwd=cwd, env=environment)
 
     commit = git("rev-parse", "--verify", INTEGRATION_REF).decode().strip()
-    reference_path = scope / "acct-selfcheck-84/proposed-controls/clean-checkout.stdout.txt"
-    reference = git("show", f"{REFERENCE_COMMIT}:{reference_path}")
-    output = here.parent / "acct-decay-87/target"
+    reference_path = scope / REFERENCE_DIRECTORY / "expected.stdout.txt"
+    manifest_path = scope / REFERENCE_DIRECTORY / "reference.json"
+    manifest = json.loads(git("show", f"{commit}:{manifest_path}"))
+    reference = git("show", f"{commit}:{reference_path}")
+    assert manifest["schema"] == 1 and manifest["path"] == str(reference_path)
+    assert hashlib.sha256(reference).hexdigest() == manifest["sha256"], "reference digest differs"
+    output = here.parent / REFERENCE_DIRECTORY / "target"
     output.mkdir(parents=True, exist_ok=True)
     run = Path(tempfile.mkdtemp(prefix="current-tip-", dir=output))
     clone = run / "checkout"
@@ -62,7 +67,9 @@ def main():
                    clone=str(clone), run_directory=str(run), status_before=before,
                    status_after=after, full_checkout=True, copied_working_tree_files=False,
                    package_absent=True, no_network=True, no_package_launch=True,
-                   reference_commit=REFERENCE_COMMIT, reference=str(reference_path),
+                   reference_kind="committed content; no historical commit pin",
+                   reference_source_commit=commit, reference=str(reference_path),
+                   reference_manifest=str(manifest_path),
                    reference_sha256=hashlib.sha256(reference).hexdigest(),
                    stdout_matches_prior_replay=actual == reference, commands=receipts)
     # Preserve failed attempts before enforcing the no-decay claim.
