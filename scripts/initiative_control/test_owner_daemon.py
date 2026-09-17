@@ -19,6 +19,10 @@ from test_coordinator import seed
 ROOT = Path(__file__).resolve().parents[2]
 CLI = ROOT / "scripts/initiative_control/owner_daemon.py"
 
+# Manager-recorded macOS 26.2, UID 503, Background/SSH-only transcript.
+HEADLESS_GUI_STDERR = "Could not print domain: 125: Domain does not support specified action\n"
+HEADLESS_USER_STDERR = 'Bad request.\nCould not find service "com.corbanu.absent" in domain for uid: 503\n'
+
 
 class OwnerDaemonTests(unittest.TestCase):
     def setUp(self):
@@ -979,6 +983,101 @@ class RecurrenceTests(unittest.TestCase):
                     self.assertEqual(["bootstrap", "kickstart", "bootout"], calls)
                     self.assertFalse((args.root / "owner.plist").exists())
 
+    def test_headless_recorded_transcript_distinguishes_gui_domain_and_user_service(self):
+        label = "com.corbanu.initiative-owner.test-headless"
+        with patch.object(os, "getuid", return_value=503), patch.object(
+                subprocess, "run", return_value=subprocess.CompletedProcess(
+                    [], 125, "", HEADLESS_GUI_STDERR)) as run:
+            self.assertEqual(("domain_absent", HEADLESS_GUI_STDERR.rstrip("\n")),
+                             owner.service(label, "gui/503"))
+            self.assertEqual(["/bin/launchctl", "print", f"gui/503/{label}"],
+                             run.call_args.args[0])
+            with self.assertRaisesRegex(f.LaunchError, "service_observation_unavailable"):
+                owner.service(label, "user/503")
+        # The recorded probe used a non-owner label. Keep its bytes verbatim,
+        # reject a mismatched label, then substitute only the queried label.
+        with patch.object(os, "getuid", return_value=503), patch.object(
+                subprocess, "run", return_value=subprocess.CompletedProcess(
+                    [], 113, "", HEADLESS_USER_STDERR)) as run:
+            with self.assertRaisesRegex(f.LaunchError, "service_observation_unavailable"):
+                owner.service(label, "user/503")
+            run.return_value.stderr = HEADLESS_USER_STDERR.replace("com.corbanu.absent", label)
+            self.assertEqual(("absent", ""), owner.service(label, "user/503"))
+
+    def test_headless_gui_sibling_allows_install_reinstall_and_uninstall(self):
+        import activate
+        args = self.installation()
+        args.domain = "user"
+        sibling = f"gui/{os.getuid()}"
+        real_service = owner.service
+        service, command, calls = self.install(args)
+        with service as observed, command:
+            normal = observed.side_effect
+            def headless(label, domain=None):
+                if domain == sibling:
+                    result = subprocess.CompletedProcess([], 125, "", HEADLESS_GUI_STDERR)
+                    with patch.object(subprocess, "run", return_value=result):
+                        return real_service(label, domain)
+                return normal(label, domain)
+            observed.side_effect = headless
+            for action in ("install", "install", "uninstall"):
+                args.owner = action
+                activate.owner_activation(args)
+                receipt = owner.load(args.root / "installation.json")
+                self.assertEqual(dict(domain=sibling, state="domain_absent",
+                                      reason=HEADLESS_GUI_STDERR.rstrip("\n")),
+                                 receipt["sibling_observation"])
+            self.assertEqual("uninstalled", receipt["phase"])
+            self.assertEqual(["bootstrap", "kickstart", "bootout"], calls)
+            self.assertFalse((args.root / "owner.plist").exists())
+
+    def test_selected_domain_vanishes_after_bootout_preserves_installation(self):
+        import activate
+        args = self.installation()
+        service, command, calls = self.install(args)
+        with service as observed, command:
+            activate.owner_activation(args)
+            before = (args.root / "installation.json").read_bytes()
+            normal = observed.side_effect
+            def vanished(label, domain=None):
+                if domain == f"gui/{os.getuid()}" and "bootout" in calls:
+                    return "domain_absent", HEADLESS_GUI_STDERR.rstrip("\n")
+                return normal(label, domain)
+            observed.side_effect = vanished
+            args.owner = "uninstall"
+            with self.assertRaisesRegex(f.LaunchError, "service_observation_unavailable"):
+                activate.owner_activation(args)
+            self.assertEqual(before, (args.root / "installation.json").read_bytes())
+            self.assertTrue((args.root / "owner.plist").exists())
+            self.assertEqual(["bootstrap", "kickstart", "bootout"], calls)
+
+    def test_undecodable_service_output_refuses_install_and_uninstall(self):
+        import activate
+        args = self.installation()
+        real_service = owner.service
+        service, command, calls = self.install(args)
+        with service as observed, command:
+            normal = observed.side_effect
+            def undecodable(label, domain=None):
+                with patch.object(subprocess, "run", side_effect=UnicodeDecodeError(
+                        "utf-8", bytes([255]), 0, 1, "invalid start byte")):
+                    return real_service(label, domain)
+            observed.side_effect = undecodable
+            with self.assertRaisesRegex(f.LaunchError, "service_observation_unavailable"):
+                activate.owner_activation(args)
+            self.assertEqual([], calls)
+            self.assertEqual(["installation.lock"], [p.name for p in args.root.iterdir()])
+            observed.side_effect = normal
+            activate.owner_activation(args)
+            before = (args.root / "installation.json").read_bytes()
+            args.owner = "uninstall"
+            observed.side_effect = undecodable
+            with self.assertRaisesRegex(f.LaunchError, "service_observation_unavailable"):
+                activate.owner_activation(args)
+            self.assertEqual(before, (args.root / "installation.json").read_bytes())
+            self.assertTrue((args.root / "owner.plist").exists())
+            self.assertNotIn("bootout", calls)
+
     def test_missing_selected_domain_refuses_before_install_writes(self):
         import activate
         args = self.installation()
@@ -1001,7 +1100,12 @@ class RecurrenceTests(unittest.TestCase):
                     (1, "Could not print domain: 1: Operation not permitted\n", None),
                     (112, f"{missing}0\n", None),
                     (1, missing, None),
-                    (112, "Bad request.\n", None)):
+                    (112, "Bad request.\n", None),
+                    (125, HEADLESS_GUI_STDERR,
+                     ("domain_absent", HEADLESS_GUI_STDERR.rstrip("\n")) if kind == "gui" else None),
+                    (125, HEADLESS_GUI_STDERR.replace("action", "action denied"), None),
+                    (1, HEADLESS_GUI_STDERR, None),
+                    (125, "Could not print domain: 125: Permission denied\n", None)):
                 with self.subTest(domain=kind, code=code, stderr=stderr), patch.object(
                         subprocess, "run", return_value=subprocess.CompletedProcess([], code, "", stderr)):
                     if expected:
