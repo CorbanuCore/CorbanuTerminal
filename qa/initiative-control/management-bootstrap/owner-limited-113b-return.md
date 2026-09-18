@@ -1,4 +1,9 @@
-# RETURN — owner-limited-113b
+# RETURN — owner-limited-113b (recipe corrected by owner-broker-114)
+
+The operational recipe and scope below incorporate round-114 corrections.
+[Current return, route analysis, authority and disclosures](owner-broker-114-return.md)
+is the current qualification reference. Round-113b provenance, tests and change
+accounting at the end remain historical; they do not describe round-114 edits.
 
 Allocation digest: `1b7fc8d814c30a8f18786f03bb20ff9b26321abea393bd3dbd3ca9c4b0981383`.
 Claim: `9826e71e-84b9-47e9-9942-be30f5e44687`. Runtime: gpt-6-astra / high.
@@ -47,11 +52,17 @@ synthetic auth marker for compatibility; it does not claim the stronger interfac
 
 The independent outer executor may receive only frozen cases and a constrained
 PTY/control capability, but the in-guest worker remains trusted with the controller.
-This bounded claim does not establish every stronger source/child-isolation
-property of the general code-blind functional contract. Document that distinction
-in the scope and independent review; if the required handoff actually needs those
-stronger properties, stop at that dependency or obtain an explicit limited-test
-agreement. Never label an exposed helper as a successful source-denial probe.
+**Product-authority basis:** Travis's existing written ruling, relayed verbatim
+in the round-114 brief, says the sandbox exists only to stop the functional tester
+reading the codebase; if it cannot read the codebase and can perform functional
+tests, the arrangement is successful; take the simplest possible path and treat
+it as qualified when those conditions are met. This is existing authority, not a
+new decision or this worker's narrowing. The current return maps each of the four
+gate booleans to its exact assertion and exclusions under that ruling. No new
+Travis acceptance is required for those covered conditions. Exposed staging
+helpers are accepted transport machinery, not a successful source-denial probe;
+the tested Corbanu codebase/history/prior findings stay outside the guest.
+Stronger worker-versus-controller confinement remains unproven and unclaimed.
 
 Changed location: replaced sections 1–4 and the corrections section of
 `owner-isolated-112-return.md` with an explicit supersession/correction; retained
@@ -140,12 +151,17 @@ remain the integrator's responsibility; setting booleans is not execution proof.
 
 2. **Mine — prepare a clean guest image/run.** Use `192.168.64.3`, `agent`, UID 503;
    verify with `id -u`, record OS/architecture, mounts and service inventory through
-   the manager's SSH session. No sudo is available or required for per-run files,
-   private TMUX or `user/503` launchd. Disable shared host directories, clipboard/
+   the manager's SSH session. The manager has a separate administrative account
+   with sudo as well as the standard `agent` account. Use the administrative
+   account only to provision the guest system config in step 6; keep its login,
+   sudo capability and management session unavailable to the worker and children.
+   `agent` needs no sudo for per-run files, private TMUX or `user/503` launchd.
+   Disable shared host directories, clipboard/
    host automation and agent forwarding at the VM/hypervisor boundary. Provision
    an external guest egress allowlist: the broker path only, plus explicitly
    declared fixtures. GitHub-only blocking is insufficient. If the host/network
-   owner has not supplied that control, stop at provisioning; no guest sudo hack.
+   owner has not supplied that control, stop at provisioning. The administrative
+   account's existence does not itself prove the external egress fence.
    Keep incoming key-based administration restricted to the manager; never stage
    its private key or forward its agent. Use a fresh image if the guest already
    contains source, old findings or credentials; absence at one guessed path is
@@ -222,34 +238,63 @@ remain the integrator's responsibility; setting booleans is not execution proof.
    connections. The worker may use this lane like the controller; that is accepted
    same-UID scope, bounded by the broker's limits.
 
-6. **Mine — use a compatible profile without changing transport code.** For an
-   explicitly authorized `openai` allocation, stage a trusted fixture worktree's
-   `.codex/config.toml` containing:
+6. **Mine — provision the supported system layer with the administrative account.**
+   For an explicitly authorized `openai` allocation, install this nonsecret file
+   as root-owned, worker-readable and worker-nonwritable
+   `/etc/codex/config.toml` in the disposable guest (on macOS, record the physical
+   `/private/etc/codex/config.toml` path as well):
 
    ```toml
    openai_base_url = "http://127.0.0.1:18443/v1"
    cli_auth_credentials_store = "file"
    ```
 
-   Provide a newly generated synthetic `auth.json` containing only a nonsecret
-   dummy OpenAI API-key marker required by the client: its only JSON member is
-   `OPENAI_API_KEY`, whose value is a fixed nonsecret fixture marker string with
-   no upstream validity. This is newly authored fixture data, not an auth clone.
-   Point the disposable `auth_link` at it. Do not copy, read, hash or print real
-   authentication files. Broker strips the dummy authorization header and supplies
-   its own upstream authorization internally. `prepare()` makes fresh per-worker
-   HOME and three profile aliases and trusts the recorded worktree; project config
-   supplies the endpoint after it replaces user config. `Worker.env` strips custom
-   inherited endpoint/key variables, so setting an outer environment variable is
-   not the recipe. A nested `[model_providers.openai]` endpoint override also is
-   not equivalent: built-in merging only applies selected transport timeouts.
-   The inspected source supports top-level `openai_base_url`; **the exact packaged
-   binary must demonstrate it in the positive control** before claiming this
-   route works. A mismatching build/provider is a blocked prerequisite, not a
-   silent switch of model/provider. Other providers need their own verified route;
-   this concrete OpenAI recipe does not claim universal provider compatibility.
-   If existing configuration cannot express the authorized route, use a new
-   transport allocation/review/re-pin rather than editing the adapter mid-run.
+   Stage those exact bytes as a nonsecret manager asset. From the administrative
+   account, in the clean guest only, install them before any worker is prepared:
+
+   ```sh
+   sudo /usr/bin/install -d -o root -g wheel -m 0755 /private/etc/codex
+   sudo /usr/bin/install -o root -g wheel -m 0644 /ABS/STAGED/broker-config.toml /private/etc/codex/config.toml
+   ```
+
+   Verify parent ownership/no worker write permission, config bytes/hash and
+   worker readability; record the guest OS and approved binary build provenance.
+   Use a fresh guest if pre-existing config/managed settings are unknown; do not
+   overwrite unrelated state. Ensure no cloud/managed/profile endpoint override
+   conflicts. This is guest provisioning, not a change to the transport's six-key
+   JSON schema, five-module package, generated profile or launch argv. Keep the
+   administrative capability outside the executor.
+
+   The loader reads the Unix system file before merging the user layer and strips
+   the endpoint only from project layers. `TmuxAdapter.prepare()` authors trust,
+   UI and analytics settings but no endpoint. Its `Worker.launch()` pins
+   provider/model/effort but no endpoint; its fresh environment does not suppress
+   system config. The surviving top-level URL builds the OpenAI Responses
+   provider and disables default-endpoint websocket prewarming in favor of SSE.
+   Code citations and the evaluated alternatives are in the current return.
+   Do not put this endpoint in the fixture's `.codex/config.toml`, use nested
+   provider overrides, patch generated user config, inject variables, or edit
+   launch argv. No other recipe step relies on any of those denied routes.
+
+   Provide a newly authored synthetic `auth.json` with only `OPENAI_API_KEY`
+   containing a fixed nonsecret dummy marker with no upstream validity. Point
+   the disposable `auth_link` at it; never copy/read/hash/print real auth files.
+   Broker strips dummy authorization and injects its upstream credential outside
+   the guest. File auth selection comes from the same system config; the
+   per-worker HOME and all profile aliases remain transport-authored.
+
+   Before the frozen acceptance run, use a separate disposable control run
+   through the exact pinned adapter/binary: require a real SSE response and
+   tool-call round trip with joined broker upstream IDs. In a separate bounded
+   negative control, stop/reject the broker lane, require inference failure and
+   zero public-endpoint connections under continuous external egress observation;
+   restore it for a fresh successful control. Retain all attempts and retries.
+   No upstream credential exists in the guest, and the fence denies direct
+   provider access, alternate IP/IPv6 routes, DNS retrieval and proxy bypass.
+   Merely observing a loopback socket or TUI answer is insufficient.
+   These controls are future proof, not tests performed by this worker. A
+   mismatching artifact or provider is a blocked prerequisite; do not silently
+   reroute or claim runtime validation from source inspection alone.
 
 7. **Mine — prove the boundary, then admit the case.** From the actual fresh
    executor's permitted tool interface and its child shell, record UID, policy,
@@ -423,14 +468,19 @@ remain the integrator's responsibility; setting booleans is not execution proof.
     copied template is not a review. Collect integrator acceptance. Export redacted
     Markdown evidence and review to absolute, nonsymlink, single-link, executing-
     UID-owned 0600 paths on the **gate machine**, hash final bytes, and populate
-    qualified fields in the order above. Recheck binary and package matches at
+    qualified fields in the order above using the current return's Travis-backed
+    four-boolean scope mapping. Link that existing ruling and the nonsecret
+    system-config hash, broker joins and fail-closed controls in the evidence.
+    Recheck binary and package matches at
     gate time. Do not copy the guest UID 503 ownership blindly to a host with a
     different executing UID. Gate PASS remains an attestation check, not a new
     proof of authenticity or full general-purpose worker confinement.
 
 11. **Mine — teardown and preserve.** After frozen recovery/resume observations,
     stop only owned test schedules/workers/TMUX servers, retain raw and redacted
-    evidence separately, close the SSH tunnel and expire the broker lane. Keep
+    evidence separately, close the SSH tunnel and expire the broker lane. The
+    administrative account then removes only its recorded disposable system
+    config, or destroys the guest; confirm no active test client remains. Keep
     failed attempts; a corrected replay gets new isolated state and fresh executor.
     Verify cleanup does not touch live service labels or unrelated processes.
 
@@ -439,7 +489,9 @@ actual named acceptance (`Travis Good`) with limitation/scope/remaining proof an
 hashed acceptance record; product-scope/gate exceptions or missing promotion
 permission require the actual product authority; new account/spend permissions
 come from their real holder (Travis only if he holds that authority). The qualified
-branch itself does not require a Travis signature. VM staging, broker provisioning
+branch itself uses Travis's existing source-blindness ruling and does not require
+a new signature or limited-test agreement for that covered narrowing. No new
+product decision is invented here. VM staging, system config and broker provisioning
 within existing authority, evidence collection and scoped review are mine. This
 recipe supplies no new permission and does not resume paused security work.
 
