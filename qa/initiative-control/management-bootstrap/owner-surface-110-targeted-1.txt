@@ -1,0 +1,143 @@
+test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure (test_slack_transport.TransportTests.test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure) ... 
+  test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure (test_slack_transport.TransportTests.test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure) (prior=None, failure='final-write') ... ERROR
+  test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure (test_slack_transport.TransportTests.test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure) (prior='ingress-held', failure='final-write') ... ERROR
+test_qualification_single_flight_across_instances_and_processes (test_slack_transport.TransportTests.test_qualification_single_flight_across_instances_and_processes) ... ok
+test_failed_qualification_preserves_newer_fault_hold (test_slack_transport.TransportTests.test_failed_qualification_preserves_newer_fault_hold) ... ok
+test_initial_qualification_failures_retry_after_real_reload_without_reset (test_slack_transport.TransportTests.test_initial_qualification_failures_retry_after_real_reload_without_reset) ... ok
+test_review_rechecks_undrained_events_after_auth (test_slack_transport.TransportTests.test_review_rechecks_undrained_events_after_auth) ... FAIL
+test_activate_renders_only_validated_extra_web_hosts (test_decision_feed.FeedTests.test_activate_renders_only_validated_extra_web_hosts) ... ok
+test_bad_slack_input_never_discards_valid_decision_context (test_decision_feed.FeedTests.test_bad_slack_input_never_discards_valid_decision_context) ... ok
+test_chain_history_links_notices_facilities_and_repeat_assessment (test_decision_feed.FeedTests.test_chain_history_links_notices_facilities_and_repeat_assessment) ... ok
+test_destinationless_export_preserves_local_publication_as_unknown (test_decision_feed.FeedTests.test_destinationless_export_preserves_local_publication_as_unknown) ... ok
+test_empty_missing_invalid_fresh_stale_and_new_assessment_chain (test_decision_feed.FeedTests.test_empty_missing_invalid_fresh_stale_and_new_assessment_chain) ... ok
+test_export_race_and_existing_verify_cli_detect_local_changes (test_decision_feed.FeedTests.test_export_race_and_existing_verify_cli_detect_local_changes) ... ok
+test_exported_entrypoint_publishes_matching_health_and_manifest (test_decision_feed.FeedTests.test_exported_entrypoint_publishes_matching_health_and_manifest) ... ok
+test_f01_published_age_initial_reload_boundaries_and_failed_health (test_decision_feed.FeedTests.test_f01_published_age_initial_reload_boundaries_and_failed_health) ... ok
+test_follows_and_outstanding_projection_survive_pinned_transfer (test_decision_feed.FeedTests.test_follows_and_outstanding_projection_survive_pinned_transfer) ... ok
+test_immutable_generations_rollback_and_legacy_unknown (test_decision_feed.FeedTests.test_immutable_generations_rollback_and_legacy_unknown) ... ok
+test_invalid_private_input_is_safe_unknown_and_drift_is_detected (test_decision_feed.FeedTests.test_invalid_private_input_is_safe_unknown_and_drift_is_detected) ... ok
+test_owner_health_survives_pinned_export_and_expires_without_retiming (test_decision_feed.FeedTests.test_owner_health_survives_pinned_export_and_expires_without_retiming) ... ok
+test_page_age_and_saved_link_javascript_without_browser_or_network (test_decision_feed.FeedTests.test_page_age_and_saved_link_javascript_without_browser_or_network) ... ok
+test_published_supervisor_health_expires_before_slack_cache (test_decision_feed.FeedTests.test_published_supervisor_health_expires_before_slack_cache) ... ok
+test_registered_slack_help_needs_no_transport_initialization (test_decision_feed.FeedTests.test_registered_slack_help_needs_no_transport_initialization) ... ok
+test_saved_verified_snapshot_downgrades_without_reprojection_or_mutation (test_decision_feed.FeedTests.test_saved_verified_snapshot_downgrades_without_reprojection_or_mutation) ... ok
+test_slack_off_projection_cli_and_registered_off_without_sdk (test_decision_feed.FeedTests.test_slack_off_projection_cli_and_registered_off_without_sdk) ... ok
+test_slack_v2_roundtrip_fresh_stale_rollback_and_input_drift (test_decision_feed.FeedTests.test_slack_v2_roundtrip_fresh_stale_rollback_and_input_drift) ... ok
+test_status_context_tamper_in_pinned_transfer_is_rejected (test_decision_feed.FeedTests.test_status_context_tamper_in_pinned_transfer_is_rejected) ... ok
+test_strict_snapshot_shape_digest_identity_paths_and_safe_read_errors (test_decision_feed.FeedTests.test_strict_snapshot_shape_digest_identity_paths_and_safe_read_errors) ... ok
+test_transfer_tamper_rejected_before_activation_and_lastgood_retained (test_decision_feed.FeedTests.test_transfer_tamper_rejected_before_activation_and_lastgood_retained) ... ok
+test_transport_rejects_secret_canaries_in_history_context_and_destinations (test_decision_feed.FeedTests.test_transport_rejects_secret_canaries_in_history_context_and_destinations) ... ok
+test_more_than_one_hundred_open_questions_survive_disk_and_export_bounds (test_decision_feed.ProjectionBoundTests.test_more_than_one_hundred_open_questions_survive_disk_and_export_bounds) ... ok
+test_omitted_history_is_disclosed_and_missing_latest_is_rejected (test_decision_feed.ProjectionBoundTests.test_omitted_history_is_disclosed_and_missing_latest_is_rejected) ... ok
+test_overflow_still_preserves_last_cache_and_reads_as_invalid (test_decision_feed.ProjectionBoundTests.test_overflow_still_preserves_last_cache_and_reads_as_invalid) ... ok
+test_bound_never_drops_open_or_acknowledged_question_after_closed_history (test_decision_feed.ProjectionRegressionTests.test_bound_never_drops_open_or_acknowledged_question_after_closed_history) ... ok
+test_historical_resolutions_also_retain_their_answered_revisions (test_decision_feed.ProjectionRegressionTests.test_historical_resolutions_also_retain_their_answered_revisions) ... ok
+test_twenty_decisions_fifty_three_revisions_projects_within_bound (test_decision_feed.ProjectionRegressionTests.test_twenty_decisions_fifty_three_revisions_projects_within_bound) ... ok
+test_a_first_inflight_tick_cannot_prove_recurrence (test_decision_feed.RecurrenceHealthTests.test_a_first_inflight_tick_cannot_prove_recurrence) ... ok
+test_running_stalled_never_installed_and_unknown_are_separate_from_slack (test_decision_feed.RecurrenceHealthTests.test_running_stalled_never_installed_and_unknown_are_separate_from_slack) ... ok
+test_subsecond_observations_match_the_dashboard_second_precision (test_decision_feed.RecurrenceHealthTests.test_subsecond_observations_match_the_dashboard_second_precision) ... ok
+test_unavailable_malformed_and_unrecorded_observations_are_unknown (test_decision_feed.RecurrenceHealthTests.test_unavailable_malformed_and_unrecorded_observations_are_unknown) ... ok
+test_actual_ingress_two_questions_revision_mapping_and_no_network_projection (test_decision_feed.SlackProjectionTests.test_actual_ingress_two_questions_revision_mapping_and_no_network_projection) ... ok
+test_missing_binding_keeps_old_alert_unknown_instead_of_omitting_it (test_decision_feed.SlackProjectionTests.test_missing_binding_keeps_old_alert_unknown_instead_of_omitting_it) ... ok
+test_older_unanswered_alert_survives_after_projection_exceeds_old_bound (test_decision_feed.SlackProjectionTests.test_older_unanswered_alert_survives_after_projection_exceeds_old_bound) ... ok
+test_projection_observes_live_owner_and_lease_without_mutating_journals (test_decision_feed.SlackProjectionTests.test_projection_observes_live_owner_and_lease_without_mutating_journals) ... ok
+test_published_projection_clears_once_an_orphan_is_owner_reconciled (test_decision_feed.SlackProjectionTests.test_published_projection_clears_once_an_orphan_is_owner_reconciled) ... ok
+test_resolved_decision_slack_line_survives_omission_with_slack_off (test_decision_feed.SlackProjectionTests.test_resolved_decision_slack_line_survives_omission_with_slack_off) ... ok
+test_resolved_decision_slack_line_survives_omission_with_slack_on (test_decision_feed.SlackProjectionTests.test_resolved_decision_slack_line_survives_omission_with_slack_on) ... ok
+test_all_fields_escape_untrusted_markup (test_attention.AttentionTests.test_all_fields_escape_untrusted_markup) ... ok
+test_explicit_question_is_read_only_and_all_its_refs_are_linked (test_attention.AttentionTests.test_explicit_question_is_read_only_and_all_its_refs_are_linked) ... ok
+test_grouping_is_stable_and_never_mutates_inputs_or_suppresses_other_notices (test_attention.AttentionTests.test_grouping_is_stable_and_never_mutates_inputs_or_suppresses_other_notices) ... ok
+test_known_unknown_and_ambiguous_references_link_honestly (test_attention.AttentionTests.test_known_unknown_and_ambiguous_references_link_honestly) ... ok
+test_legacy_links_history_not_provider_and_explains_impact (test_attention.AttentionTests.test_legacy_links_history_not_provider_and_explains_impact) ... ok
+test_missing_legacy_document_never_links_modern_provider (test_attention.AttentionTests.test_missing_legacy_document_never_links_modern_provider) ... ok
+test_modern_pf76_reference_is_not_implicitly_historical (test_attention.AttentionTests.test_modern_pf76_reference_is_not_implicitly_historical) ... ok
+test_rejected_and_unreadable_reports_have_specific_explanations (test_attention.AttentionTests.test_rejected_and_unreadable_reports_have_specific_explanations) ... ok
+test_dec001_005_full_context_exact_summary_links_and_purity (test_attention.DecisionRenderingTests.test_dec001_005_full_context_exact_summary_links_and_purity) ... ok
+test_dec001_single_open_decision_has_no_duplicate_index (test_attention.DecisionRenderingTests.test_dec001_single_open_decision_has_no_duplicate_index) ... ok
+test_dec002_full_page_flow_and_dec025_sticky_index_styles (test_attention.DecisionRenderingTests.test_dec002_full_page_flow_and_dec025_sticky_index_styles) ... ok
+test_dec006_007_019_notices_separate_acknowledged_unresolved (test_attention.DecisionRenderingTests.test_dec006_007_019_notices_separate_acknowledged_unresolved) ... ok
+test_dec008_014_freshness_unknown_and_mixed_age (test_attention.DecisionRenderingTests.test_dec008_014_freshness_unknown_and_mixed_age) ... ok
+test_dec015_018_resolution_anchors_history_and_no_actions (test_attention.DecisionRenderingTests.test_dec015_018_resolution_anchors_history_and_no_actions) ... ok
+test_dec020_historical_identity_and_missing_context (test_attention.DecisionRenderingTests.test_dec020_historical_identity_and_missing_context) ... ok
+test_dec021_escape_and_reject_canaries_even_in_retained_history (test_attention.DecisionRenderingTests.test_dec021_escape_and_reject_canaries_even_in_retained_history) ... ok
+test_dec025_index_only_lists_open_records_and_retains_safe_links (test_attention.DecisionRenderingTests.test_dec025_index_only_lists_open_records_and_retains_safe_links) ... ok
+test_dec025_long_context_keeps_all_owners_in_index_and_full_cards (test_attention.DecisionRenderingTests.test_dec025_long_context_keeps_all_owners_in_index_and_full_cards) ... ok
+test_f01_empty_unknown_and_resolved_have_no_age_target (test_attention.DecisionRenderingTests.test_f01_empty_unknown_and_resolved_have_no_age_target) ... ok
+test_f01_oldest_target_uses_open_history_and_preserves_dates (test_attention.DecisionRenderingTests.test_f01_oldest_target_uses_open_history_and_preserves_dates) ... ok
+test_omission_count_matches_own_revision_marks_with_answered_indirection (test_attention.DecisionRenderingTests.test_omission_count_matches_own_revision_marks_with_answered_indirection) ... ok
+test_omitted_settled_history_is_distinct_from_unavailable_status (test_attention.DecisionRenderingTests.test_omitted_settled_history_is_distinct_from_unavailable_status) ... ok
+test_held_notices_distinguish_wait_act_and_expired_undelivered (test_attention.SlackNoticeTests.test_held_notices_distinguish_wait_act_and_expired_undelivered) ... ok
+test_mixed_conditions_retain_fault_and_each_intake_disposition (test_attention.SlackNoticeTests.test_mixed_conditions_retain_fault_and_each_intake_disposition) ... ok
+test_supervisor_uncertainty_downgrades_fresh_projection_and_rendering (test_decision_manager.ManagerTests.test_supervisor_uncertainty_downgrades_fresh_projection_and_rendering) ... ok
+
+======================================================================
+ERROR: test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure (test_slack_transport.TransportTests.test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure) (prior=None, failure='final-write')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_slack_transport.py", line 1665, in test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure
+    self.transport.qualify(ui_evidence(), review)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/slack_transport.py", line 736, in qualify
+    return self._qualify(ui_evidence, gap_review, rollback)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/slack_transport.py", line 797, in _qualify
+    with self.store.lock(), locked(self.store) as value:
+         ~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_alerts.py", line 83, in lock
+    raise d.Invalid() from None
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+ERROR: test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure (test_slack_transport.TransportTests.test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure) (prior='ingress-held', failure='final-write')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_slack_transport.py", line 1665, in test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure
+    self.transport.qualify(ui_evidence(), review)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/slack_transport.py", line 736, in qualify
+    return self._qualify(ui_evidence, gap_review, rollback)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/slack_transport.py", line 797, in _qualify
+    with self.store.lock(), locked(self.store) as value:
+         ~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_alerts.py", line 83, in lock
+    raise d.Invalid() from None
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+FAIL: test_review_rechecks_undrained_events_after_auth (test_slack_transport.TransportTests.test_review_rechecks_undrained_events_after_auth)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_slack_transport.py", line 1768, in test_review_rechecks_undrained_events_after_auth
+    self.assertIsNotNone(after["hold"])
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None
+
+----------------------------------------------------------------------
+Ran 69 tests in 57.737s
+
+FAILED (failures=1, errors=2)
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged

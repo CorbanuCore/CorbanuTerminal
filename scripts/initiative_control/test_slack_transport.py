@@ -60,6 +60,18 @@ def crash_post(root, key, endpoint):
     a.send(store, key, PIN, transport.exchange)
 
 
+def qualify_contender(root, endpoint, results):
+    transport = s.Transport(a.Store(root), PIN, lambda: ("fixture-bot", "fixture-app"),
+                            live=True, now=lambda: NOW,
+                            web_factory=lambda **kw: WebClient(base_url=endpoint, **kw))
+    try:
+        transport.qualify(ui_evidence())
+    except BlockingIOError:
+        results.put("busy")
+    else:
+        results.put("admitted")
+
+
 def crash_ack(root):
     transport = s.Transport(a.Store(root), PIN, lambda: None, live=True, now=lambda: NOW)
     client = sdk_socket(transport, lambda _: os._exit(32))
@@ -590,7 +602,7 @@ class TransportTests(LiveFixture):
                     transport.web().timeout = 0.02
                 with self.assertRaises((TimeoutError, KeyError, d.Invalid)):
                     transport.qualify(ui_evidence())
-                self.assertEqual(a.Store(store.root).read("transport"), dict(before, hold="qualifying"))
+                self.assertEqual(a.Store(store.root).read("transport"), before)
                 self.reply, self.scopes = None, s.SCOPES.copy()
                 reopened = s.Transport(a.Store(store.root), PIN, lambda: ("fixture-bot", "fixture-app"),
                     live=True, now=lambda: NOW, web_factory=lambda **kw: WebClient(base_url=self.endpoint, **kw))
@@ -1282,11 +1294,12 @@ class TransportTests(LiveFixture):
         transport = s.Transport(self.store, PIN, lambda: self.fail("credentials read while OFF"), now=lambda: NOW)
         with self.assertRaises(d.Invalid):
             transport.qualify(ui_evidence())
+        before = self.store.read("transport")
         self.scopes.remove("chat:write")
         with self.assertRaises(d.Invalid):
             self.transport.qualify(ui_evidence())
-        with self.assertRaises(d.Invalid):
-            self.transport.gate()
+        self.assertEqual(self.store.read("transport"), before)  # Failed renewal grants no new verification.
+        self.assertIsNone(self.transport.gate()["hold"])  # Existing qualification retains its original expiry.
         with s.locked(self.store) as value:
             value["binding"] = dict(PIN, generation="rotated")
             self.store.write("transport", value)
@@ -1626,6 +1639,75 @@ class TransportTests(LiveFixture):
                 self.assertEqual(len(self.store.read("transport")["gap_reviews"]), 1)
                 self.assertEqual(self.store.read("transport"), original)
 
+    def test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure(self):
+        self.sending()
+        for prior in (None, "ingress-held"):
+            with s.locked(self.store) as journal:
+                journal["hold"] = prior
+                self.store.write("transport", journal)
+            original = self.store.read("transport")
+            review = dict(watermark=original["watermark"], ingress=s.ingress_count(self.store),
+                          binding=d.digest(PIN), evidence="fixture-review", **self.session_review())
+            for failure in ("interrupt", "auth", "final-write"):
+                with self.subTest(prior=prior, failure=failure):
+                    def fail_auth():
+                        self.assertEqual(self.store.read("transport")["hold"], "qualifying")
+                        if failure == "interrupt":
+                            raise KeyboardInterrupt()
+                        raise OSError("fixture authentication interrupted")
+                    write = self.store.write
+                    def fail_final(name, value):
+                        if name == "transport" and len(value["gap_reviews"]) > len(original["gap_reviews"]):
+                            raise OSError("fixture final persistence")
+                        return write(name, value)
+                    target = (patch.object(self.store, "write", side_effect=fail_final) if failure == "final-write"
+                              else patch.object(self.transport.web(), "auth_test", side_effect=fail_auth))
+                    with target, self.assertRaises((KeyboardInterrupt, OSError, d.Invalid)):
+                        self.transport.qualify(ui_evidence(), review)
+                    self.assertEqual(a.Store(self.root).read("transport"), original)
+            # Failure released the operation guard; an exact reviewed retry succeeds.
+            self.transport.qualify(ui_evidence(), review)
+            self.assertIsNone(self.store.read("transport")["hold"])
+
+    def test_qualification_single_flight_across_instances_and_processes(self):
+        self.sending()
+        auth = self.transport.web().auth_test
+        ctx = multiprocessing.get_context("spawn")
+        results = ctx.Queue()
+        self.addCleanup(results.close)
+        def while_auth_pending():
+            self.assertEqual(self.store.read("transport")["hold"], "qualifying")
+            other = s.Transport(a.Store(self.root), PIN, lambda: self.fail("contender credentials"),
+                                live=True, now=lambda: NOW)
+            with self.assertRaises(BlockingIOError):
+                other.qualify(ui_evidence())
+            child = ctx.Process(target=qualify_contender, args=(str(self.root), self.endpoint, results))
+            child.start()
+            try:
+                child.join(10)
+                self.assertFalse(child.is_alive())
+                self.assertEqual(child.exitcode, 0)
+                self.assertEqual(results.get(timeout=2), "busy")
+            finally:
+                if child.is_alive():
+                    child.kill()
+                    child.join(3)
+            return auth()
+        with patch.object(self.transport.web(), "auth_test", side_effect=while_auth_pending):
+            self.transport.qualify(ui_evidence())
+        self.assertIsNone(self.store.read("transport")["hold"])
+        self.transport.qualify(ui_evidence())  # Guard released on success too.
+
+    def test_failed_qualification_preserves_newer_fault_hold(self):
+        self.sending()
+        def fault():
+            s.hold(self.store, "outage-gap")
+            raise KeyboardInterrupt()
+        with patch.object(self.transport.web(), "auth_test", side_effect=fault):
+            with self.assertRaises(KeyboardInterrupt):
+                self.transport.qualify(ui_evidence())
+        self.assertEqual(self.store.read("transport")["hold"], "outage-gap")
+
     def test_invalid_review_does_not_pin_healthy_quiet_journal(self):
         self.sending()
         original = self.store.read("transport")
@@ -1684,7 +1766,8 @@ class TransportTests(LiveFixture):
         after = self.store.read("transport")
         self.assertEqual(after["gap_reviews"], journal["gap_reviews"])
         self.assertEqual(after["last_verified"], journal["last_verified"])
-        self.assertIsNotNone(after["hold"])
+        self.assertEqual(after["hold"], journal["hold"])
+        self.assertTrue(any(not event["drained"] for event in after["events"].values()))
         self.assertGreater(s.ingress_count(self.store), review["ingress"])
 
     def test_legacy_unknown_summary_rejects_invalid_counts(self):

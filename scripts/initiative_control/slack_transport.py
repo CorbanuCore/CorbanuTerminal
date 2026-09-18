@@ -294,12 +294,12 @@ def fenced(store, value):
 
 
 @contextmanager
-def locked(store):
+def locked(store, *, wait=False):
     """Never held across network, stdio or offline intake; callback fails fast if busy."""
     fd = os.open(store.root / ".transport.lock", os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK)
     with os.fdopen(fd, "r+") as lock:
         d.owner_only(os.fstat(lock.fileno()))
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(lock, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
         value = store.read("transport")
         fields = "binding last_verified hold watermark events posts routes bridges gap_reviews ingress ui_evidence"
         d.shape(value, fields + (" schema lifecycle" if "schema" in value else "")
@@ -724,6 +724,27 @@ class Transport:
             return copy.deepcopy(value)
 
     def qualify(self, ui_evidence, gap_review=None):
+        """One qualification per store, including network I/O and failed-write cleanup."""
+        fd = os.open(self.store.root / ".qualification.lock",
+                     os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+        with os.fdopen(fd, "r+") as guard:
+            d.owner_only(os.fstat(guard.fileno()))
+            d.require(stat.S_ISREG(os.fstat(guard.fileno()).st_mode))
+            fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            rollback = []
+            try:
+                return self._qualify(ui_evidence, gap_review, rollback)
+            except BaseException:
+                if rollback:
+                    # Wait for an admitted callback to finish; never overwrite its
+                    # newer fault hold or roll back any other journal evidence.
+                    with self.store.lock(), locked(self.store, wait=True) as value:
+                        if value["hold"] == "qualifying":
+                            value["hold"] = rollback[0]
+                            self.store.write("transport", value)
+                raise
+
+    def _qualify(self, ui_evidence, gap_review, rollback):
         """Owner's supported-UI evidence, not extra OAuth lookups or Slack assertions."""
         d.require(self.live)
         d.shape(ui_evidence, "binding observed_at receipt checks")
@@ -764,6 +785,7 @@ class Transport:
                 validate_review(value)
             if bootstrap:
                 os.close(owner_file(self.store, value))
+            rollback.append(previous_hold)
             value["hold"] = "qualifying"
             self.store.write("transport", value)
             initial = copy.deepcopy(value) if bootstrap else None

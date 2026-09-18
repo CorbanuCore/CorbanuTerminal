@@ -18,6 +18,32 @@ class Links(HTMLParser):
             self.hrefs.append(dict(attrs)["href"])
 
 
+class SlackNoticeTests(unittest.TestCase):
+    def test_held_notices_distinguish_wait_act_and_expired_undelivered(self):
+        base = dict(state="held", assessed_at="2026-09-12T12:00:00Z",
+                    last_verified="2026-09-12T12:00:00Z")
+        notices = []
+        for intake, expected in (
+            (dict(count=1, held=1), "Waiting for a route: wait"),
+            (dict(count=1, held=0), "Quarantined reply: act"),
+            (dict(count=0, held=0, expired=1), "Do nothing to replay that expired reply"),
+        ):
+            notice = attention.slack_notice(dict(base, supervisor_health=dict(quarantine=intake)))
+            self.assertIn(expected, notice)
+            self.assertIn("saved observation", notice)
+            notices.append(notice)
+        self.assertEqual(len(set(notices)), 3)
+
+    def test_mixed_conditions_retain_fault_and_each_intake_disposition(self):
+        notice = attention.slack_notice(dict(state="held", condition="supervisor-stale",
+            supervisor_health=dict(quarantine=dict(count=2, held=1, expired=1, unknown=1))))
+        for text in ("over five seconds old", "Waiting for a route", "Quarantined reply",
+                     "expired undelivered", "history is incomplete"):
+            self.assertIn(text, notice)
+        healthy = attention.slack_notice(dict(state="last-verified"))
+        self.assertIn("No transport action is needed", healthy)
+
+
 class AttentionTests(unittest.TestCase):
     def setUp(self):
         self.sprints = [dict(sprint_id="PF-80-S01", path="docs/sprints/current/delivery.md"),

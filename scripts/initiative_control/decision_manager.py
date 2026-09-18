@@ -96,7 +96,9 @@ def validate_supervisor_health(health):
     quarantined = 0
     if "quarantine" in health:
         intake = health["quarantine"]
-        d.shape(intake, "count held oldest_at age_seconds" + (" unknown" if "unknown" in intake else ""))
+        d.shape(intake, "count held oldest_at age_seconds" + (" unknown" if "unknown" in intake else "")
+                + (" expired" if "expired" in intake else ""))
+        d.require(type(intake.get("expired", 0)) is int and intake.get("expired", 0) >= 0)
         unknown = intake.get("unknown", 0)
         d.require(type(unknown) is int and unknown >= 0)
         d.require(not unknown or health["state"] != "healthy")
@@ -168,19 +170,23 @@ def project_disclosure(value, store, journal, alerts, now=None):
     health = read_supervisor_health(store, now, journal["binding"])
     audit, held = s.outstanding_quarantine(journal), journal.get("held_human", {})
     count = audit["count"] + len(held)
-    if count or audit.get("unknown"):
+    expired = sum(row["reason"] == "unbound-expired"
+                  for row in journal.get("quarantine", {}).get("records", []))
+    if count or audit.get("unknown") or expired:
         times = [entry["arrived_at"] for entry in held.values()]
         if audit["oldest_at"] is not None:
             times.append(audit["oldest_at"])
         oldest = (None if audit["count"] and audit["oldest_at"] is None
                   else min(times) if times else None)
         intake = dict(count=count, held=len(held), oldest_at=oldest, age_seconds=None)
+        if expired:
+            intake["expired"] = expired
         if audit.get("unknown"):
             intake["unknown"] = audit["unknown"]
         health = attach_quarantine(health, intake, now)
         if count:
             value["state"] = "held"
-        elif value["state"] == "last-verified":
+        elif audit.get("unknown") and value["state"] == "last-verified":
             value["state"] = "unknown"
     if value["state"] == "last-verified" and health["state"] == "unknown":
         value["state"] = "stale" if health.get("reason") == "observation-stale" else "unknown"
