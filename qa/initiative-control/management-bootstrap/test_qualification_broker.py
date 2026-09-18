@@ -1,5 +1,6 @@
 """Real loopback HTTP tests, with invented credentials and no live profiles."""
 import contextlib
+import base64
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import http.client
@@ -694,6 +695,526 @@ class BrokerTests(unittest.TestCase):
                           return_value=subprocess.CompletedProcess([], 1, "", "permission denied")):
             with self.assertRaisesRegex(ValueError, "unknown"):
                 q.port_owner("127.0.0.1", 18443)
+
+
+def fake_jwt(expires, *, label="access", account="fixture-private-account", fedramp=False):
+    def encoded(value):
+        return base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip("=")
+    return ".".join((encoded({"alg": "fixture-only", "typ": "JWT"}),
+                     encoded({"exp": expires, "nonce": label,
+                              "https://api.openai.com/auth": {
+                                  "chatgpt_account_id": account,
+                                  "chatgpt_account_is_fedramp": fedramp}}),
+                     "invented-signature-" + label))
+
+
+def fake_tokens(expires, *, label="initial", account="fixture-private-account", fedramp=False):
+    return {"access_token": fake_jwt(expires, label=label + "-access", account=account),
+            "id_token": fake_jwt(expires, label=label + "-identity", account=account, fedramp=fedramp),
+            "refresh_token": "invented-refresh-" + label, "account_id": account}
+
+
+class SubscriptionUpstream(FakeUpstream):
+    def error(self, status, payload):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("X-Request-Id", "req_refused_by_subscription")
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(payload)
+        self.close_connection = True
+
+    def do_POST(self):
+        if self.path == "/oauth/token":
+            obj = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            self.server.refreshes.append((obj, dict(self.headers)))
+            expected = {"client_id": "app_EMoamEEZ73f0CkXaXp7hrann",
+                        "grant_type": "refresh_token",
+                        "refresh_token": self.server.expected["refresh_token"]}
+            if obj != expected:
+                self.server.contract_errors.append("refresh_body")
+            if self.headers.get("Authorization") or self.headers.get("Cookie"):
+                self.server.contract_errors.append("refresh_unexpected_auth")
+            if self.headers.get("Content-Type") != "application/json":
+                self.server.contract_errors.append("refresh_content_type")
+            payload = self.server.refresh_payload
+            if payload is None:
+                payload = json.dumps(self.server.replacement).encode()
+            if self.server.refresh_status == 200:
+                self.server.expected = self.server.replacement
+            time.sleep(self.server.refresh_delay)
+            try:
+                self.error(self.server.refresh_status, payload)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
+        if self.path not in ("/backend-api/codex/responses", "/backend-api/codex/responses/compact"):
+            self.server.contract_errors.append("subscription_path")
+        expected = self.server.expected
+        if self.headers.get("Authorization") != "Bearer " + expected["access_token"]:
+            self.server.contract_errors.append("subscription_bearer")
+        if self.headers.get("ChatGPT-Account-ID") != expected.get("account_id"):
+            self.server.contract_errors.append("subscription_account")
+        if not self.headers.get("originator") or self.headers.get("Cookie"):
+            self.server.contract_errors.append("subscription_originator_or_cookie")
+        if self.server.reject_remaining:
+            self.server.reject_remaining -= 1
+            raw = self.rfile.read(int(self.headers["Content-Length"]))
+            self.server.requests.append((self.path, dict(self.headers), raw))
+            self.error(401, json.dumps(expected).encode())
+            return
+        super().do_POST()
+
+
+class SubscriptionTests(unittest.TestCase):
+    # Reuse fixture mechanics without inheriting/rerunning the 181s API-key test.
+    start = BrokerTests.start
+    body = BrokerTests.body
+    request = BrokerTests.request
+    records = BrokerTests.records
+    refusal = BrokerTests.refusal
+
+    def setUp(self):
+        self.logs = io.StringIO()
+        self.enterContext(contextlib.redirect_stdout(self.logs))
+        self.enterContext(contextlib.redirect_stderr(self.logs))
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.key, self.journal = self.root / "invented-auth.json", self.root / "evidence.jsonl"
+        self.now = int(time.time())
+        self.tokens = fake_tokens(self.now + 3600)
+        self.write_tokens(self.tokens)
+        connect = socket.socket.connect
+
+        def loopback_connect(sock, address):
+            if isinstance(address, tuple):
+                q.loopback(address[0])
+            return connect(sock, address)
+
+        self.enterContext(patch.object(socket.socket, "connect", loopback_connect))
+        self.up = ThreadingHTTPServer(("127.0.0.1", 0), SubscriptionUpstream)
+        self.up.requests, self.up.payloads, self.up.refreshes, self.up.contract_errors = [], [], [], []
+        self.up.mode, self.up.intervals = "ok", []
+        self.up.resolution = {"model": "fixture-model", "reasoning": {"effort": "high"}}
+        self.up.prefix_sent, self.up.release = threading.Event(), threading.Event()
+        self.up.release.set()
+        self.up.expected = self.tokens
+        self.up.replacement = fake_tokens(self.now + 7200, label="rotated")
+        self.up.refresh_status, self.up.refresh_payload, self.up.reject_remaining = 200, None, 0
+        self.up.refresh_delay = 0
+        self.start(self.up)
+        self.broker = q.Broker("127.0.0.1", 0,
+                               f"http://127.0.0.1:{self.up.server_port}/backend-api/codex",
+                               self.key, self.journal, auth_mode="subscription",
+                               refresh_url=f"http://127.0.0.1:{self.up.server_port}/oauth/token")
+        self.start(self.broker)
+        self.addCleanup(lambda: self.assertEqual(self.up.contract_errors, []))
+
+    def write_tokens(self, tokens):
+        self.key.write_text(json.dumps({"auth_mode": "chatgpt", "OPENAI_API_KEY": None,
+                                        "tokens": tokens, "last_refresh": "2026-09-17T00:00:00Z"}))
+
+    def completed(self, **kwargs):
+        response, raw = self.request(**kwargs)
+        self.assertEqual(response.status, 200)
+        payload = response.read()
+        rows = self.records()
+        self.assertEqual(rows[-2]["outcome"], "admitted")
+        self.assertEqual(rows[-1]["outcome"], "relay_completed")
+        self.assertEqual(rows[-2]["attempt_id"], rows[-1]["attempt_id"])
+        self.assertEqual(rows[-2]["upstream_request_id"], response.getheader("X-Request-Id"))
+        self.assertTrue(rows[-2]["upstream_response_id"].startswith("resp_upstream_"))
+        self.assertEqual(rows[-2]["model"], "fixture-model")
+        self.assertEqual(rows[-2]["effort"], "high")
+        return payload, raw
+
+    def exhausted_after_inference(self):
+        response, _ = self.request()
+        self.assertEqual(response.status, 503)
+        self.assertEqual(json.loads(response.read()), {"error": "subscription_refresh_exhausted"})
+        self.assertEqual(self.records()[-1]["outcome"], "subscription_refresh_exhausted")
+
+    def test_subscription_routes_exact_headers_body_and_joinable_receipts(self):
+        for path in ("/v1/responses", "/v1/responses/compact"):
+            with self.subTest(path=path):
+                body = self.body(store=False, instructions="fixture", include=["reasoning.encrypted_content"])
+                supplied = {"session-id": "fixture-session", "thread-id": "fixture-thread",
+                            "originator": "codex_cli_rs", "User-Agent": "fixture-pinned-client/1",
+                            "x-client-request-id": "client-invention", "ChatGPT-Account-ID": "untrusted-account",
+                            "X-OpenAI-Fedramp": "true", "Cookie": "untrusted-cookie"}
+                payload, raw = self.completed(path=path, body=body, headers=supplied)
+                actual_path, headers, actual_raw = self.up.requests[-1]
+                lower = {k.lower(): v for k, v in headers.items()}
+                self.assertEqual(actual_path, "/backend-api/codex" + path.removeprefix("/v1"))
+                self.assertEqual(actual_raw, raw)
+                self.assertEqual(payload, self.up.payloads[-1])
+                self.assertEqual(lower["session-id"], "fixture-session")
+                self.assertEqual(lower["thread-id"], "fixture-thread")
+                self.assertEqual(lower["user-agent"], "fixture-pinned-client/1")
+                self.assertEqual(lower["x-client-request-id"], self.records()[-1]["attempt_id"])
+                self.assertNotEqual(lower["x-client-request-id"], "client-invention")
+                for absent in ("openai-beta", "cookie", "x-openai-fedramp"):
+                    self.assertNotIn(absent, lower)
+        self.assertEqual(self.up.refreshes, [])
+
+    def test_expired_missing_exp_and_malformed_credentials_refuse_without_upstream(self):
+        self.write_tokens(fake_tokens(self.now - 1))
+        self.refusal("subscription_expired", 503)
+        for tokens in ({"access_token": "bad"}, {**self.tokens, "account_id": "bad\nheader"},
+                       {**self.tokens, "access_token": fake_jwt(None)}):
+            self.write_tokens(tokens)
+            self.refusal("credential_unavailable", 503)
+        self.assertEqual(self.up.refreshes, [])
+
+    def test_file_is_reread_revocation_and_replacement_are_observed(self):
+        self.completed()
+        self.key.unlink()
+        self.refusal("credential_unavailable", 503)
+        self.tokens = fake_tokens(self.now + 5400, label="external-replacement")
+        self.up.expected = self.tokens
+        self.write_tokens(self.tokens)
+        self.completed()
+        self.assertEqual(self.up.refreshes, [])
+
+    def test_proactive_refresh_is_serialized_memory_only_and_source_is_unchanged(self):
+        self.tokens = fake_tokens(self.now + 200)
+        self.up.expected = self.tokens
+        self.write_tokens(self.tokens)
+        before, stat_before = self.key.read_bytes(), self.key.stat()
+        def turn(_):
+            response, _ = self.request()
+            status, payload = response.status, response.read()
+            return status, bool(payload)
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            results = list(pool.map(turn, range(5)))
+        self.assertEqual(results, [(200, True)] * 5)
+        self.assertEqual(len(self.up.refreshes), 1)
+        self.assertEqual(len(self.up.requests), 5)
+        self.assertEqual(self.key.read_bytes(), before)
+        self.assertEqual(self.key.stat().st_mtime_ns, stat_before.st_mtime_ns)
+        self.assertEqual(sum(r.get("outcome") == "relay_completed" for r in self.records()), 5)
+        persisted = self.journal.read_text() + self.logs.getvalue()
+        for tokens in (self.tokens, self.up.replacement):
+            for secret in q.Subscription(tokens).secrets:
+                self.assertNotIn(secret, persisted)
+
+    def test_401_refresh_retries_before_admission_and_preserves_request_body(self):
+        before = self.key.read_bytes()
+        self.up.reject_remaining = 1
+        self.completed()
+        self.assertEqual(len(self.up.refreshes), 1)
+        self.assertEqual(len(self.up.requests), 2)
+        self.assertEqual(self.up.requests[0][2], self.up.requests[1][2])
+        self.assertEqual(self.key.read_bytes(), before)
+        self.assertEqual(len(self.records()), 3)
+        self.assertEqual(self.records()[-1]["upstream_request_id"], "req_upstream_2")
+
+    def test_mid_run_refresh_failure_refuses_then_latches_until_file_changes(self):
+        self.completed()
+        self.up.reject_remaining, self.up.refresh_status = 1, 401
+        self.up.refresh_payload = json.dumps(self.tokens).encode()
+        response, _ = self.request()
+        self.assertEqual(response.status, 503)
+        self.assertEqual(json.loads(response.read()), {"error": "subscription_refresh_failed"})
+        self.assertEqual(self.records()[-1]["outcome"], "subscription_refresh_failed")
+        self.assertEqual(self.records()[-1]["upstream_status"], 401)
+        self.refusal("subscription_refresh_exhausted", 503)
+        self.assertEqual(len(self.up.refreshes), 1)
+        self.tokens = fake_tokens(self.now + 5400, label="recovered")
+        self.up.expected = self.tokens
+        self.write_tokens(self.tokens)
+        self.completed()
+
+    def test_refresh_bad_status_redirect_invalid_payload_account_and_expiry_fail_closed(self):
+        variants = [(302, b"{}"), (500, b"upstream private error"), (200, b"invalid-json"),
+                    (200, json.dumps(fake_tokens(self.now - 1)).encode()),
+                    (200, json.dumps(fake_tokens(self.now + 7000, account="wrong-account")).encode()),
+                    (200, b"{}")]
+        for index, (status, payload) in enumerate(variants):
+            with self.subTest(index=index):
+                self.tokens = fake_tokens(self.now + 200, label=f"variant-{index}")
+                self.up.expected = self.tokens
+                self.write_tokens(self.tokens)
+                self.up.refresh_status, self.up.refresh_payload = status, payload
+                # Independent authority failures, outside the cross-generation cooldown.
+                with patch.object(q, "REFRESH_COOLDOWN", 0):
+                    self.refusal("subscription_refresh_failed", 503)
+        self.assertEqual(len(self.up.refreshes), len(variants))
+        self.assertEqual(self.up.requests, [])
+
+    def test_refresh_deadline_fails_closed_without_inference(self):
+        self.tokens = fake_tokens(self.now + 200)
+        self.up.expected = self.tokens
+        self.write_tokens(self.tokens)
+        self.up.refresh_delay = 0.2
+        with patch.object(q, "CONNECT_TIMEOUT", 0.05):
+            self.refusal("subscription_refresh_failed", 503)
+        self.assertEqual(len(self.up.refreshes), 1)
+        self.assertEqual(self.up.requests, [])
+
+    def test_refresh_lock_wait_respects_total_turn_deadline(self):
+        with self.broker.subscription_lock, patch.object(q, "RESPONSE_TIMEOUT", 0.1):
+            started = time.monotonic()
+            self.refusal("transport_failed", 502)
+            self.assertLess(time.monotonic() - started, 1)
+        self.assertEqual(self.up.refreshes, [])
+
+    def test_no_refresh_token_refuses_proactive_refresh_without_network(self):
+        for lifetime in (200, 3600):
+            self.tokens = {**fake_tokens(self.now + lifetime), "refresh_token": ""}
+            self.write_tokens(self.tokens)
+            self.refusal("subscription_refresh_failed", 503)
+        self.assertEqual(self.up.refreshes, [])
+
+    def test_second_401_is_not_retried_or_served(self):
+        self.up.reject_remaining = 2
+        response, _ = self.request()
+        self.assertEqual(response.status, 503)
+        self.assertEqual(json.loads(response.read()), {"error": "subscription_refresh_exhausted"})
+        self.assertEqual(self.records()[-1]["outcome"], "subscription_refresh_exhausted")
+        self.refusal("subscription_refresh_exhausted", 503)
+        self.assertEqual(len(self.up.requests), 2)
+        self.assertEqual(len(self.up.refreshes), 1)
+        self.assertNotIn("admitted", [r.get("outcome") for r in self.records()])
+
+    def test_expiration_during_stream_truncates_without_refresh_or_replay(self):
+        self.up.release.clear()
+        response, _ = self.request()
+        self.assertEqual(response.status, 200)
+        self.assertTrue(self.up.prefix_sent.wait(2))
+        with patch.object(q.time, "time", return_value=self.now + 4000):
+            self.up.release.set()
+            with self.assertRaises(http.client.IncompleteRead):
+                response.read()
+        self.assertEqual(self.records()[-1]["outcome"], "truncated")
+        self.assertEqual(self.records()[-1]["failure_code"], "subscription_expired")
+        self.assertEqual(len(self.up.requests), 1)
+        self.assertEqual(self.up.refreshes, [])
+
+    def test_durable_receipt_failure_serves_nothing_for_subscription(self):
+        original = self.broker.evidence.append
+        def fail_turn(fd, record, *args, **kwargs):
+            if record["kind"] == "turn":
+                raise q.Refusal("evidence_unwritable")
+            return original(fd, record, *args, **kwargs)
+        with patch.object(self.broker.evidence, "append", side_effect=fail_turn):
+            response, _ = self.request()
+            self.assertEqual(response.status, 503)
+            self.assertEqual(json.loads(response.read()), {"error": "evidence_unwritable"})
+        self.assertEqual(len(self.records()), 1)
+
+    def test_no_credential_fields_components_or_identity_in_journal_logs_or_errors(self):
+        # Probe client metadata and upstream error bodies with invented secrets.
+        snapshot = q.Subscription(self.tokens)
+        parts = snapshot.secrets + snapshot.private_ids
+        bodies = []
+        for value in (self.tokens["account_id"], self.tokens["refresh_token"],
+                      self.tokens["id_token"], self.tokens["access_token"],
+                      self.tokens["access_token"].split(".")[1]):
+            response, _ = self.request(headers={"session-id": value})
+            # Overlength identifiers are omitted by the existing allowlist;
+            # allowlisted secret identifiers are refused. Neither may persist.
+            self.assertEqual(response.status, 400 if q.identifier(value) else 200)
+            bodies.append(response.read().decode())
+        self.up.reject_remaining, self.up.refresh_status = 1, 401
+        self.up.refresh_payload = json.dumps(self.tokens).encode()
+        response, _ = self.request()
+        bodies.append(response.read().decode())
+        persisted = self.journal.read_text() + self.logs.getvalue() + "".join(bodies)
+        for secret in parts:
+            self.assertNotIn(secret, persisted)
+        self.assertNotIn(PROMPT, persisted)
+
+    def test_fedramp_flag_comes_from_stored_id_token_only(self):
+        self.tokens = fake_tokens(self.now + 3600, fedramp=True)
+        self.up.expected = self.tokens
+        self.write_tokens(self.tokens)
+        self.completed()
+        lower = {k.lower(): v for k, v in self.up.requests[-1][1].items()}
+        self.assertEqual(lower["x-openai-fedramp"], "true")
+
+    def test_preauth_does_not_open_subscription_file_or_refresh_and_stays_bounded(self):
+        before = self.journal.stat().st_size
+        with patch.object(self.broker, "subscription", side_effect=AssertionError("must not read")):
+            for bearer in (None, "wrong", self.tokens["access_token"]):
+                self.refusal("synthetic_bearer_required", 401, bearer=bearer)
+        self.assertEqual(self.journal.stat().st_size - before, q.REFUSAL_SLOT_BYTES)
+        self.assertEqual(self.records()[-1]["count"], 3)
+        self.assertEqual(self.up.refreshes, [])
+
+    def test_subscription_configuration_does_not_accept_other_bases_or_refresh_hosts(self):
+        for kwargs in ({"upstream": "https://chatgpt.com/v1"},
+                       {"upstream": "https://other.invalid/backend-api/codex"},
+                       {"upstream": "https://chatgpt.com.attacker.invalid/backend-api/codex"},
+                       {"upstream": "https://chatgpt.com:444/backend-api/codex"},
+                       {"upstream": "http://other.invalid/backend-api/codex"},
+                       {"refresh_url": "https://other.invalid/oauth/token"},
+                       {"refresh_url": "http://127.0.0.1/oauth/token?secret=bad"}):
+            options = dict(upstream="https://chatgpt.com/backend-api/codex",
+                           refresh_url="https://auth.openai.com/oauth/token")
+            options.update(kwargs)
+            with self.assertRaises(ValueError):
+                q.Broker("127.0.0.1", 0, credential_file=self.key,
+                         evidence=self.root / "unused", auth_mode="subscription", **options)
+
+
+    def test_successful_refresh_budget_survives_later_requests_and_concurrency(self):
+        self.up.reject_remaining = 1
+        self.completed()
+        self.completed()  # A successful rotation can serve ordinary successors.
+        self.up.reject_remaining = 100
+        self.exhausted_after_inference()
+        requests = len(self.up.requests)
+        def turn(_):
+            response, _ = self.request()
+            return response.status, json.loads(response.read())
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(turn, range(16)))
+        self.assertEqual(results, [(503, {"error": "subscription_refresh_exhausted"})] * 16)
+        self.assertEqual(len(self.up.refreshes), 1)
+        self.assertEqual(len(self.up.requests), requests)
+        self.assertEqual(sum(r.get("outcome") == "subscription_refresh_exhausted"
+                             for r in self.records()), 17)
+
+    def test_reformatted_replayed_and_persisted_rotations_do_not_rearm_refresh(self):
+        self.up.reject_remaining = 1
+        self.completed()
+        # Reformat/add irrelevant metadata: preserve the rotated memory snapshot.
+        obj = json.loads(self.key.read_text())
+        obj["last_refresh"] = "changed-noncredential-metadata"
+        self.key.write_text(json.dumps(obj, indent=2))
+        self.completed()
+        self.assertEqual(len(self.up.refreshes), 1)
+        self.up.reject_remaining = 100
+        self.exhausted_after_inference()
+        replacement = fake_tokens(self.now + 5400, label="external")
+        self.up.expected = replacement
+        self.write_tokens(replacement)
+        self.up.reject_remaining = 0
+        self.completed()
+        self.write_tokens(self.tokens)  # Returning to an old generation is closed.
+        self.refusal("subscription_refresh_exhausted", 503)
+        # Externally saving our own rotation also retains its spent budget.
+        self.up.expected = self.up.replacement
+        self.write_tokens(self.up.replacement)
+        self.up.reject_remaining = 100
+        self.exhausted_after_inference()
+        self.assertEqual(len(self.up.refreshes), 1)
+
+    def test_cooldown_survives_external_generation_change_without_spending_new_budget(self):
+        self.up.reject_remaining = 1
+        self.completed()
+        replacement = fake_tokens(self.now + 200, label="external-near-expiry")
+        self.up.expected = replacement
+        self.write_tokens(replacement)
+        self.refusal("subscription_refresh_cooldown", 503)
+        self.assertEqual(len(self.up.refreshes), 1)
+        self.assertEqual(self.records()[-1]["outcome"], "subscription_refresh_cooldown")
+        # Simulate the clock crossing the actual fixed cooldown, not sleeping.
+        with self.broker.subscription_lock:
+            self.broker.subscription_last_refresh -= q.REFRESH_COOLDOWN + 1
+        self.up.replacement = fake_tokens(self.now + 8000, label="second-rotation")
+        self.completed()
+        self.assertEqual(len(self.up.refreshes), 2)
+
+    def test_proactive_refresh_spends_same_budget_as_401_recovery(self):
+        self.tokens = fake_tokens(self.now + 200)
+        self.up.expected = self.tokens
+        self.write_tokens(self.tokens)
+        self.completed()
+        self.up.reject_remaining = 100
+        self.exhausted_after_inference()
+        self.refusal("subscription_refresh_exhausted", 503)
+        self.assertEqual(len(self.up.refreshes), 1)
+
+    def test_low_entropy_claims_do_not_refuse_redact_or_create_identifier_oracle(self):
+        def claims_token(token):
+            header, payload, signature = token.split(".")
+            claims = q.jwt_claims(token)
+            claims["https://api.openai.com/auth"]["chatgpt_plan_type"] = "pro"
+            claims["custom_effort"] = "high"
+            claims["arbitrary"] = "fixture"
+            encoded = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
+            return ".".join((header, encoded, signature))
+        self.tokens = {**self.tokens, "plan": "pro",
+                       "access_token": claims_token(self.tokens["access_token"]),
+                       "id_token": claims_token(self.tokens["id_token"])}
+        self.write_tokens(self.tokens)
+        self.up.expected = self.tokens
+        self.up.resolution = {"model": "gpt-pro-fixture", "reasoning": {"effort": "high"}}
+        for value in ("pro", "probe-pro-value", "probe-free-value", "high", "fixture"):
+            with self.subTest(value=value):
+                response, raw = self.request(
+                    body={**self.body(), "model": "gpt-pro-fixture"},
+                    headers={"session-id": value})
+                self.assertEqual(response.status, 200)
+                response.read()
+                receipt = self.records()[-2]
+                self.assertEqual(receipt["model"], "gpt-pro-fixture")
+                self.assertEqual(receipt["effort"], "high")
+                self.assertEqual(receipt["resolution_match"], {"model": True, "effort": True})
+                self.assertEqual(receipt["client_ids"]["header.session-id"], value)
+                self.assertEqual(self.up.requests[-1][2], raw)
+        self.assertEqual(len(self.up.requests), 5)
+
+    def test_secret_length_floor_and_private_identity_match_exactly(self):
+        snapshot = q.Subscription(self.tokens)
+        self.assertNotIn(self.tokens["access_token"].split(".")[0], snapshot.secrets)
+        self.assertFalse(q.sensitive("fixture-model", snapshot.secrets, snapshot.private_ids))
+        self.assertTrue(q.sensitive(self.tokens["account_id"], (), snapshot.private_ids))
+        self.assertFalse(q.sensitive("prefix-" + self.tokens["account_id"], (), snapshot.private_ids))
+        for size in (31, 32):
+            value = "s" * size
+            self.assertTrue(q.sensitive(value, (value,)))
+            self.assertEqual(q.sensitive("prefix-" + value, (value,)), size >= 32)
+
+    def test_absent_account_identity_omits_header_including_after_refresh(self):
+        for value in ("missing", None):
+            with self.subTest(value=value):
+                self.tokens = fake_tokens(self.now + 3600, label=str(value))
+                if value == "missing":
+                    del self.tokens["account_id"]
+                else:
+                    self.tokens["account_id"] = None
+                self.write_tokens(self.tokens)
+                self.up.expected = self.tokens
+                self.completed(headers={"ChatGPT-Account-ID": "worker-forged"})
+                self.assertNotIn("chatgpt-account-id",
+                                 {k.lower() for k in self.up.requests[-1][1]})
+        self.up.reject_remaining = 1
+        self.up.replacement = {**self.up.replacement, "account_id": None}
+        self.completed()
+        self.assertNotIn("chatgpt-account-id", {k.lower() for k in self.up.requests[-1][1]})
+
+    def test_startup_identity_records_mode_and_upstream_without_credentials(self):
+        identity = self.records()[0]["broker"]
+        self.assertEqual(identity["auth_mode"], "subscription")
+        self.assertEqual(identity["upstream"], {
+            "scheme": "http", "host": "127.0.0.1", "port": self.up.server_port,
+            "base_path": "/backend-api/codex"})
+        server = q.Broker("127.0.0.1", 0, "https://api.openai.com/v1", self.key,
+                          self.root / "api-evidence")
+        self.addCleanup(server.server_close)
+        self.assertEqual(server.identity["auth_mode"], "api-key")
+        self.assertEqual(server.identity["upstream"], {
+            "scheme": "https", "host": "api.openai.com", "port": 443, "base_path": "/v1"})
+        for value in self.tokens.values():
+            self.assertNotIn(value, self.journal.read_text() + self.logs.getvalue())
+
+    def test_window_attestation_and_lite_headers_forward_without_minting_or_journaling(self):
+        supplied = {"x-codex-window-id": "fixture-window",
+                    "x-oai-attestation": "opaque-fixture-attestation",
+                    "x-openai-internal-codex-responses-lite": "true"}
+        for path in ("/v1/responses", "/v1/responses/compact"):
+            with self.subTest(path=path):
+                self.completed(path=path, headers=supplied)
+                actual = {k.lower(): v for k, v in self.up.requests[-1][1].items()}
+                for name, value in supplied.items():
+                    self.assertEqual(actual[name], value)
+                self.completed(path=path)
+                actual = {k.lower(): v for k, v in self.up.requests[-1][1].items()}
+                self.assertTrue(supplied.keys().isdisjoint(actual))
+        self.assertNotIn(supplied["x-oai-attestation"], self.journal.read_text())
 
 
 if __name__ == "__main__":
