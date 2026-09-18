@@ -1092,7 +1092,8 @@ class ManagerTests(fixtures.LiveFixture):
         s.drain(self.store, now=deadline)
         journal = self.store.read("transport")
         self.assertEqual(journal["quarantine"]["records"][-1]["reason"], "unbound-expired")
-        self.assertNotIn("quarantine", m.project_status(self.store, deadline, True)["supervisor_health"])
+        self.assertEqual(m.project_status(self.store, deadline, True)["supervisor_health"]["quarantine"],
+                         dict(count=0, held=0, expired=1, oldest_at=None, age_seconds=None))
 
     def test_unbound_pending_count_is_projected_until_exact_binding(self):
         import decision_feed as feed
@@ -1492,7 +1493,7 @@ class ManagerTests(fixtures.LiveFixture):
                     self.assertEqual(surface["supervisor_health"]["reason"], reason)
                 rendered = attention.render_decisions(d.load_fixture(self.feed_root, at), at, [], {},
                                                       slack=projected, slack_health=health)
-                self.assertIn("Slack observation: " + state + ";", rendered)
+                self.assertIn("Slack observation: " + health["condition"] + ";", rendered)
                 if reason is not None:
                     self.assertNotIn("Slack observation: last-verified;", rendered)
                 self.assertEqual((self.root / "transport.json").read_bytes(), before)

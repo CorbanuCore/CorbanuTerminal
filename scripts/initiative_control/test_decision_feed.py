@@ -276,7 +276,7 @@ class FeedTests(unittest.TestCase):
         self.assertNotIn(transport.SLACK_FILE, pin["files"])
         before = (target / "source" / transport.ARTIFACT).read_bytes()
         _, later, old_health = self.publish(LATER)
-        self.assertIn("Slack observation: stale", later)
+        self.assertIn("Slack observation: snapshot-expired", later)
         self.assertEqual(old_health["decision_feed"]["slack"]["state"], "stale")
         self.assertEqual((target / "source" / transport.ARTIFACT).read_bytes(), before)
         changed = copy.deepcopy(cache)
@@ -326,6 +326,47 @@ class FeedTests(unittest.TestCase):
         observed = transport.slack_health(snapshot, LATER)["supervisor_health"]
         self.assertEqual((observed["state"], observed["reason"]), ("unhealthy", "event-flush-failed"))
         self.assertEqual(transport.slack_health(snapshot, LATER)["state"], "held")
+
+    def test_saved_verified_snapshot_downgrades_without_reprojection_or_mutation(self):
+        self.save(self.value)
+        cache = transport.project_slack(self.state, None, NOW)
+        observation = dict(state="healthy", event_flush_failures=0, pending_events=0,
+                           observed_at=NOW, reason=None)
+        cache["status"].update(enabled=True, state="last-verified", last_verified=NOW,
+                               supervisor_health=observation)
+        control.atomic_json(self.state / transport.SLACK_FILE, cache)
+        target, pin = self.bundle()
+        self.activate(target)
+        snapshot = transport.read_snapshot(target / "source", pin, NOW)
+        original = copy.deepcopy(snapshot)
+        raw = (target / "source" / transport.ARTIFACT).read_bytes()
+        for seconds, expected in ((0, "last-verified"), (5, "last-verified"), (6, "supervisor-stale")):
+            at = (d.stamp(NOW) + transport.dt.timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            with self.subTest(seconds=seconds):
+                _, page, health = self.publish(at)
+                self.assertEqual(health["decision_feed"]["slack"]["condition"], expected)
+                self.assertIn("Slack observation: " + expected + ";", page)
+                if seconds > 5:
+                    self.assertEqual(health["decision_feed"]["slack"]["state"], "stale")
+                    self.assertNotIn("Slack observation: last-verified;", page)
+        self.assertEqual(snapshot, original)
+        self.assertEqual((target / "source" / transport.ARTIFACT).read_bytes(), raw)
+        for bad in (None, {}, dict(observation, observed_at=None),
+                    dict(observation, observed_at="2099-01-01T00:00:00Z")):
+            with self.subTest(bad=bad):
+                snapshot["slack"]["status"]["supervisor_health"] = bad
+                health = transport.slack_health(snapshot, NOW)
+                self.assertEqual((health["state"], health["condition"]),
+                                 ("unknown", "supervisor-unreadable"))
+                self.assertIn("Supervisor observation is missing, unreadable or invalid",
+                              transport.render(snapshot, NOW, [], {}))
+        del snapshot["slack"]["status"]["supervisor_health"]
+        self.assertEqual(transport.slack_health(snapshot, NOW)["condition"], "supervisor-unreadable")
+        # Verification expiry is independent of an observation gap.
+        at = (d.stamp(NOW) + transport.dt.timedelta(seconds=901)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        snapshot["slack"]["status"]["supervisor_health"] = dict(observation, observed_at=at)
+        self.assertEqual(transport.slack_health(snapshot, at)["condition"], "verification-expired")
+        self.assertIn("fifteen-minute window", transport.render(snapshot, at, [], {}))
 
     def test_bad_slack_input_never_discards_valid_decision_context(self):
         self.save(self.value)

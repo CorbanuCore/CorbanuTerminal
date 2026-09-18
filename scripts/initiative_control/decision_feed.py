@@ -377,11 +377,25 @@ def slack_health(snapshot, at):
         return dict(state="unknown" if snapshot.get("slack_status") == "invalid" else "unrecorded", assessed_at=None, last_verified=None)
     from decision_manager import assess_supervisor_health
     status = value["status"]
-    supervisor_health = (assess_supervisor_health(status["supervisor_health"], clock(at))
-                         if "supervisor_health" in status else None)
+    supervisor_health = assess_supervisor_health(status.get("supervisor_health"), clock(at))
     age = (d.stamp(clock(at)) - d.stamp(value["assessed_at"])).total_seconds()
-    stale = not 0 <= age <= 900 or (status["last_verified"] is not None and (d.stamp(clock(at)) - d.stamp(status["last_verified"])).total_seconds() > 900)
-    return dict(state="held" if status.get("fence_gap", 0) or status.get("supervisor_health", {}).get("state") == "unhealthy" else "stale" if stale else status["state"],
+    verification_expired = (status["last_verified"] is not None and
+                            not 0 <= (d.stamp(clock(at)) - d.stamp(status["last_verified"])).total_seconds() <= 900)
+    stale = not 0 <= age <= 900 or verification_expired
+    state = ("held" if status.get("fence_gap", 0) or supervisor_health["state"] == "unhealthy"
+             else "stale" if stale else status["state"])
+    if state == "last-verified" and supervisor_health["state"] == "unknown":
+        state = "stale" if supervisor_health.get("reason") == "observation-stale" else "unknown"
+    # Keep the saved schema stable; name the independent conditions at read time.
+    condition = state
+    if state != "off":
+        if status["enabled"] and supervisor_health.get("reason") == "observation-stale":
+            condition = "supervisor-stale"
+        elif status["enabled"] and supervisor_health.get("reason") == "observation-unavailable":
+            condition = "supervisor-unreadable"
+        elif stale:
+            condition = "verification-expired" if verification_expired else "snapshot-expired"
+    return dict(state=state, condition=condition, verification_expired=verification_expired,
                 supervisor_health=supervisor_health,
                 assessed_at=value["assessed_at"], last_verified=status["last_verified"],
                 fence_gap=status.get("fence_gap", 0), pending_pointers=status.get("pending_pointers", 0),

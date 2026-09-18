@@ -96,6 +96,47 @@ def notices(data):
                   data["sprints"]["sprints"], data.get("documents", {}))
 
 
+def slack_notice(health):
+    """Describe observed transport conditions without granting delivery authority."""
+    state = health.get("state", "unknown")
+    condition = health.get("condition", state)
+    supervisor = health.get("supervisor_health") or {}
+    intake = supervisor.get("quarantine") or {}
+    messages = {
+        "last-verified": "No transport action is needed for this observation.",
+        "supervisor-stale": "Supervisor observation is over five seconds old. Ask the manager to check the supervisor and refresh the observation.",
+        "supervisor-unreadable": "Supervisor observation is missing, unreadable or invalid. Ask the manager to restore a readable observation; supervisor health is unknown.",
+        "verification-expired": "Slack verification is outside its fifteen-minute window. Ask the manager to renew qualification before relying on Slack.",
+        "snapshot-expired": "Saved Slack observation is outside its fifteen-minute window. Ask the manager to refresh the publication.",
+        "held": "Transport is held. Ask the manager to inspect the hold before retrying.",
+        "stale": "Slack observation freshness is unknown. Ask the manager to refresh the observation and verification.",
+        "unknown": "Slack status is unknown. Ask the manager to inspect the observation.",
+        "unqualified": "Slack is not qualified. Ask the manager to complete qualification.",
+        "off": "Slack projection is off. Answer in the manager task.",
+    }
+    action = messages.get(condition, messages["unknown"])
+    if health.get("verification_expired") and condition != "verification-expired":
+        action += " " + messages["verification-expired"]
+    details = []
+    if state == "held":
+        if intake.get("count", 0) > intake.get("held", 0):
+            details.append("Quarantined reply: act by asking the manager to review its disposition. Delivery is not established.")
+        if intake.get("held", 0):
+            details.append("Waiting for a route: wait for the manager to bind the reply route. Do not resend while it is held; arrival is not guaranteed.")
+        if intake.get("unknown", 0):
+            details.append("Quarantine history is incomplete. Ask the manager for an exact gap review before clearing the hold.")
+        if intake.get("expired", 0):
+            details.append("A reply expired undelivered while waiting for a route. Do nothing to replay that expired reply; if an answer is still needed, answer in the manager task.")
+        if details and condition == "held":
+            action = " ".join(details)
+        elif details:
+            action += " " + " ".join(details)
+    return ("Slack observation: " + str(condition) +
+            "; assessed " + str(health.get("assessed_at") or "unknown") +
+            "; last verified " + str(health.get("last_verified") or "never") +
+            ". This is a saved observation, not a live connection or work authorization. " + action)
+
+
 def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=None, inspection=None, withheld_count=None):
     """Pure, unconnected fixture fragment; documents is the approved safe corpus."""
     from decisions import FRESH_SECONDS, project, stamp
@@ -120,10 +161,7 @@ def render_decisions(raw, now, sprints, documents, *, slack=None, slack_health=N
                 'Slack delivery or answer authority, operational approval, or running workers.</p>')
     elif slack is not None:
         health = slack_health or {}
-        notice = ('Slack observation: ' + str(health.get("state", "unknown")) +
-                  '; assessed ' + str(health.get("assessed_at") or "unknown") +
-                  '; last verified ' + str(health.get("last_verified") or "never") +
-                  '. This is a saved observation, not a live connection or work authorization. If held or stale, answer in the manager task.')
+        notice = slack_notice(health)
         body = '<section id="decisions"><h2>Needs your decision</h2><p>' + html.escape(notice) + '</p>'
     elif slack_health and slack_health.get("state") == "unknown":
         body += '<p>Slack status unavailable. Valid decision context remains available below.</p>'
