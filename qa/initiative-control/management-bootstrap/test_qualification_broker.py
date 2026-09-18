@@ -242,8 +242,8 @@ class BrokerTests(unittest.TestCase):
         self.assertNotIn("relay_completed", [r.get("outcome") for r in self.records()])
 
     def test_real_gap_longer_than_old_timeout_completes(self):
-        self.assertEqual((q.CONNECT_TIMEOUT, q.ACTIONABLE_TIMEOUT, q.STREAM_IDLE_TIMEOUT),
-                         (60, 180, 600))
+        self.assertEqual((q.CONNECT_TIMEOUT, q.RESPONSE_TIMEOUT, q.STREAM_IDLE_TIMEOUT),
+                         (60, 2400, 600))
         self.up.intervals = [(61, event("response.in_progress"))]
         started = time.monotonic()
         response, _ = self.request(timeout=70)
@@ -421,13 +421,84 @@ class BrokerTests(unittest.TestCase):
                 self.assertEqual(self.up.requests[-1][2], raw)
                 self.assertEqual(self.records()[-1]["path"], path)
 
-    def test_wrong_and_absent_bearer_are_distinct_refusals(self):
-        for bearer in (None, "wrong-fixture", FAKE_SECRET):
+    def nonstream_handler(self, delays):
+        """Pause independently before status, headers and chunked JSON body."""
+        def serve(handler):
+            raw = handler.rfile.read(int(handler.headers["Content-Length"]))
+            handler.server.requests.append((handler.path, dict(handler.headers), raw))
+            payload = json.dumps({"id": "resp_delayed", "model": "fixture-model",
+                                  "reasoning": {"effort": "high"}, "output": []}).encode()
+            handler.server.payloads.append(payload)
+            parts = (
+                b"HTTP/1.1 200 OK\r\n",
+                b"Content-Type: application/json\r\nX-Request-Id: req_delayed\r\n"
+                b"Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n",
+                f"{len(payload):x}\r\n".encode() + payload + b"\r\n0\r\n\r\n",
+            )
+            try:
+                for delay, part in zip(delays, parts, strict=True):
+                    time.sleep(delay)
+                    handler.wfile.write(part)
+                    handler.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            handler.close_connection = True
+        return serve
+
+    def test_nonstream_compact_silent_past_old_180_seconds_completes(self):
+        self.assertEqual(q.RESPONSE_TIMEOUT, 2400)
+        body = self.body()
+        del body["stream"]  # Compact uses a unary POST without a stream flag.
+        started = time.monotonic()
+        with patch.object(FakeUpstream, "do_POST", self.nonstream_handler((181, 0, 0))):
+            response, _ = self.request(body, path="/v1/responses/compact", timeout=195)
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.read(), self.up.payloads[-1])
+        self.assertGreaterEqual(time.monotonic() - started, 181)
+        self.assertEqual(self.records()[-1]["outcome"], "relay_completed")
+
+    def test_nonstream_status_headers_and_body_share_response_budget(self):
+        body = self.body()
+        body["stream"] = False
+        for path in ("/v1/responses/compact", "/v1/responses"):
+            with self.subTest(path=path), patch.object(q, "RESPONSE_TIMEOUT", 1.5), \
+                    patch.object(FakeUpstream, "do_POST", self.nonstream_handler((0.2, 0.2, 0.2))):
+                response, _ = self.request(body, path=path)
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.read(), self.up.payloads[-1])
+                self.assertEqual(self.records()[-1]["outcome"], "relay_completed")
+
+    def test_exceeded_nonstream_deadline_records_transport_failure(self):
+        body = self.body()
+        body["stream"] = False
+        # Each phase can exhaust the budget; smaller individual delays also
+        # exhaust it in aggregate, proving progress does not reset the clock.
+        for path in ("/v1/responses/compact", "/v1/responses"):
+            for delays in ((0.5, 0, 0), (0, 0.5, 0), (0, 0, 0.5), (0.12, 0.12, 0.12)):
+                with self.subTest(path=path, delays=delays), \
+                        patch.object(q, "RESPONSE_TIMEOUT", 0.3), \
+                        patch.object(FakeUpstream, "do_POST", self.nonstream_handler(delays)):
+                    before = len(self.records())
+                    response, _ = self.request(body, path=path)
+                    self.assertEqual(response.status, 502)
+                    self.assertEqual(json.loads(response.read()), {"error": "transport_failed"})
+                    rows = self.records()[before:]
+                    self.assertEqual(len(rows), 1)
+                    self.assertEqual(rows[0]["kind"], "turn")
+                    self.assertEqual(rows[0]["outcome"], "transport_failed")
+                    self.assertNotIn("relay_completed", [r.get("outcome") for r in rows])
+
+    def test_absent_wrong_and_credential_bearers_share_fixed_refusal_aggregate(self):
+        before = self.journal.stat().st_size
+        for count, bearer in enumerate((None, "wrong-fixture", FAKE_SECRET), start=1):
             with self.subTest(bearer_present=bearer is not None):
                 row = self.refusal("synthetic_bearer_required", 401, bearer=bearer)
                 self.assertEqual(row["outcome"], "synthetic_bearer_required")
                 self.assertEqual(row["kind"], "preauth_refusals")
                 self.assertNotIn("upstream_request_id", row)
+                self.assertEqual(row["count"], count)
+                self.assertEqual(len(self.records()), 2)
+                self.assertEqual(self.journal.stat().st_size - before, q.REFUSAL_SLOT_BYTES)
 
     def test_missing_unreadable_and_invalid_credential(self):
         self.key.unlink()

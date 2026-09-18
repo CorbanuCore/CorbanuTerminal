@@ -17,7 +17,9 @@ Admission alone is UNFINISHED evidence, never success. A process crash or journa
 failure can prevent a terminal receipt; reconcile such attempts externally.
 Relay completion describes broker delivery, not client acceptance/tool success.
 SSE data-event deadlines match the client's 600-second idle tolerance; connection
-setup uses 60 seconds and actionable response headers/nonstream reads use 180.
+setup uses a separate 60-second broker cap. Initial response headers and unary
+reads share the compact client's 2400-second full-response budget. SSE headers
+use that same conservative ceiling until the response type is known.
 Only the initial SSE event delays forwarding; subsequent bytes stream unchanged
 while bounded event copies track completion. HTTP chunk framing is regenerated.
 An unwritable journal prevents forwarding/delivery. Pre-authentication refusals
@@ -74,9 +76,15 @@ SYNTHETIC_BEARER = "corbanu-qualification-only"
 PATHS = {"/v1/responses", "/v1/responses/compact"}
 MAX_BODY = 32 * 1024 * 1024
 MAX_PREFIX = 1024 * 1024
+# Connection-only broker cap, preserved from the existing harness. The client
+# separates this phase too (http-client/src/client_builder.rs:85-88), but does
+# not set a 60-second HTTP connect default (ibid.:312-321).
 CONNECT_TIMEOUT = 60
-ACTIONABLE_TIMEOUT = 180
-STREAM_IDLE_TIMEOUT = 600  # model-provider-info; reset per SSE data event.
+# model-provider-info/src/lib.rs:36,1087-1091; sse/responses.rs:555-557.
+STREAM_IDLE_TIMEOUT = 600
+# core/src/client.rs:209-211,1179-1191; endpoint/compact.rs:46-57:
+# unary POST timeout covers the WHOLE response, not an idle period per read.
+RESPONSE_TIMEOUT = STREAM_IDLE_TIMEOUT * 4
 REFUSAL_SLOT_BYTES = 1024
 ID_KEYS = {
     "session_id", "thread_id", "turn_id", "conversation_id",
@@ -229,14 +237,16 @@ class Evidence:
 
 
 class EventDeadlineReader(io.RawIOBase):
-    """Enforce an event deadline on EVERY socket read, including HTTP framing."""
+    """Enforce a response/event deadline on every read, including HTTP framing."""
 
-    def __init__(self, source, sock):
+    def __init__(self, source, sock, deadline):
         self.source, self.sock = source, sock
-        self.reset()
+        self.deadline = deadline
+        self.failure_code = "transport_failed"
 
     def reset(self):
         self.deadline = time.monotonic() + STREAM_IDLE_TIMEOUT
+        self.failure_code = "upstream_stream_idle_timeout"
 
     def readable(self):
         return True
@@ -244,12 +254,12 @@ class EventDeadlineReader(io.RawIOBase):
     def readinto(self, target):
         remaining = self.deadline - time.monotonic()
         if remaining <= 0:
-            raise Refusal("upstream_stream_idle_timeout", 502)
+            raise Refusal(self.failure_code, 502)
         self.sock.settimeout(remaining)
         try:
             data = self.source.read1(len(target))
         except TimeoutError:
-            raise Refusal("upstream_stream_idle_timeout", 502) from None
+            raise Refusal(self.failure_code, 502) from None
         target[:len(data)] = data
         return len(data)
 
@@ -455,10 +465,25 @@ class Handler(BaseHTTPRequestHandler):
                             "X-Client-Request-Id": record["attempt_id"]})
             url = self.server.upstream
             cls = http.client.HTTPSConnection if url.scheme == "https" else http.client.HTTPConnection
+            response_deadline = time.monotonic() + RESPONSE_TIMEOUT
             upstream = cls(url.hostname, url.port, timeout=CONNECT_TIMEOUT)
             upstream.connect()
             upstream_socket = upstream.sock
-            upstream_socket.settimeout(ACTIONABLE_TIMEOUT)
+            remaining = response_deadline - time.monotonic()
+            if remaining <= 0:
+                raise Refusal("transport_failed", 502)
+            upstream_socket.settimeout(remaining)
+
+            def response_with_deadline(sock, **kwargs):
+                response = http.client.HTTPResponse(sock, **kwargs)
+                response.deadline_reader = EventDeadlineReader(
+                    response.fp, sock, response_deadline)
+                response.fp = io.BufferedReader(response.deadline_reader)
+                return response
+
+            # Install before getresponse() parses the status line or headers.
+            # The deadline survives every unary read; trickles cannot renew it.
+            upstream.response_class = response_with_deadline
             upstream.request("POST", self.path, body=raw, headers=headers)
             response = upstream.getresponse()
             record.update(upstream_status=response.status, upstream_headers_at=timestamp())
@@ -473,8 +498,8 @@ class Handler(BaseHTTPRequestHandler):
                 raise Refusal("upstream_encoding_refused", 502)
             content_type = response.getheader("Content-Type", "").split(";")[0].strip()
             if content_type == "text/event-stream":
-                deadline = EventDeadlineReader(response.fp, upstream_socket)
-                response.fp = io.BufferedReader(deadline)
+                deadline = response.deadline_reader
+                deadline.reset()  # Switch from full-response to per-event budget.
                 events = SSEEvents(deadline)
                 prefix, resolved = self.sse_prefix(response, events)
             elif content_type == "application/json":

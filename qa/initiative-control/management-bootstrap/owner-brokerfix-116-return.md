@@ -201,6 +201,10 @@ python -B -m unittest discover -v -s scripts/initiative_control -p 'test_*.py'
   `RemoteDisconnected`. The fixture now accepts either closed-connection
   result and still asserts exact aggregate count and size. Raw traceback is
   retained. All other checks, including the real 61-second gap, passed.
+  Correction recorded in round 117: the 32-to-33 count increase also reflects
+  the addition of `test_terminal_evidence_failure_never_records_relay_success`
+  between these runs, not the fixture correction alone. That new test executed
+  exactly once in round 116, in the final broker run; round 117 reruns it.
 - [Final broker run](owner-brokerfix-116-focused-final.txt): **33 passed**,
   **65.795s**, exit **0**; **0 failures**, **0 errors**, **0 skips**.
   Failure/error names: **none**.
