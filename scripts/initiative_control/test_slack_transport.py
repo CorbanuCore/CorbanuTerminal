@@ -602,7 +602,8 @@ class TransportTests(LiveFixture):
                     transport.web().timeout = 0.02
                 with self.assertRaises((TimeoutError, KeyError, d.Invalid)):
                     transport.qualify(ui_evidence())
-                self.assertEqual(a.Store(store.root).read("transport"), before)
+                expected = dict(before, hold="qualification-scopes-rejected") if failure == "scope" else before
+                self.assertEqual(a.Store(store.root).read("transport"), expected)
                 self.reply, self.scopes = None, s.SCOPES.copy()
                 reopened = s.Transport(a.Store(store.root), PIN, lambda: ("fixture-bot", "fixture-app"),
                     live=True, now=lambda: NOW, web_factory=lambda **kw: WebClient(base_url=self.endpoint, **kw))
@@ -1298,8 +1299,9 @@ class TransportTests(LiveFixture):
         self.scopes.remove("chat:write")
         with self.assertRaises(d.Invalid):
             self.transport.qualify(ui_evidence())
-        self.assertEqual(self.store.read("transport"), before)  # Failed renewal grants no new verification.
-        self.assertIsNone(self.transport.gate()["hold"])  # Existing qualification retains its original expiry.
+        self.assertEqual(self.store.read("transport"), dict(before, hold="qualification-scopes-rejected"))
+        with self.assertRaises(d.Invalid):
+            self.transport.gate()  # A positive rejection invalidates the previously clear hold.
         with s.locked(self.store) as value:
             value["binding"] = dict(PIN, generation="rotated")
             self.store.write("transport", value)
@@ -1468,13 +1470,73 @@ class TransportTests(LiveFixture):
         value = self.store.read("transport")
         self.assertEqual(value["held_human"], {})
         self.assertEqual(value["events"], {})
-        self.assertEqual(s.outstanding_quarantine(value), dict(count=0, oldest_at=None))
+        self.assertEqual(s.outstanding_quarantine(value), dict(count=0, oldest_at=None, expired=1))
         record = value["quarantine"]["records"][-1]
         self.assertEqual((record["reason"], record["channel"], record["message_ts"], record["at"]),
                          ("unbound-expired", PIN["channel"], "101.000001", deadline))
         self.assertNotIn("private held answer", d.canonical(value).decode())
         self.assertEqual(s.drain(self.store, now=deadline), 0)
         self.assertEqual(self.store.read("transport")["quarantine"]["total"], 1)
+
+    def test_legacy_expiry_migration_review_and_pruning_preserve_obligations(self):
+        self.unbind_fixture()
+        self.callback()
+        self.review_gap()  # The eventual expiry has the same ingress as this review.
+        deadline = self.store.read("transport")["held_human"]["Ev001"]["expires_at"]
+        self.transport.now = self.owner.now = lambda: deadline
+        self.owner.update("connected")
+        with s.locked(self.store) as journal:
+            del journal["quarantine"]["outstanding"]["expired"]  # Pre-fix journal.
+            self.store.write("transport", journal)
+        self.assertEqual(s.outstanding_quarantine(self.store.read("transport"))["expired"], 1)
+        self.review_gap()
+        reviewed = self.store.read("transport")
+        self.assertEqual(s.outstanding_quarantine(reviewed)["expired"], 0)
+        with s.locked(self.store) as journal:
+            del journal["quarantine"]["outstanding"]["expired"]  # Legacy reviewed expiry.
+            self.store.write("transport", journal)
+        # Legacy equal-second timestamps cannot prove disposition/review order.
+        self.assertEqual(s.outstanding_quarantine(self.store.read("transport"))["expired"], 1)
+        self.review_gap()
+        self.assertEqual(s.outstanding_quarantine(self.store.read("transport"))["expired"], 0)
+        # A strictly later legacy review does cover the known disposition.
+        later = (d.stamp(deadline) + s.dt.timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.transport.now = lambda: later
+        self.review_gap()
+        with s.locked(self.store) as journal:
+            del journal["quarantine"]["outstanding"]["expired"]
+            self.store.write("transport", journal)
+        self.assertEqual(s.outstanding_quarantine(self.store.read("transport"))["expired"], 0)
+        # Expire a new arrival, then prune its locator through later intake.
+        # Outstanding expiry must outlive the bounded audit tail.
+        self.callback(payload("EvSecond"))
+        deadline = self.store.read("transport")["held_human"]["EvSecond"]["expires_at"]
+        self.transport.now = self.owner.now = lambda: deadline
+        self.owner.update("connected")
+        for index in range(129):
+            self.callback(payload("EvPoison" + str(index), subtype="message_deleted", deleted_ts="109.000001"))
+        journal = self.store.read("transport")
+        self.assertEqual(len(journal["quarantine"]["records"]), 128)
+        self.assertFalse(any(row["reason"] == "unbound-expired" for row in journal["quarantine"]["records"]))
+        self.assertEqual(s.outstanding_quarantine(journal), dict(count=129, oldest_at=deadline, expired=1))
+        self.review_gap()
+        self.assertEqual(s.outstanding_quarantine(a.Store(self.root).read("transport")),
+                         dict(count=0, oldest_at=None, expired=0))
+
+    def test_outstanding_expiry_summary_rejects_invalid_counts(self):
+        self.unbind_fixture()
+        self.callback()
+        deadline = self.store.read("transport")["held_human"]["Ev001"]["expires_at"]
+        s.drain(self.store, now=deadline)
+        original = self.store.read("transport")
+        for count in (-1, True, "1", 2):
+            with self.subTest(count=count):
+                journal = copy.deepcopy(original)
+                journal["quarantine"]["outstanding"]["expired"] = count
+                self.store.write("transport", journal)
+                with self.assertRaises(d.Invalid), s.locked(self.store):
+                    pass
+        self.store.write("transport", original)
 
     def test_route_at_or_after_deadline_delivers_retained_reply_once(self):
         row = self.unbind_fixture()
@@ -1668,6 +1730,79 @@ class TransportTests(LiveFixture):
             # Failure released the operation guard; an exact reviewed retry succeeds.
             self.transport.qualify(ui_evidence(), review)
             self.assertIsNone(self.store.read("transport")["hold"])
+
+    def test_qualification_positive_rejections_hold_and_exact_retry_recovers(self):
+        self.sending()
+        cases = [
+            (dict(ok=False, error=code), status, {}, "qualification-auth-rejected")
+            for code in ("invalid_auth", "not_authed", "token_revoked", "token_expired",
+                         "account_inactive", "org_login_required")
+            for status in (200, 401, 403)
+        ] + [
+            (dict(ok=False, error=code), 200, {}, "qualification-scopes-rejected")
+            for code in ("missing_scope", "no_permission", "not_allowed_token_type")
+        ] + [
+            (dict(ok=True, team_id=PIN["team"], bot_id=PIN["bot"]), 200,
+             {"x-oauth-scopes": "groups:history"}, "qualification-scopes-rejected"),
+            (dict(ok=True, team_id="TOTHER", bot_id=PIN["bot"]), 200,
+             {"x-oauth-scopes": ",".join(s.SCOPES)}, "qualification-identity-rejected"),
+        ]
+        for prior in (None, "ingress-held"):
+            for result, status, headers, expected in cases:
+                with self.subTest(prior=prior, error=result.get("error"), status=status, expected=expected):
+                    s.hold(self.store, prior)
+                    before = self.store.read("transport")
+                    review = dict(watermark=before["watermark"], ingress=s.ingress_count(self.store),
+                                  binding=d.digest(PIN), evidence="fixture-review", **self.session_review())
+                    self.reply = lambda *_: (result, status, headers)
+                    with self.assertRaises(s.QualificationRejected):
+                        self.transport.qualify(ui_evidence(), review)
+                    self.assertEqual(a.Store(self.root).read("transport"), dict(before, hold=expected))
+                    with self.assertRaises(d.Invalid):
+                        self.transport.gate()
+                    self.reply = None
+                    # Repair alone does not clear a recorded rejection.
+                    with self.assertRaises(d.Invalid):
+                        self.transport.qualify(ui_evidence())
+                    self.transport.qualify(ui_evidence(), review)
+                    self.assertIsNone(self.transport.gate()["hold"])
+
+    def test_qualification_inconclusive_sdk_responses_restore_exact_prior_hold(self):
+        self.sending()
+        cases = [
+            (dict(ok=False, error="ratelimited"), 429, {}),
+            (dict(ok=False, error="internal_error"), 500, {}),
+            (dict(ok=False, error="invalid_auth"), 500, {}),
+            (dict(ok=False, error="unknown_error"), 200, {}),
+            (dict(ok=True), 200, {}),
+            (dict(ok=True, team_id=PIN["team"], bot_id=PIN["bot"]), 200, {}),
+            (b"not-json", 200, {}),
+        ]
+        for prior in (None, "ingress-held", "qualification-auth-rejected"):
+            for result, status, headers in cases:
+                with self.subTest(prior=prior, result=result, status=status):
+                    s.hold(self.store, prior)
+                    before = self.store.read("transport")
+                    review = dict(watermark=before["watermark"], ingress=s.ingress_count(self.store),
+                                  binding=d.digest(PIN), evidence="fixture-review", **self.session_review())
+                    self.reply = lambda *_: (result, status, headers)
+                    with self.assertRaises(Exception) as caught:
+                        self.transport.qualify(ui_evidence(), review)
+                    self.assertNotIsInstance(caught.exception, s.QualificationRejected)
+                    self.assertEqual(a.Store(self.root).read("transport"), before)
+        self.reply = None
+        self.review_gap()
+        self.assertIsNone(self.transport.gate()["hold"])
+
+    def test_positive_rejection_preserves_newer_fault_hold(self):
+        self.sending()
+        def reject(*_):
+            s.hold(self.store, "outage-gap")
+            return dict(ok=False, error="invalid_auth"), 200, {}
+        self.reply = reject
+        with self.assertRaises(s.QualificationRejected):
+            self.transport.qualify(ui_evidence())
+        self.assertEqual(self.store.read("transport")["hold"], "outage-gap")
 
     def test_qualification_single_flight_across_instances_and_processes(self):
         self.sending()

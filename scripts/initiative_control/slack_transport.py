@@ -67,6 +67,18 @@ def failure_reason(error):
     return "sdk-failed"
 
 
+QUALIFICATION_HOLDS = {
+    "qualification-auth-rejected", "qualification-scopes-rejected", "qualification-identity-rejected",
+}
+
+
+class QualificationRejected(d.Invalid):
+    """A positive remote rejection, not an interrupted or inconclusive check."""
+    def __init__(self, reason):
+        d.require(reason in QUALIFICATION_HOLDS)
+        self.reason = reason
+
+
 class NormalizationRejected(d.Invalid):
     def __init__(self, reason):
         d.require(reason in QUARANTINE_REASONS)
@@ -101,12 +113,26 @@ def quarantine(value, payload, pin, offset, reason, now):
 
 
 def outstanding_quarantine(value):
-    """Current review obligation; historical/expired records are not live intake."""
+    """Outstanding intake and expiry review; retained history is not live intake."""
     audit = value.get("quarantine", {})
-    if "outstanding" in audit:
+    if "expired" in audit.get("outstanding", {}):
         return copy.deepcopy(audit["outstanding"])
-    reviewed = max((row["ingress"] for row in value.get("gap_reviews", [])), default=0)
     records = audit.get("records", [])
+    reviews = value.get("gap_reviews", [])
+    reviewed = max((row["ingress"] for row in reviews), default=0)
+    # Legacy summaries did not count expiry. A review covers an expiry only
+    # after its disposition, not merely after the original held arrival.
+    # Equal legacy timestamps cannot establish ordering; a fresh exact review
+    # writes an explicit zero and resolves that ambiguity.
+    expired = [row for row in records if row["reason"] == "unbound-expired"]
+    pending_expired = sum(not any(
+        review["ingress"] >= row["ingress"] and row.get("at") is not None
+        and review["at"] > row["at"] for review in reviews) for row in expired)
+    if "outstanding" in audit:
+        result = copy.deepcopy(audit["outstanding"])
+        if expired:
+            result.setdefault("expired", pending_expired)
+        return result
     pending = [row for row in records
                if row["ingress"] > reviewed and row["reason"] != "unbound-expired"]
     # Missing legacy dispositions cannot prove a live review obligation.
@@ -118,6 +144,8 @@ def outstanding_quarantine(value):
     result = dict(count=len(pending), oldest_at=min(times) if times and all(times) else None)
     if pruned:
         result["unknown"] = pruned
+    if expired:
+        result["expired"] = pending_expired
     return result
 
 
@@ -129,6 +157,8 @@ def append_quarantine(value, record):
                                     if outstanding["oldest_at"] is not None else
                                     None if outstanding["count"] else record["at"])
         outstanding["count"] += 1
+    else:
+        outstanding["expired"] = outstanding.get("expired", 0) + 1
     audit = value.setdefault("quarantine", dict(total=0, records=[]))
     audit["outstanding"] = outstanding
     if not audit["total"]:
@@ -334,10 +364,13 @@ def locked(store, *, wait=False):
                     + (" outstanding" if "outstanding" in audit else ""))
             if "outstanding" in audit:
                 pending = audit["outstanding"]
-                d.shape(pending, "count oldest_at" + (" unknown" if "unknown" in pending else ""))
-                unknown = pending.get("unknown", 0)
+                d.shape(pending, "count oldest_at" + (" unknown" if "unknown" in pending else "")
+                        + (" expired" if "expired" in pending else ""))
+                unknown, expired = pending.get("unknown", 0), pending.get("expired", 0)
                 d.require(type(unknown) is int and 0 <= unknown <= audit["total"])
-                d.require(type(pending["count"]) is int and 0 <= pending["count"] <= audit["total"] - unknown)
+                d.require(type(expired) is int and 0 <= expired <= audit["total"] - unknown)
+                d.require(type(pending["count"]) is int
+                          and 0 <= pending["count"] <= audit["total"] - unknown - expired)
                 d.require(pending["count"] or pending["oldest_at"] is None)
                 if pending["oldest_at"] is not None:
                     d.stamp(pending["oldest_at"])
@@ -734,13 +767,13 @@ class Transport:
             rollback = []
             try:
                 return self._qualify(ui_evidence, gap_review, rollback)
-            except BaseException:
+            except BaseException as error:
                 if rollback:
                     # Wait for an admitted callback to finish; never overwrite its
                     # newer fault hold or roll back any other journal evidence.
                     with self.store.lock(), locked(self.store, wait=True) as value:
                         if value["hold"] == "qualifying":
-                            value["hold"] = rollback[0]
+                            value["hold"] = error.reason if isinstance(error, QualificationRejected) else rollback[0]
                             self.store.write("transport", value)
                 raise
 
@@ -760,7 +793,7 @@ class Transport:
             ingress = ingress_count(self.store)
             uncovered = ingress != value["ingress"]
             life = value["lifecycle"]
-            bootstrap = (previous_hold in ("unqualified", "qualifying")
+            bootstrap = (previous_hold in {"unqualified", "qualifying"} | QUALIFICATION_HOLDS
                 and all(value[k] is None for k in ("binding", "last_verified", "ui_evidence"))
                 and ingress == 0 and all(type(value[k]) is int and value[k] == 0 for k in ("ingress", "watermark"))
                 and all(value[k] == {} for k in ("events", "posts", "routes", "bridges")) and value["gap_reviews"] == []
@@ -790,10 +823,31 @@ class Transport:
             self.store.write("transport", value)
             initial = copy.deepcopy(value) if bootstrap else None
         web, pin = self.web(), self.binding
-        auth = web.auth_test()
-        d.require(auth["team_id"] == pin["team"] and auth["bot_id"] == pin["bot"])
-        scopes = {s.strip() for s in auth.headers.get("x-oauth-scopes", "").split(",")}
-        d.require(SCOPES <= scopes)
+        from slack_sdk.errors import SlackApiError
+        try:
+            auth = web.auth_test()
+        except SlackApiError as error:
+            # Only fixed, recognized rejection codes become durable faults.
+            # Timeouts, rate limits, server errors and malformed replies cannot
+            # establish that authentication was refused. Never persist raw text.
+            response = error.response
+            code = response.get("error")
+            if response.status_code in (200, 401, 403) and response.get("ok") is False:
+                if code in {"invalid_auth", "not_authed", "token_revoked", "token_expired",
+                            "account_inactive", "org_login_required"}:
+                    raise QualificationRejected("qualification-auth-rejected") from None
+                if code in {"missing_scope", "no_permission", "not_allowed_token_type"}:
+                    raise QualificationRejected("qualification-scopes-rejected") from None
+            raise
+        d.require(auth["ok"] is True and auth["team_id"] and auth["bot_id"])
+        if auth["team_id"] != pin["team"] or auth["bot_id"] != pin["bot"]:
+            raise QualificationRejected("qualification-identity-rejected")
+        # Absence of scope metadata is inconclusive; an explicit list that
+        # omits a required scope positively disproves qualification.
+        d.require("x-oauth-scopes" in auth.headers)
+        scopes = {s.strip() for s in auth.headers["x-oauth-scopes"].split(",")}
+        if not SCOPES <= scopes:
+            raise QualificationRejected("qualification-scopes-rejected")
         with self.store.lock(), locked(self.store) as value:
             loss_ready(value, self.store)
             d.require(session_pin == (observe_session_locked(self.store, value) if value["lifecycle"]["session"] else None))
@@ -809,7 +863,10 @@ class Transport:
                 validate_review(value)
                 value["gap_reviews"].append(dict(gap_review, at=self.now()))
                 if "quarantine" in value:
-                    value["quarantine"]["outstanding"] = dict(count=0, oldest_at=None)
+                    summary = dict(count=0, oldest_at=None)
+                    if "expired" in outstanding_quarantine(value):
+                        summary["expired"] = 0
+                    value["quarantine"]["outstanding"] = summary
             value.update(binding=pin, last_verified=self.now(), hold=None, ingress=ingress, ui_evidence=copy.deepcopy(ui_evidence))
             self.store.write("transport", value)
         return pin

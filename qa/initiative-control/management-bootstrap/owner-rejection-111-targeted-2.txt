@@ -1,0 +1,7 @@
+test_legacy_expiry_migration_review_and_pruning_preserve_obligations (test_slack_transport.TransportTests.test_legacy_expiry_migration_review_and_pruning_preserve_obligations) ... ok
+test_outstanding_expiry_summary_rejects_invalid_counts (test_slack_transport.TransportTests.test_outstanding_expiry_summary_rejects_invalid_counts) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 3.075s
+
+OK
