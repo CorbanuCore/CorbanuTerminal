@@ -12,8 +12,12 @@ a supplied auth.json and maps those routes to --upstream
 https://chatgpt.com/backend-api/codex. Access/account headers come only from that
 file; worker credentials stay synthetic. JWT exp must be known and future.
 Near-expiry credentials refresh proactively; a 401 permits one reload/refresh
-before admission. Refresh rotation is serialized and memory-only: the source is
-never written. A failed refresh latches that file generation closed. An expired
+before admission. Each observed credential generation and its in-memory rotation
+share ONE refresh attempt for this process lifetime, successful or not. Attempts
+across external generations have a 300-second monotonic cooldown. Exhaustion
+latches the generation closed as subscription_refresh_exhausted. Reformatting or
+replaying a supplied generation never resets its budget. Rotation is memory-only;
+the source is never written. An expired
 active stream truncates; it is never replayed/refreshed after serving bytes.
 Restart loses rotations: external credential ownership must arrange a fresh file
 before restart; concurrent refresh by another profile owner is not coordinated.
@@ -97,6 +101,8 @@ STREAM_IDLE_TIMEOUT = 600
 # unary POST timeout covers the WHOLE response, not an idle period per read.
 RESPONSE_TIMEOUT = STREAM_IDLE_TIMEOUT * 4
 REFUSAL_SLOT_BYTES = 1024
+REFRESH_COOLDOWN = 300
+SECRET_SUBSTRING_MIN_LENGTH = 32
 ID_KEYS = {
     "session_id", "thread_id", "turn_id", "conversation_id",
     "parent_thread_id", "parent_turn_id", "forked_from_thread_id",
@@ -109,6 +115,7 @@ ID_HEADERS = {
 FORWARD_HEADERS = (ID_HEADERS - {"x-client-request-id"}) | {
     "x-codex-turn-state", "x-codex-turn-metadata", "x-codex-beta-features",
     "x-openai-subagent", "openai-beta", "originator",
+    "x-codex-window-id", "x-oai-attestation", "x-openai-internal-codex-responses-lite",
 }
 
 
@@ -118,6 +125,15 @@ def timestamp():
 
 def identifier(value):
     return value if isinstance(value, str) and re.fullmatch(r"[\w.:/-]{1,256}", value, re.ASCII) else None
+
+
+def sensitive(value, secrets, private_ids=()):
+    # Only credential fields/components are substring secrets, and only at >=32
+    # characters (a length floor, not an entropy estimate). Short credentials and
+    # explicitly named private identity fields match exactly, never as substrings.
+    return isinstance(value, str) and (value in private_ids or any(
+        (secret in value if len(secret) >= SECRET_SUBSTRING_MIN_LENGTH else secret == value)
+        for secret in secrets if secret))
 
 
 def loopback(host):
@@ -198,11 +214,11 @@ class Evidence:
                 os.close(fd)
             raise Refusal("evidence_unwritable") from None
 
-    def append(self, fd, record, secrets=(), *, aggregate=False):
+    def append(self, fd, record, secrets=(), *, private_ids=(), aggregate=False):
         def scrub(value):
             if isinstance(value, dict):
                 return {k: scrub(v) for k, v in value.items()}
-            if isinstance(value, str) and any(secret in value for secret in secrets if secret):
+            if sensitive(value, secrets, private_ids):
                 return None
             return value
 
@@ -356,11 +372,14 @@ class Subscription:
     def __init__(self, tokens):
         self.access = tokens["access_token"]
         self.refresh = tokens.get("refresh_token", "")
-        self.account = tokens["account_id"]
+        self.account = tokens.get("account_id")
         self.id_token = tokens["id_token"]
         if not all(isinstance(v, str) and re.fullmatch(r"[!-~]{1,32768}", v)
                    and v != SYNTHETIC_BEARER
-                   for v in (self.access, self.account, self.id_token)):
+                   for v in (self.access, self.id_token)):
+            raise ValueError()
+        if self.account is not None and not (
+                isinstance(self.account, str) and re.fullmatch(r"[!-~]{1,32768}", self.account)):
             raise ValueError()
         if not isinstance(self.refresh, str) or (self.refresh and not re.fullmatch(r"[!-~]{1,32768}", self.refresh)):
             raise ValueError()
@@ -370,27 +389,35 @@ class Subscription:
             raise ValueError()
         for claims in (access_claims, id_claims):
             auth = claims.get("https://api.openai.com/auth", {})
-            if not isinstance(auth, dict) or auth.get("chatgpt_account_id", self.account) != self.account:
+            if not isinstance(auth, dict) or (self.account is not None
+                    and auth.get("chatgpt_account_id", self.account) != self.account):
                 raise ValueError()
         self.fedramp = id_claims.get("https://api.openai.com/auth", {}).get(
             "chatgpt_account_is_fedramp", False) is True
-        # Include full credentials and individually encoded JWT components.
-        # Account identity and decoded identity strings are private too.
-        def strings(value):
-            if isinstance(value, dict):
-                return [s for child in value.values() for s in strings(child)]
-            if isinstance(value, list):
-                return [s for child in value for s in strings(child)]
-            return [value] if isinstance(value, str) and value else []
-        self.secrets = tuple(strings(tokens) + self.access.split(".") + self.id_token.split(".")
-                             + strings(access_claims) + strings(id_claims))
+        # Never register arbitrary token-object strings, decoded claim values or
+        # the public JWT header. Protect full tokens and long payload/signature
+        # components; decoded plan/model/effort values are not credentials.
+        self.secrets = tuple(v for v in (self.access, self.refresh, self.id_token) if v) + tuple(
+            part for token in (self.access, self.id_token) for part in token.split(".")[1:]
+            if len(part) >= SECRET_SUBSTRING_MIN_LENGTH)
+        self.private_ids = tuple(v for v in (
+            self.account, *(claims.get(key) for claims in (access_claims, id_claims)
+                            for key in ("sub", "email")),
+            *(claims.get("https://api.openai.com/auth", {}).get("chatgpt_account_id")
+              for claims in (access_claims, id_claims))) if isinstance(v, str) and v)
+        # Identity is entirely private, used only for the per-process budget.
+        self.generation = hashlib.sha256(json.dumps(
+            [self.access, self.refresh, self.id_token, self.account],
+            separators=(",", ":")).encode()).digest()
 
     def require_valid(self):
         if self.expires <= time.time():
             raise Refusal("subscription_expired")
 
     def headers(self):
-        headers = {"Authorization": "Bearer " + self.access, "ChatGPT-Account-ID": self.account}
+        headers = {"Authorization": "Bearer " + self.access}
+        if self.account is not None:
+            headers["ChatGPT-Account-ID"] = self.account
         if self.fedramp:
             headers["X-OpenAI-Fedramp"] = "true"
         return headers
@@ -418,7 +445,9 @@ class Broker(ThreadingHTTPServer):
         self.subscription_lock = threading.Lock()
         self.subscription_generation = None
         self.subscription_cached = None
-        self.subscription_failed = False
+        self.subscription_spent = set()
+        self.subscription_terminal = set()
+        self.subscription_last_refresh = None
         url = urlsplit(upstream)
         if (url.scheme not in ("https", "http") or not url.hostname
                 or url.username or url.password or url.query or url.fragment
@@ -426,6 +455,9 @@ class Broker(ThreadingHTTPServer):
             raise ValueError("invalid_upstream")
         if url.scheme == "http":
             loopback(url.hostname)  # Plaintext only for loopback fixtures.
+        elif (auth_mode == "subscription"
+              and upstream != "https://chatgpt.com/backend-api/codex"):
+            raise ValueError("invalid_subscription_upstream_authority")
         self.upstream = url
         self.credential_file = Path(credential_file)
         evidence = Path(evidence)
@@ -440,7 +472,11 @@ class Broker(ThreadingHTTPServer):
             self.identity = {**process_identity(os.getpid()), "ppid": os.getppid(),
                              "uid": os.getuid(), "instance_id": str(uuid.uuid4()),
                              "module_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                             "socket": {"host": self.server_address[0], "port": self.server_address[1]}}
+                             "socket": {"host": self.server_address[0], "port": self.server_address[1]},
+                             "auth_mode": self.auth_mode,
+                             "upstream": {"scheme": url.scheme, "host": url.hostname,
+                                          "port": url.port or (443 if url.scheme == "https" else 80),
+                                          "base_path": url.path.rstrip("/")}}
             record = {"schema": 2, "kind": "startup", "recorded_at": timestamp(),
                       "broker": self.identity}
             fd = self.evidence.open()
@@ -469,22 +505,20 @@ class Broker(ThreadingHTTPServer):
                     raw = source.read(131073)
                 if len(raw) > 131072:
                     raise ValueError()
-                generation = hashlib.sha256(raw).digest()
+                obj = json.loads(raw)
+                if (obj.get("auth_mode") not in (None, "chatgpt")
+                        or obj.get("OPENAI_API_KEY")):
+                    raise ValueError()
+                supplied = Subscription(obj["tokens"])
+                generation = supplied.generation
                 if generation != self.subscription_generation:
-                    obj = json.loads(raw)
-                    if (obj.get("auth_mode") not in (None, "chatgpt")
-                            or obj.get("OPENAI_API_KEY")):
-                        raise ValueError()
-                    current = Subscription(obj["tokens"])
-                    if previous is not None and current.account != previous.account:
+                    if previous is not None and supplied.account != previous.account:
                         raise ValueError()
                     self.subscription_generation = generation
-                    self.subscription_source_secrets = current.secrets
-                    self.subscription_cached = current
-                    self.subscription_failed = False
+                    self.subscription_cached = supplied
                 current = self.subscription_cached
-                if self.subscription_failed:
-                    raise Refusal("subscription_refresh_failed")
+                if generation in self.subscription_terminal:
+                    raise Refusal("subscription_refresh_exhausted")
                 if previous is not None and current.account != previous.account:
                     raise ValueError()
                 current.require_valid()
@@ -492,18 +526,41 @@ class Broker(ThreadingHTTPServer):
                     raise Refusal("subscription_refresh_failed")
                 if (current.expires <= time.time() + 300
                         or (previous is not None and current.access == previous.access)):
+                    if generation in self.subscription_spent:
+                        self.subscription_terminal.add(generation)
+                        raise Refusal("subscription_refresh_exhausted")
+                    now = time.monotonic()
+                    if (self.subscription_last_refresh is not None
+                            and now - self.subscription_last_refresh < REFRESH_COOLDOWN):
+                        raise Refusal("subscription_refresh_cooldown")
+                    # Spend BEFORE the network call; failure cannot restore budget.
+                    self.subscription_spent.add(generation)
+                    self.subscription_last_refresh = now
                     try:
-                        current = self.refresh_subscription(current, deadline)
+                        refreshed = self.refresh_subscription(current, deadline)
                     except (Refusal, OSError, ValueError, KeyError, TypeError, http.client.HTTPException):
-                        self.subscription_failed = True
+                        self.subscription_terminal.add(generation)
                         raise Refusal("subscription_refresh_failed") from None
-                    current.secrets = tuple(dict.fromkeys(self.subscription_source_secrets + current.secrets))
-                    self.subscription_cached = current
+                    # Persisting a rotation externally must not create new budget.
+                    self.subscription_spent.add(refreshed.generation)
+                    refreshed.generation = generation
+                    refreshed.secrets = tuple(dict.fromkeys(current.secrets + refreshed.secrets))
+                    refreshed.private_ids = tuple(dict.fromkeys(current.private_ids + refreshed.private_ids))
+                    self.subscription_cached = current = refreshed
                 return current
             except (OSError, ValueError, KeyError, TypeError, AttributeError):
                 raise Refusal("credential_unavailable") from None
         finally:
             self.subscription_lock.release()
+
+    def exhaust_subscription(self, current, deadline):
+        if not self.subscription_lock.acquire(timeout=max(0, deadline - time.monotonic())):
+            raise Refusal("transport_failed", 502)
+        try:
+            self.subscription_terminal.add(current.generation)
+        finally:
+            self.subscription_lock.release()
+        raise Refusal("subscription_refresh_exhausted")
 
     def refresh_subscription(self, current, deadline):
         if not current.refresh:
@@ -588,6 +645,7 @@ class Handler(BaseHTTPRequestHandler):
         fd, upstream, committed, started = None, None, False, False
         credential, subscription = None, None
         secrets = (SYNTHETIC_BEARER,)
+        private_ids = ()
         authenticated = False
         try:
             auth = self.headers.get_all("Authorization", [])
@@ -628,6 +686,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.server.auth_mode == "subscription":
                 subscription = self.server.subscription(deadline=response_deadline)
                 secrets += subscription.secrets
+                private_ids += subscription.private_ids
             else:
                 credential = self.server.credential()
                 secrets += (credential,)
@@ -654,8 +713,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise Refusal("invalid_turn_metadata", 400) from None
             # Do not persist even known credentials disguised as metadata/identifiers.
             def safe(value):
-                return not isinstance(value, str) or not any(
-                    secret in value for secret in secrets if secret)
+                return not sensitive(value, secrets, private_ids)
             if not all(safe(v) for v in [record["model"], record["effort"], *record["client_ids"].values()]):
                 record.update(model=None, effort=None, client_ids={})
                 raise Refusal("sensitive_metadata", 400)
@@ -686,13 +744,16 @@ class Handler(BaseHTTPRequestHandler):
                 request_id = identifier(response.getheader("x-request-id"))
                 if request_id and safe(request_id):
                     record["upstream_request_id"] = request_id
-                if response.status != 401 or subscription is None or attempt:
+                if response.status == 401 and subscription is not None and attempt:
+                    self.server.exhaust_subscription(subscription, response_deadline)
+                if response.status != 401 or subscription is None:
                     break
                 # No response bytes have been served. Close (do not read or log)
                 # the error body, then reload/refresh once under the same budget.
                 upstream.close()
                 subscription = self.server.subscription(previous=subscription, deadline=response_deadline)
                 secrets += subscription.secrets
+                private_ids += subscription.private_ids
             if not 200 <= response.status < 300:
                 raise Refusal("upstream_refused", 502)
             if not record["upstream_request_id"]:
@@ -732,7 +793,7 @@ class Handler(BaseHTTPRequestHandler):
             if subscription is not None:
                 subscription.require_valid()
             record.update(upstream_response_id=response_id, outcome="admitted", recorded_at=timestamp())
-            self.server.evidence.append(fd, record, secrets)
+            self.server.evidence.append(fd, record, secrets, private_ids=private_ids)
             committed = True
             self.send_response(response.status)
             self.send_header("Content-Type", content_type)
@@ -760,7 +821,7 @@ class Handler(BaseHTTPRequestHandler):
             if subscription is not None:
                 subscription.require_valid()
             record.update(kind="turn_end", outcome="relay_completed", recorded_at=timestamp())
-            self.server.evidence.append(fd, record, secrets)
+            self.server.evidence.append(fd, record, secrets, private_ids=private_ids)
             self.wfile.write(b"0\r\n\r\n")
             self.wfile.flush()
         except (Refusal, OSError, ValueError, http.client.HTTPException) as exc:
@@ -772,7 +833,7 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     record.update(outcome=failure.code, recorded_at=timestamp())
                 try:
-                    self.server.evidence.append(fd, record, secrets)
+                    self.server.evidence.append(fd, record, secrets, private_ids=private_ids)
                 except Refusal:
                     failure = Refusal("evidence_unwritable")
             if not started:

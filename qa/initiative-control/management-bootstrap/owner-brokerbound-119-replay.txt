@@ -1,0 +1,7 @@
+test_auth_failure_inactive_provider_and_stale_screen (test_fable_launcher.RealTmux.test_auth_failure_inactive_provider_and_stale_screen) ... ok
+test_forced_cleanup_stops_owned_descendant (test_fable_launcher.RealTmux.test_forced_cleanup_stops_owned_descendant) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 26.776s
+
+OK
