@@ -36,7 +36,10 @@ def validate_status(value):
     extra = [key for key in ("unacknowledged_answers", "new_thread_fallbacks", "fence_gap", "pending_pointers", "listener_exits", "listener_events_pruned") if key in value]
     d.shape(value, "schema enabled state last_verified watermark pending " + " ".join(COUNTS + extra)
             + (" last_listener_exit" if "last_listener_exit" in value else "")
-            + (" supervisor_health" if "supervisor_health" in value else ""))
+            + (" supervisor_health" if "supervisor_health" in value else "")
+            + (" qualification_fault" if "qualification_fault" in value else ""))
+    if "qualification_fault" in value:
+        d.require(value["qualification_fault"] in s.QUALIFICATION_HOLDS)
     if "supervisor_health" in value:
         health = value["supervisor_health"]
         validate_supervisor_health(health)
@@ -168,10 +171,11 @@ def read_supervisor_health(store, now, binding):
 def project_disclosure(value, store, journal, alerts, now=None):
     now = now or utc_now()
     health = read_supervisor_health(store, now, journal["binding"])
+    if journal["hold"] in s.QUALIFICATION_HOLDS:
+        value["qualification_fault"] = journal["hold"]
     audit, held = s.outstanding_quarantine(journal), journal.get("held_human", {})
     count = audit["count"] + len(held)
-    expired = sum(row["reason"] == "unbound-expired"
-                  for row in journal.get("quarantine", {}).get("records", []))
+    expired = audit.get("expired", 0)
     if count or audit.get("unknown") or expired:
         times = [entry["arrived_at"] for entry in held.values()]
         if audit["oldest_at"] is not None:

@@ -401,7 +401,8 @@ def slack_health(snapshot, at):
                 fence_gap=status.get("fence_gap", 0), pending_pointers=status.get("pending_pointers", 0),
                 listener_exits=status.get("listener_exits", 0),
                 listener_events_pruned=status.get("listener_events_pruned", 0),
-                last_listener_exit=copy.deepcopy(status.get("last_listener_exit")))
+                last_listener_exit=copy.deepcopy(status.get("last_listener_exit")),
+                **({"qualification_fault": status["qualification_fault"]} if "qualification_fault" in status else {}))
 
 
 def render(snapshot, at, sprints, documents):

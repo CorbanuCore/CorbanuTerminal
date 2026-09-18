@@ -1060,6 +1060,101 @@ class ManagerTests(fixtures.LiveFixture):
         held = feed.project_slack(self.feed_root, self.root, NOW, True)
         self.assertEqual(feed.slack_health(dict(slack=held), NOW)["state"], "held")
 
+    def rendered_projection(self, at):
+        import attention
+        import decision_feed as feed
+        projected = feed.project_slack(self.feed_root, self.root, at, True)
+        saved = feed.read_slack(self.feed_root, d.load_fixture(self.feed_root, at), at)
+        self.assertEqual(saved[0], "valid")
+        health = feed.slack_health(dict(slack=saved[1]), at)
+        rendered = attention.render_decisions(d.load_fixture(self.feed_root, at), at, [], {},
+                                             slack=saved[1], slack_health=health)
+        return projected, health, rendered
+
+    def test_unknown_history_guidance_renders_through_saved_projection_and_clears(self):
+        fixtures.TransportTests.quiet_legacy_unknown(self)
+        for advanced in (False, True):
+            if advanced:
+                self.callback(fixtures.payload("EvUnrelated", user=PIN["bot"],
+                                               bot_id=PIN["bot"], app_id=PIN["app"]))
+            projected, health, rendered = self.rendered_projection(NOW)
+            self.assertEqual((projected["status"]["state"], health["state"]), ("unknown", "unknown"))
+            self.assertIsNone(self.store.read("transport")["hold"])
+            self.assertIn("Quarantine history is incomplete", rendered)
+            self.assertIn("exact gap review to resolve the unknown history", rendered)
+            self.assertNotIn("before clearing the hold", rendered)
+        self.review_gap()
+        _, health, rendered = self.rendered_projection(NOW)
+        self.assertEqual(health["state"], "last-verified")
+        self.assertNotIn("Quarantine history is incomplete", rendered)
+
+    def test_nonheld_expiry_renders_until_review_then_stays_cleared(self):
+        fixtures.TransportTests.unbind_fixture(self)
+        self.callback()
+        # Reviewing the held arrival must not pre-review its later expiry.
+        self.review_gap()
+        deadline = self.store.read("transport")["held_human"]["Ev001"]["expires_at"]
+        at = (d.stamp(deadline) + s.dt.timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.transport.now = self.owner.now = lambda: at
+        self.owner.update("connected")
+        self.store.write("supervisor", dict(binding=PIN, health=dict(
+            state="healthy", event_flush_failures=0, pending_events=0, observed_at=at, reason=None)))
+        _, health, rendered = self.rendered_projection(at)
+        self.assertEqual(health["state"], "stale")  # Real non-held publication path.
+        self.assertEqual(health["supervisor_health"]["quarantine"]["expired"], 1)
+        self.assertIn("A reply expired undelivered", rendered)
+        self.assertIn("Do nothing to replay", rendered)
+        self.assertIn("review the expiry to clear this notice", rendered)
+        before = self.store.read("transport")
+        write = self.store.write
+        def fail_review(name, value):
+            if name == "transport" and len(value["gap_reviews"]) > len(before["gap_reviews"]):
+                raise OSError("fixture expiry review persistence")
+            return write(name, value)
+        with patch.object(self.store, "write", side_effect=fail_review), self.assertRaises(d.Invalid):
+            self.review_gap()
+        self.assertEqual(a.Store(self.root).read("transport"), before)
+        self.assertIn("A reply expired undelivered", self.rendered_projection(at)[2])
+        self.review_gap()
+        for advanced in (False, True):
+            if advanced:
+                self.callback(fixtures.payload("EvUnrelated", user=PIN["bot"],
+                                               bot_id=PIN["bot"], app_id=PIN["app"]))
+            _, health, rendered = self.rendered_projection(at)
+            self.assertEqual(health["state"], "last-verified")
+            self.assertNotIn("quarantine", health["supervisor_health"])
+            self.assertNotIn("A reply expired undelivered", rendered)
+            journal = a.Store(self.root).read("transport")
+            self.assertEqual(journal["quarantine"]["total"], 1)
+            self.assertEqual(journal["quarantine"]["records"][0]["reason"], "unbound-expired")
+            self.assertEqual(s.outstanding_quarantine(journal)["expired"], 0)
+        # A new expiry at the SAME clock tick as the review is a new obligation.
+        self.callback(fixtures.payload("EvNext"))
+        next_deadline = self.store.read("transport")["held_human"]["EvNext"]["expires_at"]
+        self.transport.now = self.owner.now = lambda: next_deadline
+        self.review_gap()
+        self.owner.update("connected")
+        self.store.write("supervisor", dict(binding=PIN, health=dict(
+            state="healthy", event_flush_failures=0, pending_events=0, observed_at=next_deadline, reason=None)))
+        _, health, rendered = self.rendered_projection(next_deadline)
+        self.assertEqual(health["supervisor_health"]["quarantine"]["expired"], 1)
+        self.assertIn("A reply expired undelivered", rendered)
+
+    def test_qualification_rejection_reason_renders_through_saved_projection(self):
+        self.sending()
+        for code, expected in (("invalid_auth", "repair the app credentials"),
+                               ("missing_scope", "restore the required app scopes")):
+            self.reply = lambda *_: (dict(ok=False, error=code), 200, {})
+            with self.assertRaises(s.QualificationRejected):
+                self.review_gap()
+            _, health, rendered = self.rendered_projection(NOW)
+            self.assertEqual(health["state"], "held")
+            self.assertIn(expected, rendered)
+            self.assertIn("review the hold and requalify", rendered)
+            self.reply = None
+            self.review_gap()
+            self.assertNotIn(expected, self.rendered_projection(NOW)[2])
+
     def test_supervisor_reason_precedes_quarantine_without_hiding_count(self):
         import decision_feed as feed
         self.sending()

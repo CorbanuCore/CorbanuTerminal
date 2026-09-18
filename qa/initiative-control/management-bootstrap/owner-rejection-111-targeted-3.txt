@@ -1,0 +1,8 @@
+test_legacy_expiry_migration_review_and_pruning_preserve_obligations (test_slack_transport.TransportTests.test_legacy_expiry_migration_review_and_pruning_preserve_obligations) ... ok
+test_outstanding_expiry_summary_rejects_invalid_counts (test_slack_transport.TransportTests.test_outstanding_expiry_summary_rejects_invalid_counts) ... ok
+test_nonheld_expiry_renders_until_review_then_stays_cleared (test_decision_manager.ManagerTests.test_nonheld_expiry_renders_until_review_then_stays_cleared) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 3.727s
+
+OK

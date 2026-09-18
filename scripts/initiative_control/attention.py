@@ -123,14 +123,21 @@ def slack_notice(health):
             details.append("Quarantined reply: act by asking the manager to review its disposition. Delivery is not established.")
         if intake.get("held", 0):
             details.append("Waiting for a route: wait for the manager to bind the reply route. Do not resend while it is held; arrival is not guaranteed.")
-        if intake.get("unknown", 0):
-            details.append("Quarantine history is incomplete. Ask the manager for an exact gap review before clearing the hold.")
-        if intake.get("expired", 0):
-            details.append("A reply expired undelivered while waiting for a route. Do nothing to replay that expired reply; if an answer is still needed, answer in the manager task.")
-        if details and condition == "held":
-            action = " ".join(details)
-        elif details:
-            action += " " + " ".join(details)
+    if intake.get("unknown", 0):
+        details.append("Quarantine history is incomplete. Ask the manager for an exact gap review to resolve the unknown history.")
+    if intake.get("expired", 0):
+        details.append("A reply expired undelivered while waiting for a route. Do nothing to replay that expired reply; if an answer is still needed, answer in the manager task. Ask the manager to review the expiry to clear this notice.")
+    fault = {
+        "qualification-auth-rejected": "Slack rejected authentication. Ask the manager to repair the app credentials, review the hold and requalify.",
+        "qualification-scopes-rejected": "Slack rejected the required permissions. Ask the manager to restore the required app scopes, review the hold and requalify.",
+        "qualification-identity-rejected": "Slack returned a different workspace or bot identity. Ask the manager to correct the app binding, review the hold and requalify.",
+    }.get(health.get("qualification_fault"))
+    if fault:
+        details.append(fault)
+    if details and condition in ("held", "last-verified"):
+        action = " ".join(details)
+    elif details:
+        action += " " + " ".join(details)
     return ("Slack observation: " + str(condition) +
             "; assessed " + str(health.get("assessed_at") or "unknown") +
             "; last verified " + str(health.get("last_verified") or "never") +
