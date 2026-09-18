@@ -9,15 +9,23 @@ Only the pinned API-key client's POST /v1/responses and /v1/responses/compact
 are supported (codex-api endpoint/{responses,compact}.rs). Its request bodies
 are uncompressed JSON (core/client.rs::responses_request_compression).
 
-One fsynced "turn" admission/refusal record is appended per HTTP attempt before
-any successful response bytes are released. Admission requires the upstream
-x-request-id and response.id (from response.created for SSE). The record is NOT
-a completion receipt: joins to client rollouts prove completion/disconnection.
-Only the initial SSE event is buffered; subsequent entity bytes stream unchanged.
-HTTP chunk framing is regenerated. An unwritable journal prevents forwarding;
-a later journal failure prevents delivery. A crash after upstream submission
-but before the receipt can leave an upstream attempt with no receipt, never a
-served success. Such an attempt cannot qualify and must be reconciled upstream.
+A fsynced "turn" admission/refusal record precedes successful response bytes.
+Admission requires upstream x-request-id and response.id; model and effort are
+upstream-resolved, with client declarations and comparisons recorded separately.
+Each admission requires a matching "turn_end": "relay_completed" or "truncated".
+Admission alone is UNFINISHED evidence, never success. A process crash or journal
+failure can prevent a terminal receipt; reconcile such attempts externally.
+Relay completion describes broker delivery, not client acceptance/tool success.
+SSE data-event deadlines match the client's 600-second idle tolerance; connection
+setup uses 60 seconds and actionable response headers/nonstream reads use 180.
+Only the initial SSE event delays forwarding; subsequent bytes stream unchanged
+while bounded event copies track completion. HTTP chunk framing is regenerated.
+An unwritable journal prevents forwarding/delivery. Pre-authentication refusals
+update one padded 1024-byte JSONL aggregate per broker instance, with exact count
+(until explicit uint64 saturation), first/last timestamps and instance join.
+Only that aggregate is mutable; turn records remain append-only. Reads of the
+live aggregate must take a shared flock; preserve the journal after stopping the
+broker. A torn/failed write latches closed; it cannot be qualification evidence.
 
 "port-owner --host 127.0.0.1 --port PORT" uses stock macOS /usr/sbin/lsof and
 /bin/ps, without inspecting argv or environments. It reports visible listening
@@ -47,6 +55,7 @@ import hmac
 import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import ipaddress
+import io
 import json
 import os
 from pathlib import Path
@@ -56,6 +65,7 @@ import stat
 import subprocess
 import sys
 import threading
+import time
 from urllib.parse import urlsplit
 import uuid
 
@@ -64,6 +74,10 @@ SYNTHETIC_BEARER = "corbanu-qualification-only"
 PATHS = {"/v1/responses", "/v1/responses/compact"}
 MAX_BODY = 32 * 1024 * 1024
 MAX_PREFIX = 1024 * 1024
+CONNECT_TIMEOUT = 60
+ACTIONABLE_TIMEOUT = 180
+STREAM_IDLE_TIMEOUT = 600  # model-provider-info; reset per SSE data event.
+REFUSAL_SLOT_BYTES = 1024
 ID_KEYS = {
     "session_id", "thread_id", "turn_id", "conversation_id",
     "parent_thread_id", "parent_turn_id", "forked_from_thread_id",
@@ -146,12 +160,15 @@ class Evidence:
         self.path = Path(path)
         self.lock = threading.Lock()
         self.failed = threading.Event()
+        self.refusal_offset = None
+        self.refusal_count = 0
+        self.refusal_first_at = None
 
     def open(self):
         if self.failed.is_set():
             raise Refusal("evidence_unwritable")
         try:
-            fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+            fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
             info = os.fstat(fd)
             if not stat.S_ISREG(info.st_mode) or not info.st_mode & stat.S_IWUSR:
                 raise OSError("not writable regular evidence")
@@ -162,7 +179,7 @@ class Evidence:
                 os.close(fd)
             raise Refusal("evidence_unwritable") from None
 
-    def append(self, fd, record, secrets=()):
+    def append(self, fd, record, secrets=(), *, aggregate=False):
         def scrub(value):
             if isinstance(value, dict):
                 return {k: scrub(v) for k, v in value.items()}
@@ -179,17 +196,99 @@ class Evidence:
                 try:
                     if not os.path.samestat(os.fstat(fd), self.path.stat()):
                         raise OSError("evidence replaced")
-                    data = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode()
+                    offset = os.lseek(fd, 0, os.SEEK_END)
+                    if aggregate:
+                        record["last_at"] = timestamp()  # Serialize timestamps with the count.
+                        self.refusal_count = min(self.refusal_count + 1, 2**64 - 1)
+                        self.refusal_first_at = self.refusal_first_at or record["last_at"]
+                        record.update(count=self.refusal_count, first_at=self.refusal_first_at,
+                                      count_saturated=self.refusal_count == 2**64 - 1)
+                    data = json.dumps(record, sort_keys=True, separators=(",", ":")).encode()
+                    if aggregate:
+                        if len(data) >= REFUSAL_SLOT_BYTES:
+                            raise OSError("refusal slot overflow")
+                        data = data.ljust(REFUSAL_SLOT_BYTES - 1)
+                        if self.refusal_offset is not None:
+                            if offset < self.refusal_offset + REFUSAL_SLOT_BYTES:
+                                raise OSError("refusal slot removed")
+                            offset = self.refusal_offset
+                        os.lseek(fd, offset, os.SEEK_SET)
+                    data += b"\n"
                     # A short/failed write is fatal; never serve from a partial receipt.
                     if os.write(fd, data) != len(data):
                         raise OSError("short evidence write")
                     os.fsync(fd)
+                    if aggregate:
+                        self.refusal_offset = offset
                 finally:
                     fcntl.flock(fd, fcntl.LOCK_UN)
             except OSError:
                 # Latch while still locked, before any successor can append.
                 self.failed.set()
                 raise Refusal("evidence_unwritable") from None
+
+
+class EventDeadlineReader(io.RawIOBase):
+    """Enforce an event deadline on EVERY socket read, including HTTP framing."""
+
+    def __init__(self, source, sock):
+        self.source, self.sock = source, sock
+        self.reset()
+
+    def reset(self):
+        self.deadline = time.monotonic() + STREAM_IDLE_TIMEOUT
+
+    def readable(self):
+        return True
+
+    def readinto(self, target):
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            raise Refusal("upstream_stream_idle_timeout", 502)
+        self.sock.settimeout(remaining)
+        try:
+            data = self.source.read1(len(target))
+        except TimeoutError:
+            raise Refusal("upstream_stream_idle_timeout", 502) from None
+        target[:len(data)] = data
+        return len(data)
+
+    def close(self):
+        try:
+            self.source.close()
+        finally:
+            super().close()
+
+
+class SSEEvents:
+    """Observe event boundaries without changing the bytes relayed to the client."""
+
+    def __init__(self, deadline):
+        self.deadline = deadline
+        self.pending = bytearray()
+        self.completed = False
+        self.failed = False
+
+    def feed(self, chunk):
+        self.pending.extend(chunk)
+        # LF and CRLF are the framing accepted by the prefix reader too.
+        while match := re.search(br"\r?\n\r?\n", self.pending):
+            raw = bytes(self.pending[:match.end()])
+            del self.pending[:match.end()]
+            data = b"\n".join(line[5:].removeprefix(b" ")
+                              for line in raw.splitlines() if line.startswith(b"data:"))
+            if not data:
+                continue  # Comments/heartbeats are not dispatched SSE data events.
+            self.deadline.reset()
+            try:
+                obj = json.loads(data)
+                kind = obj.get("type")
+            except (ValueError, AttributeError):
+                continue
+            self.completed |= kind == "response.completed"
+            self.failed |= kind in ("error", "response.failed", "response.incomplete")
+        if len(self.pending) > MAX_BODY:
+            raise Refusal("upstream_event_too_large", 502)
 
 
 class Broker(ThreadingHTTPServer):
@@ -220,7 +319,7 @@ class Broker(ThreadingHTTPServer):
                              "uid": os.getuid(), "instance_id": str(uuid.uuid4()),
                              "module_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                              "socket": {"host": self.server_address[0], "port": self.server_address[1]}}
-            record = {"schema": 1, "kind": "startup", "recorded_at": timestamp(),
+            record = {"schema": 2, "kind": "startup", "recorded_at": timestamp(),
                       "broker": self.identity}
             fd = self.evidence.open()
             try:
@@ -273,22 +372,32 @@ class Handler(BaseHTTPRequestHandler):
         self.close_connection = True
 
     def do_POST(self):
-        record = {"schema": 1, "kind": "turn", "broker": self.server.identity,
+        record = {"schema": 2, "kind": "turn", "broker": self.server.identity,
                   "attempt_id": str(uuid.uuid4()), "received_at": timestamp(),
                   "upstream_headers_at": None, "recorded_at": None,
                   "path": self.path if self.path in PATHS else None,
                   "inbound_sha256": None, "model": None, "effort": None,
                   "client_ids": {}, "upstream_request_id": None,
                   "upstream_response_id": None, "upstream_status": None,
+                  "resolution_match": {"model": None, "effort": None},
                   "outcome": None}
         fd, upstream, committed, started = None, None, False, False
         credential = None
+        authenticated = False
         try:
-            fd = self.server.evidence.open()  # Before any upstream activity.
             auth = self.headers.get_all("Authorization", [])
             if len(auth) != 1 or not hmac.compare_digest(
                     auth[0].encode(), ("Bearer " + SYNTHETIC_BEARER).encode()):
-                raise Refusal("synthetic_bearer_required", 401)
+                fd = self.server.evidence.open()
+                self.server.evidence.append(fd, {
+                    "schema": 2, "kind": "preauth_refusals",
+                    "broker_instance_id": self.server.identity["instance_id"],
+                    "outcome": "synthetic_bearer_required", "last_at": timestamp(),
+                }, aggregate=True)
+                self.refuse("synthetic_bearer_required", 401)
+                return
+            authenticated = True
+            fd = self.server.evidence.open()  # Before any upstream activity.
             if self.command != "POST" or self.path not in PATHS:
                 raise Refusal("route_refused", 404)
             sizes = self.headers.get_all("Content-Length", [])
@@ -311,7 +420,8 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, AttributeError):
                 raise Refusal("invalid_json_request", 400) from None
             credential = self.server.credential()
-            record["model"], record["effort"] = body["model"], effort
+            record["client_ids"].update({"body.model": body["model"],
+                                         "body.reasoning.effort": effort})
             for source, values in (
                 ("body", body), ("client_metadata", body.get("client_metadata")),
                 ("metadata", body.get("metadata")),
@@ -345,7 +455,10 @@ class Handler(BaseHTTPRequestHandler):
                             "X-Client-Request-Id": record["attempt_id"]})
             url = self.server.upstream
             cls = http.client.HTTPSConnection if url.scheme == "https" else http.client.HTTPConnection
-            upstream = cls(url.hostname, url.port, timeout=60)
+            upstream = cls(url.hostname, url.port, timeout=CONNECT_TIMEOUT)
+            upstream.connect()
+            upstream_socket = upstream.sock
+            upstream_socket.settimeout(ACTIONABLE_TIMEOUT)
             upstream.request("POST", self.path, body=raw, headers=headers)
             response = upstream.getresponse()
             record.update(upstream_status=response.status, upstream_headers_at=timestamp())
@@ -360,19 +473,34 @@ class Handler(BaseHTTPRequestHandler):
                 raise Refusal("upstream_encoding_refused", 502)
             content_type = response.getheader("Content-Type", "").split(";")[0].strip()
             if content_type == "text/event-stream":
-                prefix, response_id = self.sse_prefix(response)
+                deadline = EventDeadlineReader(response.fp, upstream_socket)
+                response.fp = io.BufferedReader(deadline)
+                events = SSEEvents(deadline)
+                prefix, resolved = self.sse_prefix(response, events)
             elif content_type == "application/json":
                 prefix = response.read(MAX_BODY + 1)
                 if len(prefix) > MAX_BODY:
                     raise Refusal("upstream_body_too_large", 502)
                 try:
-                    response_id = identifier(json.loads(prefix).get("id"))
+                    resolved = json.loads(prefix)
+                    if not isinstance(resolved, dict):
+                        raise ValueError()
                 except (ValueError, AttributeError):
                     raise Refusal("upstream_invalid_json", 502) from None
             else:
                 raise Refusal("upstream_content_type_refused", 502)
+            response_id = identifier(resolved.get("id"))
             if not response_id or not safe(response_id):
                 raise Refusal("upstream_response_id_missing", 502)
+            resolved_reasoning = resolved.get("reasoning")
+            resolved_effort = (resolved_reasoning.get("effort")
+                               if isinstance(resolved_reasoning, dict) else None)
+            for field, value in (("model", resolved.get("model")), ("effort", resolved_effort)):
+                value = identifier(value)
+                record[field] = value if value and safe(value) else None
+                declared = body["model"] if field == "model" else effort
+                record["resolution_match"][field] = (
+                    record[field] == declared if record[field] is not None else None)
             record.update(upstream_response_id=response_id, outcome="admitted", recorded_at=timestamp())
             self.server.evidence.append(fd, record, (credential, SYNTHETIC_BEARER))
             committed = True
@@ -389,13 +517,24 @@ class Handler(BaseHTTPRequestHandler):
             self.chunk(prefix)
             if content_type == "text/event-stream":
                 while chunk := response.read1(65536):
+                    events.feed(chunk)
                     self.chunk(chunk)
+                if events.failed:
+                    raise Refusal("upstream_stream_failed", 502)
+                if not events.completed:
+                    raise Refusal("upstream_stream_incomplete", 502)
+            record.update(kind="turn_end", outcome="relay_completed", recorded_at=timestamp())
+            self.server.evidence.append(fd, record, (credential, SYNTHETIC_BEARER))
             self.wfile.write(b"0\r\n\r\n")
             self.wfile.flush()
         except (Refusal, OSError, ValueError, http.client.HTTPException) as exc:
             failure = exc if isinstance(exc, Refusal) else Refusal("transport_failed", 502)
-            if not committed and fd is not None and failure.code != "evidence_unwritable":
-                record.update(outcome=failure.code, recorded_at=timestamp())
+            if authenticated and fd is not None and failure.code != "evidence_unwritable":
+                if committed:
+                    record.update(kind="turn_end", outcome="truncated", failure_code=failure.code,
+                                  recorded_at=timestamp())
+                else:
+                    record.update(outcome=failure.code, recorded_at=timestamp())
                 try:
                     self.server.evidence.append(fd, record, (credential, SYNTHETIC_BEARER))
                 except Refusal:
@@ -414,13 +553,14 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(f"{len(data):x}\r\n".encode() + data + b"\r\n")
             self.wfile.flush()
 
-    def sse_prefix(self, response):
+    def sse_prefix(self, response, events):
         prefix, event = bytearray(), []
         while len(prefix) < MAX_PREFIX:
             line = response.readline(MAX_PREFIX - len(prefix) + 1)
             if not line:
                 break
             prefix.extend(line)
+            events.feed(line)
             if len(prefix) > MAX_PREFIX:
                 break
             if line.rstrip(b"\r\n") == b"":
@@ -431,7 +571,10 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     obj = json.loads(data)
                     if obj.get("type") == "response.created":
-                        return bytes(prefix), identifier(obj.get("response", {}).get("id"))
+                        resolved = obj.get("response")
+                        if isinstance(resolved, dict):
+                            return bytes(prefix), resolved
+                        break
                     if obj.get("type") in ("error", "response.failed", "response.completed"):
                         break
                 except (ValueError, AttributeError):

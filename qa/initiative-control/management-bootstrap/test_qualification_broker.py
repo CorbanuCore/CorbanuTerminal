@@ -1,5 +1,6 @@
 """Real loopback HTTP tests, with invented credentials and no live profiles."""
 import contextlib
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -12,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -42,21 +44,26 @@ class FakeUpstream(BaseHTTPRequestHandler):
         request_id = f"req_upstream_{number}"
         if self.server.mode == "secret_id":
             response_id = FAKE_SECRET
-        first = b": heartbeat\r\n\r\n" + event("response.created", response={"id": response_id})
+        resolved = {"id": response_id, **self.server.resolution}
+        first = b": heartbeat\r\n\r\n" + event("response.created", response=resolved)
         tool = {"id": "fc_fixture", "type": "function_call", "call_id": "call_fixture",
                 "name": "fixture_tool", "arguments": '{"value":1}'}
         output = [] if any(item.get("type") == "function_call_output" for item in body.get("input", [])
                            if isinstance(item, dict)) else [tool]
         tail = event("response.output_item.done", item=tool) if output else b""
         tail += event("response.completed", response={"id": response_id, "output": output})
-        payload = first + tail
+        if self.server.mode == "early_eof":
+            tail = b""
+        elif self.server.mode == "failed":
+            tail = event("response.failed", response=resolved)
+        payload = first + b"".join(chunk for _, chunk in self.server.intervals) + tail
         if self.server.mode == "error":
             self.send_response(401)
             payload = FAKE_SECRET.encode()  # Must not relay/log an upstream error body.
             content_type = "application/json"
         elif self.path.endswith("/compact") or not body.get("stream"):
             self.send_response(200)
-            payload = json.dumps({"id": response_id, "output": output}).encode()
+            payload = json.dumps({**resolved, "output": output}).encode()
             content_type = "application/json"
         else:
             self.send_response(200)
@@ -78,6 +85,13 @@ class FakeUpstream(BaseHTTPRequestHandler):
                 self.chunk(first[13:])
                 self.server.prefix_sent.set()
                 self.server.release.wait(5)
+                for delay, chunk in self.server.intervals:
+                    time.sleep(delay)
+                    if self.server.mode == "framing_trickle":
+                        self.wfile.write(chunk)
+                        self.wfile.flush()
+                    else:
+                        self.chunk(chunk)
                 for offset in range(0, len(tail), 17):
                     self.chunk(tail[offset:offset + 17])
             else:
@@ -114,6 +128,8 @@ class BrokerTests(unittest.TestCase):
         self.up = ThreadingHTTPServer(("127.0.0.1", 0), FakeUpstream)
         self.up.requests, self.up.payloads = [], []
         self.up.mode = "ok"
+        self.up.resolution = {"model": "fixture-model", "reasoning": {"effort": "high"}}
+        self.up.intervals = []
         self.up.prefix_sent, self.up.release = threading.Event(), threading.Event()
         self.up.release.set()
         self.start(self.up)
@@ -141,8 +157,8 @@ class BrokerTests(unittest.TestCase):
                     input=[{"role": "user", "content": PROMPT}], stream=True, **extra)
 
     def request(self, body=None, *, path="/v1/responses", bearer=q.SYNTHETIC_BEARER,
-                headers=None, method="POST"):
-        client = http.client.HTTPConnection("127.0.0.1", self.broker.server_port, timeout=3)
+                headers=None, method="POST", timeout=3):
+        client = http.client.HTTPConnection("127.0.0.1", self.broker.server_port, timeout=timeout)
         self.addCleanup(client.close)
         raw = json.dumps(body if body is not None else self.body()).encode()
         values = {"Content-Type": "application/json"}
@@ -161,6 +177,8 @@ class BrokerTests(unittest.TestCase):
         self.assertEqual(response.status, status)
         self.assertEqual(json.loads(response.read()), {"error": code})
         self.assertEqual(len(self.up.requests), before)
+        if code == "synthetic_bearer_required":
+            return next(row for row in self.records() if row["kind"] == "preauth_refusals")
         return self.records()[-1]
 
     def test_startup_records_actual_process_and_bound_socket(self):
@@ -187,7 +205,8 @@ class BrokerTests(unittest.TestCase):
         response, raw = self.request(body, headers=headers)
         self.assertEqual(response.status, 200)
         # This must arrive while the upstream is still blocked before its tail.
-        first = b": heartbeat\r\n\r\n" + event("response.created", response={"id": "resp_upstream_1"})
+        first = b": heartbeat\r\n\r\n" + event(
+            "response.created", response={"id": "resp_upstream_1", **self.up.resolution})
         self.assertEqual(response.read(len(first)), first)
         row = self.records()[-1]  # Evidence exists BEFORE a completed response.
         self.assertEqual(row["outcome"], "admitted")
@@ -209,7 +228,170 @@ class BrokerTests(unittest.TestCase):
         self.assertNotIn("x-request-id", upstream_headers)
         self.up.release.set()
         self.assertEqual(first + response.read(), self.up.payloads[0])
+        self.assertEqual(len(self.records()), 3)
+        self.assertEqual(self.records()[-1]["outcome"], "relay_completed")
+
+    def assert_truncated(self, response, reason):
+        with self.assertRaises(http.client.IncompleteRead):
+            response.read()
+        row = self.records()[-1]
+        self.assertEqual(row["kind"], "turn_end")
+        self.assertEqual(row["outcome"], "truncated")
+        self.assertEqual(row["failure_code"], reason)
+        self.assertEqual(row["attempt_id"], self.records()[-2]["attempt_id"])
+        self.assertNotIn("relay_completed", [r.get("outcome") for r in self.records()])
+
+    def test_real_gap_longer_than_old_timeout_completes(self):
+        self.assertEqual((q.CONNECT_TIMEOUT, q.ACTIONABLE_TIMEOUT, q.STREAM_IDLE_TIMEOUT),
+                         (60, 180, 600))
+        self.up.intervals = [(61, event("response.in_progress"))]
+        started = time.monotonic()
+        response, _ = self.request(timeout=70)
+        self.assertEqual(response.read(), self.up.payloads[-1])
+        self.assertGreaterEqual(time.monotonic() - started, 61)
+        self.assertEqual(self.records()[-1]["outcome"], "relay_completed")
+
+    def test_exceeded_event_idle_tolerance_is_truncation(self):
+        self.up.intervals = [(0.4, event("response.in_progress"))]
+        with patch.object(q, "STREAM_IDLE_TIMEOUT", 0.15):
+            response, _ = self.request()
+            self.assert_truncated(response, "upstream_stream_idle_timeout")
+
+    def test_deadline_renews_per_data_event_not_per_connection(self):
+        self.up.intervals = [(0.1, event("response.in_progress"))] * 5
+        with patch.object(q, "STREAM_IDLE_TIMEOUT", 0.3):
+            started = time.monotonic()
+            response, _ = self.request()
+            self.assertEqual(response.read(), self.up.payloads[-1])
+            self.assertGreater(time.monotonic() - started, 0.3)
+            self.assertEqual(self.records()[-1]["outcome"], "relay_completed")
+
+    def test_comments_and_partial_events_do_not_renew_deadline(self):
+        for chunk in (b": heartbeat\r\n\r\n", b'data: {"partial":'):
+            with self.subTest(chunk=chunk), patch.object(q, "STREAM_IDLE_TIMEOUT", 0.15):
+                self.up.intervals = [(0.05, chunk)] * 8
+                response, _ = self.request()
+                self.assert_truncated(response, "upstream_stream_idle_timeout")
+                # Wait for this fake handler before changing its fixture settings.
+                time.sleep(0.45)
+
+    def test_http_chunk_header_trickle_cannot_extend_event_deadline(self):
+        self.up.mode = "framing_trickle"
+        self.up.intervals = [(0.05, b"1")] * 8
+        with patch.object(q, "STREAM_IDLE_TIMEOUT", 0.15):
+            started = time.monotonic()
+            response, _ = self.request()
+            self.assert_truncated(response, "upstream_stream_idle_timeout")
+            self.assertLess(time.monotonic() - started, 0.4)
+
+    def test_clean_eof_and_upstream_failure_are_not_success(self):
+        for mode, reason in (("early_eof", "upstream_stream_incomplete"),
+                             ("failed", "upstream_stream_failed")):
+            with self.subTest(mode=mode):
+                self.up.mode = mode
+                response, _ = self.request()
+                self.assert_truncated(response, reason)
+
+    def test_upstream_resolution_agreement_and_divergence(self):
+        for stream in (True, False):
+            for model, effort in (("fixture-model", "high"), ("resolved-model", "medium")):
+                with self.subTest(stream=stream, model=model):
+                    self.up.resolution = {"model": model, "reasoning": {"effort": effort}}
+                    body = self.body()
+                    body["stream"] = stream
+                    response, _ = self.request(body)
+                    response.read()
+                    for row in self.records()[-2:]:
+                        self.assertEqual((row["model"], row["effort"]), (model, effort))
+                        self.assertEqual(row["client_ids"]["body.model"], "fixture-model")
+                        self.assertEqual(row["client_ids"]["body.reasoning.effort"], "high")
+                        self.assertEqual(row["resolution_match"],
+                                         {"model": model == "fixture-model", "effort": effort == "high"})
+
+    def test_missing_or_sensitive_upstream_resolution_never_uses_client_claim(self):
+        for resolved in ({}, {"model": FAKE_SECRET, "reasoning": {"effort": FAKE_SECRET}}):
+            with self.subTest(resolved_present=bool(resolved)):
+                self.up.resolution = resolved
+                response, _ = self.request()
+                response.read()
+                row = self.records()[-1]
+                self.assertIsNone(row["model"])
+                self.assertIsNone(row["effort"])
+                self.assertEqual(row["resolution_match"], {"model": None, "effort": None})
+                self.assertNotIn(FAKE_SECRET, self.journal.read_text())
+
+    def test_unauthenticated_flood_has_fixed_space_exact_count_and_recovery(self):
+        startup_bytes = self.journal.stat().st_size
+        before = q.timestamp()
+        with patch.object(self.broker, "credential", side_effect=AssertionError("preauth key read")):
+            for number in range(128):
+                row = self.refusal("synthetic_bearer_required", 401, bearer=None)
+                self.assertEqual(row["count"], number + 1)
+                self.assertEqual(self.journal.stat().st_size, startup_bytes + q.REFUSAL_SLOT_BYTES)
         self.assertEqual(len(self.records()), 2)
+        self.assertLessEqual(before, row["first_at"])
+        self.assertLessEqual(row["first_at"], row["last_at"])
+        self.assertLessEqual(row["last_at"], q.timestamp())
+        self.assertFalse(row["count_saturated"])
+        self.assertEqual(row["broker_instance_id"], self.broker.identity["instance_id"])
+        response, _ = self.request()
+        response.read()
+        self.assertEqual(self.records()[-1]["outcome"], "relay_completed")
+        completed_bytes = self.journal.stat().st_size
+        row = self.refusal("synthetic_bearer_required", 401, bearer=None)
+        self.assertEqual(row["count"], 129)
+        self.assertEqual(self.journal.stat().st_size, completed_bytes)
+        self.assertEqual(self.records()[-1]["outcome"], "relay_completed")
+
+    def test_concurrent_unauthenticated_refusals_do_not_lose_counts(self):
+        def attempt(_):
+            client = http.client.HTTPConnection("127.0.0.1", self.broker.server_port, timeout=5)
+            try:
+                client.request("POST", "/v1/responses", b"{}")
+                response = client.getresponse()
+                self.assertEqual(response.status, 401)
+                response.read()
+            finally:
+                client.close()
+
+        initial_bytes = self.journal.stat().st_size
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            list(pool.map(attempt, range(64)))
+        self.assertEqual(self.records()[-1]["count"], 64)
+        self.assertEqual(self.journal.stat().st_size, initial_bytes + q.REFUSAL_SLOT_BYTES)
+        self.assertEqual(self.up.requests, [])
+
+    def test_preauth_disconnect_does_not_append_per_attempt_failure(self):
+        initial_bytes = self.journal.stat().st_size
+        with patch.object(q.Handler, "refuse", side_effect=BrokenPipeError()):
+            for _ in range(8):
+                with self.assertRaises((http.client.RemoteDisconnected, ConnectionResetError)):
+                    self.request(bearer=None)
+        self.assertEqual(self.records()[-1]["count"], 8)
+        self.assertEqual(self.journal.stat().st_size, initial_bytes + q.REFUSAL_SLOT_BYTES)
+
+    def test_refusal_slot_write_failure_latches_before_upstream(self):
+        self.refusal("synthetic_bearer_required", 401, bearer=None)
+        with patch.object(q.os, "write", return_value=1):
+            response, _ = self.request(bearer=None)
+            self.assertEqual(response.status, 503)
+            self.assertEqual(json.loads(response.read()), {"error": "evidence_unwritable"})
+        self.refusal("evidence_unwritable", 503)
+        self.assertTrue(self.broker.evidence.failed.is_set())
+        self.assertEqual(self.up.requests, [])
+
+    def test_terminal_evidence_failure_never_records_relay_success(self):
+        self.up.release.clear()
+        response, _ = self.request()
+        self.assertEqual(response.status, 200)
+        with patch.object(q.os, "write", return_value=1):
+            self.up.release.set()
+            with self.assertRaises(http.client.IncompleteRead):
+                response.read()
+        self.assertTrue(self.broker.evidence.failed.is_set())
+        self.assertEqual(self.records()[-1]["outcome"], "admitted")
+        self.assertNotIn("relay_completed", [r.get("outcome") for r in self.records()])
+        self.refusal("evidence_unwritable", 503)
 
     def test_tool_call_round_trip_preserves_call_and_output(self):
         first, _ = self.request()
@@ -222,7 +404,7 @@ class BrokerTests(unittest.TestCase):
         self.assertEqual(second.status, 200)
         self.assertIn(b'"output": []', second.read())
         self.assertEqual(self.up.requests[1][2], raw)
-        rows = self.records()[1:]
+        rows = [row for row in self.records() if row["kind"] == "turn"]
         self.assertEqual(len(rows), 2)
         self.assertEqual([r["upstream_response_id"] for r in rows],
                          ["resp_upstream_1", "resp_upstream_2"])
@@ -244,7 +426,8 @@ class BrokerTests(unittest.TestCase):
             with self.subTest(bearer_present=bearer is not None):
                 row = self.refusal("synthetic_bearer_required", 401, bearer=bearer)
                 self.assertEqual(row["outcome"], "synthetic_bearer_required")
-                self.assertIsNone(row["upstream_request_id"])
+                self.assertEqual(row["kind"], "preauth_refusals")
+                self.assertNotIn("upstream_request_id", row)
 
     def test_missing_unreadable_and_invalid_credential(self):
         self.key.unlink()
@@ -433,7 +616,7 @@ class BrokerTests(unittest.TestCase):
         self.assertEqual(errors, "")
         self.assertEqual(output, "")
         self.assertNotIn(FAKE_SECRET, journal.read_text())
-        self.assertEqual(len(journal.read_text().splitlines()), 2)
+        self.assertEqual(len(journal.read_text().splitlines()), 3)
 
     def test_port_owner_tool_error_is_unknown(self):
         with patch.object(q.subprocess, "run",
