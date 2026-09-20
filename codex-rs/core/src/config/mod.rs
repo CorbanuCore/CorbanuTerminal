@@ -645,6 +645,14 @@ pub enum ThreadStoreConfig {
 pub enum AccountingMode {
     #[default]
     Disabled,
+    /// Developer-selected route; identity is rebound to the serving provider per turn.
+    Provider {
+        scope: uuid::Uuid,
+        provider_id: String,
+        wire_api: codex_model_provider_info::WireApi,
+        approved_endpoint: String,
+        api_key_pricing: bool,
+    },
     DirectAnthropic {
         scope: uuid::Uuid,
         approved_endpoint: String,
@@ -2062,14 +2070,10 @@ impl Config {
             config_layer_stack,
         )
         .await?;
-        // Qualification pins the approved route/scope, including explicit OFF.
-        // Changed routes are excluded or fail admission; start a new session to rebind.
-        #[cfg(feature = "developer-accounting")]
-        let config = {
-            let mut config = config;
-            config.accounting.clone_from(&self.accounting);
-            config
-        };
+        // Preserve the developer opt-in and explicit OFF through refresh.
+        // Provider-aware collection rebinds identity and endpoint at each turn.
+        let mut config = config;
+        config.accounting.clone_from(&self.accounting);
         Ok(config)
     }
 

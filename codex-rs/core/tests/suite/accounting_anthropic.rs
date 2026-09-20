@@ -18,6 +18,99 @@ use wiremock::ResponseTemplate;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
+#[tokio::test]
+async fn accounting_plan_identity_zero_usage_and_provider_switch() -> anyhow::Result<()> {
+    use codex_model_provider_info::WireApi;
+    use codex_protocol::protocol::{Op, ThreadSettingsOverrides};
+    for zero in [false, true] {
+        let server = MockServer::start().await;
+        let next_server = MockServer::start().await;
+        let endpoint = format!("{}/v1", server.uri());
+        let next_endpoint = format!("{}/v1", next_server.uri());
+        for destination in [&server, &next_server] {
+            Mock::given(method("POST")).and(path("/v1/messages"))
+                .respond_with(success(
+                    json!({"input_tokens":if zero { 0 } else { 7 },"cache_read_input_tokens":0,"cache_creation_input_tokens":0}),
+                    json!({"output_tokens":if zero { 0 } else { 3 }})))
+                .expect(1).mount(destination).await;
+        }
+        let mode = AccountingMode::Provider {
+            scope: uuid::Uuid::new_v4(),
+            provider_id: "claude-plan".into(),
+            wire_api: WireApi::Anthropic,
+            approved_endpoint: endpoint.clone(),
+            api_key_pricing: false,
+        };
+        let test = builder(endpoint, mode)
+            .with_config(move |config| {
+                config.model_provider_id = "claude-plan".into();
+                config
+                    .model_providers
+                    .insert("claude-plan".into(), config.model_provider.clone());
+                let mut next_provider = config.model_provider.clone();
+                next_provider.base_url = Some(next_endpoint);
+                config
+                    .model_providers
+                    .insert("compatible-fixture".into(), next_provider);
+            })
+            .build_with_auto_env(&server)
+            .await?;
+        test.submit_turn("first provider").await?;
+        test.codex
+            .submit(Op::ThreadSettings {
+                thread_settings: ThreadSettingsOverrides {
+                    model_provider: Some("compatible-fixture".into()),
+                    ..Default::default()
+                },
+            })
+            .await?;
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while test.codex.config_snapshot().await.model_provider_id != "compatible-fixture" {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await?;
+        test.submit_turn("second provider").await?;
+        let db = test.codex.state_db().unwrap();
+        let records = attempts(&db).await?;
+        assert_eq!(records.len(), 2);
+        assert_eq!(
+            records
+                .iter()
+                .map(|a| a.provider.as_str())
+                .collect::<Vec<_>>(),
+            vec!["claude-plan", "compatible-fixture"]
+        );
+        assert_ne!(records[0].request_id, records[1].request_id);
+        assert_ne!(records[0].turn, records[1].turn);
+        assert!(records.iter().all(|a| a.retry_of.is_none()));
+        let now = chrono::Utc::now().timestamp_millis();
+        let InspectionDay::Ready(view) = AccountingStore::inspect_day(
+            &db,
+            test.session_configured.thread_id,
+            now / 86_400_000,
+            now,
+        )
+        .await?
+        else {
+            anyhow::bail!("expected recorded plan usage");
+        };
+        let quotes = view.requests.values().flatten().collect::<Vec<_>>();
+        assert_eq!(quotes.len(), 2);
+        for quote in quotes {
+            assert_eq!(quote.usage.input, Some(if zero { 0 } else { 7 }));
+            assert_eq!(quote.usage.output, Some(if zero { 0 } else { 3 }));
+            assert_eq!(quote.snapshot, None);
+            assert_eq!(quote.all_buckets_priced, None);
+            assert_eq!(quote.buckets, [BucketQuote::MissingRate; 4]);
+        }
+        assert_eq!(server.received_requests().await.unwrap().len(), 1);
+        assert_eq!(next_server.received_requests().await.unwrap().len(), 1);
+        stop(&test).await;
+    }
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn accounting_anthropic_cancel_held_http_other_owner_fresh_turn_and_two_resumes()
 -> anyhow::Result<()> {

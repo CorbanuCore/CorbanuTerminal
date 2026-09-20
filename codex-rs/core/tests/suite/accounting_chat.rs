@@ -10,6 +10,38 @@ use wiremock::matchers::method;
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[tokio::test]
+async fn accounting_chat_custom_provider_collects_with_real_identity() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    mount(&server, success(usage())).await;
+    let mode = AccountingMode::Provider {
+        scope: uuid::Uuid::new_v4(),
+        provider_id: "custom-plan".into(),
+        wire_api: codex_model_provider_info::WireApi::Chat,
+        approved_endpoint: endpoint.clone(),
+        api_key_pricing: false,
+    };
+    let test = builder(endpoint, mode)
+        .with_config(|config| {
+            config.model_provider_id = "custom-plan".into();
+            config.model_provider.name = "Custom Plan".into();
+        })
+        .build_with_auto_env(&server)
+        .await?;
+    test.submit_turn("custom provider accounting").await?;
+    let db = test.codex.state_db().unwrap();
+    let records = attempts(&db).await?;
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].provider, "custom-plan");
+    let prices: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
+    assert!(prices.is_empty());
+    assert_eq!(observations(&db).await?.len(), 1);
+    posts(&server, 1).await;
+    stop(&test).await;
+    Ok(())
+}
+
+#[tokio::test]
 async fn accounting_chat_native_off_and_mode_isolation() -> anyhow::Result<()> {
     for index in 0..5 {
         let server = MockServer::start().await;

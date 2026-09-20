@@ -99,11 +99,20 @@ impl DeferredResponsesSampling {
         self.check()
     }
 
+    pub(super) fn provider_mode(&self) -> bool {
+        matches!(self.mode, AccountingMode::Provider { .. })
+    }
+
     pub(crate) fn websocket_endpoint(&self) -> Result<Option<String>, CodexErr> {
         self.check()?;
         match &self.mode {
             AccountingMode::DirectOpenAiResponses {
                 approved_endpoint, ..
+            }
+            | AccountingMode::Provider {
+                approved_endpoint,
+                wire_api: WireApi::Responses,
+                ..
             } => super::websocket::endpoint(approved_endpoint)
                 .map(Some)
                 .inspect_err(|_| self.reject()),
@@ -118,7 +127,12 @@ impl DeferredResponsesSampling {
         endpoint: &str,
     ) -> Result<Option<Arc<Sampling>>, CodexErr> {
         self.check()?;
-        if !eligible(provider, auth) {
+        let admitted = if matches!(self.mode, AccountingMode::Provider { .. }) {
+            eligible(provider, auth)
+        } else {
+            legacy_eligible(provider, auth)
+        };
+        if !admitted {
             if self.sampling.initialized() {
                 self.reject();
                 self.check()?;
@@ -130,12 +144,37 @@ impl DeferredResponsesSampling {
         }
         | AccountingMode::DirectOpenAiResponses {
             approved_endpoint, ..
+        }
+        | AccountingMode::Provider {
+            approved_endpoint,
+            wire_api: WireApi::Responses,
+            ..
         }) = &self.mode
         else {
             self.reject();
             return Err(CodexErr::Fatal(FAILURE.into()));
         };
         if endpoint != format!("{}/responses", approved_endpoint.trim_end_matches('/')) {
+            self.reject();
+            return Err(CodexErr::Fatal(FAILURE.into()));
+        }
+        let mode = if let AccountingMode::Provider { provider_id, .. } = &self.mode {
+            super::turn_mode(
+                &self.mode,
+                provider_id,
+                provider,
+                auth.map(CodexAuth::auth_mode),
+                approved_endpoint,
+            )
+        } else {
+            self.mode.clone()
+        };
+        if let Some(existing) = self.sampling.get()
+            && let AccountingMode::Provider {
+                api_key_pricing, ..
+            } = &mode
+            && *api_key_pricing == matches!(existing.pricing, super::Pricing::Unavailable)
+        {
             self.reject();
             return Err(CodexErr::Fatal(FAILURE.into()));
         }
@@ -155,7 +194,7 @@ impl DeferredResponsesSampling {
                     runtime,
                     self.session.thread_id,
                     self.turn.clone(),
-                    &self.mode,
+                    &mode,
                     self.request,
                 )
                 .await?;
@@ -176,7 +215,11 @@ impl DeferredResponsesSampling {
     }
 }
 
-pub(super) fn eligible(provider: &ModelProviderInfo, auth: Option<&CodexAuth>) -> bool {
+pub(super) fn eligible(provider: &ModelProviderInfo, _auth: Option<&CodexAuth>) -> bool {
+    provider.wire_api == WireApi::Responses && super::route_refusal(provider).is_none()
+}
+
+pub(super) fn legacy_eligible(provider: &ModelProviderInfo, auth: Option<&CodexAuth>) -> bool {
     provider.wire_api == WireApi::Responses
         && matches!(auth, Some(CodexAuth::ApiKey(_)))
         && provider.auth.is_none()

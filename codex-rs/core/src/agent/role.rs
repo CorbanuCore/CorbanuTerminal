@@ -289,6 +289,7 @@ mod reload {
         // including nested settings. A whole-provider copy loses role overrides;
         // copying selected fields would lose the next supported provider setting.
         let accounting_wire = match &config.accounting {
+            crate::config::AccountingMode::Provider { .. } => Some(config.model_provider.wire_api),
             crate::config::AccountingMode::DirectAnthropic { .. }
                 if config.model_provider_id == "anthropic" =>
             {

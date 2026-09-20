@@ -11,6 +11,158 @@ use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
 use std::time::Duration;
 
+#[cfg(feature = "developer-accounting")]
+#[tokio::test]
+async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
+    use codex_login::CodexAuth;
+    use codex_model_provider_info::{ModelProviderInfo, WireApi};
+    let fixture = Fixture::new().await?;
+    let api = CodexAuth::from_api_key("synthetic");
+    let subscription =
+        CodexAuth::from_external_chatgpt_tokens("header.e30.synthetic", "synthetic-account", None)?;
+    let mut cells = 0;
+    for id in [
+        "anthropic",
+        "openai",
+        "claude-plan",
+        "corbanu",
+        "openrouter",
+        "custom",
+    ] {
+        for wire in [WireApi::Responses, WireApi::Chat, WireApi::Anthropic] {
+            for auth_kind in 0..5 {
+                let auth = match auth_kind {
+                    1 => Some(&api),
+                    2 => Some(&subscription),
+                    _ => None,
+                };
+                for exclusion in [None, Some("aws"), Some("chat_completions_provider")] {
+                    let mut provider = ModelProviderInfo::create_openai_provider(None);
+                    provider.wire_api = wire;
+                    if auth_kind == 3 {
+                        provider.experimental_bearer_token = Some("synthetic-plan".into());
+                    }
+                    if auth_kind == 4 {
+                        provider.auth = Some(serde_json::from_value(
+                            serde_json::json!({"command":"never-executed-fixture"}),
+                        )?);
+                    }
+                    if exclusion == Some("aws") {
+                        provider.aws = Some(codex_model_provider_info::ModelProviderAwsAuthInfo {
+                            profile: None,
+                            region: None,
+                        });
+                    }
+                    if exclusion == Some("chat_completions_provider") {
+                        provider.chat_completions_provider = Some(serde_json::json!({}));
+                    }
+                    let selected = developer_accounting_mode(id, &provider);
+                    let endpoint = provider
+                        .to_api_provider(auth.map(CodexAuth::auth_mode))?
+                        .base_url;
+                    let bound = turn_mode(
+                        &selected,
+                        id,
+                        &provider,
+                        auth.map(CodexAuth::auth_mode),
+                        &endpoint,
+                    );
+                    let admitted = exclusion.is_none();
+                    let reason = route_refusal(&provider);
+                    assert_eq!(reason.is_none(), admitted, "{id}/{wire}/{exclusion:?}");
+                    assert_eq!(!matches!(selected, AccountingMode::Disabled), admitted);
+                    assert_eq!(collects(&bound, id, &provider, wire), admitted);
+                    let request = chat_body();
+                    let eligible = match wire {
+                        WireApi::Responses => responses::eligible(&provider, auth),
+                        WireApi::Chat => chat::eligible(&provider, auth, &request),
+                        WireApi::Anthropic => route_refusal(&provider).is_none(),
+                    };
+                    assert_eq!(eligible, admitted, "{id}/{wire}/{exclusion:?}: {reason:?}");
+                    if admitted {
+                        let sample = Sampling::start(
+                            fixture.db.clone(),
+                            fixture.sampling.owner,
+                            format!("matrix-{cells}"),
+                            &bound,
+                        )
+                        .await?;
+                        assert_eq!(sample.provider, id);
+                        let path = match wire {
+                            WireApi::Responses => "responses",
+                            WireApi::Chat => "chat/completions",
+                            WireApi::Anthropic => "messages",
+                        };
+                        assert_eq!(sample.endpoint, format!("{endpoint}/{path}"));
+                        assert!(
+                            sample
+                                .admit("fixture", "http://wrong.invalid")
+                                .await
+                                .is_err()
+                        );
+                    }
+                    cells += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(cells, 270);
+    assert!(serde_json::from_value::<WireApi>(serde_json::json!("unknown")).is_err());
+    Ok(())
+}
+
+#[test]
+fn accounting_chat_request_overrides_are_unattributable() -> Result<()> {
+    use codex_model_provider_info::{ModelProviderInfo, WireApi};
+    let mut provider = ModelProviderInfo::create_openai_provider(None);
+    provider.wire_api = WireApi::Chat;
+    for field in ["provider", "provider_options", "plugins"] {
+        let mut value =
+            serde_json::json!({"model":"fixture","messages":[],"stream":true,"tools":[]});
+        value[field] = if field == "plugins" {
+            serde_json::json!([])
+        } else {
+            serde_json::json!({})
+        };
+        let http =
+            codex_http_client::Request::new(http::Method::POST, ENDPOINT.into()).with_json(&value);
+        assert_eq!(transport::request_refusal(&http), Some(field));
+        let mut request = chat_body();
+        match field {
+            "provider" => request.provider = Some(value[field].clone()),
+            "provider_options" => request.provider_options = Some(value[field].clone()),
+            "plugins" => request.plugins = Some(vec![]),
+            _ => unreachable!(),
+        }
+        assert!(
+            !chat::eligible(&provider, None, &request),
+            "{field} changes serving attribution"
+        );
+    }
+    Ok(())
+}
+
+fn chat_body() -> codex_api::ChatCompletionsRequest {
+    codex_api::ChatCompletionsRequest {
+        model: "fixture".into(),
+        messages: vec![],
+        stream: true,
+        tools: vec![],
+        stream_options: None,
+        tool_choice: None,
+        parallel_tool_calls: None,
+        prompt_cache_key: None,
+        response_format: None,
+        emit_usage: None,
+        enable_thinking: None,
+        reasoning_effort: None,
+        reasoning: None,
+        provider: None,
+        plugins: None,
+        provider_options: None,
+    }
+}
+
 const MODEL: &str = "claude-opus-5";
 const ENDPOINT: &str = "http://127.0.0.1:1/v1/messages";
 

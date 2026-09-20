@@ -1,0 +1,32 @@
+Analysis of sampling cargo-nextest (pid 907) every 1 millisecond
+Process:         cargo-nextest [907]
+Path:            /opt/homebrew/*/cargo-nextest
+Load Address:    0x104428000
+Identifier:      cargo-nextest
+Version:         ???
+Code Type:       ARM64
+Parent Process:  cargo-nextest [86536]
+Target Type:     live task
+
+Date/Time:       2026-09-20 1:55:40.309 pm -0700
+Launch Time:     2026-09-20 1:55:37.947 pm -0700
+OS Version:      macOS 26.6.2 (25G83)
+Report Version:  7
+Analysis Tool:   /usr/bin/sample
+
+Physical footprint:         96K
+Physical footprint (peak):  96K
+Idle exit:                  untracked
+----
+
+Call graph:
+    870 Thread_47795916: Main Thread   DispatchQueue_<multiple>
+      870 _dyld_start  (in dyld) + 0  [0x1059c49c0]
+
+Total number in stack (recursive counted multiple, when >=5):
+
+Sort by top of stack, same collapsed (when >= 5):
+        _dyld_start  (in dyld)        870
+
+Binary images description not available
+

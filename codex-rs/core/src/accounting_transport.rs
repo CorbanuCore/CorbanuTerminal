@@ -115,6 +115,27 @@ impl codex_api::ChatUsageObserver for ResponseEvidence {
     }
 }
 
+/// Request-level routing hints can change the serving provider after selection.
+/// Inspect only the routing keys; never retain or report the request payload.
+pub(super) fn request_refusal(request: &Request) -> Option<&'static str> {
+    use codex_http_client::RequestBody;
+    let decoded;
+    let value = match request.body.as_ref()? {
+        RequestBody::Json(value) => value,
+        RequestBody::EncodedJson(body) => {
+            decoded = match serde_json::from_slice::<serde_json::Value>(body.as_bytes()) {
+                Ok(value) => value,
+                Err(_) => return Some("uninspectable request body"),
+            };
+            &decoded
+        }
+        RequestBody::Raw(_) => return Some("uninspectable request body"),
+    };
+    ["provider", "provider_options", "plugins"]
+        .into_iter()
+        .find(|key| value.get(*key).is_some())
+}
+
 pub(crate) struct AccountingTransport<T> {
     inner: T,
     evidence: Option<Arc<ResponseEvidence>>,
@@ -147,18 +168,19 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
         let Some(evidence) = &self.evidence else {
             return self.inner.stream(request).await;
         };
-        if evidence.attempt.get().is_some() {
+        if evidence.attempt.get().is_some() || request_refusal(&request).is_some() {
             evidence.sampling.reject();
             return Err(TransportError::Build(FAILURE.into()));
         }
-        let admission = if evidence.sampling.provider == "anthropic" {
-            evidence.sampling.admit(&self.model, &request.url).await
-        } else {
-            evidence
-                .sampling
-                .admit_with_tier(&self.model, &request.url, self.tier.as_deref())
-                .await
-        };
+        let admission =
+            if evidence.sampling.dialect == codex_state::accounting::Dialect::NativeAnthropic {
+                evidence.sampling.admit(&self.model, &request.url).await
+            } else {
+                evidence
+                    .sampling
+                    .admit_with_tier(&self.model, &request.url, self.tier.as_deref())
+                    .await
+            };
         let attempt = admission.map_err(|_| {
             evidence.sampling.reject();
             TransportError::Build(FAILURE.into())

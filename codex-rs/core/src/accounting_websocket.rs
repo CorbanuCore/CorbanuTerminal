@@ -18,6 +18,8 @@ use std::sync::Arc;
 pub(crate) struct Provenance {
     endpoint: Option<String>,
     api_key: bool,
+    eligible: bool,
+    auth_mode: Option<codex_protocol::auth::AuthMode>,
 }
 
 impl Provenance {
@@ -32,7 +34,9 @@ impl Provenance {
                 .websocket_url_for_path("responses")
                 .ok()
                 .map(|url| url.to_string()),
-            api_key: !agent_identity && super::responses::eligible(provider, auth),
+            api_key: !agent_identity && super::responses::legacy_eligible(provider, auth),
+            eligible: !agent_identity && super::responses::eligible(provider, auth),
+            auth_mode: auth.map(CodexAuth::auth_mode),
         }
     }
 
@@ -46,7 +50,11 @@ impl Provenance {
         };
         // Unsupported current routes remain excluded until accounting has started.
         // resolve() performs the initialized-route check, without a new auth read.
-        if !self.api_key {
+        if !(if deferred.provider_mode() {
+            self.eligible
+        } else {
+            self.api_key
+        }) {
             deferred.exclude()?;
             return Ok(false);
         }
@@ -123,7 +131,7 @@ impl ResponsesWebsocketAdmission for Admission {
         Box::pin(async move {
             let result = async {
                 anyhow::ensure!(
-                    self.established.api_key
+                    self.established.eligible
                         && self.established.endpoint.as_deref() == Some(self.expected.as_str()),
                     FAILURE
                 );

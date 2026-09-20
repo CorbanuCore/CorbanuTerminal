@@ -108,8 +108,8 @@ async fn accounting_chat_bootstrap_is_lazy_once_and_mode_local() -> anyhow::Resu
 
 #[tokio::test]
 async fn accounting_chat_direct_auth_and_gateway_eligibility() -> anyhow::Result<()> {
-    assert!(eligible(&provider(), Some(&auth()), &body()));
-    assert!(!eligible(&provider(), None, &body()));
+    assert!(legacy_eligible(&provider(), Some(&auth()), &body()));
+    assert!(!legacy_eligible(&provider(), None, &body()));
     for kind in 0..4 {
         let mut provider = provider();
         match kind {
@@ -124,7 +124,7 @@ async fn accounting_chat_direct_auth_and_gateway_eligibility() -> anyhow::Result
             3 => provider.wire_api = WireApi::Responses,
             _ => unreachable!(),
         }
-        assert!(!eligible(&provider, Some(&auth()), &body()));
+        assert!(!legacy_eligible(&provider, Some(&auth()), &body()));
     }
     for index in 0..11 {
         let mut route = provider();
@@ -150,7 +150,7 @@ async fn accounting_chat_direct_auth_and_gateway_eligibility() -> anyhow::Result
             _ => unreachable!(),
         }
         route.base_url = Some(ENDPOINT.into());
-        assert!(!eligible(&route, Some(&auth()), &request));
+        assert!(!legacy_eligible(&route, Some(&auth()), &request));
         let fixture = Fixture::new().await?;
         assert!(
             fixture
@@ -605,7 +605,11 @@ async fn accounting_chat_role_inheritance_reserved_id_parity() -> anyhow::Result
     assert_eq!(config.model_provider, provider());
     assert_eq!(config.model_provider_id, "openai");
     assert_eq!(config.accounting, fixture.deferred.mode);
-    assert!(eligible(&config.model_provider, Some(&auth()), &body()));
+    assert!(legacy_eligible(
+        &config.model_provider,
+        Some(&auth()),
+        &body()
+    ));
     let endpoint = format!("{ENDPOINT}/chat/completions");
     let sampling = fixture
         .deferred

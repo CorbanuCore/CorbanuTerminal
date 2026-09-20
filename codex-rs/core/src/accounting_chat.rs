@@ -107,16 +107,26 @@ impl DeferredChatSampling {
         request: &codex_api::ChatCompletionsRequest,
     ) -> Result<Option<Arc<Sampling>>, CodexErr> {
         self.check()?;
-        if !eligible(provider, auth, request) {
+        let admitted = if matches!(self.mode, AccountingMode::Provider { .. }) {
+            eligible(provider, auth, request)
+        } else {
+            legacy_eligible(provider, auth, request)
+        };
+        if !admitted {
             if self.sampling.initialized() {
                 self.reject();
                 self.check()?;
             }
             return Ok(None);
         }
-        let AccountingMode::DirectOpenAiChat {
+        let (AccountingMode::DirectOpenAiChat {
             approved_endpoint, ..
-        } = &self.mode
+        }
+        | AccountingMode::Provider {
+            approved_endpoint,
+            wire_api: WireApi::Chat,
+            ..
+        }) = &self.mode
         else {
             self.reject();
             return Err(CodexErr::Fatal(FAILURE.into()));
@@ -126,6 +136,26 @@ impl DeferredChatSampling {
                 "{}/chat/completions",
                 approved_endpoint.trim_end_matches('/')
             )
+        {
+            self.reject();
+            return Err(CodexErr::Fatal(FAILURE.into()));
+        }
+        let mode = if let AccountingMode::Provider { provider_id, .. } = &self.mode {
+            super::turn_mode(
+                &self.mode,
+                provider_id,
+                provider,
+                auth.map(CodexAuth::auth_mode),
+                approved_endpoint,
+            )
+        } else {
+            self.mode.clone()
+        };
+        if let Some(existing) = self.sampling.get()
+            && let AccountingMode::Provider {
+                api_key_pricing, ..
+            } = &mode
+            && *api_key_pricing == matches!(existing.pricing, super::Pricing::Unavailable)
         {
             self.reject();
             return Err(CodexErr::Fatal(FAILURE.into()));
@@ -146,7 +176,7 @@ impl DeferredChatSampling {
                     runtime,
                     self.session.thread_id,
                     self.turn.clone(),
-                    &self.mode,
+                    &mode,
                     self.request,
                 )
                 .await?;
@@ -168,6 +198,18 @@ impl DeferredChatSampling {
 }
 
 pub(super) fn eligible(
+    provider: &ModelProviderInfo,
+    _auth: Option<&CodexAuth>,
+    request: &codex_api::ChatCompletionsRequest,
+) -> bool {
+    provider.wire_api == WireApi::Chat
+        && super::route_refusal(provider).is_none()
+        && request.provider.is_none()
+        && request.provider_options.is_none()
+        && request.plugins.is_none()
+}
+
+pub(super) fn legacy_eligible(
     provider: &ModelProviderInfo,
     auth: Option<&CodexAuth>,
     request: &codex_api::ChatCompletionsRequest,

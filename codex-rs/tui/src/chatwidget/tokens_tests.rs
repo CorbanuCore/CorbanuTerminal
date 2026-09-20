@@ -1244,6 +1244,28 @@ fn accounting_inspect_unknown_unavailable_note() {
 }
 
 #[test]
+fn accounting_zero_plan_usage_renders_money_unavailable() {
+    let mut q = quote();
+    q.attempt.provider = "claude-plan".into();
+    q.usage = Usage {
+        input: Some(0),
+        noncached: Some(0),
+        read: Some(0),
+        write: Some(0),
+        output: Some(0),
+        ..Usage::default()
+    };
+    q.buckets = [BucketQuote::MissingRate; 4];
+    q.known_subtotal = Decimal::default();
+    q.all_buckets_priced = None;
+    q.subtotal_display = Decimal::default().display();
+    let lines = attempt_text(&q);
+    assert!(!lines.iter().any(|line| line.contains("$0.000000")));
+    insta::assert_snapshot!(lines.iter().filter(|line| line.starts_with("Token cost:")).cloned().collect::<Vec<_>>().join("\n"),
+        @"Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.");
+}
+
+#[test]
 fn accounting_inspect_estimate_only_never_invents_billed_or_difference() {
     let pages = inspection_pages(Ok(breakdown_packet()));
     for page in &pages {

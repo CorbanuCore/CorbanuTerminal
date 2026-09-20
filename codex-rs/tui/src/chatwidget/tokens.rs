@@ -400,11 +400,20 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
         "Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable"
             .into(),
     ];
-    lines.extend(estimate(
-        q.known_subtotal,
-        i64::from(q.all_buckets_priced.is_none()),
-        1,
-    ));
+    if q.snapshot.is_none()
+        && !q
+            .buckets
+            .iter()
+            .any(|bucket| matches!(bucket, BucketQuote::Priced(_)))
+    {
+        lines.push("Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.".into());
+    } else {
+        lines.extend(estimate(
+            q.known_subtotal,
+            i64::from(q.all_buckets_priced.is_none()),
+            1,
+        ));
+    }
     let u = &q.usage;
     for (index, (label, value)) in METRICS
         .iter()

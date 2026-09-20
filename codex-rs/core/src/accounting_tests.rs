@@ -44,7 +44,7 @@ async fn accounting_build_activation_uses_loaded_provider() -> anyhow::Result<()
     #[cfg(feature = "developer-accounting")]
     assert!(matches!(
         config.accounting,
-        AccountingMode::DirectAnthropic { approved_endpoint, .. }
+        AccountingMode::Provider { approved_endpoint, .. }
             if approved_endpoint == codex_model_provider_info::ANTHROPIC_BASE_URL
     ));
     Ok(())
@@ -88,30 +88,28 @@ async fn accounting_developer_loader_override_survives_refresh() -> anyhow::Resu
 
 #[cfg(feature = "developer-accounting")]
 #[test]
-fn accounting_developer_activation_excludes_other_routes() {
-    use crate::accounting::developer_accounting_mode;
-    use codex_model_provider_info::WireApi;
-    let mut provider = ModelProviderInfo::create_anthropic_provider();
-    for id in ["claude-plan", "openrouter", "corbanu", "custom", "openai"] {
-        assert_eq!(
-            developer_accounting_mode(id, &provider),
-            AccountingMode::Disabled
-        );
+fn accounting_developer_activation_accepts_provider_id_independently_of_dialect() {
+    for id in [
+        "anthropic",
+        "openai",
+        "claude-plan",
+        "openrouter",
+        "corbanu",
+        "custom",
+    ] {
+        for wire in [
+            codex_model_provider_info::WireApi::Anthropic,
+            codex_model_provider_info::WireApi::Responses,
+            codex_model_provider_info::WireApi::Chat,
+        ] {
+            let mut provider = ModelProviderInfo::create_anthropic_provider();
+            provider.wire_api = wire;
+            assert!(matches!(
+                crate::accounting::developer_accounting_mode(id, &provider),
+                AccountingMode::Provider { provider_id, wire_api, .. } if provider_id == id && wire_api == wire
+            ));
+        }
     }
-    provider.wire_api = WireApi::Responses;
-    assert_eq!(
-        developer_accounting_mode("anthropic", &provider),
-        AccountingMode::Disabled
-    );
-    assert!(matches!(
-        developer_accounting_mode("openai", &provider),
-        AccountingMode::DirectOpenAiResponses { .. }
-    ));
-    provider.wire_api = WireApi::Chat;
-    assert!(matches!(
-        developer_accounting_mode("openai", &provider),
-        AccountingMode::DirectOpenAiChat { .. }
-    ));
 }
 
 #[cfg(feature = "developer-accounting")]
