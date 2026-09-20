@@ -77,11 +77,23 @@ never-for-distribution marker, and the package builder refuses any input
 carrying that marker. Your local build is the developer case that ruling
 allowed for, not an exception to it.
 
-Second, the ledger is separate from collection and installs itself on first use
-in this build, so the first turns you run are the first data it can have. An
-empty inspector immediately after switching builds is expected.
+Second, and this one will catch you out: **collection only activates for the
+provider ids `openai` and `anthropic`.** The profile your launcher uses is
+`model_provider = "claude-plan"`, which the lane's own test asserts is excluded
+along with `openrouter`, `corbanu` and `custom`. So if you open the app and run
+`/usage requests` on your usual Claude plan session, you will see nothing, and
+that is the provider gate, not a broken inspector.
 
-After a few real turns:
+To actually exercise it, switch the session to an OpenAI model with `/model`
+before doing the work you want to measure - your other profile already runs
+`openai` - and then inspect. A subscription Claude plan session will not collect
+no matter how many turns you run.
+
+Third, the ledger is separate from collection and installs itself on first use,
+so the first turns after switching are the first data it can have. An empty
+inspector immediately after switching is expected.
+
+After a few real turns on an `openai` session:
 
 - `/usage` for the summary views.
 - `/usage requests` and `/usage requests YYYY-MM-DD` for the day inspector.
