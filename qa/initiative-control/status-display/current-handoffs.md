@@ -1,5 +1,24 @@
 # Current workstream handoffs — September 12
 
+## September 20 19:15 UTC — build for human testing installed
+
+- The launcher's stable links now point at a build of integration commit
+  `3882e39d5`, built from a clean detached checkout of that exact commit. Two
+  packages were produced: the distribution-clean one from the canonical builder,
+  and a developer-accounting one with collection compiled in. Both are signed
+  with the same Developer ID and identifiers, so Keychain and TCC identity are
+  unchanged, and either can be selected with a one-line script.
+- **The shortcut opens the developer-accounting package**, at Travis's explicit
+  request to be able to test the feature. The package builder still refuses any
+  marked input, so this cannot become a shipped binary.
+- Two gates would otherwise read as defects and are now stated on the dashboard:
+  collection activates only for provider ids `openai` and `anthropic` - the
+  lane's own test asserts `claude-plan` is excluded - and the ledger installs
+  itself on first use, so an empty inspector right after switching is expected.
+- The human test queue was rewritten against this build; the older entries had
+  described work from 14-17 September. See
+  [the testing note](human-testing-20260920.md).
+
 ## September 15 19:40 UTC — isolation executed, two units received
 
 - **Security** ([PF-83-S01](../../../docs/sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md)):
