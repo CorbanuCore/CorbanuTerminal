@@ -20,6 +20,7 @@ async fn accounting_chatgpt_subscription_collects_without_api_prices() -> anyhow
         provider_id: "openai".into(),
         wire_api: codex_model_provider_info::WireApi::Responses,
         approved_endpoint: endpoint.clone(),
+        approved_query: None,
         api_key_pricing: false,
     };
     let test = builder(endpoint, mode)

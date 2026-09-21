@@ -11,12 +11,12 @@ use codex_http_client::Response;
 use codex_http_client::StreamResponse;
 use codex_http_client::TransportError;
 use codex_state::accounting::Attempt;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::OnceLock;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use uuid::Uuid;
 
 pub(crate) struct ResponseEvidence {
@@ -151,7 +151,12 @@ impl codex_api::ChatUsageObserver for ResponseEvidence {
 /// zstd-compressed bytes. Reading those as plain JSON fails, and treating that
 /// failure as "uninspectable" refused every compressed turn and collected
 /// nothing, so the decoding lives with the body type that produced them.
-pub(super) fn request_refusal(request: &Request) -> Option<&'static str> {
+pub(super) fn request_refusal(
+    request: &Request,
+    configured_routing: Option<&serde_json::Value>,
+    configured_routing_options: Option<&serde_json::Value>,
+    configured_plugins: Option<&serde_json::Value>,
+) -> Option<&'static str> {
     let Some(value) = request.body.as_ref()?.inspectable_json() else {
         return Some("uninspectable request body");
     };
@@ -162,12 +167,40 @@ pub(super) fn request_refusal(request: &Request) -> Option<&'static str> {
     // attributable to the selected provider while the body said otherwise.
     ["provider", "providerOptions", "provider_options", "plugins"]
         .into_iter()
-        .find(|key| value.get(*key).is_some())
+        .find(|key| {
+            let expected = match *key {
+                "provider" => configured_routing,
+                "providerOptions" | "provider_options" => configured_routing_options,
+                "plugins" => configured_plugins,
+                _ => None,
+            };
+            match (value.get(*key), expected) {
+                (None, _) => false,
+                // Exactly what configuration says this provider sends. The gateway
+                // that was selected is the account billed for the turn.
+                (Some(found), Some(expected)) if found == expected => false,
+                (Some(_), _) => true,
+            }
+        })
 }
 
 pub(crate) struct AccountingTransport<T> {
     inner: T,
     evidence: Option<Arc<ResponseEvidence>>,
+    /// The routing objects this provider is configured to send, if any.
+    ///
+    /// OpenRouter-compatible routes put their configured preferences in the body
+    /// as `provider`; the Vercel gateway puts a configured vendor pin in
+    /// `providerOptions`. Both come from provider and model configuration rather
+    /// than from the turn, and the selected gateway is the account that is billed,
+    /// so a body carrying exactly the configured value stays attributable. A
+    /// DIFFERENT value, or a key configuration did not ask for, is not.
+    configured_routing: Option<serde_json::Value>,
+    configured_routing_options: Option<serde_json::Value>,
+    /// OpenRouter web search rides the request-level `plugins` field, emitted by
+    /// this client from the provider and the session's tool set. Same principle:
+    /// the value the client itself constructed stays attributable.
+    configured_plugins: Option<serde_json::Value>,
     model: String,
     tier: Option<String>,
 }
@@ -179,11 +212,32 @@ impl<T> AccountingTransport<T> {
             evidence,
             model,
             tier: None,
+            configured_routing: None,
+            configured_routing_options: None,
+            configured_plugins: None,
         }
     }
 
     pub(crate) fn with_tier(mut self, tier: Option<String>) -> Self {
         self.tier = tier;
+        self
+    }
+
+    pub(crate) fn with_configured_routing(mut self, routing: Option<serde_json::Value>) -> Self {
+        self.configured_routing = routing;
+        self
+    }
+
+    pub(crate) fn with_configured_routing_options(
+        mut self,
+        options: Option<serde_json::Value>,
+    ) -> Self {
+        self.configured_routing_options = options;
+        self
+    }
+
+    pub(crate) fn with_configured_plugins(mut self, plugins: Option<serde_json::Value>) -> Self {
+        self.configured_plugins = plugins;
         self
     }
 }
@@ -207,7 +261,12 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
         // Anthropic have no typed body check, so failing closed here would end the
         // turn for a request the product is happy to send. Decline to sample and
         // let it through unrecorded.
-        if let Some(reason) = request_refusal(&request) {
+        if let Some(reason) = request_refusal(
+            &request,
+            self.configured_routing.as_ref(),
+            self.configured_routing_options.as_ref(),
+            self.configured_plugins.as_ref(),
+        ) {
             // Say so once. An excluded request is still billed by the provider,
             // and silence would make it indistinguishable from a turn that never
             // sent anything. The key name is routing metadata, not payload.

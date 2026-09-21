@@ -36,6 +36,10 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
                     2 => Some(&subscription),
                     _ => None,
                 };
+                // `chat_completions_provider` is no longer an exclusion: a configured
+                // routing preference names the provider that serves and bills the
+                // request. It stays in the list as an ADMITTED shape so the cells
+                // prove that, rather than silently dropping the case.
                 for exclusion in [
                     None,
                     Some("aws"),
@@ -61,18 +65,14 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
                     if exclusion == Some("chat_completions_provider") {
                         provider.chat_completions_provider = Some(serde_json::json!({}));
                     }
-                    // The resolved URL would carry the query string, so it can never
-                    // equal the pinned endpoint: the shape must be refused rather
-                    // than admitted and then failed closed. Note that for this
-                    // shape the three gates share `route_refusal`, so these cells
-                    // pin that every gate consults it - not that three independent
-                    // implementations agree.
+                    // The resolved URL carries a query string, and the pin now carries
+                    // it too, so this shape collects. These cells prove the stored
+                    // route equals the one the client builds for it.
                     if exclusion == Some("query_params") {
-                        provider.query_params =
-                            Some(std::collections::HashMap::from([(
-                                "api-version".to_string(),
-                                "2025-04-01-preview".to_string(),
-                            )]));
+                        provider.query_params = Some(std::collections::HashMap::from([(
+                            "api-version".to_string(),
+                            "2025-04-01-preview".to_string(),
+                        )]));
                     }
                     let selected = developer_accounting_mode(id, &provider);
                     let endpoint = provider
@@ -85,18 +85,36 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
                         auth.map(CodexAuth::auth_mode),
                         &endpoint,
                     );
-                    let admitted = exclusion.is_none();
+                    // Every provider shape now collects: signing, configured query
+                    // parameters and a configured routing preference are all
+                    // attributable. Only a request-level routing key the
+                    // configuration did not ask for is refused, per request.
+                    let admitted = true;
                     let reason = route_refusal(&provider);
                     assert_eq!(reason.is_none(), admitted, "{id}/{wire}/{exclusion:?}");
                     assert_eq!(!matches!(selected, AccountingMode::Disabled), admitted);
                     assert_eq!(collects(&bound, id, &provider, wire), admitted);
-                    let request = chat_body();
+                    // A configured routing preference is attributable only when the
+                    // body actually carries exactly it, so build the request the way
+                    // this configuration would send it.
+                    let mut request = chat_body();
+                    request.provider = provider.chat_completions_provider.clone();
                     let eligible = match wire {
                         WireApi::Responses => responses::eligible(&provider, auth),
                         WireApi::Chat => chat::eligible(&provider, auth, &request),
                         WireApi::Anthropic => route_refusal(&provider).is_none(),
                     };
                     assert_eq!(eligible, admitted, "{id}/{wire}/{exclusion:?}: {reason:?}");
+                    // And a routing preference configuration did NOT ask for is never
+                    // attributable, whatever the provider shape.
+                    if wire == WireApi::Chat {
+                        let mut foreign = chat_body();
+                        foreign.provider = Some(serde_json::json!({"order": ["someone-else"]}));
+                        assert!(
+                            !chat::eligible(&provider, auth, &foreign),
+                            "{id}/{exclusion:?}: an unconfigured routing preference must be refused"
+                        );
+                    }
                     if admitted {
                         let sample = Sampling::start(
                             fixture.db.clone(),
@@ -111,7 +129,17 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
                             WireApi::Chat => "chat/completions",
                             WireApi::Anthropic => "messages",
                         };
-                        assert_eq!(sample.endpoint, format!("{endpoint}/{path}"));
+                        // Compare against the client's own URL builder rather than the
+                        // accounting helper, so this cannot pass by both sides using
+                        // the same expression.
+                        let requested = provider
+                            .to_api_provider(auth.map(CodexAuth::auth_mode))?
+                            .url_for_path(path);
+                        assert_eq!(
+                            super::canonical_route(&sample.endpoint),
+                            super::canonical_route(&requested),
+                            "the stored route must be the one the client requests"
+                        );
                         assert!(
                             sample
                                 .admit("fixture", "http://wrong.invalid")
@@ -144,7 +172,10 @@ fn accounting_chat_request_overrides_are_unattributable() -> Result<()> {
         };
         let http =
             codex_http_client::Request::new(http::Method::POST, ENDPOINT.into()).with_json(&value);
-        assert_eq!(transport::request_refusal(&http), Some(field));
+        assert_eq!(
+            transport::request_refusal(&http, None, None, None),
+            Some(field)
+        );
         let mut request = chat_body();
         match field {
             "provider" => request.provider = Some(value[field].clone()),
@@ -174,7 +205,7 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
             .into_prepared()
             .map_err(anyhow::Error::msg)?;
         assert_eq!(
-            transport::request_refusal(&prepared),
+            transport::request_refusal(&prepared, None, None, None),
             None,
             "an ordinary prepared body must remain collectable under {compression:?}"
         );
@@ -191,7 +222,7 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
                 .into_prepared()
                 .map_err(anyhow::Error::msg)?;
             assert_eq!(
-                transport::request_refusal(&prepared),
+                transport::request_refusal(&prepared, None, None, None),
                 Some(field),
                 "{field} must stay unattributable under {compression:?}"
             );
@@ -209,7 +240,7 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
             .into_prepared()
             .map_err(anyhow::Error::msg)?;
         assert_eq!(
-            transport::request_refusal(&prepared),
+            transport::request_refusal(&prepared, None, None, None),
             Some("providerOptions"),
             "a serialized gateway pin must be refused under {compression:?}"
         );
@@ -219,15 +250,52 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
             .into_prepared()
             .map_err(anyhow::Error::msg)?;
         assert_eq!(
-            transport::request_refusal(&prepared),
+            transport::request_refusal(&prepared, None, None, None),
             None,
             "an ordinary serialized request must remain collectable under {compression:?}"
+        );
+    }
+    // A configuration-emitted routing value is attributable; a different one is not.
+    for (key, configured) in [
+        ("provider", serde_json::json!({"order": ["anthropic"]})),
+        (
+            "providerOptions",
+            serde_json::json!({"gateway": {"only": ["zai"]}}),
+        ),
+    ] {
+        let mut body = ordinary.clone();
+        body[key] = configured.clone();
+        let prepared = Request::new(http::Method::POST, ENDPOINT.into())
+            .with_json(&body)
+            .with_compression(RequestCompression::Zstd)
+            .into_prepared()
+            .map_err(anyhow::Error::msg)?;
+        let (routing, options) = if key == "provider" {
+            (Some(&configured), None)
+        } else {
+            (None, Some(&configured))
+        };
+        assert_eq!(
+            transport::request_refusal(&prepared, routing, options, None),
+            None,
+            "{key} exactly as configured must stay collectable"
+        );
+        let foreign = serde_json::json!({"order": ["someone-else"]});
+        let (routing, options) = if key == "provider" {
+            (Some(&foreign), None)
+        } else {
+            (None, Some(&foreign))
+        };
+        assert_eq!(
+            transport::request_refusal(&prepared, routing, options, None),
+            Some(key),
+            "{key} that configuration did not ask for must be refused"
         );
     }
     let opaque = Request::new(http::Method::POST, ENDPOINT.into())
         .with_raw_body(vec![0x00, 0x01, 0x02, 0x03]);
     assert_eq!(
-        transport::request_refusal(&opaque),
+        transport::request_refusal(&opaque, None, None, None),
         Some("uninspectable request body"),
         "a body whose routing keys cannot be read must still be refused"
     );
@@ -261,17 +329,14 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
             provider_id: id.into(),
             wire_api: provider.wire_api,
             approved_endpoint: endpoint.into(),
+            approved_query: None,
             api_key_pricing: false,
         };
-        let bound = super::turn_mode(
-            &mode,
-            id,
-            &provider,
-            Some(AuthMode::ApiKey),
-            endpoint,
-        );
+        let bound = super::turn_mode(&mode, id, &provider, Some(AuthMode::ApiKey), endpoint);
         let crate::config::AccountingMode::Provider {
-            api_key_pricing, ..
+            approved_query: None,
+            api_key_pricing,
+            ..
         } = bound
         else {
             panic!("{id} provider mode must survive rebinding");
@@ -289,6 +354,7 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
         provider_id: "openai".into(),
         wire_api: WireApi::Responses,
         approved_endpoint: "https://api.openai.com/v1".into(),
+        approved_query: None,
         api_key_pricing: false,
     };
     for (auth, expected) in [
@@ -297,9 +363,17 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
         (Some(AuthMode::ChatgptAuthTokens), false),
         (None, false),
     ] {
-        let bound = super::turn_mode(&mode, "openai", &provider, auth, "https://api.openai.com/v1");
+        let bound = super::turn_mode(
+            &mode,
+            "openai",
+            &provider,
+            auth,
+            "https://api.openai.com/v1",
+        );
         let crate::config::AccountingMode::Provider {
-            api_key_pricing, ..
+            approved_query: None,
+            api_key_pricing,
+            ..
         } = bound
         else {
             panic!("provider mode must survive rebinding for {auth:?}");
@@ -309,6 +383,56 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
             "only API-key authority may supply monetary rates ({auth:?})"
         );
     }
+}
+
+/// The client emits `providerOptions` for the Vercel gateway and `plugins` for
+/// OpenRouter web search. Requiring them to be absent excluded those sessions
+/// from collection on every turn, which is not "available on all providers".
+#[test]
+fn accounting_chat_collects_the_fields_the_client_itself_emits() {
+    use codex_model_provider_info::{ModelProviderInfo, WireApi};
+    let plain = {
+        let mut provider = ModelProviderInfo::create_openai_provider(None);
+        provider.wire_api = WireApi::Chat;
+        provider
+    };
+    let mut with_options = chat_body();
+    with_options.provider_options = Some(serde_json::json!({"gateway": {"only": ["zai"]}}));
+    let mut with_plugins = chat_body();
+    with_plugins.plugins = Some(vec![serde_json::json!({"id": "web"})]);
+
+    // An ordinary provider still refuses both: nothing explains the fields.
+    assert!(!chat::eligible(&plain, None, &with_options));
+    assert!(!chat::eligible(&plain, None, &with_plugins));
+
+    let gateway = {
+        let mut provider = ModelProviderInfo::create_openai_provider(Some(
+            "https://ai-gateway.vercel.sh/v1".to_string(),
+        ));
+        provider.wire_api = WireApi::Chat;
+        provider
+    };
+    assert!(gateway.is_vercel_gateway(), "fixture must be the gateway");
+    assert!(
+        chat::eligible(&gateway, None, &with_options),
+        "the gateway's own vendor pin must not exclude the session"
+    );
+
+    let openrouter = {
+        // `is_openrouter` keys off the provider NAME, so take the real builder
+        // rather than an OpenAI provider pointed at OpenRouter's URL.
+        let mut provider = codex_model_provider_info::built_in_model_providers(None)
+            .into_values()
+            .find(ModelProviderInfo::is_openrouter)
+            .expect("built-in OpenRouter provider");
+        provider.wire_api = WireApi::Chat;
+        provider
+    };
+    assert!(openrouter.is_openrouter(), "fixture must be openrouter");
+    assert!(
+        chat::eligible(&openrouter, None, &with_plugins),
+        "an OpenRouter web-search session must not be excluded"
+    );
 }
 
 fn chat_body() -> codex_api::ChatCompletionsRequest {
@@ -361,10 +485,8 @@ async fn accounting_unattributable_request_is_served_without_evidence() -> Resul
         async fn stream(
             &self,
             _req: Request,
-        ) -> std::result::Result<
-            codex_http_client::StreamResponse,
-            codex_http_client::TransportError,
-        > {
+        ) -> std::result::Result<codex_http_client::StreamResponse, codex_http_client::TransportError>
+        {
             self.0.fetch_add(1, Ordering::SeqCst);
             Err(codex_http_client::TransportError::Build("stub".into()))
         }
@@ -384,8 +506,15 @@ async fn accounting_unattributable_request_is_served_without_evidence() -> Resul
         .into_prepared()
         .map_err(anyhow::Error::msg)?;
     // The request reaches the real transport rather than being short-circuited.
-    assert!(wrapper.stream(request).await.is_err(), "stub inner transport");
-    assert_eq!(sent.load(Ordering::SeqCst), 1, "the turn's request was sent");
+    assert!(
+        wrapper.stream(request).await.is_err(),
+        "stub inner transport"
+    );
+    assert_eq!(
+        sent.load(Ordering::SeqCst),
+        1,
+        "the turn's request was sent"
+    );
     // The turn survives: rejecting the sampling here would abort it at the next check.
     fixture.sampling.check()?;
     // And nothing was recorded for a request we could not attribute.

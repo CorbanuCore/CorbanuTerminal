@@ -58,7 +58,15 @@ impl Provenance {
             deferred.exclude()?;
             return Ok(false);
         }
-        if self.endpoint.as_deref() != Some(expected.as_str())
+        // Compare canonically: the client emits configured query parameters in
+        // `HashMap` order while the pin sorts them, so byte equality would reject
+        // any provider that configures more than one.
+        if self
+            .endpoint
+            .as_deref()
+            .map(super::canonical_route)
+            .as_deref()
+            != Some(super::canonical_route(&expected).as_str())
             || cached.is_some_and(|old| old != self)
         {
             deferred.reject();
@@ -68,16 +76,21 @@ impl Provenance {
     }
 }
 
-pub(super) fn endpoint(base: &str) -> Result<String, CodexErr> {
-    let raw = format!("{}/responses", base.trim_end_matches('/'));
+pub(super) fn endpoint(base: &str, query: Option<&str>) -> Result<String, CodexErr> {
+    // Configured query parameters are part of the route on this lane too. The
+    // client's own `websocket_url_for_path` carries them, so a pin built without
+    // them can never match and the turn would be rejected outright.
+    let raw = super::pinned_route(base, query, "responses");
     let mut url = url::Url::parse(&raw).map_err(|_| CodexErr::Fatal(FAILURE.into()))?;
     if !url.username().is_empty()
         || url.password().is_some()
-        || url.query().is_some()
         || url.fragment().is_some()
         || !matches!(url.scheme(), "http" | "https")
         || url.as_str() != raw
     {
+        return Err(CodexErr::Fatal(FAILURE.into()));
+    }
+    if url.query().is_some() && query.is_none() {
         return Err(CodexErr::Fatal(FAILURE.into()));
     }
     let scheme = if url.scheme() == "https" { "wss" } else { "ws" };
@@ -132,7 +145,13 @@ impl ResponsesWebsocketAdmission for Admission {
             let result = async {
                 anyhow::ensure!(
                     self.established.eligible
-                        && self.established.endpoint.as_deref() == Some(self.expected.as_str()),
+                        && self
+                            .established
+                            .endpoint
+                            .as_deref()
+                            .map(super::canonical_route)
+                            .as_deref()
+                            == Some(super::canonical_route(&self.expected).as_str()),
                     FAILURE
                 );
                 self.sampling

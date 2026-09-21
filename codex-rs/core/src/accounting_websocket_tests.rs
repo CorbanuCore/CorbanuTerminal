@@ -27,6 +27,7 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
         provider_id: "openai".into(),
         wire_api: codex_model_provider_info::WireApi::Responses,
         approved_endpoint: api.base_url.clone(),
+        approved_query: None,
         api_key_pricing: false,
     };
     let fixture = Fixture::new(mode).await?;
@@ -142,7 +143,7 @@ impl Fixture {
         Ok(Admission::new(
             self.resolve().await?,
             provenance(),
-            endpoint(BASE)?,
+            endpoint(BASE, None)?,
             Default::default(),
         ))
     }
@@ -177,7 +178,7 @@ async fn accounting_responses_ws_stream_guard_checks_live_policy_with_session_st
     let admission = Admission::new(
         fixture.resolve().await?,
         provenance(),
-        endpoint(BASE)?,
+        endpoint(BASE, None)?,
         client.stage_one_memory_binding.clone(),
     );
     admission.admit("gpt-5.6-sol".into(), /*tier*/ None).await?;
@@ -311,7 +312,7 @@ async fn accounting_responses_ws_exact_endpoint_binding() -> anyhow::Result<()> 
             "wss://api.openai.com/v1/responses",
         ),
     ] {
-        assert_eq!(endpoint(http)?, ws);
+        assert_eq!(endpoint(http, None)?, ws);
     }
     for bad in [
         "http://user@127.0.0.1/v1",
@@ -319,7 +320,7 @@ async fn accounting_responses_ws_exact_endpoint_binding() -> anyhow::Result<()> 
         "http://127.0.0.1/v1#fragment",
         "ftp://127.0.0.1/v1",
     ] {
-        assert!(endpoint(bad).is_err());
+        assert!(endpoint(bad, None).is_err());
     }
     for bad in [
         "ws://127.0.0.1:12346/v1/responses",
@@ -529,5 +530,36 @@ async fn accounting_responses_ws_role_inheritance_preserves_reserved_provider_ru
             .is_err()
     );
     assert_eq!(config.accounting, original);
+    Ok(())
+}
+
+/// The pin must equal the URL the client will actually open, including configured
+/// query parameters, and must still refuse a query the configuration did not
+/// declare. Compared against the client's own builder, not a literal, and with two
+/// parameters so a `HashMap`-ordered URL cannot pass by luck.
+#[test]
+fn accounting_websocket_pin_matches_the_client_route() -> anyhow::Result<()> {
+    use codex_model_provider_info::ModelProviderInfo;
+    let mut provider =
+        ModelProviderInfo::create_openai_provider(Some("https://example.invalid/v1".to_string()));
+    provider.query_params = Some(std::collections::HashMap::from([
+        ("api-version".to_string(), "2025-04-01".to_string()),
+        ("deployment".to_string(), "fixture".to_string()),
+    ]));
+    let api = provider.to_api_provider(None)?;
+    let requested = api.websocket_url_for_path("responses")?.to_string();
+    let pinned = endpoint(
+        "https://example.invalid/v1",
+        crate::accounting::canonical_query(&provider).as_deref(),
+    )?;
+    assert_eq!(
+        crate::accounting::canonical_route(&requested),
+        crate::accounting::canonical_route(&pinned),
+        "the pin must be the route the client opens"
+    );
+    assert!(
+        endpoint("https://example.invalid/v1?stray=1", None).is_err(),
+        "a query the configuration did not declare must be refused"
+    );
     Ok(())
 }

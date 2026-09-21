@@ -2590,6 +2590,23 @@ impl ModelClientSession {
                     evidence.clone(),
                     request.model.clone(),
                 )
+                .with_configured_routing(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .chat_completions_provider
+                        .clone(),
+                )
+                .with_configured_routing_options(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .is_vercel_gateway()
+                        .then(|| vercel_gateway_provider_options(&request.model))
+                        .flatten(),
+                )
             });
             let client = ApiAnthropicMessagesClient::new(
                 transport,
@@ -3090,6 +3107,31 @@ impl ModelClientSession {
                     evidence.clone(),
                     request.model.clone(),
                 )
+                .with_configured_routing(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .chat_completions_provider
+                        .clone(),
+                )
+                .with_configured_routing_options(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .is_vercel_gateway()
+                        .then(|| vercel_gateway_provider_options(&request.model))
+                        .flatten(),
+                )
+                .with_configured_plugins(
+                    // Only the Chat request type carries `plugins`; OpenRouter web
+                    // search rides it, emitted by this client from the provider and
+                    // the session's tool set.
+                    serde_json::to_value(request.plugins.clone())
+                        .ok()
+                        .filter(|value| !value.is_null()),
+                )
             });
             let inference_trace_attempt = inference_trace.start_attempt();
             inference_trace_attempt.add_request_headers(&mut options.extra_headers);
@@ -3298,6 +3340,23 @@ impl ModelClientSession {
                     inner,
                     evidence.clone(),
                     request.model.clone(),
+                )
+                .with_configured_routing(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .chat_completions_provider
+                        .clone(),
+                )
+                .with_configured_routing_options(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .is_vercel_gateway()
+                        .then(|| vercel_gateway_provider_options(&request.model))
+                        .flatten(),
                 )
                 .with_tier(request.service_tier.clone())
             });

@@ -131,12 +131,12 @@ impl DeferredChatSampling {
             self.reject();
             return Err(CodexErr::Fatal(FAILURE.into()));
         };
-        if endpoint
-            != format!(
-                "{}/chat/completions",
-                approved_endpoint.trim_end_matches('/')
-            )
-        {
+        let pinned = super::pinned_route(
+            approved_endpoint,
+            super::canonical_query(provider).as_deref(),
+            "chat/completions",
+        );
+        if super::canonical_route(endpoint) != super::canonical_route(&pinned) {
             self.reject();
             return Err(CodexErr::Fatal(FAILURE.into()));
         }
@@ -204,9 +204,18 @@ pub(super) fn eligible(
 ) -> bool {
     provider.wire_api == WireApi::Chat
         && super::route_refusal(provider).is_none()
-        && request.provider.is_none()
-        && request.provider_options.is_none()
-        && request.plugins.is_none()
+        // A configured routing preference is part of who serves and bills this
+        // request, so it stays attributable to the selected provider. A
+        // request-level preference configuration did not ask for is not.
+        && request.provider == provider.chat_completions_provider
+        // The other two routing fields are emitted by this client from provider
+        // configuration as well: `providerOptions` when the selected provider is
+        // the Vercel gateway, `plugins` when it is OpenRouter and the session has
+        // web search. Requiring them to be absent excluded those sessions from
+        // collection entirely. Their exact values are still checked at the
+        // transport against what the client constructed.
+        && (request.provider_options.is_none() || provider.is_vercel_gateway())
+        && (request.plugins.is_none() || provider.is_openrouter())
 }
 
 pub(super) fn legacy_eligible(

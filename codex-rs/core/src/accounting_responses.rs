@@ -108,12 +108,15 @@ impl DeferredResponsesSampling {
         match &self.mode {
             AccountingMode::DirectOpenAiResponses {
                 approved_endpoint, ..
-            }
-            | AccountingMode::Provider {
+            } => super::websocket::endpoint(approved_endpoint, None)
+                .map(Some)
+                .inspect_err(|_| self.reject()),
+            AccountingMode::Provider {
                 approved_endpoint,
+                approved_query,
                 wire_api: WireApi::Responses,
                 ..
-            } => super::websocket::endpoint(approved_endpoint)
+            } => super::websocket::endpoint(approved_endpoint, approved_query.as_deref())
                 .map(Some)
                 .inspect_err(|_| self.reject()),
             _ => Ok(None),
@@ -154,7 +157,12 @@ impl DeferredResponsesSampling {
             self.reject();
             return Err(CodexErr::Fatal(FAILURE.into()));
         };
-        if endpoint != format!("{}/responses", approved_endpoint.trim_end_matches('/')) {
+        let pinned = super::pinned_route(
+            approved_endpoint,
+            super::canonical_query(provider).as_deref(),
+            "responses",
+        );
+        if super::canonical_route(endpoint) != super::canonical_route(&pinned) {
             self.reject();
             return Err(CodexErr::Fatal(FAILURE.into()));
         }

@@ -103,6 +103,32 @@ warning: method `append_native` is never used
    |                                                 ^^^^^^^^^^^^^
 
 warning: `codex-state` (lib) generated 10 warnings
+warning: function `reject_unchanged` is never used
+   --> state/tests/../src/runtime/accounting_late_import_test_support.rs:120:21
+    |
+120 | pub(super) async fn reject_unchanged(
+    |                     ^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `wait_file` is never used
+   --> state/tests/../src/runtime/accounting_late_import_test_support.rs:195:21
+    |
+195 | pub(super) async fn wait_file(path: &Path) -> anyhow::Result<()> {
+    |                     ^^^^^^^^^
+
+warning: function `spawn_worker` is never used
+   --> state/tests/../src/runtime/accounting_late_import_test_support.rs:205:15
+    |
+205 | pub(super) fn spawn_worker(
+    |               ^^^^^^^^^^^^
+
+warning: function `child_input` is never used
+   --> state/tests/../src/runtime/accounting_late_import_test_support.rs:218:15
+    |
+218 | pub(super) fn child_input() -> Option<(std::path::PathBuf, String)> {
+    |               ^^^^^^^^^^^
+
 warning: function `unchanged` is never used
    --> state/src/runtime/accounting_retention_test_support.rs:110:21
     |
@@ -177,38 +203,6 @@ warning: function `reopened` is never used
 164 | pub(super) async fn reopened(
     |                     ^^^^^^^^
 
-warning: function `reject_unchanged` is never used
-   --> state/tests/../src/runtime/accounting_late_import_test_support.rs:120:21
-    |
-120 | pub(super) async fn reject_unchanged(
-    |                     ^^^^^^^^^^^^^^^^
-    |
-    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
-
-warning: function `raw_insert_guards` is never used
-   --> state/tests/../src/runtime/accounting_late_import_test_support.rs:177:21
-    |
-177 | pub(super) async fn raw_insert_guards(conn: &mut SqliteConnection) -> anyhow::Result<()> {
-    |                     ^^^^^^^^^^^^^^^^^
-
-warning: function `wait_file` is never used
-   --> state/tests/../src/runtime/accounting_late_import_test_support.rs:195:21
-    |
-195 | pub(super) async fn wait_file(path: &Path) -> anyhow::Result<()> {
-    |                     ^^^^^^^^^
-
-warning: function `spawn_worker` is never used
-   --> state/tests/../src/runtime/accounting_late_import_test_support.rs:205:15
-    |
-205 | pub(super) fn spawn_worker(
-    |               ^^^^^^^^^^^^
-
-warning: function `child_input` is never used
-   --> state/tests/../src/runtime/accounting_late_import_test_support.rs:218:15
-    |
-218 | pub(super) fn child_input() -> Option<(std::path::PathBuf, String)> {
-    |               ^^^^^^^^^^^
-
 warning: function `entry` is never used
   --> state/tests/../src/runtime/accounting_late_import_test_support.rs:51:15
    |
@@ -235,179 +229,185 @@ warning: function `expected_day` is never used
 143 | pub(super) fn expected_day(
     |               ^^^^^^^^^^^^
 
+warning: function `raw_insert_guards` is never used
+   --> state/tests/../src/runtime/accounting_late_import_test_support.rs:177:21
+    |
+177 | pub(super) async fn raw_insert_guards(conn: &mut SqliteConnection) -> anyhow::Result<()> {
+    |                     ^^^^^^^^^^^^^^^^^
+
+warning: `codex-state` (test "accounting_late_import") generated 4 warnings
 warning: `codex-state` (lib test) generated 21 warnings (9 duplicates)
-warning: `codex-state` (test "accounting_late_import_process") generated 2 warnings
-warning: `codex-state` (test "accounting_late_import") generated 4 warnings (1 duplicate)
-warning: `codex-state` (test "accounting_contract_golden") generated 8 warnings (4 duplicates)
+warning: `codex-state` (test "accounting_contract_golden") generated 8 warnings (3 duplicates)
+warning: `codex-state` (test "accounting_late_import_process") generated 2 warnings (2 duplicates)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.25s
 ────────────
- Nextest run ID ef7ccf70-3dad-4d18-b4b5-84c17e8be3c0 with nextest profile: local
+ Nextest run ID d124c86c-a886-48d4-9046-a69b2e808e56 with nextest profile: local
     Starting 166 tests across 5 binaries (187 tests skipped)
-        PASS [   0.003s] (  1/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::composition_preserves_all_seven_independent_populations
-        PASS [   0.003s] (  2/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::canonical_amounts_round_trip_at_all_required_scales_and_u128_max
-        PASS [   0.003s] (  3/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::every_checked_addition_rejects_overflow_without_mutating_operands
+        PASS [   0.002s] (  1/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::all_entry_points_validate_in_memory_values_without_repair
+        PASS [   0.002s] (  2/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::schema_requires_exact_fields_version_object_and_array_arity
+        PASS [   0.004s] (  3/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::actual_quote_reduction_converts_partial_and_twenty_four_place_amounts
         PASS [   0.002s] (  4/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_uncommitted_process_worker
-        PASS [   0.020s] (  5/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::all_entry_points_validate_in_memory_values_without_repair
-        PASS [   0.020s] (  6/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::actual_quote_reduction_converts_partial_and_twenty_four_place_amounts
-        PASS [   0.021s] (  7/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::empty_and_unknown_populations_cannot_invent_known_values
-        PASS [   0.021s] (  8/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::exact_addition_precedes_six_place_half_even_display
-        PASS [   0.021s] (  9/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::malformed_and_noncanonical_stored_amounts_are_rejected
-        PASS [   0.021s] ( 10/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::schema_requires_exact_fields_version_object_and_array_arity
-        PASS [   0.022s] ( 11/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::every_count_rejects_wrong_types_negative_and_overflow
-        PASS [   0.004s] ( 12/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::mixed_scales_and_known_plus_unknown_keep_exact_subtotals
-        PASS [   0.047s] ( 13/166) codex-state runtime::accounting::pricing::storage::latest_tests::invalid_replay_prefix_and_checked_arithmetic_fail_without_saved_estimates
-        PASS [   0.050s] ( 14/166) codex-state runtime::accounting::pricing::storage::latest_tests::every_current_and_old_version_is_validated_even_without_latest_estimate
-        PASS [   0.051s] ( 15/166) codex-state runtime::accounting::pricing::storage::latest_tests::source_binding_and_snapshot_corruption_cannot_fall_back_to_unknown
-        PASS [   0.075s] ( 16/166) codex-state runtime::accounting::pricing::storage::latest_tests::current_stale_reordered_and_caller_rollback_survive_two_reopens
-        PASS [   0.083s] ( 17/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::consumer_tests::pending_cleanup_expired_days_stale_and_known_zero
-        PASS [   0.085s] ( 18/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_retry_chain_normalizes_reordered_duplicate_revisions
-        PASS [   0.096s] ( 19/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::consumer_tests::strict_admission_boundaries_conflicts_and_no_write_failures
-        PASS [   0.121s] ( 20/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::native_tests::native_admission_owner_replay_and_archived_rows
-        PASS [   0.129s] ( 21/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::consumer_tests::retained_totals_freshness_coverage_corruption_and_reopens
-        PASS [   0.120s] ( 22/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::consumer_tests::actual_append_contention_and_observation_fault_rollback
-        PASS [   0.157s] ( 23/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_deferred_commit_failure_rolls_back
-        PASS [   0.164s] ( 24/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_replay_price_and_two_reopens
-        PASS [   0.146s] ( 25/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_raw_plus_compact_overflow_and_unrelated_delete
-        PASS [   0.148s] ( 26/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::consumer_tests::schema_staging_admission_and_active_null_reopens
-        PASS [   0.150s] ( 27/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::native_tests::native_commit_foreign_key_failure_is_jointly_atomic
-        PASS [   0.153s] ( 28/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::native_tests::native_invalid_time_activation_and_late_import_roll_back
-        PASS [   0.165s] ( 29/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_process_kill_after_uncommitted_writes
-        PASS [   0.184s] ( 30/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::native_tests::public_delete_wrapper_and_absent_schema_keep_native_contract
-        PASS [   0.074s] ( 31/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::tests::checked_compact_merges_fail_without_writes
-        PASS [   0.084s] ( 32/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::tests::exact_90_365_dispatch_zero_and_one_millisecond_day_loss
-        PASS [   0.138s] ( 33/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::latest_original_price_null_binding_intent_and_known_zero
-        PASS [   0.204s] ( 34/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::exact_boundaries_replay_shared_prices_and_two_reopens
-        PASS [   0.087s] ( 35/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::tests::checked_times_keys_and_payloads_fail_without_writes
-        PASS [   0.127s] ( 36/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::transferred_replay_suppression_survives_two_reopens_without_setup
-        PASS [   0.105s] ( 37/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::tests::whole_store_mixed_days_shared_snapshots_and_two_reopens
-        PASS [   0.115s] ( 38/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::tests::complete_input_preserves_expired_rows_bindings_freshness_and_two_reopens
-        PASS [   0.133s] ( 39/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::tests::raw_day_freshness_and_checked_sums_cover_every_member
-        PASS [   0.278s] ( 40/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::native_tests::native_two_real_writer_orders_and_joint_read_snapshots
-        PASS [   0.100s] ( 41/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::tests::whole_store_corruption_including_expired_and_orphan_rows_never_writes
-        PASS [   0.278s] ( 42/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::checked_compact_overflow_propagates_through_all_coupled_paths
-        PASS [   0.167s] ( 43/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::target_failure_rolls_back_day365_expiry_and_replay_floor
-        PASS [   0.085s] ( 44/166) codex-state runtime::accounting::pricing::storage::lifecycle::tests::deletion_abort_invalid_times_and_corrupt_source_roll_back_whole_rows
-        PASS [   0.003s] ( 45/166) codex-state runtime::accounting::pricing::tests::absent_null_zero_and_missing_rates_remain_distinct
-        PASS [   0.004s] ( 46/166) codex-state runtime::accounting::pricing::tests::checked_product_alignment_and_sum_overflow_are_errors
-        PASS [   0.003s] ( 47/166) codex-state runtime::accounting::pricing::tests::decimal_syntax_and_representation_bounds
-        PASS [   0.003s] ( 48/166) codex-state runtime::accounting::pricing::tests::display_rounds_half_even_and_preserves_exact_values
-        PASS [   0.003s] ( 49/166) codex-state runtime::accounting::pricing::tests::exact_identity_and_half_open_dispatch_selection
-        PASS [   0.279s] ( 50/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::deferred_foreign_key_commit_failure_rolls_back_and_retries
-        PASS [   0.003s] ( 51/166) codex-state runtime::accounting::pricing::tests::inclusive_revisions_replace_and_reasoning_is_not_charged_twice
-        PASS [   0.005s] ( 52/166) codex-state runtime::accounting::pricing::tests::invalid_catalogs_fail_even_when_not_selected
-        PASS [   0.003s] ( 53/166) codex-state runtime::accounting::pricing::tests::native_partial_retains_exact_subtotal_and_provenance
-        PASS [   0.059s] ( 54/166) codex-state runtime::accounting::pricing::storage::tests::concurrent_idempotence_and_snapshot_conflicts
-        PASS [   0.318s] ( 55/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_original_snapshot_collision_and_invalid_prefix
-        PASS [   0.003s] ( 56/166) codex-state runtime::accounting::pricing::tests::snapshot_schema_rejects_unsupported_or_unbounded_inputs
-        PASS [   0.003s] ( 57/166) codex-state runtime::accounting::pricing::tests::validates_attempt_and_replay_before_quoting
-        PASS [   0.004s] ( 58/166) codex-state runtime::accounting::pricing::tests::prospective_catalog_is_order_independent_and_return_is_owned
-        PASS [   0.264s] ( 59/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::expired_first_sweep_and_invalid_times_never_resurrect_detail
-        PASS [   0.084s] ( 60/166) codex-state runtime::accounting::pricing::storage::lifecycle::tests::revisions_missing_estimates_and_corrupt_attribution
-        PASS [   0.112s] ( 61/166) codex-state runtime::accounting::pricing::storage::lifecycle::tests::exact_day_objects_and_two_disk_reopens
-        PASS [   0.073s] ( 62/166) codex-state runtime::accounting::pricing::storage::tests::forged_quote_fields_and_snapshot_content_are_rejected
-        PASS [   0.068s] ( 63/166) codex-state runtime::accounting::pricing::storage::tests::retained_journal_keys_payload_and_evidence_are_checked
-        PASS [   0.128s] ( 64/166) codex-state runtime::accounting::pricing::storage::lifecycle::tests::deletion_removes_all_versions_and_intentions_with_opaque_reopen_guard
-        PASS [   0.076s] ( 65/166) codex-state runtime::accounting::pricing::storage::tests::validation_and_sql_failure_roll_back_all_estimate_writes
-        PASS [   0.071s] ( 66/166) codex-state runtime::accounting::pricing::tests::closed_journal_reopens_and_quotes_without_changing_rows_or_positions
-        PASS [   0.141s] ( 67/166) codex-state runtime::accounting::pricing::storage::lifecycle::tests::deterministic_replay_refresh_delete_orders_and_reader_snapshot
-        PASS [   0.121s] ( 68/166) codex-state runtime::accounting::pricing::storage::lifecycle::tests::sum_before_rounding_and_checked_overflow
-        PASS [   0.060s] ( 69/166) codex-state runtime::accounting::store::tests::accounting_inspect_absent_schema_is_read_only
-        PASS [   0.132s] ( 70/166) codex-state runtime::accounting::pricing::storage::tests::late_revisions_preserve_versions_and_unavailable_binding
-        PASS [   0.095s] ( 71/166) codex-state runtime::accounting::store::tests::absent_store_delete_locks_before_inspection_and_ordinary_writer
-        PASS [   0.106s] ( 72/166) codex-state runtime::accounting::store::tests::accounting_inspect_checkpoint_and_stale_estimate
-        PASS [   0.005s] ( 73/166) codex-state runtime::accounting::store::tests::accounting_inspect_range_iso_week_calendar_month_boundaries
-        PASS [   0.381s] ( 74/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::four_real_writer_orders_and_reader_snapshot_transfer
-        PASS [   0.076s] ( 75/166) codex-state runtime::accounting::store::tests::accounting_inspect_never_maintained_is_checkpoint_lag
-        PASS [   0.097s] ( 76/166) codex-state runtime::accounting::store::tests::accounting_inspect_coverage_divergence_with_overdue_other_day
-        PASS [   0.475s] ( 77/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::native_tests::native_raw_compact_missing_counts_and_shared_price_survive_reopens
-        PASS [   0.125s] ( 78/166) codex-state runtime::accounting::store::tests::accounting_inspect_half_open_date_bounds
-        PASS [   0.106s] ( 79/166) codex-state runtime::accounting::store::tests::accounting_inspect_noncanonical_own_id_is_an_error
-        PASS [   0.072s] ( 80/166) codex-state runtime::accounting::store::tests::accounting_inspect_range_invalid_empty_reversed_and_unavailable
-        PASS [   0.525s] ( 81/166) codex-state runtime::accounting::pricing::storage::latest_tests::null_unbound_missing_estimates_and_exact_quotes_survive_two_reopens
-        PASS [   0.132s] ( 82/166) codex-state runtime::accounting::store::tests::accounting_inspect_original_null_and_price_are_immutable
-        PASS [   0.086s] ( 83/166) codex-state runtime::accounting::store::tests::accounting_inspect_range_partial_edges_and_checkpoint_coverage
-        PASS [   0.106s] ( 84/166) codex-state runtime::accounting::store::tests::accounting_inspect_range_mixed_compaction_exact_no_double_count
-        PASS [   0.528s] ( 85/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::corrupt_inputs_fail_maintenance_read_and_deletion_then_restore_and_retry
-        PASS [   0.145s] ( 86/166) codex-state runtime::accounting::store::tests::accounting_inspect_range_hours_half_open_and_cutoff_suffix
-        PASS [   0.575s] ( 87/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_overflow_rolls_back_entire_database
-        PASS [   0.100s] ( 88/166) codex-state runtime::accounting::store::tests::accounting_inspect_raw_day_reconciles_contributions
-        PASS [   0.096s] ( 89/166) codex-state runtime::accounting::store::tests::accounting_inspect_single_snapshot_concurrent_writer
-        PASS [   0.113s] ( 90/166) codex-state runtime::accounting::store::tests::accounting_inspect_retention_and_compact_matrix
-        PASS [   0.152s] ( 91/166) codex-state runtime::accounting::store::tests::accounting_inspect_range_week_day_slices_and_expired_prefix
-        PASS [   0.600s] ( 92/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_presence_numeric_and_exact_price_goldens
-        PASS [   0.250s] ( 93/166) codex-state runtime::accounting::store::tests::accounting_inspect_malformed_source_with_edge_is_unknown
-        PASS [   0.609s] ( 94/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_raw_authority_and_input_bounds_are_not_bypassed
-        PASS [   0.291s] ( 95/166) codex-state runtime::accounting::store::tests::accounting_inspect_conflicting_and_missing_edges_are_unknown
-        PASS [   0.614s] ( 96/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::native_tests::separate_store_failures_preserve_retry_graph_without_global_rollback_claim
-        PASS [   0.252s] ( 97/166) codex-state runtime::accounting::store::tests::accounting_inspect_missing_binding_is_not_unpriced
-        PASS [   0.668s] ( 98/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::native_tests::native_post_accounting_faults_and_second_owner_rollback_retry
-        PASS [   0.060s] ( 99/166) codex-state runtime::accounting::tests::concurrent_same_key_writers_deduplicate_and_conflict
-        PASS [   0.003s] (100/166) codex-state runtime::accounting::tests::inclusive_subsets_totals_and_arithmetic_overflow_are_validated
-        PASS [   0.692s] (101/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_writer_orders_and_read_snapshot
-        PASS [   0.062s] (102/166) codex-state runtime::accounting::tests::duplicate_revision_cannot_change_source_position_or_presence
-        PASS [   0.066s] (103/166) codex-state runtime::accounting::tests::conflicting_batch_rolls_back_identity_rows_and_positions
-        PASS [   0.003s] (104/166) codex-state runtime::accounting::tests::native_anthropic_partial_input_and_unknown_dialect_remain_distinct
-        PASS [   0.544s] (105/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::tests::missing_stale_null_unbound_and_original_prices_survive_reopen
-        PASS [   0.003s] (106/166) codex-state runtime::accounting::tests::numeric_presence_rejects_nonintegers_overflow_and_arbitrary_fields
-        PASS [   0.047s] (107/166) codex-state runtime::accounting::tests::normal_init_does_not_create_draft_tables
-        PASS [   0.124s] (108/166) codex-state runtime::accounting::store::tests::store_rejections_preserve_clock_native_rows_and_original_binding
-        PASS [   0.288s] (109/166) codex-state runtime::accounting::store::tests::accounting_inspect_range_tree_unknown_and_single_snapshot
-        PASS [   0.059s] (110/166) codex-state runtime::accounting::tests::invalid_metadata_revision_and_batch_leave_no_intent
-        PASS [   0.066s] (111/166) codex-state runtime::accounting::tests::interrupted_intent_and_retry_survive_real_close_reopen
-        PASS [   0.757s] (112/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_sql_faults_full_rollback_reopen_retry
-        PASS [   0.085s] (113/166) codex-state runtime::accounting::tests::identity_is_immutable_and_request_owner_cannot_change
-        PASS [   0.072s] (114/166) codex-state runtime::accounting::tests::reordered_prefix_validation_rolls_back_without_erasing_knowns
-        PASS [   0.075s] (115/166) codex-state runtime::accounting::tests::presence_gaps_reordering_and_two_replays_after_reopen
-        PASS [   0.058s] (116/166) codex-state runtime::goals::tests::stopped_usage_accounting_promotes_paused_goal_over_budget
-        PASS [   0.059s] (117/166) codex-state runtime::goals::tests::active_status_only_usage_accounting_does_not_update_budget_limited_goals
-        PASS [   0.281s] (118/166) codex-state runtime::accounting::store::tests::accounting_inspect_tree_lineage_and_cost_share_one_snapshot
-        PASS [   0.195s] (119/166) codex-state runtime::accounting::store::tests::store_commit_failure_is_not_admission_and_rolls_back_complete_state
-        PASS [   0.795s] (120/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_boundaries_and_no_raw_staging
-        PASS [   0.059s] (121/166) codex-state runtime::goals::tests::usage_accounting_can_finalize_completed_goal_for_completing_turn
-        PASS [   0.054s] (122/166) codex-state runtime::goals::tests::usage_accounting_can_finalize_stopped_goal_for_in_flight_turn
-        PASS [   0.062s] (123/166) codex-state runtime::goals::tests::usage_accounting_adds_concurrent_token_deltas
-        PASS [   0.056s] (124/166) codex-state runtime::goals::tests::usage_accounting_ignores_replaced_goal_version
-        PASS [   0.004s] (125/166) codex-state::accounting_late_import_process accounting_late_import_process_worker
-        PASS [   0.480s] (126/166) codex-state runtime::accounting::store::tests::accounting_inspect_corruption_and_unknowns
-        PASS [   0.054s] (127/166) codex-state runtime::goals::tests::usage_accounting_updates_active_goals_and_accounts_budget_limited_in_flight_usage
-        PASS [   0.215s] (128/166) codex-state runtime::accounting::store::tests::resultant_day_overflow_rejects_observation_without_poisoning_native_state
-        PASS [   0.266s] (129/166) codex-state runtime::accounting::store::tests::accounting_inspect_work_is_not_refunded_for_unrelated_roots
-        PASS [   0.294s] (130/166) codex-state runtime::accounting::store::tests::accounting_inspect_unknown_compact_preserves_root_coverage
-        PASS [   0.317s] (131/166) codex-state runtime::accounting::store::tests::accounting_inspect_tree_reconciles_and_quarantines_unknown_parents
-        PASS [   0.571s] (132/166) codex-state runtime::accounting::pricing::storage::tests::exact_cases_survive_two_disk_reopens
-        PASS [   0.306s] (133/166) codex-state runtime::accounting::store::tests::accounting_inspect_unknown_unavailable_preserves_root
-        PASS [   0.290s] (134/166) codex-state runtime::accounting::store::tests::price_bound_admission_and_native_delete_contend_in_both_orders_with_snapshots
-        PASS [   0.293s] (135/166) codex-state runtime::accounting::store::tests::public_deletion_samples_time_after_cleanup_and_writer_acquisition
-        PASS [   0.315s] (136/166) codex-state runtime::accounting::store::tests::process_interruption_recovers_install_and_activation
-        PASS [   0.098s] (137/166) codex-state::accounting_store accounting_inspect_public_delete_and_empty
-        PASS [   0.327s] (138/166) codex-state runtime::accounting::store::tests::inactive_activation_and_installed_native_delete_failures_are_retryable
-        PASS [   0.106s] (139/166) codex-state::accounting_store accounting_inspect_public_identity_retry_scope
-        PASS [   0.092s] (140/166) codex-state::accounting_store accounting_inspect_public_reads_do_not_write
-        PASS [   0.103s] (141/166) codex-state::accounting_store accounting_inspect_public_reopens_twice
-        PASS [   0.156s] (142/166) codex-state::accounting_late_import accounting_late_import_public_native_delete_contends_without_winner_assumption
-        PASS [   0.161s] (143/166) codex-state::accounting_late_import accounting_late_import_public_delete_off_recreated_owner_and_snapshot_gc
-        PASS [   0.482s] (144/166) codex-state runtime::accounting::store::tests::accounting_inspect_schema_rejection_matrix
-        PASS [   0.219s] (145/166) codex-state::accounting_late_import accounting_late_import_public_native_delete_serialized_outcomes
-        PASS [   1.076s] (146/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_invalid_identity_revision_retry_and_prices
-        PASS [   0.302s] (147/166) codex-state::accounting_store accounting_inspect_public_literal_partial_goldens
-        PASS [   0.795s] (148/166) codex-state runtime::accounting::store::tests::accounting_inspect_descendant_stale_and_compact_refuse_tree_total
-        PASS [   0.363s] (149/166) codex-state::accounting_late_import accounting_late_import_native_family_literal_golden_and_young_reconstruction
-        PASS [   0.469s] (150/166) codex-state::accounting_late_import_process accounting_late_import_process_queued_cancel_and_lost_ack_replay
-        PASS [   0.933s] (151/166) codex-state runtime::accounting::store::tests::accounting_inspect_provisional_unrelated_chain_is_bounded
-        PASS [   0.553s] (152/166) codex-state::accounting_contract_golden accounting_contract_golden_original_price_and_native_family
-        PASS [   0.834s] (153/166) codex-state runtime::accounting::store::tests::accounting_inspect_tree_combined_attempt_cap_is_not_per_run
-        PASS [   1.273s] (154/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::target_deletion_faults_follow_maintenance_and_preserve_all_owners
-        PASS [   0.626s] (155/166) codex-state::accounting_contract_golden accounting_contract_golden_compact_original_bundle_parity
-        PASS [   0.850s] (156/166) codex-state runtime::accounting::store::tests::store_sql_faults_roll_back_all_tables_then_two_reopens_and_retry
-        PASS [   1.053s] (157/166) codex-state::accounting_contract_golden accounting_contract_golden_raw_replay_and_two_reopens
-        PASS [   1.045s] (158/166) codex-state::accounting_store accounting_inspect_valid_ten_thousand_retained_rows
-        PASS [   1.284s] (159/166) codex-state::accounting_store accounting_inspect_whole_store_denominator_thresholds
-        PASS [   1.520s] (160/166) codex-state::accounting_store accounting_inspect_small_day_on_busy_host
-        PASS [   2.170s] (161/166) codex-state runtime::accounting::store::tests::accounting_inspect_candidate_cap_precedes_unavailable_candidates
-        PASS [   2.505s] (162/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::fourteen_reachable_sql_faults_rollback_reopen_retry_both_routes
-        PASS [   3.042s] (163/166) codex-state::accounting_store accounting_inspect_work_budget_spans_range_buckets
-        PASS [   5.100s] (164/166) codex-state::accounting_store accounting_inspect_public_limits_no_truncation
-        PASS [   6.619s] (165/166) codex-state::accounting_store accounting_inspect_maximal_valid_packet
-        PASS [   9.322s] (166/166) codex-state::accounting_store accounting_inspect_work_budget_refuses_unknown_busy_host
+        PASS [   0.020s] (  5/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::exact_addition_precedes_six_place_half_even_display
+        PASS [   0.021s] (  6/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::composition_preserves_all_seven_independent_populations
+        PASS [   0.021s] (  7/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::canonical_amounts_round_trip_at_all_required_scales_and_u128_max
+        PASS [   0.021s] (  8/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::every_count_rejects_wrong_types_negative_and_overflow
+        PASS [   0.021s] (  9/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::every_checked_addition_rejects_overflow_without_mutating_operands
+        PASS [   0.020s] ( 10/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::mixed_scales_and_known_plus_unknown_keep_exact_subtotals
+        PASS [   0.038s] ( 11/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::empty_and_unknown_populations_cannot_invent_known_values
+        PASS [   0.038s] ( 12/166) codex-state runtime::accounting::pricing::storage::lifecycle::compact_values::tests::malformed_and_noncanonical_stored_amounts_are_rejected
+        PASS [   0.045s] ( 13/166) codex-state runtime::accounting::pricing::storage::latest_tests::source_binding_and_snapshot_corruption_cannot_fall_back_to_unknown
+        PASS [   0.049s] ( 14/166) codex-state runtime::accounting::pricing::storage::latest_tests::every_current_and_old_version_is_validated_even_without_latest_estimate
+        PASS [   0.067s] ( 15/166) codex-state runtime::accounting::pricing::storage::latest_tests::current_stale_reordered_and_caller_rollback_survive_two_reopens
+        PASS [   0.067s] ( 16/166) codex-state runtime::accounting::pricing::storage::latest_tests::invalid_replay_prefix_and_checked_arithmetic_fail_without_saved_estimates
+        PASS [   0.087s] ( 17/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::consumer_tests::strict_admission_boundaries_conflicts_and_no_write_failures
+        PASS [   0.081s] ( 18/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_retry_chain_normalizes_reordered_duplicate_revisions
+        PASS [   0.098s] ( 19/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::native_tests::native_admission_owner_replay_and_archived_rows
+        PASS [   0.096s] ( 20/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::consumer_tests::pending_cleanup_expired_days_stale_and_known_zero
+        PASS [   0.117s] ( 21/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::consumer_tests::actual_append_contention_and_observation_fault_rollback
+        PASS [   0.142s] ( 22/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::consumer_tests::retained_totals_freshness_coverage_corruption_and_reopens
+        PASS [   0.147s] ( 23/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::consumer_tests::schema_staging_admission_and_active_null_reopens
+        PASS [   0.147s] ( 24/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_replay_price_and_two_reopens
+        PASS [   0.143s] ( 25/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::native_tests::native_invalid_time_activation_and_late_import_roll_back
+        PASS [   0.158s] ( 26/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::native_tests::native_commit_foreign_key_failure_is_jointly_atomic
+        PASS [   0.172s] ( 27/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_process_kill_after_uncommitted_writes
+        PASS [   0.185s] ( 28/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_deferred_commit_failure_rolls_back
+        PASS [   0.189s] ( 29/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_raw_plus_compact_overflow_and_unrelated_delete
+        PASS [   0.072s] ( 30/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::tests::checked_compact_merges_fail_without_writes
+        PASS [   0.094s] ( 31/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::tests::exact_90_365_dispatch_zero_and_one_millisecond_day_loss
+        PASS [   0.215s] ( 32/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::native_tests::public_delete_wrapper_and_absent_schema_keep_native_contract
+        PASS [   0.150s] ( 33/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::latest_original_price_null_binding_intent_and_known_zero
+        PASS [   0.249s] ( 34/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::native_tests::native_two_real_writer_orders_and_joint_read_snapshots
+        PASS [   0.129s] ( 35/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::transferred_replay_suppression_survives_two_reopens_without_setup
+        PASS [   0.093s] ( 36/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::tests::raw_day_freshness_and_checked_sums_cover_every_member
+        PASS [   0.083s] ( 37/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::tests::checked_times_keys_and_payloads_fail_without_writes
+        PASS [   0.222s] ( 38/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::exact_boundaries_replay_shared_prices_and_two_reopens
+        PASS [   0.174s] ( 39/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::target_failure_rolls_back_day365_expiry_and_replay_floor
+        PASS [   0.116s] ( 40/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::tests::whole_store_mixed_days_shared_snapshots_and_two_reopens
+        PASS [   0.115s] ( 41/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::tests::complete_input_preserves_expired_rows_bindings_freshness_and_two_reopens
+        PASS [   0.107s] ( 42/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::tests::whole_store_corruption_including_expired_and_orphan_rows_never_writes
+        PASS [   0.279s] ( 43/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::deferred_foreign_key_commit_failure_rolls_back_and_retries
+        PASS [   0.087s] ( 44/166) codex-state runtime::accounting::pricing::storage::lifecycle::tests::deletion_abort_invalid_times_and_corrupt_source_roll_back_whole_rows
+        PASS [   0.004s] ( 45/166) codex-state runtime::accounting::pricing::tests::absent_null_zero_and_missing_rates_remain_distinct
+        PASS [   0.003s] ( 46/166) codex-state runtime::accounting::pricing::tests::checked_product_alignment_and_sum_overflow_are_errors
+        PASS [   0.002s] ( 47/166) codex-state runtime::accounting::pricing::tests::decimal_syntax_and_representation_bounds
+        PASS [   0.298s] ( 48/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::checked_compact_overflow_propagates_through_all_coupled_paths
+        PASS [   0.003s] ( 49/166) codex-state runtime::accounting::pricing::tests::display_rounds_half_even_and_preserves_exact_values
+        PASS [   0.003s] ( 50/166) codex-state runtime::accounting::pricing::tests::exact_identity_and_half_open_dispatch_selection
+        PASS [   0.004s] ( 51/166) codex-state runtime::accounting::pricing::tests::inclusive_revisions_replace_and_reasoning_is_not_charged_twice
+        PASS [   0.003s] ( 52/166) codex-state runtime::accounting::pricing::tests::native_partial_retains_exact_subtotal_and_provenance
+        PASS [   0.004s] ( 53/166) codex-state runtime::accounting::pricing::tests::invalid_catalogs_fail_even_when_not_selected
+        PASS [   0.003s] ( 54/166) codex-state runtime::accounting::pricing::tests::snapshot_schema_rejects_unsupported_or_unbounded_inputs
+        PASS [   0.003s] ( 55/166) codex-state runtime::accounting::pricing::tests::prospective_catalog_is_order_independent_and_return_is_owned
+        PASS [   0.004s] ( 56/166) codex-state runtime::accounting::pricing::tests::validates_attempt_and_replay_before_quoting
+        PASS [   0.333s] ( 57/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_original_snapshot_collision_and_invalid_prefix
+        PASS [   0.284s] ( 58/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::expired_first_sweep_and_invalid_times_never_resurrect_detail
+        PASS [   0.069s] ( 59/166) codex-state runtime::accounting::pricing::storage::tests::concurrent_idempotence_and_snapshot_conflicts
+        PASS [   0.098s] ( 60/166) codex-state runtime::accounting::pricing::storage::lifecycle::tests::revisions_missing_estimates_and_corrupt_attribution
+        PASS [   0.119s] ( 61/166) codex-state runtime::accounting::pricing::storage::lifecycle::tests::deletion_removes_all_versions_and_intentions_with_opaque_reopen_guard
+        PASS [   0.084s] ( 62/166) codex-state runtime::accounting::pricing::storage::tests::forged_quote_fields_and_snapshot_content_are_rejected
+        PASS [   0.111s] ( 63/166) codex-state runtime::accounting::pricing::storage::lifecycle::tests::exact_day_objects_and_two_disk_reopens
+        PASS [   0.133s] ( 64/166) codex-state runtime::accounting::pricing::storage::lifecycle::tests::deterministic_replay_refresh_delete_orders_and_reader_snapshot
+        PASS [   0.073s] ( 65/166) codex-state runtime::accounting::pricing::storage::tests::retained_journal_keys_payload_and_evidence_are_checked
+        PASS [   0.074s] ( 66/166) codex-state runtime::accounting::pricing::storage::tests::validation_and_sql_failure_roll_back_all_estimate_writes
+        PASS [   0.072s] ( 67/166) codex-state runtime::accounting::pricing::tests::closed_journal_reopens_and_quotes_without_changing_rows_or_positions
+        PASS [   0.057s] ( 68/166) codex-state runtime::accounting::store::tests::accounting_inspect_absent_schema_is_read_only
+        PASS [   0.141s] ( 69/166) codex-state runtime::accounting::pricing::storage::lifecycle::tests::sum_before_rounding_and_checked_overflow
+        PASS [   0.125s] ( 70/166) codex-state runtime::accounting::pricing::storage::tests::late_revisions_preserve_versions_and_unavailable_binding
+        PASS [   0.089s] ( 71/166) codex-state runtime::accounting::store::tests::absent_store_delete_locks_before_inspection_and_ordinary_writer
+        PASS [   0.091s] ( 72/166) codex-state runtime::accounting::store::tests::accounting_inspect_coverage_divergence_with_overdue_other_day
+        PASS [   0.004s] ( 73/166) codex-state runtime::accounting::store::tests::accounting_inspect_range_iso_week_calendar_month_boundaries
+        PASS [   0.073s] ( 74/166) codex-state runtime::accounting::store::tests::accounting_inspect_never_maintained_is_checkpoint_lag
+        PASS [   0.389s] ( 75/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::four_real_writer_orders_and_reader_snapshot_transfer
+        PASS [   0.128s] ( 76/166) codex-state runtime::accounting::store::tests::accounting_inspect_checkpoint_and_stale_estimate
+        PASS [   0.462s] ( 77/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::native_tests::native_raw_compact_missing_counts_and_shared_price_survive_reopens
+        PASS [   0.126s] ( 78/166) codex-state runtime::accounting::store::tests::accounting_inspect_half_open_date_bounds
+        PASS [   0.109s] ( 79/166) codex-state runtime::accounting::store::tests::accounting_inspect_noncanonical_own_id_is_an_error
+        PASS [   0.088s] ( 80/166) codex-state runtime::accounting::store::tests::accounting_inspect_range_invalid_empty_reversed_and_unavailable
+        PASS [   0.130s] ( 81/166) codex-state runtime::accounting::store::tests::accounting_inspect_original_null_and_price_are_immutable
+        PASS [   0.080s] ( 82/166) codex-state runtime::accounting::store::tests::accounting_inspect_range_partial_edges_and_checkpoint_coverage
+        PASS [   0.521s] ( 83/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::corrupt_inputs_fail_maintenance_read_and_deletion_then_restore_and_retry
+        PASS [   0.574s] ( 84/166) codex-state runtime::accounting::pricing::storage::latest_tests::null_unbound_missing_estimates_and_exact_quotes_survive_two_reopens
+        PASS [   0.116s] ( 85/166) codex-state runtime::accounting::store::tests::accounting_inspect_range_mixed_compaction_exact_no_double_count
+        PASS [   0.103s] ( 86/166) codex-state runtime::accounting::store::tests::accounting_inspect_raw_day_reconciles_contributions
+        PASS [   0.569s] ( 87/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_overflow_rolls_back_entire_database
+        PASS [   0.159s] ( 88/166) codex-state runtime::accounting::store::tests::accounting_inspect_range_hours_half_open_and_cutoff_suffix
+        PASS [   0.605s] ( 89/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_raw_authority_and_input_bounds_are_not_bypassed
+        PASS [   0.118s] ( 90/166) codex-state runtime::accounting::store::tests::accounting_inspect_retention_and_compact_matrix
+        PASS [   0.613s] ( 91/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_presence_numeric_and_exact_price_goldens
+        PASS [   0.112s] ( 92/166) codex-state runtime::accounting::store::tests::accounting_inspect_single_snapshot_concurrent_writer
+        PASS [   0.173s] ( 93/166) codex-state runtime::accounting::store::tests::accounting_inspect_range_week_day_slices_and_expired_prefix
+        PASS [   0.296s] ( 94/166) codex-state runtime::accounting::store::tests::accounting_inspect_conflicting_and_missing_edges_are_unknown
+        PASS [   0.271s] ( 95/166) codex-state runtime::accounting::store::tests::accounting_inspect_malformed_source_with_edge_is_unknown
+        PASS [   0.281s] ( 96/166) codex-state runtime::accounting::store::tests::accounting_inspect_missing_binding_is_not_unpriced
+        PASS [   0.674s] ( 97/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::native_tests::native_post_accounting_faults_and_second_owner_rollback_retry
+        PASS [   0.685s] ( 98/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::native_tests::separate_store_failures_preserve_retry_graph_without_global_rollback_claim
+        PASS [   0.566s] ( 99/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::tests::missing_stale_null_unbound_and_original_prices_survive_reopen
+        PASS [   0.004s] (100/166) codex-state runtime::accounting::tests::inclusive_subsets_totals_and_arithmetic_overflow_are_validated
+        PASS [   0.079s] (101/166) codex-state runtime::accounting::tests::concurrent_same_key_writers_deduplicate_and_conflict
+        PASS [   0.063s] (102/166) codex-state runtime::accounting::tests::conflicting_batch_rolls_back_identity_rows_and_positions
+        PASS [   0.003s] (103/166) codex-state runtime::accounting::tests::native_anthropic_partial_input_and_unknown_dialect_remain_distinct
+        PASS [   0.275s] (104/166) codex-state runtime::accounting::store::tests::accounting_inspect_range_tree_unknown_and_single_snapshot
+        PASS [   0.003s] (105/166) codex-state runtime::accounting::tests::numeric_presence_rejects_nonintegers_overflow_and_arbitrary_fields
+        PASS [   0.063s] (106/166) codex-state runtime::accounting::tests::duplicate_revision_cannot_change_source_position_or_presence
+        PASS [   0.757s] (107/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_writer_orders_and_read_snapshot
+        PASS [   0.130s] (108/166) codex-state runtime::accounting::store::tests::store_rejections_preserve_clock_native_rows_and_original_binding
+        PASS [   0.147s] (109/166) codex-state runtime::accounting::store::tests::store_commit_failure_is_not_admission_and_rolls_back_complete_state
+        PASS [   0.774s] (110/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_boundaries_and_no_raw_staging
+        PASS [   0.071s] (111/166) codex-state runtime::accounting::tests::identity_is_immutable_and_request_owner_cannot_change
+        PASS [   0.056s] (112/166) codex-state runtime::accounting::tests::normal_init_does_not_create_draft_tables
+        PASS [   0.062s] (113/166) codex-state runtime::accounting::tests::invalid_metadata_revision_and_batch_leave_no_intent
+        PASS [   0.434s] (114/166) codex-state runtime::accounting::store::tests::accounting_inspect_corruption_and_unknowns
+        PASS [   0.076s] (115/166) codex-state runtime::accounting::tests::interrupted_intent_and_retry_survive_real_close_reopen
+        PASS [   0.060s] (116/166) codex-state runtime::accounting::tests::reordered_prefix_validation_rolls_back_without_erasing_knowns
+        PASS [   0.822s] (117/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_sql_faults_full_rollback_reopen_retry
+        PASS [   0.066s] (118/166) codex-state runtime::goals::tests::active_status_only_usage_accounting_does_not_update_budget_limited_goals
+        PASS [   0.081s] (119/166) codex-state runtime::accounting::tests::presence_gaps_reordering_and_two_replays_after_reopen
+        PASS [   0.055s] (120/166) codex-state runtime::goals::tests::stopped_usage_accounting_promotes_paused_goal_over_budget
+        PASS [   0.054s] (121/166) codex-state runtime::goals::tests::usage_accounting_adds_concurrent_token_deltas
+        PASS [   0.279s] (122/166) codex-state runtime::accounting::store::tests::accounting_inspect_tree_reconciles_and_quarantines_unknown_parents
+        PASS [   0.255s] (123/166) codex-state runtime::accounting::store::tests::price_bound_admission_and_native_delete_contend_in_both_orders_with_snapshots
+        PASS [   0.054s] (124/166) codex-state runtime::goals::tests::usage_accounting_can_finalize_completed_goal_for_completing_turn
+        PASS [   0.262s] (125/166) codex-state runtime::accounting::store::tests::accounting_inspect_work_is_not_refunded_for_unrelated_roots
+        PASS [   0.004s] (126/166) codex-state::accounting_late_import_process accounting_late_import_process_worker
+        PASS [   0.296s] (127/166) codex-state runtime::accounting::store::tests::accounting_inspect_tree_lineage_and_cost_share_one_snapshot
+        PASS [   0.061s] (128/166) codex-state runtime::goals::tests::usage_accounting_can_finalize_stopped_goal_for_in_flight_turn
+        PASS [   0.059s] (129/166) codex-state runtime::goals::tests::usage_accounting_ignores_replaced_goal_version
+        PASS [   0.231s] (130/166) codex-state runtime::accounting::store::tests::resultant_day_overflow_rejects_observation_without_poisoning_native_state
+        PASS [   0.573s] (131/166) codex-state runtime::accounting::pricing::storage::tests::exact_cases_survive_two_disk_reopens
+        PASS [   0.282s] (132/166) codex-state runtime::accounting::store::tests::accounting_inspect_unknown_unavailable_preserves_root
+        PASS [   0.065s] (133/166) codex-state runtime::goals::tests::usage_accounting_updates_active_goals_and_accounts_budget_limited_in_flight_usage
+        PASS [   0.299s] (134/166) codex-state runtime::accounting::store::tests::accounting_inspect_unknown_compact_preserves_root_coverage
+        PASS [   0.341s] (135/166) codex-state runtime::accounting::store::tests::inactive_activation_and_installed_native_delete_failures_are_retryable
+        PASS [   0.309s] (136/166) codex-state runtime::accounting::store::tests::public_deletion_samples_time_after_cleanup_and_writer_acquisition
+        PASS [   0.092s] (137/166) codex-state::accounting_store accounting_inspect_public_delete_and_empty
+        PASS [   0.086s] (138/166) codex-state::accounting_store accounting_inspect_public_reads_do_not_write
+        PASS [   0.326s] (139/166) codex-state runtime::accounting::store::tests::process_interruption_recovers_install_and_activation
+        PASS [   0.107s] (140/166) codex-state::accounting_store accounting_inspect_public_reopens_twice
+        PASS [   0.122s] (141/166) codex-state::accounting_store accounting_inspect_public_identity_retry_scope
+        PASS [   0.154s] (142/166) codex-state::accounting_late_import accounting_late_import_public_delete_off_recreated_owner_and_snapshot_gc
+        PASS [   0.159s] (143/166) codex-state::accounting_late_import accounting_late_import_public_native_delete_contends_without_winner_assumption
+        PASS [   0.493s] (144/166) codex-state runtime::accounting::store::tests::accounting_inspect_schema_rejection_matrix
+        PASS [   0.215s] (145/166) codex-state::accounting_late_import accounting_late_import_public_native_delete_serialized_outcomes
+        PASS [   1.069s] (146/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::late_import::tests::accounting_late_import_invalid_identity_revision_retry_and_prices
+        PASS [   0.282s] (147/166) codex-state::accounting_store accounting_inspect_public_literal_partial_goldens
+        PASS [   0.798s] (148/166) codex-state runtime::accounting::store::tests::accounting_inspect_descendant_stale_and_compact_refuse_tree_total
+        PASS [   0.356s] (149/166) codex-state::accounting_late_import accounting_late_import_native_family_literal_golden_and_young_reconstruction
+        PASS [   0.467s] (150/166) codex-state::accounting_late_import_process accounting_late_import_process_queued_cancel_and_lost_ack_replay
+        PASS [   0.913s] (151/166) codex-state runtime::accounting::store::tests::accounting_inspect_provisional_unrelated_chain_is_bounded
+        PASS [   0.523s] (152/166) codex-state::accounting_contract_golden accounting_contract_golden_original_price_and_native_family
+        PASS [   0.805s] (153/166) codex-state runtime::accounting::store::tests::accounting_inspect_tree_combined_attempt_cap_is_not_per_run
+        PASS [   1.293s] (154/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::target_deletion_faults_follow_maintenance_and_preserve_all_owners
+        PASS [   0.613s] (155/166) codex-state::accounting_contract_golden accounting_contract_golden_compact_original_bundle_parity
+        PASS [   0.853s] (156/166) codex-state runtime::accounting::store::tests::store_sql_faults_roll_back_all_tables_then_two_reopens_and_retry
+        PASS [   1.014s] (157/166) codex-state::accounting_contract_golden accounting_contract_golden_raw_replay_and_two_reopens
+        PASS [   1.068s] (158/166) codex-state::accounting_store accounting_inspect_valid_ten_thousand_retained_rows
+        PASS [   1.319s] (159/166) codex-state::accounting_store accounting_inspect_whole_store_denominator_thresholds
+        PASS [   1.543s] (160/166) codex-state::accounting_store accounting_inspect_small_day_on_busy_host
+        PASS [   2.142s] (161/166) codex-state runtime::accounting::store::tests::accounting_inspect_candidate_cap_precedes_unavailable_candidates
+        PASS [   2.527s] (162/166) codex-state runtime::accounting::pricing::storage::lifecycle::retention_plan::reduction::atomic::tests::fourteen_reachable_sql_faults_rollback_reopen_retry_both_routes
+        PASS [   3.055s] (163/166) codex-state::accounting_store accounting_inspect_work_budget_spans_range_buckets
+        PASS [   5.185s] (164/166) codex-state::accounting_store accounting_inspect_public_limits_no_truncation
+        PASS [   6.429s] (165/166) codex-state::accounting_store accounting_inspect_maximal_valid_packet
+        PASS [   9.379s] (166/166) codex-state::accounting_store accounting_inspect_work_budget_refuses_unknown_busy_host
 ────────────
-     Summary [  10.205s] 166 tests run: 166 passed, 187 skipped
+     Summary [  10.244s] 166 tests run: 166 passed, 187 skipped

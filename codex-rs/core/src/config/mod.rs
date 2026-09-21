@@ -651,6 +651,12 @@ pub enum AccountingMode {
         provider_id: String,
         wire_api: codex_model_provider_info::WireApi,
         approved_endpoint: String,
+        /// Configured query parameters, canonically sorted as `k=v&k=v`.
+        ///
+        /// The client appends these to every request URL, so the pinned route has
+        /// to carry them or the endpoint check can never match. They are ordered
+        /// here because the provider stores them in a `HashMap`.
+        approved_query: Option<String>,
         api_key_pricing: bool,
     },
     DirectAnthropic {
