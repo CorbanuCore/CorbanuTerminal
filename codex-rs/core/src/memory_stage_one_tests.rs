@@ -429,13 +429,16 @@ async fn pf_60_s03_stage_one_extraction_records_its_own_turn() -> anyhow::Result
             "total_tokens":140}}}),
     ]
     .iter()
-    .map(|event| format!("event: {}\ndata: {event}\n\n", event["type"].as_str().unwrap()))
+    .map(|event| {
+        format!(
+            "event: {}\ndata: {event}\n\n",
+            event["type"].as_str().unwrap()
+        )
+    })
     .collect::<String>();
     wiremock::Mock::given(wiremock::matchers::method("POST"))
         .and(wiremock::matchers::path("/v1/responses"))
-        .respond_with(
-            wiremock::ResponseTemplate::new(200).set_body_raw(body, "text/event-stream"),
-        )
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_raw(body, "text/event-stream"))
         .mount(&server)
         .await;
 
