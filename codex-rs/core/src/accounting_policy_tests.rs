@@ -36,6 +36,10 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
                     2 => Some(&subscription),
                     _ => None,
                 };
+                // `chat_completions_provider` is no longer an exclusion: a configured
+                // routing preference names the provider that serves and bills the
+                // request. It stays in the list as an ADMITTED shape so the cells
+                // prove that, rather than silently dropping the case.
                 for exclusion in [
                     None,
                     Some("aws"),
@@ -85,18 +89,33 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
                         auth.map(CodexAuth::auth_mode),
                         &endpoint,
                     );
-                    let admitted = exclusion.is_none();
+                    let admitted =
+                        exclusion.is_none() || exclusion == Some("chat_completions_provider");
                     let reason = route_refusal(&provider);
                     assert_eq!(reason.is_none(), admitted, "{id}/{wire}/{exclusion:?}");
                     assert_eq!(!matches!(selected, AccountingMode::Disabled), admitted);
                     assert_eq!(collects(&bound, id, &provider, wire), admitted);
-                    let request = chat_body();
+                    // A configured routing preference is attributable only when the
+                    // body actually carries exactly it, so build the request the way
+                    // this configuration would send it.
+                    let mut request = chat_body();
+                    request.provider = provider.chat_completions_provider.clone();
                     let eligible = match wire {
                         WireApi::Responses => responses::eligible(&provider, auth),
                         WireApi::Chat => chat::eligible(&provider, auth, &request),
                         WireApi::Anthropic => route_refusal(&provider).is_none(),
                     };
                     assert_eq!(eligible, admitted, "{id}/{wire}/{exclusion:?}: {reason:?}");
+                    // And a routing preference configuration did NOT ask for is never
+                    // attributable, whatever the provider shape.
+                    if wire == WireApi::Chat {
+                        let mut foreign = chat_body();
+                        foreign.provider = Some(serde_json::json!({"order": ["someone-else"]}));
+                        assert!(
+                            !chat::eligible(&provider, auth, &foreign),
+                            "{id}/{exclusion:?}: an unconfigured routing preference must be refused"
+                        );
+                    }
                     if admitted {
                         let sample = Sampling::start(
                             fixture.db.clone(),
