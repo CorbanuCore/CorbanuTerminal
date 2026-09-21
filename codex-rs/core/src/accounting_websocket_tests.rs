@@ -143,7 +143,7 @@ impl Fixture {
         Ok(Admission::new(
             self.resolve().await?,
             provenance(),
-            endpoint(BASE)?,
+            endpoint(BASE, None)?,
             Default::default(),
         ))
     }
@@ -178,7 +178,7 @@ async fn accounting_responses_ws_stream_guard_checks_live_policy_with_session_st
     let admission = Admission::new(
         fixture.resolve().await?,
         provenance(),
-        endpoint(BASE)?,
+        endpoint(BASE, None)?,
         client.stage_one_memory_binding.clone(),
     );
     admission.admit("gpt-5.6-sol".into(), /*tier*/ None).await?;
@@ -312,7 +312,7 @@ async fn accounting_responses_ws_exact_endpoint_binding() -> anyhow::Result<()> 
             "wss://api.openai.com/v1/responses",
         ),
     ] {
-        assert_eq!(endpoint(http)?, ws);
+        assert_eq!(endpoint(http, None)?, ws);
     }
     for bad in [
         "http://user@127.0.0.1/v1",
@@ -320,7 +320,14 @@ async fn accounting_responses_ws_exact_endpoint_binding() -> anyhow::Result<()> 
         "http://127.0.0.1/v1#fragment",
         "ftp://127.0.0.1/v1",
     ] {
-        assert!(endpoint(bad).is_err());
+        assert!(endpoint(bad, None).is_err());
+        // A configured query is part of the route on this lane too, and one that
+        // configuration did not declare is still refused.
+        assert_eq!(
+            endpoint("https://example.invalid/v1", Some("api-version=2025-04-01"))?,
+            "wss://example.invalid/v1/responses?api-version=2025-04-01"
+        );
+        assert!(endpoint("https://example.invalid/v1?stray=1", None).is_err());
     }
     for bad in [
         "ws://127.0.0.1:12346/v1/responses",
