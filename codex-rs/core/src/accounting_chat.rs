@@ -204,7 +204,10 @@ pub(super) fn eligible(
 ) -> bool {
     provider.wire_api == WireApi::Chat
         && super::route_refusal(provider).is_none()
-        && request.provider.is_none()
+        // A configured routing preference is part of who serves and bills this
+        // request, so it stays attributable to the selected provider. A
+        // request-level preference configuration did not ask for is not.
+        && request.provider == provider.chat_completions_provider
         && request.provider_options.is_none()
         && request.plugins.is_none()
 }
@@ -218,10 +221,8 @@ pub(super) fn legacy_eligible(
         && provider.is_openai()
         && provider.requires_openai_auth
         && !provider.is_pfterminal_plan()
-        // A configured routing preference is part of who serves and bills this
-        // request, so it is attributable; a request-level one that configuration
-        // did not ask for is not.
-        && request.provider == provider.chat_completions_provider
+        && provider.chat_completions_provider.is_none()
+        && request.provider.is_none()
         && request.provider_options.is_none()
         && request.plugins.is_none()
         && matches!(auth, Some(CodexAuth::ApiKey(_)))
