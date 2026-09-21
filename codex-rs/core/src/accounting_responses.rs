@@ -133,7 +133,6 @@ impl DeferredResponsesSampling {
             legacy_eligible(provider, auth)
         };
         if !admitted {
-            eprintln!("ACCTPROBE resolve: not admitted; wire={:?} refusal={:?}", provider.wire_api, super::route_refusal(provider));
             if self.sampling.initialized() {
                 self.reject();
                 self.check()?;
@@ -156,7 +155,6 @@ impl DeferredResponsesSampling {
             return Err(CodexErr::Fatal(FAILURE.into()));
         };
         if endpoint != format!("{}/responses", approved_endpoint.trim_end_matches('/')) {
-            eprintln!("ACCTPROBE resolve: endpoint mismatch actual={endpoint} approved={approved_endpoint}");
             self.reject();
             return Err(CodexErr::Fatal(FAILURE.into()));
         }
@@ -206,7 +204,6 @@ impl DeferredResponsesSampling {
             .await;
         match result {
             Ok(sampling) => {
-                eprintln!("ACCTPROBE resolve: sampling ready");
                 self.check()?;
                 Ok(Some(Arc::clone(sampling)))
             }

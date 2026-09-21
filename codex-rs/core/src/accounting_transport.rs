@@ -115,6 +115,23 @@ impl codex_api::ChatUsageObserver for ResponseEvidence {
     }
 }
 
+/// Reads the routing keys out of a request body, whatever encoding it arrived in.
+///
+/// An `EncodedJsonBody` may already hold the final compressed wire bytes, and the
+/// request's own compression field does not say so - it describes what the
+/// transport should still do, not what preparation already did. Parsing those
+/// bytes as JSON fails, so treating a parse failure as "uninspectable" refused
+/// every compressed turn and silently collected nothing. Decode the one encoding
+/// this client produces before deciding a body cannot be inspected.
+fn routing_json(bytes: &[u8]) -> Result<serde_json::Value, &'static str> {
+    if let Ok(value) = serde_json::from_slice::<serde_json::Value>(bytes) {
+        return Ok(value);
+    }
+    let plain = zstd::stream::decode_all(std::io::Cursor::new(bytes))
+        .map_err(|_| "uninspectable request body")?;
+    serde_json::from_slice(&plain).map_err(|_| "uninspectable request body")
+}
+
 /// Request-level routing hints can change the serving provider after selection.
 /// Inspect only the routing keys; never retain or report the request payload.
 pub(super) fn request_refusal(request: &Request) -> Option<&'static str> {
@@ -123,13 +140,19 @@ pub(super) fn request_refusal(request: &Request) -> Option<&'static str> {
     let value = match request.body.as_ref()? {
         RequestBody::Json(value) => value,
         RequestBody::EncodedJson(body) => {
-            decoded = match serde_json::from_slice::<serde_json::Value>(body.as_bytes()) {
+            decoded = match routing_json(body.as_bytes()) {
                 Ok(value) => value,
-                Err(_) => return Some("uninspectable request body"),
+                Err(reason) => return Some(reason),
             };
             &decoded
         }
-        RequestBody::Raw(_) => return Some("uninspectable request body"),
+        RequestBody::Raw(bytes) => {
+            decoded = match routing_json(bytes) {
+                Ok(value) => value,
+                Err(reason) => return Some(reason),
+            };
+            &decoded
+        }
     };
     ["provider", "provider_options", "plugins"]
         .into_iter()
@@ -166,28 +189,8 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
 
     async fn stream(&self, request: Request) -> Result<StreamResponse, TransportError> {
         let Some(evidence) = &self.evidence else {
-            eprintln!("ACCTPROBE transport: no evidence attached; url={}", request.url);
             return self.inner.stream(request).await;
         };
-        {
-            use codex_http_client::RequestBody as PB;
-            let (variant, len, head) = match request.body.as_ref() {
-                None => ("none", 0usize, String::new()),
-                Some(PB::Json(_)) => ("json", 0, String::new()),
-                Some(PB::EncodedJson(b)) => (
-                    "encoded",
-                    b.as_bytes().len(),
-                    b.as_bytes().iter().take(8).map(|byte| format!("{byte:02x}")).collect(),
-                ),
-                Some(PB::Raw(b)) => (
-                    "raw",
-                    b.len(),
-                    b.iter().take(8).map(|byte| format!("{byte:02x}")).collect(),
-                ),
-            };
-            eprintln!("ACCTPROBE transport: url={} refusal={:?} body_variant={variant} len={len} head={head} compression={:?}",
-                request.url, request_refusal(&request), request.compression);
-        }
         if evidence.attempt.get().is_some() || request_refusal(&request).is_some() {
             evidence.sampling.reject();
             return Err(TransportError::Build(FAILURE.into()));
