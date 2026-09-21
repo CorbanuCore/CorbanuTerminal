@@ -128,3 +128,37 @@ published observation has gone stale again and I want to know.
   but deliberately unreviewed and unreceived, and is not in this build.
 - Nothing here is a release qualification. It is a local signed build of the
   integration tip for your testing, on this machine only.
+
+## Update, 21 September: collection actually works now
+
+The build this note originally described had accounting compiled in and still
+collected nothing, on every provider. The routing-key check read the request body
+as plain JSON while the transport sees it after preparation, which for this client
+means zstd-compressed bytes, so every prepared turn was judged uninspectable and
+refused before admission. That is fixed, along with five rounds of review findings
+including two defects in the repair itself.
+
+Your shortcut now opens integration commit `333ade4084`, same signing identity and
+identifiers as before. What changed for your testing:
+
+- **`/usage requests` will have data** after a few real turns, on any provider and
+  dialect this code understands - Responses, Chat or Anthropic - including your
+  `claude-plan` launcher profile. The provider-id restriction that made me tell
+  you to switch to an OpenAI model is gone.
+- **Money is deliberately not shown for plan routes.** A plan has no per-token
+  rate, so those turns record tokens with cost reported as unavailable, which is
+  distinct from zero and from absent. Metered API-key routes on the built-in
+  OpenAI and Anthropic providers are priced.
+- **Two shapes are refused on purpose**, and a refusal now means "served but not
+  recorded" rather than a failed turn: AWS-signed providers, and providers whose
+  requests carry gateway routing keys that could send the work to a different
+  upstream vendor. When that happens the log says so.
+
+Verified on the RTX workstation rather than here, because this Mac has been
+manufacturing timeout failures while Spotlight re-indexes: core 132/132, core with
+the developer feature 136/136, state 166/166, usage 92/92. Raw logs are committed
+under `qa/portfolio/agent-cost-accounting/pf-60-s03/rtx-20260921/`.
+
+Still true: collection remains impossible in any build a user could receive, and
+the plan-burn and API-equivalent numbers you asked for are the next round, not
+this one.
