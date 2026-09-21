@@ -95,8 +95,8 @@ Clean-host lanes at this tree, RTX workstation:
 
 | lane | result |
 | --- | --- |
-| `codex-core` accounting | **134 run, 134 passed** |
-| `codex-core` accounting, `developer-accounting` | **139 run, 139 passed** |
+| `codex-core` accounting | **135 run, 135 passed** |
+| `codex-core` accounting, `developer-accounting` | **140 run, 140 passed** |
 | `codex-state` accounting | **166 run, 166 passed** |
 | `codex-tui` usage | **92 run, 92 passed** |
 | `codex-tui` tokens | 66 run, 65 passed, 1 pre-existing failure |
@@ -135,12 +135,32 @@ it with no collector attached, so those turns never recorded - including
 `/compact`, which the operator asks for directly. My stated rationale for the
 other exclusions ("not turns the operator asked for") was simply false for it.
 
-Compaction now collects. The attachment logic that `session/turn.rs` performed
-inline is extracted into `accounting::attach_turn`, and both paths use it, so the
-two cannot drift again. In compaction the attachment is deliberately best effort:
-if collection cannot be attached the compaction still runs and a warning says it
-proceeded unrecorded. Accounting observes a session; it must never be a gate on
-one.
+Compaction now collects, on **both** compaction paths. The first attempt wired
+only the local one, and review pointed out that providers supporting remote
+compaction - OpenAI and Azure Responses, which is where operator `/compact`
+usually lands - route to `compact_remote_v2` and still recorded nothing. Both now
+call the same helper: the attachment logic `session/turn.rs` performed inline is
+extracted into `accounting::attach_turn`, so the paths cannot drift again.
+
+The remote path attaches only when the compaction owns its client session. When
+the session is borrowed from a live turn, that turn's collectors are already
+attached and the compaction request belongs to it, so nothing is replaced
+mid-flight.
+
+The turn label is `accounting::compaction_turn_label`, which keeps the identity
+inside the store's 128-byte bound: a long submission id would otherwise make its
+compaction unrecordable while the ordinary turn recorded fine.
+`accounting_compaction_label_stays_recordable` pins that against
+`Attempt::validate`, including a multi-byte boundary. In compaction the attachment is deliberately best effort: if collection cannot be
+attached the compaction still runs and a warning says it proceeded unrecorded.
+
+Honest limit, because review pushed on it and the first answer was worse than the
+problem: best effort covers ATTACH time only. Once collectors are attached, an
+accounting fault mid-stream still fails the compaction, exactly as it fails an
+ordinary turn. I tried making that path retry the attempt unrecorded and backed it
+out - it re-sends the request, so a bookkeeping fault would have cost a second
+compaction call. Failing closed and consistently is the better of the two, and the
+inconsistency with the sentence above is stated rather than hidden.
 
 Two exclusions remain, both session classes rather than provider or model
 classes, and neither introduced by this work:
