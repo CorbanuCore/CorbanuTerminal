@@ -502,70 +502,70 @@ warning: function `get_upgrade_version_for_popup` is never used
 warning: `codex-tui` (lib test) generated 25 warnings (9 duplicates) (run `cargo fix --lib -p codex-tui --tests` to apply 1 suggestion)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
 ────────────
- Nextest run ID 15c636fa-58b4-40f4-8cff-6ef9d099381d with nextest profile: local
+ Nextest run ID 7ee71db1-5035-4102-9e6d-a7afcdc02b99 with nextest profile: local
     Starting 67 tests across 6 binaries (4105 tests skipped)
-        PASS [   0.011s] ( 1/67) codex-tui chatwidget::tokens::chart::palette::tests::non_rgb_theme_accent_remains_active_fallback
-        PASS [   0.011s] ( 2/67) codex-tui chatwidget::tokens::chart::palette::tests::truecolor_palette_blends_theme_accent_against_dark_background
-        PASS [   0.011s] ( 3/67) codex-tui bottom_pane::chat_composer::tests::test_current_at_token_tracks_tokens_with_second_at
-        PASS [   0.011s] ( 4/67) codex-tui chatwidget::tokens::tests::accounting_inspect_breakdown_freshness_and_empty_attribution
-        PASS [   0.013s] ( 5/67) codex-tui chatwidget::tokens::chart::palette::tests::missing_terminal_colors_use_theme_accent_fallback
-        PASS [   0.013s] ( 6/67) codex-tui chatwidget::goal_status::tests::completed_goal_usage_reports_tokens_when_budgeted
-        PASS [   0.014s] ( 7/67) codex-tui chatwidget::goal_status::tests::stopped_goal_budget_usage_reports_budgeted_tokens
-        PASS [   0.014s] ( 8/67) codex-tui bottom_pane::chat_composer::popup_state::tests::dismissed_tokens_after_adjacent_elements_are_occurrence_scoped
-        PASS [   0.014s] ( 9/67) codex-tui chatwidget::tokens::chart::palette::tests::truecolor_palette_blends_empty_cell_for_light_background
-        PASS [   0.020s] (10/67) codex-tui chatwidget::tokens::chart::tests::cumulative_graph_snapshot_renders_running_total_bar_chart_and_caption
-        PASS [   0.009s] (11/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_coverage_names_intersection_for_request_and_retention_clips
-        PASS [   0.020s] (12/67) codex-tui chatwidget::tokens::chart::tests::weekly_graph_snapshot_renders_bar_chart_and_caption
-        PASS [   0.012s] (13/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_partial_no_amount_and_explicit_coverage
-        PASS [   0.027s] (14/67) codex-tui chatwidget::tokens::chart::tests::summary_snapshot_left_aligns_and_splits_when_needed
-        PASS [   0.017s] (15/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_bucket_ancestry_counts_have_explicit_scopes
-        PASS [   0.017s] (16/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_breakdowns_and_navigation_reconcile
-        PASS [   0.016s] (17/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_overview_discloses_unknown_population_before_total
-        PASS [   0.030s] (18/67) codex-tui chatwidget::tokens::tests::accounting_inspect_coverage_never_claims_run_complete
-        PASS [   0.031s] (19/67) codex-tui chatwidget::tokens::chart::tests::bar_levels_fill_from_bottom
-        PASS [   0.011s] (20/67) codex-tui chatwidget::tokens::tests::accounting_inspect_unknown_unavailable_note
-        PASS [   0.032s] (21/67) codex-tui chatwidget::tests::status_and_layout::context_indicator_shows_used_tokens_when_window_unknown
-        PASS [   0.015s] (22/67) codex-tui chatwidget::tokens::tests::accounting_inspect_request_attempt_price_detail
-        PASS [   0.034s] (23/67) codex-tui chatwidget::tokens::tests::accounting_inspect_plan_work_is_never_reported_as_money_spent
-        PASS [   0.021s] (24/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_unavailable_precision_and_freshness
-        PASS [   0.022s] (25/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_week_and_month_merge_exact_attempts
-        PASS [   0.038s] (26/67) codex-tui chatwidget::tokens::chart::palette::tests::ansi16_palette_uses_theme_accent_without_green_fallback
-        PASS [   0.025s] (27/67) codex-tui chatwidget::tokens::tests::accounting_inspect_rendered_tree_and_provider_model_reconcile
-        PASS [   0.040s] (28/67) codex-tui chatwidget::tokens::chart::tests::duplicate_dates_sum_and_negative_values_clamp
-        PASS [   0.032s] (29/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_command_refresh_and_refusal
-        PASS [   0.045s] (30/67) codex-tui chatwidget::tokens::chart::tests::token_activity_view_aliases_parse
-        PASS [   0.045s] (31/67) codex-tui chatwidget::tokens::tests::accounting_inspect_estimate_only_never_invents_billed_or_difference
-        PASS [   0.029s] (32/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_aggregate_coverage_does_not_claim_raw_detail
-        PASS [   0.046s] (33/67) codex-tui chatwidget::tokens::chart::tests::daily_graph_snapshot_uses_distinct_empty_and_active_cells
-        PASS [   0.021s] (34/67) codex-tui chatwidget::tokens::tests::accounting_inspect_unpriced_zero_and_missing_rate
-        PASS [   0.030s] (35/67) codex-tui chatwidget::tokens::tests::accounting_inspect_group_partial_price_stays_unknown
-        PASS [   0.047s] (36/67) codex-tui chatwidget::tokens::tests::accounting_inspect_exact_rounding_reconciliation
-        PASS [   0.016s] (37/67) codex-tui chatwidget::tps::tests::positive_tokens_zero_duration_renders_placeholder
-        PASS [   0.018s] (38/67) codex-tui chatwidget::tokens::tests::loaded_state_freezes_chart_anchor_date_at_completion
-        PASS [   0.050s] (39/67) codex-tui chatwidget::tokens::chart::tests::daily_graph_snapshot_stays_left_aligned_in_wide_terminal
-        PASS [   0.016s] (40/67) codex-tui clipboard_paste::pasted_paths_tests::normalize_multiple_tokens_returns_none
-        PASS [   0.053s] (41/67) codex-tui chatwidget::tokens::tests::accounting_inspect_breakdown_navigation_reuses_packet
-        PASS [   0.037s] (42/67) codex-tui chatwidget::tokens::tests::accounting_inspect_partial_and_unknown_copy
-        PASS [   0.018s] (43/67) codex-tui goal_display::tests::goal_usage_summary_formats_time_and_budgeted_tokens
-        PASS [   0.016s] (44/67) codex-tui history_cell::tests::plan_update_does_not_split_url_like_tokens_in_note_or_step
-        PASS [   0.019s] (45/67) codex-tui claude_panes::tests::live_status_panel_shows_thinking_tokens_and_marks_prior_tool_done
-        PASS [   0.024s] (46/67) codex-tui chatwidget::tokens::tests::accounting_zero_plan_usage_renders_money_unavailable
-        PASS [   0.055s] (47/67) codex-tui chatwidget::tokens::tests::accounting_inspect_availability_state_snapshots
-        PASS [   0.011s] (48/67) codex-tui wrapping::tests::adaptive_wrap_line_preserves_default_behavior_for_non_url_tokens
-        PASS [   0.017s] (49/67) codex-tui markdown_render::tests::column_classification_token_heavy_by_url_like_tokens
-        PASS [   0.018s] (50/67) codex-tui local_chatgpt_auth::tests::prefers_managed_auth_over_external_ephemeral_tokens
-        PASS [   0.014s] (51/67) codex-tui mention_codec::tests::decode_history_mentions_restores_visible_tokens
-        PASS [   0.011s] (52/67) codex-tui wrapping::tests::text_contains_url_like_matches_expected_tokens
-        PASS [   0.011s] (53/67) codex-tui wrapping::tests::line_has_mixed_url_and_non_url_tokens_ignores_pipe_prefix
-        PASS [   0.012s] (54/67) codex-tui wrapping::tests::line_has_mixed_url_and_non_url_tokens_detects_prose_plus_url
-        PASS [   0.038s] (55/67) codex-tui chatwidget::tokens::tests::accounting_inspect_snapshot_navigation_roundtrip
-        PASS [   0.012s] (56/67) codex-tui wrapping::tests::line_has_mixed_url_and_non_url_tokens_ignores_ordered_list_marker
-        PASS [   0.013s] (57/67) codex-tui status::tests::status_card_token_usage_excludes_cached_tokens
+        PASS [   0.010s] ( 1/67) codex-tui chatwidget::goal_status::tests::completed_goal_usage_reports_tokens_when_budgeted
+        PASS [   0.010s] ( 2/67) codex-tui bottom_pane::chat_composer::popup_state::tests::dismissed_tokens_after_adjacent_elements_are_occurrence_scoped
+        PASS [   0.010s] ( 3/67) codex-tui chatwidget::goal_status::tests::stopped_goal_budget_usage_reports_budgeted_tokens
+        PASS [   0.010s] ( 4/67) codex-tui chatwidget::tokens::chart::palette::tests::truecolor_palette_blends_theme_accent_against_dark_background
+        PASS [   0.010s] ( 5/67) codex-tui bottom_pane::chat_composer::tests::test_current_at_token_tracks_tokens_with_second_at
+        PASS [   0.017s] ( 6/67) codex-tui chatwidget::tokens::chart::palette::tests::missing_terminal_colors_use_theme_accent_fallback
+        PASS [   0.010s] ( 7/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_coverage_names_intersection_for_request_and_retention_clips
+        PASS [   0.011s] ( 8/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_bucket_ancestry_counts_have_explicit_scopes
+        PASS [   0.012s] ( 9/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_breakdowns_and_navigation_reconcile
+        PASS [   0.022s] (10/67) codex-tui chatwidget::tests::status_and_layout::context_indicator_shows_used_tokens_when_window_unknown
+        PASS [   0.031s] (11/67) codex-tui chatwidget::tokens::chart::tests::bar_levels_fill_from_bottom
+        PASS [   0.031s] (12/67) codex-tui chatwidget::tokens::chart::tests::token_activity_view_aliases_parse
+        PASS [   0.031s] (13/67) codex-tui chatwidget::tokens::chart::tests::duplicate_dates_sum_and_negative_values_clamp
+        PASS [   0.033s] (14/67) codex-tui chatwidget::tokens::tests::accounting_inspect_breakdown_freshness_and_empty_attribution
+        PASS [   0.037s] (15/67) codex-tui chatwidget::tokens::tests::accounting_inspect_coverage_never_claims_run_complete
+        PASS [   0.015s] (16/67) codex-tui chatwidget::tokens::tests::accounting_inspect_request_attempt_price_detail
+        PASS [   0.022s] (17/67) codex-tui chatwidget::tokens::tests::accounting_inspect_availability_state_snapshots
+        PASS [   0.022s] (18/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_partial_no_amount_and_explicit_coverage
+        PASS [   0.039s] (19/67) codex-tui chatwidget::tokens::tests::accounting_inspect_group_partial_price_stays_unknown
+        PASS [   0.029s] (20/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_overview_discloses_unknown_population_before_total
+        PASS [   0.040s] (21/67) codex-tui chatwidget::tokens::tests::accounting_inspect_plan_work_is_never_reported_as_money_spent
+        PASS [   0.042s] (22/67) codex-tui chatwidget::tokens::chart::palette::tests::non_rgb_theme_accent_remains_active_fallback
+        PASS [   0.045s] (23/67) codex-tui chatwidget::tokens::chart::palette::tests::truecolor_palette_blends_empty_cell_for_light_background
+        PASS [   0.045s] (24/67) codex-tui chatwidget::tokens::chart::tests::daily_graph_snapshot_stays_left_aligned_in_wide_terminal
+        PASS [   0.018s] (25/67) codex-tui chatwidget::tokens::tests::accounting_inspect_estimate_only_never_invents_billed_or_difference
+        PASS [   0.045s] (26/67) codex-tui chatwidget::tokens::chart::palette::tests::ansi16_palette_uses_theme_accent_without_green_fallback
+        PASS [   0.014s] (27/67) codex-tui chatwidget::tokens::tests::accounting_inspect_unpriced_zero_and_missing_rate
+        PASS [   0.029s] (28/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_aggregate_coverage_does_not_claim_raw_detail
+        PASS [   0.024s] (29/67) codex-tui chatwidget::tokens::tests::accounting_inspect_rendered_tree_and_provider_model_reconcile
+        PASS [   0.026s] (30/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_unavailable_precision_and_freshness
+        PASS [   0.047s] (31/67) codex-tui chatwidget::tokens::chart::tests::weekly_graph_snapshot_renders_bar_chart_and_caption
+        PASS [   0.028s] (32/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_week_and_month_merge_exact_attempts
+        PASS [   0.035s] (33/67) codex-tui chatwidget::tokens::tests::accounting_inspect_exact_rounding_reconciliation
+        PASS [   0.037s] (34/67) codex-tui chatwidget::tokens::tests::accounting_inspect_partial_and_unknown_copy
+        PASS [   0.013s] (35/67) codex-tui claude_panes::tests::live_status_panel_shows_thinking_tokens_and_marks_prior_tool_done
+        PASS [   0.014s] (36/67) codex-tui chatwidget::tps::tests::positive_tokens_zero_duration_renders_placeholder
+        PASS [   0.016s] (37/67) codex-tui chatwidget::tokens::tests::loaded_state_freezes_chart_anchor_date_at_completion
+        PASS [   0.056s] (38/67) codex-tui chatwidget::tokens::chart::tests::daily_graph_snapshot_uses_distinct_empty_and_active_cells
+        PASS [   0.056s] (39/67) codex-tui chatwidget::tokens::chart::tests::cumulative_graph_snapshot_renders_running_total_bar_chart_and_caption
+        PASS [   0.048s] (40/67) codex-tui chatwidget::tokens::tests::accounting_inspect_range_command_refresh_and_refusal
+        PASS [   0.015s] (41/67) codex-tui clipboard_paste::pasted_paths_tests::normalize_multiple_tokens_returns_none
+        PASS [   0.014s] (42/67) codex-tui goal_display::tests::goal_usage_summary_formats_time_and_budgeted_tokens
+        PASS [   0.030s] (43/67) codex-tui chatwidget::tokens::tests::accounting_inspect_unknown_unavailable_note
+        PASS [   0.014s] (44/67) codex-tui history_cell::tests::plan_update_does_not_split_url_like_tokens_in_note_or_step
+        PASS [   0.061s] (45/67) codex-tui chatwidget::tokens::chart::tests::summary_snapshot_left_aligns_and_splits_when_needed
+        PASS [   0.016s] (46/67) codex-tui status::tests::status_card_token_usage_excludes_cached_tokens
+        PASS [   0.012s] (47/67) codex-tui wrapping::tests::line_has_mixed_url_and_non_url_tokens_ignores_ordered_list_marker
+        PASS [   0.017s] (48/67) codex-tui markdown_render::tests::column_classification_token_heavy_by_url_like_tokens
+        PASS [   0.010s] (49/67) codex-tui wrapping::tests::text_contains_url_like_matches_expected_tokens
+        PASS [   0.026s] (50/67) codex-tui chatwidget::tokens::tests::accounting_zero_plan_usage_renders_money_unavailable
+        PASS [   0.018s] (51/67) codex-tui mention_codec::tests::decode_history_mentions_restores_visible_tokens
+        PASS [   0.012s] (52/67) codex-tui wrapping::tests::line_has_mixed_url_and_non_url_tokens_ignores_pipe_prefix
+        PASS [   0.017s] (53/67) codex-tui wrapping::tests::line_has_mixed_url_and_non_url_tokens_detects_prose_plus_url
+        PASS [   0.018s] (54/67) codex-tui wrapping::tests::adaptive_wrap_line_preserves_default_behavior_for_non_url_tokens
+        PASS [   0.019s] (55/67) codex-tui local_chatgpt_auth::tests::prefers_managed_auth_over_external_ephemeral_tokens
+        PASS [   0.066s] (56/67) codex-tui chatwidget::tokens::tests::accounting_inspect_breakdown_navigation_reuses_packet
+        PASS [   0.041s] (57/67) codex-tui chatwidget::tokens::tests::accounting_inspect_usability_wrap_tracks_resize
         PASS [   0.043s] (58/67) codex-tui chatwidget::tokens::tests::accounting_inspect_usability_unavailable_first_screen
-        PASS [   0.042s] (59/67) codex-tui chatwidget::tokens::tests::accounting_inspect_usability_wrap_tracks_resize
-        PASS [   0.049s] (60/67) codex-tui chatwidget::tokens::tests::accounting_inspect_usability_short_day_visible_in_every_state
-        PASS [   0.079s] (61/67) codex-tui chatwidget::tokens::tests::accounting_inspect_empty_day_after_checkpoint_renders_lag
-  TRY 1 FAIL [   0.089s] (─────) codex-tui chatwidget::tokens::tests::accounting_inspect_maintenance_with_healthy_raw_renders_lag
+        PASS [   0.050s] (59/67) codex-tui chatwidget::tokens::tests::accounting_inspect_snapshot_navigation_roundtrip
+        PASS [   0.070s] (60/67) codex-tui chatwidget::tokens::tests::accounting_inspect_empty_day_after_checkpoint_renders_lag
+        PASS [   0.053s] (61/67) codex-tui chatwidget::tokens::tests::accounting_inspect_usability_short_day_visible_in_every_state
+  TRY 1 FAIL [   0.102s] (─────) codex-tui chatwidget::tokens::tests::accounting_inspect_maintenance_with_healthy_raw_renders_lag
   stdout ───
 
     running 1 test
@@ -610,18 +610,19 @@ warning: `codex-tui` (lib test) generated 25 warnings (9 duplicates) (run `cargo
     failures:
         chatwidget::tokens::tests::accounting_inspect_maintenance_with_healthy_raw_renders_lag
 
-    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4080 filtered out; finished in 0.06s
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4080 filtered out; finished in 0.07s
 
   stderr ───
 
-    thread 'chatwidget::tokens::tests::accounting_inspect_maintenance_with_healthy_raw_renders_lag' (3602658) panicked at /home/ambient/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    thread 'chatwidget::tokens::tests::accounting_inspect_maintenance_with_healthy_raw_renders_lag' (3718564) panicked at /home/ambient/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
     snapshot assertion for 'accounting_inspect_maintenance_with_healthy_raw_renders_lag' failed in line 1043
     note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
-        PASS [   0.126s] (62/67) codex-tui chatwidget::tokens::tests::accounting_inspect_narrow_and_long_fields
-        PASS [   0.127s] (63/67) codex-tui chatwidget::tokens::tests::accounting_inspect_maintenance_with_stale_raw_renders_refresh
-        PASS [   0.111s] (64/67) codex-tui claude_panes::tests::vercel_fast_command_plan_uses_count_tokens_passthrough_bridge
-  TRY 2 FAIL [   0.057s] (65/67) codex-tui chatwidget::tokens::tests::accounting_inspect_maintenance_with_healthy_raw_renders_lag
+        PASS [   0.137s] (62/67) codex-tui chatwidget::tokens::tests::accounting_inspect_maintenance_with_stale_raw_renders_refresh
+        PASS [   0.125s] (63/67) codex-tui chatwidget::tokens::tests::accounting_inspect_narrow_and_long_fields
+        PASS [   0.107s] (64/67) codex-tui claude_panes::tests::vercel_fast_command_plan_uses_count_tokens_passthrough_bridge
+        PASS [   0.146s] (65/67) codex-tui chatwidget::tokens::tests::accounting_inspect_usability_hour_lifetime_wording
+  TRY 2 FAIL [   0.062s] (66/67) codex-tui chatwidget::tokens::tests::accounting_inspect_maintenance_with_healthy_raw_renders_lag
   stdout ───
 
     running 1 test
@@ -670,13 +671,12 @@ warning: `codex-tui` (lib test) generated 25 warnings (9 duplicates) (run `cargo
 
   stderr ───
 
-    thread 'chatwidget::tokens::tests::accounting_inspect_maintenance_with_healthy_raw_renders_lag' (3602762) panicked at /home/ambient/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
+    thread 'chatwidget::tokens::tests::accounting_inspect_maintenance_with_healthy_raw_renders_lag' (3718670) panicked at /home/ambient/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/insta-1.46.3/src/runtime.rs:719:13:
     snapshot assertion for 'accounting_inspect_maintenance_with_healthy_raw_renders_lag' failed in line 1043
     note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
-        PASS [   0.138s] (66/67) codex-tui chatwidget::tokens::tests::accounting_inspect_usability_hour_lifetime_wording
-        PASS [   0.278s] (67/67) codex-tui chatwidget::tokens::tests::accounting_inspect_usability_unavailable_hour_bucket_lifetime_wording
+        PASS [   0.275s] (67/67) codex-tui chatwidget::tokens::tests::accounting_inspect_usability_unavailable_hour_bucket_lifetime_wording
 ────────────
-     Summary [   0.317s] 67 tests run: 66 passed, 1 failed, 4105 skipped
-  TRY 2 FAIL [   0.057s] (65/67) codex-tui chatwidget::tokens::tests::accounting_inspect_maintenance_with_healthy_raw_renders_lag
+     Summary [   0.324s] 67 tests run: 66 passed, 1 failed, 4105 skipped
+  TRY 2 FAIL [   0.062s] (66/67) codex-tui chatwidget::tokens::tests::accounting_inspect_maintenance_with_healthy_raw_renders_lag
 error: test run failed

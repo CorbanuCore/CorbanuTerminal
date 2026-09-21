@@ -81,7 +81,7 @@ the edits path's pin and the no-handle branch are covered by the type system and
 by reading, not by a test. That is stated rather than implied.
 
 Clean-host lanes, RTX workstation, fmt-clean: `codex-core` accounting with
-`developer-accounting` **150/150**, the image-generation extension 10/10.
+`developer-accounting` **151/151**, the image-generation extension 10/10.
 
 ## What is still uncollected
 
