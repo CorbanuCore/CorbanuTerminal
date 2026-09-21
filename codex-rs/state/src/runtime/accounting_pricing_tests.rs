@@ -67,6 +67,10 @@ fn partial_expected(observations: Vec<Observation>) -> ObservationQuote {
             rounded: false,
             nonzero_sub_micro: false,
         },
+        known_equivalent: Decimal::default(),
+        all_buckets_equivalent: None,
+        plan_burn_millis: None,
+        plan_burn_milli_tokens: None,
     }
 }
 
@@ -121,6 +125,10 @@ fn inclusive_revisions_replace_and_reasoning_is_not_charged_twice() {
                 rounded: false,
                 nonzero_sub_micro: false
             },
+            known_equivalent: Decimal::default(),
+            all_buckets_equivalent: None,
+            plan_burn_millis: None,
+            plan_burn_milli_tokens: None,
         }
     );
 }
@@ -145,6 +153,10 @@ fn absent_null_zero_and_missing_rates_remain_distinct() {
                 known_subtotal: Decimal::default(),
                 all_buckets_priced: None,
                 subtotal_display: Decimal::default().display(),
+                known_equivalent: Decimal::default(),
+                all_buckets_equivalent: None,
+                plan_burn_millis: None,
+                plan_burn_milli_tokens: None,
             }
         );
     }

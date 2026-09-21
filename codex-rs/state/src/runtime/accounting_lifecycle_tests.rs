@@ -115,6 +115,7 @@ async fn exact_day_objects_and_two_disk_reopens() -> anyhow::Result<()> {
         known_usd: Decimal::canonical(153, 6),
         unknown_estimates: 2,
         attempts: 2,
+        ..Default::default()
     });
     // Unpriced zero usage: measured stays empty and the estimate is incomplete,
     // because an absent rate cannot produce a zero-cost total.

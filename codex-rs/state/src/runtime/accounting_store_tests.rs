@@ -241,6 +241,7 @@ async fn accounting_inspect_raw_day_reconciles_contributions() -> anyhow::Result
             known_usd: "0.000002".to_owned().try_into()?,
             unknown_estimates: 2,
             attempts: 2,
+            ..Default::default()
         }
     );
     runtime.close().await;

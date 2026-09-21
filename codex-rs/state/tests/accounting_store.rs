@@ -665,7 +665,7 @@ async fn accounting_inspect_maximal_valid_packet() -> anyhow::Result<()> {
     let template = store
         .observe(a.thread_id, &a, &[observation(&a, 1, 1)?], 0)
         .await?;
-    let mut quotes = Vec::new();
+    let mut quotes: Vec<ObservationQuote> = Vec::new();
     let mut packet = 8192;
     loop {
         let mut q = template.clone();
@@ -681,7 +681,25 @@ async fn accounting_inspect_maximal_valid_packet() -> anyhow::Result<()> {
             size += extra;
             q.observations.push(row);
         }
-        assert!(!q.observations.is_empty());
+        if q.observations.is_empty() {
+            // The remainder no longer fits another quote skeleton plus evidence.
+            // Spend it on identity metadata already inside the packet so the
+            // packet still lands exactly on the ceiling.
+            let mut remaining = CEILING - 1 - packet;
+            for packed in &mut quotes {
+                for text in [&mut packed.attempt.model, &mut packed.attempt.provider] {
+                    let padding = remaining.min(128 - text.len());
+                    text.push_str(&"x".repeat(padding));
+                    remaining -= padding;
+                    packet += padding;
+                }
+                if remaining == 0 {
+                    break;
+                }
+            }
+            assert_eq!(remaining, 0);
+            break;
+        }
         packet += size;
         if q.observations.len() < 4096 {
             // Fill the final sub-observation remainder with legal identity metadata.
@@ -1082,6 +1100,7 @@ async fn normal_default_profiles_do_not_install_and_opt_in_keeps_ordinary_histor
                 known_usd: Decimal::default(),
                 unknown_estimates: 1,
                 attempts: 1,
+                ..Default::default()
             }),
         }
     );

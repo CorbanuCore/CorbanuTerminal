@@ -115,7 +115,9 @@ fn expected(
         "usage":{"input":input,"noncached":noncached,"read":read,"write":write,
             "output":output,"reasoning":reasoning,"total":total},
         "buckets":buckets, "known_subtotal":subtotal, "all_buckets_priced":null,
-        "subtotal_display":{"text":subtotal,"rounded":false,"nonzero_sub_micro":false}
+        "subtotal_display":{"text":subtotal,"rounded":false,"nonzero_sub_micro":false},
+        "known_equivalent":"0", "all_buckets_equivalent":null,
+        "plan_burn_millis":null, "plan_burn_milli_tokens":null
     })
 }
 

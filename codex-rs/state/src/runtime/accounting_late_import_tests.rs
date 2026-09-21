@@ -330,6 +330,7 @@ async fn accounting_late_import_presence_numeric_and_exact_price_goldens() -> an
                     known_usd: Decimal::default(),
                     unknown_estimates: estimates,
                     attempts: 1,
+                    ..Default::default()
                 }),
             }
         );

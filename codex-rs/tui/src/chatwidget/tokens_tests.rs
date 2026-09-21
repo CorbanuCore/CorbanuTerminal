@@ -252,6 +252,10 @@ fn quote() -> ObservationQuote {
         known_subtotal: known,
         all_buckets_priced: None,
         subtotal_display: known.display(),
+        known_equivalent: Decimal::default(),
+        all_buckets_equivalent: None,
+        plan_burn_millis: None,
+        plan_burn_milli_tokens: None,
     }
 }
 
@@ -275,6 +279,7 @@ fn packet() -> InspectionDay {
                 known: n.unwrap_or(0),
                 unknown: i64::from(n.is_none()),
             }),
+            ..Default::default()
         },
         own_totals: DayTotals::from_quotes([&q]).unwrap(),
         descendant_totals: DayTotals::default(),
