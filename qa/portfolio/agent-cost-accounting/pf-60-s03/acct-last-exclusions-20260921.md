@@ -201,6 +201,8 @@ Three things were needed, and each is the smallest honest version of itself:
 - A collected request here also stops following redirects, the rule the three
   streaming paths already had: a response from somewhere else must never be
   attributed to the approved endpoint.
+  `accounting_legacy_compaction_never_follows_a_redirect` sweeps 301 through 308
+  and asserts the redirect target is never reached; reverting the rule fails it.
 
 `accounting_records_legacy_compaction` turns the feature off, drives a real
 `/compact`, and asserts the second attempt is a `compact:` turn whose own
@@ -224,6 +226,12 @@ and none of them was in this workstream's scope until now:
 - **Realtime calls.** `ModelClient::create_realtime_call_with_headers` posts
   through the plain transport; `realtime_conversation` is under development.
 - **Web search.** `ext/web-search`'s client is in the same shape.
+- **The Claude panes bridge.** `tui/src/claude_panes` posts chat completions to
+  Ambient on a bare client with an operator credential from the vault, and
+  selects an Anthropic OAuth passthrough for the same surface. Operator-paid
+  inference on a shipped surface, with no collector anywhere in the path.
 
-That is the honest remaining list, and image generation is the one that matters:
-it is on by default. It is the next thing to attach.
+Image generation is the one that matters most: it is on by default. It is the
+next thing to attach, and the panes bridge after it. This list is of clients
+outside the conversational model path; it is where the next increments go, and
+it is stated here rather than left for a reader to discover.

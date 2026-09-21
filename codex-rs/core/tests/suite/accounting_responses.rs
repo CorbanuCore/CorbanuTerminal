@@ -699,3 +699,59 @@ async fn accounting_records_legacy_compaction() -> anyhow::Result<()> {
     stop(&test).await;
     Ok(())
 }
+
+/// A collected request must not follow a redirect: a response from somewhere
+/// else would be attributed to the approved endpoint. The streaming paths have
+/// pinned that for a while; the compaction endpoint takes the same branch now.
+#[tokio::test]
+async fn accounting_legacy_compaction_never_follows_a_redirect() -> anyhow::Result<()> {
+    for status in [301, 302, 303, 307, 308] {
+        let origin = MockServer::start().await;
+        let target = MockServer::start().await;
+        let endpoint = format!("{}/v1", origin.uri());
+        let turn = responses::mount_sse_once(&origin, success(usage(Some(0)))).await;
+        Mock::given(method("POST"))
+            .and(path("/v1/responses/compact"))
+            .respond_with(ResponseTemplate::new(status).insert_header(
+                "location",
+                format!("{}/v1/responses/compact", target.uri()),
+            ))
+            .mount(&origin)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/v1/responses/compact"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "output":[{"type":"compaction","encrypted_content":"elsewhere"}]
+            })))
+            .mount(&target)
+            .await;
+        let test = builder(endpoint.clone(), enabled(&endpoint))
+            .with_config(|config| {
+                config
+                    .features
+                    .disable(codex_features::Feature::TokenBudget)
+                    .unwrap();
+                config
+                    .features
+                    .disable(codex_features::Feature::RemoteCompactionV2)
+                    .unwrap();
+            })
+            .build_with_auto_env(&origin)
+            .await?;
+        test.submit_turn("fixture").await?;
+        let db = test.codex.state_db().unwrap();
+        wait_attempts(&db, 1).await?;
+        test.codex
+            .submit(codex_protocol::protocol::Op::Compact)
+            .await?;
+        terminal(&test).await?;
+        assert_eq!(
+            target.received_requests().await.unwrap().len(),
+            0,
+            "{status} redirect was followed"
+        );
+        assert_eq!(turn.requests().len(), 1);
+        stop(&test).await;
+    }
+    Ok(())
+}
