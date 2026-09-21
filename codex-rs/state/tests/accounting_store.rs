@@ -190,11 +190,13 @@ async fn accounting_inspect_public_literal_partial_goldens() -> anyhow::Result<(
             0,
             Some(80),
         ),
+        // Unpriced: zero tokens are not a zero-cost claim, so the estimate is
+        // incomplete rather than a complete zero.
         (
             false,
             json!({"input":0,"read":0,"write":0,"output":0}),
             "0",
-            0,
+            1,
             Some(0),
         ),
         (

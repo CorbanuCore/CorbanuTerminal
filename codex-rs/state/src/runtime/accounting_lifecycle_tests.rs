@@ -116,9 +116,12 @@ async fn exact_day_objects_and_two_disk_reopens() -> anyhow::Result<()> {
         unknown_estimates: 2,
         attempts: 2,
     });
+    // Unpriced zero usage: measured stays empty and the estimate is incomplete,
+    // because an absent rate cannot produce a zero-cost total.
     let zero = Current::Ready(DayTotals {
         measured: std::array::from_fn(|_| Metric::default()),
         attempts: 1,
+        unknown_estimates: 1,
         ..DayTotals::default()
     });
     assert_eq!(store.read_day(thread, 0).await?, expected);

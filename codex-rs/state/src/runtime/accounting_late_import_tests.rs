@@ -271,12 +271,14 @@ async fn accounting_late_import_presence_numeric_and_exact_price_goldens() -> an
             [1; 7],
             1,
         ),
+        // Unpriced by OriginalPriceEvidence, so zero counts leave the estimate
+        // incomplete instead of asserting a zero cost.
         (
             Dialect::NativeAnthropic,
             json!({"input":0,"read":0,"write":0,"output":0,"reasoning":0}),
             [0; 7],
             [0; 7],
-            0,
+            1,
         ),
         (
             Dialect::NativeAnthropic,
