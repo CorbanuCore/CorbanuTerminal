@@ -151,7 +151,10 @@ impl codex_api::ChatUsageObserver for ResponseEvidence {
 /// zstd-compressed bytes. Reading those as plain JSON fails, and treating that
 /// failure as "uninspectable" refused every compressed turn and collected
 /// nothing, so the decoding lives with the body type that produced them.
-pub(super) fn request_refusal(request: &Request) -> Option<&'static str> {
+pub(super) fn request_refusal(
+    request: &Request,
+    configured_routing: Option<&serde_json::Value>,
+) -> Option<&'static str> {
     let Some(value) = request.body.as_ref()?.inspectable_json() else {
         return Some("uninspectable request body");
     };
@@ -162,7 +165,13 @@ pub(super) fn request_refusal(request: &Request) -> Option<&'static str> {
     // attributable to the selected provider while the body said otherwise.
     ["provider", "providerOptions", "provider_options", "plugins"]
         .into_iter()
-        .find(|key| value.get(*key).is_some())
+        .find(|key| match (value.get(*key), configured_routing) {
+            (None, _) => false,
+            // Exactly what configuration says this provider sends: the serving and
+            // billing provider is still the selected one.
+            (Some(found), Some(expected)) if *key == "provider" && found == expected => false,
+            (Some(_), _) => true,
+        })
 }
 
 pub(crate) struct AccountingTransport<T> {

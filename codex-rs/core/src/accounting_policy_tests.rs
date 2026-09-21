@@ -163,7 +163,7 @@ fn accounting_chat_request_overrides_are_unattributable() -> Result<()> {
         };
         let http =
             codex_http_client::Request::new(http::Method::POST, ENDPOINT.into()).with_json(&value);
-        assert_eq!(transport::request_refusal(&http), Some(field));
+        assert_eq!(transport::request_refusal(&http, None), Some(field));
         let mut request = chat_body();
         match field {
             "provider" => request.provider = Some(value[field].clone()),
@@ -193,7 +193,7 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
             .into_prepared()
             .map_err(anyhow::Error::msg)?;
         assert_eq!(
-            transport::request_refusal(&prepared),
+            transport::request_refusal(&prepared, None),
             None,
             "an ordinary prepared body must remain collectable under {compression:?}"
         );
@@ -210,7 +210,7 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
                 .into_prepared()
                 .map_err(anyhow::Error::msg)?;
             assert_eq!(
-                transport::request_refusal(&prepared),
+                transport::request_refusal(&prepared, None),
                 Some(field),
                 "{field} must stay unattributable under {compression:?}"
             );
@@ -228,7 +228,7 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
             .into_prepared()
             .map_err(anyhow::Error::msg)?;
         assert_eq!(
-            transport::request_refusal(&prepared),
+            transport::request_refusal(&prepared, None),
             Some("providerOptions"),
             "a serialized gateway pin must be refused under {compression:?}"
         );
@@ -238,7 +238,7 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
             .into_prepared()
             .map_err(anyhow::Error::msg)?;
         assert_eq!(
-            transport::request_refusal(&prepared),
+            transport::request_refusal(&prepared, None),
             None,
             "an ordinary serialized request must remain collectable under {compression:?}"
         );
@@ -246,7 +246,7 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
     let opaque = Request::new(http::Method::POST, ENDPOINT.into())
         .with_raw_body(vec![0x00, 0x01, 0x02, 0x03]);
     assert_eq!(
-        transport::request_refusal(&opaque),
+        transport::request_refusal(&opaque, None),
         Some("uninspectable request body"),
         "a body whose routing keys cannot be read must still be refused"
     );
