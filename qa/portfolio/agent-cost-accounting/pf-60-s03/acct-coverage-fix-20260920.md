@@ -113,3 +113,56 @@ called out explicitly instead of being absorbed into the environmental set, and
 they remain open for their own disposition.
 
 Not claimed here: independent review, a receipt, or any live qualification.
+
+## Second independent review, and what it found in my own fixes
+
+The first review refused the change: one P1, three P2, three P3, all acted on.
+The second review refused it again, and both of its P2s were in work I had done
+myself rather than in the worker's original:
+
+1. My restored pricing predicate added `api_key_header_name().is_none()`. The
+   built-in Anthropic provider declares `x-api-key` as its own credential header,
+   so that condition made the Anthropic arm of the pricing match dead code and
+   left metered Anthropic turns with no rate at all. The condition is gone; a
+   provider's own declared credential header for its own approved endpoint is not
+   a foreign proxy credential.
+2. A body carrying a gateway pin still failed the turn closed on Responses and
+   Anthropic, because only Chat inspects the typed request before a collector
+   exists. That is the same defect class as the `query_params` shape I had just
+   fixed, one layer down. The transport now declines to sample and passes the
+   request through unrecorded instead of ending the user's turn.
+3. P3: the new `query_params` refusal had no test. The admission matrix now
+   enumerates it as a fourth configuration shape, 360 cells instead of 270, and
+   passes in the feature build.
+
+A third finding came from my own test rather than either review: holding the
+endpoint at the real OpenAI default and varying only the auth mode is what
+exposed defect 1 above. The test is
+`accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint`.
+
+## Final lanes
+
+| lane | result |
+| --- | --- |
+| policy and subscription tests | 4 run, **4 passed** |
+| admission matrix, feature build | **passed** at 360 cells |
+| `codex-core` accounting | 131 run, 85 passed, 46 true failures |
+| `codex-core` accounting, feature | 135 run, 81 passed, 54 true failures |
+| `codex-state` accounting | 166 run, **166 passed** |
+
+Failure attribution is now computed flaky-aware: a test that prints `FAILED` on
+one try and passes on a retry is not a failure. On that basis the plain lane has
+46 true failures against base's 62, and **no test fails in the candidate that does
+not also fail at base**. An earlier count that looked like a new failure,
+`accounting_anthropic_native_presence_prices_and_two_reopens`, was a first-try
+timeout that passed on retry.
+
+Three feature-lane failures appear in neither base nor the plain lane:
+`accounting_anthropic_401_and_429_are_terminal_and_preflight_schema_fault_has_no_send`,
+`accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_endpoint`
+and `accounting_responses_ws_native_handshake_and_postdispatch_errors`. The first
+two fail inside wiremock's verification with "the server did not receive any
+request", which is the same environmental signature seen at base for other cases,
+and the base run cannot contain them because the feature does not exist there.
+They are being re-run in isolation before any receipt; until that returns they
+are **unresolved**, not dismissed.
