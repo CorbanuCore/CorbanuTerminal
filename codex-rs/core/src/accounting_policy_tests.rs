@@ -439,6 +439,7 @@ fn accounting_chat_collects_the_fields_the_client_itself_emits() {
 /// catalogue, not six synthetic identities. Every built-in provider must select a
 /// collecting mode at its own wire dialect; if a future provider is added with a
 /// shape this code cannot attribute, this test is where that shows up.
+#[cfg(feature = "developer-accounting")]
 #[test]
 fn accounting_every_built_in_provider_collects() {
     use codex_model_provider_info::built_in_model_providers;
