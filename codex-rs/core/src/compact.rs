@@ -262,13 +262,25 @@ async fn run_compact_task_inner_impl(
     // A compaction is inference the operator paid for - and `/compact` is one they
     // asked for directly - so it is collected like any other turn rather than
     // silently escaping accounting.
-    let _accounting = crate::accounting::attach_turn(
+    // Best effort on purpose: a compaction that cannot be recorded must still
+    // run. Accounting is an observer here, not a gate on the user's session.
+    let _accounting = match crate::accounting::attach_turn(
         &sess,
         &turn_context,
         &client_session,
         format!("compact:{}", turn_context.sub_id),
     )
-    .await?;
+    .await
+    {
+        Ok(scopes) => Some(scopes),
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                "accounting: compaction proceeding unrecorded"
+            );
+            None
+        }
+    };
     // Reuse one client session so turn-scoped state (sticky routing, websocket incremental
     // request tracking)
     // survives retries within this compact turn.
