@@ -11,6 +11,8 @@ use codex_http_client::Response;
 use codex_http_client::StreamResponse;
 use codex_http_client::TransportError;
 use codex_state::accounting::Attempt;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -21,6 +23,7 @@ pub(crate) struct ResponseEvidence {
     sampling: Arc<Sampling>,
     attempt: OnceLock<Attempt>,
     source: Uuid,
+    excluded: AtomicBool,
 }
 
 impl ResponseEvidence {
@@ -29,6 +32,7 @@ impl ResponseEvidence {
             sampling,
             attempt: OnceLock::from(attempt),
             source: Uuid::new_v4(),
+            excluded: AtomicBool::new(false),
         })
     }
 
@@ -37,7 +41,23 @@ impl ResponseEvidence {
             sampling,
             attempt: OnceLock::new(),
             source: Uuid::new_v4(),
+            excluded: AtomicBool::new(false),
         })
+    }
+
+    /// Records nothing for this request and lets it proceed unaccounted.
+    ///
+    /// Rejecting the turn's sampling instead would abort the turn at the next
+    /// `check()`, and leaving the observers armed with no admitted attempt would
+    /// fail the stream on the first usage event - after the request had already
+    /// been sent and billed. Neither is acceptable for a request the product is
+    /// happy to serve; it is only one the accounting cannot attribute.
+    pub(super) fn exclude(&self) {
+        self.excluded.store(true, Ordering::SeqCst);
+    }
+
+    fn is_excluded(&self) -> bool {
+        self.excluded.load(Ordering::SeqCst)
     }
 }
 
@@ -48,6 +68,9 @@ impl AnthropicUsageObserver for ResponseEvidence {
         usage: Result<AnthropicUsagePatch, InvalidAnthropicUsage>,
     ) -> Pin<Box<dyn Future<Output = Result<(), ApiError>> + Send + '_>> {
         Box::pin(async move {
+            if self.is_excluded() {
+                return Ok(());
+            }
             let result = match (self.attempt.get(), usage) {
                 (Some(attempt), Ok(usage)) => {
                     self.sampling
@@ -71,6 +94,9 @@ impl codex_api::ResponsesUsageObserver for ResponseEvidence {
         usage: Result<codex_api::ResponsesUsagePatch, codex_api::InvalidResponsesUsage>,
     ) -> Pin<Box<dyn Future<Output = Result<(), ApiError>> + Send + '_>> {
         Box::pin(async move {
+            if self.is_excluded() {
+                return Ok(());
+            }
             let result = async {
                 let attempt = self.attempt.get().ok_or_else(|| anyhow::anyhow!(FAILURE))?;
                 let usage = usage.map_err(|_| anyhow::anyhow!(FAILURE))?;
@@ -99,6 +125,9 @@ impl codex_api::ChatUsageObserver for ResponseEvidence {
         usage: Result<codex_api::ChatUsagePatch, codex_api::InvalidChatUsage>,
     ) -> Pin<Box<dyn Future<Output = Result<(), ApiError>> + Send + '_>> {
         Box::pin(async move {
+            if self.is_excluded() {
+                return Ok(());
+            }
             let result = async {
                 let attempt = self.attempt.get().ok_or_else(|| anyhow::anyhow!(FAILURE))?;
                 let usage = usage.map_err(|_| anyhow::anyhow!(FAILURE))?;
@@ -179,7 +208,7 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
         // turn for a request the product is happy to send. Decline to sample and
         // let it through unrecorded.
         if request_refusal(&request).is_some() {
-            evidence.sampling.reject();
+            evidence.exclude();
             return self.inner.stream(request).await;
         }
         let admission =
