@@ -500,101 +500,101 @@ warning: function `get_upgrade_version_for_popup` is never used
     |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning: `codex-tui` (lib test) generated 25 warnings (9 duplicates) (run `cargo fix --lib -p codex-tui --tests` to apply 1 suggestion)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.35s
 ────────────
- Nextest run ID 73d2e65c-3224-40cb-83b6-890baec3b4a9 with nextest profile: local
+ Nextest run ID 68852ceb-5dad-4beb-8b81-d5f1562b4b63 with nextest profile: local
     Starting 92 tests across 6 binaries (4079 tests skipped)
-        PASS [   0.010s] ( 1/92) codex-tui chatwidget::goal_status::tests::active_goal_usage_reports_time_without_budget
-        PASS [   0.011s] ( 2/92) codex-tui bottom_pane::slash_commands::tests::usage_command_is_hidden_from_input_when_account_token_activity_is_disabled
-        PASS [   0.011s] ( 3/92) codex-tui chatwidget::goal_status::tests::stopped_goal_budget_usage_omits_unbudgeted_usage
+        PASS [   0.010s] ( 1/92) codex-tui chatwidget::goal_status::tests::completed_goal_usage_reports_time_without_token_budget
+        PASS [   0.011s] ( 2/92) codex-tui chatwidget::goal_status::tests::active_goal_usage_prefers_token_budget
+        PASS [   0.011s] ( 3/92) codex-tui bottom_pane::slash_commands::tests::usage_command_is_hidden_from_input_when_account_token_activity_is_disabled
         PASS [   0.011s] ( 4/92) codex-tui bottom_pane::slash_commands::tests::usage_command_exact_lookup_still_resolves_when_account_token_activity_is_disabled
-        PASS [   0.025s] ( 5/92) codex-tui app::tests::token_usage_update_refreshes_status_line_with_runtime_context_window
-        PASS [   0.029s] ( 6/92) codex-tui chatwidget::tests::plan_mode::plan_implementation_popup_context_usage_snapshot
-        PASS [   0.032s] ( 7/92) codex-tui chatwidget::tests::goal_menu::goal_menu_usage_limited_snapshot
-        PASS [   0.033s] ( 8/92) codex-tui app::tests::accounting_inspect_app_off_and_old_usage_routes
-        PASS [   0.022s] ( 9/92) codex-tui chatwidget::goal_status::tests::active_goal_usage_prefers_token_budget
-        PASS [   0.023s] (10/92) codex-tui app::tests::session_summary::session_summary_skips_when_no_usage_or_resume_hint
-        PASS [   0.042s] (11/92) codex-tui chatwidget::goal_status::tests::stopped_goal_budget_usage_reports_budgeted_tokens
-        PASS [   0.042s] (12/92) codex-tui chatwidget::goal_status::tests::completed_goal_usage_reports_tokens_when_budgeted
-        PASS [   0.033s] (13/92) codex-tui chatwidget::tests::status_and_layout::status_line_tps_updates_when_usage_arrives_after_completion
-        PASS [   0.034s] (14/92) codex-tui chatwidget::tests::status_and_layout::status_line_legacy_context_usage_renders_context_used_percent
-        PASS [   0.046s] (15/92) codex-tui bottom_pane::status_line_setup::tests::context_used_accepts_context_usage_legacy_id
-        PASS [   0.031s] (16/92) codex-tui chatwidget::tests::slash_commands::signed_out_usage_command_reports_chatgpt_login_requirement
-        PASS [   0.048s] (17/92) codex-tui chatwidget::tests::slash_commands::usage_command_runs_with_backend_auth_from_widget_init
-        PASS [   0.049s] (18/92) codex-tui chatwidget::goal_status::tests::completed_goal_usage_reports_time_without_token_budget
-        PASS [   0.033s] (19/92) codex-tui chatwidget::tests::slash_commands::raw_slash_command_reports_usage_for_invalid_arg
-        PASS [   0.056s] (20/92) codex-tui chatwidget::tests::slash_commands::goal_control_slash_command_without_thread_shows_full_usage
-        PASS [   0.056s] (21/92) codex-tui app::tests::late_usage_result_can_follow_finalized_plan
-        PASS [   0.045s] (22/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_show_when_authoritative_snapshot_clears_credits
-        PASS [   0.040s] (23/92) codex-tui chatwidget::tests::slash_commands::slash_keymap_invalid_args_show_usage
-        PASS [   0.041s] (24/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_clear_workspace_limit_from_authoritative_snapshot
-        PASS [   0.041s] (25/92) codex-tui chatwidget::tests::slash_commands::slash_mcp_invalid_args_show_usage
-        PASS [   0.056s] (26/92) codex-tui chatwidget::tests::slash_commands::usage_command_with_invalid_view_reports_usage_snapshot
-        PASS [   0.058s] (27/92) codex-tui chatwidget::tests::slash_commands::signed_out_usage_command_with_args_reports_chatgpt_login_requirement
-        PASS [   0.042s] (28/92) codex-tui chatwidget::tests::slash_commands::usage_command_runs_with_backend_auth_without_chatgpt_account_flag
-        PASS [   0.044s] (29/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_preserve_and_clear_spend_control_state
-        PASS [   0.036s] (30/92) codex-tui chatwidget::tests::status_and_layout::status_line_tps_uses_streamed_text_when_usage_is_missing
-        PASS [   0.046s] (31/92) codex-tui chatwidget::tests::status_and_layout::account_update_clears_derived_usage_limit_state_and_prompt
-        PASS [   0.053s] (32/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_preserve_workspace_limit_for_sparse_snapshots
-        PASS [   0.067s] (33/92) codex-tui chatwidget::tests::slash_commands::usage_error_slash_command_is_available_from_local_recall
-        PASS [   0.035s] (34/92) codex-tui chatwidget::tests::status_and_layout::usage_limit_error_remaps_stale_member_credits_state_to_usage_limit_prompt
-        PASS [   0.026s] (35/92) codex-tui chatwidget::tests::usage::account_change_invalidates_pending_reset_requests
-        PASS [   0.039s] (36/92) codex-tui chatwidget::tests::status_and_layout::token_usage_update_uses_runtime_context_window
-        PASS [   0.056s] (37/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_newly_reached_workspace_limit
-        PASS [   0.057s] (38/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_follow_workspace_credit_flags
-        PASS [   0.012s] (39/92) codex-tui chatwidget::tests::usage::reset_credit_options_use_generic_copy_when_backend_copy_is_missing
-        PASS [   0.033s] (40/92) codex-tui chatwidget::tests::usage::account_update_invalidates_usage_menu_refresh_when_visible_state_is_unchanged
-        PASS [   0.032s] (41/92) codex-tui chatwidget::tests::usage::clearing_pending_reset_hint_preserves_in_flight_redemption
-        PASS [   0.046s] (42/92) codex-tui chatwidget::tests::status_and_layout::workspace_member_usage_limit_prompts_and_sends_usage_limit
-        PASS [   0.035s] (43/92) codex-tui chatwidget::tests::usage::accounting_inspect_cancel_refresh_generation
-        PASS [   0.043s] (44/92) codex-tui chatwidget::tests::usage::account_change_dismisses_reset_popup_beneath_overlay
-        PASS [   0.037s] (45/92) codex-tui chatwidget::tests::usage::opening_rate_limit_reset_flow_invalidates_in_flight_startup_hint
-        PASS [   0.041s] (46/92) codex-tui chatwidget::tests::usage::already_redeemed_is_an_idempotent_success
-        PASS [   0.033s] (47/92) codex-tui chatwidget::tests::usage::rate_limit_reset_load_result_updates_popup_beneath_overlay
-        PASS [   0.040s] (48/92) codex-tui chatwidget::tests::usage::no_credit_outcome_disables_reset_entry_in_usage_menu
-        PASS [   0.049s] (49/92) codex-tui chatwidget::tests::usage::accounting_inspect_menu_and_reset_regression
-        PASS [   0.039s] (50/92) codex-tui chatwidget::tests::usage::rate_limit_reset_confirmation_no_and_escape_return_to_picker
-        PASS [   0.035s] (51/92) codex-tui chatwidget::tests::usage::rate_limit_reset_retry_reuses_idempotency_key
-        PASS [   0.046s] (52/92) codex-tui chatwidget::tests::usage::failed_post_consume_refresh_does_not_keep_stale_reset_count
-        PASS [   0.039s] (53/92) codex-tui chatwidget::tests::usage::rate_limit_reset_confirmation_can_use_reset
-        PASS [   0.030s] (54/92) codex-tui chatwidget::tests::usage::startup_check_omits_reset_hint_when_none_are_available
-        PASS [   0.034s] (55/92) codex-tui chatwidget::tests::usage::reset_picker_allows_only_one_pending_confirmation
-        PASS [   0.030s] (56/92) codex-tui chatwidget::tests::usage::startup_check_shows_available_reset_hint_snapshot
-        PASS [   0.061s] (57/92) codex-tui chatwidget::tests::status_and_layout::workspace_owner_usage_limit_nudge_completion_renders_feedback
-        PASS [   0.028s] (58/92) codex-tui chatwidget::tests::usage::startup_reset_hint_waits_for_active_output_snapshot
-        PASS [   0.043s] (59/92) codex-tui chatwidget::tests::usage::rate_limit_reset_picker_wraps_expiry_details_snapshot
-        PASS [   0.038s] (60/92) codex-tui chatwidget::tests::usage::rate_limit_reset_success_updates_popup_beneath_overlay
-        PASS [   0.033s] (61/92) codex-tui chatwidget::tests::usage::starting_rate_limit_reset_redemption_clears_deferred_startup_hint
-        PASS [   0.011s] (62/92) codex-tui chatwidget::tps::tests::provider_usage_overrides_stream_estimate_for_active_turn
-        PASS [   0.034s] (63/92) codex-tui chatwidget::tests::usage::startup_check_shows_reset_hint_for_workspace_account_with_credit
-        PASS [   0.045s] (64/92) codex-tui chatwidget::tests::usage::rate_limit_reset_redemption_cannot_be_dismissed_while_in_flight
-        PASS [   0.014s] (65/92) codex-tui chatwidget::tps::tests::provider_usage_falls_back_to_cumulative_delta_for_active_turn
-        PASS [   0.029s] (66/92) codex-tui chatwidget::tests::usage::usage_command_can_check_reset_availability_for_workspace_accounts
-        PASS [   0.016s] (67/92) codex-tui chatwidget::tokens::tests::accounting_zero_plan_usage_renders_money_unavailable
-        PASS [   0.087s] (68/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_explicit_rolling_workspace_limit
-        PASS [   0.048s] (69/92) codex-tui chatwidget::tests::usage::rate_limit_reset_picker_starts_with_soonest_expiries_and_keeps_all_rows_reachable
-        PASS [   0.050s] (70/92) codex-tui chatwidget::tests::usage::rate_limit_reset_confirmation_uses_backend_copy_snapshot
-        PASS [   0.026s] (71/92) codex-tui chatwidget::tests::usage::usage_menu_refresh_enables_newly_available_reset
-        PASS [   0.032s] (72/92) codex-tui chatwidget::tests::usage::usage_command_disables_reset_after_cached_zero_snapshot
+        PASS [   0.011s] ( 5/92) codex-tui app::tests::session_summary::session_summary_skips_when_no_usage_or_resume_hint
+        PASS [   0.022s] ( 6/92) codex-tui app::tests::token_usage_update_refreshes_status_line_with_runtime_context_window
+        PASS [   0.023s] ( 7/92) codex-tui app::tests::accounting_inspect_app_off_and_old_usage_routes
+        PASS [   0.016s] ( 8/92) codex-tui chatwidget::goal_status::tests::stopped_goal_budget_usage_omits_unbudgeted_usage
+        PASS [   0.018s] ( 9/92) codex-tui chatwidget::goal_status::tests::completed_goal_usage_reports_tokens_when_budgeted
+        PASS [   0.030s] (10/92) codex-tui app::tests::late_usage_result_can_follow_finalized_plan
+        PASS [   0.028s] (11/92) codex-tui chatwidget::tests::status_and_layout::status_line_legacy_context_usage_renders_context_used_percent
+        PASS [   0.027s] (12/92) codex-tui chatwidget::tests::slash_commands::slash_mcp_invalid_args_show_usage
+        PASS [   0.029s] (13/92) codex-tui chatwidget::tests::goal_menu::goal_menu_usage_limited_snapshot
+        PASS [   0.031s] (14/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_show_when_authoritative_snapshot_clears_credits
+        PASS [   0.030s] (15/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_preserve_and_clear_spend_control_state
+        PASS [   0.032s] (16/92) codex-tui chatwidget::tests::slash_commands::usage_command_runs_with_backend_auth_from_widget_init
+        PASS [   0.044s] (17/92) codex-tui chatwidget::goal_status::tests::stopped_goal_budget_usage_reports_budgeted_tokens
+        PASS [   0.045s] (18/92) codex-tui chatwidget::tests::slash_commands::slash_keymap_invalid_args_show_usage
+        PASS [   0.035s] (19/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_clear_workspace_limit_from_authoritative_snapshot
+        PASS [   0.036s] (20/92) codex-tui chatwidget::tests::status_and_layout::status_line_tps_updates_when_usage_arrives_after_completion
+        PASS [   0.035s] (21/92) codex-tui chatwidget::tests::slash_commands::usage_command_with_invalid_view_reports_usage_snapshot
+        PASS [   0.035s] (22/92) codex-tui chatwidget::tests::slash_commands::usage_command_runs_with_backend_auth_without_chatgpt_account_flag
+        PASS [   0.047s] (23/92) codex-tui bottom_pane::status_line_setup::tests::context_used_accepts_context_usage_legacy_id
+        PASS [   0.040s] (24/92) codex-tui chatwidget::tests::status_and_layout::status_line_tps_uses_streamed_text_when_usage_is_missing
+        PASS [   0.039s] (25/92) codex-tui chatwidget::tests::slash_commands::signed_out_usage_command_with_args_reports_chatgpt_login_requirement
+        PASS [   0.053s] (26/92) codex-tui chatwidget::goal_status::tests::active_goal_usage_reports_time_without_budget
+        PASS [   0.046s] (27/92) codex-tui chatwidget::tests::slash_commands::usage_error_slash_command_is_available_from_local_recall
+        PASS [   0.037s] (28/92) codex-tui chatwidget::tests::status_and_layout::token_usage_update_uses_runtime_context_window
+        PASS [   0.049s] (29/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_newly_reached_workspace_limit
+        PASS [   0.064s] (30/92) codex-tui chatwidget::tests::slash_commands::signed_out_usage_command_reports_chatgpt_login_requirement
+        PASS [   0.064s] (31/92) codex-tui chatwidget::tests::slash_commands::raw_slash_command_reports_usage_for_invalid_arg
+        PASS [   0.042s] (32/92) codex-tui chatwidget::tests::status_and_layout::usage_limit_error_remaps_stale_member_credits_state_to_usage_limit_prompt
+        PASS [   0.055s] (33/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_preserve_workspace_limit_for_sparse_snapshots
+        PASS [   0.066s] (34/92) codex-tui chatwidget::tests::slash_commands::goal_control_slash_command_without_thread_shows_full_usage
+        PASS [   0.037s] (35/92) codex-tui chatwidget::tests::status_and_layout::account_update_clears_derived_usage_limit_state_and_prompt
+        PASS [   0.038s] (36/92) codex-tui chatwidget::tests::usage::account_change_dismisses_reset_popup_beneath_overlay
+        PASS [   0.025s] (37/92) codex-tui chatwidget::tests::usage::clearing_pending_reset_hint_preserves_in_flight_redemption
+        PASS [   0.031s] (38/92) codex-tui chatwidget::tests::usage::account_update_invalidates_usage_menu_refresh_when_visible_state_is_unchanged
+        PASS [   0.077s] (39/92) codex-tui chatwidget::tests::plan_mode::plan_implementation_popup_context_usage_snapshot
+        PASS [   0.065s] (40/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_follow_workspace_credit_flags
+        PASS [   0.032s] (41/92) codex-tui chatwidget::tests::usage::opening_rate_limit_reset_flow_invalidates_in_flight_startup_hint
+        PASS [   0.034s] (42/92) codex-tui chatwidget::tests::usage::no_credit_outcome_disables_reset_entry_in_usage_menu
+        PASS [   0.015s] (43/92) codex-tui chatwidget::tests::usage::reset_credit_options_use_generic_copy_when_backend_copy_is_missing
+        PASS [   0.052s] (44/92) codex-tui chatwidget::tests::status_and_layout::workspace_member_usage_limit_prompts_and_sends_usage_limit
+        PASS [   0.033s] (45/92) codex-tui chatwidget::tests::usage::rate_limit_reset_confirmation_uses_backend_copy_snapshot
+        PASS [   0.043s] (46/92) codex-tui chatwidget::tests::usage::account_change_invalidates_pending_reset_requests
+        PASS [   0.039s] (47/92) codex-tui chatwidget::tests::usage::already_redeemed_is_an_idempotent_success
+        PASS [   0.051s] (48/92) codex-tui chatwidget::tests::status_and_layout::workspace_owner_usage_limit_nudge_completion_renders_feedback
+        PASS [   0.035s] (49/92) codex-tui chatwidget::tests::usage::rate_limit_reset_confirmation_can_use_reset
+        PASS [   0.043s] (50/92) codex-tui chatwidget::tests::usage::accounting_inspect_cancel_refresh_generation
+        PASS [   0.043s] (51/92) codex-tui chatwidget::tests::usage::accounting_inspect_menu_and_reset_regression
+        PASS [   0.039s] (52/92) codex-tui chatwidget::tests::usage::rate_limit_reset_load_result_updates_popup_beneath_overlay
+        PASS [   0.036s] (53/92) codex-tui chatwidget::tests::usage::rate_limit_reset_picker_wraps_expiry_details_snapshot
+        PASS [   0.030s] (54/92) codex-tui chatwidget::tests::usage::rate_limit_reset_redemption_cannot_be_dismissed_while_in_flight
+        PASS [   0.029s] (55/92) codex-tui chatwidget::tests::usage::rate_limit_reset_retry_reuses_idempotency_key
+        PASS [   0.049s] (56/92) codex-tui chatwidget::tests::usage::failed_post_consume_refresh_does_not_keep_stale_reset_count
+        PASS [   0.047s] (57/92) codex-tui chatwidget::tests::usage::rate_limit_reset_confirmation_no_and_escape_return_to_picker
+        PASS [   0.044s] (58/92) codex-tui chatwidget::tests::usage::rate_limit_reset_picker_starts_with_soonest_expiries_and_keeps_all_rows_reachable
+        PASS [   0.084s] (59/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_explicit_rolling_workspace_limit
+        PASS [   0.030s] (60/92) codex-tui chatwidget::tests::usage::rate_limit_reset_success_updates_popup_beneath_overlay
+        PASS [   0.012s] (61/92) codex-tui chatwidget::wallet_usage::tests::comma_format_is_exact
+        PASS [   0.015s] (62/92) codex-tui chatwidget::tps::tests::late_provider_usage_records_completed_zero_stream_turn
+        PASS [   0.031s] (63/92) codex-tui chatwidget::tests::usage::startup_check_shows_available_reset_hint_snapshot
+        PASS [   0.033s] (64/92) codex-tui chatwidget::tests::usage::starting_rate_limit_reset_redemption_clears_deferred_startup_hint
+        PASS [   0.017s] (65/92) codex-tui chatwidget::tps::tests::provider_usage_renders_without_approximation_marker
+        PASS [   0.018s] (66/92) codex-tui chatwidget::tps::tests::provider_usage_falls_back_to_cumulative_delta_for_active_turn
+        PASS [   0.042s] (67/92) codex-tui chatwidget::tests::usage::rate_limit_reset_redemption_allows_ctrl_c_to_quit_while_in_flight
+        PASS [   0.016s] (68/92) codex-tui chatwidget::usage::corbanu_plan_tests::plan_usage_action_opens_dedicated_usage_view
+        PASS [   0.019s] (69/92) codex-tui chatwidget::tokens::tests::accounting_zero_plan_usage_renders_money_unavailable
+        PASS [   0.035s] (70/92) codex-tui chatwidget::tests::usage::startup_check_omits_reset_hint_when_none_are_available
+        PASS [   0.034s] (71/92) codex-tui chatwidget::tests::usage::startup_check_shows_reset_hint_for_workspace_account_with_credit
+        PASS [   0.035s] (72/92) codex-tui chatwidget::tests::usage::startup_reset_hint_waits_for_active_output_snapshot
         PASS [   0.034s] (73/92) codex-tui chatwidget::tests::usage::usage_command_can_check_reset_availability_before_startup_refresh_finishes_snapshot
-        PASS [   0.021s] (74/92) codex-tui chatwidget::tps::tests::late_provider_usage_records_completed_zero_stream_turn
-        PASS [   0.049s] (75/92) codex-tui chatwidget::tests::usage::rate_limit_reset_redemption_allows_ctrl_c_to_quit_while_in_flight
-        PASS [   0.014s] (76/92) codex-tui chatwidget::wallet_usage::tests::usage_summary_exposes_spend_used_reserved_limits_and_resets
-        PASS [   0.031s] (77/92) codex-tui chatwidget::tests::usage::usage_menu_rate_limit_reset_entry_opens_reset_flow
-        PASS [   0.029s] (78/92) codex-tui chatwidget::tests::usage::usage_menu_refresh_failure_preserves_disabled_known_zero
+        PASS [   0.018s] (74/92) codex-tui chatwidget::wallet_usage::tests::usage_summary_exposes_spend_used_reserved_limits_and_resets
+        PASS [   0.023s] (75/92) codex-tui chatwidget::tps::tests::provider_usage_overrides_stream_estimate_for_active_turn
+        PASS [   0.016s] (76/92) codex-tui claude_panes::tests::anthropic_stream_events_preserve_upstream_usage_in_protocol_fields
+        PASS [   0.053s] (77/92) codex-tui chatwidget::tests::usage::rate_limit_reset_popup_states_snapshot
+        PASS [   0.016s] (78/92) codex-tui claude_panes::tests::zero_usage_summary_is_untrusted_not_reported
         PASS [   0.012s] (79/92) codex-tui goal_display::tests::goal_usage_summary_formats_time_and_budgeted_tokens
-        PASS [   0.016s] (80/92) codex-tui chatwidget::wallet_usage::tests::reset_countdown_is_human_readable_and_keeps_exact_time_separate
-        PASS [   0.016s] (81/92) codex-tui chatwidget::wallet_usage::tests::comma_format_is_exact
-        PASS [   0.017s] (82/92) codex-tui chatwidget::usage::corbanu_plan_tests::plan_usage_action_opens_dedicated_usage_view
-        PASS [   0.017s] (83/92) codex-tui chatwidget::tps::tests::provider_usage_renders_without_approximation_marker
-        PASS [   0.016s] (84/92) codex-tui claude_panes::tests::anthropic_stream_events_preserve_upstream_usage_in_protocol_fields
-        PASS [   0.016s] (85/92) codex-tui claude_panes::tests::zero_usage_summary_is_untrusted_not_reported
-        PASS [   0.015s] (86/92) codex-tui status::tests::status_card_token_usage_excludes_cached_tokens
-        PASS [   0.036s] (87/92) codex-tui chatwidget::tests::usage::usage_command_opens_menu_when_reset_is_available_snapshot
-        PASS [   0.015s] (88/92) codex-tui local_chatgpt_auth::tests::preserves_usage_based_plan_type_wire_name
-        PASS [   0.059s] (89/92) codex-tui chatwidget::tests::usage::rate_limit_reset_popup_states_snapshot
-        PASS [   0.016s] (90/92) codex-tui status::tests::status_model_provider_uses_bedrock_runtime_base_url_and_gates_usage_link
-        PASS [   0.016s] (91/92) codex-tui status::tests::status_context_window_uses_last_usage
-        PASS [   0.144s] (92/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_workspace_limit_after_rolling_credits
+        PASS [   0.020s] (80/92) codex-tui chatwidget::wallet_usage::tests::reset_countdown_is_human_readable_and_keeps_exact_time_separate
+        PASS [   0.012s] (81/92) codex-tui local_chatgpt_auth::tests::preserves_usage_based_plan_type_wire_name
+        PASS [   0.043s] (82/92) codex-tui chatwidget::tests::usage::reset_picker_allows_only_one_pending_confirmation
+        PASS [   0.014s] (83/92) codex-tui status::tests::status_card_token_usage_excludes_cached_tokens
+        PASS [   0.030s] (84/92) codex-tui chatwidget::tests::usage::usage_menu_rate_limit_reset_entry_opens_reset_flow
+        PASS [   0.031s] (85/92) codex-tui chatwidget::tests::usage::usage_menu_refresh_enables_newly_available_reset
+        PASS [   0.015s] (86/92) codex-tui status::tests::status_context_window_uses_last_usage
+        PASS [   0.034s] (87/92) codex-tui chatwidget::tests::usage::usage_command_can_check_reset_availability_for_workspace_accounts
+        PASS [   0.016s] (88/92) codex-tui status::tests::status_model_provider_uses_bedrock_runtime_base_url_and_gates_usage_link
+        PASS [   0.033s] (89/92) codex-tui chatwidget::tests::usage::usage_menu_refresh_failure_preserves_disabled_known_zero
+        PASS [   0.035s] (90/92) codex-tui chatwidget::tests::usage::usage_command_disables_reset_after_cached_zero_snapshot
+        PASS [   0.036s] (91/92) codex-tui chatwidget::tests::usage::usage_command_opens_menu_when_reset_is_available_snapshot
+        PASS [   0.146s] (92/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_workspace_limit_after_rolling_credits
 ────────────
-     Summary [   0.154s] 92 tests run: 92 passed, 4079 skipped
+     Summary [   0.156s] 92 tests run: 92 passed, 4079 skipped

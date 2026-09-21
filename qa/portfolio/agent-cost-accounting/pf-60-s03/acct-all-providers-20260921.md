@@ -95,19 +95,108 @@ Clean-host lanes at this tree, RTX workstation:
 
 | lane | result |
 | --- | --- |
-| `codex-core` accounting | **134 run, 134 passed** |
-| `codex-core` accounting, `developer-accounting` | **138 run, 138 passed** |
+| `codex-core` accounting | **137 run, 137 passed** |
+| `codex-core` accounting, `developer-accounting` | **142 run, 142 passed** |
 | `codex-state` accounting | **166 run, 166 passed** |
 | `codex-tui` usage | **92 run, 92 passed** |
 | `codex-tui` tokens | 66 run, 65 passed, 1 pre-existing failure |
+| `codex-core` compaction | **174 run, 174 passed** |
 
-The counts include the two tests this increment added:
+The counts include the two compaction tests described above, and
 `accounting_chat_collects_the_fields_the_client_itself_emits` and
-`accounting_websocket_pin_matches_the_client_route`.
+`accounting_websocket_pin_matches_the_client_route` from the previous
+increment.
+
+Three compaction tests need a retry under the fully parallel suite and pass
+alone. They do the same at the integration tip without any of this work, so the
+flakiness is the suite's, not this increment's.
 
 The admission matrix still enumerates 360 cells over six provider ids, three
 dialects, five authentication setups and four configuration shapes, and now
 asserts every shape collects, with the stored route equal to the one the client
 requests for that shape.
 
-Not claimed: independent review of this increment, or any live run.
+Independent review of this increment (Opus, author-separate) found nothing at P1
+or P2 and three P3s: a comment that mis-stated the collector's write ordering, a
+timeout that reported no context, and a stale exclusion count. All three are
+fixed here. Not claimed: any live run.
+
+## Checked against the real catalogue, and what is still outside collection
+
+`accounting_every_built_in_provider_collects` iterates
+`built_in_model_providers(None)` - the product's actual provider list, twenty-one
+entries, asserted exactly so a shrinking catalogue is visible - and asserts each one selects a collecting mode at its own wire dialect, binds a mode
+that collects, is admitted by the per-turn dialect gate as well as the selector,
+and carries pricing authority under API-key authentication only for the two
+metered entries at their own default endpoints. An earlier version of this test
+bound with no auth mode at all, which made its pricing assertion unfalsifiable. Six synthetic identities in the matrix proved the rule; this
+proves the catalogue obeys it. A future provider with a shape this code cannot
+attribute fails here rather than silently going uncollected.
+
+Collection keys on provider identity and wire dialect only. There is no
+model-level gate, so "all models" follows from "all providers" for any model a
+provider serves. Pricing is a separate question and is per model, by catalogue
+billing.
+
+Review found a third class I had missed, and it was the one that mattered:
+**compaction**. A compaction builds its own model client session and streamed on
+it with no collector attached, so those turns never recorded - including
+`/compact`, which the operator asks for directly. My stated rationale for the
+other exclusions ("not turns the operator asked for") was simply false for it.
+
+Compaction now collects, on **both** compaction paths. The first attempt wired
+only the local one, and review pointed out that providers supporting remote
+compaction - OpenAI and Azure Responses, which is where operator `/compact`
+usually lands - route to `compact_remote_v2` and still recorded nothing. Both now
+call the same helper: the attachment logic `session/turn.rs` performed inline is
+extracted into `accounting::attach_turn`, so the paths cannot drift again.
+
+**Retracted.** An earlier revision of this record claimed the remote path need
+attach only when the compaction owns its client session, because a session
+borrowed from a live turn already carries that turn's collectors. That was
+wrong. Inline auto-compaction borrows the turn's session but runs outside the
+turn's sampling scope, so those slots are empty: under the owned-only rule every
+automatic compaction went unrecorded while this document said compaction
+collects. The remote path now attaches for both shapes, and because the borrowed
+slots are empty nothing in flight is displaced.
+
+The claim is no longer taken on argument.
+`accounting_records_manual_compaction` drives a real `/compact` through the
+remote path and asserts a second attempt under a `compact:` turn identity;
+`accounting_records_auto_compaction` drives an automatic pre-turn compaction
+and asserts exactly one `compact:` row among the three. Both fail if the
+compaction's scopes are dropped instead of held, which is how the owned-only
+defect would look.
+
+The turn label is `accounting::compaction_turn_label`, which keeps the identity
+inside the store's 128-byte bound: a long submission id would otherwise make its
+compaction unrecordable while the ordinary turn recorded fine.
+`accounting_compaction_label_stays_recordable` pins that against
+`Attempt::validate`, including a multi-byte boundary. In compaction the attachment is deliberately best effort: if collection cannot be
+attached the compaction still runs and a warning says it proceeded unrecorded.
+
+Honest limit, because review pushed on it and the first answer was worse than the
+problem: best effort covers ATTACH time only. Once collectors are attached, an
+accounting fault mid-stream still fails the compaction, exactly as it fails an
+ordinary turn. I tried making that path retry the attempt unrecorded and backed it
+out - it re-sends the request, so a bookkeeping fault would have cost a second
+compaction call. Failing closed and consistently is the better of the two, and the
+inconsistency with the sentence above is stated rather than hidden.
+
+Three exclusions remain, all session or route classes rather than provider or
+model classes, and none introduced by this work:
+
+- **Agent-identity telemetry sessions.** When the client resolves agent-identity
+  telemetry, the Responses WebSocket route is excluded before a collector exists.
+- **Startup prewarm and auxiliary inference.** Outside sampling collection by
+  design; they are not turns the operator asked for. That rationale is true for
+  these two.
+- **Legacy remote compaction, the `/responses/compact` endpoint.** Reachable
+  only by disabling `remote_compaction_v2`, which is Stable and on by default.
+  It does not stream through `ModelClientSession` at all - it posts through
+  `ApiCompactClient`, which has no collector attachment point - so recording it
+  is a plumbing change, not a flag. Named here rather than quietly implied by
+  "compaction collects". Default-configured operators are unaffected.
+
+Token-budget compaction is not in that list: it installs a fresh context window
+without any model call, so there is no inference to record.

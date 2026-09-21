@@ -17,6 +17,8 @@ use codex_state::accounting::Dialect;
 use codex_state::accounting::Observation;
 use codex_state::accounting::Patch;
 use codex_state::accounting::Presence;
+use sha2::Digest;
+use sha2::Sha256;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
@@ -111,6 +113,112 @@ pub(crate) fn canonical_route(url: &str) -> String {
 }
 
 /// Canonical `k=v&k=v` for a provider's configured query parameters.
+/// A bounded turn label for a compaction of `sub_id`.
+///
+/// `Attempt::validate` caps a turn identity at 128 bytes, so a long submission id
+/// would make its compaction unrecordable while the ordinary turn recorded fine.
+/// Keep the prefix and as much of the id as fits.
+pub(crate) fn compaction_turn_label(sub_id: &str) -> String {
+    const LIMIT: usize = 128;
+    const PREFIX: &str = "compact:";
+    let room = LIMIT - PREFIX.len();
+    if sub_id.len() <= room {
+        return format!("{PREFIX}{sub_id}");
+    }
+    // Truncation alone would merge two submissions that share a long prefix into
+    // one turn identity, so keep a digest of the whole id in the part that fits.
+    let digest = format!("{:x}", Sha256::digest(sub_id.as_bytes()));
+    let digest = &digest[..16];
+    let mut end = room.saturating_sub(digest.len() + 1);
+    while end > 0 && !sub_id.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{PREFIX}{}-{digest}", &sub_id[..end])
+}
+
+/// Guards that keep this turn's collectors attached to a client session.
+///
+/// Dropping this detaches them, so the session can be reused for work that is
+/// not part of the turn.
+pub(crate) struct TurnScopes {
+    pub(crate) anthropic: Option<Arc<Sampling>>,
+    pub(crate) responses: Option<Arc<responses::DeferredResponsesSampling>>,
+    pub(crate) chat: Option<Arc<chat::DeferredChatSampling>>,
+    _anthropic_scope: SamplingScope,
+    _responses_scope: responses::Scope,
+    _chat_scope: chat::Scope,
+}
+
+/// Bind collection for one turn on one client session.
+///
+/// Both the ordinary turn path and compaction use this: a compaction request is
+/// inference the operator paid for, so it must be recorded like any other turn
+/// rather than silently escaping collection.
+pub(crate) async fn attach_turn(
+    session: &Arc<crate::session::session::Session>,
+    turn_context: &crate::session::turn_context::TurnContext,
+    client_session: &crate::client::ModelClientSession,
+    turn: String,
+) -> Result<TurnScopes, CodexErr> {
+    let mode = if matches!(
+        turn_context.config.accounting,
+        AccountingMode::Provider { .. }
+    ) {
+        let auth = turn_context.provider.auth().await;
+        let api = turn_context.provider.api_provider().await?;
+        turn_mode(
+            &turn_context.config.accounting,
+            &turn_context.config.model_provider_id,
+            turn_context.provider.info(),
+            auth.as_ref().map(codex_login::CodexAuth::auth_mode),
+            &api.base_url,
+        )
+    } else {
+        turn_context.config.accounting.clone()
+    };
+    let collects_wire = |wire| {
+        collects(
+            &mode,
+            &turn_context.config.model_provider_id,
+            turn_context.provider.info(),
+            wire,
+        )
+    };
+    let anthropic = if collects_wire(codex_model_provider_info::WireApi::Anthropic) {
+        session
+            .try_ensure_rollout_materialized()
+            .await
+            .map_err(|_| CodexErr::Fatal(FAILURE.into()))?;
+        let runtime = session
+            .state_db()
+            .ok_or_else(|| CodexErr::Fatal(FAILURE.into()))?;
+        Some(Sampling::start(runtime, session.thread_id, turn.clone(), &mode).await?)
+    } else {
+        None
+    };
+    let _anthropic_scope =
+        SamplingScope::attach(Arc::clone(&client_session.accounting), anthropic.clone())?;
+    let responses = collects_wire(codex_model_provider_info::WireApi::Responses).then(|| {
+        responses::DeferredResponsesSampling::new(Arc::clone(session), turn.clone(), mode.clone())
+    });
+    let _responses_scope = responses::Scope::attach(
+        Arc::clone(&client_session.responses_accounting),
+        responses.clone(),
+    )?;
+    let chat = collects_wire(codex_model_provider_info::WireApi::Chat)
+        .then(|| chat::DeferredChatSampling::new(Arc::clone(session), turn.clone(), mode.clone()));
+    let _chat_scope =
+        chat::Scope::attach(Arc::clone(&client_session.chat_accounting), chat.clone())?;
+    Ok(TurnScopes {
+        anthropic,
+        responses,
+        chat,
+        _anthropic_scope,
+        _responses_scope,
+        _chat_scope,
+    })
+}
+
 pub(crate) fn canonical_query(
     provider: &codex_model_provider_info::ModelProviderInfo,
 ) -> Option<String> {

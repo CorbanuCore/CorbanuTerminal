@@ -384,6 +384,154 @@ async fn accounting_responses_native_sampling_and_auxiliary_scope() -> anyhow::R
     Ok(())
 }
 
+/// The ledger is written by the collector, not by the event stream, so reading a
+/// count the instant a turn completes is a race: observed failing under the
+/// parallel full-suite run and passing in isolation. Wait for the ledger rather
+/// than for the protocol, and name what was found when the wait runs out.
+async fn wait_attempts(
+    db: &codex_state::StateRuntime,
+    count: usize,
+) -> anyhow::Result<Vec<Attempt>> {
+    let mut seen = Vec::new();
+    let waited = tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        loop {
+            seen = attempts(db).await?;
+            if seen.len() >= count {
+                return anyhow::Ok(());
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    if waited.is_err() {
+        anyhow::bail!(
+            "waited for {count} attempts, ledger holds {:?}",
+            seen.iter().map(|record| &record.turn).collect::<Vec<_>>()
+        );
+    }
+    waited??;
+    Ok(seen)
+}
+
+/// A remote-compaction-v2 response: the compaction item plus terminal usage.
+fn compaction(usage: Value) -> String {
+    responses::sse(vec![
+        responses::ev_response_created("compaction-response"),
+        json!({"type":"response.output_item.done",
+            "item":{"type":"compaction","encrypted_content":"synthetic-compaction"}}),
+        json!({"type":"response.completed",
+            "response":{"id":"compaction-response","usage":usage}}),
+    ])
+}
+
+/// An operator `/compact` is inference they paid for, so it must land in the
+/// ledger under its own turn identity rather than escaping collection.
+#[tokio::test]
+async fn accounting_records_manual_compaction() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    let mock = responses::mount_sse_sequence(
+        &server,
+        vec![success(usage(Some(0))), compaction(usage(Some(0)))],
+    )
+    .await;
+    let test = builder(endpoint.clone(), enabled(&endpoint))
+        .with_config(|config| {
+            config
+                .features
+                .disable(codex_features::Feature::TokenBudget)
+                .unwrap();
+            config
+                .features
+                .enable(codex_features::Feature::RemoteCompactionV2)
+                .unwrap();
+        })
+        .build_with_auto_env(&server)
+        .await?;
+    test.submit_turn("fixture").await?;
+    let db = test.codex.state_db().unwrap();
+    let turn = wait_attempts(&db, 1).await?;
+    assert_eq!(turn.len(), 1);
+    // The day total is thread-wide, so it reads the turn's tokens alone here.
+    wait_observations(&db, 1).await?;
+    assert_eq!(totals(&db, &turn[0]).await?.measured[0].known, 100);
+    test.codex
+        .submit(codex_protocol::protocol::Op::Compact)
+        .await?;
+    terminal(&test).await?;
+    let records = wait_attempts(&db, 2).await?;
+    assert_eq!(records.len(), 2);
+    let compaction = &records[1];
+    assert!(
+        compaction.turn.starts_with("compact:"),
+        "compaction recorded under {}",
+        compaction.turn
+    );
+    assert_ne!(compaction.turn, turn[0].turn);
+    // The compaction's own tokens are what moved the day total from 100 to 200.
+    wait_observations(&db, 2).await?;
+    assert_eq!(totals(&db, compaction).await?.measured[0].known, 200);
+    assert_eq!(mock.requests().len(), 2);
+    stop(&test).await;
+    Ok(())
+}
+
+/// Auto-compaction runs on the turn's own client session rather than a session
+/// of its own. Collecting only the standalone shape - the first version of this
+/// - left every automatic compaction unrecorded while the record claimed
+/// otherwise, so the borrowed shape is proven here too.
+#[tokio::test]
+async fn accounting_records_auto_compaction() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    let mock = responses::mount_sse_sequence(
+        &server,
+        vec![
+            success(usage(Some(0))),
+            compaction(usage(Some(0))),
+            success(usage(Some(0))),
+        ],
+    )
+    .await;
+    let test = builder(endpoint.clone(), enabled(&endpoint))
+        .with_config(|config| {
+            // The first turn reports 140 total tokens, so the next turn compacts
+            // before it runs.
+            config.model_auto_compact_token_limit = Some(50);
+            config
+                .features
+                .disable(codex_features::Feature::TokenBudget)
+                .unwrap();
+            config
+                .features
+                .enable(codex_features::Feature::RemoteCompactionV2)
+                .unwrap();
+        })
+        .build_with_auto_env(&server)
+        .await?;
+    test.submit_turn("fixture").await?;
+    test.submit_turn("fixture after compaction").await?;
+    let db = test.codex.state_db().unwrap();
+    let records = wait_attempts(&db, 3).await?;
+    assert_eq!(records.len(), 3);
+    assert_eq!(mock.requests().len(), 3);
+    let compactions: Vec<&Attempt> = records
+        .iter()
+        .filter(|record| record.turn.starts_with("compact:"))
+        .collect();
+    assert_eq!(
+        compactions.len(),
+        1,
+        "turns recorded: {:?}",
+        records.iter().map(|record| &record.turn).collect::<Vec<_>>()
+    );
+    // Thread-wide day total: both turns and the compaction between them.
+    wait_observations(&db, 3).await?;
+    assert_eq!(totals(&db, compactions[0]).await?.measured[0].known, 300);
+    stop(&test).await;
+    Ok(())
+}
+
 #[tokio::test]
 async fn accounting_responses_native_ws_only_no_install() -> anyhow::Result<()> {
     let server = responses::start_websocket_server(vec![vec![

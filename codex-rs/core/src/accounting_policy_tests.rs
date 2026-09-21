@@ -435,6 +435,117 @@ fn accounting_chat_collects_the_fields_the_client_itself_emits() {
     );
 }
 
+/// "Available on all providers" should be checked against the product's real
+/// catalogue, not six synthetic identities. Every built-in provider must select a
+/// collecting mode at its own wire dialect; if a future provider is added with a
+/// shape this code cannot attribute, this test is where that shows up.
+#[cfg(feature = "developer-accounting")]
+#[test]
+fn accounting_every_built_in_provider_collects() {
+    use codex_model_provider_info::built_in_model_providers;
+    let mut checked = 0;
+    for (id, provider) in built_in_model_providers(None) {
+        let selected = developer_accounting_mode(&id, &provider);
+        assert!(
+            !matches!(selected, AccountingMode::Disabled),
+            "{id} ({:?}) selects no accounting mode",
+            provider.wire_api
+        );
+        // Bind at the provider's own resolved endpoint and under API-key auth, so
+        // the pricing assertion below can actually fail: with no auth mode,
+        // `api_key_pricing` is false for every entry and proves nothing.
+        let endpoint = provider
+            .to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))
+            .map(|api| api.base_url)
+            .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
+        let bound = turn_mode(
+            &selected,
+            &id,
+            &provider,
+            Some(codex_protocol::auth::AuthMode::ApiKey),
+            &endpoint,
+        );
+        assert!(
+            collects(&bound, &id, &provider, provider.wire_api),
+            "{id} ({:?}) binds a mode that does not collect",
+            provider.wire_api
+        );
+        // Only the two metered catalogue entries at their own default endpoints may
+        // carry monetary rates; everything else records tokens with money
+        // unavailable even under API-key authentication.
+        if let AccountingMode::Provider {
+            api_key_pricing, ..
+        } = bound
+        {
+            let metered = matches!(id.as_str(), "openai" | "anthropic");
+            assert_eq!(
+                api_key_pricing, metered,
+                "{id} pricing authority under API-key auth"
+            );
+        }
+        // And the per-turn dialect gate must admit it too, not just the selector.
+        let admitted = match provider.wire_api {
+            codex_model_provider_info::WireApi::Responses => responses::eligible(&provider, None),
+            codex_model_provider_info::WireApi::Chat => {
+                let mut request = chat_body();
+                request.provider = provider.chat_completions_provider.clone();
+                chat::eligible(&provider, None, &request)
+            }
+            codex_model_provider_info::WireApi::Anthropic => route_refusal(&provider).is_none(),
+        };
+        assert!(admitted, "{id} is selected but not admitted per turn");
+        checked += 1;
+    }
+    // The catalogue is the product's real provider list; if it shrinks, this
+    // test should be updated deliberately rather than silently covering less.
+    // The catalogue has twenty-one entries today; assert the real number so a
+    // silently shrinking catalogue is visible rather than tolerated.
+    assert_eq!(checked, 21, "catalogue size changed");
+}
+
+/// A compaction's turn identity must fit the store's bounded identity, or the
+/// compaction of a long submission id would be unrecordable while its ordinary
+/// turn recorded fine.
+#[test]
+fn accounting_compaction_label_stays_recordable() -> Result<()> {
+    use codex_state::accounting::Attempt;
+    for sub_id in [
+        "short".to_string(),
+        "x".repeat(120),
+        "x".repeat(128),
+        "x".repeat(400),
+        format!("{}é", "y".repeat(126)),
+    ] {
+        let label = super::compaction_turn_label(&sub_id);
+        assert!(label.starts_with("compact:"), "{label}");
+        assert!(label.len() <= 128, "{} bytes", label.len());
+        // Two submissions sharing a long prefix must not collapse into one turn.
+        let sibling = super::compaction_turn_label(&format!("{sub_id}-sibling"));
+        assert_ne!(
+            label, sibling,
+            "labels must stay distinct for distinct submissions"
+        );
+        let attempt = Attempt {
+            attempt_id: uuid::Uuid::new_v4(),
+            request_id: uuid::Uuid::new_v4(),
+            thread_id: ThreadId::new(),
+            turn: label.clone(),
+            retry_of: None,
+            provider: "fixture".into(),
+            model: MODEL.into(),
+            scope: uuid::Uuid::new_v4(),
+            dialect: codex_state::accounting::Dialect::Inclusive,
+            dispatched_at_ms: 1i64.try_into()?,
+        };
+        assert!(
+            attempt.validate().is_ok(),
+            "the store must accept the compaction label for {} bytes",
+            sub_id.len()
+        );
+    }
+    Ok(())
+}
+
 fn chat_body() -> codex_api::ChatCompletionsRequest {
     codex_api::ChatCompletionsRequest {
         model: "fixture".into(),

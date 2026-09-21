@@ -1635,78 +1635,17 @@ async fn run_sampling_request(
     let turn_context = Arc::clone(&step_context.turn);
     let router = Arc::clone(&step_context.tool_router);
 
-    let accounting_mode = if matches!(
-        turn_context.config.accounting,
-        crate::config::AccountingMode::Provider { .. }
-    ) {
-        let auth = turn_context.provider.auth().await;
-        let api = turn_context.provider.api_provider().await?;
-        crate::accounting::turn_mode(
-            &turn_context.config.accounting,
-            &turn_context.config.model_provider_id,
-            turn_context.provider.info(),
-            auth.as_ref().map(codex_login::CodexAuth::auth_mode),
-            &api.base_url,
-        )
-    } else {
-        turn_context.config.accounting.clone()
-    };
-    let collects = |wire| {
-        crate::accounting::collects(
-            &accounting_mode,
-            &turn_context.config.model_provider_id,
-            turn_context.provider.info(),
-            wire,
-        )
-    };
-    let accounting = if collects(codex_model_provider_info::WireApi::Anthropic) {
-        sess.try_ensure_rollout_materialized()
-            .await
-            .map_err(|_| CodexErr::Fatal(crate::accounting::FAILURE.into()))?;
-        let runtime = sess
-            .state_db()
-            .ok_or_else(|| CodexErr::Fatal(crate::accounting::FAILURE.into()))?;
-        Some(
-            crate::accounting::Sampling::start(
-                runtime,
-                sess.thread_id,
-                turn_context.sub_id.clone(),
-                &accounting_mode,
-            )
-            .await?,
-        )
-    } else {
-        None
-    };
-    // Clear even when the entire sampling future is cancelled. The client
-    // session can subsequently be reused for non-accounted native operations.
-    let _accounting_scope = crate::accounting::SamplingScope::attach(
-        Arc::clone(&client_session.accounting),
-        accounting.clone(),
-    )?;
+    let scopes = crate::accounting::attach_turn(
+        &sess,
+        &turn_context,
+        client_session,
+        turn_context.sub_id.clone(),
+    )
+    .await?;
+    let accounting = scopes.anthropic.clone();
+    let responses_accounting = scopes.responses.clone();
+    let chat_accounting = scopes.chat.clone();
 
-    let responses_accounting = collects(codex_model_provider_info::WireApi::Responses).then(|| {
-        crate::accounting::responses::DeferredResponsesSampling::new(
-            Arc::clone(&sess),
-            turn_context.sub_id.clone(),
-            accounting_mode.clone(),
-        )
-    });
-    let _responses_scope = crate::accounting::responses::Scope::attach(
-        Arc::clone(&client_session.responses_accounting),
-        responses_accounting.clone(),
-    )?;
-    let chat_accounting = collects(codex_model_provider_info::WireApi::Chat).then(|| {
-        crate::accounting::chat::DeferredChatSampling::new(
-            Arc::clone(&sess),
-            turn_context.sub_id.clone(),
-            accounting_mode.clone(),
-        )
-    });
-    let _chat_scope = crate::accounting::chat::Scope::attach(
-        Arc::clone(&client_session.chat_accounting),
-        chat_accounting.clone(),
-    )?;
     let base_instructions = sess.get_base_instructions().await;
     trace_turn_timing("after_get_base_instructions", sampling_started_at);
 
