@@ -70,7 +70,16 @@ each of those silently excluded whole provider, model or session classes on ever
 turn.
 
 All three are now threaded to the transport as the expected value, and a body
-carrying exactly what the client constructed is admitted. What remains refused is
+carrying exactly what the client constructed is admitted.
+
+Threading alone was not enough, and review caught that too: `chat::eligible` runs
+BEFORE the transport exists and still demanded that `provider_options` and
+`plugins` be absent, so the threading was dead code and OpenRouter web-search
+sessions and Vercel-gateway Chat sessions still never collected. The predicate now
+accepts each field when the provider configuration explains it - the gateway for
+`providerOptions`, OpenRouter for `plugins` - while the exact value is still
+checked at the transport. `accounting_chat_collects_the_fields_the_client_itself_emits`
+pins both, and pins that an ordinary provider still refuses both. What remains refused is
 a routing key whose value differs from that - which, since the client builds the
 body, is a belt-and-braces invariant rather than a load-bearing gate. It is kept
 because it is cheap and because it fails safe: such a request is served unrecorded
