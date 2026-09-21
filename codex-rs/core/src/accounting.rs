@@ -117,7 +117,10 @@ pub(crate) fn turn_mode(
     let api_key_pricing = auth_mode == Some(codex_protocol::auth::AuthMode::ApiKey)
         && provider.auth.is_none()
         && provider.experimental_bearer_token.is_none()
-        && provider.api_key_header_name().is_none()
+        // Deliberately NOT gated on `api_key_header_name`: the built-in Anthropic
+        // provider declares `x-api-key` as its own credential header, so requiring
+        // it to be absent made the Anthropic pricing arm below dead code and left
+        // metered Anthropic turns with no rate at all.
         && !credential_header(&provider.http_headers)
         && !credential_header(&provider.env_http_headers)
         && match (provider_id, provider.wire_api) {
