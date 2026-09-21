@@ -206,6 +206,7 @@ impl DeferredResponsesSampling {
             .await;
         match result {
             Ok(sampling) => {
+                eprintln!("ACCTPROBE resolve: sampling ready");
                 self.check()?;
                 Ok(Some(Arc::clone(sampling)))
             }

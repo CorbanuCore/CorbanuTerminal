@@ -166,8 +166,11 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
 
     async fn stream(&self, request: Request) -> Result<StreamResponse, TransportError> {
         let Some(evidence) = &self.evidence else {
+            eprintln!("ACCTPROBE transport: no evidence attached; url={}", request.url);
             return self.inner.stream(request).await;
         };
+        eprintln!("ACCTPROBE transport: evidence present; url={} refusal={:?} already={}",
+            request.url, request_refusal(&request), evidence.attempt.get().is_some());
         if evidence.attempt.get().is_some() || request_refusal(&request).is_some() {
             evidence.sampling.reject();
             return Err(TransportError::Build(FAILURE.into()));
