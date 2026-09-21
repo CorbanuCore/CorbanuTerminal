@@ -384,22 +384,33 @@ async fn accounting_responses_native_sampling_and_auxiliary_scope() -> anyhow::R
     Ok(())
 }
 
-/// Attempts are journalled after the turn's terminal event, so a count read the
-/// instant a turn completes is a race under load. Wait for the ledger instead.
+/// The ledger is written by the collector, not by the event stream, so reading a
+/// count the instant a turn completes is a race: observed failing under the
+/// parallel full-suite run and passing in isolation. Wait for the ledger rather
+/// than for the protocol, and name what was found when the wait runs out.
 async fn wait_attempts(
     db: &codex_state::StateRuntime,
     count: usize,
 ) -> anyhow::Result<Vec<Attempt>> {
-    tokio::time::timeout(std::time::Duration::from_secs(20), async {
+    let mut seen = Vec::new();
+    let waited = tokio::time::timeout(std::time::Duration::from_secs(20), async {
         loop {
-            let records = attempts(db).await?;
-            if records.len() >= count {
-                return anyhow::Ok(records);
+            seen = attempts(db).await?;
+            if seen.len() >= count {
+                return anyhow::Ok(());
             }
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
     })
-    .await?
+    .await;
+    if waited.is_err() {
+        anyhow::bail!(
+            "waited for {count} attempts, ledger holds {:?}",
+            seen.iter().map(|record| &record.turn).collect::<Vec<_>>()
+        );
+    }
+    waited??;
+    Ok(seen)
 }
 
 /// A remote-compaction-v2 response: the compaction item plus terminal usage.

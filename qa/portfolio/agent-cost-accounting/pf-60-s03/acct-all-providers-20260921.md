@@ -95,22 +95,31 @@ Clean-host lanes at this tree, RTX workstation:
 
 | lane | result |
 | --- | --- |
-| `codex-core` accounting | **135 run, 135 passed** |
-| `codex-core` accounting, `developer-accounting` | **140 run, 140 passed** |
+| `codex-core` accounting | **137 run, 137 passed** |
+| `codex-core` accounting, `developer-accounting` | **142 run, 142 passed** |
 | `codex-state` accounting | **166 run, 166 passed** |
 | `codex-tui` usage | **92 run, 92 passed** |
 | `codex-tui` tokens | 66 run, 65 passed, 1 pre-existing failure |
+| `codex-core` compaction | **174 run, 174 passed** |
 
-The counts include the two tests this increment added:
+The counts include the two compaction tests described above, and
 `accounting_chat_collects_the_fields_the_client_itself_emits` and
-`accounting_websocket_pin_matches_the_client_route`.
+`accounting_websocket_pin_matches_the_client_route` from the previous
+increment.
+
+Three compaction tests need a retry under the fully parallel suite and pass
+alone. They do the same at the integration tip without any of this work, so the
+flakiness is the suite's, not this increment's.
 
 The admission matrix still enumerates 360 cells over six provider ids, three
 dialects, five authentication setups and four configuration shapes, and now
 asserts every shape collects, with the stored route equal to the one the client
 requests for that shape.
 
-Not claimed: independent review of this increment, or any live run.
+Independent review of this increment (Opus, author-separate) found nothing at P1
+or P2 and three P3s: a comment that mis-stated the collector's write ordering, a
+timeout that reported no context, and a stale exclusion count. All three are
+fixed here. Not claimed: any live run.
 
 ## Checked against the real catalogue, and what is still outside collection
 
@@ -174,8 +183,8 @@ out - it re-sends the request, so a bookkeeping fault would have cost a second
 compaction call. Failing closed and consistently is the better of the two, and the
 inconsistency with the sentence above is stated rather than hidden.
 
-Two exclusions remain, both session classes rather than provider or model
-classes, and neither introduced by this work:
+Three exclusions remain, all session or route classes rather than provider or
+model classes, and none introduced by this work:
 
 - **Agent-identity telemetry sessions.** When the client resolves agent-identity
   telemetry, the Responses WebSocket route is excluded before a collector exists.
