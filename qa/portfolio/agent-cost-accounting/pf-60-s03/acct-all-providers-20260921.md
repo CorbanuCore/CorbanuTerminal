@@ -95,11 +95,15 @@ Clean-host lanes at this tree, RTX workstation:
 
 | lane | result |
 | --- | --- |
-| `codex-core` accounting | **132 run, 132 passed** |
-| `codex-core` accounting, `developer-accounting` | **136 run, 136 passed** |
+| `codex-core` accounting | **134 run, 134 passed** |
+| `codex-core` accounting, `developer-accounting` | **138 run, 138 passed** |
 | `codex-state` accounting | **166 run, 166 passed** |
 | `codex-tui` usage | **92 run, 92 passed** |
 | `codex-tui` tokens | 66 run, 65 passed, 1 pre-existing failure |
+
+The counts include the two tests this increment added:
+`accounting_chat_collects_the_fields_the_client_itself_emits` and
+`accounting_websocket_pin_matches_the_client_route`.
 
 The admission matrix still enumerates 360 cells over six provider ids, three
 dialects, five authentication setups and four configuration shapes, and now
