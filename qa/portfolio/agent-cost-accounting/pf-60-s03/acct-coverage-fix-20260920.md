@@ -79,4 +79,21 @@ stay pinned.
 identically at base `6322a6e7c`. It is pre-existing snapshot drift, not this
 change, and is left for its own commit so attribution stays clean.
 
+## Full lanes after the fix
+
+| lane | result | attribution |
+| --- | --- | --- |
+| `codex-core` accounting | 130 run, 92 passed, 38 failed | every failing test is also in the base failing set; base failed 63 distinct where this run failed 41 |
+| `codex-core` accounting, `developer-accounting` | 134 run, 94 passed, 40 failed | 41 distinct, all also in the base set; 75 `deadline has elapsed` |
+| `codex-state` accounting | **166 run, 166 passed** | |
+| `codex-tui` usage | **92 run, 92 passed** | |
+| `codex-tui` tokens | 66 run, 65 passed, 1 failed | the one failure also fails at base |
+
+`comm -23` of the candidate failing set against the base failing set is empty for
+both core lanes: this change introduces no test that fails which did not already
+fail before it. Two of the shared failures are assertion rather than deadline
+failures (`accounting_responses.rs:314` and `:408`); both fail at base too, so
+they are pre-existing and out of scope here, and they are named so they are not
+quietly absorbed into the environmental set.
+
 Not claimed here: independent review, a receipt, or any live qualification.
