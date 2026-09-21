@@ -4602,7 +4602,7 @@ fn write_test_provider_auth(codex_home: &Path) {
     .expect("write test provider API key");
 }
 
-async fn build_test_config(codex_home: &Path) -> Config {
+pub(crate) async fn build_test_config(codex_home: &Path) -> Config {
     ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.to_path_buf())
         .harness_overrides(ConfigOverrides {
@@ -5974,7 +5974,7 @@ pub(crate) async fn build_world_state_from_turn_context(
 }
 
 // todo: use online model info
-async fn make_session_and_context_for_config(config: Config) -> (Session, TurnContext) {
+pub(crate) async fn make_session_and_context_for_config(config: Config) -> (Session, TurnContext) {
     let (tx_sub, _rx_sub) = async_channel::bounded(16);
     let (tx_event, _rx_event) = async_channel::unbounded();
     let config = Arc::new(config);

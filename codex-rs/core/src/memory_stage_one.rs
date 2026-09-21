@@ -13,6 +13,7 @@ use crate::client_common::Prompt;
 use crate::client_common::ResponseEvent;
 use crate::responses_metadata::CodexResponsesMetadata;
 use crate::session::SessionLoopTermination;
+use crate::session::memory_stage_one::MemoryStageOneConfiguration;
 use crate::session::session::Session;
 use codex_features::Feature;
 use codex_http_client::HttpTransport;
@@ -106,6 +107,16 @@ impl std::fmt::Debug for StageOneMemoryBinding {
 }
 
 impl StageOneMemoryBinding {
+    /// The owner's current stage-one configuration, denied on any drift.
+    async fn owner_configuration(
+        &self,
+        owner: &Arc<Session>,
+    ) -> Result<MemoryStageOneConfiguration, StageOneMemoryDenial> {
+        owner
+            .memory_stage_one_configuration(self.owner_id, &self.provider)
+            .await
+    }
+
     async fn evaluate(&self) -> Result<(), StageOneMemoryDenial> {
         if self.termination.clone().now_or_never().is_some() {
             return Err(StageOneMemoryDenial::OwnerTerminated);
@@ -273,12 +284,70 @@ impl StageOneMemoryClient {
         self.binding.check().await.map_err(Into::into)
     }
 
+    /// Collection for one extraction, read from the owner's own configuration.
+    ///
+    /// The owner is held weakly, and the pipeline runs after a turn: a session
+    /// that has gone away records nothing rather than failing the extraction.
+    async fn attach_accounting(
+        &self,
+        session: &crate::client::ModelClientSession,
+    ) -> anyhow::Result<Option<crate::accounting::TurnScopes>> {
+        let Some(owner) = self.binding.owner.upgrade() else {
+            return Ok(None);
+        };
+        let policy = self
+            .binding
+            .owner_configuration(&owner)
+            .await
+            .map_err(|denial| anyhow::anyhow!(denial.to_string()))?;
+        // Collect only when this request really goes to the route the owner's
+        // configuration approved. Accounting must never be the reason a
+        // stage-one request fails, and a request bound elsewhere would fail the
+        // route check at admission instead of simply going unrecorded.
+        if self.client.provider_info() != &policy.config.model_provider {
+            return Ok(None);
+        }
+        let auth = owner.services.auth_manager.auth().await;
+        let auth_mode = auth.as_ref().map(codex_login::CodexAuth::auth_mode);
+        let endpoint = policy
+            .config
+            .model_provider
+            .to_api_provider(auth_mode)
+            .map(|api| api.base_url)
+            .unwrap_or_default();
+        Ok(Some(
+            crate::accounting::attach_scopes(
+                &owner,
+                &policy.config.accounting,
+                &policy.config.model_provider_id,
+                &policy.config.model_provider,
+                auth_mode,
+                &endpoint,
+                session,
+                crate::accounting::memory_turn_label(),
+            )
+            .await?,
+        ))
+    }
+
     pub async fn extract(
         &mut self,
         request: StageOneMemoryRequest<'_>,
     ) -> Result<StageOneMemoryOutput, StageOneMemoryError> {
         self.check_completion().await?;
         let mut session = self.client.new_session();
+        // Extraction is a model request the operator paid for, on a session of
+        // its own, so it is collected like any other - under its own `memory:`
+        // turn. Best effort, exactly as compaction and prewarm are: an
+        // extraction that cannot be recorded still runs, because accounting is
+        // an observer here and not a gate on the memory pipeline.
+        let _accounting = match self.attach_accounting(&session).await {
+            Ok(scopes) => scopes,
+            Err(error) => {
+                tracing::warn!(%error, "accounting: stage-one memory proceeding unrecorded");
+                None
+            }
+        };
         let trace = InferenceTraceContext::disabled();
         let mut stream = tokio::select! {
             _ = self.binding.termination.clone() => return Err(StageOneMemoryDenial::OwnerTerminated.into()),

@@ -407,3 +407,131 @@ async fn pf_30_s04_owner_termination_cancels_pending_http_without_a_retry() {
     ));
     assert_eq!(server.received_requests().await.unwrap().len(), 1);
 }
+
+/// Stage-one extraction is a model request the operator paid for, on a client
+/// session of its own. Nothing collected it, so an operator who turns memories
+/// on ran billable extraction that reached no ledger.
+#[tokio::test]
+async fn pf_60_s03_stage_one_extraction_records_its_own_turn() -> anyhow::Result<()> {
+    use codex_state::SqliteConfig;
+    use codex_state::StateRuntime;
+    use codex_state::ThreadMetadataBuilder;
+    use codex_utils_absolute_path::AbsolutePathBuf;
+
+    let server = wiremock::MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    let body = [
+        serde_json::json!({"type":"response.created","response":{"id":"memory-fixture"}}),
+        serde_json::json!({"type":"response.output_text.delta","delta":"remembered"}),
+        serde_json::json!({"type":"response.completed","response":{"id":"memory-fixture",
+            "usage":{"input_tokens":100,"input_tokens_details":{"cached_tokens":20},
+            "output_tokens":40,"output_tokens_details":{"reasoning_tokens":10},
+            "total_tokens":140}}}),
+    ]
+    .iter()
+    .map(|event| format!("event: {}\ndata: {event}\n\n", event["type"].as_str().unwrap()))
+    .collect::<String>();
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/v1/responses"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_raw(body, "text/event-stream"),
+        )
+        .mount(&server)
+        .await;
+
+    let home = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path()).await;
+    config.model_provider = codex_model_provider_info::ModelProviderInfo {
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        stream_idle_timeout_ms: Some(60_000),
+        supports_websockets: false,
+        ..codex_model_provider_info::ModelProviderInfo::create_openai_provider(Some(
+            endpoint.clone(),
+        ))
+    };
+    config.model_provider_id = "openai".into();
+    config.accounting = crate::config::AccountingMode::Provider {
+        scope: uuid::Uuid::new_v4(),
+        provider_id: "openai".into(),
+        wire_api: codex_model_provider_info::WireApi::Responses,
+        approved_endpoint: endpoint.clone(),
+        approved_query: None,
+        pricing: crate::config::PriceAuthority::Unavailable,
+    };
+    config.features.enable(Feature::Sqlite)?;
+
+    let (mut session, context) =
+        crate::session::tests::make_session_and_context_for_config(config).await;
+    let db = StateRuntime::init(
+        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        "openai".into(),
+    )
+    .await?;
+    session.services.state_db = Some(db.clone());
+    session.services.agent_control = session
+        .services
+        .agent_control
+        .clone()
+        .with_effective_security_policy(SecurityLevel::Permissive, session.thread_id, false)
+        .unwrap();
+    let owner = Arc::new(session);
+    db.upsert_thread(
+        &ThreadMetadataBuilder::new(
+            owner.thread_id,
+            home.path().join("memory-fixture.jsonl"),
+            chrono::Utc::now(),
+            codex_protocol::protocol::SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+
+    let mut client = client(&owner).await.unwrap();
+    let prompt = Prompt::default();
+    let metadata = CodexResponsesMetadata::new(
+        "fixture".into(),
+        "fixture".into(),
+        owner.thread_id.to_string(),
+        "fixture:0".into(),
+    );
+    client
+        .extract(StageOneMemoryRequest {
+            prompt: &prompt,
+            model_info: &context.model_info,
+            session_telemetry: &context.session_telemetry,
+            reasoning_effort: None,
+            reasoning_summary: ReasoningSummary::default(),
+            service_tier: None,
+            responses_metadata: &metadata,
+        })
+        .await
+        .unwrap();
+
+    let pool = db
+        .sqlite()
+        .open_read_only_pool(&db.sqlite().state_db_path())
+        .await?;
+    let rows: Vec<String> =
+        sqlx::query_scalar("SELECT payload FROM draft_accounting_attempts ORDER BY rowid")
+            .fetch_all(&pool)
+            .await?;
+    let turns: Vec<String> = rows
+        .iter()
+        .map(|row| {
+            serde_json::from_str::<serde_json::Value>(row).expect("attempt payload")["turn"]
+                .as_str()
+                .expect("turn identity")
+                .to_string()
+        })
+        .collect();
+    assert_eq!(
+        turns
+            .iter()
+            .filter(|turn| turn.starts_with("memory:"))
+            .count(),
+        1,
+        "turns recorded: {turns:?}"
+    );
+    Ok(())
+}
