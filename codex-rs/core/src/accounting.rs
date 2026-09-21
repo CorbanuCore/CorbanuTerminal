@@ -115,16 +115,41 @@ pub(crate) fn canonical_route(url: &str) -> String {
 
 /// Canonical `k=v&k=v` for a provider's configured query parameters.
 /// A bounded turn label for a compaction of `sub_id`.
+pub(crate) fn compaction_turn_label(sub_id: &str) -> String {
+    scoped_turn_label("compact:", sub_id)
+}
+
+/// A turn label for one startup prewarm.
+///
+/// Prewarm is inference the operator paid for - it primes the model's cache, and
+/// the provider charges for the prompt - so it is recorded as its own turn
+/// rather than escaping collection or being folded into the first real turn.
+/// Every prewarm gets its own identity: a session's startup submission id is a
+/// constant, so deriving the label from it would merge the primings of every
+/// reopen of a thread into one turn.
+pub(crate) fn prewarm_turn_label() -> String {
+    format!("prewarm:{}", Uuid::new_v4())
+}
+
+/// A bounded turn label for the completion assessment of `sub_id`.
+///
+/// The classifier is a second model request the operator paid for, issued on its
+/// own client session so it does not queue behind the turn's transport teardown.
+/// It belongs to the turn it assesses and is recorded under that turn's id.
+pub(crate) fn assessment_turn_label(sub_id: &str) -> String {
+    scoped_turn_label("assess:", sub_id)
+}
+
+/// A bounded `prefix` + `sub_id` turn identity.
 ///
 /// `Attempt::validate` caps a turn identity at 128 bytes, so a long submission id
-/// would make its compaction unrecordable while the ordinary turn recorded fine.
-/// Keep the prefix and as much of the id as fits.
-pub(crate) fn compaction_turn_label(sub_id: &str) -> String {
+/// would make the labelled turn unrecordable while the ordinary turn recorded
+/// fine. Keep the prefix and as much of the id as fits.
+fn scoped_turn_label(prefix: &str, sub_id: &str) -> String {
     const LIMIT: usize = 128;
-    const PREFIX: &str = "compact:";
-    let room = LIMIT - PREFIX.len();
+    let room = LIMIT - prefix.len();
     if sub_id.len() <= room {
-        return format!("{PREFIX}{sub_id}");
+        return format!("{prefix}{sub_id}");
     }
     // Truncation alone would merge two submissions that share a long prefix into
     // one turn identity, so keep a digest of the whole id in the part that fits.
@@ -134,7 +159,7 @@ pub(crate) fn compaction_turn_label(sub_id: &str) -> String {
     while end > 0 && !sub_id.is_char_boundary(end) {
         end -= 1;
     }
-    format!("{PREFIX}{}-{digest}", &sub_id[..end])
+    format!("{prefix}{}-{digest}", &sub_id[..end])
 }
 
 /// Guards that keep this turn's collectors attached to a client session.

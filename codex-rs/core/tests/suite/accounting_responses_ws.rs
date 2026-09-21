@@ -43,7 +43,7 @@ async fn accounting_responses_ws_native_complete_and_partial_goldens() -> anyhow
         held.send(success(write)).await?;
         terminal(&test).await?;
         let db = test.codex.state_db().unwrap();
-        let records = attempts(&db).await?;
+        let records = turn_attempts(&db).await?;
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].thread_id, test.session_configured.thread_id);
         let expected = [
@@ -57,7 +57,7 @@ async fn accounting_responses_ws_native_complete_and_partial_goldens() -> anyhow
         ];
         assert_eq!(
             totals(&db, &records[0]).await?,
-            DayTotals {
+            with_prewarm(DayTotals {
                 measured: std::array::from_fn(|i| Metric {
                     known: expected[i],
                     unknown: i64::from(write.is_none() && (i == 1 || i == 3))
@@ -72,9 +72,9 @@ async fn accounting_responses_ws_native_complete_and_partial_goldens() -> anyhow
                 unknown_estimates: i64::from(write.is_none()),
                 attempts: 1,
                 ..Default::default()
-            }
+            })
         );
-        assert_eq!(observations(&db).await?.len(), 1);
+        assert_eq!(turn_observations(&db).await?.len(), 1);
         counts(&gate, (1, 1, 1, 0));
         stop(&test).await;
     }
@@ -92,13 +92,15 @@ async fn accounting_responses_ws_native_prewarm_preconnect_and_cached_reuse() ->
     let held = gate.next().await?;
     assert_eq!(held.body["previous_response_id"], "reused-provider-id");
     let db = test.codex.state_db().unwrap();
-    assert!(observations(&db).await?.is_empty());
+    // The turn has reported nothing yet; the startup prewarm already has.
+    assert!(turn_observations(&db).await?.is_empty());
     held.complete().await?;
     terminal(&test).await?;
-    assert_eq!(observations(&db).await?.len(), 1);
+    assert_eq!(turn_observations(&db).await?.len(), 1);
+    // The day holds the turn's 100 input tokens and the startup prewarm's 999.
     assert_eq!(
-        totals(&db, &attempts(&db).await?[0]).await?.measured[0].known,
-        100
+        totals(&db, &turn_attempts(&db).await?[0]).await?.measured[0].known,
+        1099
     );
     counts(&gate, (1, 1, 1, 0));
     stop(&test).await;
@@ -133,7 +135,7 @@ async fn accounting_responses_ws_native_incremental_sampling_and_turn_identity()
     second.complete().await?;
     terminal(&test).await?;
     let db = test.codex.state_db().unwrap();
-    let records = attempts(&db).await?;
+    let records = turn_attempts(&db).await?;
     assert_eq!(records.len(), 2);
     assert_eq!(records[0].turn, records[1].turn);
     assert_ne!(records[0].request_id, records[1].request_id);
@@ -169,7 +171,7 @@ async fn accounting_responses_ws_native_upgrade_required_http_fallback() -> anyh
     );
     assert_eq!(mock.requests().len(), 1);
     let db = test.codex.state_db().unwrap();
-    assert_eq!(attempts(&db).await?.len(), 1);
+    assert_eq!(turn_attempts(&db).await?.len(), 1);
     stop(&test).await;
     Ok(())
 }
@@ -193,12 +195,13 @@ async fn accounting_responses_ws_native_ws_prefix_then_http_fallback() -> anyhow
     http.complete().await?;
     drop(http);
     terminal(&test).await?;
-    let records = attempts(&db).await?;
+    let records = turn_attempts(&db).await?;
     assert_eq!(records.len(), 2);
     chain(&records);
     assert_eq!(
         totals(&db, &records[0]).await?.known_usd,
-        "0.00322".to_string().try_into()?
+        // The two turn attempts, plus the startup prewarm's own $0.02997.
+        "0.03319".to_string().try_into()?
     );
     counts(&gate, (1, 1, 1, 1));
     stop(&test).await;
@@ -221,10 +224,13 @@ async fn accounting_responses_ws_native_connection_limit_reconnect() -> anyhow::
     next.complete().await?;
     terminal(&test).await?;
     let db = test.codex.state_db().unwrap();
-    let records = attempts(&db).await?;
+    let records = turn_attempts(&db).await?;
     assert_eq!(records.len(), 2);
     chain(&records);
-    assert_eq!(totals(&db, &records[0]).await?.unknown_estimates, 1);
+    assert_eq!(
+        totals(&db, &records[0]).await?.unknown_estimates,
+        1 + PREWARM_UNKNOWN_ESTIMATES
+    );
     counts(&gate, (2, 1, 2, 0));
     stop(&test).await;
     Ok(())
@@ -249,7 +255,7 @@ async fn accounting_responses_ws_native_previous_response_missing_full_retry() -
     assert!(!next.body["input"].as_array().unwrap().is_empty());
     next.complete().await?;
     terminal(&test).await?;
-    let records = attempts(&test.codex.state_db().unwrap()).await?;
+    let records = turn_attempts(&test.codex.state_db().unwrap()).await?;
     assert_eq!(records.len(), 2);
     chain(&records);
     counts(&gate, (2, 1, 2, 0));
@@ -275,10 +281,13 @@ async fn accounting_responses_ws_native_fallback_http_transport_retry() -> anyho
     drop(http);
     terminal(&test).await?;
     let db = test.codex.state_db().unwrap();
-    let records = attempts(&db).await?;
+    let records = turn_attempts(&db).await?;
     assert_eq!(records.len(), 3);
     chain(&records);
-    assert_eq!(totals(&db, &records[0]).await?.unknown_estimates, 2);
+    assert_eq!(
+        totals(&db, &records[0]).await?.unknown_estimates,
+        2 + PREWARM_UNKNOWN_ESTIMATES
+    );
     counts(&gate, (1, 1, 1, 2));
     stop(&test).await;
     Ok(())
@@ -297,7 +306,7 @@ async fn accounting_responses_ws_native_handshake_and_postdispatch_errors() -> a
     submit(&test).await?;
     terminal(&test).await?;
     let db = test.codex.state_db().unwrap();
-    assert!(attempts(&db).await?.is_empty());
+    assert!(turn_attempts(&db).await?.is_empty());
     assert!(
         server
             .received_requests()
@@ -315,8 +324,8 @@ async fn accounting_responses_ws_native_handshake_and_postdispatch_errors() -> a
     gate.next().await?.send(vec![json!({"type":"error","error":{"code":"invalid_request_error","message":"fixture"},"status":400})]).await?;
     terminal(&test).await?;
     let db = test.codex.state_db().unwrap();
-    assert_eq!(attempts(&db).await?.len(), 1);
-    assert!(observations(&db).await?.is_empty());
+    assert_eq!(turn_attempts(&db).await?.len(), 1);
+    assert!(turn_observations(&db).await?.is_empty());
     gate.no_pending().await;
     stop(&test).await;
     Ok(())
@@ -385,7 +394,7 @@ async fn accounting_responses_ws_native_redirects_never_escape_binding() -> anyh
             );
             assert_eq!(posts, usize::from(fallback));
             let db = test.codex.state_db().unwrap();
-            assert_eq!(attempts(&db).await?.len(), usize::from(fallback));
+            assert_eq!(turn_attempts(&db).await?.len(), usize::from(fallback));
             stop(&test).await;
         }
     }

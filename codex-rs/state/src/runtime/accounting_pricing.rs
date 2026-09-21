@@ -66,7 +66,8 @@ impl Decimal {
         Ok(Self::canonical(coefficient, self.scale + 6))
     }
 
-    fn add(self, other: Self) -> anyhow::Result<Self> {
+    /// Exact addition, the only way amounts are ever combined in this ledger.
+    pub fn add(self, other: Self) -> anyhow::Result<Self> {
         if self.coefficient == 0 {
             return Ok(other);
         }

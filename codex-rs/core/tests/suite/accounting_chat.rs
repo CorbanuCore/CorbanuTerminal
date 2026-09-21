@@ -510,3 +510,104 @@ async fn accounting_chat_native_gateway_exclusion_and_header_parity() -> anyhow:
     }
     Ok(())
 }
+
+/// The turn-completion classifier is a second model request, on a client session
+/// of its own so it does not queue behind the turn's transport teardown. Nothing
+/// attached collection to that session, so on providers whose stop is ambiguous
+/// for action turns - the built-in Kimi Code provider - every classifier call
+/// was paid for and recorded nowhere.
+#[tokio::test]
+async fn accounting_chat_completion_assessment_collects() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    mount(&server, success(usage())).await;
+    let mode = AccountingMode::Provider {
+        scope: uuid::Uuid::new_v4(),
+        provider_id: "kimi-code".into(),
+        wire_api: codex_model_provider_info::WireApi::Chat,
+        approved_endpoint: endpoint.clone(),
+        approved_query: None,
+        pricing: PriceAuthority::Unavailable,
+    };
+    let test = builder(endpoint.clone(), mode)
+        .with_config(|config| {
+            config.model_provider_id = "kimi-code".into();
+            config.model_provider.name = "Kimi Code".into();
+            // The shared Chat fixture's two-second idle timeout can end the turn
+            // before the ambiguous-stop branch is reached on a loaded host, which
+            // would make the turn, not the classifier, the thing under test.
+            config.model_provider.stream_idle_timeout_ms = Some(60_000);
+        })
+        .build_with_auto_env(&server)
+        .await?;
+    submit(&test).await?;
+    terminal(&test).await?;
+    let db = test.codex.state_db().unwrap();
+    // The classifier runs on its own session, so its request can still be in
+    // flight when the turn ends. Wait for the classifier itself, identified by
+    // its own instructions rather than by counting requests: a second POST from
+    // some other path would not be the thing this test is about.
+    let classifier = |body: &[u8]| {
+        String::from_utf8_lossy(body)
+            .contains("Decide whether the assistant's latest response completes")
+    };
+    let dispatched = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+        loop {
+            if server
+                .received_requests()
+                .await
+                .unwrap_or_default()
+                .iter()
+                .any(|request| classifier(&request.body))
+            {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    assert!(dispatched.is_ok(), "the classifier never dispatched");
+    // The ledger is written by the collector, not by the event stream, so wait
+    // for it rather than for the turn's terminal event.
+    let mut records = Vec::new();
+    let waited = tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        loop {
+            records = attempts(&db).await?;
+            if records
+                .iter()
+                .any(|record| record.turn.starts_with("assess:"))
+            {
+                return anyhow::Ok(());
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    let turns: Vec<_> = records.iter().map(|record| &record.turn).collect();
+    let bodies: Vec<usize> = server
+        .received_requests()
+        .await
+        .unwrap_or_default()
+        .iter()
+        .map(|request| request.body.len())
+        .collect();
+    assert!(
+        waited.is_ok(),
+        "no assessment recorded; turns: {turns:?}; request sizes: {bodies:?}"
+    );
+    waited??;
+    assert_eq!(
+        records
+            .iter()
+            .filter(|record| record.turn.starts_with("assess:"))
+            .count(),
+        1,
+        "turns recorded: {:?}",
+        records
+            .iter()
+            .map(|record| &record.turn)
+            .collect::<Vec<_>>()
+    );
+    stop(&test).await;
+    Ok(())
+}

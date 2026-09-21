@@ -32,7 +32,7 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
         pricing: PriceAuthority::Unavailable,
     };
     let fixture = Fixture::new(mode).await?;
-    let provenance = Provenance::capture(&provider, Some(&auth), &api, false);
+    let provenance = Provenance::capture(&provider, Some(&auth), &api);
     assert!(provenance.validate(&fixture.deferred, None)?);
     let sampling = fixture
         .deferred
@@ -75,7 +75,6 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
         &provider,
         Some(&auth),
         &provider.to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?,
-        false,
     );
     assert!(wrong.validate(&fixture.deferred, None).is_err());
     Ok(())
@@ -101,7 +100,6 @@ fn provenance() -> Provenance {
         &provider()
             .to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))
             .unwrap(),
-        false,
     )
 }
 struct Fixture {
@@ -287,10 +285,13 @@ async fn accounting_responses_ws_auth_route_eligibility() -> anyhow::Result<()> 
     let fixture = Fixture::new(mode()).await?;
     assert!(provenance().validate(&fixture.deferred, None)?);
     let api = provider().to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?;
-    for variant in 0..9 {
+    // Eight shapes that disqualify a route. An agent identity is no longer one of
+    // them: it is a credential whose economics `turn_mode` decides, and refusing
+    // it here left those sessions with nothing collected at all.
+    for variant in 0..8 {
         let mut provider = provider();
         match variant {
-            8 => {
+            6 => {
                 provider.auth = Some(serde_json::from_value(
                     serde_json::json!({"command":"never-run-fixture"}),
                 )?)
@@ -320,7 +321,6 @@ async fn accounting_responses_ws_auth_route_eligibility() -> anyhow::Result<()> 
             &provider,
             if variant == 5 { None } else { Some(&auth) },
             &api,
-            variant == 6,
         );
         assert!(!current.validate(&fixture.deferred, None)?);
     }

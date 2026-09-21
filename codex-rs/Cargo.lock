@@ -2814,6 +2814,7 @@ dependencies = [
  "chrono",
  "clap",
  "codex-agent-graph-store",
+ "codex-agent-identity",
  "codex-analytics",
  "codex-api",
  "codex-app-server-protocol",

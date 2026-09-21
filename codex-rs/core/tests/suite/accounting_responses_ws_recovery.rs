@@ -36,7 +36,7 @@ async fn accounting_responses_ws_native_admission_and_guard_barriers() -> anyhow
             .any(|e| matches!(e, EventMsg::Error(_)))
     );
     gate.no_pending().await;
-    assert_eq!(attempts(&db).await?.len(), 1);
+    assert_eq!(turn_attempts(&db).await?.len(), 1);
     let guard = test
         .codex
         .stage_one_memory_client(codex_protocol::ThreadId::new(), &test.config.model_provider)
@@ -84,8 +84,8 @@ async fn live_binding_denial(prime_denial: bool) -> anyhow::Result<()> {
                 .await?;
             wait_observations(&db, 1).await?;
         }
-        let records = attempts(&db).await?;
-        let before = observations(&db).await?;
+        let records = turn_attempts(&db).await?;
+        let before = turn_observations(&db).await?;
         let total = totals(&db, &records[0]).await?;
         test.codex.attach_stage_one_binding_for_fixture(&memory)?;
         test.codex
@@ -121,14 +121,17 @@ async fn live_binding_denial(prime_denial: bool) -> anyhow::Result<()> {
                 .any(|event| matches!(event, EventMsg::ModelResponseCompleted(_)))
         );
         gate.no_pending().await;
-        assert_eq!(attempts(&db).await?, records);
+        assert_eq!(turn_attempts(&db).await?, records);
         assert_eq!(
-            observations(&db).await?,
+            turn_observations(&db).await?,
             before,
             "live denial must preserve only committed usage"
         );
         assert_eq!(totals(&db, &records[0]).await?, total);
-        assert_eq!(total.unknown_estimates, i64::from(!prefix));
+        assert_eq!(
+            total.unknown_estimates,
+            i64::from(!prefix) + PREWARM_UNKNOWN_ESTIMATES
+        );
         counts(&gate, (1, 1, 1, 0));
         stop(&test).await;
     }
@@ -147,7 +150,7 @@ async fn accounting_responses_ws_native_observation_failure_no_repair() -> anyho
     held.send(vec![event("response.usage", usage(Some(0)))])
         .await?;
     wait_observations(&db, 1).await?;
-    let before = observations(&db).await?;
+    let before = turn_observations(&db).await?;
     sqlx::query("CREATE TRIGGER reject_ws_observation BEFORE INSERT ON draft_accounting_observations BEGIN SELECT RAISE(ABORT, 'fixture'); END").execute(&mut connection(&db).await?).await?;
     held.complete().await?;
     assert!(
@@ -157,8 +160,8 @@ async fn accounting_responses_ws_native_observation_failure_no_repair() -> anyho
             .any(|e| matches!(e, EventMsg::Error(_)))
     );
     gate.no_pending().await;
-    assert_eq!(observations(&db).await?, before);
-    assert_eq!(attempts(&db).await?.len(), 1);
+    assert_eq!(turn_observations(&db).await?, before);
+    assert_eq!(turn_attempts(&db).await?.len(), 1);
     counts(&gate, (1, 1, 1, 0));
     stop(&test).await;
     Ok(())
@@ -201,8 +204,8 @@ async fn accounting_responses_ws_native_cancel_before_and_after_dispatch() -> an
         gate.no_pending().await;
         assert_eq!(gate.counts.lock().unwrap().2, usize::from(dispatched));
         if dispatched {
-            assert_eq!(attempts(&db).await?.len(), 1);
-            assert!(observations(&db).await?.is_empty());
+            assert_eq!(turn_attempts(&db).await?.len(), 1);
+            assert!(turn_observations(&db).await?.is_empty());
         }
         stop(&test).await;
     }
@@ -237,20 +240,22 @@ async fn accounting_responses_ws_native_two_reopens_and_original_prices() -> any
         test.codex.submit(Op::Interrupt).await?;
         terminal(&test).await?;
         drop(held);
-        let records = attempts(&db).await?;
-        let patches = observations(&db).await?;
+        let records = turn_attempts(&db).await?;
+        let patches = turn_observations(&db).await?;
         let prices: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
         let before = totals(&db, &records[0]).await?;
         if prefix {
+            // The turn's own money, plus the startup prewarm's $0.02997 - which
+            // exists only where the catalogue prices this model at all.
+            let priced = model == "gpt-5.6-sol";
             assert_eq!(
                 before.known_usd,
-                if model == "gpt-5.6-sol" {
-                    "0.00161"
-                } else {
-                    "0"
-                }
-                .to_string()
-                .try_into()?
+                with_prewarms(
+                    if priced { "0.00161" } else { "0" }
+                        .to_string()
+                        .try_into()?,
+                    usize::from(priced)
+                )?
             );
         }
         assert_eq!(prices.is_empty(), model == "gpt-6-astra");
@@ -265,19 +270,25 @@ async fn accounting_responses_ws_native_two_reopens_and_original_prices() -> any
                 .resume(&server, home.clone(), rollout.clone())
                 .await?;
             let db = reopened.codex.state_db().unwrap();
-            assert_eq!(attempts(&db).await?, records);
-            assert_eq!(observations(&db).await?, patches);
-            assert_eq!(
-                payloads::<Snapshot>(&db, "draft_accounting_price_snapshots").await?,
-                prices
-            );
-            assert_eq!(totals(&db, &records[0]).await?, before);
+            assert_eq!(turn_attempts(&db).await?, records);
+            assert_eq!(turn_observations(&db).await?, patches);
+            // Each reopen runs its own startup prewarm, which records its own
+            // attempt and its own price, so the day legitimately grows. What
+            // must not change is the turn's own evidence and the prices bound
+            // to it: an original binding cannot be replaced by a later catalog.
+            let current: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
+            for price in &prices {
+                assert!(current.contains(price), "original price replaced on reopen");
+            }
+            // The day's own totals are not asserted here: a reopened session
+            // starts its own prewarm, and whether that has landed by this point
+            // is a race this test is not about.
             gate.no_pending().await;
             if index == 1 {
                 submit(&reopened).await?;
                 gate.next().await?.complete().await?;
                 terminal(&reopened).await?;
-                let fresh = attempts(&db).await?;
+                let fresh = turn_attempts(&db).await?;
                 assert_eq!(fresh.len(), 2);
                 assert_ne!(fresh[1].request_id, records[0].request_id);
                 assert_eq!(fresh[1].retry_of, None);
@@ -366,7 +377,7 @@ async fn accounting_responses_ws_native_spawned_role_children_and_fork() -> anyh
         held.push(gate.next().await?);
     }
     let db = test.codex.state_db().unwrap();
-    let records = attempts(&db).await?;
+    let records = turn_attempts(&db).await?;
     assert_eq!(records.len(), 4);
     let owners: std::collections::HashSet<_> = records.iter().map(|a| a.thread_id).collect();
     assert_eq!(owners.len(), 3);
@@ -386,7 +397,7 @@ async fn accounting_responses_ws_native_spawned_role_children_and_fork() -> anyh
     drop(held.remove(role_index));
     let retried = gate.next().await?;
     assert!(retried.body.to_string().contains("ws role fixture"));
-    let retries = attempts(&db).await?;
+    let retries = turn_attempts(&db).await?;
     assert_eq!(retries.len(), 5);
     let retry = retries.last().unwrap();
     let predecessor = records
@@ -404,7 +415,7 @@ async fn accounting_responses_ws_native_spawned_role_children_and_fork() -> anyh
     }
     terminal(&test).await?;
     wait_observations(&db, 4).await?;
-    let before = attempts(&db).await?;
+    let before = turn_attempts(&db).await?;
     test.thread_manager
         .fork_thread(
             codex_core::ForkSnapshot::Interrupted,
@@ -414,7 +425,7 @@ async fn accounting_responses_ws_native_spawned_role_children_and_fork() -> anyh
             None,
         )
         .await?;
-    assert_eq!(attempts(&db).await?, before);
+    assert_eq!(turn_attempts(&db).await?, before);
     test.thread_manager
         .shutdown_all_threads_bounded(Duration::from_secs(3))
         .await;
@@ -430,7 +441,7 @@ async fn accounting_responses_ws_native_delete_rejects_late_usage() -> anyhow::R
     submit(&test).await?;
     let held = gate.next().await?;
     let db = test.codex.state_db().unwrap();
-    assert_eq!(attempts(&db).await?.len(), 1);
+    assert_eq!(turn_attempts(&db).await?.len(), 1);
     let unrelated = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
         .with_home(test.home.clone())
         .build_with_auto_env(&server)
@@ -438,18 +449,27 @@ async fn accounting_responses_ws_native_delete_rejects_late_usage() -> anyhow::R
     submit(&unrelated).await?;
     gate.next().await?.complete().await?;
     terminal(&unrelated).await?;
-    let unrelated_records: Vec<_> = attempts(&db)
+    let unrelated_records: Vec<_> = turn_attempts(&db)
         .await?
         .into_iter()
         .filter(|a| a.thread_id == unrelated.session_configured.thread_id)
         .collect();
     assert_eq!(unrelated_records.len(), 1);
-    let unrelated_usage = observations(&db).await?;
+    let unrelated_usage = turn_observations(&db).await?;
     db.delete_thread(test.session_configured.thread_id).await?;
     held.complete().await?;
     terminal(&test).await?;
-    assert_eq!(attempts(&db).await?, unrelated_records);
-    assert_eq!(observations(&db).await?, unrelated_usage);
+    assert_eq!(turn_attempts(&db).await?, unrelated_records);
+    assert_eq!(turn_observations(&db).await?, unrelated_usage);
+    // Deletion must take the prewarm rows too: they are attempts of the deleted
+    // thread like any other, so name them rather than filtering them away.
+    for attempt in attempts(&db).await? {
+        assert_eq!(
+            attempt.thread_id, unrelated.session_configured.thread_id,
+            "deleted thread left {} behind",
+            attempt.turn
+        );
+    }
     gate.no_pending().await;
     let home = unrelated.home.clone();
     let rollout = unrelated.codex.rollout_path().unwrap();
@@ -463,7 +483,7 @@ async fn accounting_responses_ws_native_delete_rejects_late_usage() -> anyhow::R
     .resume(&server, home, rollout)
     .await?;
     off.codex.state_db().unwrap().delete_thread(owner).await?;
-    assert!(attempts(&db).await?.is_empty());
+    assert!(turn_attempts(&db).await?.is_empty());
     assert!(observations(&db).await?.is_empty());
     stop(&off).await;
     stop(&test).await;
@@ -491,20 +511,25 @@ async fn accounting_responses_ws_native_unknown_prices_and_no_usage() -> anyhow:
         }
         terminal(&test).await?;
         let db = test.codex.state_db().unwrap();
-        let records = attempts(&db).await?;
+        let records = turn_attempts(&db).await?;
         assert_eq!(records.len(), 1);
         assert!(
             payloads::<Snapshot>(&db, "draft_accounting_price_snapshots")
                 .await?
                 .is_empty()
         );
-        assert_eq!(observations(&db).await?.len(), usize::from(usage_present));
+        assert_eq!(
+            turn_observations(&db).await?.len(),
+            usize::from(usage_present)
+        );
         let total = totals(&db, &records[0]).await?;
-        assert_eq!(total.unknown_estimates, 1);
+        // The turn's own incomplete estimate, plus the startup prewarm's.
+        assert_eq!(total.unknown_estimates, 1 + PREWARM_UNKNOWN_ESTIMATES);
+        // The day's totals also carry the startup prewarm's 1998 tokens.
         assert_eq!(
             total.measured[6],
             Metric {
-                known: if usage_present { 140 } else { 0 },
+                known: 1998 + if usage_present { 140 } else { 0 },
                 unknown: i64::from(!usage_present)
             }
         );
@@ -534,7 +559,7 @@ async fn accounting_responses_ws_native_auxiliary_scope_and_event_parity() -> an
     let events = terminal(&test).await?;
     assert!(!events.iter().any(|e| matches!(e, EventMsg::Error(_))));
     let db = test.codex.state_db().unwrap();
-    let before = attempts(&db).await?;
+    let before = turn_attempts(&db).await?;
     test.codex.submit(Op::Compact).await?;
     let compact_events = terminal(&test).await?;
     assert!(
@@ -542,8 +567,8 @@ async fn accounting_responses_ws_native_auxiliary_scope_and_event_parity() -> an
             .iter()
             .any(|event| matches!(event, EventMsg::Error(_)))
     );
-    assert_eq!(attempts(&db).await?, before);
-    assert_eq!(observations(&db).await?.len(), 1);
+    assert_eq!(turn_attempts(&db).await?, before);
+    assert_eq!(turn_observations(&db).await?.len(), 1);
     counts(&gate, (1, 1, 1, 1));
     stop(&test).await;
     for mask in 0..8 {
@@ -621,17 +646,17 @@ async fn accounting_responses_ws_native_auxiliary_scope_and_event_parity() -> an
                     kind != "response.completed"
                 );
                 let db = test.codex.state_db().unwrap();
-                let records = attempts(&db).await?;
+                let records = turn_attempts(&db).await?;
                 assert_eq!(records.len(), 1 + usize::from(fallback));
                 chain(&records);
                 assert_eq!(
-                    observations(&db).await?.len(),
+                    turn_observations(&db).await?.len(),
                     usize::from(usage_kind == 2),
                     "metadata terminal must not fabricate usage evidence: mask={mask}, usage={usage_kind}, kind={kind}"
                 );
                 assert_eq!(
                     totals(&db, &records[0]).await?,
-                    DayTotals {
+                    with_prewarm(DayTotals {
                         measured: std::array::from_fn(|i| Metric {
                             known: if usage_kind == 2 {
                                 [100, 80, 20, 0, 40, 10, 140][i]
@@ -646,7 +671,7 @@ async fn accounting_responses_ws_native_auxiliary_scope_and_event_parity() -> an
                         unknown_estimates: i64::from(usage_kind != 2) + i64::from(fallback),
                         attempts: 1 + i64::from(fallback),
                         ..Default::default()
-                    }
+                    })
                 );
                 eprintln!("metadata matrix passed: mask={mask}, usage={usage_kind}, kind={kind}");
                 gate.no_pending().await;
