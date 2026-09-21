@@ -115,44 +115,16 @@ impl codex_api::ChatUsageObserver for ResponseEvidence {
     }
 }
 
-/// Reads the routing keys out of a request body, whatever encoding it arrived in.
-///
-/// An `EncodedJsonBody` may already hold the final compressed wire bytes, and the
-/// request's own compression field does not say so - it describes what the
-/// transport should still do, not what preparation already did. Parsing those
-/// bytes as JSON fails, so treating a parse failure as "uninspectable" refused
-/// every compressed turn and silently collected nothing. Decode the one encoding
-/// this client produces before deciding a body cannot be inspected.
-fn routing_json(bytes: &[u8]) -> Result<serde_json::Value, &'static str> {
-    if let Ok(value) = serde_json::from_slice::<serde_json::Value>(bytes) {
-        return Ok(value);
-    }
-    let plain = zstd::stream::decode_all(std::io::Cursor::new(bytes))
-        .map_err(|_| "uninspectable request body")?;
-    serde_json::from_slice(&plain).map_err(|_| "uninspectable request body")
-}
-
 /// Request-level routing hints can change the serving provider after selection.
 /// Inspect only the routing keys; never retain or report the request payload.
+///
+/// The transport sees the body after preparation, which for this client can mean
+/// zstd-compressed bytes. Reading those as plain JSON fails, and treating that
+/// failure as "uninspectable" refused every compressed turn and collected
+/// nothing, so the decoding lives with the body type that produced them.
 pub(super) fn request_refusal(request: &Request) -> Option<&'static str> {
-    use codex_http_client::RequestBody;
-    let decoded;
-    let value = match request.body.as_ref()? {
-        RequestBody::Json(value) => value,
-        RequestBody::EncodedJson(body) => {
-            decoded = match routing_json(body.as_bytes()) {
-                Ok(value) => value,
-                Err(reason) => return Some(reason),
-            };
-            &decoded
-        }
-        RequestBody::Raw(bytes) => {
-            decoded = match routing_json(bytes) {
-                Ok(value) => value,
-                Err(reason) => return Some(reason),
-            };
-            &decoded
-        }
+    let Some(value) = request.body.as_ref()?.inspectable_json() else {
+        return Some("uninspectable request body");
     };
     ["provider", "provider_options", "plugins"]
         .into_iter()
