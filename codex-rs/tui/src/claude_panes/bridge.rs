@@ -13,6 +13,9 @@ use tokio::net::TcpListener;
 use tokio::time::MissedTickBehavior;
 use tokio::time::interval;
 
+use crate::app_event::AppEvent;
+use crate::app_event_sender::AppEventSender;
+
 use super::bridge_translate::ambient_chat_messages_from_claude_request;
 use super::bridge_translate::ambient_chat_tools_from_claude_request;
 use super::bridge_translate::anthropic_message_response;
@@ -31,7 +34,10 @@ use super::turn_types::ClaudeBridgePlan;
 
 pub(crate) const AMBIENT_BRIDGE_UPSTREAM_MAX_ATTEMPTS: usize = 3;
 const ANTHROPIC_OAUTH_BETA: &str = "oauth-2025-04-20";
-pub(crate) async fn run_claude_bridge(plan: ClaudeBridgePlan) -> Result<()> {
+pub(crate) async fn run_claude_bridge(
+    plan: ClaudeBridgePlan,
+    accounting_tx: Option<AppEventSender>,
+) -> Result<()> {
     let listener = TcpListener::from_std(plan.listener)
         .context("failed to create async Claude bridge listener")?;
     let api_key = Arc::new(
@@ -41,6 +47,7 @@ pub(crate) async fn run_claude_bridge(plan: ClaudeBridgePlan) -> Result<()> {
     let client_auth_token = Arc::new(plan.client_auth_token);
     let upstream_base_url = Arc::new(plan.upstream_base_url);
     let upstream_model = Arc::new(plan.upstream_model);
+    let accounting_provider_id = Arc::new(plan.accounting_provider_id);
     let kind = plan.kind;
     let http = reqwest::Client::new();
     loop {
@@ -50,6 +57,8 @@ pub(crate) async fn run_claude_bridge(plan: ClaudeBridgePlan) -> Result<()> {
         let upstream_base_url = upstream_base_url.clone();
         let upstream_model = upstream_model.clone();
         let http = http.clone();
+        let accounting_tx = accounting_tx.clone();
+        let accounting_provider_id = accounting_provider_id.clone();
         tokio::spawn(async move {
             let result = match kind {
                 ClaudeBridgeKind::AmbientChat => {
@@ -59,6 +68,8 @@ pub(crate) async fn run_claude_bridge(plan: ClaudeBridgePlan) -> Result<()> {
                         api_key,
                         upstream_model,
                         http,
+                        accounting_tx,
+                        accounting_provider_id,
                     )
                     .await
                 }
@@ -70,6 +81,8 @@ pub(crate) async fn run_claude_bridge(plan: ClaudeBridgePlan) -> Result<()> {
                         upstream_base_url,
                         http,
                         /*proxy_count_tokens*/ false,
+                        accounting_tx,
+                        accounting_provider_id,
                     )
                     .await
                 }
@@ -81,6 +94,8 @@ pub(crate) async fn run_claude_bridge(plan: ClaudeBridgePlan) -> Result<()> {
                         upstream_base_url,
                         http,
                         /*proxy_count_tokens*/ true,
+                        accounting_tx,
+                        accounting_provider_id,
                     )
                     .await
                 }
@@ -98,6 +113,8 @@ pub(crate) async fn handle_ambient_bridge_connection(
     api_key: Arc<String>,
     upstream_model: Arc<String>,
     http: reqwest::Client,
+    accounting_tx: Option<AppEventSender>,
+    accounting_provider_id: Arc<Option<String>>,
 ) -> Result<()> {
     let mut buffer = Vec::new();
     let mut temp = [0_u8; 4096];
@@ -312,6 +329,16 @@ pub(crate) async fn handle_ambient_bridge_connection(
             return Ok(());
         }
     };
+    // The operator paid for this request on their own credential. Report it so
+    // it reaches their ledger; the server decides what the route means.
+    report_bridge_model_request(
+        accounting_tx.as_ref(),
+        accounting_provider_id.as_deref(),
+        AMBIENT_CHAT_BASE_URL,
+        "chat/completions",
+        upstream_model.as_str(),
+        upstream.get("usage").cloned(),
+    );
     let usage = upstream.get("usage").cloned().unwrap_or_else(|| {
         serde_json::json!({
             "prompt_tokens": 0,
@@ -365,6 +392,8 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
     upstream_base_url: Arc<String>,
     http: reqwest::Client,
     proxy_count_tokens: bool,
+    accounting_tx: Option<AppEventSender>,
+    accounting_provider_id: Arc<Option<String>>,
 ) -> Result<()> {
     let mut buffer = Vec::new();
     let mut temp = [0_u8; 4096];
@@ -470,6 +499,35 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
         .bytes()
         .await
         .context("failed to read Anthropic passthrough bridge response")?;
+    // Inference only, and only the route this connection actually took. This
+    // handler serves every Anthropic-shaped upstream, not only Anthropic, and
+    // the OAuth lane also proxies token counting - which is free, is not a
+    // model request, and would otherwise enter the ledger as one. The target
+    // is compared without its query, because the client that uses this bridge
+    // sends `/v1/messages?beta=true`: an exact comparison would have dropped
+    // every real turn while still admitting nothing extra, since
+    // `/v1/messages/count_tokens` differs before the query.
+    if status.is_success() && upstream_path.split('?').next() == Some("/v1/messages") {
+        // The model this turn asked for is the pane's own choice, carried in
+        // the request it proxied. A streamed response reports its numbers in
+        // events rather than in a body, so usage is often absent here; the
+        // ledger records the call with its tokens unknown rather than as zero.
+        let request: Option<Value> = serde_json::from_slice(body).ok();
+        report_bridge_model_request(
+            accounting_tx.as_ref(),
+            accounting_provider_id.as_deref(),
+            &format!("{}/v1", upstream_base_url.trim_end_matches('/')),
+            "messages",
+            request
+                .as_ref()
+                .and_then(|request| request.get("model"))
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
+            serde_json::from_slice::<Value>(response_body.as_ref())
+                .ok()
+                .and_then(|body| body.get("usage").cloned()),
+        );
+    }
     write_raw_http_response(
         &mut stream,
         status.as_u16(),
@@ -479,6 +537,37 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
     )
     .await?;
     Ok(())
+}
+
+/// The Ambient chat lane posts to one fixed route; the passthrough lane posts
+/// to whichever upstream its profile names, and reports that one.
+pub(crate) const AMBIENT_CHAT_BASE_URL: &str = "https://api.ambient.xyz/v1";
+
+/// Report one upstream send for recording. Best effort and never blocking: a
+/// report that cannot be delivered leaves the request unrecorded rather than
+/// failing the pane turn. The server still decides whether the account and
+/// route named here are ones it will record.
+fn report_bridge_model_request(
+    accounting_tx: Option<&AppEventSender>,
+    provider_id: Option<&str>,
+    base_url: &str,
+    path: &str,
+    model: &str,
+    usage: Option<Value>,
+) {
+    let (Some(accounting_tx), Some(provider_id)) = (accounting_tx, provider_id) else {
+        return;
+    };
+    if model.is_empty() {
+        return;
+    }
+    accounting_tx.send(AppEvent::PaneBridgeModelRequestSent {
+        provider_id: provider_id.to_string(),
+        base_url: base_url.to_string(),
+        path: path.to_string(),
+        model: model.to_string(),
+        usage,
+    });
 }
 
 fn anthropic_oauth_beta_header(incoming: Option<&str>) -> String {

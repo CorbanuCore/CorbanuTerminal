@@ -47,6 +47,21 @@ pub trait AnthropicUsageObserver: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<(), ApiError>> + Send + '_>>;
 }
 
+/// Numeric usage carried by a non-streaming Messages body, if it carries any.
+///
+/// The streaming shape puts usage inside events; a single response puts it at
+/// the top level. A body with no `usage` is not an error: the provider stated
+/// no numbers, which the ledger records as unknown rather than as zero.
+pub fn body_usage(body: &[u8]) -> Result<Option<AnthropicUsagePatch>, InvalidAnthropicUsage> {
+    let value: Value = serde_json::from_slice(body).map_err(|_| InvalidAnthropicUsage)?;
+    match value.get("usage") {
+        None | Some(Value::Null) => Ok(None),
+        Some(usage) => serde_json::from_value(usage.clone())
+            .map(Some)
+            .map_err(|_| InvalidAnthropicUsage),
+    }
+}
+
 pub(super) fn decode(data: &str) -> Result<Option<AnthropicUsagePatch>, InvalidAnthropicUsage> {
     let value: Value = serde_json::from_str(data).map_err(|_| InvalidAnthropicUsage)?;
     let usage = match value.get("type").and_then(Value::as_str) {

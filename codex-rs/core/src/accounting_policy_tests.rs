@@ -1132,3 +1132,39 @@ async fn accounting_policy_slot_poison_rejects_stale_and_incoming_without_disabl
     }
     Ok(())
 }
+
+/// A path can bring query of its own - realtime call creation appends the pairs
+/// that select its architecture - and those pairs are part of the route the
+/// request is admitted against. A pin that dropped them refused every call it
+/// was meant to record.
+#[test]
+fn a_pinned_route_carries_both_the_configured_query_and_the_path_s_own() {
+    use super::canonical_route;
+    use super::pinned_route;
+
+    assert_eq!(
+        pinned_route("https://example.com/v1", None, "responses"),
+        "https://example.com/v1/responses"
+    );
+    assert_eq!(
+        pinned_route("https://example.com/v1", Some("key=value"), "responses"),
+        "https://example.com/v1/responses?key=value"
+    );
+    assert_eq!(
+        pinned_route(
+            "https://example.com/v1",
+            None,
+            "realtime/calls?intent=quicksilver&architecture=avas"
+        ),
+        "https://example.com/v1/realtime/calls?intent=quicksilver&architecture=avas"
+    );
+    // Both sets, and the comparison that matters does not depend on their order.
+    assert_eq!(
+        canonical_route(&pinned_route(
+            "https://example.com/v1",
+            Some("key=value"),
+            "realtime/calls?intent=quicksilver"
+        )),
+        canonical_route("https://example.com/v1/realtime/calls?intent=quicksilver&key=value")
+    );
+}

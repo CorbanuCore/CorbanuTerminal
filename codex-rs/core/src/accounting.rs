@@ -119,6 +119,16 @@ pub(crate) fn compaction_turn_label(sub_id: &str) -> String {
     scoped_turn_label("compact:", sub_id)
 }
 
+/// A turn label for one realtime call.
+///
+/// Creating the call is a model request the operator paid for. The realtime
+/// session's own token usage never reaches this client - the protocol this
+/// client parses carries none - so the call is recorded with its tokens
+/// unknown rather than left invisible.
+pub(crate) fn realtime_turn_label(sub_id: &str) -> String {
+    scoped_turn_label("realtime:", sub_id)
+}
+
 /// A turn label for one stage-one memory extraction.
 ///
 /// Extraction is a model call the operator paid for, on a client session of its
@@ -304,10 +314,24 @@ pub(crate) fn canonical_query(
 /// The route the client will actually request for `path`, including configured
 /// query parameters. Compared through `canonical_route`.
 pub(crate) fn pinned_route(approved_endpoint: &str, query: Option<&str>, path: &str) -> String {
+    // A path can carry query of its own: realtime call creation appends the
+    // pairs that select its architecture, and they are part of the route the
+    // request is admitted against. Both sets belong in the pin, and
+    // `canonical_route` sorts them, so the order they merge in does not matter.
+    let (path, path_query) = match path.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (path, None),
+    };
     let route = format!("{}/{path}", approved_endpoint.trim_end_matches('/'));
-    match query {
-        Some(query) if !query.is_empty() => format!("{route}?{query}"),
-        _ => route,
+    let query: Vec<&str> = [query, path_query]
+        .into_iter()
+        .flatten()
+        .filter(|query| !query.is_empty())
+        .collect();
+    if query.is_empty() {
+        route
+    } else {
+        format!("{route}?{}", query.join("&"))
     }
 }
 
@@ -714,7 +738,7 @@ impl Sampling {
         self.admit_with_tier(model, endpoint, None).await
     }
 
-    async fn admit_with_tier(
+    pub(crate) async fn admit_with_tier(
         &self,
         model: &str,
         endpoint: &str,

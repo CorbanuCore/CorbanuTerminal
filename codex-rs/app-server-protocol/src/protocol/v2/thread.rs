@@ -1572,6 +1572,38 @@ pub struct ThreadInjectItemsParams {
 #[ts(export_to = "v2/")]
 pub struct ThreadInjectItemsResponse {}
 
+/// One model request a client sent itself, reported so the operator's ledger
+/// can record spend this process never saw.
+///
+/// The Claude panes bridge is the caller: it posts to a provider from inside
+/// the TUI, which does not run the model client. Only routes the server
+/// recognises are recorded.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadRecordSentModelRequestParams {
+    pub thread_id: String,
+    /// The account the client believes it billed. Recorded only when the
+    /// server knows this provider and the route below is its own.
+    pub provider_id: String,
+    /// The base URL the request went to, and the endpoint underneath it.
+    pub base_url: String,
+    pub path: String,
+    pub model: String,
+    /// The `usage` object the provider's response carried, if it carried one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<JsonValue>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct ThreadRecordSentModelRequestResponse {
+    /// False when the server is not collecting, or does not recognise the
+    /// route. Never an error: reporting spend must not fail the work.
+    pub recorded: bool,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]

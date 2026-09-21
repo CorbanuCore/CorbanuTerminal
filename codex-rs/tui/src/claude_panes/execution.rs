@@ -142,7 +142,7 @@ pub(crate) async fn run_claude_command_plan(
     let bridge_handle = plan
         .bridge
         .take()
-        .map(|bridge| tokio::spawn(run_claude_bridge(bridge)));
+        .map(|bridge| tokio::spawn(run_claude_bridge(bridge, progress_tx.clone())));
     let mut command = Command::new(&plan.executable);
     command.kill_on_drop(true);
     #[cfg(unix)]

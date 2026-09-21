@@ -626,6 +626,20 @@ pub(crate) enum AppEvent {
     ClaudePaneTurnProgress {
         progress: crate::claude_panes::ClaudePaneTurnProgress,
     },
+    /// A pane bridge sent a model request upstream and is reporting it.
+    ///
+    /// The bridge posts to a provider from inside this process, which does not
+    /// run the model client, so the request reaches no ledger unless it is
+    /// reported. The server decides which account the route bills and whether
+    /// to record it at all.
+    PaneBridgeModelRequestSent {
+        provider_id: String,
+        base_url: String,
+        path: String,
+        model: String,
+        /// The `usage` object the provider's response carried, if any.
+        usage: Option<serde_json::Value>,
+    },
 
     AgentControlTick {
         directory: PathBuf,

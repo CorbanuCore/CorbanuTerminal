@@ -1545,6 +1545,8 @@ async fn anthropic_passthrough_bridge_replaces_client_auth_and_forwards_oauth_be
                 Arc::new(format!("http://{upstream_addr}")),
                 reqwest::Client::new(),
                 /*proxy_count_tokens*/ true,
+                /*accounting_tx*/ None,
+                /*accounting_provider_id*/ Arc::new(None),
             )
             .await
             .expect("proxy request");
@@ -1611,6 +1613,8 @@ async fn anthropic_compatibility_bridge_keeps_authorized_synthetic_token_counts(
                 Arc::new("http://127.0.0.1:1".to_string()),
                 reqwest::Client::new(),
                 /*proxy_count_tokens*/ false,
+                /*accounting_tx*/ None,
+                /*accounting_provider_id*/ Arc::new(None),
             )
             .await
             .expect("serve compatibility request");
@@ -2489,6 +2493,7 @@ fn bridge_redaction_plan(
             upstream_api_key: Some(secret.to_string()),
             deferred_vault_secret: None,
             upstream_model: "test-model".to_string(),
+            accounting_provider_id: None,
         }),
     }
 }
@@ -4094,4 +4099,168 @@ async fn live_ambient_bridge_runs_disposable_edit_task() {
         std::fs::read_to_string(&target).expect("read edited fixture"),
         "PFT_EDIT_OK\n"
     );
+}
+
+/// The pane's turns are the operator's spend, and the bridge is the only place
+/// that sees them. What gets reported - and what does not - is the whole
+/// feature, so drive it rather than reason about it.
+///
+/// The client this bridge serves sends `/v1/messages?beta=true`. Comparing the
+/// target for exact equality dropped every real turn while still admitting
+/// nothing extra, which is a failure that shows up as silence.
+#[tokio::test]
+async fn passthrough_bridge_reports_inference_and_not_token_counting() {
+    use crate::app_event::AppEvent;
+    use crate::app_event_sender::AppEventSender;
+
+    let upstream_listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind fake upstream");
+    let upstream_addr = upstream_listener.local_addr().expect("upstream address");
+    tokio::spawn(async move {
+        loop {
+            let (mut stream, _) = upstream_listener.accept().await.expect("accept upstream");
+            let _ = read_http_request(&mut stream).await;
+            let body = r#"{"usage":{"input_tokens":11,"output_tokens":7},"type":"message"}"#;
+            stream
+                .write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .expect("write upstream response");
+        }
+    });
+
+    let (event_tx, mut events) = tokio::sync::mpsc::unbounded_channel();
+    let accounting_tx = AppEventSender::new(event_tx);
+    let bridge_listener = TcpListener::bind("127.0.0.1:0").await.expect("bind bridge");
+    let bridge_addr = bridge_listener.local_addr().expect("bridge address");
+    let upstream_base = format!("http://{upstream_addr}");
+    let bridge_upstream_base = upstream_base.clone();
+    tokio::spawn(async move {
+        for _ in 0..2 {
+            let (stream, _) = bridge_listener.accept().await.expect("accept bridge");
+            handle_anthropic_passthrough_bridge_connection(
+                stream,
+                Arc::new("capability".to_string()),
+                Arc::new("upstream-secret-not-real".to_string()),
+                Arc::new(bridge_upstream_base.clone()),
+                reqwest::Client::new(),
+                /*proxy_count_tokens*/ true,
+                /*accounting_tx*/ Some(accounting_tx.clone()),
+                /*accounting_provider_id*/ Arc::new(Some("vercel-anthropic".to_string())),
+            )
+            .await
+            .expect("serve bridge request");
+        }
+    });
+
+    let send = |target: &'static str, body: &'static str| async move {
+        let mut client = TcpStream::connect(bridge_addr).await.expect("connect");
+        client
+            .write_all(
+                format!(
+                    "POST {target} HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer capability\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .as_bytes(),
+            )
+            .await
+            .expect("write request");
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).await.expect("read");
+    };
+
+    // Inference, with the beta query this client always sends.
+    send("/v1/messages?beta=true", r#"{"model":"zai/glm-5.2"}"#).await;
+    // Bounded: a defect that stops reporting should fail here and say so,
+    // rather than hang until the runner gives up.
+    let event = tokio::time::timeout(Duration::from_secs(10), events.recv())
+        .await
+        .expect("a send is reported")
+        .expect("a send is reported");
+    match event {
+        AppEvent::PaneBridgeModelRequestSent {
+            provider_id,
+            base_url,
+            path,
+            model,
+            usage,
+        } => {
+            assert_eq!(provider_id, "vercel-anthropic");
+            assert_eq!(base_url, format!("{upstream_base}/v1"));
+            assert_eq!(path, "messages");
+            assert_eq!(model, "zai/glm-5.2");
+            assert_eq!(
+                usage.and_then(|usage| usage["input_tokens"].as_i64()),
+                Some(11)
+            );
+        }
+        other => panic!("unexpected event: {other:?}"),
+    }
+
+    // Token counting is free and is not inference. It must not enter the
+    // ledger, even though this lane proxies it upstream.
+    send(
+        "/v1/messages/count_tokens?beta=true",
+        r#"{"model":"zai/glm-5.2"}"#,
+    )
+    .await;
+    assert!(
+        events.try_recv().is_err(),
+        "token counting must not be reported as a model request"
+    );
+}
+
+/// Every bridge lane must report a route the server will accept, and the two
+/// sides of that agreement live in different crates. When they drift the
+/// failure is silence - the server warns and records nothing - so pin it here
+/// rather than discover it by finding the ledger empty.
+#[test]
+fn every_bridge_profile_reports_its_provider_s_own_route() {
+    use super::bridge::AMBIENT_CHAT_BASE_URL;
+    use super::provider::ClaudeProviderTransport;
+
+    let catalogue = codex_model_provider_info::built_in_model_providers(None);
+    for kind in ClaudeProviderProfileKind::restoration_options() {
+        let profile = kind.profile();
+        // What the bridge will report, built the way the bridge builds it.
+        let reported = match profile.transport {
+            ClaudeProviderTransport::AmbientChatBridge => AMBIENT_CHAT_BASE_URL.to_string(),
+            ClaudeProviderTransport::AnthropicPassthroughBridge => format!(
+                "{}/v1",
+                profile
+                    .base_url
+                    .expect("a passthrough profile names its upstream")
+                    .trim_end_matches('/')
+            ),
+            // The Claude Plan profile has no base URL of its own; its bridge
+            // posts to Anthropic.
+            ClaudeProviderTransport::DirectAnthropic if kind == ClaudeProviderProfileKind::ClaudePlan => {
+                format!(
+                    "{}/v1",
+                    "https://api.anthropic.com".trim_end_matches('/')
+                )
+            }
+            ClaudeProviderTransport::DirectAnthropic => continue,
+        };
+        let provider_id = profile
+            .accounting_provider_id
+            .unwrap_or_else(|| panic!("{kind:?} posts through a bridge and must name its account"));
+        let provider = catalogue
+            .get(provider_id)
+            .unwrap_or_else(|| panic!("{kind:?} names `{provider_id}`, which this build does not ship"));
+        let api = provider
+            .to_api_provider(None)
+            .unwrap_or_else(|_| panic!("{provider_id} resolves to an API provider"));
+        assert_eq!(
+            api.base_url.trim_end_matches('/'),
+            reported,
+            "{kind:?} would report a route `{provider_id}` does not serve"
+        );
+    }
 }

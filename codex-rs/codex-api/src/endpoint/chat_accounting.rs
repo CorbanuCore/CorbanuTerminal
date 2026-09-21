@@ -57,6 +57,19 @@ fn detail(value: Option<&Value>, name: &str) -> Result<ChatTokenPresence, Invali
     }
 }
 
+/// Numeric usage carried by a non-streaming Chat Completions body, if it
+/// carries any.
+///
+/// A client outside this process can send a chat request and report what the
+/// provider answered; reading its numbers with the same parser the streaming
+/// path uses keeps one definition of what a usage object means. A body with no
+/// `usage` is not an error: the provider stated no numbers, which the ledger
+/// records as unknown rather than as zero.
+pub fn body_usage(body: &[u8]) -> Result<Option<ChatUsagePatch>, InvalidChatUsage> {
+    let data = std::str::from_utf8(body).map_err(|_| InvalidChatUsage)?;
+    decode(data)
+}
+
 pub(super) fn decode(data: &str) -> Result<Option<ChatUsagePatch>, InvalidChatUsage> {
     let value: Value = serde_json::from_str(data).map_err(|_| InvalidChatUsage)?;
     let object = value.as_object().ok_or(InvalidChatUsage)?;
