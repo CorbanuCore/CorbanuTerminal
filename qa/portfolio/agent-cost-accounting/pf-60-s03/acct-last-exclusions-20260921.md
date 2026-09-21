@@ -111,18 +111,26 @@ host the turn itself could end before the ambiguous-stop branch was reached. The
 test now waits for the classifier identified by **its own instructions** rather
 than by counting requests - a second POST from some other path is not the thing
 under test - and raises the idle timeout for this case so the turn is not the
-variable. Eight consecutive full-lane runs are clean.
+variable. Eight consecutive full-lane runs were clean; the repeat summaries are retained
+in `rtx-20260921/classifier-repeats.txt`, alongside the failing run the fix
+addresses.
 
 ## What this does not claim
 
 - Auxiliary inference that opens its own client session: local compaction,
   remote compaction, startup prewarm and the completion classifier all attach.
-  There is a fifth, **stage-one memory extraction**, which builds its own
-  `ModelClient` and streams a real request with no collector. It is not
-  attached here and it is not reachable in ordinary use: `Feature::MemoryTool`
-  is default-off and `StageOneMemorySession` has no production caller in this
-  tree - only its own tests. Naming it is the point; the earlier version of this
-  sentence claimed four call sites and was wrong.
+  There is a fifth, **stage-one memory extraction**, which is not attached here.
+  `memory_stage_one::StageOneMemoryClient` builds its own `ModelClient` and
+  streams a real billable request with no collector. It **is** reachable in
+  production - `app-server`'s turn processor starts the memories task, which
+  reaches it through `memories/write`'s phase-one runtime - and it is gated:
+  `Feature::MemoryTool` is default-off, and the pipeline is skipped for
+  ephemeral and non-root sessions. The feature is Stable and the TUI offers to
+  turn it on, so an operator who enables memories runs extraction that records
+  nothing. That is a disclosed exclusion, not an unreachable one, and it is the
+  next thing to attach. Two earlier versions of this sentence were wrong - first
+  claiming four call sites, then claiming this one had no production caller -
+  which is why it is spelled out here.
 - The legacy `/responses/compact` endpoint is still uninstrumented; it is
   reachable only by disabling `remote_compaction_v2`, which is Stable and
   default-on, and it posts through `ApiCompactClient`, which has no collector
