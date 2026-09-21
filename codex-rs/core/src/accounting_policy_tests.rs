@@ -89,8 +89,9 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
                         auth.map(CodexAuth::auth_mode),
                         &endpoint,
                     );
-                    let admitted =
-                        exclusion.is_none() || exclusion == Some("chat_completions_provider");
+                    // Only the query-parameter shape stays uncollected: its resolved
+                    // URL carries a query string the pinned endpoint does not.
+                    let admitted = exclusion != Some("query_params");
                     let reason = route_refusal(&provider);
                     assert_eq!(reason.is_none(), admitted, "{id}/{wire}/{exclusion:?}");
                     assert_eq!(!matches!(selected, AccountingMode::Disabled), admitted);

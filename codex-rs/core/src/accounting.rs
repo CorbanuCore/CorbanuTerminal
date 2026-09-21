@@ -72,9 +72,10 @@ pub(crate) fn developer_accounting_mode(
 pub(super) fn route_refusal(
     provider: &codex_model_provider_info::ModelProviderInfo,
 ) -> Option<&'static str> {
-    if provider.aws.is_some() {
-        Some("AWS signing does not establish the supported endpoint/dialect")
-    } else if provider.query_params.is_some() {
+    // AWS signing changes how the request is authenticated, not where it goes or
+    // which dialect it speaks, and the endpoint pin still proves the destination.
+    // It cannot supply monetary rates, which `turn_mode` enforces separately.
+    if provider.query_params.is_some() {
         // The resolved request URL carries the query string, so it can never equal
         // the pinned `{base}/path`. Refusing the shape leaves such a provider
         // uncollected; admitting it made every turn fail closed instead.
@@ -113,6 +114,7 @@ pub(crate) fn turn_mode(
         })
     };
     let api_key_pricing = auth_mode == Some(codex_protocol::auth::AuthMode::ApiKey)
+        && provider.aws.is_none()
         && provider.auth.is_none()
         && provider.experimental_bearer_token.is_none()
         // Deliberately NOT gated on `api_key_header_name`: the built-in Anthropic
