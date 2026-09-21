@@ -269,3 +269,40 @@ Things it deliberately will not tell you:
 
 Verified on the RTX workstation: core 139/139, core with the developer feature
 144/144, state 168/168, usage 92/92.
+
+## Update, 21 September, fifth build: the last excluded classes
+
+Your shortcut now opens integration commit `7a0af4fe3`. Every record in this
+workstream up to now ended with the same two sentences about what still did not
+collect. They are gone, and a third case review found is closed with them.
+
+- **Agent-identity sessions.** These recorded nothing at all, on every provider.
+  The client refused them before a collector existed, left over from the
+  original API-key-only scope. They collect now, on the plan side, like any
+  other subscription credential.
+- **Startup prewarm.** Corbanu primes the model with your whole prompt when a
+  session starts, and the provider charges for that. It was invisible. It now
+  appears as its own turn, named `prewarm:`, so you can see what priming costs
+  rather than having it silently missing or folded into your first turn.
+- **The turn-completion classifier.** On providers whose stop signal is
+  ambiguous for action turns - Kimi Code among the built-ins - Corbanu asks the
+  model a second question to decide whether your turn is really finished. That
+  call was paid for and recorded nowhere. It now appears as `assess:`, attached
+  to the turn it judges.
+
+What to look for: after starting a session and running a turn on one of those
+providers, `/usage` should show more rows than just your turns, with the
+`prewarm:` and `assess:` labels making it obvious what each one was.
+
+Still disclosed and not collected, so you know where the edges are:
+
+- **Memory extraction.** If you turn the memories feature on - it is off by
+  default - the stage-one extraction pass is a real model call that this build
+  does not record. That is the next one to close.
+- The legacy compaction endpoint, reachable only by turning off
+  `remote_compaction_v2`.
+- Anything pointed at a proxy rather than a provider's own route: tokens are
+  recorded, money is not claimed.
+
+Verified on the RTX workstation: core 141/141, core with the developer feature
+146/146, state 168/168, usage 92/92.
