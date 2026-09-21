@@ -103,7 +103,6 @@ warning: method `append_native` is never used
    |                                                 ^^^^^^^^^^^^^
 
 warning: `codex-state` (lib) generated 10 warnings
-   Compiling codex-core v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/core)
 warning: function `append_chat_messages_for_response_item` is never used
     --> core/src/client.rs:4005:4
      |
@@ -146,143 +145,143 @@ warning: method `submit_inter_agent_communication` is never used
     |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning: `codex-core` (lib test) generated 6 warnings
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 10.55s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.31s
 ────────────
- Nextest run ID 255d5bc0-9ef8-4df8-8c1c-d2f717ae682c with nextest profile: local
+ Nextest run ID 180ab2c4-12e7-4b92-8138-96607cc19d74 with nextest profile: local
     Starting 134 tests across 4 binaries (3525 tests skipped)
-        PASS [   0.009s] (  1/134) codex-core accounting::policy_tests::accounting_chat_request_overrides_are_unattributable
-        PASS [   0.010s] (  2/134) codex-core accounting::policy_tests::accounting_chat_collects_the_fields_the_client_itself_emits
-        PASS [   0.012s] (  3/134) codex-core accounting::policy_tests::accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint
-        PASS [   0.013s] (  4/134) codex-core accounting::policy_tests::accounting_prepared_bodies_are_inspected_not_refused
-        PASS [   0.017s] (  5/134) codex-core accounting::prices::tests::accounting_price_projection_retains_absent_read_and_write_and_exact_milli
-        PASS [   0.033s] (  6/134) codex-core accounting::chat::tests::accounting_chat_borrowed_binding_denies_existing_and_future_clones
-        PASS [   0.026s] (  7/134) codex-core accounting::prices::tests::accounting_bundled_prices_are_exact_prospective_and_content_identified
-        PASS [   0.028s] (  8/134) codex-core accounting::prices::tests::accounting_price_authority_rejects_aliases_remote_and_non_metered_rows
-        PASS [   0.039s] (  9/134) codex-core accounting::prices::tests::accounting_responses_prices_exact_and_unknown
-        PASS [   0.060s] ( 10/134) codex-core accounting::chat::tests::accounting_chat_frame_guard_denies_provider_change_before_client_publication
-        PASS [   0.012s] ( 11/134) codex-core accounting::websocket::tests::accounting_responses_ws_role_inheritance_preserves_reserved_provider_rule
-        PASS [   0.057s] ( 12/134) codex-core accounting::prices::tests::accounting_chat_prices_exact_source_and_unknown
-        PASS [   0.008s] ( 13/134) codex-core accounting::websocket::tests::accounting_websocket_pin_matches_the_client_route
-        PASS [   0.090s] ( 14/134) codex-core accounting::chat::tests::accounting_chat_bootstrap_is_lazy_once_and_mode_local
-        PASS [   0.074s] ( 15/134) codex-core accounting::policy_tests::accounting_unattributable_request_is_served_without_evidence
-        PASS [   0.082s] ( 16/134) codex-core accounting::responses::tests::accounting_responses_scope_cleanup_and_failure_latch
-        PASS [   0.015s] ( 17/134) codex-core memory_stage_one::accounting_tests::accounting_build_activation_uses_loaded_provider
-        PASS [   0.116s] ( 18/134) codex-core accounting::chat::tests::accounting_chat_auth_and_guard_before_admission
-        PASS [   0.117s] ( 19/134) codex-core accounting::chat::tests::accounting_chat_role_inheritance_reserved_id_parity
-        PASS [   0.106s] ( 20/134) codex-core accounting::responses::tests::accounting_responses_bootstrap_is_lazy_and_once
-        PASS [   0.114s] ( 21/134) codex-core accounting::responses::tests::accounting_responses_auth_and_guard_precede_admission
-        PASS [   0.014s] ( 22/134) codex-core memory_stage_one::accounting_tests::accounting_role_overlay_keeps_explicit_provider_fields_and_validates_conflicts
-        PASS [   0.115s] ( 23/134) codex-core accounting::responses::tests::accounting_responses_auth_route_eligibility
-        PASS [   0.014s] ( 24/134) codex-core memory_stage_one::accounting_tests::accounting_role_reload_preserves_internal_binding_without_changing_off_route_behavior
-        PASS [   0.117s] ( 25/134) codex-core accounting::responses::tests::accounting_responses_role_overlay_preserves_binding
-        PASS [   0.119s] ( 26/134) codex-core accounting::responses::tests::accounting_responses_bootstrap_failure_and_cancellation
-        PASS [   0.145s] ( 27/134) codex-core accounting::policy_tests::accounting_policy_completion_guard_never_repairs_possible_committed_rows
-        PASS [   0.137s] ( 28/134) codex-core accounting::websocket::tests::accounting_responses_ws_auth_route_eligibility
-        PASS [   0.148s] ( 29/134) codex-core accounting::policy_tests::accounting_policy_observe_wait_cancel_and_start_cancel_publish_nothing
-        PASS [   0.159s] ( 30/134) codex-core accounting::policy_tests::accounting_policy_wait_cancellation_and_post_wait_failure_have_no_effect
-        PASS [   0.159s] ( 31/134) codex-core accounting::policy_tests::accounting_policy_serial_retry_identity_and_time_sample_after_gate
-        PASS [   0.070s] ( 32/134) codex-core memory_stage_one::accounting_tests::accounting_awaited_auth_denial_creates_no_attempt_or_transport_send
-        PASS [   0.136s] ( 33/134) codex-core accounting::websocket::tests::accounting_responses_ws_fallback_keeps_request_and_predecessor
-        PASS [   0.038s] ( 34/134) codex-core session::rollout_reconstruction_tests::record_initial_history_resumed_aborted_turn_without_id_clears_active_turn_for_compaction_accounting
-        PASS [   0.176s] ( 35/134) codex-core accounting::chat::tests::accounting_chat_response_local_attempt_identity
-        PASS [   0.180s] ( 36/134) codex-core accounting::responses::tests::accounting_responses_response_local_identity
-        PASS [   0.078s] ( 37/134) codex-core memory_stage_one::accounting_tests::accounting_guard_denial_precedes_admission_and_never_sends
-        PASS [   0.134s] ( 38/134) codex-core accounting::websocket::tests::accounting_responses_ws_stream_guard_checks_live_policy_with_session_state_locked
-        PASS [   0.133s] ( 39/134) codex-core accounting::websocket::tests::accounting_responses_ws_subscription_uses_resolved_endpoint_without_api_prices
-        PASS [   0.186s] ( 40/134) codex-core accounting::websocket::tests::accounting_responses_ws_failure_and_cancellation_latch
-        PASS [   0.234s] ( 41/134) codex-core accounting::chat::tests::accounting_chat_bootstrap_cancel_scope_and_latch
+        PASS [   0.011s] (  1/134) codex-core accounting::policy_tests::accounting_chat_request_overrides_are_unattributable
+        PASS [   0.011s] (  2/134) codex-core accounting::policy_tests::accounting_chat_collects_the_fields_the_client_itself_emits
+        PASS [   0.014s] (  3/134) codex-core accounting::policy_tests::accounting_prepared_bodies_are_inspected_not_refused
+        PASS [   0.028s] (  4/134) codex-core accounting::prices::tests::accounting_price_projection_retains_absent_read_and_write_and_exact_milli
+        PASS [   0.033s] (  5/134) codex-core accounting::policy_tests::accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint
+        PASS [   0.022s] (  6/134) codex-core accounting::prices::tests::accounting_bundled_prices_are_exact_prospective_and_content_identified
+        PASS [   0.036s] (  7/134) codex-core accounting::prices::tests::accounting_price_authority_rejects_aliases_remote_and_non_metered_rows
+        PASS [   0.039s] (  8/134) codex-core accounting::chat::tests::accounting_chat_borrowed_binding_denies_existing_and_future_clones
+        PASS [   0.036s] (  9/134) codex-core accounting::prices::tests::accounting_responses_prices_exact_and_unknown
+        PASS [   0.012s] ( 10/134) codex-core accounting::websocket::tests::accounting_responses_ws_role_inheritance_preserves_reserved_provider_rule
+        PASS [   0.057s] ( 11/134) codex-core accounting::prices::tests::accounting_chat_prices_exact_source_and_unknown
+        PASS [   0.087s] ( 12/134) codex-core accounting::policy_tests::accounting_unattributable_request_is_served_without_evidence
+        PASS [   0.089s] ( 13/134) codex-core accounting::chat::tests::accounting_chat_bootstrap_is_lazy_once_and_mode_local
+        PASS [   0.092s] ( 14/134) codex-core accounting::chat::tests::accounting_chat_frame_guard_denies_provider_change_before_client_publication
+        PASS [   0.014s] ( 15/134) codex-core accounting::websocket::tests::accounting_websocket_pin_matches_the_client_route
+        PASS [   0.095s] ( 16/134) codex-core accounting::responses::tests::accounting_responses_scope_cleanup_and_failure_latch
+        PASS [   0.106s] ( 17/134) codex-core accounting::chat::tests::accounting_chat_role_inheritance_reserved_id_parity
+        PASS [   0.107s] ( 18/134) codex-core accounting::responses::tests::accounting_responses_bootstrap_is_lazy_and_once
+        PASS [   0.100s] ( 19/134) codex-core accounting::responses::tests::accounting_responses_role_overlay_preserves_binding
+        PASS [   0.115s] ( 20/134) codex-core accounting::chat::tests::accounting_chat_auth_and_guard_before_admission
+        PASS [   0.115s] ( 21/134) codex-core accounting::responses::tests::accounting_responses_auth_route_eligibility
+        PASS [   0.104s] ( 22/134) codex-core accounting::responses::tests::accounting_responses_auth_and_guard_precede_admission
+        PASS [   0.014s] ( 23/134) codex-core memory_stage_one::accounting_tests::accounting_role_overlay_keeps_explicit_provider_fields_and_validates_conflicts
+        PASS [   0.015s] ( 24/134) codex-core memory_stage_one::accounting_tests::accounting_build_activation_uses_loaded_provider
+        PASS [   0.117s] ( 25/134) codex-core accounting::responses::tests::accounting_responses_bootstrap_failure_and_cancellation
+        PASS [   0.017s] ( 26/134) codex-core memory_stage_one::accounting_tests::accounting_role_reload_preserves_internal_binding_without_changing_off_route_behavior
+        PASS [   0.125s] ( 27/134) codex-core accounting::policy_tests::accounting_policy_wait_cancellation_and_post_wait_failure_have_no_effect
+        PASS [   0.141s] ( 28/134) codex-core accounting::chat::tests::accounting_chat_response_local_attempt_identity
+        PASS [   0.141s] ( 29/134) codex-core accounting::policy_tests::accounting_policy_observe_wait_cancel_and_start_cancel_publish_nothing
+        PASS [   0.035s] ( 30/134) codex-core session::rollout_reconstruction_tests::record_initial_history_resumed_aborted_turn_without_id_clears_active_turn_for_compaction_accounting
+        PASS [   0.153s] ( 31/134) codex-core accounting::policy_tests::accounting_policy_completion_guard_never_repairs_possible_committed_rows
+        PASS [   0.150s] ( 32/134) codex-core accounting::websocket::tests::accounting_responses_ws_auth_route_eligibility
+        PASS [   0.160s] ( 33/134) codex-core accounting::policy_tests::accounting_policy_serial_retry_identity_and_time_sample_after_gate
+        PASS [   0.139s] ( 34/134) codex-core accounting::websocket::tests::accounting_responses_ws_fallback_keeps_request_and_predecessor
+        PASS [   0.178s] ( 35/134) codex-core accounting::responses::tests::accounting_responses_response_local_identity
+        PASS [   0.079s] ( 36/134) codex-core memory_stage_one::accounting_tests::accounting_awaited_auth_denial_creates_no_attempt_or_transport_send
+        PASS [   0.080s] ( 37/134) codex-core memory_stage_one::accounting_tests::accounting_guard_denial_precedes_admission_and_never_sends
+        PASS [   0.131s] ( 38/134) codex-core accounting::websocket::tests::accounting_responses_ws_subscription_uses_resolved_endpoint_without_api_prices
+        PASS [   0.145s] ( 39/134) codex-core accounting::websocket::tests::accounting_responses_ws_stream_guard_checks_live_policy_with_session_state_locked
+        PASS [   0.103s] ( 40/134) codex-core memory_stage_one::accounting_tests::accounting_scope_drop_clears_cancelled_sampling_and_observation_failure_is_fatal
+        PASS [   0.218s] ( 41/134) codex-core accounting::chat::tests::accounting_chat_bootstrap_cancel_scope_and_latch
         PASS [   0.218s] ( 42/134) codex-core accounting::policy_tests::accounting_policy_slot_poison_rejects_stale_and_incoming_without_disabling
-        PASS [   0.196s] ( 43/134) codex-core accounting::websocket::tests::accounting_responses_ws_original_price_binding
-        PASS [   0.119s] ( 44/134) codex-core memory_stage_one::accounting_tests::accounting_scope_drop_clears_cancelled_sampling_and_observation_failure_is_fatal
-        PASS [   0.161s] ( 45/134) codex-core memory_stage_one::accounting_tests::accounting_actual_transport_retries_and_old_response_keep_distinct_owned_identity
-        PASS [   0.147s] ( 46/134) codex-core memory_stage_one::accounting_tests::accounting_writer_barrier_prevents_send_until_durable_admission
-        PASS [   0.253s] ( 47/134) codex-core accounting::websocket::tests::accounting_responses_ws_cached_connection_provenance
-        PASS [   0.243s] ( 48/134) codex-core accounting::websocket::tests::accounting_responses_ws_mode_scope_and_lazy_bootstrap
-        PASS [   0.266s] ( 49/134) codex-core accounting::policy_tests::accounting_policy_previous_poison_before_and_during_admission_is_sticky
-        PASS [   0.310s] ( 50/134) codex-core accounting::policy_tests::accounting_policy_cancel_in_operation_rejects_and_releases_capacity
-        PASS [   0.155s] ( 51/134) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_missing_optional_state_is_only_fatal_when_enabled
-        PASS [   0.259s] ( 52/134) codex-core memory_stage_one::accounting_tests::accounting_admission_failure_and_route_mismatch_are_sticky_without_send
-        PASS [   0.346s] ( 53/134) codex-core accounting::websocket::tests::accounting_responses_ws_exact_endpoint_binding
-        PASS [   0.269s] ( 54/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_default_off_does_not_install_and_installed_off_deletion_cleans
-        PASS [   0.237s] ( 55/134) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_observation_failure_stops_real_sampling_without_repair_send
-        PASS [   0.216s] ( 56/134) codex-core::all suite::accounting_chat::accounting_chat_custom_provider_collects_with_real_identity
-        PASS [   0.281s] ( 57/134) codex-core::all suite::accounting_chat::accounting_chat_native_cumulative_and_separate_usage
-        PASS [   0.388s] ( 58/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_native_presence_prices_and_two_reopens
-        PASS [   0.376s] ( 59/134) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_opt_in_does_not_activate_other_native_routes
-        PASS [   0.430s] ( 60/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_endpoint_mismatch_has_no_unapproved_send
-        PASS [   0.204s] ( 61/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_api_key_401_no_invented_refresh
-        PASS [   0.618s] ( 62/134) codex-core accounting::chat::tests::accounting_chat_exact_final_endpoint_binding
-        PASS [   0.441s] ( 63/134) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_deleted_native_owner_cannot_be_resurrected_by_delayed_usage
-        PASS [   0.477s] ( 64/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_request_retry
-        PASS [   0.493s] ( 65/134) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_401_and_429_are_terminal_and_preflight_schema_fault_has_no_send
-        PASS [   0.509s] ( 66/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_stream_retry
-        PASS [   0.516s] ( 67/134) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_stream_retry_retains_start_usage_without_merging_reused_provider_id
-        PASS [   0.407s] ( 68/134) codex-core::all suite::accounting_chat::accounting_chat_native_top_level_error_retains_usage
-        PASS [   0.531s] ( 69/134) codex-core::all suite::accounting_chat::accounting_chat_native_gateway_exclusion_and_header_parity
-        PASS [   0.407s] ( 70/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_admission_barrier_and_failure
-        PASS [   0.659s] ( 71/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_native_spawned_children_role_reload_and_fork_own_only_new_sends
-        PASS [   0.236s] ( 72/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_observation_failure_no_repair
-        PASS [   0.677s] ( 73/134) codex-core::all suite::accounting_anthropic::accounting_plan_identity_zero_usage_and_provider_switch
-        PASS [   0.566s] ( 74/134) codex-core::all suite::accounting_chat::accounting_chat_native_mismatched_endpoint_never_sends
-        PASS [   0.245s] ( 75/134) codex-core::all suite::accounting_responses::accounting_chatgpt_subscription_collects_without_api_prices
-        PASS [   0.738s] ( 76/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_actual_presence_revisions_and_remote_only_price_unknown
-        PASS [   0.618s] ( 77/134) codex-core::all suite::accounting_chat::accounting_chat_native_literal_partial_and_zero_goldens
-        PASS [   0.768s] ( 78/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_http_and_payload_retries_are_separate_durable_attempts
-        PASS [   0.920s] ( 79/134) codex-core accounting::chat::tests::accounting_chat_direct_auth_and_gateway_eligibility
-        PASS [   0.477s] ( 80/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_delete_rejects_late_usage
-        PASS [   0.591s] ( 81/134) codex-core::all suite::accounting_chat::accounting_chat_native_sampling_auxiliary_scope
-        PASS [   0.725s] ( 82/134) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_endpoint
-        PASS [   0.822s] ( 83/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_cancel_held_http_other_owner_fresh_turn_and_two_resumes
-        PASS [   0.227s] ( 84/134) codex-core::all suite::accounting_responses::accounting_responses_native_ws_only_no_install
-        PASS [   0.429s] ( 85/134) codex-core::all suite::accounting_responses::accounting_responses_native_complete_and_partial_goldens
-        PASS [   0.210s] ( 86/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_api_key_401
-        PASS [   0.399s] ( 87/134) codex-core::all suite::accounting_responses::accounting_responses_native_no_usage_is_unknown
-        PASS [   0.268s] ( 88/134) codex-core::all suite::accounting_responses::accounting_responses_native_ws_fallback_http_segment
-        PASS [   0.424s] ( 89/134) codex-core::all suite::accounting_responses::accounting_responses_native_endpoint_mismatch
-        PASS [   0.218s] ( 90/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_delete_rejects_late_usage
-        PASS [   0.515s] ( 91/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_outer_retry_prefix_and_ids
-        PASS [   0.930s] ( 92/134) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_cancel_keeps_intent_or_observed_start_through_reopen
-        PASS [   0.612s] ( 93/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_http_retry_policy
-        PASS [   0.232s] ( 94/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_observation_failure
-        PASS [   0.869s] ( 95/134) codex-core::all suite::accounting_chat::accounting_chat_native_missing_usage_and_correlation
-        PASS [   0.445s] ( 96/134) codex-core::all suite::accounting_responses::accounting_responses_native_sampling_and_auxiliary_scope
-        PASS [   0.404s] ( 97/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_admission_barrier
-        PASS [   0.230s] ( 98/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_upgrade_required_http_fallback
-        PASS [   1.099s] ( 99/134) codex-core::all suite::accounting_chat::accounting_chat_native_finish_reason_and_tool_parity
-        PASS [   0.259s] (100/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_prewarm_preconnect_and_cached_reuse
-        PASS [   0.627s] (101/134) codex-core::all suite::accounting_responses::accounting_responses_native_off_and_unsupported
-        PASS [   1.095s] (102/134) codex-core::all suite::accounting_chat::accounting_chat_native_off_and_mode_isolation
-        PASS [   0.635s] (103/134) codex-core::all suite::accounting_responses::accounting_responses_native_separate_and_terminal_usage
-        PASS [   0.523s] (104/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_outer_retry_prefix
-        PASS [   0.523s] (105/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_complete_and_partial_goldens
-        PASS [   0.334s] (106/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_ws_prefix_then_http_fallback
-        PASS [   0.609s] (107/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_http_retry_policy
-        PASS [   0.978s] (108/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_invalid_evidence_no_repair
-        PASS [   0.587s] (109/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_connection_limit_reconnect
-        PASS [   0.469s] (110/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_off_and_http_only_compatibility
-        PASS [   0.761s] (111/134) codex-core::all suite::accounting_responses::accounting_responses_native_unknown_prices_and_tiers
-        PASS [   0.507s] (112/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_fallback_http_transport_retry
-        PASS [   0.514s] (113/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_incremental_sampling_and_turn_identity
-        PASS [   0.977s] (114/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_spawned_role_children_and_fork
-        PASS [   0.556s] (115/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_endpoint_and_cached_auth_mismatch
-        PASS [   1.332s] (116/134) codex-core::all suite::accounting_chat::accounting_chat_native_immutable_prices_and_unpriced_rows
-        PASS [   0.552s] (117/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_handshake_and_postdispatch_errors
-        PASS [   0.542s] (118/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_previous_response_missing_full_retry
-        PASS [   0.775s] (119/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_cancel_two_reopens
-        PASS [   1.075s] (120/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_redirects_no_follow_or_repair
-        PASS [   0.411s] (121/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_observation_failure_no_repair
-        PASS [   0.878s] (122/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_spawned_role_children
-        PASS [   0.451s] (123/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_unknown_prices_and_no_usage
-        PASS [   0.665s] (124/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_delete_rejects_late_usage
-        PASS [   0.721s] (125/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_late_clone_binding_stops_running_dispatch
-        PASS [   1.166s] (126/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_redirects
-        PASS [   0.835s] (127/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_spawned_role_children_and_fork
-        PASS [   1.326s] (128/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_redirects_never_escape_binding
-        PASS [   1.344s] (129/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_admission_and_guard_barriers
-        PASS [   2.469s] (130/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_extends_actual_child_idle_timeout
-        PASS [   1.982s] (131/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_two_reopens_and_original_prices
-        PASS [   5.714s] (132/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_cancellation_and_two_reopens
-        PASS [   5.821s] (133/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_cancel_before_and_after_dispatch
-        PASS [  23.250s] (134/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity
+        PASS [   0.195s] ( 43/134) codex-core accounting::websocket::tests::accounting_responses_ws_original_price_binding
+        PASS [   0.207s] ( 44/134) codex-core accounting::websocket::tests::accounting_responses_ws_failure_and_cancellation_latch
+        PASS [   0.160s] ( 45/134) codex-core memory_stage_one::accounting_tests::accounting_actual_transport_retries_and_old_response_keep_distinct_owned_identity
+        PASS [   0.265s] ( 46/134) codex-core accounting::policy_tests::accounting_policy_previous_poison_before_and_during_admission_is_sticky
+        PASS [   0.270s] ( 47/134) codex-core accounting::policy_tests::accounting_policy_cancel_in_operation_rejects_and_releases_capacity
+        PASS [   0.156s] ( 48/134) codex-core memory_stage_one::accounting_tests::accounting_writer_barrier_prevents_send_until_durable_admission
+        PASS [   0.258s] ( 49/134) codex-core accounting::websocket::tests::accounting_responses_ws_cached_connection_provenance
+        PASS [   0.214s] ( 50/134) codex-core memory_stage_one::accounting_tests::accounting_admission_failure_and_route_mismatch_are_sticky_without_send
+        PASS [   0.287s] ( 51/134) codex-core accounting::websocket::tests::accounting_responses_ws_mode_scope_and_lazy_bootstrap
+        PASS [   0.165s] ( 52/134) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_missing_optional_state_is_only_fatal_when_enabled
+        PASS [   0.340s] ( 53/134) codex-core accounting::websocket::tests::accounting_responses_ws_exact_endpoint_binding
+        PASS [   0.288s] ( 54/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_default_off_does_not_install_and_installed_off_deletion_cleans
+        PASS [   0.280s] ( 55/134) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_observation_failure_stops_real_sampling_without_repair_send
+        PASS [   0.256s] ( 56/134) codex-core::all suite::accounting_chat::accounting_chat_custom_provider_collects_with_real_identity
+        PASS [   0.284s] ( 57/134) codex-core::all suite::accounting_chat::accounting_chat_native_cumulative_and_separate_usage
+        PASS [   0.409s] ( 58/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_native_presence_prices_and_two_reopens
+        PASS [   0.432s] ( 59/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_request_retry
+        PASS [   0.390s] ( 60/134) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_opt_in_does_not_activate_other_native_routes
+        PASS [   0.456s] ( 61/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_endpoint_mismatch_has_no_unapproved_send
+        PASS [   0.193s] ( 62/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_api_key_401_no_invented_refresh
+        PASS [   0.447s] ( 63/134) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_deleted_native_owner_cannot_be_resurrected_by_delayed_usage
+        PASS [   0.488s] ( 64/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_disables_actual_child_stream_retry
+        PASS [   0.668s] ( 65/134) codex-core accounting::chat::tests::accounting_chat_exact_final_endpoint_binding
+        PASS [   0.505s] ( 66/134) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_401_and_429_are_terminal_and_preflight_schema_fault_has_no_send
+        PASS [   0.554s] ( 67/134) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_stream_retry_retains_start_usage_without_merging_reused_provider_id
+        PASS [   0.426s] ( 68/134) codex-core::all suite::accounting_chat::accounting_chat_native_top_level_error_retains_usage
+        PASS [   0.431s] ( 69/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_admission_barrier_and_failure
+        PASS [   0.228s] ( 70/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_observation_failure_no_repair
+        PASS [   0.580s] ( 71/134) codex-core::all suite::accounting_chat::accounting_chat_native_gateway_exclusion_and_header_parity
+        PASS [   0.713s] ( 72/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_native_spawned_children_role_reload_and_fork_own_only_new_sends
+        PASS [   0.733s] ( 73/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_http_and_payload_retries_are_separate_durable_attempts
+        PASS [   0.751s] ( 74/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_actual_presence_revisions_and_remote_only_price_unknown
+        PASS [   0.600s] ( 75/134) codex-core::all suite::accounting_chat::accounting_chat_native_mismatched_endpoint_never_sends
+        PASS [   0.724s] ( 76/134) codex-core::all suite::accounting_anthropic::accounting_plan_identity_zero_usage_and_provider_switch
+        PASS [   0.266s] ( 77/134) codex-core::all suite::accounting_responses::accounting_chatgpt_subscription_collects_without_api_prices
+        PASS [   0.700s] ( 78/134) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_endpoint
+        PASS [   0.650s] ( 79/134) codex-core::all suite::accounting_chat::accounting_chat_native_literal_partial_and_zero_goldens
+        PASS [   0.606s] ( 80/134) codex-core::all suite::accounting_chat::accounting_chat_native_sampling_auxiliary_scope
+        PASS [   0.831s] ( 81/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_cancel_held_http_other_owner_fresh_turn_and_two_resumes
+        PASS [   0.954s] ( 82/134) codex-core accounting::chat::tests::accounting_chat_direct_auth_and_gateway_eligibility
+        PASS [   0.474s] ( 83/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_delete_rejects_late_usage
+        PASS [   0.218s] ( 84/134) codex-core::all suite::accounting_responses::accounting_responses_native_ws_only_no_install
+        PASS [   0.202s] ( 85/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_api_key_401
+        PASS [   0.437s] ( 86/134) codex-core::all suite::accounting_responses::accounting_responses_native_complete_and_partial_goldens
+        PASS [   0.196s] ( 87/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_delete_rejects_late_usage
+        PASS [   0.494s] ( 88/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_outer_retry_prefix_and_ids
+        PASS [   0.413s] ( 89/134) codex-core::all suite::accounting_responses::accounting_responses_native_no_usage_is_unknown
+        PASS [   0.443s] ( 90/134) codex-core::all suite::accounting_responses::accounting_responses_native_endpoint_mismatch
+        PASS [   0.291s] ( 91/134) codex-core::all suite::accounting_responses::accounting_responses_native_ws_fallback_http_segment
+        PASS [   0.842s] ( 92/134) codex-core::all suite::accounting_chat::accounting_chat_native_missing_usage_and_correlation
+        PASS [   0.957s] ( 93/134) codex-core::all suite::accounting_anthropic_recovery::accounting_anthropic_cancel_keeps_intent_or_observed_start_through_reopen
+        PASS [   0.625s] ( 94/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_http_retry_policy
+        PASS [   0.244s] ( 95/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_observation_failure
+        PASS [   0.454s] ( 96/134) codex-core::all suite::accounting_responses::accounting_responses_native_sampling_and_auxiliary_scope
+        PASS [   0.401s] ( 97/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_admission_barrier
+        PASS [   1.111s] ( 98/134) codex-core::all suite::accounting_chat::accounting_chat_native_finish_reason_and_tool_parity
+        PASS [   0.255s] ( 99/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_prewarm_preconnect_and_cached_reuse
+        PASS [   0.241s] (100/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_upgrade_required_http_fallback
+        PASS [   0.585s] (101/134) codex-core::all suite::accounting_responses::accounting_responses_native_separate_and_terminal_usage
+        PASS [   0.616s] (102/134) codex-core::all suite::accounting_responses::accounting_responses_native_off_and_unsupported
+        PASS [   1.085s] (103/134) codex-core::all suite::accounting_chat::accounting_chat_native_off_and_mode_isolation
+        PASS [   0.493s] (104/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_outer_retry_prefix
+        PASS [   0.482s] (105/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_complete_and_partial_goldens
+        PASS [   0.332s] (106/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_ws_prefix_then_http_fallback
+        PASS [   0.543s] (107/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_connection_limit_reconnect
+        PASS [   0.620s] (108/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_http_retry_policy
+        PASS [   0.985s] (109/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_invalid_evidence_no_repair
+        PASS [   0.460s] (110/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_off_and_http_only_compatibility
+        PASS [   0.752s] (111/134) codex-core::all suite::accounting_responses::accounting_responses_native_unknown_prices_and_tiers
+        PASS [   0.951s] (112/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_spawned_role_children_and_fork
+        PASS [   0.501s] (113/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_incremental_sampling_and_turn_identity
+        PASS [   0.504s] (114/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_previous_response_missing_full_retry
+        PASS [   0.529s] (115/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_fallback_http_transport_retry
+        PASS [   1.348s] (116/134) codex-core::all suite::accounting_chat::accounting_chat_native_immutable_prices_and_unpriced_rows
+        PASS [   0.545s] (117/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_endpoint_and_cached_auth_mismatch
+        PASS [   0.545s] (118/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_handshake_and_postdispatch_errors
+        PASS [   0.766s] (119/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_cancel_two_reopens
+        PASS [   1.050s] (120/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_redirects_no_follow_or_repair
+        PASS [   0.407s] (121/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_observation_failure_no_repair
+        PASS [   0.857s] (122/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_spawned_role_children
+        PASS [   0.448s] (123/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_unknown_prices_and_no_usage
+        PASS [   0.691s] (124/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_delete_rejects_late_usage
+        PASS [   0.711s] (125/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_late_clone_binding_stops_running_dispatch
+        PASS [   1.153s] (126/134) codex-core::all suite::accounting_responses_recovery::accounting_responses_native_redirects
+        PASS [   0.849s] (127/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_spawned_role_children_and_fork
+        PASS [   1.327s] (128/134) codex-core::all suite::accounting_responses_ws::accounting_responses_ws_native_redirects_never_escape_binding
+        PASS [   1.340s] (129/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_admission_and_guard_barriers
+        PASS [   2.498s] (130/134) codex-core::all suite::accounting_anthropic::accounting_anthropic_role_extends_actual_child_idle_timeout
+        PASS [   1.994s] (131/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_two_reopens_and_original_prices
+        PASS [   5.713s] (132/134) codex-core::all suite::accounting_chat_recovery::accounting_chat_native_cancellation_and_two_reopens
+        PASS [   5.815s] (133/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_cancel_before_and_after_dispatch
+        PASS [  23.156s] (134/134) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity
 ────────────
-     Summary [  24.415s] 134 tests run: 134 passed, 3525 skipped
+     Summary [  24.326s] 134 tests run: 134 passed, 3525 skipped

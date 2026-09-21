@@ -115,10 +115,12 @@ Not claimed: independent review of this increment, or any live run.
 ## Checked against the real catalogue, and what is still outside collection
 
 `accounting_every_built_in_provider_collects` iterates
-`built_in_model_providers(None)` - the product's actual provider list, twenty
-entries - and asserts each one selects a collecting mode at its own wire dialect,
-binds a mode that collects, and never claims pricing authority without API-key
-authentication. Six synthetic identities in the matrix proved the rule; this
+`built_in_model_providers(None)` - the product's actual provider list, twenty-one
+entries, asserted exactly so a shrinking catalogue is visible - and asserts each one selects a collecting mode at its own wire dialect, binds a mode
+that collects, is admitted by the per-turn dialect gate as well as the selector,
+and carries pricing authority under API-key authentication only for the two
+metered entries at their own default endpoints. An earlier version of this test
+bound with no auth mode at all, which made its pricing assertion unfalsifiable. Six synthetic identities in the matrix proved the rule; this
 proves the catalogue obeys it. A future provider with a shape this code cannot
 attribute fails here rather than silently going uncollected.
 
@@ -127,13 +129,24 @@ model-level gate, so "all models" follows from "all providers" for any model a
 provider serves. Pricing is a separate question and is per model, by catalogue
 billing.
 
-Two exclusions remain that are not provider or model classes, and are named here
-so they are not mistaken for coverage gaps:
+Review found a third class I had missed, and it was the one that mattered:
+**compaction**. A compaction builds its own model client session and streamed on
+it with no collector attached, so those turns never recorded - including
+`/compact`, which the operator asks for directly. My stated rationale for the
+other exclusions ("not turns the operator asked for") was simply false for it.
+
+Compaction now collects. The attachment logic that `session/turn.rs` performed
+inline is extracted into `accounting::attach_turn`, and both paths use it, so the
+two cannot drift again. In compaction the attachment is deliberately best effort:
+if collection cannot be attached the compaction still runs and a warning says it
+proceeded unrecorded. Accounting observes a session; it must never be a gate on
+one.
+
+Two exclusions remain, both session classes rather than provider or model
+classes, and neither introduced by this work:
 
 - **Agent-identity telemetry sessions.** When the client resolves agent-identity
   telemetry, the Responses WebSocket route is excluded before a collector exists.
-  This is a session type, not a provider.
-- **Startup prewarm and auxiliary inference.** These are outside sampling
-  collection by design; they are not turns the operator asked for.
-
-Neither was introduced or changed by this work.
+- **Startup prewarm and auxiliary inference.** Outside sampling collection by
+  design; they are not turns the operator asked for. That rationale is true for
+  these two.
