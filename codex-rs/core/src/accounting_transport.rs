@@ -154,6 +154,7 @@ impl codex_api::ChatUsageObserver for ResponseEvidence {
 pub(super) fn request_refusal(
     request: &Request,
     configured_routing: Option<&serde_json::Value>,
+    configured_routing_options: Option<&serde_json::Value>,
 ) -> Option<&'static str> {
     let Some(value) = request.body.as_ref()?.inspectable_json() else {
         return Some("uninspectable request body");
@@ -165,25 +166,35 @@ pub(super) fn request_refusal(
     // attributable to the selected provider while the body said otherwise.
     ["provider", "providerOptions", "provider_options", "plugins"]
         .into_iter()
-        .find(|key| match (value.get(*key), configured_routing) {
-            (None, _) => false,
-            // Exactly what configuration says this provider sends: the serving and
-            // billing provider is still the selected one.
-            (Some(found), Some(expected)) if *key == "provider" && found == expected => false,
-            (Some(_), _) => true,
+        .find(|key| {
+            let expected = match *key {
+                "provider" => configured_routing,
+                "providerOptions" | "provider_options" => configured_routing_options,
+                _ => None,
+            };
+            match (value.get(*key), expected) {
+                (None, _) => false,
+                // Exactly what configuration says this provider sends. The gateway
+                // that was selected is the account billed for the turn.
+                (Some(found), Some(expected)) if found == expected => false,
+                (Some(_), _) => true,
+            }
         })
 }
 
 pub(crate) struct AccountingTransport<T> {
     inner: T,
     evidence: Option<Arc<ResponseEvidence>>,
-    /// The routing object this provider is configured to send, if any.
+    /// The routing objects this provider is configured to send, if any.
     ///
     /// OpenRouter-compatible routes put their configured preferences in the body
-    /// as `provider`. That value comes from provider configuration, not from the
-    /// turn, so it names the provider that will serve and bill the request and is
-    /// attributable. A DIFFERENT value, or any other routing key, is not.
+    /// as `provider`; the Vercel gateway puts a configured vendor pin in
+    /// `providerOptions`. Both come from provider and model configuration rather
+    /// than from the turn, and the selected gateway is the account that is billed,
+    /// so a body carrying exactly the configured value stays attributable. A
+    /// DIFFERENT value, or a key configuration did not ask for, is not.
     configured_routing: Option<serde_json::Value>,
+    configured_routing_options: Option<serde_json::Value>,
     model: String,
     tier: Option<String>,
 }
@@ -196,6 +207,7 @@ impl<T> AccountingTransport<T> {
             model,
             tier: None,
             configured_routing: None,
+            configured_routing_options: None,
         }
     }
 
@@ -206,6 +218,14 @@ impl<T> AccountingTransport<T> {
 
     pub(crate) fn with_configured_routing(mut self, routing: Option<serde_json::Value>) -> Self {
         self.configured_routing = routing;
+        self
+    }
+
+    pub(crate) fn with_configured_routing_options(
+        mut self,
+        options: Option<serde_json::Value>,
+    ) -> Self {
+        self.configured_routing_options = options;
         self
     }
 }
@@ -229,7 +249,11 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
         // Anthropic have no typed body check, so failing closed here would end the
         // turn for a request the product is happy to send. Decline to sample and
         // let it through unrecorded.
-        if let Some(reason) = request_refusal(&request, self.configured_routing.as_ref()) {
+        if let Some(reason) = request_refusal(
+            &request,
+            self.configured_routing.as_ref(),
+            self.configured_routing_options.as_ref(),
+        ) {
             // Say so once. An excluded request is still billed by the provider,
             // and silence would make it indistinguishable from a turn that never
             // sent anything. The key name is routing metadata, not payload.
