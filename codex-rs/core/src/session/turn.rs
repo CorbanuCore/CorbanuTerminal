@@ -1685,6 +1685,10 @@ async fn run_sampling_request(
         accounting.clone(),
     )?;
 
+    eprintln!("ACCTPROBE turn: mode={:?} provider_id={} wire={:?} collects_responses={}",
+        accounting_mode, turn_context.config.model_provider_id,
+        turn_context.provider.info().wire_api,
+        collects(codex_model_provider_info::WireApi::Responses));
     let responses_accounting = collects(codex_model_provider_info::WireApi::Responses).then(|| {
         crate::accounting::responses::DeferredResponsesSampling::new(
             Arc::clone(&sess),
