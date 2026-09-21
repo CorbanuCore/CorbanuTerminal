@@ -81,3 +81,12 @@ a usage event on the excluded request records nothing instead of failing the
 stream. That is the coverage whose absence let an earlier version of the
 pass-through - which rejected the sampling and sent anyway - go green on every
 lane.
+
+## The logs in this commit cover this commit
+
+An earlier version of this record cited logs produced before the final test edit,
+so no committed run described the tree being received. The artifacts here are from
+a run of all five lanes at the tree that carries the three-observer exclusion test
+and the exclusion warning: core 132/132, core with `developer-accounting` 136/136,
+state 166/166, tui usage 92/92, tui tokens 65 of 66 with the pre-existing snapshot
+failure. `lanes.summary` carries the matching exit codes 0, 0, 0, 0, 100.
