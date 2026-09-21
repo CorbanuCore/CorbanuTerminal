@@ -306,3 +306,39 @@ Still disclosed and not collected, so you know where the edges are:
 
 Verified on the RTX workstation: core 141/141, core with the developer feature
 146/146, state 168/168, usage 92/92.
+
+## Update, 21 September, sixth build: image generation, and where I stopped
+
+Your shortcut now opens integration commit `f134b90c0`.
+
+**Image generation records now.** This one was worth catching: the feature is on
+by default, and generating an image was billed model inference that reached no
+ledger at all. It had no collector because the extension builds its own client -
+there was no turn for it to attach to - so there is now a host handle an
+extension wraps its own transport with. An image request shows up as its own
+`image:` row with the tokens the images API reports.
+
+**What to look for:** run `/usage` after generating an image and you should see
+an `image:` row alongside your turns, with `prewarm:`, `compact:` and `assess:`
+rows from the earlier builds.
+
+**Where I stopped, and why it needs you.** The Claude panes bridge is the last
+client sending paid inference with no record. It is a small HTTP server inside
+the TUI that posts to Ambient on your vault credential. The TUI does not depend
+on the core crate - on purpose - so the seam every other client uses cannot
+reach it. I wired it anyway to be sure, then reverted it, because the only ways
+to make it work in place were to duplicate the accounting policy or write to the
+ledger behind core's back.
+
+Two options, and a question that is yours:
+
+1. Record through the app server, the way the TUI already reads the ledger.
+2. Move the policy layer into a crate both can use.
+
+The question: **pane turns are another agent's spend on your credential.**
+Recording them under the session makes `/usage` your total cost, which I think
+is what you want - but it changes what that number means, so I am not deciding
+it by how I happen to wire it.
+
+Verified on the RTX workstation: core 146/146, core with the developer feature
+151/151, state 168/168, usage 92/92, image-generation extension 10/10.
