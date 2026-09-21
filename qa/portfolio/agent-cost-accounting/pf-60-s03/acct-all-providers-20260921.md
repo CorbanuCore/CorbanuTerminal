@@ -96,7 +96,7 @@ Clean-host lanes at this tree, RTX workstation:
 | lane | result |
 | --- | --- |
 | `codex-core` accounting | **134 run, 134 passed** |
-| `codex-core` accounting, `developer-accounting` | **138 run, 138 passed** |
+| `codex-core` accounting, `developer-accounting` | **139 run, 139 passed** |
 | `codex-state` accounting | **166 run, 166 passed** |
 | `codex-tui` usage | **92 run, 92 passed** |
 | `codex-tui` tokens | 66 run, 65 passed, 1 pre-existing failure |
@@ -111,3 +111,29 @@ asserts every shape collects, with the stored route equal to the one the client
 requests for that shape.
 
 Not claimed: independent review of this increment, or any live run.
+
+## Checked against the real catalogue, and what is still outside collection
+
+`accounting_every_built_in_provider_collects` iterates
+`built_in_model_providers(None)` - the product's actual provider list, twenty
+entries - and asserts each one selects a collecting mode at its own wire dialect,
+binds a mode that collects, and never claims pricing authority without API-key
+authentication. Six synthetic identities in the matrix proved the rule; this
+proves the catalogue obeys it. A future provider with a shape this code cannot
+attribute fails here rather than silently going uncollected.
+
+Collection keys on provider identity and wire dialect only. There is no
+model-level gate, so "all models" follows from "all providers" for any model a
+provider serves. Pricing is a separate question and is per model, by catalogue
+billing.
+
+Two exclusions remain that are not provider or model classes, and are named here
+so they are not mistaken for coverage gaps:
+
+- **Agent-identity telemetry sessions.** When the client resolves agent-identity
+  telemetry, the Responses WebSocket route is excluded before a collector exists.
+  This is a session type, not a provider.
+- **Startup prewarm and auxiliary inference.** These are outside sampling
+  collection by design; they are not turns the operator asked for.
+
+Neither was introduced or changed by this work.
