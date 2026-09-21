@@ -8,6 +8,7 @@ use codex_api::LocationType;
 use codex_api::SearchContextSize;
 use codex_api::SearchFilters;
 use codex_api::SearchSettings;
+use codex_core::accounting_extensions::ExtensionAccounting;
 use codex_core::config::Config;
 use codex_extension_api::ConfigContributor;
 use codex_extension_api::ExtensionData;
@@ -139,6 +140,7 @@ impl ToolContributor for WebSearchExtension {
             originator: thread_store
                 .get::<ThreadOriginator>()
                 .map(|originator| originator.0.clone()),
+            accounting: thread_store.get::<ExtensionAccounting>(),
         })]
     }
 }

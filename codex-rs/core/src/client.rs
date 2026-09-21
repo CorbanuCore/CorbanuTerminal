@@ -1249,6 +1249,7 @@ impl ModelClient {
         session_config: ApiRealtimeSessionConfig,
         mut extra_headers: ApiHeaderMap,
         api_provider_override: Option<ApiProvider>,
+        accounting: &crate::accounting::responses::Slot,
     ) -> Result<RealtimeWebrtcCallStart> {
         self.check_source_admission(&Prompt::default())?;
         // Create the media call over HTTP first, then retain matching auth so realtime can attach
@@ -1262,7 +1263,52 @@ impl ModelClient {
             client_setup.api_auth.as_ref(),
         ));
         let api_provider = api_provider_override.unwrap_or(client_setup.api_provider);
-        let transport = self.build_api_transport(&api_provider, REALTIME_CALLS_ENDPOINT)?;
+        // Creating the call is a model request the operator paid for, so it is
+        // recorded. Its response carries no usage - the realtime protocol this
+        // client parses carries none anywhere - so the attempt lands with its
+        // tokens unknown, which is what the provider actually said.
+        //
+        // The route is read from the API client rather than restated: call
+        // creation picks its path from the session's parser and appends the
+        // pairs that select its architecture, and a pin missing those would
+        // refuse every call it was meant to record.
+        let call_url = codex_api::realtime_call_url(&api_provider, &session_config);
+        let call_route = codex_api::realtime_call_route(&api_provider, &session_config);
+        let sampling = match crate::accounting::responses::read(accounting)? {
+            Some(deferred) => {
+                deferred
+                    .resolve_path(
+                        self.state.provider.info(),
+                        client_setup.auth.as_ref(),
+                        &call_url,
+                        &call_route,
+                    )
+                    .await?
+            }
+            None => None,
+        };
+        let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+        let transport = if evidence.is_some() {
+            let client = codex_login::default_client::create_client_for_route_without_redirects(
+                &self.http_client_factory,
+                &call_url,
+                ClientRouteClass::Api,
+            )
+            .map_err(std::io::Error::from)?;
+            crate::memory_stage_one::StageOneGuardedTransport::new(
+                ReqwestTransport::from_http_client(client),
+                self.stage_one_memory_binding.get().cloned(),
+            )
+        } else {
+            self.build_api_transport(&api_provider, REALTIME_CALLS_ENDPOINT)?
+        };
+        let transport = transport.map_inner(|inner| {
+            crate::accounting::transport::AccountingTransport::new(
+                inner,
+                evidence.clone(),
+                session_config.model.clone().unwrap_or_default(),
+            )
+        });
         let response = ApiRealtimeCallClient::new(transport, api_provider, client_setup.api_auth)
             .create_with_session_and_headers(sdp, session_config, extra_headers)
             .await

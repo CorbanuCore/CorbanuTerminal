@@ -109,6 +109,67 @@ impl Request {
         }
     }
 
+    /// Every JSON document this request's body carries, for callers that must
+    /// inspect routing keys.
+    ///
+    /// Almost every body is a single JSON document. A multipart body is not
+    /// JSON as a whole - realtime call creation builds one, an SDP part beside
+    /// a session JSON part - so reading it as one document yields nothing, and
+    /// a caller that treats nothing as uninspectable refuses the whole route.
+    /// The JSON parts are readable, so return them and let the caller inspect
+    /// what is actually there. `None` still means the body could not be read,
+    /// which callers must treat as uninspectable rather than as an absence of
+    /// keys; an absent body is an empty list, because it carries no keys.
+    pub fn inspectable_json_documents(&self) -> Option<Vec<Value>> {
+        let Some(body) = self.body.as_ref() else {
+            return Some(Vec::new());
+        };
+        if let Some(value) = body.inspectable_json() {
+            return Some(vec![value]);
+        }
+        let boundary = self.multipart_boundary()?;
+        let RequestBody::Raw(bytes) = body else {
+            return None;
+        };
+        let text = std::str::from_utf8(bytes).ok()?;
+        let mut documents = Vec::new();
+        for part in text.split(&format!("--{boundary}")).skip(1) {
+            let Some((headers, content)) = part.split_once("\r\n\r\n") else {
+                continue;
+            };
+            if !headers
+                .to_ascii_lowercase()
+                .contains("content-type: application/json")
+            {
+                continue;
+            }
+            // A part that says it is JSON and is not means this body is not the
+            // shape it claims; that is uninspectable, not empty.
+            documents.push(serde_json::from_str(content.trim_end_matches("\r\n")).ok()?);
+        }
+        Some(documents)
+    }
+
+    /// The boundary of a multipart body, from the content type this request
+    /// declares. `None` for every other content type.
+    fn multipart_boundary(&self) -> Option<String> {
+        let content_type = self
+            .headers
+            .get(http::header::CONTENT_TYPE)?
+            .to_str()
+            .ok()?;
+        let (kind, parameters) = content_type.split_once(';')?;
+        if !kind.trim().eq_ignore_ascii_case("multipart/form-data") {
+            return None;
+        }
+        parameters.split(';').find_map(|parameter| {
+            let (name, value) = parameter.split_once('=')?;
+            name.trim()
+                .eq_ignore_ascii_case("boundary")
+                .then(|| value.trim().trim_matches('"').to_string())
+        })
+    }
+
     pub fn with_json<T: Serialize>(mut self, body: &T) -> Self {
         self.body = serde_json::to_value(body).ok().map(RequestBody::Json);
         self
@@ -244,6 +305,52 @@ mod tests {
     use http::HeaderValue;
     use pretty_assertions::assert_eq;
     use serde_json::json;
+
+    fn multipart(parts: &str) -> Request {
+        let mut request =
+            Request::new(Method::POST, "https://example.com/v1/realtime/calls".into())
+                .with_raw_body(parts.to_string());
+        request.headers.insert(
+            http::header::CONTENT_TYPE,
+            HeaderValue::from_static("multipart/form-data; boundary=\"edge\""),
+        );
+        request
+    }
+
+    #[test]
+    fn multipart_body_exposes_its_json_parts_for_inspection() {
+        let request = multipart(concat!(
+            "--edge\r\nContent-Disposition: form-data; name=\"sdp\"\r\n",
+            "Content-Type: application/sdp\r\n\r\nv=offer\r\n",
+            "--edge\r\nContent-Disposition: form-data; name=\"session\"\r\n",
+            "Content-Type: application/json\r\n\r\n{\"model\":\"gpt-realtime\"}\r\n",
+            "--edge--\r\n"
+        ));
+
+        assert_eq!(
+            request.inspectable_json_documents(),
+            Some(vec![json!({"model": "gpt-realtime"})])
+        );
+    }
+
+    #[test]
+    fn multipart_part_that_is_not_the_json_it_claims_is_uninspectable() {
+        let request = multipart(concat!(
+            "--edge\r\nContent-Disposition: form-data; name=\"session\"\r\n",
+            "Content-Type: application/json\r\n\r\nnot json\r\n",
+            "--edge--\r\n"
+        ));
+
+        assert_eq!(request.inspectable_json_documents(), None);
+    }
+
+    #[test]
+    fn a_body_that_is_neither_json_nor_multipart_stays_uninspectable() {
+        let request = Request::new(Method::POST, "https://example.com/v1/responses".to_string())
+            .with_raw_body("v=offer\r\n");
+
+        assert_eq!(request.inspectable_json_documents(), None);
+    }
 
     #[test]
     fn prepare_body_for_send_serializes_json_and_sets_content_type() {

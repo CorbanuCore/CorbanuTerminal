@@ -157,9 +157,27 @@ pub(super) fn request_refusal(
     configured_routing_options: Option<&serde_json::Value>,
     configured_plugins: Option<&serde_json::Value>,
 ) -> Option<&'static str> {
-    let Some(value) = request.body.as_ref()?.inspectable_json() else {
+    let Some(documents) = request.inspectable_json_documents() else {
         return Some("uninspectable request body");
     };
+    documents.iter().find_map(|value| {
+        routing_refusal(
+            value,
+            configured_routing,
+            configured_routing_options,
+            configured_plugins,
+        )
+    })
+}
+
+/// The routing keys one JSON document carries that this provider did not ask
+/// for, or asked for with a different value.
+fn routing_refusal(
+    value: &serde_json::Value,
+    configured_routing: Option<&serde_json::Value>,
+    configured_routing_options: Option<&serde_json::Value>,
+    configured_plugins: Option<&serde_json::Value>,
+) -> Option<&'static str> {
     // These are the names the wire actually carries. `provider_options` is
     // serialized as `providerOptions` by every request type that has it, and the
     // shipped gateway providers populate it to pin a different upstream vendor,

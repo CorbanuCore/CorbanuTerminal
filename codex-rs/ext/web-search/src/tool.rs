@@ -5,6 +5,7 @@ use codex_api::SearchQuery;
 use codex_api::SearchRequest;
 use codex_api::SearchSettings;
 use codex_core::X_CODEX_TURN_METADATA_HEADER;
+use codex_core::accounting_extensions::ExtensionAccounting;
 use codex_core::web_search_action_detail;
 use codex_extension_api::ExtensionTurnItem;
 use codex_extension_api::FunctionCallError;
@@ -47,6 +48,10 @@ pub(crate) struct WebSearchTool {
     pub(crate) provider: SharedModelProvider,
     pub(crate) settings: SearchSettings,
     pub(crate) originator: Option<String>,
+    /// Search is a model request the operator paid for. The host hands this
+    /// over so it reaches the ledger; without it the request is still sent,
+    /// unrecorded.
+    pub(crate) accounting: Option<std::sync::Arc<ExtensionAccounting>>,
 }
 
 impl ToolExecutor<ToolCall> for WebSearchTool {
@@ -102,11 +107,23 @@ impl WebSearchTool {
             .api_auth()
             .await
             .map_err(|err| FunctionCallError::Fatal(err.to_string()))?;
-        let client = SearchClient::new(
-            ReqwestTransport::from_http_client(create_client()),
-            provider,
-            auth,
-        );
+        let transport = ReqwestTransport::from_http_client(create_client());
+        let transport = match &self.accounting {
+            Some(accounting) => {
+                accounting
+                    .transport(
+                        transport,
+                        self.provider.info(),
+                        &provider.base_url,
+                        &call.model,
+                        "alpha/search",
+                        "search",
+                    )
+                    .await
+            }
+            None => ExtensionAccounting::unrecorded(transport, &call.model),
+        };
+        let client = SearchClient::new(transport, provider, auth);
         let request = SearchRequest {
             id: self.session_id.clone(),
             model: call.model.clone(),

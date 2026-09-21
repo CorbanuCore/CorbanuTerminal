@@ -91,6 +91,8 @@ pub use crate::endpoint::chat_completions::accounting::ChatTokenPresence;
 pub use crate::endpoint::chat_completions::accounting::ChatUsageObserver;
 pub use crate::endpoint::chat_completions::accounting::ChatUsagePatch;
 pub use crate::endpoint::chat_completions::accounting::InvalidChatUsage;
+pub use crate::endpoint::realtime_call_route;
+pub use crate::endpoint::realtime_call_url;
 pub use crate::endpoint::responses::accounting::InvalidResponsesUsage;
 pub use crate::endpoint::responses::accounting::ResponsesTokenPresence;
 pub use crate::endpoint::responses::accounting::ResponsesUsageObserver;

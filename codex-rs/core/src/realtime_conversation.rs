@@ -472,6 +472,13 @@ struct RealtimeStart {
     session_config: RealtimeSessionConfig,
     model_client: ModelClient,
     sdp: Option<String>,
+    /// Collection for the call this start creates, attached by the caller that
+    /// owns the session. `None` leaves the call unrecorded. The scopes travel
+    /// with the session they are attached to and drop when the start returns.
+    accounting: Option<(
+        crate::client::ModelClientSession,
+        crate::accounting::TurnScopes,
+    )>,
 }
 
 struct RealtimeStartOutput {
@@ -533,6 +540,7 @@ impl RealtimeConversationManager {
             session_config,
             model_client,
             sdp,
+            accounting,
         } = start;
         // Neither realtime transport has a screened native projection yet.
         // Check the effective policy before session instructions or initial items
@@ -588,6 +596,10 @@ impl RealtimeConversationManager {
                     session_config.clone(),
                     extra_headers.unwrap_or_default(),
                     realtime_call_api_provider,
+                    accounting
+                        .as_ref()
+                        .map(|(session, _scopes)| &session.responses_accounting)
+                        .unwrap_or(&Default::default()),
                 )
                 .await?;
             let task = spawn_webrtc_sideband_input_task(RealtimeWebrtcSidebandInputTask {
@@ -1413,6 +1425,11 @@ async fn handle_start_inner(
         transport,
     } = prepared_start;
     info!("starting realtime conversation");
+    let accounting_endpoint = realtime_call_api_provider
+        .as_ref()
+        .unwrap_or(&api_provider)
+        .base_url
+        .clone();
     let sdp = match transport {
         ConversationStartTransport::Websocket => None,
         ConversationStartTransport::Webrtc { sdp } => Some(sdp),
@@ -1431,6 +1448,7 @@ async fn handle_start_inner(
         session_config,
         model_client: sess.services.model_client().as_ref().clone(),
         sdp,
+        accounting: realtime_accounting(sess, sub_id, &accounting_endpoint).await,
     };
     let start_output = sess.conversation.start(start).await?;
 
@@ -2456,3 +2474,41 @@ async fn send_realtime_conversation_closed(
 #[cfg(test)]
 #[path = "realtime_conversation_tests.rs"]
 mod tests;
+
+/// Collection for one realtime call, on a client session of its own.
+///
+/// Best effort, as compaction and prewarm are: a call that cannot be recorded
+/// still starts. What is recorded is that the call happened, against this
+/// provider and model - its tokens are unknown because the realtime protocol
+/// this client parses never reports any.
+pub(crate) async fn realtime_accounting(
+    sess: &Arc<Session>,
+    sub_id: &str,
+    endpoint: &str,
+) -> Option<(
+    crate::client::ModelClientSession,
+    crate::accounting::TurnScopes,
+)> {
+    let client_session = sess.services.new_model_client_session();
+    let (accounting, provider_id) = sess.accounting_binding().await;
+    let provider = sess.provider().await;
+    let auth = sess.services.auth_manager.auth().await;
+    match crate::accounting::attach_scopes(
+        sess,
+        &accounting,
+        &provider_id,
+        &provider,
+        auth.as_ref().map(codex_login::CodexAuth::auth_mode),
+        endpoint,
+        &client_session,
+        crate::accounting::realtime_turn_label(sub_id),
+    )
+    .await
+    {
+        Ok(scopes) => Some((client_session, scopes)),
+        Err(error) => {
+            tracing::warn!(%error, "accounting: realtime call proceeding unrecorded");
+            None
+        }
+    }
+}
