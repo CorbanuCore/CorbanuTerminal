@@ -91,36 +91,30 @@ pub(super) async fn run_remote_compact_v2_attempt(
         "parallel_tool_calls": prompt.parallel_tool_calls,
     }));
     let mut owned_client_session = None;
-    let mut standalone = false;
     let client_session = match client_session {
         Some(client_session) => client_session,
-        None => {
-            standalone = true;
-            owned_client_session.insert(sess.services.new_model_client_session())
-        }
+        None => owned_client_session.insert(sess.services.new_model_client_session()),
     };
-    // Collect standalone compactions, which is where operator `/compact` lands on
-    // providers that support remote compaction. When the session is borrowed the
-    // turn's own collectors are already attached to it and this request belongs to
-    // that turn, so nothing is attached here. Best effort either way: a compaction
-    // that cannot be recorded must still run.
-    let _accounting = if standalone {
-        match crate::accounting::attach_turn(
-            sess,
-            turn_context.as_ref(),
-            client_session,
-            crate::accounting::compaction_turn_label(&turn_context.sub_id),
-        )
-        .await
-        {
-            Ok(scopes) => Some(scopes),
-            Err(error) => {
-                tracing::warn!(%error, "accounting: remote compaction proceeding unrecorded");
-                None
-            }
+    // Attach for both shapes. A standalone compaction is where operator `/compact`
+    // lands on providers that support remote compaction; an inline auto-compaction
+    // borrows the turn's session, but its call sites sit outside the turn's own
+    // sampling scope, so those slots are empty and nothing in flight is displaced.
+    // Skipping the borrowed case - the first version of this - left every
+    // auto-compaction unrecorded. Best effort: a compaction that cannot be
+    // recorded must still run.
+    let _accounting = match crate::accounting::attach_turn(
+        sess,
+        turn_context.as_ref(),
+        client_session,
+        crate::accounting::compaction_turn_label(&turn_context.sub_id),
+    )
+    .await
+    {
+        Ok(scopes) => Some(scopes),
+        Err(error) => {
+            tracing::warn!(%error, "accounting: remote compaction proceeding unrecorded");
+            None
         }
-    } else {
-        None
     };
     let compaction_output_result = run_remote_compaction_request_v2(
         sess,

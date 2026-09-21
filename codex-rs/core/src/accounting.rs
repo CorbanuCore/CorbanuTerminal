@@ -17,6 +17,8 @@ use codex_state::accounting::Dialect;
 use codex_state::accounting::Observation;
 use codex_state::accounting::Patch;
 use codex_state::accounting::Presence;
+use sha2::Digest;
+use sha2::Sha256;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
@@ -120,11 +122,18 @@ pub(crate) fn compaction_turn_label(sub_id: &str) -> String {
     const LIMIT: usize = 128;
     const PREFIX: &str = "compact:";
     let room = LIMIT - PREFIX.len();
-    let mut end = sub_id.len().min(room);
+    if sub_id.len() <= room {
+        return format!("{PREFIX}{sub_id}");
+    }
+    // Truncation alone would merge two submissions that share a long prefix into
+    // one turn identity, so keep a digest of the whole id in the part that fits.
+    let digest = format!("{:x}", Sha256::digest(sub_id.as_bytes()));
+    let digest = &digest[..16];
+    let mut end = room.saturating_sub(digest.len() + 1);
     while end > 0 && !sub_id.is_char_boundary(end) {
         end -= 1;
     }
-    format!("{PREFIX}{}", &sub_id[..end])
+    format!("{PREFIX}{}-{digest}", &sub_id[..end])
 }
 
 /// Guards that keep this turn's collectors attached to a client session.

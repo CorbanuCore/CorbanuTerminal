@@ -519,6 +519,12 @@ fn accounting_compaction_label_stays_recordable() -> Result<()> {
         let label = super::compaction_turn_label(&sub_id);
         assert!(label.starts_with("compact:"), "{label}");
         assert!(label.len() <= 128, "{} bytes", label.len());
+        // Two submissions sharing a long prefix must not collapse into one turn.
+        let sibling = super::compaction_turn_label(&format!("{sub_id}-sibling"));
+        assert_ne!(
+            label, sibling,
+            "labels must stay distinct for distinct submissions"
+        );
         let attempt = Attempt {
             attempt_id: uuid::Uuid::new_v4(),
             request_id: uuid::Uuid::new_v4(),
