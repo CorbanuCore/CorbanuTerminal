@@ -102,11 +102,24 @@ pub(crate) fn turn_mode(
         return AccountingMode::Disabled;
     }
     // Only the existing native API-key authority can supply monetary rates.
+    // Only credential-bearing headers disqualify a route from monetary rates. The
+    // built-in providers always set benign originator and version headers, so
+    // requiring the maps to be absent entirely would silence pricing on exactly
+    // the metered API-key routes that can be priced. This keeps the predicate the
+    // legacy eligibility used.
+    let credential_header = |headers: &Option<std::collections::HashMap<String, String>>| {
+        headers.as_ref().is_some_and(|headers| {
+            headers.keys().any(|name| {
+                name.eq_ignore_ascii_case("authorization") || name.eq_ignore_ascii_case("api-key")
+            })
+        })
+    };
     let api_key_pricing = auth_mode == Some(codex_protocol::auth::AuthMode::ApiKey)
         && provider.auth.is_none()
         && provider.experimental_bearer_token.is_none()
-        && provider.http_headers.is_none()
-        && provider.env_http_headers.is_none()
+        && provider.api_key_header_name().is_none()
+        && !credential_header(&provider.http_headers)
+        && !credential_header(&provider.env_http_headers)
         && match (provider_id, provider.wire_api) {
             ("anthropic", codex_model_provider_info::WireApi::Anthropic) => {
                 resolved_endpoint == codex_model_provider_info::ANTHROPIC_BASE_URL
