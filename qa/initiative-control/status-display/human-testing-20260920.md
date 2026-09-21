@@ -190,3 +190,39 @@ names the key.
 
 Verified on the RTX workstation: core 134/134, core with the developer feature
 138/138, state 166/166, usage 92/92.
+
+## Update, 21 September, third build: compaction is collected too
+
+Your shortcut now opens integration commit `3eb8e1b9a`. Independent review found
+a class I had missed, and it was the one that mattered for anyone with a long
+session: **compaction did not record at all**. A compaction is a model call you
+paid for, and `/compact` is one you asked for directly, yet those tokens never
+reached the ledger.
+
+What to expect now:
+
+- Run `/compact` and a new row appears under a turn named `compact:<turn id>`,
+  with its own tokens, separate from the turn that preceded it.
+- Automatic compaction - the one that fires on its own when the context fills -
+  records the same way. The first version of this fix missed exactly that case,
+  so there are now two tests that fail if either shape stops recording.
+- If accounting cannot attach for some reason, the compaction still runs. It is
+  never a gate on your session; it simply records nothing and logs that it did
+  not.
+
+One honest limit: that "never a gate" holds when collection is being attached.
+Once it is attached, a bookkeeping fault mid-stream fails the compaction the same
+way it fails an ordinary turn. The alternative - retrying unrecorded - re-sends
+the request, so a bookkeeping problem would have cost you a second compaction
+call. I built that and backed it out.
+
+Not collected, and named rather than implied: the legacy compaction endpoint,
+which is only reachable if you turn off `remote_compaction_v2` (Stable, on by
+default); agent-identity telemetry sessions; and startup prewarm. Token-budget
+compaction makes no model call, so there is nothing to record.
+
+Verified on the RTX workstation: core 137/137, core with the developer feature
+142/142, state 166/166, usage 92/92, compaction 174/174.
+
+Still true: collection remains impossible in any build a user could receive, and
+the plan-burn and API-equivalent numbers you asked for are the next round.
