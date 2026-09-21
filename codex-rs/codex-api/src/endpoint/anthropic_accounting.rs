@@ -62,6 +62,44 @@ pub fn body_usage(body: &[u8]) -> Result<Option<AnthropicUsagePatch>, InvalidAnt
     }
 }
 
+/// The usage an Anthropic event stream stated, as one object in the shape the
+/// provider used to state it.
+///
+/// A streamed Messages response puts its numbers in events rather than in a
+/// body: the input and cache counts arrive with `message_start` and the output
+/// count arrives cumulatively with `message_delta`. A caller holding the whole
+/// stream - a proxy that buffered it, for instance - has everything the
+/// provider said, and this is where that is read, beside the event shapes it
+/// depends on, rather than restated by every caller that needs it.
+///
+/// The last statement of a field wins, because `message_delta` restates the
+/// running total. `None` means the stream stated no usage at all, which is
+/// unknown rather than zero.
+pub fn stream_usage(body: &[u8]) -> Option<Value> {
+    let mut usage = serde_json::Map::new();
+    for line in std::str::from_utf8(body).ok()?.lines() {
+        let Some(data) = line.strip_prefix("data:") else {
+            continue;
+        };
+        let Ok(value) = serde_json::from_str::<Value>(data.trim()) else {
+            continue;
+        };
+        let stated = match value.get("type").and_then(Value::as_str) {
+            Some("message_start") => value
+                .get("message")
+                .and_then(|message| message.get("usage")),
+            Some("message_delta") => value.get("usage"),
+            _ => None,
+        };
+        if let Some(Value::Object(stated)) = stated {
+            for (field, value) in stated {
+                usage.insert(field.clone(), value.clone());
+            }
+        }
+    }
+    (!usage.is_empty()).then_some(Value::Object(usage))
+}
+
 pub(super) fn decode(data: &str) -> Result<Option<AnthropicUsagePatch>, InvalidAnthropicUsage> {
     let value: Value = serde_json::from_str(data).map_err(|_| InvalidAnthropicUsage)?;
     let usage = match value.get("type").and_then(Value::as_str) {

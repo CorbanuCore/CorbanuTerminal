@@ -229,3 +229,47 @@ async fn anthropic_accounting_awaits_persistence_and_stops_before_completion() {
             .any(|event| matches!(event, Ok(ResponseEvent::Completed { .. })))
     );
 }
+
+/// A streamed response states its input and cache counts once, at the start,
+/// and restates a running output total as it goes. The whole stream carries
+/// everything the provider said about what it charged for.
+#[test]
+fn stream_usage_reads_what_the_events_stated() {
+    let stream = concat!(
+        "event: message_start\n",
+        "data: {\"type\":\"message_start\",\"message\":{\"content\":[],\"usage\":{\"input_tokens\":120,\"cache_read_input_tokens\":20,\"output_tokens\":1}}}\n\n",
+        "event: content_block_delta\n",
+        "data: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"hello\"}}\n\n",
+        "event: message_delta\n",
+        "data: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":7}}\n\n",
+        "event: message_delta\n",
+        "data: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":33}}\n\n",
+    );
+
+    let usage = super::stream_usage(stream.as_bytes()).expect("the stream stated usage");
+
+    assert_eq!(usage["input_tokens"], 120);
+    assert_eq!(usage["cache_read_input_tokens"], 20);
+    // The last statement wins: `message_delta` restates the running total.
+    assert_eq!(usage["output_tokens"], 33);
+    // And the patch parser reads it as the provider's own shape.
+    let patch: super::AnthropicUsagePatch =
+        serde_json::from_value(usage).expect("the stated object is a usage object");
+    assert_eq!(
+        patch.output_tokens,
+        super::AnthropicTokenPresence::Number(33)
+    );
+}
+
+/// A stream that states nothing is unknown, not zero, and a stream this client
+/// cannot read is not invented.
+#[test]
+fn stream_usage_says_nothing_when_the_events_did() {
+    let no_usage = concat!(
+        "event: content_block_delta\n",
+        "data: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"hello\"}}\n\n",
+    );
+    assert_eq!(super::stream_usage(no_usage.as_bytes()), None);
+    assert_eq!(super::stream_usage(b"not a stream at all"), None);
+    assert_eq!(super::stream_usage(&[0xff, 0xfe]), None);
+}

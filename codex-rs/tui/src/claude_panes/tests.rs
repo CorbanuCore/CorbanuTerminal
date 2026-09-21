@@ -4240,20 +4240,19 @@ fn every_bridge_profile_reports_its_provider_s_own_route() {
             ),
             // The Claude Plan profile has no base URL of its own; its bridge
             // posts to Anthropic.
-            ClaudeProviderTransport::DirectAnthropic if kind == ClaudeProviderProfileKind::ClaudePlan => {
-                format!(
-                    "{}/v1",
-                    "https://api.anthropic.com".trim_end_matches('/')
-                )
+            ClaudeProviderTransport::DirectAnthropic
+                if kind == ClaudeProviderProfileKind::ClaudePlan =>
+            {
+                format!("{}/v1", "https://api.anthropic.com".trim_end_matches('/'))
             }
             ClaudeProviderTransport::DirectAnthropic => continue,
         };
         let provider_id = profile
             .accounting_provider_id
             .unwrap_or_else(|| panic!("{kind:?} posts through a bridge and must name its account"));
-        let provider = catalogue
-            .get(provider_id)
-            .unwrap_or_else(|| panic!("{kind:?} names `{provider_id}`, which this build does not ship"));
+        let provider = catalogue.get(provider_id).unwrap_or_else(|| {
+            panic!("{kind:?} names `{provider_id}`, which this build does not ship")
+        });
         let api = provider
             .to_api_provider(None)
             .unwrap_or_else(|_| panic!("{provider_id} resolves to an API provider"));
@@ -4263,4 +4262,89 @@ fn every_bridge_profile_reports_its_provider_s_own_route() {
             "{kind:?} would report a route `{provider_id}` does not serve"
         );
     }
+}
+
+/// Claude Code streams. If a streamed turn records with its tokens unknown,
+/// then in practice the ledger has no numbers for the pane lane that is
+/// actually used, which is most of the feature missing.
+#[tokio::test]
+async fn passthrough_bridge_reports_the_numbers_a_streamed_turn_stated() {
+    use crate::app_event::AppEvent;
+    use crate::app_event_sender::AppEventSender;
+
+    let upstream_listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind fake upstream");
+    let upstream_addr = upstream_listener.local_addr().expect("upstream address");
+    tokio::spawn(async move {
+        let (mut stream, _) = upstream_listener.accept().await.expect("accept upstream");
+        let _ = read_http_request(&mut stream).await;
+        let body = concat!(
+            "event: message_start\n",
+            "data: {\"type\":\"message_start\",\"message\":{\"content\":[],\"usage\":{\"input_tokens\":120,\"cache_read_input_tokens\":20,\"output_tokens\":1}}}\n\n",
+            "event: content_block_delta\n",
+            "data: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"hello\"}}\n\n",
+            "event: message_delta\n",
+            "data: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":44}}\n\n",
+        );
+        stream
+            .write_all(
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .as_bytes(),
+            )
+            .await
+            .expect("write streamed upstream response");
+    });
+
+    let (event_tx, mut events) = tokio::sync::mpsc::unbounded_channel();
+    let accounting_tx = AppEventSender::new(event_tx);
+    let bridge_listener = TcpListener::bind("127.0.0.1:0").await.expect("bind bridge");
+    let bridge_addr = bridge_listener.local_addr().expect("bridge address");
+    let upstream_base = format!("http://{upstream_addr}");
+    tokio::spawn(async move {
+        let (stream, _) = bridge_listener.accept().await.expect("accept bridge");
+        handle_anthropic_passthrough_bridge_connection(
+            stream,
+            Arc::new("capability".to_string()),
+            Arc::new("upstream-secret-not-real".to_string()),
+            Arc::new(upstream_base),
+            reqwest::Client::new(),
+            /*proxy_count_tokens*/ true,
+            /*accounting_tx*/ Some(accounting_tx),
+            /*accounting_provider_id*/ Arc::new(Some("claude-plan".to_string())),
+        )
+        .await
+        .expect("serve bridge request");
+    });
+
+    let body = r#"{"model":"claude-opus-4-5","stream":true}"#;
+    let mut client = TcpStream::connect(bridge_addr).await.expect("connect");
+    client
+        .write_all(
+            format!(
+                "POST /v1/messages?beta=true HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer capability\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .as_bytes(),
+        )
+        .await
+        .expect("write request");
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).await.expect("read");
+
+    let event = tokio::time::timeout(Duration::from_secs(10), events.recv())
+        .await
+        .expect("a streamed send is reported")
+        .expect("a streamed send is reported");
+    let AppEvent::PaneBridgeModelRequestSent { model, usage, .. } = event else {
+        panic!("unexpected event");
+    };
+    assert_eq!(model, "claude-opus-4-5");
+    let usage = usage.expect("a streamed turn states its usage in its events");
+    assert_eq!(usage["input_tokens"], 120);
+    assert_eq!(usage["cache_read_input_tokens"], 20);
+    assert_eq!(usage["output_tokens"], 44);
 }
