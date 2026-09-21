@@ -162,3 +162,31 @@ under `qa/portfolio/agent-cost-accounting/pf-60-s03/rtx-20260921/`.
 Still true: collection remains impossible in any build a user could receive, and
 the plan-burn and API-equivalent numbers you asked for are the next round, not
 this one.
+
+## Update, 21 September, second build: every provider shape now collects
+
+Your shortcut now opens integration commit `1362b7ace`. The build you had before
+this one collected on every provider whose *shape* the gates allowed, but three
+whole classes were still refused outright and two more were excluded by a
+predicate that ran before the check that was supposed to allow them:
+
+- **AWS-signed providers** (Bedrock) collect. Signing changes how a request is
+  authenticated, not where it goes. They are never priced.
+- **Providers with query parameters** (the Azure shape) collect. The route is now
+  pinned the way the client builds it, including the query, and compared
+  canonically because the client emits parameters in hash order.
+- **OpenRouter** collects, including web-search sessions, whose `plugins` field
+  this client emits itself.
+- **Vercel gateway** Chat sessions collect, including the vendor pin the client
+  puts in `providerOptions`.
+
+What the provider id means for gateway routes: it is the account that gets
+billed. Which upstream vendor serves a turn inside a gateway's pool is not pinned
+by configuration, and the record does not claim it is.
+
+Still refused, and it is now one narrow thing: a routing key whose value differs
+from what the client constructed. Such a request is served unrecorded and the log
+names the key.
+
+Verified on the RTX workstation: core 134/134, core with the developer feature
+138/138, state 166/166, usage 92/92.
