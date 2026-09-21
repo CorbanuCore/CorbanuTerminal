@@ -59,15 +59,26 @@ carries exactly it. What it records is the gateway that bills the account. The
 upstream vendor inside that gateway's pool is not pinned by configuration and is
 not claimed to be.
 
-## What is still not collected
+## All three routing keys this client emits are admitted
 
-A **request-level** routing key that configuration did not ask for: `provider` or
-`providerOptions` with a value other than the configured one, or `plugins`. That
-body can send the work somewhere the selected configuration did not authorise, so
-attributing it to the selected provider would be a lie. Such a request is served
-unrecorded and the transport logs the key that caused it. This is a per-request
-condition, not a provider class: the same provider collects normally on every
-other turn.
+The record has now been wrong twice about what remains refused, in the same way
+each time: a key I assumed came from the turn is in fact emitted by the client
+itself. `provider` comes from `chat_completions_provider`, `providerOptions` from
+the Vercel gateway vendor pin, and `plugins` from OpenRouter web search, which the
+client derives from the provider and the session's tool set. Under the old rule
+each of those silently excluded whole provider, model or session classes on every
+turn.
+
+All three are now threaded to the transport as the expected value, and a body
+carrying exactly what the client constructed is admitted. What remains refused is
+a routing key whose value differs from that - which, since the client builds the
+body, is a belt-and-braces invariant rather than a load-bearing gate. It is kept
+because it is cheap and because it fails safe: such a request is served unrecorded
+and the transport logs the key.
+
+The honest caveat for all three: the recorded provider id is the account that is
+billed. Which upstream vendor serves the turn inside a gateway's pool is not
+pinned by configuration and is not claimed to be.
 
 ## Verification
 
