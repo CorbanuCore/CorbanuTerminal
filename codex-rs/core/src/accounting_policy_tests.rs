@@ -419,9 +419,12 @@ fn accounting_chat_collects_the_fields_the_client_itself_emits() {
     );
 
     let openrouter = {
-        let mut provider = ModelProviderInfo::create_openai_provider(Some(
-            "https://openrouter.ai/api/v1".to_string(),
-        ));
+        // `is_openrouter` keys off the provider NAME, so take the real builder
+        // rather than an OpenAI provider pointed at OpenRouter's URL.
+        let mut provider = codex_model_provider_info::built_in_model_providers(None)
+            .into_values()
+            .find(ModelProviderInfo::is_openrouter)
+            .expect("built-in OpenRouter provider");
         provider.wire_api = WireApi::Chat;
         provider
     };
