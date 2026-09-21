@@ -65,12 +65,9 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
                     if exclusion == Some("chat_completions_provider") {
                         provider.chat_completions_provider = Some(serde_json::json!({}));
                     }
-                    // The resolved URL would carry the query string, so it can never
-                    // equal the pinned endpoint: the shape must be refused rather
-                    // than admitted and then failed closed. Note that for this
-                    // shape the three gates share `route_refusal`, so these cells
-                    // pin that every gate consults it - not that three independent
-                    // implementations agree.
+                    // The resolved URL carries a query string, and the pin now carries
+                    // it too, so this shape collects. These cells prove the stored
+                    // route equals the one the client builds for it.
                     if exclusion == Some("query_params") {
                         provider.query_params =
                             Some(std::collections::HashMap::from([(
@@ -133,13 +130,15 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
                             WireApi::Chat => "chat/completions",
                             WireApi::Anthropic => "messages",
                         };
+                        // Compare against the client's own URL builder rather than the
+                        // accounting helper, so this cannot pass by both sides using
+                        // the same expression.
+                        let requested = provider
+                            .to_api_provider(auth.map(CodexAuth::auth_mode))?
+                            .url_for_path(path);
                         assert_eq!(
-                            sample.endpoint,
-                            super::pinned_route(
-                                &endpoint,
-                                super::canonical_query(&provider).as_deref(),
-                                path
-                            ),
+                            super::canonical_route(&sample.endpoint),
+                            super::canonical_route(&requested),
                             "the stored route must be the one the client requests"
                         );
                         assert!(
