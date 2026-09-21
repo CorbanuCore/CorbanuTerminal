@@ -96,21 +96,33 @@ in the same way.
 and asserts the `assess:` row; dropping the scopes instead of holding them fails
 it.
 
-**A flake I have not explained, stated rather than hidden.** That test failed in
-2 of roughly 8 full-lane runs and never in isolation. In the failing runs the
-classifier request is dispatched - the fixture sees it - and no attempt is
-recorded, with no attach failure reported. The likely mechanism is the limit
-this workstream has already recorded twice: best effort covers attach time, and
-under load the window in which the assessment's scopes are alive can close
-before its stream admits. It is a real, if rare, gap in the classifier's
-coverage, and it is the first thing the next increment should pin down.
+**The flake that test had, and what it actually was.** As first written the test
+failed in 2 of roughly 8 full-lane runs and never in isolation, and I recorded a
+guess - that the assessment's scopes closed before its stream admitted. Review
+refuted it from the code: `AccountingTransport::stream` commits the attempt row
+*before* handing the request to the inner transport, and a scope drop clears the
+slot without rejecting an already-resolved sampling, so there is no window of
+that kind to lose. The guess would have sent the next increment after the wrong
+thing.
+
+The actual cause was the fixture, as review also suggested: the shared Chat
+support sets a two-second stream idle timeout with no retries, so on a loaded
+host the turn itself could end before the ambiguous-stop branch was reached. The
+test now waits for the classifier identified by **its own instructions** rather
+than by counting requests - a second POST from some other path is not the thing
+under test - and raises the idle timeout for this case so the turn is not the
+variable. Eight consecutive full-lane runs are clean.
 
 ## What this does not claim
 
-- Auxiliary inference other than startup prewarm and the completion classifier:
-  there is none that opens its own client session. Local compaction, remote
-  compaction, startup prewarm and the classifier are the four call sites, and
-  all four now attach.
+- Auxiliary inference that opens its own client session: local compaction,
+  remote compaction, startup prewarm and the completion classifier all attach.
+  There is a fifth, **stage-one memory extraction**, which builds its own
+  `ModelClient` and streams a real request with no collector. It is not
+  attached here and it is not reachable in ordinary use: `Feature::MemoryTool`
+  is default-off and `StageOneMemorySession` has no production caller in this
+  tree - only its own tests. Naming it is the point; the earlier version of this
+  sentence claimed four call sites and was wrong.
 - The legacy `/responses/compact` endpoint is still uninstrumented; it is
   reachable only by disabling `remote_compaction_v2`, which is Stable and
   default-on, and it posts through `ApiCompactClient`, which has no collector

@@ -533,6 +533,10 @@ async fn accounting_chat_completion_assessment_collects() -> anyhow::Result<()> 
         .with_config(|config| {
             config.model_provider_id = "kimi-code".into();
             config.model_provider.name = "Kimi Code".into();
+            // The shared Chat fixture's two-second idle timeout can end the turn
+            // before the ambiguous-stop branch is reached on a loaded host, which
+            // would make the turn, not the classifier, the thing under test.
+            config.model_provider.stream_idle_timeout_ms = Some(60_000);
         })
         .build_with_auto_env(&server)
         .await?;
@@ -540,10 +544,22 @@ async fn accounting_chat_completion_assessment_collects() -> anyhow::Result<()> 
     terminal(&test).await?;
     let db = test.codex.state_db().unwrap();
     // The classifier runs on its own session, so its request can still be in
-    // flight when the turn ends. Wait for the request the ledger row is about.
-    let dispatched = tokio::time::timeout(std::time::Duration::from_secs(20), async {
+    // flight when the turn ends. Wait for the classifier itself, identified by
+    // its own instructions rather than by counting requests: a second POST from
+    // some other path would not be the thing this test is about.
+    let classifier = |body: &[u8]| {
+        String::from_utf8_lossy(body)
+            .contains("Decide whether the assistant's latest response completes")
+    };
+    let dispatched = tokio::time::timeout(std::time::Duration::from_secs(30), async {
         loop {
-            if server.received_requests().await.unwrap_or_default().len() >= 2 {
+            if server
+                .received_requests()
+                .await
+                .unwrap_or_default()
+                .iter()
+                .any(|request| classifier(&request.body))
+            {
                 return;
             }
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
