@@ -74,8 +74,6 @@ pub(super) fn route_refusal(
 ) -> Option<&'static str> {
     if provider.aws.is_some() {
         Some("AWS signing does not establish the supported endpoint/dialect")
-    } else if provider.chat_completions_provider.is_some() {
-        Some("chat_completions_provider overrides the serving provider")
     } else if provider.query_params.is_some() {
         // The resolved request URL carries the query string, so it can never equal
         // the pinned `{base}/path`. Refusing the shape leaves such a provider

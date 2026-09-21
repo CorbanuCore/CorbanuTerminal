@@ -2590,6 +2590,14 @@ impl ModelClientSession {
                     evidence.clone(),
                     request.model.clone(),
                 )
+                .with_configured_routing(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .chat_completions_provider
+                        .clone(),
+                )
             });
             let client = ApiAnthropicMessagesClient::new(
                 transport,
@@ -3090,6 +3098,14 @@ impl ModelClientSession {
                     evidence.clone(),
                     request.model.clone(),
                 )
+                .with_configured_routing(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .chat_completions_provider
+                        .clone(),
+                )
             });
             let inference_trace_attempt = inference_trace.start_attempt();
             inference_trace_attempt.add_request_headers(&mut options.extra_headers);
@@ -3298,6 +3314,14 @@ impl ModelClientSession {
                     inner,
                     evidence.clone(),
                     request.model.clone(),
+                )
+                .with_configured_routing(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .chat_completions_provider
+                        .clone(),
                 )
                 .with_tier(request.service_tier.clone())
             });
