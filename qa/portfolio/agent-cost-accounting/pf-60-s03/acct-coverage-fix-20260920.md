@@ -90,10 +90,26 @@ change, and is left for its own commit so attribution stays clean.
 | `codex-tui` tokens | 66 run, 65 passed, 1 failed | the one failure also fails at base |
 
 `comm -23` of the candidate failing set against the base failing set is empty for
-both core lanes: this change introduces no test that fails which did not already
-fail before it. Two of the shared failures are assertion rather than deadline
-failures (`accounting_responses.rs:314` and `:408`); both fail at base too, so
-they are pre-existing and out of scope here, and they are named so they are not
-quietly absorbed into the environmental set.
+both core lanes: no test fails here that was not already failing at base. That
+argument has a known limit, stated rather than glossed: an empty difference of
+failing *names* cannot prove that a test which fails environmentally at base
+would still pass under the new semantics. It rules out a newly failing name, not
+a regression hidden inside an already-failing one.
+
+The distinct-name counts differ from the nextest totals because a retried
+attempt prints `FAILED` for both tries: base reported 62 failed with 63 distinct
+names, this run 38 failed with 41 distinct names.
+
+Two of the shared failures are assertion rather than deadline failures, named
+here rather than by line number, because this change inserts lines into that file
+and shifts them:
+
+- `suite::accounting_responses::accounting_responses_native_ws_fallback_http_segment`
+- `suite::accounting_responses::accounting_responses_native_ws_only_no_install`
+
+Both appear in the base run's `FAILED` lines by name, so both are pre-existing.
+They are WebSocket-route cases in the file this change touches, so they are
+called out explicitly instead of being absorbed into the environmental set, and
+they remain open for their own disposition.
 
 Not claimed here: independent review, a receipt, or any live qualification.
