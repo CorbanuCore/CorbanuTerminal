@@ -304,12 +304,8 @@ async fn null_unbound_missing_estimates_and_exact_quotes_survive_two_reopens() -
                 // MissingRate: without a rate there is no monetary claim to make,
                 // and a complete zero estimate would read as one.
                 want["usage"] = json!({"input":0,"noncached":0,"read":0,"write":0,"output":0,"reasoning":0,"total":0});
-                want["buckets"] = json!([
-                    "MissingRate",
-                    "MissingRate",
-                    "MissingRate",
-                    "MissingRate"
-                ]);
+                want["buckets"] =
+                    json!(["MissingRate", "MissingRate", "MissingRate", "MissingRate"]);
             }
             "unknown" => {
                 want["usage"]["noncached"] = Value::Null;

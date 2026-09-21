@@ -2607,7 +2607,6 @@ impl ModelClientSession {
                         .then(|| vercel_gateway_provider_options(&request.model))
                         .flatten(),
                 )
-
             });
             let client = ApiAnthropicMessagesClient::new(
                 transport,
@@ -3133,7 +3132,6 @@ impl ModelClientSession {
                         .ok()
                         .filter(|value| !value.is_null()),
                 )
-
             });
             let inference_trace_attempt = inference_trace.start_attempt();
             inference_trace_attempt.add_request_headers(&mut options.extra_headers);
@@ -3360,7 +3358,6 @@ impl ModelClientSession {
                         .then(|| vercel_gateway_provider_options(&request.model))
                         .flatten(),
                 )
-
                 .with_tier(request.service_tier.clone())
             });
             let client = ApiResponsesClient::new(

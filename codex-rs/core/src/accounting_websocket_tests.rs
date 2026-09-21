@@ -540,9 +540,8 @@ async fn accounting_responses_ws_role_inheritance_preserves_reserved_provider_ru
 #[test]
 fn accounting_websocket_pin_matches_the_client_route() -> anyhow::Result<()> {
     use codex_model_provider_info::ModelProviderInfo;
-    let mut provider = ModelProviderInfo::create_openai_provider(Some(
-        "https://example.invalid/v1".to_string(),
-    ));
+    let mut provider =
+        ModelProviderInfo::create_openai_provider(Some("https://example.invalid/v1".to_string()));
     provider.query_params = Some(std::collections::HashMap::from([
         ("api-version".to_string(), "2025-04-01".to_string()),
         ("deployment".to_string(), "fixture".to_string()),

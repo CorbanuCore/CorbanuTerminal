@@ -69,11 +69,10 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
                     // it too, so this shape collects. These cells prove the stored
                     // route equals the one the client builds for it.
                     if exclusion == Some("query_params") {
-                        provider.query_params =
-                            Some(std::collections::HashMap::from([(
-                                "api-version".to_string(),
-                                "2025-04-01-preview".to_string(),
-                            )]));
+                        provider.query_params = Some(std::collections::HashMap::from([(
+                            "api-version".to_string(),
+                            "2025-04-01-preview".to_string(),
+                        )]));
                     }
                     let selected = developer_accounting_mode(id, &provider);
                     let endpoint = provider
@@ -173,7 +172,10 @@ fn accounting_chat_request_overrides_are_unattributable() -> Result<()> {
         };
         let http =
             codex_http_client::Request::new(http::Method::POST, ENDPOINT.into()).with_json(&value);
-        assert_eq!(transport::request_refusal(&http, None, None, None), Some(field));
+        assert_eq!(
+            transport::request_refusal(&http, None, None, None),
+            Some(field)
+        );
         let mut request = chat_body();
         match field {
             "provider" => request.provider = Some(value[field].clone()),
@@ -256,7 +258,10 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
     // A configuration-emitted routing value is attributable; a different one is not.
     for (key, configured) in [
         ("provider", serde_json::json!({"order": ["anthropic"]})),
-        ("providerOptions", serde_json::json!({"gateway": {"only": ["zai"]}})),
+        (
+            "providerOptions",
+            serde_json::json!({"gateway": {"only": ["zai"]}}),
+        ),
     ] {
         let mut body = ordinary.clone();
         body[key] = configured.clone();
@@ -325,18 +330,13 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
             wire_api: provider.wire_api,
             approved_endpoint: endpoint.into(),
             approved_query: None,
-        api_key_pricing: false,
+            api_key_pricing: false,
         };
-        let bound = super::turn_mode(
-            &mode,
-            id,
-            &provider,
-            Some(AuthMode::ApiKey),
-            endpoint,
-        );
+        let bound = super::turn_mode(&mode, id, &provider, Some(AuthMode::ApiKey), endpoint);
         let crate::config::AccountingMode::Provider {
             approved_query: None,
-        api_key_pricing, ..
+            api_key_pricing,
+            ..
         } = bound
         else {
             panic!("{id} provider mode must survive rebinding");
@@ -363,10 +363,17 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
         (Some(AuthMode::ChatgptAuthTokens), false),
         (None, false),
     ] {
-        let bound = super::turn_mode(&mode, "openai", &provider, auth, "https://api.openai.com/v1");
+        let bound = super::turn_mode(
+            &mode,
+            "openai",
+            &provider,
+            auth,
+            "https://api.openai.com/v1",
+        );
         let crate::config::AccountingMode::Provider {
             approved_query: None,
-        api_key_pricing, ..
+            api_key_pricing,
+            ..
         } = bound
         else {
             panic!("provider mode must survive rebinding for {auth:?}");
@@ -475,10 +482,8 @@ async fn accounting_unattributable_request_is_served_without_evidence() -> Resul
         async fn stream(
             &self,
             _req: Request,
-        ) -> std::result::Result<
-            codex_http_client::StreamResponse,
-            codex_http_client::TransportError,
-        > {
+        ) -> std::result::Result<codex_http_client::StreamResponse, codex_http_client::TransportError>
+        {
             self.0.fetch_add(1, Ordering::SeqCst);
             Err(codex_http_client::TransportError::Build("stub".into()))
         }
@@ -498,8 +503,15 @@ async fn accounting_unattributable_request_is_served_without_evidence() -> Resul
         .into_prepared()
         .map_err(anyhow::Error::msg)?;
     // The request reaches the real transport rather than being short-circuited.
-    assert!(wrapper.stream(request).await.is_err(), "stub inner transport");
-    assert_eq!(sent.load(Ordering::SeqCst), 1, "the turn's request was sent");
+    assert!(
+        wrapper.stream(request).await.is_err(),
+        "stub inner transport"
+    );
+    assert_eq!(
+        sent.load(Ordering::SeqCst),
+        1,
+        "the turn's request was sent"
+    );
     // The turn survives: rejecting the sampling here would abort it at the next check.
     fixture.sampling.check()?;
     // And nothing was recorded for a request we could not attribute.

@@ -40,7 +40,7 @@ async fn accounting_plan_identity_zero_usage_and_provider_switch() -> anyhow::Re
             wire_api: WireApi::Anthropic,
             approved_endpoint: endpoint.clone(),
             approved_query: None,
-        api_key_pricing: false,
+            api_key_pricing: false,
         };
         let test = builder(endpoint, mode)
             .with_config(move |config| {

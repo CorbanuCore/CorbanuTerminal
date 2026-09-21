@@ -11,12 +11,12 @@ use codex_http_client::Response;
 use codex_http_client::StreamResponse;
 use codex_http_client::TransportError;
 use codex_state::accounting::Attempt;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::OnceLock;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use uuid::Uuid;
 
 pub(crate) struct ResponseEvidence {
