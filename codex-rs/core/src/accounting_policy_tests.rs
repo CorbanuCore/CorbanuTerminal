@@ -11,8 +11,409 @@ use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
 use std::time::Duration;
 
+#[cfg(feature = "developer-accounting")]
+#[tokio::test]
+async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
+    use codex_login::CodexAuth;
+    use codex_model_provider_info::{ModelProviderInfo, WireApi};
+    let fixture = Fixture::new().await?;
+    let api = CodexAuth::from_api_key("synthetic");
+    let subscription =
+        CodexAuth::from_external_chatgpt_tokens("header.e30.synthetic", "synthetic-account", None)?;
+    let mut cells = 0;
+    for id in [
+        "anthropic",
+        "openai",
+        "claude-plan",
+        "corbanu",
+        "openrouter",
+        "custom",
+    ] {
+        for wire in [WireApi::Responses, WireApi::Chat, WireApi::Anthropic] {
+            for auth_kind in 0..5 {
+                let auth = match auth_kind {
+                    1 => Some(&api),
+                    2 => Some(&subscription),
+                    _ => None,
+                };
+                for exclusion in [
+                    None,
+                    Some("aws"),
+                    Some("chat_completions_provider"),
+                    Some("query_params"),
+                ] {
+                    let mut provider = ModelProviderInfo::create_openai_provider(None);
+                    provider.wire_api = wire;
+                    if auth_kind == 3 {
+                        provider.experimental_bearer_token = Some("synthetic-plan".into());
+                    }
+                    if auth_kind == 4 {
+                        provider.auth = Some(serde_json::from_value(
+                            serde_json::json!({"command":"never-executed-fixture"}),
+                        )?);
+                    }
+                    if exclusion == Some("aws") {
+                        provider.aws = Some(codex_model_provider_info::ModelProviderAwsAuthInfo {
+                            profile: None,
+                            region: None,
+                        });
+                    }
+                    if exclusion == Some("chat_completions_provider") {
+                        provider.chat_completions_provider = Some(serde_json::json!({}));
+                    }
+                    // The resolved URL would carry the query string, so it can never
+                    // equal the pinned endpoint: the shape must be refused rather
+                    // than admitted and then failed closed. Note that for this
+                    // shape the three gates share `route_refusal`, so these cells
+                    // pin that every gate consults it - not that three independent
+                    // implementations agree.
+                    if exclusion == Some("query_params") {
+                        provider.query_params =
+                            Some(std::collections::HashMap::from([(
+                                "api-version".to_string(),
+                                "2025-04-01-preview".to_string(),
+                            )]));
+                    }
+                    let selected = developer_accounting_mode(id, &provider);
+                    let endpoint = provider
+                        .to_api_provider(auth.map(CodexAuth::auth_mode))?
+                        .base_url;
+                    let bound = turn_mode(
+                        &selected,
+                        id,
+                        &provider,
+                        auth.map(CodexAuth::auth_mode),
+                        &endpoint,
+                    );
+                    let admitted = exclusion.is_none();
+                    let reason = route_refusal(&provider);
+                    assert_eq!(reason.is_none(), admitted, "{id}/{wire}/{exclusion:?}");
+                    assert_eq!(!matches!(selected, AccountingMode::Disabled), admitted);
+                    assert_eq!(collects(&bound, id, &provider, wire), admitted);
+                    let request = chat_body();
+                    let eligible = match wire {
+                        WireApi::Responses => responses::eligible(&provider, auth),
+                        WireApi::Chat => chat::eligible(&provider, auth, &request),
+                        WireApi::Anthropic => route_refusal(&provider).is_none(),
+                    };
+                    assert_eq!(eligible, admitted, "{id}/{wire}/{exclusion:?}: {reason:?}");
+                    if admitted {
+                        let sample = Sampling::start(
+                            fixture.db.clone(),
+                            fixture.sampling.owner,
+                            format!("matrix-{cells}"),
+                            &bound,
+                        )
+                        .await?;
+                        assert_eq!(sample.provider, id);
+                        let path = match wire {
+                            WireApi::Responses => "responses",
+                            WireApi::Chat => "chat/completions",
+                            WireApi::Anthropic => "messages",
+                        };
+                        assert_eq!(sample.endpoint, format!("{endpoint}/{path}"));
+                        assert!(
+                            sample
+                                .admit("fixture", "http://wrong.invalid")
+                                .await
+                                .is_err()
+                        );
+                    }
+                    cells += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(cells, 360);
+    assert!(serde_json::from_value::<WireApi>(serde_json::json!("unknown")).is_err());
+    Ok(())
+}
+
+#[test]
+fn accounting_chat_request_overrides_are_unattributable() -> Result<()> {
+    use codex_model_provider_info::{ModelProviderInfo, WireApi};
+    let mut provider = ModelProviderInfo::create_openai_provider(None);
+    provider.wire_api = WireApi::Chat;
+    for field in ["provider", "provider_options", "plugins"] {
+        let mut value =
+            serde_json::json!({"model":"fixture","messages":[],"stream":true,"tools":[]});
+        value[field] = if field == "plugins" {
+            serde_json::json!([])
+        } else {
+            serde_json::json!({})
+        };
+        let http =
+            codex_http_client::Request::new(http::Method::POST, ENDPOINT.into()).with_json(&value);
+        assert_eq!(transport::request_refusal(&http), Some(field));
+        let mut request = chat_body();
+        match field {
+            "provider" => request.provider = Some(value[field].clone()),
+            "provider_options" => request.provider_options = Some(value[field].clone()),
+            "plugins" => request.plugins = Some(vec![]),
+            _ => unreachable!(),
+        }
+        assert!(
+            !chat::eligible(&provider, None, &request),
+            "{field} changes serving attribution"
+        );
+    }
+    Ok(())
+}
+
+/// The transport sees the body AFTER preparation, which for this client means
+/// zstd-compressed bytes. Inspecting only plain JSON refused every real turn and
+/// collected nothing, so cover both encodings and both answers here.
+#[test]
+fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
+    use codex_http_client::{Request, RequestCompression};
+    let ordinary = serde_json::json!({"model":"fixture","input":[],"stream":true});
+    for compression in [RequestCompression::None, RequestCompression::Zstd] {
+        let prepared = Request::new(http::Method::POST, ENDPOINT.into())
+            .with_json(&ordinary)
+            .with_compression(compression)
+            .into_prepared()
+            .map_err(anyhow::Error::msg)?;
+        assert_eq!(
+            transport::request_refusal(&prepared),
+            None,
+            "an ordinary prepared body must remain collectable under {compression:?}"
+        );
+        for field in ["provider", "provider_options", "plugins"] {
+            let mut value = ordinary.clone();
+            value[field] = if field == "plugins" {
+                serde_json::json!([])
+            } else {
+                serde_json::json!({})
+            };
+            let prepared = Request::new(http::Method::POST, ENDPOINT.into())
+                .with_json(&value)
+                .with_compression(compression)
+                .into_prepared()
+                .map_err(anyhow::Error::msg)?;
+            assert_eq!(
+                transport::request_refusal(&prepared),
+                Some(field),
+                "{field} must stay unattributable under {compression:?}"
+            );
+        }
+    }
+    // Serialize a real request rather than hand-writing the JSON: the wire name is
+    // `providerOptions`, and a hand-built snake_case body would pass a check that
+    // the actual traffic walks straight past.
+    for compression in [RequestCompression::None, RequestCompression::Zstd] {
+        let mut request = chat_body();
+        request.provider_options = Some(serde_json::json!({"gateway":{"only":["zai"]}}));
+        let prepared = Request::new(http::Method::POST, ENDPOINT.into())
+            .with_json(&request)
+            .with_compression(compression)
+            .into_prepared()
+            .map_err(anyhow::Error::msg)?;
+        assert_eq!(
+            transport::request_refusal(&prepared),
+            Some("providerOptions"),
+            "a serialized gateway pin must be refused under {compression:?}"
+        );
+        let prepared = Request::new(http::Method::POST, ENDPOINT.into())
+            .with_json(&chat_body())
+            .with_compression(compression)
+            .into_prepared()
+            .map_err(anyhow::Error::msg)?;
+        assert_eq!(
+            transport::request_refusal(&prepared),
+            None,
+            "an ordinary serialized request must remain collectable under {compression:?}"
+        );
+    }
+    let opaque = Request::new(http::Method::POST, ENDPOINT.into())
+        .with_raw_body(vec![0x00, 0x01, 0x02, 0x03]);
+    assert_eq!(
+        transport::request_refusal(&opaque),
+        Some("uninspectable request body"),
+        "a body whose routing keys cannot be read must still be refused"
+    );
+    Ok(())
+}
+
+/// The subscription integration test uses a wiremock endpoint, which already
+/// forces `api_key_pricing` off. Pin the auth-mode half of the rule directly, at
+/// the real default endpoint, so swapping the auth cannot silently keep prices.
+#[test]
+fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
+    use codex_model_provider_info::{ModelProviderInfo, WireApi};
+    use codex_protocol::auth::AuthMode;
+    // Both built-in metered routes, because the Anthropic arm was dead code until
+    // the predicate stopped rejecting a provider for declaring its own api-key
+    // header, and nothing asserted the positive side of that arm.
+    for (id, provider, endpoint) in [
+        (
+            "openai",
+            ModelProviderInfo::create_openai_provider(None),
+            "https://api.openai.com/v1",
+        ),
+        (
+            "anthropic",
+            ModelProviderInfo::create_anthropic_provider(),
+            codex_model_provider_info::ANTHROPIC_BASE_URL,
+        ),
+    ] {
+        let mode = crate::config::AccountingMode::Provider {
+            scope: uuid::Uuid::new_v4(),
+            provider_id: id.into(),
+            wire_api: provider.wire_api,
+            approved_endpoint: endpoint.into(),
+            api_key_pricing: false,
+        };
+        let bound = super::turn_mode(
+            &mode,
+            id,
+            &provider,
+            Some(AuthMode::ApiKey),
+            endpoint,
+        );
+        let crate::config::AccountingMode::Provider {
+            api_key_pricing, ..
+        } = bound
+        else {
+            panic!("{id} provider mode must survive rebinding");
+        };
+        assert!(
+            api_key_pricing,
+            "a metered API-key {id} route at its own default endpoint must be priced"
+        );
+    }
+    let provider = ModelProviderInfo::create_openai_provider(None);
+    assert_eq!(provider.wire_api, WireApi::Responses);
+    let scope = uuid::Uuid::new_v4();
+    let mode = crate::config::AccountingMode::Provider {
+        scope,
+        provider_id: "openai".into(),
+        wire_api: WireApi::Responses,
+        approved_endpoint: "https://api.openai.com/v1".into(),
+        api_key_pricing: false,
+    };
+    for (auth, expected) in [
+        (Some(AuthMode::ApiKey), true),
+        (Some(AuthMode::Chatgpt), false),
+        (Some(AuthMode::ChatgptAuthTokens), false),
+        (None, false),
+    ] {
+        let bound = super::turn_mode(&mode, "openai", &provider, auth, "https://api.openai.com/v1");
+        let crate::config::AccountingMode::Provider {
+            api_key_pricing, ..
+        } = bound
+        else {
+            panic!("provider mode must survive rebinding for {auth:?}");
+        };
+        assert_eq!(
+            api_key_pricing, expected,
+            "only API-key authority may supply monetary rates ({auth:?})"
+        );
+    }
+}
+
+fn chat_body() -> codex_api::ChatCompletionsRequest {
+    codex_api::ChatCompletionsRequest {
+        model: "fixture".into(),
+        messages: vec![],
+        stream: true,
+        tools: vec![],
+        stream_options: None,
+        tool_choice: None,
+        parallel_tool_calls: None,
+        prompt_cache_key: None,
+        response_format: None,
+        emit_usage: None,
+        enable_thinking: None,
+        reasoning_effort: None,
+        reasoning: None,
+        provider: None,
+        plugins: None,
+        provider_options: None,
+    }
+}
+
 const MODEL: &str = "claude-opus-5";
 const ENDPOINT: &str = "http://127.0.0.1:1/v1/messages";
+
+/// A body that can re-route the serving provider must not be attributed, must not
+/// kill the turn, and must not leave partial evidence. Nothing covered this
+/// before, which is how an earlier version that rejected the turn's sampling and
+/// then sent the request anyway passed every lane.
+#[tokio::test]
+async fn accounting_unattributable_request_is_served_without_evidence() -> Result<()> {
+    use codex_http_client::HttpTransport;
+    use codex_http_client::Request;
+    use codex_http_client::RequestCompression;
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering;
+
+    #[derive(Default, Clone)]
+    struct Counting(Arc<AtomicUsize>);
+    impl HttpTransport for Counting {
+        async fn execute(
+            &self,
+            _req: Request,
+        ) -> std::result::Result<codex_http_client::Response, codex_http_client::TransportError>
+        {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Err(codex_http_client::TransportError::Build("stub".into()))
+        }
+        async fn stream(
+            &self,
+            _req: Request,
+        ) -> std::result::Result<
+            codex_http_client::StreamResponse,
+            codex_http_client::TransportError,
+        > {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Err(codex_http_client::TransportError::Build("stub".into()))
+        }
+    }
+
+    let fixture = Fixture::new().await?;
+    let evidence = transport::ResponseEvidence::new(Arc::clone(&fixture.sampling));
+    let inner = Counting::default();
+    let sent = Arc::clone(&inner.0);
+    let wrapper =
+        transport::AccountingTransport::new(inner, Some(Arc::clone(&evidence)), MODEL.into());
+    let mut body = serde_json::json!({"model": MODEL, "input": [], "stream": true});
+    body["providerOptions"] = serde_json::json!({"gateway": {"only": ["zai"]}});
+    let request = Request::new(http::Method::POST, ENDPOINT.into())
+        .with_json(&body)
+        .with_compression(RequestCompression::Zstd)
+        .into_prepared()
+        .map_err(anyhow::Error::msg)?;
+    // The request reaches the real transport rather than being short-circuited.
+    assert!(wrapper.stream(request).await.is_err(), "stub inner transport");
+    assert_eq!(sent.load(Ordering::SeqCst), 1, "the turn's request was sent");
+    // The turn survives: rejecting the sampling here would abort it at the next check.
+    fixture.sampling.check()?;
+    // And nothing was recorded for a request we could not attribute.
+    assert!(fixture.attempts().await?.is_empty());
+    // A usage event on an excluded request records nothing instead of failing the
+    // stream - on every dialect, because the three observers are three different
+    // code shapes and a future edit could drop the guard from one of them.
+    codex_api::ResponsesUsageObserver::observe(
+        &*evidence,
+        0,
+        Ok(codex_api::ResponsesUsagePatch::default()),
+    )
+    .await
+    .map_err(|error| anyhow::anyhow!("excluded responses usage must not fail: {error}"))?;
+    codex_api::ChatUsageObserver::observe(&*evidence, 0, Ok(codex_api::ChatUsagePatch::default()))
+        .await
+        .map_err(|error| anyhow::anyhow!("excluded chat usage must not fail: {error}"))?;
+    codex_api::AnthropicUsageObserver::observe(
+        &*evidence,
+        0,
+        Ok(codex_api::AnthropicUsagePatch::default()),
+    )
+    .await
+    .map_err(|error| anyhow::anyhow!("excluded anthropic usage must not fail: {error}"))?;
+    fixture.sampling.check()?;
+    assert!(fixture.attempts().await?.is_empty());
+    Ok(())
+}
 
 struct Fixture {
     home: tempfile::TempDir,

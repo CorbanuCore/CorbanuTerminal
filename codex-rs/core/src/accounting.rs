@@ -56,20 +56,118 @@ pub(crate) fn developer_accounting_mode(
         }
         .into()
     });
-    match (provider_id, provider.wire_api) {
-        ("anthropic", WireApi::Anthropic) => AccountingMode::DirectAnthropic {
-            scope,
-            approved_endpoint,
-        },
-        ("openai", WireApi::Responses) => AccountingMode::DirectOpenAiResponses {
-            scope,
-            approved_endpoint,
-        },
-        ("openai", WireApi::Chat) => AccountingMode::DirectOpenAiChat {
-            scope,
-            approved_endpoint,
-        },
-        _ => AccountingMode::Disabled,
+    if route_refusal(provider).is_some() {
+        return AccountingMode::Disabled;
+    }
+    AccountingMode::Provider {
+        scope,
+        provider_id: provider_id.into(),
+        wire_api: provider.wire_api,
+        approved_endpoint,
+        api_key_pricing: false,
+    }
+}
+
+/// Shared admission policy. Authentication changes economics, not token attribution.
+pub(super) fn route_refusal(
+    provider: &codex_model_provider_info::ModelProviderInfo,
+) -> Option<&'static str> {
+    if provider.aws.is_some() {
+        Some("AWS signing does not establish the supported endpoint/dialect")
+    } else if provider.chat_completions_provider.is_some() {
+        Some("chat_completions_provider overrides the serving provider")
+    } else if provider.query_params.is_some() {
+        // The resolved request URL carries the query string, so it can never equal
+        // the pinned `{base}/path`. Refusing the shape leaves such a provider
+        // uncollected; admitting it made every turn fail closed instead.
+        Some("query parameters are not part of the pinned endpoint")
+    } else {
+        None
+    }
+}
+
+/// Bind developer collection to this turn, including provider switches and the
+/// authentication-dependent default endpoint. Never read credentials here.
+pub(crate) fn turn_mode(
+    mode: &AccountingMode,
+    provider_id: &str,
+    provider: &codex_model_provider_info::ModelProviderInfo,
+    auth_mode: Option<codex_protocol::auth::AuthMode>,
+    resolved_endpoint: &str,
+) -> AccountingMode {
+    let AccountingMode::Provider { scope, .. } = mode else {
+        return mode.clone();
+    };
+    if route_refusal(provider).is_some() {
+        return AccountingMode::Disabled;
+    }
+    // Only the existing native API-key authority can supply monetary rates.
+    // Only credential-bearing headers disqualify a route from monetary rates. The
+    // built-in providers always set benign originator and version headers, so
+    // requiring the maps to be absent entirely would silence pricing on exactly
+    // the metered API-key routes that can be priced. This keeps the predicate the
+    // legacy eligibility used.
+    let credential_header = |headers: &Option<std::collections::HashMap<String, String>>| {
+        headers.as_ref().is_some_and(|headers| {
+            headers.keys().any(|name| {
+                name.eq_ignore_ascii_case("authorization") || name.eq_ignore_ascii_case("api-key")
+            })
+        })
+    };
+    let api_key_pricing = auth_mode == Some(codex_protocol::auth::AuthMode::ApiKey)
+        && provider.auth.is_none()
+        && provider.experimental_bearer_token.is_none()
+        // Deliberately NOT gated on `api_key_header_name`: the built-in Anthropic
+        // provider declares `x-api-key` as its own credential header, so requiring
+        // it to be absent made the Anthropic pricing arm below dead code and left
+        // metered Anthropic turns with no rate at all.
+        && !credential_header(&provider.http_headers)
+        && !credential_header(&provider.env_http_headers)
+        && match (provider_id, provider.wire_api) {
+            ("anthropic", codex_model_provider_info::WireApi::Anthropic) => {
+                resolved_endpoint == codex_model_provider_info::ANTHROPIC_BASE_URL
+            }
+            (
+                "openai",
+                codex_model_provider_info::WireApi::Responses
+                | codex_model_provider_info::WireApi::Chat,
+            ) => resolved_endpoint == "https://api.openai.com/v1",
+            _ => false,
+        };
+    AccountingMode::Provider {
+        scope: *scope,
+        provider_id: provider_id.into(),
+        wire_api: provider.wire_api,
+        approved_endpoint: resolved_endpoint.into(),
+        api_key_pricing,
+    }
+}
+
+pub(crate) fn collects(
+    mode: &AccountingMode,
+    provider_id: &str,
+    provider: &codex_model_provider_info::ModelProviderInfo,
+    wire: codex_model_provider_info::WireApi,
+) -> bool {
+    use codex_model_provider_info::WireApi;
+    if provider.wire_api != wire || route_refusal(provider).is_some() {
+        return false;
+    }
+    match mode {
+        AccountingMode::Provider {
+            provider_id: bound,
+            wire_api,
+            ..
+        } => bound == provider_id && *wire_api == wire,
+        AccountingMode::DirectAnthropic { .. } => {
+            provider_id == "anthropic" && wire == WireApi::Anthropic
+        }
+        AccountingMode::DirectOpenAiChat { .. } => provider_id == "openai" && wire == WireApi::Chat,
+        AccountingMode::DirectOpenAiResponses { .. }
+        | AccountingMode::DirectOpenAiResponsesHttp { .. } => {
+            provider_id == "openai" && wire == WireApi::Responses
+        }
+        AccountingMode::Disabled => false,
     }
 }
 
@@ -134,6 +232,7 @@ enum Pricing {
     Anthropic,
     Responses,
     Chat,
+    Unavailable,
 }
 
 pub(crate) struct Sampling {
@@ -143,7 +242,7 @@ pub(crate) struct Sampling {
     request: Uuid,
     scope: Uuid,
     endpoint: String,
-    provider: &'static str,
+    provider: String,
     dialect: Dialect,
     pricing: Pricing,
     previous: Mutex<Option<Uuid>>,
@@ -183,6 +282,27 @@ impl Sampling {
         request: Uuid,
     ) -> Result<Arc<Self>, CodexErr> {
         let (scope, approved_endpoint, provider, dialect, path) = match mode {
+            AccountingMode::Provider {
+                scope,
+                provider_id,
+                wire_api,
+                approved_endpoint,
+                ..
+            } => {
+                use codex_model_provider_info::WireApi;
+                let (dialect, path) = match wire_api {
+                    WireApi::Anthropic => (Dialect::NativeAnthropic, "messages"),
+                    WireApi::Responses => (Dialect::Inclusive, "responses"),
+                    WireApi::Chat => (Dialect::Inclusive, "chat/completions"),
+                };
+                (
+                    scope,
+                    approved_endpoint,
+                    provider_id.as_str(),
+                    dialect,
+                    path,
+                )
+            }
             AccountingMode::DirectAnthropic {
                 scope,
                 approved_endpoint,
@@ -243,9 +363,22 @@ impl Sampling {
             request,
             scope: *scope,
             endpoint: format!("{}/{path}", approved_endpoint.trim_end_matches('/')),
-            provider,
+            provider: provider.into(),
             dialect,
             pricing: match mode {
+                AccountingMode::Provider {
+                    wire_api,
+                    api_key_pricing: true,
+                    ..
+                } => match wire_api {
+                    codex_model_provider_info::WireApi::Anthropic => Pricing::Anthropic,
+                    codex_model_provider_info::WireApi::Responses => Pricing::Responses,
+                    codex_model_provider_info::WireApi::Chat => Pricing::Chat,
+                },
+                AccountingMode::Provider {
+                    api_key_pricing: false,
+                    ..
+                } => Pricing::Unavailable,
                 AccountingMode::DirectAnthropic { .. } => Pricing::Anthropic,
                 AccountingMode::DirectOpenAiChat { .. } => Pricing::Chat,
                 AccountingMode::DirectOpenAiResponsesHttp { .. }
@@ -301,13 +434,14 @@ impl Sampling {
             thread_id: self.owner,
             turn: self.turn.clone(),
             retry_of: previous,
-            provider: self.provider.into(),
+            provider: self.provider.clone(),
             model: model.into(),
             scope: self.scope,
             dialect: self.dialect,
             dispatched_at_ms: dispatched_at.try_into()?,
         };
         let prices = match self.pricing {
+            Pricing::Unavailable => Vec::new(),
             Pricing::Anthropic => prices::original(model, self.scope, dispatched_at)?,
             Pricing::Responses => {
                 prices::responses_original(model, self.scope, dispatched_at, tier)?

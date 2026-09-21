@@ -11,6 +11,41 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[tokio::test]
+async fn accounting_chatgpt_subscription_collects_without_api_prices() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    let mock = responses::mount_sse_once(&server, success(usage(Some(0)))).await;
+    let mode = AccountingMode::Provider {
+        scope: uuid::Uuid::new_v4(),
+        provider_id: "openai".into(),
+        wire_api: codex_model_provider_info::WireApi::Responses,
+        approved_endpoint: endpoint.clone(),
+        api_key_pricing: false,
+    };
+    let test = builder(endpoint, mode)
+        .with_auth(codex_login::CodexAuth::from_external_chatgpt_tokens(
+            "header.e30.synthetic",
+            "synthetic-account",
+            None,
+        )?)
+        .build_with_auto_env(&server)
+        .await?;
+    test.submit_turn("subscription accounting").await?;
+    let db = test.codex.state_db().unwrap();
+    let records = attempts(&db).await?;
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].provider, "openai");
+    let prices: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
+    assert!(prices.is_empty());
+    let total = totals(&db, &records[0]).await?;
+    assert_eq!(total.measured[0].known, 100);
+    assert_eq!(total.unknown_estimates, 1);
+    assert_eq!(mock.requests().len(), 1);
+    stop(&test).await;
+    Ok(())
+}
+
+#[tokio::test]
 async fn accounting_responses_native_off_and_unsupported() -> anyhow::Result<()> {
     for variant in 0..4 {
         let server = MockServer::start().await;

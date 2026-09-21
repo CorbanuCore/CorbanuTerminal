@@ -11,6 +11,8 @@ use codex_http_client::Response;
 use codex_http_client::StreamResponse;
 use codex_http_client::TransportError;
 use codex_state::accounting::Attempt;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -21,6 +23,7 @@ pub(crate) struct ResponseEvidence {
     sampling: Arc<Sampling>,
     attempt: OnceLock<Attempt>,
     source: Uuid,
+    excluded: AtomicBool,
 }
 
 impl ResponseEvidence {
@@ -29,6 +32,7 @@ impl ResponseEvidence {
             sampling,
             attempt: OnceLock::from(attempt),
             source: Uuid::new_v4(),
+            excluded: AtomicBool::new(false),
         })
     }
 
@@ -37,7 +41,23 @@ impl ResponseEvidence {
             sampling,
             attempt: OnceLock::new(),
             source: Uuid::new_v4(),
+            excluded: AtomicBool::new(false),
         })
+    }
+
+    /// Records nothing for this request and lets it proceed unaccounted.
+    ///
+    /// Rejecting the turn's sampling instead would abort the turn at the next
+    /// `check()`, and leaving the observers armed with no admitted attempt would
+    /// fail the stream on the first usage event - after the request had already
+    /// been sent and billed. Neither is acceptable for a request the product is
+    /// happy to serve; it is only one the accounting cannot attribute.
+    pub(super) fn exclude(&self) {
+        self.excluded.store(true, Ordering::SeqCst);
+    }
+
+    fn is_excluded(&self) -> bool {
+        self.excluded.load(Ordering::SeqCst)
     }
 }
 
@@ -48,6 +68,9 @@ impl AnthropicUsageObserver for ResponseEvidence {
         usage: Result<AnthropicUsagePatch, InvalidAnthropicUsage>,
     ) -> Pin<Box<dyn Future<Output = Result<(), ApiError>> + Send + '_>> {
         Box::pin(async move {
+            if self.is_excluded() {
+                return Ok(());
+            }
             let result = match (self.attempt.get(), usage) {
                 (Some(attempt), Ok(usage)) => {
                     self.sampling
@@ -71,6 +94,9 @@ impl codex_api::ResponsesUsageObserver for ResponseEvidence {
         usage: Result<codex_api::ResponsesUsagePatch, codex_api::InvalidResponsesUsage>,
     ) -> Pin<Box<dyn Future<Output = Result<(), ApiError>> + Send + '_>> {
         Box::pin(async move {
+            if self.is_excluded() {
+                return Ok(());
+            }
             let result = async {
                 let attempt = self.attempt.get().ok_or_else(|| anyhow::anyhow!(FAILURE))?;
                 let usage = usage.map_err(|_| anyhow::anyhow!(FAILURE))?;
@@ -99,6 +125,9 @@ impl codex_api::ChatUsageObserver for ResponseEvidence {
         usage: Result<codex_api::ChatUsagePatch, codex_api::InvalidChatUsage>,
     ) -> Pin<Box<dyn Future<Output = Result<(), ApiError>> + Send + '_>> {
         Box::pin(async move {
+            if self.is_excluded() {
+                return Ok(());
+            }
             let result = async {
                 let attempt = self.attempt.get().ok_or_else(|| anyhow::anyhow!(FAILURE))?;
                 let usage = usage.map_err(|_| anyhow::anyhow!(FAILURE))?;
@@ -113,6 +142,27 @@ impl codex_api::ChatUsageObserver for ResponseEvidence {
             })
         })
     }
+}
+
+/// Request-level routing hints can change the serving provider after selection.
+/// Inspect only the routing keys; never retain or report the request payload.
+///
+/// The transport sees the body after preparation, which for this client can mean
+/// zstd-compressed bytes. Reading those as plain JSON fails, and treating that
+/// failure as "uninspectable" refused every compressed turn and collected
+/// nothing, so the decoding lives with the body type that produced them.
+pub(super) fn request_refusal(request: &Request) -> Option<&'static str> {
+    let Some(value) = request.body.as_ref()?.inspectable_json() else {
+        return Some("uninspectable request body");
+    };
+    // These are the names the wire actually carries. `provider_options` is
+    // serialized as `providerOptions` by every request type that has it, and the
+    // shipped gateway providers populate it to pin a different upstream vendor,
+    // so matching only the snake_case form left Responses and Anthropic turns
+    // attributable to the selected provider while the body said otherwise.
+    ["provider", "providerOptions", "provider_options", "plugins"]
+        .into_iter()
+        .find(|key| value.get(*key).is_some())
 }
 
 pub(crate) struct AccountingTransport<T> {
@@ -151,14 +201,32 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
             evidence.sampling.reject();
             return Err(TransportError::Build(FAILURE.into()));
         }
-        let admission = if evidence.sampling.provider == "anthropic" {
-            evidence.sampling.admit(&self.model, &request.url).await
-        } else {
-            evidence
-                .sampling
-                .admit_with_tier(&self.model, &request.url, self.tier.as_deref())
-                .await
-        };
+        // A body that can re-route the serving provider must not be attributed to
+        // the selected one, but it also must not kill the user's turn: Chat
+        // declines such a request before a collector exists, and Responses and
+        // Anthropic have no typed body check, so failing closed here would end the
+        // turn for a request the product is happy to send. Decline to sample and
+        // let it through unrecorded.
+        if let Some(reason) = request_refusal(&request) {
+            // Say so once. An excluded request is still billed by the provider,
+            // and silence would make it indistinguishable from a turn that never
+            // sent anything. The key name is routing metadata, not payload.
+            tracing::warn!(
+                accounting.excluded = reason,
+                "accounting: request not attributable to the selected provider; serving it unrecorded"
+            );
+            evidence.exclude();
+            return self.inner.stream(request).await;
+        }
+        let admission =
+            if evidence.sampling.dialect == codex_state::accounting::Dialect::NativeAnthropic {
+                evidence.sampling.admit(&self.model, &request.url).await
+            } else {
+                evidence
+                    .sampling
+                    .admit_with_tier(&self.model, &request.url, self.tier.as_deref())
+                    .await
+            };
         let attempt = admission.map_err(|_| {
             evidence.sampling.reject();
             TransportError::Build(FAILURE.into())

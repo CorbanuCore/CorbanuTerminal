@@ -152,11 +152,7 @@ fn absent_null_zero_and_missing_rates_remain_distinct() {
     let q = quote_observations(&attempt(), &rows, &[]).unwrap();
     assert_eq!(
         (q.buckets, q.all_buckets_priced, q.snapshot),
-        (
-            [BucketQuote::Priced(Decimal::default()); 4],
-            Some(Decimal::default()),
-            None
-        )
+        ([BucketQuote::MissingRate; 4], None, None)
     );
     let rows = [row(1, json!({"input":1,"read":0,"write":1,"output":2}))];
     assert_eq!(

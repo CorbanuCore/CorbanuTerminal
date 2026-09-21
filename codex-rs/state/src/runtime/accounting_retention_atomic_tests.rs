@@ -778,16 +778,23 @@ async fn latest_original_price_null_binding_intent_and_known_zero() -> anyhow::R
         2,
         2,
     );
-    let zero = values([0; 7], [0; 7], "0", 0, 1);
+    // The compacted day for the unpriced attempt carries one incomplete estimate:
+    // zero tokens without a rate is not a zero cost, and `zero` is the row this
+    // test's pipeline actually produces. `priced_zero` is a hand-built row: it
+    // pins only that `to_day_totals` still reports a complete zero when the
+    // estimate count is zero, not that any attempt here produced it.
+    let zero = values([0; 7], [0; 7], "0", 1, 1);
+    let priced_zero = values([0; 7], [0; 7], "0", 0, 1);
     let unknown = values([0; 7], [1; 7], "0", 1, 1);
-    let zero_totals = zero.to_day_totals()?;
-    assert_eq!(zero_totals.full_usd(), Some(Decimal::default()));
+    let priced_zero_totals = priced_zero.to_day_totals()?;
+    assert_eq!(priced_zero_totals.full_usd(), Some(Decimal::default()));
     assert!(
-        zero_totals
+        priced_zero_totals
             .measured
             .iter()
             .all(|metric| metric.full() == Some(0))
     );
+    assert_eq!(zero.to_day_totals()?.full_usd(), None);
     assert_eq!(unknown.to_day_totals()?.full_usd(), None);
     store.maintain_retention(DETAIL_MS).await?;
     let expected = retained_rows(

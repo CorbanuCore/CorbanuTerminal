@@ -53,6 +53,26 @@ impl RequestBody {
             Self::EncodedJson(_) | Self::Raw(_) => None,
         }
     }
+
+    /// Returns the body as JSON for callers that must inspect routing keys.
+    ///
+    /// A prepared body holds the final wire bytes, which for this client means
+    /// they may already be zstd-compressed; only this module knows that, so the
+    /// decoding lives here rather than in every caller. `None` means the body
+    /// genuinely cannot be read as JSON, which callers must treat as
+    /// uninspectable rather than as an absence of keys.
+    pub fn inspectable_json(&self) -> Option<Value> {
+        let bytes = match self {
+            Self::Json(value) => return Some(value.clone()),
+            Self::EncodedJson(body) => body.as_bytes(),
+            Self::Raw(bytes) => bytes.as_ref(),
+        };
+        if let Ok(value) = serde_json::from_slice::<Value>(bytes) {
+            return Some(value);
+        }
+        let plain = zstd::stream::decode_all(std::io::Cursor::new(bytes)).ok()?;
+        serde_json::from_slice(&plain).ok()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

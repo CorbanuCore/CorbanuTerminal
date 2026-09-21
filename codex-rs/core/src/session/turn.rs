@@ -1635,12 +1635,31 @@ async fn run_sampling_request(
     let turn_context = Arc::clone(&step_context.turn);
     let router = Arc::clone(&step_context.tool_router);
 
-    let accounting = if matches!(
+    let accounting_mode = if matches!(
         turn_context.config.accounting,
-        crate::config::AccountingMode::DirectAnthropic { .. }
-    ) && turn_context.config.model_provider_id == "anthropic"
-        && turn_context.provider.info().wire_api == codex_model_provider_info::WireApi::Anthropic
-    {
+        crate::config::AccountingMode::Provider { .. }
+    ) {
+        let auth = turn_context.provider.auth().await;
+        let api = turn_context.provider.api_provider().await?;
+        crate::accounting::turn_mode(
+            &turn_context.config.accounting,
+            &turn_context.config.model_provider_id,
+            turn_context.provider.info(),
+            auth.as_ref().map(codex_login::CodexAuth::auth_mode),
+            &api.base_url,
+        )
+    } else {
+        turn_context.config.accounting.clone()
+    };
+    let collects = |wire| {
+        crate::accounting::collects(
+            &accounting_mode,
+            &turn_context.config.model_provider_id,
+            turn_context.provider.info(),
+            wire,
+        )
+    };
+    let accounting = if collects(codex_model_provider_info::WireApi::Anthropic) {
         sess.try_ensure_rollout_materialized()
             .await
             .map_err(|_| CodexErr::Fatal(crate::accounting::FAILURE.into()))?;
@@ -1652,7 +1671,7 @@ async fn run_sampling_request(
                 runtime,
                 sess.thread_id,
                 turn_context.sub_id.clone(),
-                &turn_context.config.accounting,
+                &accounting_mode,
             )
             .await?,
         )
@@ -1666,35 +1685,24 @@ async fn run_sampling_request(
         accounting.clone(),
     )?;
 
-    let responses_accounting = (matches!(
-        turn_context.config.accounting,
-        crate::config::AccountingMode::DirectOpenAiResponsesHttp { .. }
-            | crate::config::AccountingMode::DirectOpenAiResponses { .. }
-    ) && turn_context.config.model_provider_id == "openai"
-        && turn_context.provider.info().wire_api == codex_model_provider_info::WireApi::Responses)
-        .then(|| {
-            crate::accounting::responses::DeferredResponsesSampling::new(
-                Arc::clone(&sess),
-                turn_context.sub_id.clone(),
-                turn_context.config.accounting.clone(),
-            )
-        });
+    let responses_accounting = collects(codex_model_provider_info::WireApi::Responses).then(|| {
+        crate::accounting::responses::DeferredResponsesSampling::new(
+            Arc::clone(&sess),
+            turn_context.sub_id.clone(),
+            accounting_mode.clone(),
+        )
+    });
     let _responses_scope = crate::accounting::responses::Scope::attach(
         Arc::clone(&client_session.responses_accounting),
         responses_accounting.clone(),
     )?;
-    let chat_accounting = (matches!(
-        turn_context.config.accounting,
-        crate::config::AccountingMode::DirectOpenAiChat { .. }
-    ) && turn_context.config.model_provider_id == "openai"
-        && turn_context.provider.info().wire_api == codex_model_provider_info::WireApi::Chat)
-        .then(|| {
-            crate::accounting::chat::DeferredChatSampling::new(
-                Arc::clone(&sess),
-                turn_context.sub_id.clone(),
-                turn_context.config.accounting.clone(),
-            )
-        });
+    let chat_accounting = collects(codex_model_provider_info::WireApi::Chat).then(|| {
+        crate::accounting::chat::DeferredChatSampling::new(
+            Arc::clone(&sess),
+            turn_context.sub_id.clone(),
+            accounting_mode.clone(),
+        )
+    });
     let _chat_scope = crate::accounting::chat::Scope::attach(
         Arc::clone(&client_session.chat_accounting),
         chat_accounting.clone(),

@@ -1,0 +1,628 @@
+Test isolation: disposable profile; native keyring disabled (debug lane)
+warning: field `runtime` is never read
+  --> state/src/runtime/accounting.rs:27:5
+   |
+26 | struct Journal<'a> {
+   |        ------- field in this struct
+27 |     runtime: &'a StateRuntime,
+   |     ^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `begin_attempt`, `append_observation`, and `read_observations` are never used
+   --> state/src/runtime/accounting.rs:49:14
+    |
+ 30 | impl<'a> Journal<'a> {
+    | -------------------- methods in this implementation
+...
+ 49 |     async fn begin_attempt(&self, attempt: &Attempt) -> anyhow::Result<()> {
+    |              ^^^^^^^^^^^^^
+...
+ 54 |     async fn append_observation(
+    |              ^^^^^^^^^^^^^^^^^^
+...
+162 |     async fn read_observations(
+    |              ^^^^^^^^^^^^^^^^^
+
+warning: field `journal` is never read
+  --> state/src/runtime/accounting_estimates.rs:27:5
+   |
+26 | struct EstimateStore<'a> {
+   |        ------------- field in this struct
+27 |     journal: Journal<'a>,
+   |     ^^^^^^^
+
+warning: methods `persist_current` and `read_estimate` are never used
+  --> state/src/runtime/accounting_estimates.rs:50:14
+   |
+30 | impl<'a> EstimateStore<'a> {
+   | -------------------------- methods in this implementation
+...
+50 |     async fn persist_current(
+   |              ^^^^^^^^^^^^^^^
+...
+99 |     async fn read_estimate(
+   |              ^^^^^^^^^^^^^
+
+warning: method `full` is never used
+  --> state/src/runtime/accounting_lifecycle.rs:25:8
+   |
+24 | impl Metric {
+   | ----------- method in this implementation
+25 |     fn full(&self) -> Option<i64> {
+   |        ^^^^
+
+warning: method `full_usd` is never used
+  --> state/src/runtime/accounting_lifecycle.rs:63:8
+   |
+51 | impl DayTotals {
+   | -------------- method in this implementation
+...
+63 |     fn full_usd(&self) -> Option<Decimal> {
+   |        ^^^^^^^^
+
+warning: struct `Lifecycle` is never constructed
+  --> state/src/runtime/accounting_lifecycle.rs:93:8
+   |
+93 | struct Lifecycle<'a> {
+   |        ^^^^^^^^^
+
+warning: methods `refresh_current`, `read_day`, and `delete_recorded_thread` are never used
+   --> state/src/runtime/accounting_lifecycle.rs:114:14
+    |
+ 97 | impl<'a> Lifecycle<'a> {
+    | ---------------------- methods in this implementation
+...
+114 |     async fn refresh_current(&self, id: Uuid) -> anyhow::Result<Current<()>> {
+    |              ^^^^^^^^^^^^^^^
+...
+135 |     async fn read_day(&self, thread: ThreadId, day: i64) -> anyhow::Result<Current<DayTotals>> {
+    |              ^^^^^^^^
+...
+178 |     async fn delete_recorded_thread(&self, thread: ThreadId, as_of_ms: i64) -> anyhow::Result<()> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `maintain_retention` and `read_retained_day` are never used
+  --> state/src/runtime/accounting_retention_atomic.rs:55:14
+   |
+54 | impl Lifecycle<'_> {
+   | ------------------ methods in this implementation
+55 |     async fn maintain_retention(&self, as_of_ms: i64) -> anyhow::Result<()> {
+   |              ^^^^^^^^^^^^^^^^^^
+...
+73 |     pub(in crate::runtime::accounting::pricing::storage::lifecycle) async fn read_retained_day(
+   |                                                                              ^^^^^^^^^^^^^^^^^
+
+warning: method `append_native` is never used
+  --> state/src/runtime/accounting_native.rs:53:49
+   |
+ 8 | impl Journal<'_> {
+   | ---------------- method in this implementation
+...
+53 |     pub(in crate::runtime::accounting) async fn append_native(
+   |                                                 ^^^^^^^^^^^^^
+
+warning: `codex-state` (lib) generated 10 warnings
+   Compiling codex-core v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/core)
+warning: constant `STATUS_PATH` is never used
+  --> tasknode-session/src/session_validity.rs:13:7
+   |
+13 | const STATUS_PATH: &str = "/api/terminal/tasknode/status";
+   |       ^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `RESPONSE_LIMIT` is never used
+  --> tasknode-session/src/session_validity.rs:14:7
+   |
+14 | const RESPONSE_LIMIT: usize = 16 * 1024 * 1024;
+   |       ^^^^^^^^^^^^^^
+
+warning: enum `ObservationControl` is never used
+  --> tasknode-session/src/session_validity.rs:17:17
+   |
+17 | pub(crate) enum ObservationControl {
+   |                 ^^^^^^^^^^^^^^^^^^
+
+warning: struct `ValidityCurrent` is never constructed
+  --> tasknode-session/src/session_validity.rs:26:19
+   |
+26 | pub(crate) struct ValidityCurrent {
+   |                   ^^^^^^^^^^^^^^^
+
+warning: struct `ValidityBinding` is never constructed
+  --> tasknode-session/src/session_validity.rs:36:19
+   |
+36 | pub(crate) struct ValidityBinding {
+   |                   ^^^^^^^^^^^^^^^
+
+warning: enum `ValidityHold` is never used
+  --> tasknode-session/src/session_validity.rs:48:17
+   |
+48 | pub(crate) enum ValidityHold {
+   |                 ^^^^^^^^^^^^
+
+warning: associated items `new` and `fence` are never used
+  --> tasknode-session/src/session_validity.rs:72:19
+   |
+71 | impl ValidityBinding {
+   | -------------------- associated items in this implementation
+72 |     pub(crate) fn new(current: &ValidityCurrent) -> Result<Self, ValidityHold> {
+   |                   ^^^
+...
+90 |     fn fence(
+   |        ^^^^^
+
+warning: function `current_client` is never used
+   --> tasknode-session/src/session_validity.rs:113:4
+    |
+113 | fn current_client(current: &ValidityCurrent) -> Result<Client, ValidityHold> {
+    |    ^^^^^^^^^^^^^^
+
+warning: struct `CheckedIdentity` is never constructed
+   --> tasknode-session/src/session_validity.rs:145:19
+    |
+145 | pub(crate) struct CheckedIdentity {
+    |                   ^^^^^^^^^^^^^^^
+
+warning: struct `IdentityAtCheck` is never constructed
+   --> tasknode-session/src/session_validity.rs:152:19
+    |
+152 | pub(crate) struct IdentityAtCheck {
+    |                   ^^^^^^^^^^^^^^^
+
+warning: method `consume_for_observation` is never used
+   --> tasknode-session/src/session_validity.rs:158:19
+    |
+157 | impl CheckedIdentity {
+    | -------------------- method in this implementation
+158 |     pub(crate) fn consume_for_observation(
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `check_identity` is never used
+   --> tasknode-session/src/session_validity.rs:170:21
+    |
+170 | pub(crate) async fn check_identity(
+    |                     ^^^^^^^^^^^^^^
+
+warning: function `check_identity_with` is never used
+   --> tasknode-session/src/session_validity.rs:184:10
+    |
+184 | async fn check_identity_with<F: Future<Output = Result<(u16, Vec<u8>), ClientError>>>(
+    |          ^^^^^^^^^^^^^^^^^^^
+
+warning: struct `IdentityStatus` is never constructed
+   --> tasknode-session/src/session_validity.rs:213:8
+    |
+213 | struct IdentityStatus {
+    |        ^^^^^^^^^^^^^^
+
+warning: struct `Github` is never constructed
+   --> tasknode-session/src/session_validity.rs:222:8
+    |
+222 | struct Github {
+    |        ^^^^^^
+
+warning: function `object` is never used
+   --> tasknode-session/src/session_validity.rs:230:4
+    |
+230 | fn object<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(de: D) -> Result<T, D::Error> {
+    |    ^^^^^^
+
+warning: function `decode_identity_status` is never used
+   --> tasknode-session/src/session_validity.rs:244:4
+    |
+244 | fn decode_identity_status(status: u16, bytes: &[u8]) -> Result<IdentityStatus, ValidityHold> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `codex-tasknode-session` (lib) generated 17 warnings
+   Compiling codex-memories-write v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/memories/write)
+   Compiling codex-app-server-transport v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/app-server-transport)
+   Compiling codex-image-generation-extension v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/image-generation)
+   Compiling codex-web-search-extension v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/web-search)
+   Compiling codex-chatgpt v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/chatgpt)
+   Compiling codex-goal-extension v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/goal)
+   Compiling codex-cloud-config v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/cloud-config)
+   Compiling codex-mcp-extension v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/mcp)
+   Compiling codex-memories-extension v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/memories)
+   Compiling codex-guardian v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/guardian)
+   Compiling codex-agent-extension v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/agent)
+   Compiling codex-lmstudio v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/lmstudio)
+   Compiling codex-ollama v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ollama)
+   Compiling core_test_support v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/core/tests/common)
+   Compiling codex-app-server-test-client v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/app-server-test-client)
+   Compiling codex-mcp-server v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/mcp-server)
+   Compiling codex-utils-oss v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/utils/oss)
+   Compiling app_test_support v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/app-server/tests/common)
+   Compiling codex-external-agent-migration v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/external-agent-migration)
+   Compiling codex-app-server-daemon v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/app-server-daemon)
+   Compiling codex-app-server v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/app-server)
+   Compiling codex-app-server-client v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/app-server-client)
+   Compiling codex-tui v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/tui)
+   Compiling codex-telegram v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/telegram)
+   Compiling codex-exec v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/exec)
+warning: variant `OpenPlans` is never constructed
+   --> tui/src/app_event.rs:318:5
+    |
+313 | pub(crate) enum WalletUnlockContinuation {
+    |                 ------------------------ variant in this enum
+...
+318 |     OpenPlans {
+    |     ^^^^^^^^^
+    |
+    = note: `WalletUnlockContinuation` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variants `ProviderCredentialStatusesReady`, `OpenWalletPlanReceipt`, `WalletRecoverPlanRequested`, and `UpdateActivePermissionProfile` are never constructed
+    --> tui/src/app_event.rs:1790:5
+     |
+ 395 | pub(crate) enum AppEvent {
+     |                 -------- variants in this enum
+...
+1790 |     ProviderCredentialStatusesReady {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1956 |     OpenWalletPlanReceipt {
+     |     ^^^^^^^^^^^^^^^^^^^^^
+...
+1960 |     WalletRecoverPlanRequested,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+2104 |     UpdateActivePermissionProfile(ActivePermissionProfile),
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `AppEvent` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: variant `Checking` is never constructed
+   --> tui/src/chatwidget/claude_code_login.rs:186:5
+    |
+185 | pub(crate) enum ClaudeCodePlanStatus {
+    |                 -------------------- variant in this enum
+186 |     Checking,
+    |     ^^^^^^^^
+    |
+    = note: `ClaudeCodePlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: variants `Checking`, `Active`, `WalletOnly`, `ConnectedStatusUnavailable`, `NotConnected`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:7:5
+   |
+ 6 | pub(crate) enum PfTerminalPlanStatus {
+   |                 -------------------- variants in this enum
+ 7 |     Checking,
+   |     ^^^^^^^^
+ 8 |     Active {
+   |     ^^^^^^
+...
+12 |     WalletOnly {
+   |     ^^^^^^^^^^
+...
+15 |     ConnectedStatusUnavailable {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+18 |     NotConnected,
+   |     ^^^^^^^^^^^^
+19 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `PfTerminalPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `load` is never used
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:22:21
+   |
+22 | pub(crate) async fn load(
+   |                     ^^^^
+
+warning: constant `PROVIDER_STATUS_TIMEOUT` is never used
+  --> tui/src/chatwidget/provider_credentials.rs:33:7
+   |
+33 | const PROVIDER_STATUS_TIMEOUT: Duration = Duration::from_secs(10);
+   |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `AvailableFromEnvironment`, `Stored`, `NotConfigured`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/provider_credentials.rs:38:5
+   |
+36 | pub(crate) enum ProviderApiKeyStatus {
+   |                 -------------------- variants in this enum
+37 |     Checking,
+38 |     AvailableFromEnvironment,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+39 |     Stored,
+   |     ^^^^^^
+40 |     NotConfigured,
+   |     ^^^^^^^^^^^^^
+41 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `ProviderApiKeyStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `open_provider_credentials_menu` and `refresh_provider_credentials_status_in_background` are never used
+   --> tui/src/chatwidget/provider_credentials.rs:108:19
+    |
+107 | impl ChatWidget {
+    | --------------- methods in this implementation
+108 |     pub(crate) fn open_provider_credentials_menu(&mut self) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+137 |     fn refresh_provider_credentials_status_in_background(&self) {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `provider_api_key_statuses` is never used
+   --> tui/src/chatwidget/provider_credentials.rs:380:4
+    |
+380 | fn provider_api_key_statuses(codex_home: &Path) -> Vec<(String, ProviderApiKeyStatus)> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `provider_api_key_unavailable_statuses` is never used
+   --> tui/src/chatwidget/provider_credentials.rs:409:4
+    |
+409 | fn provider_api_key_unavailable_statuses() -> Vec<(String, ProviderApiKeyStatus)> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `New`, `Onboarding`, and `Upgrade` are never constructed
+  --> tui/src/chatwidget/wallet_menu.rs:55:5
+   |
+54 | pub(crate) enum WalletPlanPurchaseMode {
+   |                 ---------------------- variants in this enum
+55 |     New,
+   |     ^^^
+56 |     Onboarding {
+   |     ^^^^^^^^^^
+...
+59 |     Upgrade {
+   |     ^^^^^^^
+   |
+   = note: `WalletPlanPurchaseMode` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `wallet_address` is never read
+   --> tui/src/chatwidget/wallet_menu.rs:114:16
+    |
+113 | pub(crate) struct WalletPlanStatus {
+    |                   ---------------- field in this struct
+114 |     pub(crate) wallet_address: String,
+    |                ^^^^^^^^^^^^^^
+    |
+    = note: `WalletPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `latest_plan_receipt` is never used
+   --> tui/src/chatwidget/wallet_receipt.rs:190:15
+    |
+190 | pub(super) fn latest_plan_receipt(
+    |               ^^^^^^^^^^^^^^^^^^^
+
+   Compiling codex-cloud-tasks v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/cloud-tasks)
+warning: `codex-tui` (lib) generated 13 warnings
+   Compiling codex-cli v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/cli)
+warning: variable does not need to be mutable
+  --> tui/src/app/resume_defaults_tests.rs:17:9
+   |
+17 |     let mut server = crate::start_embedded_app_server_for_picker(&config).await?;
+   |         ----^^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variants `ProviderCredentialStatusesReady`, `OpenWalletPlanReceipt`, `WalletRecoverPlanRequested`, and `UpdateActivePermissionProfile` are never constructed
+    --> tui/src/app_event.rs:1790:5
+     |
+ 395 | pub(crate) enum AppEvent {
+     |                 -------- variants in this enum
+...
+1790 |     ProviderCredentialStatusesReady {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1956 |     OpenWalletPlanReceipt {
+     |     ^^^^^^^^^^^^^^^^^^^^^
+...
+1960 |     WalletRecoverPlanRequested,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+2104 |     UpdateActivePermissionProfile(ActivePermissionProfile),
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `AppEvent` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variants `Checking`, `ConnectedStatusUnavailable`, `NotConnected`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:7:5
+   |
+ 6 | pub(crate) enum PfTerminalPlanStatus {
+   |                 -------------------- variants in this enum
+ 7 |     Checking,
+   |     ^^^^^^^^
+...
+15 |     ConnectedStatusUnavailable {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+18 |     NotConnected,
+   |     ^^^^^^^^^^^^
+19 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `PfTerminalPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: variants `Onboarding` and `Upgrade` are never constructed
+  --> tui/src/chatwidget/wallet_menu.rs:56:5
+   |
+54 | pub(crate) enum WalletPlanPurchaseMode {
+   |                 ---------------------- variants in this enum
+55 |     New,
+56 |     Onboarding {
+   |     ^^^^^^^^^^
+...
+59 |     Upgrade {
+   |     ^^^^^^^
+   |
+   = note: `WalletPlanPurchaseMode` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: constant `OTHER_TOOLTIP` is never used
+  --> tui/src/tooltips.rs:20:7
+   |
+20 | const OTHER_TOOLTIP: &str = "*New* Build faster with the **Desktop app**. Run 'codex app' or visit https://chatgpt.com/codex?app-lan...
+   |       ^^^^^^^^^^^^^
+
+warning: constant `OTHER_TOOLTIP_NON_MAC` is never used
+  --> tui/src/tooltips.rs:22:7
+   |
+22 | const OTHER_TOOLTIP_NON_MAC: &str = "*New* Build faster with Codex.";
+   |       ^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `FREE_GO_TOOLTIP` is never used
+  --> tui/src/tooltips.rs:24:7
+   |
+24 | const FREE_GO_TOOLTIP: &str =
+   |       ^^^^^^^^^^^^^^^
+
+warning: function `get_update_action` is never used
+  --> tui/src/update_action.rs:59:8
+   |
+59 | pub fn get_update_action() -> Option<UpdateAction> {
+   |        ^^^^^^^^^^^^^^^^^
+
+warning: function `get_upgrade_version` is never used
+  --> tui/src/updates.rs:23:8
+   |
+23 | pub fn get_upgrade_version(config: &Config) -> Option<String> {
+   |        ^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CORBANU_LATEST_RELEASE_URL` is never used
+  --> tui/src/updates.rs:56:7
+   |
+56 | const CORBANU_LATEST_RELEASE_URL: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CORBANU_RELEASE_BY_TAG_URL` is never used
+  --> tui/src/updates.rs:58:7
+   |
+58 | const CORBANU_RELEASE_BY_TAG_URL: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `LEGACY_PFTERMINAL_LATEST_RELEASE_URL` is never used
+  --> tui/src/updates.rs:60:7
+   |
+60 | const LEGACY_PFTERMINAL_LATEST_RELEASE_URL: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `LEGACY_PFTERMINAL_RELEASE_BY_TAG_URL` is never used
+  --> tui/src/updates.rs:62:7
+   |
+62 | const LEGACY_PFTERMINAL_RELEASE_BY_TAG_URL: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `RELEASE_VALIDATION_TIMEOUT` is never used
+  --> tui/src/updates.rs:64:7
+   |
+64 | const RELEASE_VALIDATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `check_for_update` is never used
+  --> tui/src/updates.rs:71:10
+   |
+71 | async fn check_for_update(
+   |          ^^^^^^^^^^^^^^^^
+
+warning: function `get_upgrade_version_for_popup` is never used
+   --> tui/src/updates.rs:161:14
+    |
+161 | pub async fn get_upgrade_version_for_popup(config: &Config) -> Option<String> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `codex-tui` (lib test) generated 25 warnings (9 duplicates) (run `cargo fix --lib -p codex-tui --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 25.34s
+────────────
+ Nextest run ID 4eba9105-3010-4d37-ba70-5b76e03605d2 with nextest profile: local
+    Starting 92 tests across 6 binaries (4079 tests skipped)
+        PASS [   0.010s] ( 1/92) codex-tui chatwidget::goal_status::tests::active_goal_usage_prefers_token_budget
+        PASS [   0.010s] ( 2/92) codex-tui bottom_pane::slash_commands::tests::usage_command_is_hidden_from_input_when_account_token_activity_is_disabled
+        PASS [   0.010s] ( 3/92) codex-tui app::tests::session_summary::session_summary_skips_when_no_usage_or_resume_hint
+        PASS [   0.010s] ( 4/92) codex-tui bottom_pane::slash_commands::tests::usage_command_exact_lookup_still_resolves_when_account_token_activity_is_disabled
+        PASS [   0.011s] ( 5/92) codex-tui chatwidget::goal_status::tests::completed_goal_usage_reports_time_without_token_budget
+        PASS [   0.012s] ( 6/92) codex-tui bottom_pane::status_line_setup::tests::context_used_accepts_context_usage_legacy_id
+        PASS [   0.022s] ( 7/92) codex-tui app::tests::accounting_inspect_app_off_and_old_usage_routes
+        PASS [   0.022s] ( 8/92) codex-tui app::tests::token_usage_update_refreshes_status_line_with_runtime_context_window
+        PASS [   0.023s] ( 9/92) codex-tui app::tests::late_usage_result_can_follow_finalized_plan
+        PASS [   0.019s] (10/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_show_when_authoritative_snapshot_clears_credits
+        PASS [   0.020s] (11/92) codex-tui chatwidget::tests::status_and_layout::status_line_legacy_context_usage_renders_context_used_percent
+        PASS [   0.020s] (12/92) codex-tui chatwidget::tests::status_and_layout::status_line_tps_updates_when_usage_arrives_after_completion
+        PASS [   0.019s] (13/92) codex-tui chatwidget::tests::status_and_layout::token_usage_update_uses_runtime_context_window
+        PASS [   0.020s] (14/92) codex-tui chatwidget::tests::status_and_layout::status_line_tps_uses_streamed_text_when_usage_is_missing
+        PASS [   0.032s] (15/92) codex-tui chatwidget::goal_status::tests::completed_goal_usage_reports_tokens_when_budgeted
+        PASS [   0.032s] (16/92) codex-tui chatwidget::goal_status::tests::active_goal_usage_reports_time_without_budget
+        PASS [   0.035s] (17/92) codex-tui chatwidget::goal_status::tests::stopped_goal_budget_usage_omits_unbudgeted_usage
+        PASS [   0.034s] (18/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_preserve_workspace_limit_for_sparse_snapshots
+        PASS [   0.030s] (19/92) codex-tui chatwidget::goal_status::tests::stopped_goal_budget_usage_reports_budgeted_tokens
+        PASS [   0.055s] (20/92) codex-tui chatwidget::tests::slash_commands::usage_command_runs_with_backend_auth_without_chatgpt_account_flag
+        PASS [   0.056s] (21/92) codex-tui chatwidget::tests::plan_mode::plan_implementation_popup_context_usage_snapshot
+        PASS [   0.031s] (22/92) codex-tui chatwidget::tests::usage::account_change_invalidates_pending_reset_requests
+        PASS [   0.039s] (23/92) codex-tui chatwidget::tests::status_and_layout::usage_limit_error_remaps_stale_member_credits_state_to_usage_limit_prompt
+        PASS [   0.038s] (24/92) codex-tui chatwidget::tests::status_and_layout::workspace_owner_usage_limit_nudge_completion_renders_feedback
+        PASS [   0.040s] (25/92) codex-tui chatwidget::tests::slash_commands::slash_mcp_invalid_args_show_usage
+        PASS [   0.034s] (26/92) codex-tui chatwidget::tests::usage::account_change_dismisses_reset_popup_beneath_overlay
+        PASS [   0.032s] (27/92) codex-tui chatwidget::tests::usage::clearing_pending_reset_hint_preserves_in_flight_redemption
+        PASS [   0.044s] (28/92) codex-tui chatwidget::tests::slash_commands::slash_keymap_invalid_args_show_usage
+        PASS [   0.037s] (29/92) codex-tui chatwidget::tests::usage::accounting_inspect_cancel_refresh_generation
+        PASS [   0.067s] (30/92) codex-tui chatwidget::tests::slash_commands::signed_out_usage_command_with_args_reports_chatgpt_login_requirement
+        PASS [   0.045s] (31/92) codex-tui chatwidget::tests::status_and_layout::workspace_member_usage_limit_prompts_and_sends_usage_limit
+        PASS [   0.046s] (32/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_preserve_and_clear_spend_control_state
+        PASS [   0.047s] (33/92) codex-tui chatwidget::tests::status_and_layout::account_update_clears_derived_usage_limit_state_and_prompt
+        PASS [   0.047s] (34/92) codex-tui chatwidget::tests::slash_commands::usage_error_slash_command_is_available_from_local_recall
+        PASS [   0.049s] (35/92) codex-tui chatwidget::tests::slash_commands::signed_out_usage_command_reports_chatgpt_login_requirement
+        PASS [   0.039s] (36/92) codex-tui chatwidget::tests::usage::already_redeemed_is_an_idempotent_success
+        PASS [   0.049s] (37/92) codex-tui chatwidget::tests::goal_menu::goal_menu_usage_limited_snapshot
+        PASS [   0.051s] (38/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_clear_workspace_limit_from_authoritative_snapshot
+        PASS [   0.042s] (39/92) codex-tui chatwidget::tests::usage::account_update_invalidates_usage_menu_refresh_when_visible_state_is_unchanged
+        PASS [   0.053s] (40/92) codex-tui chatwidget::tests::slash_commands::usage_command_runs_with_backend_auth_from_widget_init
+        PASS [   0.053s] (41/92) codex-tui chatwidget::tests::slash_commands::raw_slash_command_reports_usage_for_invalid_arg
+        PASS [   0.039s] (42/92) codex-tui chatwidget::tests::usage::failed_post_consume_refresh_does_not_keep_stale_reset_count
+        PASS [   0.045s] (43/92) codex-tui chatwidget::tests::usage::accounting_inspect_menu_and_reset_regression
+        PASS [   0.039s] (44/92) codex-tui chatwidget::tests::usage::no_credit_outcome_disables_reset_entry_in_usage_menu
+        PASS [   0.028s] (45/92) codex-tui chatwidget::tests::usage::rate_limit_reset_confirmation_can_use_reset
+        PASS [   0.017s] (46/92) codex-tui chatwidget::tests::usage::reset_credit_options_use_generic_copy_when_backend_copy_is_missing
+        PASS [   0.033s] (47/92) codex-tui chatwidget::tests::usage::opening_rate_limit_reset_flow_invalidates_in_flight_startup_hint
+        PASS [   0.052s] (48/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_newly_reached_workspace_limit
+        PASS [   0.031s] (49/92) codex-tui chatwidget::tests::usage::rate_limit_reset_confirmation_no_and_escape_return_to_picker
+        PASS [   0.066s] (50/92) codex-tui chatwidget::tests::slash_commands::usage_command_with_invalid_view_reports_usage_snapshot
+        PASS [   0.074s] (51/92) codex-tui chatwidget::tests::slash_commands::goal_control_slash_command_without_thread_shows_full_usage
+        PASS [   0.036s] (52/92) codex-tui chatwidget::tests::usage::rate_limit_reset_confirmation_uses_backend_copy_snapshot
+        PASS [   0.030s] (53/92) codex-tui chatwidget::tests::usage::rate_limit_reset_retry_reuses_idempotency_key
+        PASS [   0.014s] (54/92) codex-tui chatwidget::tps::tests::late_provider_usage_records_completed_zero_stream_turn
+        PASS [   0.035s] (55/92) codex-tui chatwidget::tests::usage::rate_limit_reset_redemption_allows_ctrl_c_to_quit_while_in_flight
+        PASS [   0.037s] (56/92) codex-tui chatwidget::tests::usage::rate_limit_reset_load_result_updates_popup_beneath_overlay
+        PASS [   0.015s] (57/92) codex-tui chatwidget::tokens::tests::accounting_zero_plan_usage_renders_money_unavailable
+        PASS [   0.012s] (58/92) codex-tui chatwidget::tps::tests::provider_usage_renders_without_approximation_marker
+        PASS [   0.013s] (59/92) codex-tui chatwidget::tps::tests::provider_usage_overrides_stream_estimate_for_active_turn
+        PASS [   0.015s] (60/92) codex-tui chatwidget::tps::tests::provider_usage_falls_back_to_cumulative_delta_for_active_turn
+        PASS [   0.031s] (61/92) codex-tui chatwidget::tests::usage::startup_check_omits_reset_hint_when_none_are_available
+        PASS [   0.079s] (62/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_explicit_rolling_workspace_limit
+        PASS [   0.037s] (63/92) codex-tui chatwidget::tests::usage::rate_limit_reset_redemption_cannot_be_dismissed_while_in_flight
+        PASS [   0.016s] (64/92) codex-tui chatwidget::usage::corbanu_plan_tests::plan_usage_action_opens_dedicated_usage_view
+        PASS [   0.032s] (65/92) codex-tui chatwidget::tests::usage::startup_check_shows_reset_hint_for_workspace_account_with_credit
+        PASS [   0.027s] (66/92) codex-tui chatwidget::tests::usage::usage_menu_refresh_enables_newly_available_reset
+        PASS [   0.043s] (67/92) codex-tui chatwidget::tests::usage::rate_limit_reset_picker_wraps_expiry_details_snapshot
+        PASS [   0.083s] (68/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_follow_workspace_credit_flags
+        PASS [   0.038s] (69/92) codex-tui chatwidget::tests::usage::reset_picker_allows_only_one_pending_confirmation
+        PASS [   0.045s] (70/92) codex-tui chatwidget::tests::usage::rate_limit_reset_picker_starts_with_soonest_expiries_and_keeps_all_rows_reachable
+        PASS [   0.034s] (71/92) codex-tui chatwidget::tests::usage::usage_command_disables_reset_after_cached_zero_snapshot
+        PASS [   0.041s] (72/92) codex-tui chatwidget::tests::usage::rate_limit_reset_success_updates_popup_beneath_overlay
+        PASS [   0.039s] (73/92) codex-tui chatwidget::tests::usage::startup_check_shows_available_reset_hint_snapshot
+        PASS [   0.039s] (74/92) codex-tui chatwidget::tests::usage::startup_reset_hint_waits_for_active_output_snapshot
+        PASS [   0.038s] (75/92) codex-tui chatwidget::tests::usage::usage_command_can_check_reset_availability_before_startup_refresh_finishes_snapshot
+        PASS [   0.015s] (76/92) codex-tui chatwidget::wallet_usage::tests::comma_format_is_exact
+        PASS [   0.012s] (77/92) codex-tui claude_panes::tests::zero_usage_summary_is_untrusted_not_reported
+        PASS [   0.013s] (78/92) codex-tui claude_panes::tests::anthropic_stream_events_preserve_upstream_usage_in_protocol_fields
+        PASS [   0.012s] (79/92) codex-tui goal_display::tests::goal_usage_summary_formats_time_and_budgeted_tokens
+        PASS [   0.047s] (80/92) codex-tui chatwidget::tests::usage::rate_limit_reset_popup_states_snapshot
+        PASS [   0.012s] (81/92) codex-tui local_chatgpt_auth::tests::preserves_usage_based_plan_type_wire_name
+        PASS [   0.014s] (82/92) codex-tui chatwidget::wallet_usage::tests::reset_countdown_is_human_readable_and_keeps_exact_time_separate
+        PASS [   0.014s] (83/92) codex-tui chatwidget::wallet_usage::tests::usage_summary_exposes_spend_used_reserved_limits_and_resets
+        PASS [   0.039s] (84/92) codex-tui chatwidget::tests::usage::usage_command_can_check_reset_availability_for_workspace_accounts
+        PASS [   0.038s] (85/92) codex-tui chatwidget::tests::usage::usage_menu_rate_limit_reset_entry_opens_reset_flow
+        PASS [   0.044s] (86/92) codex-tui chatwidget::tests::usage::starting_rate_limit_reset_redemption_clears_deferred_startup_hint
+        PASS [   0.014s] (87/92) codex-tui status::tests::status_model_provider_uses_bedrock_runtime_base_url_and_gates_usage_link
+        PASS [   0.040s] (88/92) codex-tui chatwidget::tests::usage::usage_command_opens_menu_when_reset_is_available_snapshot
+        PASS [   0.015s] (89/92) codex-tui status::tests::status_card_token_usage_excludes_cached_tokens
+        PASS [   0.015s] (90/92) codex-tui status::tests::status_context_window_uses_last_usage
+        PASS [   0.036s] (91/92) codex-tui chatwidget::tests::usage::usage_menu_refresh_failure_preserves_disabled_known_zero
+        PASS [   0.148s] (92/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_workspace_limit_after_rolling_credits
+────────────
+     Summary [   0.158s] 92 tests run: 92 passed, 4079 skipped

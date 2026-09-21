@@ -98,8 +98,8 @@ async fn accounting_responses_bootstrap_is_lazy_and_once() -> anyhow::Result<()>
 
 #[tokio::test]
 async fn accounting_responses_auth_route_eligibility() -> anyhow::Result<()> {
-    assert!(eligible(&provider(), Some(&auth())));
-    assert!(!eligible(&provider(), None));
+    assert!(legacy_eligible(&provider(), Some(&auth())));
+    assert!(!legacy_eligible(&provider(), None));
     for kind in 0..4 {
         let mut provider = provider();
         match kind {
@@ -114,7 +114,7 @@ async fn accounting_responses_auth_route_eligibility() -> anyhow::Result<()> {
             3 => provider.wire_api = WireApi::Chat,
             _ => unreachable!(),
         }
-        assert!(!eligible(&provider, Some(&auth())));
+        assert!(!legacy_eligible(&provider, Some(&auth())));
     }
     let fixture = Fixture::new().await?;
     fixture.resolve().await?;
@@ -330,7 +330,7 @@ async fn accounting_responses_role_overlay_preserves_binding() -> anyhow::Result
     assert_eq!(config.model_provider, provider());
     assert_eq!(config.model_provider_id, "openai");
     assert_eq!(config.accounting, fixture.deferred.mode);
-    assert!(eligible(&config.model_provider, Some(&auth())));
+    assert!(legacy_eligible(&config.model_provider, Some(&auth())));
     let endpoint = format!("{ENDPOINT}/responses");
     let sampling = fixture
         .deferred

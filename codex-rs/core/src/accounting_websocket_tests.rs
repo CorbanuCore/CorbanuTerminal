@@ -12,6 +12,46 @@ use futures::poll;
 use pretty_assertions::assert_eq;
 use uuid::Uuid;
 
+#[tokio::test]
+async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api_prices()
+-> anyhow::Result<()> {
+    let provider = ModelProviderInfo::create_openai_provider(None);
+    let auth = CodexAuth::from_external_chatgpt_tokens("header.e30.synthetic", "fixture", None)?;
+    let api = provider.to_api_provider(Some(auth.auth_mode()))?;
+    assert_eq!(
+        api.base_url,
+        codex_model_provider_info::CHATGPT_CODEX_BASE_URL
+    );
+    let mode = AccountingMode::Provider {
+        scope: Uuid::new_v4(),
+        provider_id: "openai".into(),
+        wire_api: codex_model_provider_info::WireApi::Responses,
+        approved_endpoint: api.base_url.clone(),
+        api_key_pricing: false,
+    };
+    let fixture = Fixture::new(mode).await?;
+    let provenance = Provenance::capture(&provider, Some(&auth), &api, false);
+    assert!(provenance.validate(&fixture.deferred, None)?);
+    let sampling = fixture
+        .deferred
+        .resolve(&provider, Some(&auth), &api.url_for_path("responses"))
+        .await?
+        .unwrap();
+    assert!(matches!(
+        sampling.pricing,
+        super::super::Pricing::Unavailable
+    ));
+    assert_eq!(sampling.provider, "openai");
+    let wrong = Provenance::capture(
+        &provider,
+        Some(&auth),
+        &provider.to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?,
+        false,
+    );
+    assert!(wrong.validate(&fixture.deferred, None).is_err());
+    Ok(())
+}
+
 const BASE: &str = "http://127.0.0.1:12345/v1";
 fn mode() -> AccountingMode {
     AccountingMode::DirectOpenAiResponses {

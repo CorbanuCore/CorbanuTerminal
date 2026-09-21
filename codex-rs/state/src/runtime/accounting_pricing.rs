@@ -258,7 +258,7 @@ fn quote_observations(
     {
         *bucket = match (count, rate) {
             (None, _) => BucketQuote::MissingUsage,
-            (Some(0), _) => BucketQuote::Priced(Decimal::default()),
+            (Some(0), _) if selected.is_some() => BucketQuote::Priced(Decimal::default()),
             (Some(n), Some(rate)) => BucketQuote::Priced(rate.price(n)?),
             (Some(_), None) => BucketQuote::MissingRate,
         };
