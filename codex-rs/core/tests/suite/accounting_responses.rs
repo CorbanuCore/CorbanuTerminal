@@ -384,6 +384,24 @@ async fn accounting_responses_native_sampling_and_auxiliary_scope() -> anyhow::R
     Ok(())
 }
 
+/// Attempts are journalled after the turn's terminal event, so a count read the
+/// instant a turn completes is a race under load. Wait for the ledger instead.
+async fn wait_attempts(
+    db: &codex_state::StateRuntime,
+    count: usize,
+) -> anyhow::Result<Vec<Attempt>> {
+    tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        loop {
+            let records = attempts(db).await?;
+            if records.len() >= count {
+                return anyhow::Ok(records);
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await?
+}
+
 /// A remote-compaction-v2 response: the compaction item plus terminal usage.
 fn compaction(usage: Value) -> String {
     responses::sse(vec![
@@ -421,15 +439,16 @@ async fn accounting_records_manual_compaction() -> anyhow::Result<()> {
         .await?;
     test.submit_turn("fixture").await?;
     let db = test.codex.state_db().unwrap();
-    let turn = attempts(&db).await?;
+    let turn = wait_attempts(&db, 1).await?;
     assert_eq!(turn.len(), 1);
     // The day total is thread-wide, so it reads the turn's tokens alone here.
+    wait_observations(&db, 1).await?;
     assert_eq!(totals(&db, &turn[0]).await?.measured[0].known, 100);
     test.codex
         .submit(codex_protocol::protocol::Op::Compact)
         .await?;
     terminal(&test).await?;
-    let records = attempts(&db).await?;
+    let records = wait_attempts(&db, 2).await?;
     assert_eq!(records.len(), 2);
     let compaction = &records[1];
     assert!(
@@ -439,6 +458,7 @@ async fn accounting_records_manual_compaction() -> anyhow::Result<()> {
     );
     assert_ne!(compaction.turn, turn[0].turn);
     // The compaction's own tokens are what moved the day total from 100 to 200.
+    wait_observations(&db, 2).await?;
     assert_eq!(totals(&db, compaction).await?.measured[0].known, 200);
     assert_eq!(mock.requests().len(), 2);
     stop(&test).await;
@@ -481,9 +501,9 @@ async fn accounting_records_auto_compaction() -> anyhow::Result<()> {
     test.submit_turn("fixture").await?;
     test.submit_turn("fixture after compaction").await?;
     let db = test.codex.state_db().unwrap();
-    let records = attempts(&db).await?;
-    assert_eq!(mock.requests().len(), 3);
+    let records = wait_attempts(&db, 3).await?;
     assert_eq!(records.len(), 3);
+    assert_eq!(mock.requests().len(), 3);
     let compactions: Vec<&Attempt> = records
         .iter()
         .filter(|record| record.turn.starts_with("compact:"))
@@ -495,6 +515,7 @@ async fn accounting_records_auto_compaction() -> anyhow::Result<()> {
         records.iter().map(|record| &record.turn).collect::<Vec<_>>()
     );
     // Thread-wide day total: both turns and the compaction between them.
+    wait_observations(&db, 3).await?;
     assert_eq!(totals(&db, compactions[0]).await?.measured[0].known, 300);
     stop(&test).await;
     Ok(())
