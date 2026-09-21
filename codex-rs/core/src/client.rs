@@ -1135,7 +1135,9 @@ impl ModelClient {
         let transport = if evidence.is_some() {
             let client = codex_login::default_client::create_client_for_route_without_redirects(
                 &self.http_client_factory,
-                &client_setup.api_provider.url_for_path(RESPONSES_COMPACT_ENDPOINT),
+                &client_setup
+                    .api_provider
+                    .url_for_path(RESPONSES_COMPACT_ENDPOINT),
                 ClientRouteClass::Api,
             )
             .map_err(std::io::Error::from)?;

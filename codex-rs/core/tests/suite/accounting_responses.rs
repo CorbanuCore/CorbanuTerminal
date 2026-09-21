@@ -712,10 +712,10 @@ async fn accounting_legacy_compaction_never_follows_a_redirect() -> anyhow::Resu
         let turn = responses::mount_sse_once(&origin, success(usage(Some(0)))).await;
         Mock::given(method("POST"))
             .and(path("/v1/responses/compact"))
-            .respond_with(ResponseTemplate::new(status).insert_header(
-                "location",
-                format!("{}/v1/responses/compact", target.uri()),
-            ))
+            .respond_with(
+                ResponseTemplate::new(status)
+                    .insert_header("location", format!("{}/v1/responses/compact", target.uri())),
+            )
             .mount(&origin)
             .await;
         Mock::given(method("POST"))
