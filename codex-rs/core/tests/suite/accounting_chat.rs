@@ -603,7 +603,10 @@ async fn accounting_chat_completion_assessment_collects() -> anyhow::Result<()> 
             .count(),
         1,
         "turns recorded: {:?}",
-        records.iter().map(|record| &record.turn).collect::<Vec<_>>()
+        records
+            .iter()
+            .map(|record| &record.turn)
+            .collect::<Vec<_>>()
     );
     stop(&test).await;
     Ok(())
