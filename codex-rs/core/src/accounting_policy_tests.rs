@@ -179,6 +179,33 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
             );
         }
     }
+    // Serialize a real request rather than hand-writing the JSON: the wire name is
+    // `providerOptions`, and a hand-built snake_case body would pass a check that
+    // the actual traffic walks straight past.
+    for compression in [RequestCompression::None, RequestCompression::Zstd] {
+        let mut request = chat_body();
+        request.provider_options = Some(serde_json::json!({"gateway":{"only":["zai"]}}));
+        let prepared = Request::new(http::Method::POST, ENDPOINT.into())
+            .with_json(&request)
+            .with_compression(compression)
+            .into_prepared()
+            .map_err(anyhow::Error::msg)?;
+        assert_eq!(
+            transport::request_refusal(&prepared),
+            Some("providerOptions"),
+            "a serialized gateway pin must be refused under {compression:?}"
+        );
+        let prepared = Request::new(http::Method::POST, ENDPOINT.into())
+            .with_json(&chat_body())
+            .with_compression(compression)
+            .into_prepared()
+            .map_err(anyhow::Error::msg)?;
+        assert_eq!(
+            transport::request_refusal(&prepared),
+            None,
+            "an ordinary serialized request must remain collectable under {compression:?}"
+        );
+    }
     let opaque = Request::new(http::Method::POST, ENDPOINT.into())
         .with_raw_body(vec![0x00, 0x01, 0x02, 0x03]);
     assert_eq!(
