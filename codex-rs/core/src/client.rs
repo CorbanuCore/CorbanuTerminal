@@ -1332,6 +1332,7 @@ impl ModelClient {
         model_info: &ModelInfo,
         effort: Option<ReasoningEffortConfig>,
         session_telemetry: &SessionTelemetry,
+        accounting: &crate::accounting::responses::Slot,
     ) -> Result<Vec<ApiMemorySummarizeOutput>> {
         if raw_memories.is_empty() {
             return Ok(Vec::new());
@@ -1340,8 +1341,53 @@ impl ModelClient {
         self.check_source_admission(&Prompt::default())?;
 
         let client_setup = self.current_client_setup().await?;
-        let transport =
-            self.build_api_transport(&client_setup.api_provider, MEMORIES_SUMMARIZE_ENDPOINT)?;
+        // Summarising memories names a model and a reasoning effort: it is
+        // inference the operator paid for, answered with one JSON body rather
+        // than a stream, so it is collected the way the legacy compaction
+        // endpoint is. The slot is a parameter because this client is
+        // session-scoped by design - which is also why this call could be
+        // written with no way to record it at all.
+        let sampling = match crate::accounting::responses::read(accounting)? {
+            Some(deferred) => {
+                deferred
+                    .resolve_path(
+                        self.state.provider.info(),
+                        client_setup.auth.as_ref(),
+                        &client_setup
+                            .api_provider
+                            .url_for_path(MEMORIES_SUMMARIZE_ENDPOINT),
+                        MEMORIES_SUMMARIZE_ENDPOINT.trim_start_matches('/'),
+                    )
+                    .await?
+            }
+            None => None,
+        };
+        let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+        // A collected request must not be able to follow a redirect, for the
+        // same reason every other collected route may not.
+        let transport = if evidence.is_some() {
+            let client = codex_login::default_client::create_client_for_route_without_redirects(
+                &self.http_client_factory,
+                &client_setup
+                    .api_provider
+                    .url_for_path(MEMORIES_SUMMARIZE_ENDPOINT),
+                ClientRouteClass::Api,
+            )
+            .map_err(std::io::Error::from)?;
+            crate::memory_stage_one::StageOneGuardedTransport::new(
+                ReqwestTransport::from_http_client(client),
+                self.stage_one_memory_binding.get().cloned(),
+            )
+        } else {
+            self.build_api_transport(&client_setup.api_provider, MEMORIES_SUMMARIZE_ENDPOINT)?
+        };
+        let transport = transport.map_inner(|inner| {
+            crate::accounting::transport::AccountingTransport::new(
+                inner,
+                evidence.clone(),
+                model_info.slug.clone(),
+            )
+        });
         let request_telemetry = Self::build_request_telemetry(
             session_telemetry,
             AuthRequestTelemetryContext::new(
