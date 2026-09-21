@@ -22,7 +22,10 @@ fn version_one_days_decode_as_days_with_no_plan_work() {
     let legacy = json!({"version":1, "known":[7,0,0,0,0,0,7], "unknown":[0,0,0,0,0,0,0],
         "known_usd":"0.000153", "unknown_estimates":0, "attempts":1});
     let totals = decode(&legacy).to_day_totals().unwrap();
-    assert_eq!(serde_json::to_value(totals.known_usd).unwrap(), json!("0.000153"));
+    assert_eq!(
+        serde_json::to_value(totals.known_usd).unwrap(),
+        json!("0.000153")
+    );
     assert_eq!(totals.equivalent_usd, Decimal::default());
     assert_eq!(totals.plan_attempts, 0);
     assert_eq!(totals.unknown_equivalents, 0);

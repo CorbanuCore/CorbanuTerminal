@@ -617,9 +617,7 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
     }
     let freshness = pages[0].text.clone();
     let t = &ready.totals;
-    pages[0]
-        .text
-        .splice(0..0, estimate(t));
+    pages[0].text.splice(0..0, estimate(t));
     pages[0].text.extend([
         format!("UTC admission interval: [{}, {}) ms since Unix epoch", ready.utc_day * 86_400_000, (ready.utc_day + 1) * 86_400_000),
         format!("Read at: {} ms UTC; store checkpoint: {} ms UTC; maintenance lag: {} ms",

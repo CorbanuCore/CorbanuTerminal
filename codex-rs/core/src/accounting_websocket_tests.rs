@@ -1,6 +1,6 @@
-use crate::config::PriceAuthority;
 use super::*;
 use crate::config::AccountingMode;
+use crate::config::PriceAuthority;
 use codex_protocol::protocol::SessionSource;
 use codex_state::SqliteConfig;
 use codex_state::StateRuntime;
@@ -39,10 +39,7 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
         .resolve(&provider, Some(&auth), &api.url_for_path("responses"))
         .await?
         .unwrap();
-    assert!(matches!(
-        sampling.pricing,
-        super::super::Pricing::Plan
-    ));
+    assert!(matches!(sampling.pricing, super::super::Pricing::Plan));
     assert_eq!(sampling.provider, "openai");
     // Admission on the real subscription route records the plan rate that
     // applied and, because this row states API rates, what the same tokens
@@ -52,7 +49,10 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
         .await?;
     let prices: Vec<Snapshot> = fixture.rows("draft_accounting_price_snapshots").await?;
     assert_eq!(prices.len(), 1);
-    assert_eq!(prices[0].basis, codex_state::accounting::Basis::PlanEquivalent);
+    assert_eq!(
+        prices[0].basis,
+        codex_state::accounting::Basis::PlanEquivalent
+    );
     assert_eq!(prices[0].plan_burn_millis, Some(1000));
     assert_eq!(prices[0].provider, "openai");
     assert_eq!(prices[0].model, "gpt-5.6-sol");

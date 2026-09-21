@@ -79,15 +79,21 @@ had their API-key spend booked as plan work.
   resolved under the turn's own credential, with no credential-bearing custom
   headers and no provider-held credential shape (AWS signing, command auth, an
   experimental bearer token).
-- **`PlanRate`** - that same route under subscription-style authentication. The
-  route is resolved per credential, because a ChatGPT plan turn goes to the
-  Codex route and an API key to the API one, and both are OpenAI's own.
+- **`PlanRate`** - that same route under subscription-style authentication,
+  named positively: ChatGPT, externally supplied ChatGPT tokens, header auth,
+  agent identity, personal access token. The route is resolved per credential,
+  because a ChatGPT plan turn goes to the Codex route and an API key to the API
+  one, and both are OpenAI's own. Defining this side as "not an API key" made a
+  turn with no visible credential into subscription capacity - the same
+  substitution review caught, in the other direction - and review caught that
+  too, on the round that introduced the three-way rule.
 - **`Unavailable`** - anything else. Tokens are still collected; no economics of
   either kind are claimed for a destination the catalogue quotes nothing for.
 
-`accounting_every_built_in_provider_collects` asserts all three per provider:
-rates on its own route under an API key, the plan side on that route under plan
-authentication, and nothing at all through a relay.
+`accounting_every_built_in_provider_collects` asserts all four outcomes per
+provider: rates on its own route under an API key, the plan side on that
+credential's own route under header authentication, nothing at all through a
+relay, and nothing at all with no credential.
 
 `billed` also stopped refusing `AuthDependent` rows. Under API-key
 authentication those rows' API rates are precisely what the provider charges;
@@ -130,8 +136,8 @@ differ from the previous release by construction.
   pins the copy, including the case where the catalogue prices none of the plan
   attempts and the display says so instead of reporting zero.
 
-Clean-host lanes at this tree, RTX workstation: `codex-core` accounting
-138/138, with `developer-accounting` 143/143, `codex-state` accounting 168/168,
+Formatted with `cargo fmt --all` and checked clean. Clean-host lanes at this
+tree, RTX workstation: `codex-core` accounting 138/138, with `developer-accounting` 143/143, `codex-state` accounting 168/168,
 `codex-tui` usage 92/92, `codex-tui` tokens 66 of 67 - the one failure,
 `accounting_inspect_maintenance_with_healthy_raw_renders_lag`, is a stale
 snapshot that fails identically at the integration tip without any of this work,

@@ -1,7 +1,7 @@
 #[path = "accounting_responses_support.rs"]
 pub(super) mod support;
-use codex_core::config::PriceAuthority;
 use codex_core::config::AccountingMode;
+use codex_core::config::PriceAuthority;
 use codex_protocol::protocol::EventMsg;
 use codex_state::accounting::*;
 use core_test_support::responses;
@@ -12,7 +12,8 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[tokio::test]
-async fn accounting_chatgpt_subscription_off_route_collects_without_economics() -> anyhow::Result<()> {
+async fn accounting_chatgpt_subscription_off_route_collects_without_economics() -> anyhow::Result<()>
+{
     let server = MockServer::start().await;
     let endpoint = format!("{}/v1", server.uri());
     let mock = responses::mount_sse_once(&server, success(usage(Some(0)))).await;
@@ -533,7 +534,10 @@ async fn accounting_records_auto_compaction() -> anyhow::Result<()> {
         compactions.len(),
         1,
         "turns recorded: {:?}",
-        records.iter().map(|record| &record.turn).collect::<Vec<_>>()
+        records
+            .iter()
+            .map(|record| &record.turn)
+            .collect::<Vec<_>>()
     );
     // Thread-wide day total: both turns and the compaction between them.
     wait_observations(&db, 3).await?;

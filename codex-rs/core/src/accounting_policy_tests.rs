@@ -384,7 +384,11 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
         (Some(AuthMode::ApiKey), PriceAuthority::ApiKeyRates),
         (Some(AuthMode::Chatgpt), PriceAuthority::PlanRate),
         (Some(AuthMode::ChatgptAuthTokens), PriceAuthority::PlanRate),
-        (None, PriceAuthority::PlanRate),
+        (Some(AuthMode::Headers), PriceAuthority::PlanRate),
+        // No visible credential is not a subscription. Recording it as one would
+        // book a turn this client cannot attribute as plan capacity.
+        (None, PriceAuthority::Unavailable),
+        (Some(AuthMode::BedrockApiKey), PriceAuthority::Unavailable),
     ] {
         let endpoint = provider
             .to_api_provider(auth)
@@ -507,7 +511,10 @@ fn accounting_every_built_in_provider_collects() {
             } else {
                 PriceAuthority::ApiKeyRates
             };
-            assert_eq!(pricing, expected, "{id} pricing authority under API-key auth");
+            assert_eq!(
+                pricing, expected,
+                "{id} pricing authority under API-key auth"
+            );
             if !carries_own_credentials {
                 priced_providers.push(id.clone());
             }
@@ -531,18 +538,33 @@ fn accounting_every_built_in_provider_collects() {
                 ),
                 "{id} must not carry rates away from its own route"
             );
-            // Subscription-style authentication on the same route records the
-            // plan side instead, never per-token spend.
-            let on_plan = turn_mode(&selected, &id, &provider, None, &endpoint);
+            // Subscription-style authentication on that provider's own route for
+            // that credential records the plan side instead, never per-token
+            // spend. A turn with no credential at all records neither.
+            let plan_auth = Some(codex_protocol::auth::AuthMode::Headers);
+            if let Ok(plan_route) = provider.to_api_provider(plan_auth) {
+                let on_plan = turn_mode(&selected, &id, &provider, plan_auth, &plan_route.base_url);
+                assert!(
+                    matches!(
+                        on_plan,
+                        AccountingMode::Provider {
+                            pricing: PriceAuthority::PlanRate,
+                            ..
+                        }
+                    ),
+                    "{id} on plan authentication must record the plan side"
+                );
+            }
+            let anonymous = turn_mode(&selected, &id, &provider, None, &endpoint);
             assert!(
                 matches!(
-                    on_plan,
+                    anonymous,
                     AccountingMode::Provider {
-                        pricing: PriceAuthority::PlanRate,
+                        pricing: PriceAuthority::Unavailable,
                         ..
                     }
                 ),
-                "{id} on plan authentication must record the plan side"
+                "{id} with no credential must state no economics"
             );
         }
         // And the per-turn dialect gate must admit it too, not just the selector.

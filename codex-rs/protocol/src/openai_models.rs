@@ -1131,7 +1131,10 @@ mod tests {
         let plan = ModelBilling::Plan {
             relative_burn_millis: 2000,
         };
-        assert_eq!(plan.plan_burn_millis_at(at("2026-09-21T12:00:00Z")), Some(2000));
+        assert_eq!(
+            plan.plan_burn_millis_at(at("2026-09-21T12:00:00Z")),
+            Some(2000)
+        );
         assert_eq!(plan.api_key_rates(), None);
 
         let auth = ModelBilling::AuthDependent {
@@ -1140,7 +1143,10 @@ mod tests {
             api_key_output_milli_usd_per_million_tokens: 15000,
             api_key_cached_input_milli_usd_per_million_tokens: Some(250),
         };
-        assert_eq!(auth.plan_burn_millis_at(at("2026-09-21T12:00:00Z")), Some(500));
+        assert_eq!(
+            auth.plan_burn_millis_at(at("2026-09-21T12:00:00Z")),
+            Some(500)
+        );
         assert_eq!(auth.api_key_rates(), Some((2500, 15000, Some(250))));
 
         let metered = ModelBilling::Metered {
@@ -1148,7 +1154,10 @@ mod tests {
             output_milli_usd_per_million_tokens: 2420,
             cached_input_milli_usd_per_million_tokens: Some(140),
         };
-        assert_eq!(metered.plan_burn_millis_at(at("2026-09-21T12:00:00Z")), None);
+        assert_eq!(
+            metered.plan_burn_millis_at(at("2026-09-21T12:00:00Z")),
+            None
+        );
         assert_eq!(metered.api_key_rates(), Some((760, 2420, Some(140))));
         assert_eq!(
             ModelBilling::Local.plan_burn_millis_at(at("2026-09-21T12:00:00Z")),
@@ -1199,7 +1208,11 @@ mod tests {
             ("2026-09-30T23:59:59Z", 1000),
             ("2026-10-01T00:00:00Z", 2000),
         ] {
-            assert_eq!(promoted.plan_burn_millis_at(at(instant)), Some(expected), "{instant}");
+            assert_eq!(
+                promoted.plan_burn_millis_at(at(instant)),
+                Some(expected),
+                "{instant}"
+            );
         }
 
         // A promotion with no end, or an end this client cannot parse, is not a
@@ -1250,7 +1263,11 @@ mod tests {
             ("2026-09-19T02:00:00Z", 1000),
             ("2026-09-19T23:00:00Z", 1000),
         ] {
-            assert_eq!(overnight.plan_burn_millis_at(at(instant)), Some(expected), "{instant}");
+            assert_eq!(
+                overnight.plan_burn_millis_at(at(instant)),
+                Some(expected),
+                "{instant}"
+            );
         }
 
         // A degenerate window charges off-peak rather than charging peak forever.

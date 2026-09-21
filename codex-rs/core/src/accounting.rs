@@ -292,9 +292,24 @@ pub(crate) fn turn_mode(
     // by whether per-token rates happen to be available. Treating "API key on a
     // route this client will not price" as subscription capacity would book
     // API-key spend as plan work.
+    use codex_protocol::auth::AuthMode;
+    // Named positively. Defining the plan side as "not an API key" would make a
+    // turn with no visible credential, or one whose credential is supplied out of
+    // band, into subscription capacity - the same substitution in the other
+    // direction.
+    let subscription = matches!(
+        auth_mode,
+        Some(
+            AuthMode::Chatgpt
+                | AuthMode::ChatgptAuthTokens
+                | AuthMode::Headers
+                | AuthMode::AgentIdentity
+                | AuthMode::PersonalAccessToken
+        )
+    );
     let pricing = if !own_route {
         PriceAuthority::Unavailable
-    } else if auth_mode == Some(codex_protocol::auth::AuthMode::ApiKey) {
+    } else if auth_mode == Some(AuthMode::ApiKey) {
         // Deliberately NOT gated on `api_key_header_name`: the built-in Anthropic
         // provider declares `x-api-key` as its own credential header, so requiring
         // it to be absent made the Anthropic pricing arm below dead code and left
@@ -311,10 +326,15 @@ pub(crate) fn turn_mode(
         } else {
             PriceAuthority::Unavailable
         }
-    } else {
+    } else if subscription {
         // Subscription-style authentication on the provider's own route: a
-        // ChatGPT plan, or a provider whose credential is its own plan login.
+        // ChatGPT plan, or a provider whose credential is its own plan login,
+        // as the built-in `claude-plan` provider's command auth is.
         PriceAuthority::PlanRate
+    } else {
+        // No visible credential, a bearer token, or a Bedrock key: this client
+        // cannot say which side of the catalogue such a turn is charged on.
+        PriceAuthority::Unavailable
     };
     AccountingMode::Provider {
         scope: *scope,

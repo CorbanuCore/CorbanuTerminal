@@ -1,7 +1,7 @@
 #[path = "accounting_chat_support.rs"]
 pub(super) mod support;
-use codex_core::config::PriceAuthority;
 use codex_core::config::AccountingMode;
+use codex_core::config::PriceAuthority;
 use codex_protocol::protocol::{EventMsg, Op};
 use codex_state::accounting::*;
 use pretty_assertions::assert_eq;

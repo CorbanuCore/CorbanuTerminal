@@ -187,7 +187,9 @@ fn accounting_responses_prices_exact_and_unknown() {
         assert_eq!(value.rates.read, read.map(|value| rate(value).unwrap()));
         assert_eq!(value.rates.write, None);
     }
-    let anthropic = anthropic_original("claude-opus-5", "anthropic", scope, 1000).unwrap().remove(0);
+    let anthropic = anthropic_original("claude-opus-5", "anthropic", scope, 1000)
+        .unwrap()
+        .remove(0);
     // Every billed projection now states provenance in one shape, including the
     // authentication and tier the rates are quoted for.
     let source = serde_json::to_vec(&(
@@ -211,8 +213,12 @@ fn accounting_responses_prices_exact_and_unknown() {
 #[test]
 fn accounting_bundled_prices_are_exact_prospective_and_content_identified() {
     let scope = Uuid::new_v4();
-    let first = anthropic_original("claude-opus-5", "anthropic", scope, 1000).unwrap().remove(0);
-    let second = anthropic_original("claude-opus-5", "anthropic", scope, 2000).unwrap().remove(0);
+    let first = anthropic_original("claude-opus-5", "anthropic", scope, 1000)
+        .unwrap()
+        .remove(0);
+    let second = anthropic_original("claude-opus-5", "anthropic", scope, 2000)
+        .unwrap()
+        .remove(0);
     assert_ne!(first.id, second.id);
     assert_eq!(first.source_reference, second.source_reference);
     assert_eq!(
@@ -251,7 +257,9 @@ fn accounting_bundled_prices_are_exact_prospective_and_content_identified() {
         ),
         (1000, 1000, 1000, None)
     );
-    let fable = anthropic_original("claude-fable-5-1", "anthropic", scope, 1000).unwrap().remove(0);
+    let fable = anthropic_original("claude-fable-5-1", "anthropic", scope, 1000)
+        .unwrap()
+        .remove(0);
     assert_ne!(fable.source_reference, first.source_reference);
     assert_eq!(
         fable.rates,
@@ -272,7 +280,10 @@ fn accounting_price_authority_rejects_aliases_remote_and_non_metered_rows() {
         "CLAUDE-OPUS-5",
         "remote-only",
     ] {
-        assert_eq!(anthropic_original(model, "anthropic", Uuid::nil(), 10).unwrap(), vec![]);
+        assert_eq!(
+            anthropic_original(model, "anthropic", Uuid::nil(), 10).unwrap(),
+            vec![]
+        );
     }
     // Rows with no per-token price state none, whoever serves them.
     for billing in [

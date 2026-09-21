@@ -1,4 +1,25 @@
 Test isolation: disposable profile; native keyring disabled (debug lane)
+   Compiling codex-protocol v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/protocol)
+   Compiling codex-api v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/codex-api)
+   Compiling codex-file-system v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/file-system)
+   Compiling codex-shell-command v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/shell-command)
+   Compiling codex-agent-identity v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/agent-identity)
+   Compiling codex-utils-output-truncation v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/utils/output-truncation)
+   Compiling codex-state v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/state)
+   Compiling codex-code-mode-protocol v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/code-mode-protocol)
+   Compiling codex-context-fragments v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/context-fragments)
+   Compiling codex-skills v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/skills)
+   Compiling codex-shell-escalation v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/shell-escalation)
+   Compiling codex-utils-sandbox-summary v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/utils/sandbox-summary)
+   Compiling codex-utils-approval-presets v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/utils/approval-presets)
+   Compiling codex-git-utils v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/git-utils)
+   Compiling codex-exec-server-protocol v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/exec-server-protocol)
+   Compiling codex-app-server-protocol v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/app-server-protocol)
+   Compiling codex-memories-read v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/memories/read)
+   Compiling codex-utils-cli v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/utils/cli)
+   Compiling codex-code-mode v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/code-mode)
+   Compiling codex-secrets v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/secrets)
+   Compiling codex-prompts v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/prompts)
 warning: field `runtime` is never read
   --> state/src/runtime/accounting.rs:27:5
    |
@@ -102,7 +123,15 @@ warning: method `append_native` is never used
 53 |     pub(in crate::runtime::accounting) async fn append_native(
    |                                                 ^^^^^^^^^^^^^
 
+   Compiling codex-rollout-trace v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/rollout-trace)
+   Compiling codex-agent-graph-store v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/agent-graph-store)
+   Compiling codex-vault v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/vault)
+   Compiling codex-otel v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/otel)
+   Compiling codex-model-provider-info v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/model-provider-info)
+   Compiling codex-response-debug-context v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/response-debug-context)
 warning: `codex-state` (lib) generated 10 warnings
+   Compiling codex-gpu-market v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/gpu-market)
+   Compiling codex-tasknode-session v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/tasknode-session)
 warning: constant `STATUS_PATH` is never used
   --> tasknode-session/src/session_validity.rs:13:7
    |
@@ -215,6 +244,67 @@ warning: function `decode_identity_status` is never used
     |    ^^^^^^^^^^^^^^^^^^^^^^
 
 warning: `codex-tasknode-session` (lib) generated 17 warnings
+   Compiling codex-features v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/features)
+   Compiling codex-windows-sandbox v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/windows-sandbox-rs)
+   Compiling codex-rollout v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/rollout)
+   Compiling codex-sandboxing v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/sandboxing)
+   Compiling codex-config v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/config)
+   Compiling codex-exec-server v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/exec-server)
+   Compiling codex-linux-sandbox v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/linux-sandbox)
+   Compiling codex-utils-plugins v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/utils/plugins)
+   Compiling codex-apply-patch v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/apply-patch)
+   Compiling codex-arg0 v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/arg0)
+   Compiling codex-login v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/login)
+   Compiling codex-plugin v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/plugin)
+   Compiling codex-rmcp-client v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/rmcp-client)
+   Compiling codex-protected-state v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/protected-state)
+   Compiling codex-message-history v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/message-history)
+   Compiling codex-hooks v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/hooks)
+   Compiling codex-thread-store v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/thread-store)
+   Compiling codex-feedback v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/feedback)
+   Compiling codex-models-manager v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/models-manager)
+   Compiling codex-connectors v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/connectors)
+   Compiling codex-provider-auth v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/provider-auth)
+   Compiling codex-model-provider v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/model-provider)
+   Compiling codex-tools v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/tools)
+   Compiling codex-mcp v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/codex-mcp)
+   Compiling codex-analytics v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/analytics)
+   Compiling codex-backend-client v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/backend-client)
+   Compiling codex-cloud-tasks-client v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/cloud-tasks-client)
+   Compiling codex-cloud-tasks-mock-client v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/cloud-tasks-mock-client)
+   Compiling codex-core-skills v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/core-skills)
+   Compiling codex-extension-api v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/extension-api)
+   Compiling codex-home v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/codex-home)
+   Compiling codex-git-attribution v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/git-attribution)
+   Compiling codex-core-plugins v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/core-plugins)
+   Compiling codex-skills-extension v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/skills)
+   Compiling codex-core v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/core)
+   Compiling codex-connectors-extension v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/connectors)
+   Compiling codex-memories-write v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/memories/write)
+   Compiling codex-app-server-transport v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/app-server-transport)
+   Compiling codex-image-generation-extension v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/image-generation)
+   Compiling codex-cloud-config v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/cloud-config)
+   Compiling codex-guardian v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/guardian)
+   Compiling codex-agent-extension v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/agent)
+   Compiling codex-mcp-extension v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/mcp)
+   Compiling codex-goal-extension v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/goal)
+   Compiling codex-memories-extension v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/memories)
+   Compiling codex-web-search-extension v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ext/web-search)
+   Compiling codex-chatgpt v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/chatgpt)
+   Compiling codex-ollama v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/ollama)
+   Compiling codex-lmstudio v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/lmstudio)
+   Compiling codex-app-server-test-client v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/app-server-test-client)
+   Compiling core_test_support v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/core/tests/common)
+   Compiling codex-utils-oss v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/utils/oss)
+   Compiling codex-mcp-server v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/mcp-server)
+   Compiling app_test_support v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/app-server/tests/common)
+   Compiling codex-external-agent-migration v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/external-agent-migration)
+   Compiling codex-app-server-daemon v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/app-server-daemon)
+   Compiling codex-app-server v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/app-server)
+   Compiling codex-app-server-client v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/app-server-client)
+   Compiling codex-tui v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/tui)
+   Compiling codex-exec v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/exec)
+   Compiling codex-telegram v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/telegram)
 warning: variant `OpenPlans` is never constructed
    --> tui/src/app_event.rs:318:5
     |
@@ -363,6 +453,8 @@ warning: function `latest_plan_receipt` is never used
 190 | pub(super) fn latest_plan_receipt(
     |               ^^^^^^^^^^^^^^^^^^^
 
+   Compiling codex-cloud-tasks v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/cloud-tasks)
+   Compiling codex-cli v0.1.42 (/home/ambient/corbanu-acct/head/codex-rs/cli)
 warning: `codex-tui` (lib) generated 13 warnings
 warning: variable does not need to be mutable
   --> tui/src/app/resume_defaults_tests.rs:17:9
@@ -500,101 +592,101 @@ warning: function `get_upgrade_version_for_popup` is never used
     |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning: `codex-tui` (lib test) generated 25 warnings (9 duplicates) (run `cargo fix --lib -p codex-tui --tests` to apply 1 suggestion)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 36.35s
 ────────────
- Nextest run ID 4375b072-73ce-4652-8126-9c2ba5bbd148 with nextest profile: local
+ Nextest run ID 412f3e52-0f64-44dc-8be2-41dd0a9af60a with nextest profile: local
     Starting 92 tests across 6 binaries (4080 tests skipped)
-        PASS [   0.010s] ( 1/92) codex-tui chatwidget::goal_status::tests::completed_goal_usage_reports_time_without_token_budget
-        PASS [   0.010s] ( 2/92) codex-tui chatwidget::goal_status::tests::completed_goal_usage_reports_tokens_when_budgeted
-        PASS [   0.010s] ( 3/92) codex-tui chatwidget::goal_status::tests::stopped_goal_budget_usage_reports_budgeted_tokens
-        PASS [   0.020s] ( 4/92) codex-tui chatwidget::tests::goal_menu::goal_menu_usage_limited_snapshot
-        PASS [   0.020s] ( 5/92) codex-tui chatwidget::tests::slash_commands::usage_command_with_invalid_view_reports_usage_snapshot
-        PASS [   0.020s] ( 6/92) codex-tui app::tests::accounting_inspect_app_off_and_old_usage_routes
-        PASS [   0.023s] ( 7/92) codex-tui chatwidget::tests::plan_mode::plan_implementation_popup_context_usage_snapshot
-        PASS [   0.020s] ( 8/92) codex-tui chatwidget::tests::status_and_layout::status_line_legacy_context_usage_renders_context_used_percent
-        PASS [   0.035s] ( 9/92) codex-tui chatwidget::goal_status::tests::active_goal_usage_reports_time_without_budget
-        PASS [   0.012s] (10/92) codex-tui bottom_pane::slash_commands::tests::usage_command_is_hidden_from_input_when_account_token_activity_is_disabled
-        PASS [   0.036s] (11/92) codex-tui bottom_pane::status_line_setup::tests::context_used_accepts_context_usage_legacy_id
-        PASS [   0.041s] (12/92) codex-tui bottom_pane::slash_commands::tests::usage_command_exact_lookup_still_resolves_when_account_token_activity_is_disabled
-        PASS [   0.041s] (13/92) codex-tui app::tests::session_summary::session_summary_skips_when_no_usage_or_resume_hint
-        PASS [   0.035s] (14/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_show_when_authoritative_snapshot_clears_credits
-        PASS [   0.029s] (15/92) codex-tui chatwidget::tests::status_and_layout::status_line_tps_uses_streamed_text_when_usage_is_missing
-        PASS [   0.039s] (16/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_preserve_workspace_limit_for_sparse_snapshots
-        PASS [   0.028s] (17/92) codex-tui chatwidget::goal_status::tests::active_goal_usage_prefers_token_budget
-        PASS [   0.028s] (18/92) codex-tui chatwidget::tests::slash_commands::slash_keymap_invalid_args_show_usage
-        PASS [   0.033s] (19/92) codex-tui chatwidget::tests::status_and_layout::status_line_tps_updates_when_usage_arrives_after_completion
-        PASS [   0.033s] (20/92) codex-tui chatwidget::tests::status_and_layout::token_usage_update_uses_runtime_context_window
-        PASS [   0.031s] (21/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_preserve_and_clear_spend_control_state
-        PASS [   0.061s] (22/92) codex-tui chatwidget::tests::slash_commands::slash_mcp_invalid_args_show_usage
-        PASS [   0.061s] (23/92) codex-tui chatwidget::goal_status::tests::stopped_goal_budget_usage_omits_unbudgeted_usage
-        PASS [   0.061s] (24/92) codex-tui chatwidget::tests::slash_commands::signed_out_usage_command_with_args_reports_chatgpt_login_requirement
-        PASS [   0.061s] (25/92) codex-tui chatwidget::tests::slash_commands::raw_slash_command_reports_usage_for_invalid_arg
-        PASS [   0.061s] (26/92) codex-tui chatwidget::tests::slash_commands::usage_command_runs_with_backend_auth_without_chatgpt_account_flag
-        PASS [   0.061s] (27/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_clear_workspace_limit_from_authoritative_snapshot
-        PASS [   0.039s] (28/92) codex-tui chatwidget::tests::status_and_layout::usage_limit_error_remaps_stale_member_credits_state_to_usage_limit_prompt
-        PASS [   0.066s] (29/92) codex-tui app::tests::late_usage_result_can_follow_finalized_plan
-        PASS [   0.067s] (30/92) codex-tui chatwidget::tests::slash_commands::goal_control_slash_command_without_thread_shows_full_usage
-        PASS [   0.044s] (31/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_newly_reached_workspace_limit
-        PASS [   0.045s] (32/92) codex-tui chatwidget::tests::slash_commands::usage_command_runs_with_backend_auth_from_widget_init
-        PASS [   0.033s] (33/92) codex-tui chatwidget::tests::usage::account_change_invalidates_pending_reset_requests
-        PASS [   0.073s] (34/92) codex-tui app::tests::token_usage_update_refreshes_status_line_with_runtime_context_window
-        PASS [   0.052s] (35/92) codex-tui chatwidget::tests::slash_commands::usage_error_slash_command_is_available_from_local_recall
-        PASS [   0.053s] (36/92) codex-tui chatwidget::tests::slash_commands::signed_out_usage_command_reports_chatgpt_login_requirement
-        PASS [   0.041s] (37/92) codex-tui chatwidget::tests::usage::account_change_dismisses_reset_popup_beneath_overlay
-        PASS [   0.042s] (38/92) codex-tui chatwidget::tests::status_and_layout::workspace_owner_usage_limit_nudge_completion_renders_feedback
-        PASS [   0.040s] (39/92) codex-tui chatwidget::tests::status_and_layout::account_update_clears_derived_usage_limit_state_and_prompt
-        PASS [   0.046s] (40/92) codex-tui chatwidget::tests::status_and_layout::workspace_member_usage_limit_prompts_and_sends_usage_limit
-        PASS [   0.029s] (41/92) codex-tui chatwidget::tests::usage::clearing_pending_reset_hint_preserves_in_flight_redemption
-        PASS [   0.037s] (42/92) codex-tui chatwidget::tests::usage::account_update_invalidates_usage_menu_refresh_when_visible_state_is_unchanged
-        PASS [   0.033s] (43/92) codex-tui chatwidget::tests::usage::already_redeemed_is_an_idempotent_success
-        PASS [   0.029s] (44/92) codex-tui chatwidget::tests::usage::rate_limit_reset_confirmation_can_use_reset
-        PASS [   0.032s] (45/92) codex-tui chatwidget::tests::usage::failed_post_consume_refresh_does_not_keep_stale_reset_count
-        PASS [   0.018s] (46/92) codex-tui chatwidget::tests::usage::reset_credit_options_use_generic_copy_when_backend_copy_is_missing
-        PASS [   0.033s] (47/92) codex-tui chatwidget::tests::usage::rate_limit_reset_confirmation_no_and_escape_return_to_picker
-        PASS [   0.046s] (48/92) codex-tui chatwidget::tests::usage::accounting_inspect_cancel_refresh_generation
-        PASS [   0.034s] (49/92) codex-tui chatwidget::tests::usage::rate_limit_reset_redemption_allows_ctrl_c_to_quit_while_in_flight
-        PASS [   0.058s] (50/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_follow_workspace_credit_flags
-        PASS [   0.044s] (51/92) codex-tui chatwidget::tests::usage::no_credit_outcome_disables_reset_entry_in_usage_menu
-        PASS [   0.033s] (52/92) codex-tui chatwidget::tests::usage::rate_limit_reset_redemption_cannot_be_dismissed_while_in_flight
-        PASS [   0.050s] (53/92) codex-tui chatwidget::tests::usage::accounting_inspect_menu_and_reset_regression
-        PASS [   0.029s] (54/92) codex-tui chatwidget::tests::usage::rate_limit_reset_retry_reuses_idempotency_key
-        PASS [   0.011s] (55/92) codex-tui chatwidget::tps::tests::late_provider_usage_records_completed_zero_stream_turn
-        PASS [   0.035s] (56/92) codex-tui chatwidget::tests::usage::rate_limit_reset_picker_starts_with_soonest_expiries_and_keeps_all_rows_reachable
-        PASS [   0.030s] (57/92) codex-tui chatwidget::tests::usage::rate_limit_reset_success_updates_popup_beneath_overlay
-        PASS [   0.014s] (58/92) codex-tui chatwidget::tokens::tests::accounting_zero_plan_usage_renders_money_unavailable
-        PASS [   0.036s] (59/92) codex-tui chatwidget::tests::usage::rate_limit_reset_load_result_updates_popup_beneath_overlay
-        PASS [   0.029s] (60/92) codex-tui chatwidget::tests::usage::reset_picker_allows_only_one_pending_confirmation
-        PASS [   0.046s] (61/92) codex-tui chatwidget::tests::usage::opening_rate_limit_reset_flow_invalidates_in_flight_startup_hint
-        PASS [   0.014s] (62/92) codex-tui chatwidget::tps::tests::provider_usage_falls_back_to_cumulative_delta_for_active_turn
-        PASS [   0.036s] (63/92) codex-tui chatwidget::tests::usage::starting_rate_limit_reset_redemption_clears_deferred_startup_hint
-        PASS [   0.043s] (64/92) codex-tui chatwidget::tests::usage::rate_limit_reset_picker_wraps_expiry_details_snapshot
-        PASS [   0.018s] (65/92) codex-tui chatwidget::tps::tests::provider_usage_overrides_stream_estimate_for_active_turn
-        PASS [   0.045s] (66/92) codex-tui chatwidget::tests::usage::rate_limit_reset_confirmation_uses_backend_copy_snapshot
-        PASS [   0.029s] (67/92) codex-tui chatwidget::tests::usage::usage_menu_rate_limit_reset_entry_opens_reset_flow
-        PASS [   0.031s] (68/92) codex-tui chatwidget::tests::usage::startup_check_shows_reset_hint_for_workspace_account_with_credit
-        PASS [   0.035s] (69/92) codex-tui chatwidget::tests::usage::startup_check_omits_reset_hint_when_none_are_available
-        PASS [   0.033s] (70/92) codex-tui chatwidget::tests::usage::usage_command_disables_reset_after_cached_zero_snapshot
-        PASS [   0.032s] (71/92) codex-tui chatwidget::tests::usage::usage_command_opens_menu_when_reset_is_available_snapshot
-        PASS [   0.013s] (72/92) codex-tui goal_display::tests::goal_usage_summary_formats_time_and_budgeted_tokens
-        PASS [   0.015s] (73/92) codex-tui chatwidget::wallet_usage::tests::comma_format_is_exact
-        PASS [   0.033s] (74/92) codex-tui chatwidget::tests::usage::usage_command_can_check_reset_availability_for_workspace_accounts
-        PASS [   0.015s] (75/92) codex-tui chatwidget::wallet_usage::tests::reset_countdown_is_human_readable_and_keeps_exact_time_separate
-        PASS [   0.014s] (76/92) codex-tui claude_panes::tests::anthropic_stream_events_preserve_upstream_usage_in_protocol_fields
-        PASS [   0.014s] (77/92) codex-tui claude_panes::tests::zero_usage_summary_is_untrusted_not_reported
-        PASS [   0.035s] (78/92) codex-tui chatwidget::tests::usage::startup_check_shows_available_reset_hint_snapshot
-        PASS [   0.049s] (79/92) codex-tui chatwidget::tests::usage::rate_limit_reset_popup_states_snapshot
-        PASS [   0.015s] (80/92) codex-tui chatwidget::tps::tests::provider_usage_renders_without_approximation_marker
-        PASS [   0.016s] (81/92) codex-tui chatwidget::wallet_usage::tests::usage_summary_exposes_spend_used_reserved_limits_and_resets
-        PASS [   0.015s] (82/92) codex-tui local_chatgpt_auth::tests::preserves_usage_based_plan_type_wire_name
-        PASS [   0.017s] (83/92) codex-tui chatwidget::usage::corbanu_plan_tests::plan_usage_action_opens_dedicated_usage_view
-        PASS [   0.015s] (84/92) codex-tui status::tests::status_card_token_usage_excludes_cached_tokens
-        PASS [   0.015s] (85/92) codex-tui status::tests::status_model_provider_uses_bedrock_runtime_base_url_and_gates_usage_link
-        PASS [   0.031s] (86/92) codex-tui chatwidget::tests::usage::usage_menu_refresh_failure_preserves_disabled_known_zero
-        PASS [   0.017s] (87/92) codex-tui status::tests::status_context_window_uses_last_usage
-        PASS [   0.114s] (88/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_explicit_rolling_workspace_limit
-        PASS [   0.039s] (89/92) codex-tui chatwidget::tests::usage::usage_command_can_check_reset_availability_before_startup_refresh_finishes_snapshot
-        PASS [   0.034s] (90/92) codex-tui chatwidget::tests::usage::usage_menu_refresh_enables_newly_available_reset
-        PASS [   0.041s] (91/92) codex-tui chatwidget::tests::usage::startup_reset_hint_waits_for_active_output_snapshot
-        PASS [   0.136s] (92/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_workspace_limit_after_rolling_credits
+        PASS [   0.010s] ( 1/92) codex-tui bottom_pane::status_line_setup::tests::context_used_accepts_context_usage_legacy_id
+        PASS [   0.010s] ( 2/92) codex-tui chatwidget::goal_status::tests::completed_goal_usage_reports_time_without_token_budget
+        PASS [   0.010s] ( 3/92) codex-tui app::tests::session_summary::session_summary_skips_when_no_usage_or_resume_hint
+        PASS [   0.011s] ( 4/92) codex-tui chatwidget::goal_status::tests::active_goal_usage_reports_time_without_budget
+        PASS [   0.011s] ( 5/92) codex-tui bottom_pane::slash_commands::tests::usage_command_exact_lookup_still_resolves_when_account_token_activity_is_disabled
+        PASS [   0.011s] ( 6/92) codex-tui chatwidget::goal_status::tests::active_goal_usage_prefers_token_budget
+        PASS [   0.012s] ( 7/92) codex-tui chatwidget::goal_status::tests::completed_goal_usage_reports_tokens_when_budgeted
+        PASS [   0.025s] ( 8/92) codex-tui app::tests::token_usage_update_refreshes_status_line_with_runtime_context_window
+        PASS [   0.025s] ( 9/92) codex-tui chatwidget::tests::status_and_layout::account_update_clears_derived_usage_limit_state_and_prompt
+        PASS [   0.019s] (10/92) codex-tui chatwidget::goal_status::tests::stopped_goal_budget_usage_reports_budgeted_tokens
+        PASS [   0.043s] (11/92) codex-tui app::tests::late_usage_result_can_follow_finalized_plan
+        PASS [   0.032s] (12/92) codex-tui chatwidget::tests::slash_commands::raw_slash_command_reports_usage_for_invalid_arg
+        PASS [   0.017s] (13/92) codex-tui bottom_pane::slash_commands::tests::usage_command_is_hidden_from_input_when_account_token_activity_is_disabled
+        PASS [   0.032s] (14/92) codex-tui chatwidget::tests::slash_commands::signed_out_usage_command_with_args_reports_chatgpt_login_requirement
+        PASS [   0.044s] (15/92) codex-tui chatwidget::goal_status::tests::stopped_goal_budget_usage_omits_unbudgeted_usage
+        PASS [   0.045s] (16/92) codex-tui chatwidget::tests::goal_menu::goal_menu_usage_limited_snapshot
+        PASS [   0.036s] (17/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_show_when_authoritative_snapshot_clears_credits
+        PASS [   0.036s] (18/92) codex-tui chatwidget::tests::status_and_layout::status_line_tps_updates_when_usage_arrives_after_completion
+        PASS [   0.035s] (19/92) codex-tui chatwidget::tests::slash_commands::usage_command_runs_with_backend_auth_without_chatgpt_account_flag
+        PASS [   0.035s] (20/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_preserve_and_clear_spend_control_state
+        PASS [   0.047s] (21/92) codex-tui chatwidget::tests::slash_commands::usage_error_slash_command_is_available_from_local_recall
+        PASS [   0.036s] (22/92) codex-tui chatwidget::tests::slash_commands::usage_command_with_invalid_view_reports_usage_snapshot
+        PASS [   0.036s] (23/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_clear_workspace_limit_from_authoritative_snapshot
+        PASS [   0.037s] (24/92) codex-tui chatwidget::tests::status_and_layout::token_usage_update_uses_runtime_context_window
+        PASS [   0.039s] (25/92) codex-tui chatwidget::tests::status_and_layout::status_line_legacy_context_usage_renders_context_used_percent
+        PASS [   0.052s] (26/92) codex-tui app::tests::accounting_inspect_app_off_and_old_usage_routes
+        PASS [   0.053s] (27/92) codex-tui chatwidget::tests::plan_mode::plan_implementation_popup_context_usage_snapshot
+        PASS [   0.053s] (28/92) codex-tui chatwidget::tests::slash_commands::usage_command_runs_with_backend_auth_from_widget_init
+        PASS [   0.048s] (29/92) codex-tui chatwidget::tests::status_and_layout::status_line_tps_uses_streamed_text_when_usage_is_missing
+        PASS [   0.061s] (30/92) codex-tui chatwidget::tests::slash_commands::goal_control_slash_command_without_thread_shows_full_usage
+        PASS [   0.036s] (31/92) codex-tui chatwidget::tests::status_and_layout::workspace_owner_usage_limit_nudge_completion_renders_feedback
+        PASS [   0.051s] (32/92) codex-tui chatwidget::tests::slash_commands::slash_keymap_invalid_args_show_usage
+        PASS [   0.053s] (33/92) codex-tui chatwidget::tests::status_and_layout::usage_limit_error_remaps_stale_member_credits_state_to_usage_limit_prompt
+        PASS [   0.034s] (34/92) codex-tui chatwidget::tests::usage::account_change_dismisses_reset_popup_beneath_overlay
+        PASS [   0.056s] (35/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_preserve_workspace_limit_for_sparse_snapshots
+        PASS [   0.070s] (36/92) codex-tui chatwidget::tests::slash_commands::slash_mcp_invalid_args_show_usage
+        PASS [   0.046s] (37/92) codex-tui chatwidget::tests::status_and_layout::workspace_member_usage_limit_prompts_and_sends_usage_limit
+        PASS [   0.012s] (38/92) codex-tui chatwidget::tests::usage::reset_credit_options_use_generic_copy_when_backend_copy_is_missing
+        PASS [   0.032s] (39/92) codex-tui chatwidget::tests::usage::clearing_pending_reset_hint_preserves_in_flight_redemption
+        PASS [   0.034s] (40/92) codex-tui chatwidget::tests::usage::account_change_invalidates_pending_reset_requests
+        PASS [   0.069s] (41/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_newly_reached_workspace_limit
+        PASS [   0.081s] (42/92) codex-tui chatwidget::tests::slash_commands::signed_out_usage_command_reports_chatgpt_login_requirement
+        PASS [   0.037s] (43/92) codex-tui chatwidget::tests::usage::account_update_invalidates_usage_menu_refresh_when_visible_state_is_unchanged
+        PASS [   0.070s] (44/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_follow_workspace_credit_flags
+        PASS [   0.038s] (45/92) codex-tui chatwidget::tests::usage::already_redeemed_is_an_idempotent_success
+        PASS [   0.036s] (46/92) codex-tui chatwidget::tests::usage::opening_rate_limit_reset_flow_invalidates_in_flight_startup_hint
+        PASS [   0.035s] (47/92) codex-tui chatwidget::tests::usage::rate_limit_reset_picker_wraps_expiry_details_snapshot
+        PASS [   0.037s] (48/92) codex-tui chatwidget::tests::usage::no_credit_outcome_disables_reset_entry_in_usage_menu
+        PASS [   0.037s] (49/92) codex-tui chatwidget::tests::usage::rate_limit_reset_confirmation_can_use_reset
+        PASS [   0.033s] (50/92) codex-tui chatwidget::tests::usage::rate_limit_reset_redemption_cannot_be_dismissed_while_in_flight
+        PASS [   0.040s] (51/92) codex-tui chatwidget::tests::usage::rate_limit_reset_confirmation_uses_backend_copy_snapshot
+        PASS [   0.043s] (52/92) codex-tui chatwidget::tests::usage::failed_post_consume_refresh_does_not_keep_stale_reset_count
+        PASS [   0.042s] (53/92) codex-tui chatwidget::tests::usage::rate_limit_reset_picker_starts_with_soonest_expiries_and_keeps_all_rows_reachable
+        PASS [   0.045s] (54/92) codex-tui chatwidget::tests::usage::rate_limit_reset_confirmation_no_and_escape_return_to_picker
+        PASS [   0.082s] (55/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_explicit_rolling_workspace_limit
+        PASS [   0.046s] (56/92) codex-tui chatwidget::tests::usage::rate_limit_reset_load_result_updates_popup_beneath_overlay
+        PASS [   0.036s] (57/92) codex-tui chatwidget::tests::usage::rate_limit_reset_retry_reuses_idempotency_key
+        PASS [   0.012s] (58/92) codex-tui chatwidget::tps::tests::late_provider_usage_records_completed_zero_stream_turn
+        PASS [   0.051s] (59/92) codex-tui chatwidget::tests::usage::accounting_inspect_cancel_refresh_generation
+        PASS [   0.030s] (60/92) codex-tui chatwidget::tests::usage::startup_check_omits_reset_hint_when_none_are_available
+        PASS [   0.011s] (61/92) codex-tui chatwidget::usage::corbanu_plan_tests::plan_usage_action_opens_dedicated_usage_view
+        PASS [   0.014s] (62/92) codex-tui chatwidget::tps::tests::provider_usage_overrides_stream_estimate_for_active_turn
+        PASS [   0.033s] (63/92) codex-tui chatwidget::tests::usage::startup_check_shows_available_reset_hint_snapshot
+        PASS [   0.030s] (64/92) codex-tui chatwidget::tests::usage::startup_check_shows_reset_hint_for_workspace_account_with_credit
+        PASS [   0.047s] (65/92) codex-tui chatwidget::tests::usage::rate_limit_reset_redemption_allows_ctrl_c_to_quit_while_in_flight
+        PASS [   0.034s] (66/92) codex-tui chatwidget::tests::usage::starting_rate_limit_reset_redemption_clears_deferred_startup_hint
+        PASS [   0.038s] (67/92) codex-tui chatwidget::tests::usage::reset_picker_allows_only_one_pending_confirmation
+        PASS [   0.018s] (68/92) codex-tui chatwidget::tps::tests::provider_usage_falls_back_to_cumulative_delta_for_active_turn
+        PASS [   0.018s] (69/92) codex-tui chatwidget::tps::tests::provider_usage_renders_without_approximation_marker
+        PASS [   0.041s] (70/92) codex-tui chatwidget::tests::usage::rate_limit_reset_success_updates_popup_beneath_overlay
+        PASS [   0.032s] (71/92) codex-tui chatwidget::tests::usage::startup_reset_hint_waits_for_active_output_snapshot
+        PASS [   0.012s] (72/92) codex-tui chatwidget::wallet_usage::tests::usage_summary_exposes_spend_used_reserved_limits_and_resets
+        PASS [   0.021s] (73/92) codex-tui chatwidget::tokens::tests::accounting_zero_plan_usage_renders_money_unavailable
+        PASS [   0.015s] (74/92) codex-tui chatwidget::wallet_usage::tests::reset_countdown_is_human_readable_and_keeps_exact_time_separate
+        PASS [   0.010s] (75/92) codex-tui goal_display::tests::goal_usage_summary_formats_time_and_budgeted_tokens
+        PASS [   0.011s] (76/92) codex-tui claude_panes::tests::zero_usage_summary_is_untrusted_not_reported
+        PASS [   0.061s] (77/92) codex-tui chatwidget::tests::usage::accounting_inspect_menu_and_reset_regression
+        PASS [   0.013s] (78/92) codex-tui claude_panes::tests::anthropic_stream_events_preserve_upstream_usage_in_protocol_fields
+        PASS [   0.018s] (79/92) codex-tui chatwidget::wallet_usage::tests::comma_format_is_exact
+        PASS [   0.025s] (80/92) codex-tui chatwidget::tests::usage::usage_menu_rate_limit_reset_entry_opens_reset_flow
+        PASS [   0.033s] (81/92) codex-tui chatwidget::tests::usage::usage_command_can_check_reset_availability_for_workspace_accounts
+        PASS [   0.033s] (82/92) codex-tui chatwidget::tests::usage::usage_command_disables_reset_after_cached_zero_snapshot
+        PASS [   0.014s] (83/92) codex-tui local_chatgpt_auth::tests::preserves_usage_based_plan_type_wire_name
+        PASS [   0.015s] (84/92) codex-tui status::tests::status_context_window_uses_last_usage
+        PASS [   0.059s] (85/92) codex-tui chatwidget::tests::usage::rate_limit_reset_popup_states_snapshot
+        PASS [   0.038s] (86/92) codex-tui chatwidget::tests::usage::usage_command_can_check_reset_availability_before_startup_refresh_finishes_snapshot
+        PASS [   0.016s] (87/92) codex-tui status::tests::status_model_provider_uses_bedrock_runtime_base_url_and_gates_usage_link
+        PASS [   0.016s] (88/92) codex-tui status::tests::status_card_token_usage_excludes_cached_tokens
+        PASS [   0.032s] (89/92) codex-tui chatwidget::tests::usage::usage_menu_refresh_enables_newly_available_reset
+        PASS [   0.035s] (90/92) codex-tui chatwidget::tests::usage::usage_menu_refresh_failure_preserves_disabled_known_zero
+        PASS [   0.037s] (91/92) codex-tui chatwidget::tests::usage::usage_command_opens_menu_when_reset_is_available_snapshot
+        PASS [   0.150s] (92/92) codex-tui chatwidget::tests::status_and_layout::rate_limit_usage_warnings_keep_workspace_limit_after_rolling_credits
 ────────────
-     Summary [   0.146s] 92 tests run: 92 passed, 4080 skipped
+     Summary [   0.159s] 92 tests run: 92 passed, 4080 skipped
