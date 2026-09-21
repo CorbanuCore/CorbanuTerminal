@@ -36,10 +36,20 @@ let transport = accounting.transport(transport, model, "images/generations", "im
   or a route that collects nothing all return the transport unwrapped and the
   request proceeds unrecorded. An older host that supplies no handle gets
   `ExtensionAccounting::unrecorded`, which is the same passthrough.
-- Nothing about the image request changes otherwise. The numbers come from the
-  response the provider already sends: the images API returns `usage` in the
-  same shape the Responses body parser reads, so tokens are recorded rather
-  than left unknown.
+- The numbers come from the response the provider already sends: the images API
+  returns `usage` in the same shape the Responses body parser reads, so tokens
+  are recorded rather than left unknown.
+- The provider passed in is the caller's **live** one, not a snapshot taken when
+  the handle was made. `turn_mode` then binds the route the request actually
+  takes, exactly as it does for a turn, so a session whose provider changed
+  records against the new route rather than a stale one. Review caught the
+  snapshot; it would have bound collection to a provider the request no longer
+  used.
+- One thing does change about the request, and it is the same limit as
+  everywhere else: once evidence exists, an accounting fault - a failed
+  admission, a route the transport refuses, a failed observation write - fails
+  the image request, which before could only fail for its own reasons. Best
+  effort covers getting attached, not staying attached.
 
 This works because `AccountingTransport::execute` learned to collect in the
 previous increment, for the legacy compaction endpoint. Image generation is the
@@ -52,9 +62,16 @@ a real state runtime, wraps a real `ImagesClient` through the handle, drives a
 generation against a mock images endpoint, and asserts one `image:` attempt for
 model `gpt-image-1` with its usage observed. Returning no evidence from the
 handle - which is what the defect looked like - fails it.
+`accounting_extension_client_without_its_session_records_nothing` drops the
+session first and asserts the request still succeeds with no accounting
+installed at all.
+
+Both tests exercise the seam directly rather than through `backend.rs`, so the
+edits path's pin and the no-handle branch are covered by the type system and by
+reading, not by a test. That is stated rather than implied.
 
 Clean-host lanes, RTX workstation, fmt-clean: `codex-core` accounting with
-`developer-accounting` **149/149**, the image-generation extension 10/10.
+`developer-accounting` **150/150**, the image-generation extension 10/10.
 
 ## What is still uncollected
 

@@ -30,7 +30,6 @@ pub struct ExtensionAccounting {
     owner: Weak<Session>,
     accounting: AccountingMode,
     provider_id: String,
-    provider: ModelProviderInfo,
 }
 
 impl std::fmt::Debug for ExtensionAccounting {
@@ -44,13 +43,11 @@ impl ExtensionAccounting {
         owner: Weak<Session>,
         accounting: AccountingMode,
         provider_id: String,
-        provider: ModelProviderInfo,
     ) -> Self {
         Self {
             owner,
             accounting,
             provider_id,
-            provider,
         }
     }
 
@@ -68,11 +65,12 @@ impl ExtensionAccounting {
     pub async fn transport<T: HttpTransport>(
         &self,
         transport: T,
+        provider: &ModelProviderInfo,
         model: &str,
         path: &str,
         label: &str,
     ) -> Accounted<T> {
-        match self.evidence(model, path, label).await {
+        match self.evidence(provider, path, label).await {
             Some(evidence) => Accounted {
                 inner: AccountingTransport::new(transport, Some(evidence), model.to_string()),
             },
@@ -89,33 +87,33 @@ impl ExtensionAccounting {
         }
     }
 
+    /// The provider is the caller's own, live one, not a snapshot taken when
+    /// this handle was made. `turn_mode` then binds the route the request
+    /// actually takes, exactly as it does for a turn, so a session whose
+    /// provider changed records against the new route rather than against a
+    /// stale one - or, if that route collects nothing, records nothing.
     async fn evidence(
         &self,
-        model: &str,
+        provider: &ModelProviderInfo,
         path: &str,
         label: &str,
     ) -> Option<Arc<ResponseEvidence>> {
         let owner = self.owner.upgrade()?;
         let auth = owner.services.auth_manager.auth().await;
         let auth_mode = auth.as_ref().map(codex_login::CodexAuth::auth_mode);
-        let api = self.provider.to_api_provider(auth_mode).ok()?;
+        let api = provider.to_api_provider(auth_mode).ok()?;
         let mode = if matches!(self.accounting, AccountingMode::Provider { .. }) {
             crate::accounting::turn_mode(
                 &self.accounting,
                 &self.provider_id,
-                &self.provider,
+                provider,
                 auth_mode,
                 &api.base_url,
             )
         } else {
             self.accounting.clone()
         };
-        if !crate::accounting::collects(
-            &mode,
-            &self.provider_id,
-            &self.provider,
-            self.provider.wire_api,
-        ) {
+        if !crate::accounting::collects(&mode, &self.provider_id, provider, provider.wire_api) {
             return None;
         }
         owner.try_ensure_rollout_materialized().await.ok()?;
@@ -129,7 +127,6 @@ impl ExtensionAccounting {
         )
         .await
         .ok()?;
-        let _ = model;
         Some(ResponseEvidence::new(sampling))
     }
 }

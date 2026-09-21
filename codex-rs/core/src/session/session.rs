@@ -1257,7 +1257,6 @@ impl Session {
                     Arc::downgrade(&sess),
                     config.accounting.clone(),
                     config.model_provider_id.clone(),
-                    config.model_provider.clone(),
                 ),
             );
             // Dispatch the SessionConfiguredEvent first and then report any errors.

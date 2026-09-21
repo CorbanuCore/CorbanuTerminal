@@ -56,7 +56,11 @@ impl CodexImagesBackend {
             .map_err(|err| err.to_string())?;
         let transport = ReqwestTransport::from_http_client(create_client());
         let transport = match &self.accounting {
-            Some(accounting) => accounting.transport(transport, model, path, "image").await,
+            Some(accounting) => {
+                accounting
+                    .transport(transport, self.provider.info(), model, path, "image")
+                    .await
+            }
             None => ExtensionAccounting::unrecorded(transport, model),
         };
         Ok(ImagesClient::new(transport, provider, auth))
