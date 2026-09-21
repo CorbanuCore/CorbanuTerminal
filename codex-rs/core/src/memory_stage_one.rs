@@ -86,6 +86,12 @@ pub struct StageOneMemoryOutput {
 pub struct StageOneMemoryClient {
     client: ModelClient,
     binding: Arc<StageOneMemoryBinding>,
+    /// Collection inputs, read once from the owner's configuration when this
+    /// client was admitted, rather than re-read per request. The binding
+    /// already denies a request whose owner, provider or policy has drifted, so
+    /// a second read would answer the same question again.
+    accounting: crate::config::AccountingMode,
+    accounting_provider_id: String,
 }
 
 pub(crate) struct StageOneMemoryBinding {
@@ -266,11 +272,60 @@ impl StageOneMemoryClient {
             config.http_client_factory(),
         );
         client.with_stage_one_memory_binding(Arc::clone(&binding))?;
-        Ok(Self { client, binding })
+        Ok(Self {
+            client,
+            binding,
+            accounting: config.accounting.clone(),
+            accounting_provider_id: config.model_provider_id.clone(),
+        })
     }
 
     pub async fn check_completion(&self) -> Result<(), StageOneMemoryError> {
         self.binding.check().await.map_err(Into::into)
+    }
+
+    /// Collection for one extraction.
+    ///
+    /// The owner is held weakly, and the pipeline runs after a turn: a session
+    /// that has gone away records nothing rather than failing the extraction.
+    /// Nothing here takes the session's state lock - the inputs were read when
+    /// this client was admitted - because the request path runs alongside the
+    /// session's own turn lifecycle.
+    async fn attach_accounting(
+        &self,
+        session: &crate::client::ModelClientSession,
+    ) -> anyhow::Result<Option<crate::accounting::TurnScopes>> {
+        let Some(owner) = self.binding.owner.upgrade() else {
+            return Ok(None);
+        };
+        // Collect only when this request really goes to the route the admitted
+        // configuration approved. Accounting must never be the reason a
+        // stage-one request fails, and a request bound elsewhere would fail the
+        // route check at admission instead of simply going unrecorded.
+        if self.client.provider_info() != &self.binding.provider {
+            return Ok(None);
+        }
+        let auth = owner.services.auth_manager.auth().await;
+        let auth_mode = auth.as_ref().map(codex_login::CodexAuth::auth_mode);
+        let endpoint = self
+            .binding
+            .provider
+            .to_api_provider(auth_mode)
+            .map(|api| api.base_url)
+            .unwrap_or_default();
+        Ok(Some(
+            crate::accounting::attach_scopes(
+                &owner,
+                &self.accounting,
+                &self.accounting_provider_id,
+                &self.binding.provider,
+                auth_mode,
+                &endpoint,
+                session,
+                crate::accounting::memory_turn_label(),
+            )
+            .await?,
+        ))
     }
 
     pub async fn extract(
@@ -279,6 +334,18 @@ impl StageOneMemoryClient {
     ) -> Result<StageOneMemoryOutput, StageOneMemoryError> {
         self.check_completion().await?;
         let mut session = self.client.new_session();
+        // Extraction is a model request the operator paid for, on a session of
+        // its own, so it is collected like any other - under its own `memory:`
+        // turn. Best effort, exactly as compaction and prewarm are: an
+        // extraction that cannot be recorded still runs, because accounting is
+        // an observer here and not a gate on the memory pipeline.
+        let _accounting = match self.attach_accounting(&session).await {
+            Ok(scopes) => scopes,
+            Err(error) => {
+                tracing::warn!(%error, "accounting: stage-one memory proceeding unrecorded");
+                None
+            }
+        };
         let trace = InferenceTraceContext::disabled();
         let mut stream = tokio::select! {
             _ = self.binding.termination.clone() => return Err(StageOneMemoryDenial::OwnerTerminated.into()),

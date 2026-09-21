@@ -119,6 +119,15 @@ pub(crate) fn compaction_turn_label(sub_id: &str) -> String {
     scoped_turn_label("compact:", sub_id)
 }
 
+/// A turn label for one stage-one memory extraction.
+///
+/// Extraction is a model call the operator paid for, on a client session of its
+/// own. Each extraction is its own turn: they are independent passes over
+/// different material, not retries of one another.
+pub(crate) fn memory_turn_label() -> String {
+    format!("memory:{}", Uuid::new_v4())
+}
+
 /// A turn label for one startup prewarm.
 ///
 /// Prewarm is inference the operator paid for - it primes the model's cache, and
@@ -186,30 +195,62 @@ pub(crate) async fn attach_turn(
     client_session: &crate::client::ModelClientSession,
     turn: String,
 ) -> Result<TurnScopes, CodexErr> {
-    let mode = if matches!(
+    let (auth_mode, endpoint) = if matches!(
         turn_context.config.accounting,
         AccountingMode::Provider { .. }
     ) {
         let auth = turn_context.provider.auth().await;
         let api = turn_context.provider.api_provider().await?;
-        turn_mode(
-            &turn_context.config.accounting,
-            &turn_context.config.model_provider_id,
-            turn_context.provider.info(),
+        (
             auth.as_ref().map(codex_login::CodexAuth::auth_mode),
-            &api.base_url,
+            api.base_url,
         )
     } else {
-        turn_context.config.accounting.clone()
+        (None, String::new())
     };
-    let collects_wire = |wire| {
-        collects(
-            &mode,
-            &turn_context.config.model_provider_id,
-            turn_context.provider.info(),
-            wire,
+    attach_scopes(
+        session,
+        &turn_context.config.accounting,
+        &turn_context.config.model_provider_id,
+        turn_context.provider.info(),
+        auth_mode,
+        &endpoint,
+        client_session,
+        turn,
+    )
+    .await
+}
+
+/// Bind collection for one unit of inference on one client session.
+///
+/// Every path that opens a client session of its own goes through here: the
+/// ordinary turn, compaction, startup prewarm, the completion classifier and
+/// stage-one memory extraction. Each of those is inference the operator paid
+/// for, so each is recorded rather than escaping collection; what differs is
+/// only the turn identity it records under.
+#[expect(clippy::too_many_arguments)]
+pub(crate) async fn attach_scopes(
+    session: &Arc<crate::session::session::Session>,
+    accounting: &AccountingMode,
+    provider_id: &str,
+    provider: &codex_model_provider_info::ModelProviderInfo,
+    auth_mode: Option<codex_protocol::auth::AuthMode>,
+    resolved_endpoint: &str,
+    client_session: &crate::client::ModelClientSession,
+    turn: String,
+) -> Result<TurnScopes, CodexErr> {
+    let mode = if matches!(accounting, AccountingMode::Provider { .. }) {
+        turn_mode(
+            accounting,
+            provider_id,
+            provider,
+            auth_mode,
+            resolved_endpoint,
         )
+    } else {
+        accounting.clone()
     };
+    let collects_wire = |wire| collects(&mode, provider_id, provider, wire);
     let anthropic = if collects_wire(codex_model_provider_info::WireApi::Anthropic) {
         session
             .try_ensure_rollout_materialized()

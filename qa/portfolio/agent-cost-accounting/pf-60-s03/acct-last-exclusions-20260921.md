@@ -76,7 +76,14 @@ tokens 66 of 67 - the one failure is the stale snapshot that fails identically
 at the integration tip. The `websocket` suite passes 69/69 and the `compact`
 suite passes with retries; with retries disabled the compaction suite is
 load-flaky at this tree and at the integration tip alike, with different tests
-failing on each run. Raw logs under `rtx-20260921/`.
+failing on each run. The stage-one suite passes 24/24, logged as
+`rtx-20260921/head-memory-stage-one.txt`. Raw logs under `rtx-20260921/`.
+
+One pre-existing flake worth naming because I chased it: `session::tests::
+non_steerable_turn_defers_user_input_until_completion` fails most runs on this
+host at this tree, at the integration tip, and at the older integration base
+alike, in isolation as well as under load. It is not caused by this work; I
+attributed it by running the same test at all three trees.
 
 ## A third class review found: the turn-completion classifier
 
@@ -115,22 +122,53 @@ variable. Eight consecutive full-lane runs were clean; the repeat summaries are 
 in `rtx-20260921/classifier-repeats.txt`, alongside the failing run the fix
 addresses.
 
+## The fifth call site: stage-one memory extraction
+
+`memory_stage_one::StageOneMemoryClient` builds its own `ModelClient` and
+streams a real billable request. It is reachable in production - `app-server`'s
+turn processor starts the memories task, which reaches it through
+`memories/write`'s phase-one runtime - and it is gated: `Feature::MemoryTool` is
+default-off, and the pipeline is skipped for ephemeral and non-root sessions.
+The feature is Stable and the TUI offers to turn it on, so an operator who
+enables memories was running extraction that reached no ledger.
+
+It now collects, under a `memory:` turn of its own, with two properties this
+path needs and the others did not:
+
+- **Collection inputs are read once, at admission.** The accounting mode and
+  provider id are captured in `StageOneMemoryClient::new`, from the same policy
+  read that admits the client, rather than re-read per request. This is one
+  read instead of one per extraction; it is not protection from lock
+  contention, since `check_completion` already takes the session lock on entry.
+  The per-event guard, `check_stream`, deliberately takes no session-state lock
+  at all. It cannot go stale unnoticed: the client is built
+  per pipeline run, `config.model_provider` is forced to the admitted provider,
+  and a provider or policy change denies the binding before anything records.
+- **It collects only on the route the admitted configuration approved.** If the
+  client's provider is not the one the binding validated, the extraction runs
+  and records nothing, rather than failing the route check at admission.
+  Best effort, and the same honest limit as everywhere else in this workstream:
+  it covers **attach** time. Once scopes are held, an accounting fault inside
+  the request - a poisoned slot, a route or mode disagreement, a failed
+  admission - fails the extraction, exactly as it fails an ordinary turn, and
+  the request runs through the accounting transport rather than the plain one.
+  So an extraction can now fail for accounting reasons where before it had no
+  collector and could not. The denial contract itself is untouched: the
+  guarded transport still carries the binding, `check_completion` still runs on
+  entry and on every event, and only bounded metadata - turn label, provider,
+  model, token counts - reaches the ledger.
+
+`pf_60_s03_stage_one_extraction_records_its_own_turn` drives a real extraction
+against a mock at the session's own configured route and asserts the `memory:`
+row; dropping the scopes instead of holding them fails it. The existing
+stage-one security fixtures, which substitute a socket endpoint through a
+private hook, keep passing precisely because of the route rule above.
+
 ## What this does not claim
 
 - Auxiliary inference that opens its own client session: local compaction,
-  remote compaction, startup prewarm and the completion classifier all attach.
-  There is a fifth, **stage-one memory extraction**, which is not attached here.
-  `memory_stage_one::StageOneMemoryClient` builds its own `ModelClient` and
-  streams a real billable request with no collector. It **is** reachable in
-  production - `app-server`'s turn processor starts the memories task, which
-  reaches it through `memories/write`'s phase-one runtime - and it is gated:
-  `Feature::MemoryTool` is default-off, and the pipeline is skipped for
-  ephemeral and non-root sessions. The feature is Stable and the TUI offers to
-  turn it on, so an operator who enables memories runs extraction that records
-  nothing. That is a disclosed exclusion, not an unreachable one, and it is the
-  next thing to attach. Two earlier versions of this sentence were wrong - first
-  claiming four call sites, then claiming this one had no production caller -
-  which is why it is spelled out here.
+  remote compaction, startup prewarm, the completion classifier and stage-one
+  memory extraction. All five attach, the fifth as described above.
 - The legacy `/responses/compact` endpoint is still uninstrumented; it is
   reachable only by disabling `remote_compaction_v2`, which is Stable and
   default-on, and it posts through `ApiCompactClient`, which has no collector
@@ -139,5 +177,8 @@ addresses.
   unaffected: those turns record tokens.
 
 With this increment the "what does not collect" list holds no session class
-that ordinary use reaches, with the classifier flake above as the one open
-question about how reliably the newest of them is recorded.
+that ordinary use reaches. One exclusion is still reachable by a supported
+toggle: turning off `remote_compaction_v2` - Stable and default-on - routes
+compaction through the legacy `/responses/compact` endpoint, which posts via
+`ApiCompactClient` and has no collector seam. That is the last named path where
+paid inference reaches no ledger, and it is the next one to close.
