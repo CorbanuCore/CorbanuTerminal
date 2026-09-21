@@ -139,8 +139,9 @@ path needs and the others did not:
   provider id are captured in `StageOneMemoryClient::new`, from the same policy
   read that admits the client, rather than re-read per request. This is one
   read instead of one per extraction; it is not protection from lock
-  contention, since `check_completion` already takes the session lock on entry
-  and on every stream event. It cannot go stale unnoticed: the client is built
+  contention, since `check_completion` already takes the session lock on entry.
+  The per-event guard, `check_stream`, deliberately takes no session-state lock
+  at all. It cannot go stale unnoticed: the client is built
   per pipeline run, `config.model_provider` is forced to the admitted provider,
   and a provider or policy change denies the binding before anything records.
 - **It collects only on the route the admitted configuration approved.** If the
@@ -176,5 +177,8 @@ private hook, keep passing precisely because of the route rule above.
   unaffected: those turns record tokens.
 
 With this increment the "what does not collect" list holds no session class
-that ordinary use reaches, and none that a non-default but Stable configuration
-reaches either.
+that ordinary use reaches. One exclusion is still reachable by a supported
+toggle: turning off `remote_compaction_v2` - Stable and default-on - routes
+compaction through the legacy `/responses/compact` endpoint, which posts via
+`ApiCompactClient` and has no collector seam. That is the last named path where
+paid inference reaches no ledger, and it is the next one to close.

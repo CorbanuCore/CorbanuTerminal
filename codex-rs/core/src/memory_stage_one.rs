@@ -87,10 +87,9 @@ pub struct StageOneMemoryClient {
     client: ModelClient,
     binding: Arc<StageOneMemoryBinding>,
     /// Collection inputs, read once from the owner's configuration when this
-    /// client was admitted. They are not re-read per request: the binding
-    /// already denies a request whose owner, provider or policy has drifted,
-    /// and reading session state inside the request path would take the
-    /// session's own lock while a turn is running.
+    /// client was admitted, rather than re-read per request. The binding
+    /// already denies a request whose owner, provider or policy has drifted, so
+    /// a second read would answer the same question again.
     accounting: crate::config::AccountingMode,
     accounting_provider_id: String,
 }
