@@ -292,6 +292,74 @@ fn chat_body() -> codex_api::ChatCompletionsRequest {
 const MODEL: &str = "claude-opus-5";
 const ENDPOINT: &str = "http://127.0.0.1:1/v1/messages";
 
+/// A body that can re-route the serving provider must not be attributed, must not
+/// kill the turn, and must not leave partial evidence. Nothing covered this
+/// before, which is how an earlier version that rejected the turn's sampling and
+/// then sent the request anyway passed every lane.
+#[tokio::test]
+async fn accounting_unattributable_request_is_served_without_evidence() -> Result<()> {
+    use codex_http_client::HttpTransport;
+    use codex_http_client::Request;
+    use codex_http_client::RequestCompression;
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering;
+
+    #[derive(Default, Clone)]
+    struct Counting(Arc<AtomicUsize>);
+    impl HttpTransport for Counting {
+        async fn execute(
+            &self,
+            _req: Request,
+        ) -> std::result::Result<codex_http_client::Response, codex_http_client::TransportError>
+        {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Err(codex_http_client::TransportError::Build("stub".into()))
+        }
+        async fn stream(
+            &self,
+            _req: Request,
+        ) -> std::result::Result<
+            codex_http_client::StreamResponse,
+            codex_http_client::TransportError,
+        > {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Err(codex_http_client::TransportError::Build("stub".into()))
+        }
+    }
+
+    let fixture = Fixture::new().await?;
+    let evidence = transport::ResponseEvidence::new(Arc::clone(&fixture.sampling));
+    let inner = Counting::default();
+    let sent = Arc::clone(&inner.0);
+    let wrapper =
+        transport::AccountingTransport::new(inner, Some(Arc::clone(&evidence)), MODEL.into());
+    let mut body = serde_json::json!({"model": MODEL, "input": [], "stream": true});
+    body["providerOptions"] = serde_json::json!({"gateway": {"only": ["zai"]}});
+    let request = Request::new(http::Method::POST, ENDPOINT.into())
+        .with_json(&body)
+        .with_compression(RequestCompression::Zstd)
+        .into_prepared()
+        .map_err(anyhow::Error::msg)?;
+    // The request reaches the real transport rather than being short-circuited.
+    assert!(wrapper.stream(request).await.is_err(), "stub inner transport");
+    assert_eq!(sent.load(Ordering::SeqCst), 1, "the turn's request was sent");
+    // The turn survives: rejecting the sampling here would abort it at the next check.
+    fixture.sampling.check()?;
+    // And nothing was recorded for a request we could not attribute.
+    assert!(fixture.attempts().await?.is_empty());
+    // A usage event on an excluded request records nothing instead of failing the stream.
+    codex_api::ResponsesUsageObserver::observe(
+        &*evidence,
+        0,
+        Ok(codex_api::ResponsesUsagePatch::default()),
+    )
+    .await
+    .map_err(|error| anyhow::anyhow!("excluded usage must not fail the stream: {error}"))?;
+    fixture.sampling.check()?;
+    assert!(fixture.attempts().await?.is_empty());
+    Ok(())
+}
+
 struct Fixture {
     home: tempfile::TempDir,
     db: Arc<StateRuntime>,
