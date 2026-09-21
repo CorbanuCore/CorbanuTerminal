@@ -96,3 +96,39 @@ generation was:
 
 Both are named here rather than left to be discovered, and both are reachable:
 the panes bridge is a shipped surface. They are the next increments.
+
+## The Claude panes bridge: a boundary, not an oversight
+
+I attempted this next and stopped at a decision that is not mine to make.
+
+The bridge is a local HTTP server **inside the TUI process**. It accepts
+Anthropic-format requests from a Claude Code pane and posts them upstream -
+Ambient chat completions on a vault credential, or an Anthropic OAuth
+passthrough - with `reqwest` directly. Nothing about that request passes through
+`codex-core`.
+
+`codex-tui` does not depend on `codex-core`, deliberately: it talks to the app
+server. So the seam image generation uses is unreachable from the bridge, and no
+amount of wiring inside the TUI can fix that without either duplicating the
+collection policy - which route may be recorded, which dialect, which prices -
+or bypassing it and writing to `codex-state` directly. Both are exactly the kind
+of second implementation this workstream exists to avoid.
+
+I built the in-process version to be sure, and reverted it when the crate
+boundary made it dishonest. What is left are two real options:
+
+1. **Record through the app server.** Add a request the TUI issues after each
+   physical send; the handler holds the core session and uses the same seam
+   image generation does. This is how the TUI already *reads* the ledger, and it
+   keeps one implementation of the policy.
+2. **Move the policy layer below both.** Lift sampling, route pinning and
+   dialect selection out of `codex-core` into a crate the TUI can depend on.
+   Larger, and it makes the accounting policy a shared surface.
+
+There is also a product question underneath, which is why I am not choosing:
+**pane turns are a different agent's spend on the operator's credential.**
+Recording them under the session's thread makes `/usage` the operator's total
+cost, which is probably what an operator wants - but it changes what that number
+means, and it should be a decision rather than a side effect of how I wired it.
+
+Until then the bridge is uncollected, and named here.
