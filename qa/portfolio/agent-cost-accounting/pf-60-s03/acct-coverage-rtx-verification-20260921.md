@@ -13,11 +13,14 @@ the `just test` recipe uses, so profile isolation is identical.
 ## Raw artifacts
 
 The five lane logs and the run summary are committed beside this record in
-`rtx-20260921/`: `head-core.log`, `head-core-feature.log`, `head-state.log`,
-`head-tui-usage.log`, `head-tui-tokens.log` and `lanes.summary`. They are the
-nextest output copied from `~/corbanu-acct/` on the host, unedited. An earlier
-version of this record stated the conclusion without citing them, which is not
-good enough for evidence that overturns a previous attribution.
+`rtx-20260921/`: `head-core.txt`, `head-core-feature.txt`, `head-state.txt`,
+`head-tui-usage.txt`, `head-tui-tokens.txt` and `lanes.summary`. They are the
+nextest output copied from `~/corbanu-acct/` on the host, unedited, renamed from
+`.log` because the repository ignores that suffix - the first attempt at this
+commit cited five files that git had silently dropped, and the record asserted
+they were present when only the summary was. An earlier version stated the
+conclusion without citing artifacts at all, which is not good enough for evidence
+that overturns a previous attribution.
 
 ## Result at the branch head
 
