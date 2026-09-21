@@ -27,7 +27,7 @@ pub(crate) struct ResponseEvidence {
 }
 
 impl ResponseEvidence {
-    pub(super) fn admitted(sampling: Arc<Sampling>, attempt: Attempt) -> Arc<Self> {
+    pub(crate) fn admitted(sampling: Arc<Sampling>, attempt: Attempt) -> Arc<Self> {
         Arc::new(Self {
             sampling,
             attempt: OnceLock::from(attempt),

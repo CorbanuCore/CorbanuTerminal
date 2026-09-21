@@ -738,7 +738,7 @@ impl Sampling {
         self.admit_with_tier(model, endpoint, None).await
     }
 
-    async fn admit_with_tier(
+    pub(crate) async fn admit_with_tier(
         &self,
         model: &str,
         endpoint: &str,

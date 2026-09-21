@@ -217,6 +217,18 @@ pub struct BackgroundTerminalInfo {
 /// Conduit for the bidirectional stream of messages that compose a thread
 /// (formerly called a conversation) in Codex.
 impl CodexThread {
+    /// Record a model request a client outside this process already sent, on
+    /// this thread. Returns whether it was recorded; collection being off is a
+    /// `false`, not an error.
+    pub async fn record_sent_model_request(
+        &self,
+        request: crate::accounting_extensions::SentModelRequest,
+    ) -> bool {
+        crate::accounting_extensions::ExtensionAccounting::new(Arc::downgrade(&self.session))
+            .record_sent_request(request)
+            .await
+    }
+
     pub(crate) fn new(
         session: Arc<Session>,
         io: SessionIo,

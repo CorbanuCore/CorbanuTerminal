@@ -353,3 +353,111 @@ async fn accounting_extension_client_binds_the_route_it_actually_sends_to() -> a
     assert_eq!(attempts, 1, "the live route was not recorded");
     Ok(())
 }
+
+/// The Claude panes bridge sends model requests from inside the TUI, which
+/// cannot reach this crate's transport, so the host reports the send instead.
+/// This is one of those, recorded: a different provider on a different route
+/// from the session's own, with the tokens the provider reported and no money
+/// claimed on a credential this session does not hold.
+#[tokio::test]
+async fn accounting_records_a_request_another_client_already_sent() -> anyhow::Result<()> {
+    let home = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path()).await;
+    config.model_provider_id = "openai".into();
+    config.accounting = crate::config::AccountingMode::Provider {
+        scope: Uuid::new_v4(),
+        provider_id: "openai".into(),
+        wire_api: codex_model_provider_info::WireApi::Responses,
+        approved_endpoint: "https://api.openai.com/v1".into(),
+        approved_query: None,
+        pricing: crate::config::PriceAuthority::Unavailable,
+    };
+    config.features.enable(Feature::Sqlite)?;
+
+    let (mut session, _context) =
+        crate::session::tests::make_session_and_context_for_config(config).await;
+    let db = StateRuntime::init(
+        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        "openai".into(),
+    )
+    .await?;
+    session.services.state_db = Some(db.clone());
+    let owner = Arc::new(session);
+    db.upsert_thread(
+        &ThreadMetadataBuilder::new(
+            owner.thread_id,
+            home.path().join("pane-fixture.jsonl"),
+            chrono::Utc::now(),
+            codex_protocol::protocol::SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+
+    let sent = || SentModelRequest {
+        provider_id: "ambient".into(),
+        endpoint: "https://api.ambient.xyz/v1".into(),
+        path: "chat/completions".into(),
+        wire_api: codex_model_provider_info::WireApi::Chat,
+        model: "claude-sonnet-4-5".into(),
+        label: "pane".into(),
+        usage: Some(serde_json::json!({
+            "prompt_tokens": 120,
+            "prompt_tokens_details": {"cached_tokens": 20},
+            "completion_tokens": 30,
+            "total_tokens": 150
+        })),
+    };
+    assert!(
+        ExtensionAccounting::new(Arc::downgrade(&owner))
+            .record_sent_request(sent())
+            .await
+    );
+
+    let pool = db
+        .sqlite()
+        .open_read_only_pool(&db.sqlite().state_db_path())
+        .await?;
+    let attempts: Vec<String> =
+        sqlx::query_scalar("SELECT payload FROM draft_accounting_attempts ORDER BY rowid")
+            .fetch_all(&pool)
+            .await?;
+    let attempt: serde_json::Value = serde_json::from_str(&attempts[0])?;
+    assert_eq!(attempts.len(), 1);
+    assert_eq!(attempt["provider"], "ambient");
+    assert_eq!(attempt["model"], "claude-sonnet-4-5");
+    assert!(
+        attempt["turn"]
+            .as_str()
+            .expect("turn identity")
+            .starts_with("pane:"),
+        "turn recorded: {attempt:?}"
+    );
+    let observations: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM draft_accounting_observations")
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(observations, 1);
+
+    // A session that is not collecting records nothing, and says so rather
+    // than failing the caller.
+    let owner_without_collection = {
+        let mut config = crate::session::tests::build_test_config(home.path()).await;
+        config.accounting = crate::config::AccountingMode::Disabled;
+        config.features.enable(Feature::Sqlite)?;
+        let (mut session, _context) =
+            crate::session::tests::make_session_and_context_for_config(config).await;
+        session.services.state_db = Some(db.clone());
+        Arc::new(session)
+    };
+    assert!(
+        !ExtensionAccounting::new(Arc::downgrade(&owner_without_collection))
+            .record_sent_request(sent())
+            .await
+    );
+    let attempts_after: i64 = sqlx::query_scalar("SELECT count(*) FROM draft_accounting_attempts")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(attempts_after, 1);
+    Ok(())
+}
