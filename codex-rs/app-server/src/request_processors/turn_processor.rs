@@ -26,14 +26,19 @@ const DIRECT_INPUT_TO_MULTI_AGENT_V2_SUBAGENT_ERROR: &str =
 /// The route a reported send may be recorded against, canonically.
 ///
 /// A client reports the account it believes it billed; this server only agrees
-/// when that account is one it knows and the reported route is that account's
-/// own route in its own dialect. A provider this build does not ship, or a
-/// route that is not the one the catalogue quotes for it, is not recorded -
-/// so a client cannot enter spend against a provider of its choosing, and
-/// cannot move a provider's spend onto a route it never serves.
+/// when that account is one it ships and the reported route is that account's
+/// own route in its own dialect. A provider this build does not know, or a
+/// known provider on a route it does not serve, is not recorded.
 ///
-/// The strings returned are the catalogue's, not the caller's, so the same
-/// real route always lands in the ledger as the same endpoint.
+/// This is a well-formedness check and not an authorisation boundary, and the
+/// difference matters: the caller still names the account, and the accepted
+/// base URLs are public constants, so a client that can reach this request can
+/// name any built-in provider whose own route it quotes correctly - including
+/// two providers that share a route, which this cannot tell apart. What it
+/// does guarantee is that nothing lands under a route its named provider does
+/// not serve, and that the endpoint recorded is the catalogue's string rather
+/// than however the caller spelled it. Nothing monetary rides on the name:
+/// `record_sent_request` claims no economics for a reported send.
 fn recognised_reported_route(
     provider_id: &str,
     base_url: &str,
@@ -1055,11 +1060,12 @@ impl TurnRequestProcessor {
     /// does not run the model client, so those requests reached no ledger at
     /// all. The client reports the send; the server decides what it means.
     ///
-    /// Which account is billed and which dialect it speaks are derived here
-    /// from the route, not taken from the client: a route this server does not
-    /// recognise is not recorded, so a client cannot enter spend against an
-    /// arbitrary provider. The numbers still come from the provider's own
-    /// response body, parsed by the dialect's own parser.
+    /// The client names the account it billed and the route it took; this
+    /// server records it only when the two agree with a provider it ships, and
+    /// records the catalogue's strings rather than the caller's. See
+    /// `recognised_reported_route` for what that does and does not guarantee.
+    /// The numbers still come from the provider's own response body, parsed by
+    /// the dialect's own parser.
     async fn thread_record_sent_model_request_inner(
         &self,
         params: ThreadRecordSentModelRequestParams,

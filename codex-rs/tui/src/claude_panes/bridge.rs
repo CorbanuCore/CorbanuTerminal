@@ -502,8 +502,12 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
     // Inference only, and only the route this connection actually took. This
     // handler serves every Anthropic-shaped upstream, not only Anthropic, and
     // the OAuth lane also proxies token counting - which is free, is not a
-    // model request, and would otherwise enter the ledger as one.
-    if status.is_success() && upstream_path == "/v1/messages" {
+    // model request, and would otherwise enter the ledger as one. The target
+    // is compared without its query, because the client that uses this bridge
+    // sends `/v1/messages?beta=true`: an exact comparison would have dropped
+    // every real turn while still admitting nothing extra, since
+    // `/v1/messages/count_tokens` differs before the query.
+    if status.is_success() && upstream_path.split('?').next() == Some("/v1/messages") {
         // The model this turn asked for is the pane's own choice, carried in
         // the request it proxied. A streamed response reports its numbers in
         // events rather than in a body, so usage is often absent here; the
