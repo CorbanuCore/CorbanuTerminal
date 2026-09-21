@@ -1248,6 +1248,18 @@ impl Session {
                 let mut guard = network_policy_decider_session.write().await;
                 *guard = Arc::downgrade(&sess);
             }
+            // Extensions own their own model clients - image generation ships on
+            // by default - and those requests are billed to the operator like
+            // any other inference. This is how they record. It is inserted once
+            // the session exists and holds it weakly.
+            sess.services.thread_extension_data.insert(
+                crate::accounting_extensions::ExtensionAccounting::new(
+                    Arc::downgrade(&sess),
+                    config.accounting.clone(),
+                    config.model_provider_id.clone(),
+                    config.model_provider.clone(),
+                ),
+            );
             // Dispatch the SessionConfiguredEvent first and then report any errors.
             // If resuming, include converted initial messages in the payload so UIs can render them immediately.
             let initial_messages = initial_history.get_event_msgs();

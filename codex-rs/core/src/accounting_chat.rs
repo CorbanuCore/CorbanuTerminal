@@ -92,13 +92,6 @@ impl DeferredChatSampling {
         self.sampling.get().map_or(Ok(()), |value| value.check())
     }
 
-    pub(crate) fn exclude(&self) -> Result<(), CodexErr> {
-        if self.sampling.initialized() {
-            self.reject();
-        }
-        self.check()
-    }
-
     pub(crate) async fn resolve(
         &self,
         provider: &ModelProviderInfo,

@@ -576,6 +576,19 @@ impl Sampling {
         Self::start_request(runtime, owner, turn, mode, Uuid::new_v4(), None).await
     }
 
+    /// Start a sampling pinned to `path` under the mode's approved endpoint.
+    ///
+    /// Clients an extension owns have their own endpoints under the same route.
+    pub(crate) async fn start_at_path(
+        runtime: Arc<StateRuntime>,
+        owner: ThreadId,
+        turn: String,
+        mode: &AccountingMode,
+        path: &str,
+    ) -> Result<Arc<Self>, CodexErr> {
+        Self::start_request(runtime, owner, turn, mode, Uuid::new_v4(), Some(path)).await
+    }
+
     /// `path_override` pins this sampling to a different path under the same
     /// approved endpoint. Compaction's own endpoint is the one case: pinning it
     /// to the dialect's default path would read as a route change and refuse
