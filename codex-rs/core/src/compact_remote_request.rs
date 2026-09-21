@@ -20,9 +20,11 @@ pub(super) struct RemoteCompactAttempt {
     pub(super) trace_input_history: Option<Vec<ResponseItem>>,
 }
 
+#[expect(clippy::too_many_arguments)]
 pub(super) async fn run_remote_compact_attempt(
     sess: &Arc<Session>,
     step_context: &Arc<StepContext>,
+    client_session: &crate::client::ModelClientSession,
     turn_state: Option<Arc<OnceLock<String>>>,
     compaction_trace: &CompactionTraceContext,
     compaction_metadata: CompactionTurnMetadata,
@@ -93,6 +95,7 @@ pub(super) async fn run_remote_compact_attempt(
             &turn_context.session_telemetry,
             compaction_trace,
             &responses_metadata,
+            &client_session.responses_accounting,
         )
         .await?;
     Ok(RemoteCompactAttempt {

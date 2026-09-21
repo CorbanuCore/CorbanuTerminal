@@ -129,6 +129,22 @@ impl DeferredResponsesSampling {
         auth: Option<&CodexAuth>,
         endpoint: &str,
     ) -> Result<Option<Arc<Sampling>>, CodexErr> {
+        self.resolve_path(provider, auth, endpoint, "responses")
+            .await
+    }
+
+    /// Resolve against a specific path under the approved endpoint.
+    ///
+    /// Compaction has its own path on the same approved route. Pinning it
+    /// against `responses` would read as a route change and reject the turn,
+    /// which is how the legacy compaction endpoint stayed uncollected.
+    pub(crate) async fn resolve_path(
+        &self,
+        provider: &ModelProviderInfo,
+        auth: Option<&CodexAuth>,
+        endpoint: &str,
+        path: &str,
+    ) -> Result<Option<Arc<Sampling>>, CodexErr> {
         self.check()?;
         let admitted = if matches!(self.mode, AccountingMode::Provider { .. }) {
             eligible(provider, auth)
@@ -160,7 +176,7 @@ impl DeferredResponsesSampling {
         let pinned = super::pinned_route(
             approved_endpoint,
             super::canonical_query(provider).as_deref(),
-            "responses",
+            path,
         );
         if super::canonical_route(endpoint) != super::canonical_route(&pinned) {
             self.reject();
@@ -204,6 +220,7 @@ impl DeferredResponsesSampling {
                     self.turn.clone(),
                     &mode,
                     self.request,
+                    (path != "responses").then_some(path),
                 )
                 .await?;
                 completion.1 = true;

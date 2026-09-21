@@ -1094,6 +1094,7 @@ impl ModelClient {
     /// The model selection and telemetry context are passed explicitly to keep `ModelClient`
     /// session-scoped.
     #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub(crate) async fn compact_conversation_history(
         &self,
         prompt: &Prompt,
@@ -1103,11 +1104,31 @@ impl ModelClient {
         session_telemetry: &SessionTelemetry,
         compaction_trace: &CompactionTraceContext,
         responses_metadata: &CodexResponsesMetadata,
+        accounting: &crate::accounting::responses::Slot,
     ) -> Result<Vec<ResponseItem>> {
         if prompt.input.is_empty() {
             return Ok(Vec::new());
         }
         let client_setup = self.current_client_setup().await?;
+        // The legacy compaction endpoint is a model request the operator paid
+        // for. It answers with one JSON body rather than a stream, so it never
+        // met the streaming collector; it is collected here instead.
+        let sampling = match crate::accounting::responses::read(accounting)? {
+            Some(deferred) => {
+                deferred
+                    .resolve_path(
+                        self.state.provider.info(),
+                        client_setup.auth.as_ref(),
+                        &client_setup
+                            .api_provider
+                            .url_for_path(RESPONSES_COMPACT_ENDPOINT),
+                        RESPONSES_COMPACT_ENDPOINT.trim_start_matches('/'),
+                    )
+                    .await?
+            }
+            None => None,
+        };
+        let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
         let transport =
             self.build_api_transport(&client_setup.api_provider, RESPONSES_COMPACT_ENDPOINT)?;
         let request_telemetry = Self::build_request_telemetry(
@@ -1180,6 +1201,14 @@ impl ModelClient {
             .api_provider
             .stream_idle_timeout
             .saturating_mul(COMPACT_REQUEST_TIMEOUT_IDLE_MULTIPLIER);
+        let transport = transport.map_inner(|inner| {
+            crate::accounting::transport::AccountingTransport::new(
+                inner,
+                evidence.clone(),
+                model.clone(),
+            )
+            .with_tier(service_tier.clone())
+        });
         let client =
             ApiCompactClient::new(transport, client_setup.api_provider, client_setup.api_auth)
                 .with_telemetry(Some(request_telemetry));

@@ -573,15 +573,20 @@ impl Sampling {
         turn: String,
         mode: &AccountingMode,
     ) -> Result<Arc<Self>, CodexErr> {
-        Self::start_request(runtime, owner, turn, mode, Uuid::new_v4()).await
+        Self::start_request(runtime, owner, turn, mode, Uuid::new_v4(), None).await
     }
 
+    /// `path_override` pins this sampling to a different path under the same
+    /// approved endpoint. Compaction's own endpoint is the one case: pinning it
+    /// to the dialect's default path would read as a route change and refuse
+    /// the request, which is how that endpoint stayed uncollected.
     async fn start_request(
         runtime: Arc<StateRuntime>,
         owner: ThreadId,
         turn: String,
         mode: &AccountingMode,
         request: Uuid,
+        path_override: Option<&str>,
     ) -> Result<Arc<Self>, CodexErr> {
         let mut approved_query = None;
         let (scope, approved_endpoint, provider, dialect, path) = match mode {
@@ -667,7 +672,11 @@ impl Sampling {
             turn,
             request,
             scope: *scope,
-            endpoint: pinned_route(approved_endpoint, approved_query.as_deref(), path),
+            endpoint: pinned_route(
+                approved_endpoint,
+                approved_query.as_deref(),
+                path_override.unwrap_or(path),
+            ),
             provider: provider.into(),
             dialect,
             pricing: pricing_for(mode),

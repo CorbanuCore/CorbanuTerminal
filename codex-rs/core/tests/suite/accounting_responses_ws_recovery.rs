@@ -567,7 +567,16 @@ async fn accounting_responses_ws_native_auxiliary_scope_and_event_parity() -> an
             .iter()
             .any(|event| matches!(event, EventMsg::Error(_)))
     );
-    assert_eq!(turn_attempts(&db).await?, before);
+    // The legacy compaction endpoint records its own `compact:` attempt; the
+    // turn's own rows are unchanged.
+    let after = turn_attempts(&db).await?;
+    assert_eq!(after[..before.len()], before[..]);
+    assert_eq!(after.len(), before.len() + 1);
+    assert!(
+        after[before.len()].turn.starts_with("compact:"),
+        "{}",
+        after[before.len()].turn
+    );
     assert_eq!(turn_observations(&db).await?.len(), 1);
     counts(&gate, (1, 1, 1, 1));
     stop(&test).await;
