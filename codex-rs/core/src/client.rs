@@ -1093,7 +1093,6 @@ impl ModelClient {
     ///
     /// The model selection and telemetry context are passed explicitly to keep `ModelClient`
     /// session-scoped.
-    #[allow(clippy::too_many_arguments)]
     #[expect(clippy::too_many_arguments)]
     pub(crate) async fn compact_conversation_history(
         &self,
@@ -1129,8 +1128,24 @@ impl ModelClient {
             None => None,
         };
         let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
-        let transport =
-            self.build_api_transport(&client_setup.api_provider, RESPONSES_COMPACT_ENDPOINT)?;
+        // A collected request must not be able to follow a redirect: the
+        // streaming paths build a no-redirect client whenever evidence exists,
+        // so that a response from somewhere else can never be attributed to the
+        // approved endpoint. This endpoint needs the same rule.
+        let transport = if evidence.is_some() {
+            let client = codex_login::default_client::create_client_for_route_without_redirects(
+                &self.http_client_factory,
+                &client_setup.api_provider.url_for_path(RESPONSES_COMPACT_ENDPOINT),
+                ClientRouteClass::Api,
+            )
+            .map_err(std::io::Error::from)?;
+            crate::memory_stage_one::StageOneGuardedTransport::new(
+                ReqwestTransport::from_http_client(client),
+                self.stage_one_memory_binding.get().cloned(),
+            )
+        } else {
+            self.build_api_transport(&client_setup.api_provider, RESPONSES_COMPACT_ENDPOINT)?
+        };
         let request_telemetry = Self::build_request_telemetry(
             session_telemetry,
             AuthRequestTelemetryContext::new(

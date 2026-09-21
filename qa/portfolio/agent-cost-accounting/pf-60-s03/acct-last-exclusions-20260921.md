@@ -70,7 +70,7 @@ reopens unchanged.
 ## Verification
 
 Clean-host lanes at this tree, RTX workstation, formatted and fmt-clean:
-`codex-core` accounting **141/141**, with `developer-accounting` **146/146**,
+`codex-core` accounting **142/142**, with `developer-accounting` **147/147**,
 `codex-state` accounting **168/168**, `codex-tui` usage **92/92**, `codex-tui`
 tokens 66 of 67 - the one failure is the stale snapshot that fails identically
 at the integration tip. The `websocket` suite passes 69/69 and the `compact`
@@ -194,14 +194,36 @@ Three things were needed, and each is the smallest honest version of itself:
   `responses` read as a route change and refused the request, which is exactly
   why this endpoint could not be collected before.
 - The legacy compaction path opens a client session of its own and attaches
-  under the same `compact:` identity as every other compaction, best effort.
+  under the same `compact:` identity as every other compaction, best effort -
+  and, as everywhere else in this workstream, best effort covers **attach**
+  time. Once evidence exists, an admission failure, a route mismatch or a failed
+  observation fails the compaction, which this path could not do before.
+- A collected request here also stops following redirects, the rule the three
+  streaming paths already had: a response from somewhere else must never be
+  attributed to the approved endpoint.
 
 `accounting_records_legacy_compaction` turns the feature off, drives a real
 `/compact`, and asserts the second attempt is a `compact:` turn whose own
 tokens move the day total to 200. Two existing tests that pinned the opposite -
 that this endpoint records nothing - now assert the row instead.
 
-With this increment every path in the product that sends paid inference is
+With this increment every **conversational** path that sends paid inference is
 collected: ordinary turns, all three compaction paths, startup prewarm, the
 completion classifier, agent-identity sessions and stage-one memory extraction.
-No session class, and no supported configuration, is left recording nothing.
+No session class and no supported configuration of those is left recording
+nothing.
+
+Review found, while checking that claim, that it is not true of the product as a
+whole. Three non-conversational clients send billed requests with no collector,
+and none of them was in this workstream's scope until now:
+
+- **Image generation.** `ext/image-generation` posts `/v1/images/generations`
+  and `/v1/images/edits` on a bare transport with the session's provider and
+  auth. `Feature::ImageGeneration` is Stable and **default-on**, so this is
+  operator-billed inference recording nothing in a default configuration.
+- **Realtime calls.** `ModelClient::create_realtime_call_with_headers` posts
+  through the plain transport; `realtime_conversation` is under development.
+- **Web search.** `ext/web-search`'s client is in the same shape.
+
+That is the honest remaining list, and image generation is the one that matters:
+it is on by default. It is the next thing to attach.
