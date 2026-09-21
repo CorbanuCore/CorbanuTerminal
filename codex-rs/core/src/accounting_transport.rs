@@ -169,8 +169,25 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
             eprintln!("ACCTPROBE transport: no evidence attached; url={}", request.url);
             return self.inner.stream(request).await;
         };
-        eprintln!("ACCTPROBE transport: evidence present; url={} refusal={:?} already={}",
-            request.url, request_refusal(&request), evidence.attempt.get().is_some());
+        {
+            use codex_http_client::RequestBody as PB;
+            let (variant, len, head) = match request.body.as_ref() {
+                None => ("none", 0usize, String::new()),
+                Some(PB::Json(_)) => ("json", 0, String::new()),
+                Some(PB::EncodedJson(b)) => (
+                    "encoded",
+                    b.as_bytes().len(),
+                    b.as_bytes().iter().take(8).map(|byte| format!("{byte:02x}")).collect(),
+                ),
+                Some(PB::Raw(b)) => (
+                    "raw",
+                    b.len(),
+                    b.iter().take(8).map(|byte| format!("{byte:02x}")).collect(),
+                ),
+            };
+            eprintln!("ACCTPROBE transport: url={} refusal={:?} body_variant={variant} len={len} head={head} compression={:?}",
+                request.url, request_refusal(&request), request.compression);
+        }
         if evidence.attempt.get().is_some() || request_refusal(&request).is_some() {
             evidence.sampling.reject();
             return Err(TransportError::Build(FAILURE.into()));
