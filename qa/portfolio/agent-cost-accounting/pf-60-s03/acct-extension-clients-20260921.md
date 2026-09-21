@@ -69,9 +69,16 @@ handle - which is what the defect looked like - fails it.
 session first and asserts the request still succeeds with no accounting
 installed at all.
 
-Both tests exercise the seam directly rather than through `backend.rs`, so the
-edits path's pin and the no-handle branch are covered by the type system and by
-reading, not by a test. That is stated rather than implied.
+`accounting_extension_client_binds_the_route_it_actually_sends_to` pins the
+property review caught twice and no test covered: the session is configured for
+one route while the extension's client sends to another, and the request must
+record against the route it actually takes. Re-resolving the endpoint from the
+session instead of taking the caller's fails it with an admission error - which
+is what the snapshot defect would have done to a real image request.
+
+All three tests exercise the seam directly rather than through `backend.rs`, so
+the edits path's pin and the no-handle branch are covered by the type system and
+by reading, not by a test. That is stated rather than implied.
 
 Clean-host lanes, RTX workstation, fmt-clean: `codex-core` accounting with
 `developer-accounting` **150/150**, the image-generation extension 10/10.

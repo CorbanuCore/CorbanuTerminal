@@ -240,3 +240,116 @@ async fn accounting_extension_client_without_its_session_records_nothing() -> an
     assert_eq!(installed, 0, "a session-less handle installed accounting");
     Ok(())
 }
+
+/// The binding is read live, and the route is the caller's own.
+///
+/// This is the property review caught twice and no test pinned: with the
+/// session configured for one provider route and the extension's client sending
+/// to another, a snapshot taken when the handle was built would pin the stale
+/// route and the request would fail admission instead of recording.
+#[tokio::test]
+async fn accounting_extension_client_binds_the_route_it_actually_sends_to() -> anyhow::Result<()> {
+    let server = wiremock::MockServer::start().await;
+    let live_endpoint = format!("{}/v1", server.uri());
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/v1/images/generations"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "created": 0,
+                "data": [{"b64_json": "aW1hZ2U="}],
+                "usage": {"input_tokens": 100, "output_tokens": 40, "total_tokens": 140}
+            })),
+        )
+        .mount(&server)
+        .await;
+
+    let home = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path()).await;
+    // The session was configured for a route the extension no longer uses.
+    let stale = "http://127.0.0.1:1/v1";
+    config.model_provider = codex_model_provider_info::ModelProviderInfo {
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        supports_websockets: false,
+        ..codex_model_provider_info::ModelProviderInfo::create_openai_provider(Some(stale.into()))
+    };
+    config.model_provider_id = "openai".into();
+    config.accounting = crate::config::AccountingMode::Provider {
+        scope: Uuid::new_v4(),
+        provider_id: "openai".into(),
+        wire_api: codex_model_provider_info::WireApi::Responses,
+        approved_endpoint: stale.into(),
+        approved_query: None,
+        pricing: crate::config::PriceAuthority::Unavailable,
+    };
+    config.features.enable(Feature::Sqlite)?;
+
+    let (mut session, _context) =
+        crate::session::tests::make_session_and_context_for_config(config.clone()).await;
+    let db = StateRuntime::init(
+        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        "openai".into(),
+    )
+    .await?;
+    session.services.state_db = Some(db.clone());
+    let owner = Arc::new(session);
+    db.upsert_thread(
+        &ThreadMetadataBuilder::new(
+            owner.thread_id,
+            home.path().join("image-fixture.jsonl"),
+            chrono::Utc::now(),
+            codex_protocol::protocol::SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+
+    // The client the extension actually sends with.
+    let live = codex_model_provider_info::ModelProviderInfo {
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        supports_websockets: false,
+        ..codex_model_provider_info::ModelProviderInfo::create_openai_provider(Some(
+            live_endpoint.clone(),
+        ))
+    };
+    let accounting = ExtensionAccounting::new(Arc::downgrade(&owner));
+    let transport = accounting
+        .transport(
+            codex_api::ReqwestTransport::from_http_client(
+                codex_login::default_client::create_client(),
+            ),
+            &live,
+            &live_endpoint,
+            "gpt-image-1",
+            "images/generations",
+            "image",
+        )
+        .await;
+    let api = live.to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?;
+    // A stale pin would make this fail at admission rather than record.
+    codex_api::ImagesClient::new(transport, api, Arc::new(FixtureAuth))
+        .generate(
+            &codex_api::ImageGenerationRequest {
+                prompt: "fixture".into(),
+                background: None,
+                model: "gpt-image-1".into(),
+                n: None,
+                quality: None,
+                size: None,
+            },
+            http::HeaderMap::new(),
+        )
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+
+    let pool = db
+        .sqlite()
+        .open_read_only_pool(&db.sqlite().state_db_path())
+        .await?;
+    let attempts: i64 = sqlx::query_scalar("SELECT count(*) FROM draft_accounting_attempts")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(attempts, 1, "the live route was not recorded");
+    Ok(())
+}
