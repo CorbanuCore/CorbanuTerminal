@@ -779,8 +779,10 @@ async fn latest_original_price_null_binding_intent_and_known_zero() -> anyhow::R
         2,
     );
     // The compacted day for the unpriced attempt carries one incomplete estimate:
-    // zero tokens without a rate is not a zero cost. A day that did have a rate
-    // still compacts to a complete zero, which is what the assertions below pin.
+    // zero tokens without a rate is not a zero cost, and `zero` is the row this
+    // test's pipeline actually produces. `priced_zero` is a hand-built row: it
+    // pins only that `to_day_totals` still reports a complete zero when the
+    // estimate count is zero, not that any attempt here produced it.
     let zero = values([0; 7], [0; 7], "0", 1, 1);
     let priced_zero = values([0; 7], [0; 7], "0", 0, 1);
     let unknown = values([0; 7], [1; 7], "0", 1, 1);
