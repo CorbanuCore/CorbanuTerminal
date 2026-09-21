@@ -145,7 +145,7 @@ differ from the previous release by construction.
   attempts and the display says so instead of reporting zero.
 
 Formatted with `cargo fmt --all` and checked clean. Clean-host lanes at this
-tree, RTX workstation: `codex-core` accounting 138/138, with `developer-accounting` 143/143, `codex-state` accounting 168/168,
+tree, RTX workstation: `codex-core` accounting 139/139, with `developer-accounting` 144/144, `codex-state` accounting 168/168,
 `codex-tui` usage 92/92, `codex-tui` tokens 66 of 67 - the one failure,
 `accounting_inspect_maintenance_with_healthy_raw_renders_lag`, is a stale
 snapshot that fails identically at the integration tip without any of this work,
