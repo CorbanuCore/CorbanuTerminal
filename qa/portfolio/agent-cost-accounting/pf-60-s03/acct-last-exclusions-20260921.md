@@ -169,16 +169,39 @@ private hook, keep passing precisely because of the route rule above.
 - Auxiliary inference that opens its own client session: local compaction,
   remote compaction, startup prewarm, the completion classifier and stage-one
   memory extraction. All five attach, the fifth as described above.
-- The legacy `/responses/compact` endpoint is still uninstrumented; it is
-  reachable only by disabling `remote_compaction_v2`, which is Stable and
-  default-on, and it posts through `ApiCompactClient`, which has no collector
-  seam.
+- The legacy `/responses/compact` endpoint collects now too; it has its own
+  section below.
 - Off a provider's own route, economics are still not claimed. Collection is
   unaffected: those turns record tokens.
 
-With this increment the "what does not collect" list holds no session class
-that ordinary use reaches. One exclusion is still reachable by a supported
-toggle: turning off `remote_compaction_v2` - Stable and default-on - routes
-compaction through the legacy `/responses/compact` endpoint, which posts via
-`ApiCompactClient` and has no collector seam. That is the last named path where
-paid inference reaches no ledger, and it is the next one to close.
+## The legacy compaction endpoint
+
+Turning off `remote_compaction_v2` - Stable and default-on - routes compaction
+through `/responses/compact`, which answers with one JSON body rather than a
+stream and posts through `ApiCompactClient`. It never met the streaming
+collector, so every such compaction was paid for and recorded nowhere. It was
+the last named path where that was true.
+
+Three things were needed, and each is the smallest honest version of itself:
+
+- `AccountingTransport::execute` now does for a single response what `stream`
+  does for a stream: admit an attempt before the send, refuse the same
+  routing keys, and record the numbers the body carries. A body with no `usage`
+  records the attempt with its tokens **unknown**, which is what the provider
+  said - not zero.
+- A sampling can be pinned to a path other than its dialect's default.
+  Compaction has its own path under the same approved endpoint; pinning it to
+  `responses` read as a route change and refused the request, which is exactly
+  why this endpoint could not be collected before.
+- The legacy compaction path opens a client session of its own and attaches
+  under the same `compact:` identity as every other compaction, best effort.
+
+`accounting_records_legacy_compaction` turns the feature off, drives a real
+`/compact`, and asserts the second attempt is a `compact:` turn whose own
+tokens move the day total to 200. Two existing tests that pinned the opposite -
+that this endpoint records nothing - now assert the row instead.
+
+With this increment every path in the product that sends paid inference is
+collected: ordinary turns, all three compaction paths, startup prewarm, the
+completion classifier, agent-identity sessions and stage-one memory extraction.
+No session class, and no supported configuration, is left recording nothing.
