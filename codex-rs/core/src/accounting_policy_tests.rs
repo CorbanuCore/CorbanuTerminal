@@ -503,6 +503,43 @@ fn accounting_every_built_in_provider_collects() {
     assert_eq!(checked, 21, "catalogue size changed");
 }
 
+/// A compaction's turn identity must fit the store's bounded identity, or the
+/// compaction of a long submission id would be unrecordable while its ordinary
+/// turn recorded fine.
+#[test]
+fn accounting_compaction_label_stays_recordable() -> Result<()> {
+    use codex_state::accounting::Attempt;
+    for sub_id in [
+        "short".to_string(),
+        "x".repeat(120),
+        "x".repeat(128),
+        "x".repeat(400),
+        format!("{}é", "y".repeat(126)),
+    ] {
+        let label = super::compaction_turn_label(&sub_id);
+        assert!(label.starts_with("compact:"), "{label}");
+        assert!(label.len() <= 128, "{} bytes", label.len());
+        let attempt = Attempt {
+            attempt_id: uuid::Uuid::new_v4(),
+            request_id: uuid::Uuid::new_v4(),
+            thread_id: ThreadId::new(),
+            turn: label.clone(),
+            retry_of: None,
+            provider: "fixture".into(),
+            model: MODEL.into(),
+            scope: uuid::Uuid::new_v4(),
+            dialect: codex_state::accounting::Dialect::Inclusive,
+            dispatched_at_ms: 1i64.try_into()?,
+        };
+        assert!(
+            attempt.validate().is_ok(),
+            "the store must accept the compaction label for {} bytes",
+            sub_id.len()
+        );
+    }
+    Ok(())
+}
+
 fn chat_body() -> codex_api::ChatCompletionsRequest {
     codex_api::ChatCompletionsRequest {
         model: "fixture".into(),

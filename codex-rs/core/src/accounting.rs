@@ -111,6 +111,22 @@ pub(crate) fn canonical_route(url: &str) -> String {
 }
 
 /// Canonical `k=v&k=v` for a provider's configured query parameters.
+/// A bounded turn label for a compaction of `sub_id`.
+///
+/// `Attempt::validate` caps a turn identity at 128 bytes, so a long submission id
+/// would make its compaction unrecordable while the ordinary turn recorded fine.
+/// Keep the prefix and as much of the id as fits.
+pub(crate) fn compaction_turn_label(sub_id: &str) -> String {
+    const LIMIT: usize = 128;
+    const PREFIX: &str = "compact:";
+    let room = LIMIT - PREFIX.len();
+    let mut end = sub_id.len().min(room);
+    while end > 0 && !sub_id.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{PREFIX}{}", &sub_id[..end])
+}
+
 /// Guards that keep this turn's collectors attached to a client session.
 ///
 /// Dropping this detaches them, so the session can be reused for work that is

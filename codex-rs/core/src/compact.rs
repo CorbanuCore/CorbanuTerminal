@@ -268,7 +268,7 @@ async fn run_compact_task_inner_impl(
         &sess,
         &turn_context,
         &client_session,
-        format!("compact:{}", turn_context.sub_id),
+        crate::accounting::compaction_turn_label(&turn_context.sub_id),
     )
     .await
     {
