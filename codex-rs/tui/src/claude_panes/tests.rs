@@ -1546,6 +1546,7 @@ async fn anthropic_passthrough_bridge_replaces_client_auth_and_forwards_oauth_be
                 reqwest::Client::new(),
                 /*proxy_count_tokens*/ true,
                 /*accounting_tx*/ None,
+                /*accounting_provider_id*/ Arc::new(None),
             )
             .await
             .expect("proxy request");
@@ -1613,6 +1614,7 @@ async fn anthropic_compatibility_bridge_keeps_authorized_synthetic_token_counts(
                 reqwest::Client::new(),
                 /*proxy_count_tokens*/ false,
                 /*accounting_tx*/ None,
+                /*accounting_provider_id*/ Arc::new(None),
             )
             .await
             .expect("serve compatibility request");
@@ -2491,6 +2493,7 @@ fn bridge_redaction_plan(
             upstream_api_key: Some(secret.to_string()),
             deferred_vault_secret: None,
             upstream_model: "test-model".to_string(),
+            accounting_provider_id: None,
         }),
     }
 }

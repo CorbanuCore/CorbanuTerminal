@@ -47,6 +47,7 @@ pub(crate) async fn run_claude_bridge(
     let client_auth_token = Arc::new(plan.client_auth_token);
     let upstream_base_url = Arc::new(plan.upstream_base_url);
     let upstream_model = Arc::new(plan.upstream_model);
+    let accounting_provider_id = Arc::new(plan.accounting_provider_id);
     let kind = plan.kind;
     let http = reqwest::Client::new();
     loop {
@@ -57,6 +58,7 @@ pub(crate) async fn run_claude_bridge(
         let upstream_model = upstream_model.clone();
         let http = http.clone();
         let accounting_tx = accounting_tx.clone();
+        let accounting_provider_id = accounting_provider_id.clone();
         tokio::spawn(async move {
             let result = match kind {
                 ClaudeBridgeKind::AmbientChat => {
@@ -67,6 +69,7 @@ pub(crate) async fn run_claude_bridge(
                         upstream_model,
                         http,
                         accounting_tx,
+                        accounting_provider_id,
                     )
                     .await
                 }
@@ -79,6 +82,7 @@ pub(crate) async fn run_claude_bridge(
                         http,
                         /*proxy_count_tokens*/ false,
                         accounting_tx,
+                        accounting_provider_id,
                     )
                     .await
                 }
@@ -91,6 +95,7 @@ pub(crate) async fn run_claude_bridge(
                         http,
                         /*proxy_count_tokens*/ true,
                         accounting_tx,
+                        accounting_provider_id,
                     )
                     .await
                 }
@@ -109,6 +114,7 @@ pub(crate) async fn handle_ambient_bridge_connection(
     upstream_model: Arc<String>,
     http: reqwest::Client,
     accounting_tx: Option<AppEventSender>,
+    accounting_provider_id: Arc<Option<String>>,
 ) -> Result<()> {
     let mut buffer = Vec::new();
     let mut temp = [0_u8; 4096];
@@ -327,6 +333,7 @@ pub(crate) async fn handle_ambient_bridge_connection(
     // it reaches their ledger; the server decides what the route means.
     report_bridge_model_request(
         accounting_tx.as_ref(),
+        accounting_provider_id.as_deref(),
         AMBIENT_CHAT_BASE_URL,
         "chat/completions",
         upstream_model.as_str(),
@@ -386,6 +393,7 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
     http: reqwest::Client,
     proxy_count_tokens: bool,
     accounting_tx: Option<AppEventSender>,
+    accounting_provider_id: Arc<Option<String>>,
 ) -> Result<()> {
     let mut buffer = Vec::new();
     let mut temp = [0_u8; 4096];
@@ -491,7 +499,11 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
         .bytes()
         .await
         .context("failed to read Anthropic passthrough bridge response")?;
-    if status.is_success() {
+    // Inference only, and only the route this connection actually took. This
+    // handler serves every Anthropic-shaped upstream, not only Anthropic, and
+    // the OAuth lane also proxies token counting - which is free, is not a
+    // model request, and would otherwise enter the ledger as one.
+    if status.is_success() && upstream_path == "/v1/messages" {
         // The model this turn asked for is the pane's own choice, carried in
         // the request it proxied. A streamed response reports its numbers in
         // events rather than in a body, so usage is often absent here; the
@@ -499,7 +511,8 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
         let request: Option<Value> = serde_json::from_slice(body).ok();
         report_bridge_model_request(
             accounting_tx.as_ref(),
-            ANTHROPIC_MESSAGES_BASE_URL,
+            accounting_provider_id.as_deref(),
+            &format!("{}/v1", upstream_base_url.trim_end_matches('/')),
             "messages",
             request
                 .as_ref()
@@ -522,29 +535,30 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
     Ok(())
 }
 
-/// The upstreams this bridge posts to, named where they are reported so the
-/// route the server recognises and the route this code sends to stay the same
-/// two strings.
+/// The Ambient chat lane posts to one fixed route; the passthrough lane posts
+/// to whichever upstream its profile names, and reports that one.
 pub(crate) const AMBIENT_CHAT_BASE_URL: &str = "https://api.ambient.xyz/v1";
-pub(crate) const ANTHROPIC_MESSAGES_BASE_URL: &str = "https://api.anthropic.com/v1";
 
 /// Report one upstream send for recording. Best effort and never blocking: a
 /// report that cannot be delivered leaves the request unrecorded rather than
-/// failing the pane turn.
+/// failing the pane turn. The server still decides whether the account and
+/// route named here are ones it will record.
 fn report_bridge_model_request(
     accounting_tx: Option<&AppEventSender>,
+    provider_id: Option<&str>,
     base_url: &str,
     path: &str,
     model: &str,
     usage: Option<Value>,
 ) {
-    let Some(accounting_tx) = accounting_tx else {
+    let (Some(accounting_tx), Some(provider_id)) = (accounting_tx, provider_id) else {
         return;
     };
     if model.is_empty() {
         return;
     }
     accounting_tx.send(AppEvent::PaneBridgeModelRequestSent {
+        provider_id: provider_id.to_string(),
         base_url: base_url.to_string(),
         path: path.to_string(),
         model: model.to_string(),

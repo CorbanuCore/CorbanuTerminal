@@ -633,6 +633,7 @@ pub(crate) enum AppEvent {
     /// reported. The server decides which account the route bills and whether
     /// to record it at all.
     PaneBridgeModelRequestSent {
+        provider_id: String,
         base_url: String,
         path: String,
         model: String,

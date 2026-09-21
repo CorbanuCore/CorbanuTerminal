@@ -1583,6 +1583,9 @@ pub struct ThreadInjectItemsResponse {}
 #[ts(export_to = "v2/")]
 pub struct ThreadRecordSentModelRequestParams {
     pub thread_id: String,
+    /// The account the client believes it billed. Recorded only when the
+    /// server knows this provider and the route below is its own.
+    pub provider_id: String,
     /// The base URL the request went to, and the endpoint underneath it.
     pub base_url: String,
     pub path: String,

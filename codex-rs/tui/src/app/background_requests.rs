@@ -1629,6 +1629,7 @@ impl App {
     pub(super) fn record_pane_bridge_model_request(
         &mut self,
         app_server: &AppServerSession,
+        provider_id: String,
         base_url: String,
         path: String,
         model: String,
@@ -1647,6 +1648,7 @@ impl App {
                     )),
                     params: ThreadRecordSentModelRequestParams {
                         thread_id: thread_id.to_string(),
+                        provider_id,
                         base_url,
                         path,
                         model,

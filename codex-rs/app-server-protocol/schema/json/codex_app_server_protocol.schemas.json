@@ -20772,6 +20772,10 @@
           "path": {
             "type": "string"
           },
+          "providerId": {
+            "description": "The account the client believes it billed. Recorded only when the server knows this provider and the route below is its own.",
+            "type": "string"
+          },
           "threadId": {
             "type": "string"
           },
@@ -20783,6 +20787,7 @@
           "baseUrl",
           "model",
           "path",
+          "providerId",
           "threadId"
         ],
         "title": "ThreadRecordSentModelRequestParams",

@@ -4,6 +4,7 @@ use codex_agent_extension::AgentRun;
 use codex_agent_extension::AgentRunner;
 use codex_core::accounting_extensions::SentModelRequest;
 use codex_model_provider_info::WireApi;
+use codex_model_provider_info::built_in_model_providers;
 use codex_protocol::crew::AgentClass;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::ContentItem;
@@ -22,20 +23,35 @@ use crate::image_url::is_remote_image_url;
 const DIRECT_INPUT_TO_MULTI_AGENT_V2_SUBAGENT_ERROR: &str =
     "direct app-server input is not allowed for multi-agent v2 sub-agents";
 
-/// The routes a client may report a send on, and what each one means.
+/// The route a reported send may be recorded against, canonically.
 ///
-/// A reported send names a route; this server decides which account it bills
-/// and which dialect it speaks, so a client cannot enter spend against a
-/// provider of its choosing. These are the upstreams the Claude panes bridge
-/// is built to post to; anything else is not recorded.
-fn recognised_reported_route(base_url: &str, path: &str) -> Option<(&'static str, WireApi)> {
-    let base_url = base_url.trim_end_matches('/');
-    let path = path.trim_start_matches('/');
-    match (base_url, path) {
-        ("https://api.ambient.xyz/v1", "chat/completions") => Some(("ambient", WireApi::Chat)),
-        ("https://api.anthropic.com/v1", "messages") => Some(("anthropic", WireApi::Anthropic)),
-        _ => None,
+/// A client reports the account it believes it billed; this server only agrees
+/// when that account is one it knows and the reported route is that account's
+/// own route in its own dialect. A provider this build does not ship, or a
+/// route that is not the one the catalogue quotes for it, is not recorded -
+/// so a client cannot enter spend against a provider of its choosing, and
+/// cannot move a provider's spend onto a route it never serves.
+///
+/// The strings returned are the catalogue's, not the caller's, so the same
+/// real route always lands in the ledger as the same endpoint.
+fn recognised_reported_route(
+    provider_id: &str,
+    base_url: &str,
+    path: &str,
+) -> Option<(String, String, WireApi)> {
+    let provider = built_in_model_providers(None).remove(provider_id)?;
+    let api = provider.to_api_provider(None).ok()?;
+    let route = api.base_url.trim_end_matches('/').to_string();
+    if route != base_url.trim_end_matches('/') {
+        return None;
     }
+    let dialect_path = match provider.wire_api {
+        WireApi::Anthropic => "messages",
+        WireApi::Responses => "responses",
+        WireApi::Chat => "chat/completions",
+    };
+    (path.trim_start_matches('/') == dialect_path)
+        .then(|| (route, dialect_path.to_string(), provider.wire_api))
 }
 
 /// Mirrors the direct-input policy in both request validation and thread capability responses.
@@ -1049,21 +1065,22 @@ impl TurnRequestProcessor {
         params: ThreadRecordSentModelRequestParams,
     ) -> Result<ThreadRecordSentModelRequestResponse, JSONRPCErrorError> {
         let (_, thread) = self.load_thread(&params.thread_id).await?;
-        let Some((provider_id, wire_api)) =
-            recognised_reported_route(&params.base_url, &params.path)
+        let Some((endpoint, path, wire_api)) =
+            recognised_reported_route(&params.provider_id, &params.base_url, &params.path)
         else {
             tracing::warn!(
+                provider_id = %params.provider_id,
                 base_url = %params.base_url,
                 path = %params.path,
-                "accounting: reported send is not on a route this server records"
+                "accounting: reported send is not a known provider's own route"
             );
             return Ok(ThreadRecordSentModelRequestResponse { recorded: false });
         };
         let recorded = thread
             .record_sent_model_request(SentModelRequest {
-                provider_id: provider_id.to_string(),
-                endpoint: params.base_url,
-                path: params.path,
+                provider_id: params.provider_id,
+                endpoint,
+                path,
                 wire_api,
                 model: params.model,
                 label: "pane".to_string(),
@@ -1817,22 +1834,48 @@ mod tests {
     /// Which account a reported send bills is decided here, from the route,
     /// and not by the client that reports it.
     #[test]
-    fn only_the_bridge_s_own_upstreams_are_recorded() {
+    fn only_a_known_provider_s_own_route_is_recorded() {
+        // The bridge's upstreams, canonicalised by the catalogue rather than
+        // by however the caller spelled them.
         assert_eq!(
-            recognised_reported_route("https://api.ambient.xyz/v1", "chat/completions"),
-            Some(("ambient", WireApi::Chat))
+            recognised_reported_route(
+                "ambient",
+                "https://api.ambient.xyz/v1/",
+                "/chat/completions"
+            ),
+            Some((
+                "https://api.ambient.xyz/v1".to_string(),
+                "chat/completions".to_string(),
+                WireApi::Chat
+            ))
         );
         assert_eq!(
-            recognised_reported_route("https://api.anthropic.com/v1/", "/messages"),
-            Some(("anthropic", WireApi::Anthropic))
+            recognised_reported_route(
+                "vercel-anthropic",
+                "https://ai-gateway.vercel.sh/v1",
+                "messages"
+            ),
+            Some((
+                "https://ai-gateway.vercel.sh/v1".to_string(),
+                "messages".to_string(),
+                WireApi::Anthropic
+            ))
         );
-        // Not this client's route, and not this client's business to price.
+        // A provider this build does not ship.
         assert_eq!(
-            recognised_reported_route("https://evil.example.com/v1", "chat/completions"),
+            recognised_reported_route("evil", "https://evil.example.com/v1", "messages"),
             None
         );
+        // A known provider, on a route it does not serve: the gateway's spend
+        // cannot be moved onto Anthropic's route, nor Anthropic's onto the
+        // gateway's.
         assert_eq!(
-            recognised_reported_route("https://api.ambient.xyz/v1", "responses"),
+            recognised_reported_route("anthropic", "https://ai-gateway.vercel.sh/v1", "messages"),
+            None
+        );
+        // A known provider, on its own route but in another dialect.
+        assert_eq!(
+            recognised_reported_route("ambient", "https://api.ambient.xyz/v1", "responses"),
             None
         );
     }

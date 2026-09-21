@@ -191,6 +191,9 @@ pub(crate) struct ClaudeBridgePlan {
     pub(crate) upstream_api_key: Option<String>,
     pub(crate) deferred_vault_secret: Option<DeferredVaultSecret>,
     pub(crate) upstream_model: String,
+    /// The built-in provider whose account these sends bill, reported with
+    /// each send so the operator's ledger can record them.
+    pub(crate) accounting_provider_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]

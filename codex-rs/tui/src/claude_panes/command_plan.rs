@@ -172,6 +172,7 @@ pub(crate) fn build_claude_command_plan(
             upstream_api_key: None,
             deferred_vault_secret,
             upstream_model,
+            accounting_provider_id: profile.accounting_provider_id.map(str::to_string),
         });
     }
     let settings = settings_json_with_base_url(

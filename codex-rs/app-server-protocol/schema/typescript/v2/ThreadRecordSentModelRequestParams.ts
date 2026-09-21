@@ -13,6 +13,11 @@ import type { JsonValue } from "../serde_json/JsonValue";
  */
 export type ThreadRecordSentModelRequestParams = { threadId: string,
 /**
+ * The account the client believes it billed. Recorded only when the
+ * server knows this provider and the route below is its own.
+ */
+providerId: string,
+/**
  * The base URL the request went to, and the endpoint underneath it.
  */
 baseUrl: string, path: string, model: string,
