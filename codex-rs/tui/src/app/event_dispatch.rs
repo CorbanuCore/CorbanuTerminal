@@ -5900,6 +5900,7 @@ impl App {
                     .await;
             }
             AppEvent::ClaudePaneTurnFinished { pane_id, result } => {
+                self.record_direct_pane_turn(app_server, result.as_ref().ok());
                 self.on_claude_pane_turn_finished(pane_id, result);
             }
             AppEvent::ClaudePaneTurnProgress { progress } => {

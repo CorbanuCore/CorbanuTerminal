@@ -24,6 +24,7 @@ use super::provider::ClaudeProviderProfileKind;
 use super::provider::ClaudeProviderTransport;
 use super::turn_types::ClaudeBridgeKind;
 use super::turn_types::ClaudeBridgePlan;
+use super::turn_types::PaneDirectAccounting;
 use super::turn_types::ClaudeCommandPlan;
 use super::turn_types::DeferredClaudePlanAuth;
 use super::turn_types::DeferredVaultSecret;
@@ -301,6 +302,17 @@ pub(crate) fn build_claude_command_plan(
     };
     args.push(prompt);
 
+    // With a bridge, every send passes through this process and is reported
+    // there. Without one, the pane talks to the provider itself and the only
+    // account of what it cost is the one the pane gives back.
+    let direct_accounting = match (bridge.is_none(), profile.accounting_provider_id, profile.base_url) {
+        (true, Some(provider_id), Some(base_url)) => Some(PaneDirectAccounting {
+            provider_id: provider_id.to_string(),
+            base_url: format!("{}/v1", base_url.trim_end_matches('/')),
+            model: profile.provider_model.to_string(),
+        }),
+        _ => None,
+    };
     Ok(ClaudeCommandPlan {
         executable: "claude".to_string(),
         args,
@@ -320,6 +332,7 @@ pub(crate) fn build_claude_command_plan(
         timeout_ms: None,
         deferred_claude_plan_auth,
         bridge,
+        direct_accounting,
     })
 }
 

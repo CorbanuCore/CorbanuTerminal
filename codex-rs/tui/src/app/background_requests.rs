@@ -1616,6 +1616,51 @@ mod tests {
 }
 
 impl App {
+    /// Record a pane turn whose requests this process never saw.
+    ///
+    /// The direct profiles hand Claude Code a provider base URL and a vault
+    /// credential and let it talk to the provider itself, so there is no send
+    /// to observe and no bridge to observe it. What comes back is the pane's
+    /// own report of what the turn cost - the provider's numbers relayed by
+    /// it - so the turn is recorded once, from that, rather than left out of
+    /// the operator's ledger entirely.
+    ///
+    /// One turn, one record: a pane turn can be many model requests, and this
+    /// client saw none of them individually. The count of attempts is
+    /// therefore turns, not requests, which is what the numbers describe.
+    pub(super) fn record_direct_pane_turn(
+        &mut self,
+        app_server: &AppServerSession,
+        output: Option<&crate::claude_panes::ClaudePaneTurnOutput>,
+    ) {
+        let Some(output) = output else {
+            return;
+        };
+        let Some(accounting) = output.direct_accounting.clone() else {
+            return;
+        };
+        // No numbers means the pane reported nothing this client can stand
+        // behind, and a turn recorded with nothing stated is not worth a row
+        // here: unlike a send, there is no request whose existence is itself
+        // the fact being recorded.
+        let Some(usage) = output
+            .usage_summary
+            .as_deref()
+            .and_then(|usage| serde_json::from_str::<serde_json::Value>(usage).ok())
+            .filter(serde_json::Value::is_object)
+        else {
+            return;
+        };
+        self.record_pane_bridge_model_request(
+            app_server,
+            accounting.provider_id,
+            accounting.base_url,
+            "messages".to_string(),
+            accounting.model,
+            Some(usage),
+        );
+    }
+
     /// Record a model request a pane bridge sent on the operator's credential.
     ///
     /// The bridge posts upstream from inside this process, which does not run

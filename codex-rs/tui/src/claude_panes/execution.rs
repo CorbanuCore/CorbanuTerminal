@@ -632,6 +632,7 @@ fn turn_output_from_parsed(
             .or_else(|| Some(plan.command_session_id.clone())),
         usage_status: usage_status_from_summary(parsed.usage_summary.as_deref()),
         usage_summary: parsed.usage_summary,
+        direct_accounting: plan.direct_accounting.clone(),
         artifact_path: plan.artifact_path.clone(),
         audit_path: plan.audit_path.clone(),
         duration_ms,
@@ -657,6 +658,9 @@ pub(crate) fn failed_turn_output(
         session_id: None,
         usage_summary: None,
         usage_status: ClaudePaneUsageStatus::Missing,
+        // A turn that failed before it reported anything has nothing to
+        // record; a failed turn that did report is recorded by the caller.
+        direct_accounting: None,
         artifact_path: plan.artifact_path.clone(),
         audit_path: plan.audit_path.clone(),
         duration_ms,

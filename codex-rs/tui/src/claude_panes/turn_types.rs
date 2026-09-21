@@ -38,6 +38,25 @@ pub(crate) struct ClaudePaneTurnOutput {
     pub(crate) tool_events: Vec<ClaudePaneToolEvent>,
     pub(crate) reasoning_events: Vec<ClaudePaneReasoningEvent>,
     pub(crate) command_mode: ClaudeCommandMode,
+    /// How to record this turn's spend when the pane talked to its provider
+    /// directly, with no bridge in between. `None` when a bridge carried the
+    /// turn - the bridge reports each send itself - or when the profile names
+    /// no account.
+    pub(crate) direct_accounting: Option<PaneDirectAccounting>,
+}
+
+/// A pane turn this process never saw the requests for.
+///
+/// The three direct profiles hand Claude Code the provider's base URL and a
+/// vault credential and let it talk to the provider itself, so there is no
+/// send to observe. What there is, is Claude Code's own report of what the
+/// turn cost, which is the provider's numbers relayed through it - one turn,
+/// one record, rather than the individual requests this client never saw.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PaneDirectAccounting {
+    pub(crate) provider_id: String,
+    pub(crate) base_url: String,
+    pub(crate) model: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,6 +103,9 @@ pub(crate) struct ClaudeCommandPlan {
     pub(crate) timeout_ms: Option<u64>,
     pub(crate) deferred_claude_plan_auth: Option<DeferredClaudePlanAuth>,
     pub(crate) bridge: Option<ClaudeBridgePlan>,
+    /// Set only when no bridge carries this turn: with no request to observe,
+    /// the turn is recorded from what the pane reports it cost.
+    pub(crate) direct_accounting: Option<PaneDirectAccounting>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

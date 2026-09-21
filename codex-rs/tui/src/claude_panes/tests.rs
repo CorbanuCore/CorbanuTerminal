@@ -2478,6 +2478,7 @@ fn bridge_redaction_plan(
         provider_model: "test-model".to_string(),
         turn_index: 1,
         command_mode: ClaudeCommandMode::NewSession,
+        direct_accounting: None,
         command_session_id: "11111111-1111-4111-8111-111111111111".to_string(),
         max_turns: None,
         artifact_path: dir.path().join("turn-0001.jsonl"),
@@ -3026,6 +3027,7 @@ fn interrupt_turn_cancels_prepared_claude_token_and_finishes_cleanly() {
         tool_events: Vec::new(),
         reasoning_events: Vec::new(),
         command_mode: ClaudeCommandMode::NewSession,
+        direct_accounting: None,
     });
     registry.finish_turn(&pane_id, &result);
 
@@ -3125,6 +3127,7 @@ async fn cancelling_running_command_returns_interrupted_output() {
             provider_model: "test-model".to_string(),
             turn_index: 1,
             command_mode: ClaudeCommandMode::NewSession,
+            direct_accounting: None,
             command_session_id: "55555555-5555-4555-8555-555555555555".to_string(),
             max_turns: None,
             artifact_path: artifact_path.clone(),
@@ -3406,6 +3409,7 @@ fn registry_locks_turns_and_resumes_stored_session() {
         tool_events: Vec::new(),
         reasoning_events: Vec::new(),
         command_mode: ClaudeCommandMode::NewSession,
+        direct_accounting: None,
     });
     registry.finish_turn(&pane_id, &result);
 
@@ -3497,6 +3501,7 @@ fn provider_error_clears_resume_session_for_next_turn() {
         tool_events: Vec::new(),
         reasoning_events: Vec::new(),
         command_mode: ClaudeCommandMode::Resume,
+        direct_accounting: None,
     });
     registry.finish_turn(&pane_id, &result);
 
@@ -3546,6 +3551,7 @@ fn max_turn_output_keeps_resume_guidance_and_audit_hint() {
         }],
         reasoning_events: Vec::new(),
         command_mode: ClaudeCommandMode::NewSession,
+        direct_accounting: None,
     };
 
     assert!(output.failure_message().contains("Type `continue`"));
@@ -3619,6 +3625,7 @@ fn turn_audit_counts_tool_events_not_unique_tool_names() {
         ],
         reasoning_events: Vec::new(),
         command_mode: ClaudeCommandMode::NewSession,
+        direct_accounting: None,
     };
 
     write_turn_audit(
@@ -3655,6 +3662,7 @@ fn turn_audit_serializes_reasoning_events() {
             preview: "Inspect Orc output before reporting to the Nazgul.".to_string(),
         }],
         command_mode: ClaudeCommandMode::NewSession,
+        direct_accounting: None,
     };
 
     write_turn_audit(
@@ -4216,12 +4224,12 @@ async fn passthrough_bridge_reports_inference_and_not_token_counting() {
     );
 }
 
-/// Every bridge lane must report a route the server will accept, and the two
+/// Every pane profile must report a route the server will accept, and the two
 /// sides of that agreement live in different crates. When they drift the
 /// failure is silence - the server warns and records nothing - so pin it here
 /// rather than discover it by finding the ledger empty.
 #[test]
-fn every_bridge_profile_reports_its_provider_s_own_route() {
+fn every_pane_profile_reports_its_provider_s_own_route() {
     use super::bridge::AMBIENT_CHAT_BASE_URL;
     use super::provider::ClaudeProviderTransport;
 
@@ -4249,7 +4257,7 @@ fn every_bridge_profile_reports_its_provider_s_own_route() {
         };
         let provider_id = profile
             .accounting_provider_id
-            .unwrap_or_else(|| panic!("{kind:?} posts through a bridge and must name its account"));
+            .unwrap_or_else(|| panic!("{kind:?} spends on a provider and must name its account"));
         let provider = catalogue.get(provider_id).unwrap_or_else(|| {
             panic!("{kind:?} names `{provider_id}`, which this build does not ship")
         });
@@ -4347,4 +4355,61 @@ async fn passthrough_bridge_reports_the_numbers_a_streamed_turn_stated() {
     assert_eq!(usage["input_tokens"], 120);
     assert_eq!(usage["cache_read_input_tokens"], 20);
     assert_eq!(usage["output_tokens"], 44);
+}
+
+/// A turn is recorded from what the pane reports only when this process had no
+/// chance to see the sends itself. Recording both ways would count the same
+/// spend twice.
+#[test]
+fn only_a_pane_without_a_bridge_is_recorded_from_its_own_report() {
+    let home = tempfile::tempdir().expect("temp home");
+    let mut registry = ClaudePaneRegistry::new();
+
+    let direct = registry
+        .create_pane_without_vault_for_test(
+            ClaudeProviderProfileKind::ZaiGlm52,
+            home.path().to_path_buf(),
+            home.path(),
+        )
+        .expect("create direct pane");
+    let plan = build_claude_command_plan(
+        registry
+            .panes
+            .iter()
+            .find(|pane| pane.id == direct)
+            .expect("direct pane"),
+        "prompt".to_string(),
+        home.path(),
+    )
+    .expect("plan for a direct profile");
+    assert!(plan.bridge.is_none(), "this profile talks to z.ai itself");
+    let accounting = plan
+        .direct_accounting
+        .expect("a direct turn is recorded from its own report");
+    assert_eq!(accounting.provider_id, "zai-anthropic");
+    assert_eq!(accounting.base_url, "https://api.z.ai/api/anthropic/v1");
+    assert_eq!(accounting.model, "glm-5.2[1m]");
+
+    let bridged = registry
+        .create_pane_without_vault_for_test(
+            ClaudeProviderProfileKind::VercelGlm52,
+            home.path().to_path_buf(),
+            home.path(),
+        )
+        .expect("create bridged pane");
+    let plan = build_claude_command_plan(
+        registry
+            .panes
+            .iter()
+            .find(|pane| pane.id == bridged)
+            .expect("bridged pane"),
+        "prompt".to_string(),
+        home.path(),
+    )
+    .expect("plan for a bridged profile");
+    assert!(plan.bridge.is_some(), "this profile posts through a bridge");
+    assert!(
+        plan.direct_accounting.is_none(),
+        "a bridged turn is recorded send by send, and must not be recorded twice"
+    );
 }
