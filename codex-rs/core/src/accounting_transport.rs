@@ -126,7 +126,12 @@ pub(super) fn request_refusal(request: &Request) -> Option<&'static str> {
     let Some(value) = request.body.as_ref()?.inspectable_json() else {
         return Some("uninspectable request body");
     };
-    ["provider", "provider_options", "plugins"]
+    // These are the names the wire actually carries. `provider_options` is
+    // serialized as `providerOptions` by every request type that has it, and the
+    // shipped gateway providers populate it to pin a different upstream vendor,
+    // so matching only the snake_case form left Responses and Anthropic turns
+    // attributable to the selected provider while the body said otherwise.
+    ["provider", "providerOptions", "provider_options", "plugins"]
         .into_iter()
         .find(|key| value.get(*key).is_some())
 }
