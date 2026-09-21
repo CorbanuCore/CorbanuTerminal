@@ -17,3 +17,5 @@
 # fails a receipt whose gates all passed. Two receipts died on this before I
 # fixed the cause rather than the instance.
 *.snap.new
+# Newer insta also writes .<file>.pending-snap for inline snapshots; same story.
+.*.pending-snap
