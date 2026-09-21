@@ -23,19 +23,21 @@ pub(crate) struct Provenance {
 }
 
 impl Provenance {
+    /// An agent identity no longer disqualifies a route. It is a credential, and
+    /// which economics it admits is decided once, in `turn_mode`; refusing it
+    /// here left those sessions with no collection at all to apply economics to.
     pub(crate) fn capture(
         provider: &ModelProviderInfo,
         auth: Option<&CodexAuth>,
         api: &codex_api::Provider,
-        agent_identity: bool,
     ) -> Self {
         Self {
             endpoint: api
                 .websocket_url_for_path("responses")
                 .ok()
                 .map(|url| url.to_string()),
-            api_key: !agent_identity && super::responses::legacy_eligible(provider, auth),
-            eligible: !agent_identity && super::responses::eligible(provider, auth),
+            api_key: super::responses::legacy_eligible(provider, auth),
+            eligible: super::responses::eligible(provider, auth),
             auth_mode: auth.map(CodexAuth::auth_mode),
         }
     }

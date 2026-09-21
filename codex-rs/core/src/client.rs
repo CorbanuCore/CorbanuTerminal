@@ -2888,7 +2888,6 @@ impl ModelClientSession {
             self.client.state.provider.info(),
             client_setup.auth.as_ref(),
             &client_setup.api_provider,
-            client_setup.agent_identity_telemetry.is_some(),
         );
         let connection = self
             .client
@@ -3063,11 +3062,11 @@ impl ModelClientSession {
                 responses_metadata,
             )?;
             trace_stream_timing("chat_http_after_build_request", provider_request_started_at);
+            // Agent-identity sessions collect like any other. Excluding them here
+            // meant a whole class of sessions recorded nothing at all on every
+            // provider, while the policy that decides their economics already
+            // treats an agent identity as subscription capacity.
             let sampling = match crate::accounting::chat::read(&self.chat_accounting)? {
-                Some(deferred) if client_setup.agent_identity_telemetry.is_some() => {
-                    deferred.exclude()?;
-                    None
-                }
                 Some(deferred) => {
                     deferred
                         .resolve(
@@ -3246,13 +3245,6 @@ impl ModelClientSession {
             );
             let client_setup = self.client.current_client_setup().await?;
             let sampling = match crate::accounting::responses::read(&self.responses_accounting)? {
-                Some(deferred)
-                    if deferred.websocket_endpoint()?.is_some()
-                        && client_setup.agent_identity_telemetry.is_some() =>
-                {
-                    deferred.exclude()?;
-                    None
-                }
                 Some(deferred) => {
                     deferred
                         .resolve(
@@ -3503,17 +3495,15 @@ impl ModelClientSession {
                 service_tier.clone(),
                 responses_metadata,
             )?;
-            let deferred = if warmup {
-                None
-            } else {
-                crate::accounting::responses::read(&self.responses_accounting)?
-                    .filter(|value| !matches!(value.websocket_endpoint(), Ok(None)))
-            };
+            // Warmup is collected too. Skipping it here meant the prompt this
+            // client sends to prime the cache - and the cache writes the provider
+            // charges for - never reached the ledger on any provider.
+            let deferred = crate::accounting::responses::read(&self.responses_accounting)?
+                .filter(|value| !matches!(value.websocket_endpoint(), Ok(None)));
             let provenance = crate::accounting::websocket::Provenance::capture(
                 self.client.state.provider.info(),
                 client_setup.auth.as_ref(),
                 &client_setup.api_provider,
-                client_setup.agent_identity_telemetry.is_some(),
             );
             let sampling = if let Some(deferred) = &deferred {
                 let cached = if self.websocket_session.connection.is_some() {

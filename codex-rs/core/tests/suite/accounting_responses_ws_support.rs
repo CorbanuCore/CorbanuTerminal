@@ -236,3 +236,83 @@ pub fn chain(records: &[codex_state::accounting::Attempt]) {
         assert_ne!(pair[1].attempt_id, pair[0].attempt_id);
     }
 }
+
+/// Attempts of the session's own turns.
+///
+/// Startup prewarm is collected now - it sends the whole prompt to prime the
+/// model, and the provider charges for that - so it records under its own
+/// `prewarm:` turn. These suites are about a turn's arithmetic, so they read the
+/// turn's rows here and assert the prewarm row once, where it is the subject.
+pub async fn turn_attempts(
+    db: &codex_state::StateRuntime,
+) -> anyhow::Result<Vec<codex_state::accounting::Attempt>> {
+    Ok(attempts(db)
+        .await?
+        .into_iter()
+        .filter(|attempt| !attempt.turn.starts_with("prewarm:"))
+        .collect())
+}
+
+/// The fixture's startup prewarm contribution to a day: 999 in, 999 out, 1998
+/// total, with no cache or reasoning detail, priced at the fixture's own rates.
+pub fn with_prewarm(mut totals: codex_state::accounting::DayTotals) -> codex_state::accounting::DayTotals {
+    totals.measured[0].known += 999;
+    totals.measured[4].known += 999;
+    totals.measured[6].known += 1998;
+    for index in [1, 2, 3, 5] {
+        totals.measured[index].unknown += 1;
+    }
+    // 999 output at $30/M. The frame reports no cached-token detail, so the
+    // uncached bucket is unknown and only the output side is priced.
+    let prewarm: codex_state::accounting::Decimal =
+        serde_json::from_value(serde_json::json!("0.02997")).expect("fixture prewarm subtotal");
+    totals.known_usd = totals
+        .known_usd
+        .add(prewarm)
+        .expect("fixture prewarm subtotal");
+    totals.unknown_estimates += 1;
+    totals.attempts += 1;
+    totals
+}
+
+/// Observations of the session's own turns, excluding the startup prewarm's.
+///
+/// An observation's `source` identifies the evidence, not the attempt, so the
+/// two are joined through the store's own attempt column.
+pub async fn turn_observations(
+    db: &codex_state::StateRuntime,
+) -> anyhow::Result<Vec<codex_state::accounting::Observation>> {
+    let prewarm: Vec<String> = super::accounting_responses::support::attempts(db)
+        .await?
+        .into_iter()
+        .filter(|attempt| attempt.turn.starts_with("prewarm:"))
+        .map(|attempt| attempt.attempt_id.to_string())
+        .collect();
+    let mut conn = connection(db).await?;
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT attempt_id, payload FROM draft_accounting_observations ORDER BY rowid")
+            .fetch_all(&mut conn)
+            .await?;
+    rows.into_iter()
+        .filter(|(attempt_id, _)| !prewarm.contains(attempt_id))
+        .map(|(_, payload)| Ok(serde_json::from_str(&payload)?))
+        .collect()
+}
+
+/// The prewarm's own contribution to a day's incomplete-estimate count: its
+/// frame reports no cache or reasoning detail, so it is never fully priced.
+pub const PREWARM_UNKNOWN_ESTIMATES: i64 = 1;
+
+/// A day's known money after `count` further startup prewarms, each $0.02997.
+pub fn with_prewarms(
+    known_usd: codex_state::accounting::Decimal,
+    count: usize,
+) -> anyhow::Result<codex_state::accounting::Decimal> {
+    let prewarm: codex_state::accounting::Decimal =
+        serde_json::from_value(serde_json::json!("0.02997"))?;
+    let mut total = known_usd;
+    for _ in 0..count {
+        total = total.add(prewarm)?;
+    }
+    Ok(total)
+}

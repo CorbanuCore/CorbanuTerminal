@@ -574,3 +574,61 @@ async fn accounting_responses_native_ws_only_no_install() -> anyhow::Result<()> 
     server.shutdown().await;
     Ok(())
 }
+
+/// A registered agent identity is a credential, not a reason to stop counting.
+/// The client used to exclude these sessions outright, so an agent-identity run
+/// recorded nothing at all on any provider while the policy that decides its
+/// economics already treated it as subscription capacity.
+#[tokio::test]
+async fn accounting_agent_identity_session_collects() -> anyhow::Result<()> {
+    let key = codex_agent_identity::generate_agent_key_material()?;
+    let record = codex_login::auth::AgentIdentityAuthRecord {
+        agent_runtime_id: "fixture-runtime".into(),
+        agent_private_key: key.private_key_pkcs8_base64,
+        account_id: "fixture-account".into(),
+        chatgpt_user_id: "fixture-user".into(),
+        email: None,
+        plan_type: codex_protocol::account::PlanType::Pro,
+        chatgpt_account_is_fedramp: false,
+        // Already registered: construction must not reach the network.
+        task_id: Some("fixture-task".into()),
+    };
+    let identity = codex_login::auth::AgentIdentityAuth::from_record(
+        record,
+        "https://agent-identity.invalid",
+        &codex_login::AuthRouteConfig::from_http_client_factory(
+            codex_http_client::HttpClientFactory::new(
+                codex_http_client::OutboundProxyPolicy::ReqwestDefault,
+            ),
+        ),
+    )
+    .await?;
+    let auth = codex_login::CodexAuth::AgentIdentity(identity);
+    assert_eq!(auth.auth_mode(), codex_protocol::auth::AuthMode::AgentIdentity);
+
+    let server = MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    let mock = responses::mount_sse_once(&server, success(usage(Some(0)))).await;
+    let mode = AccountingMode::Provider {
+        scope: uuid::Uuid::new_v4(),
+        provider_id: "openai".into(),
+        wire_api: codex_model_provider_info::WireApi::Responses,
+        approved_endpoint: endpoint.clone(),
+        approved_query: None,
+        pricing: PriceAuthority::Unavailable,
+    };
+    let test = builder(endpoint.clone(), mode)
+        .with_auth(auth)
+        .build_with_auto_env(&server)
+        .await?;
+    test.submit_turn("agent identity accounting").await?;
+    let db = test.codex.state_db().unwrap();
+    let records = wait_attempts(&db, 1).await?;
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].provider, "openai");
+    wait_observations(&db, 1).await?;
+    assert_eq!(totals(&db, &records[0]).await?.measured[0].known, 100);
+    assert_eq!(mock.requests().len(), 1);
+    stop(&test).await;
+    Ok(())
+}
