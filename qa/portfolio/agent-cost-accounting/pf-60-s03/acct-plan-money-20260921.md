@@ -65,14 +65,29 @@ the plan rate, and what they would have cost on the API side.
 `Metered` and `Local` rows have no plan side and state none. Inventing a burn
 for a metered row would put a number in the ledger no catalogue ever stated.
 
-## Money follows the route
+## Money follows the route, and authentication chooses the basis
 
-Pricing authority is now granted to any built-in provider bound at its **own**
-default route, in its own dialect, under API-key authentication, with no
-credential-bearing custom headers and no provider-held credential shape (AWS
-signing, a command auth, or an experimental bearer token). The same provider
-read through a different endpoint carries no rates, which
-`accounting_every_built_in_provider_collects` now asserts per provider.
+There are three situations, not two, and an earlier revision of this work
+collapsed them into the old `api_key_pricing` bit. Independent review caught it:
+"API key on a route this client will not price" was being treated as
+subscription capacity, so an operator pointing a provider at a proxy would have
+had their API-key spend booked as plan work.
+
+`PriceAuthority` now states which economics a turn admits:
+
+- **`ApiKeyRates`** - the provider's own default route, in its own dialect,
+  resolved under the turn's own credential, with no credential-bearing custom
+  headers and no provider-held credential shape (AWS signing, command auth, an
+  experimental bearer token).
+- **`PlanRate`** - that same route under subscription-style authentication. The
+  route is resolved per credential, because a ChatGPT plan turn goes to the
+  Codex route and an API key to the API one, and both are OpenAI's own.
+- **`Unavailable`** - anything else. Tokens are still collected; no economics of
+  either kind are claimed for a destination the catalogue quotes nothing for.
+
+`accounting_every_built_in_provider_collects` asserts all three per provider:
+rates on its own route under an API key, the plan side on that route under plan
+authentication, and nothing at all through a relay.
 
 `billed` also stopped refusing `AuthDependent` rows. Under API-key
 authentication those rows' API rates are precisely what the provider charges;
@@ -97,13 +112,14 @@ differ from the previous release by construction.
   price), `gpt-5.6-luna` (burn 0.2x plus exact API rates), `glm-5.3` (3.0x
   inside the weekday peak, 1.0x outside) - and that nothing is stated for a
   metered row, another provider's row, an unknown slug, or an unquoted tier.
-- `codex-core`: `accounting_chatgpt_subscription_records_plan_rate_and_api_equivalent`
-  drives a real subscription turn end to end and asserts a `PlanEquivalent`
-  snapshot at 1.0x, `known_usd` exactly zero, `equivalent_usd` $0.00161 for the
-  fixture's 80 uncached, 20 cached and 40 output tokens, and one plan attempt at
-  140000 milli-tokens. This test previously asserted the opposite - that a
-  subscription turn records no prices at all - and is retained under a name that
-  states what it now proves.
+- `codex-core`: `accounting_responses_ws_subscription_uses_resolved_endpoint_without_api_prices`
+  admits a real attempt on the **real** Codex subscription route and asserts the
+  stored snapshot is `PlanEquivalent` at 1.0x carrying the catalogue's own API
+  side - $5/M uncached, $30/M output, $0.50/M cached input - for `gpt-5.6-sol`.
+- `codex-core`: `accounting_chatgpt_subscription_off_route_collects_without_economics`
+  drives a subscription turn end to end against a wiremock endpoint, which is
+  nobody's own route, and asserts tokens are collected while no snapshot, no
+  spend and no plan figure are claimed.
 - `codex-state`: `plan_basis_separates_plan_consumption_from_money_spent` proves
   spend stays zero while the equivalent accrues, that a burn-only row records
   the rate and no money of either kind, and that a snapshot mixing the two bases
@@ -134,5 +150,11 @@ checked on the same host. Raw logs under `rtx-20260921/`.
   is unknowable per turn. The plan figures sit beside that count rather than
   replacing it.
 - Provider-held credential shapes (AWS signing, command auth, bearer tokens)
-  still collect tokens and carry no rates: what the account is charged there is
-  not something the catalogue states for this client's route.
+  carry no per-token rates: what that account is charged is not something the
+  catalogue states for this client. On the provider's own route they do take the
+  plan side when the credential is not an API key, which is exactly how the
+  built-in `claude-plan` provider - command auth, plan rows - gets its burn
+  recorded.
+- Off a provider's own route, nothing is claimed at all. That is deliberate: a
+  proxy or relay may or may not charge what the catalogue quotes, and this client
+  is not told which.

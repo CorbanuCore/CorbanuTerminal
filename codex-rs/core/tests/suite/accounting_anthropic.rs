@@ -1,5 +1,6 @@
 #[path = "accounting_anthropic_support.rs"]
 mod support;
+use codex_core::config::PriceAuthority;
 use codex_core::config::AccountingMode;
 use codex_features::Feature;
 use codex_protocol::protocol::EventMsg;
@@ -40,7 +41,7 @@ async fn accounting_plan_identity_zero_usage_and_provider_switch() -> anyhow::Re
             wire_api: WireApi::Anthropic,
             approved_endpoint: endpoint.clone(),
             approved_query: None,
-            api_key_pricing: false,
+            pricing: PriceAuthority::Unavailable,
         };
         let test = builder(endpoint, mode)
             .with_config(move |config| {

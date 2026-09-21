@@ -1,3 +1,4 @@
+use crate::config::PriceAuthority;
 use super::*;
 use crate::config::AccountingMode;
 use codex_protocol::protocol::SessionSource;
@@ -28,7 +29,7 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
         wire_api: codex_model_provider_info::WireApi::Responses,
         approved_endpoint: api.base_url.clone(),
         approved_query: None,
-        api_key_pricing: false,
+        pricing: PriceAuthority::Unavailable,
     };
     let fixture = Fixture::new(mode).await?;
     let provenance = Provenance::capture(&provider, Some(&auth), &api, false);
@@ -43,6 +44,33 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
         super::super::Pricing::Plan
     ));
     assert_eq!(sampling.provider, "openai");
+    // Admission on the real subscription route records the plan rate that
+    // applied and, because this row states API rates, what the same tokens
+    // would have cost - as an equivalent, never as spend.
+    let attempt = sampling
+        .admit("gpt-5.6-sol", &api.url_for_path("responses"))
+        .await?;
+    let prices: Vec<Snapshot> = fixture.rows("draft_accounting_price_snapshots").await?;
+    assert_eq!(prices.len(), 1);
+    assert_eq!(prices[0].basis, codex_state::accounting::Basis::PlanEquivalent);
+    assert_eq!(prices[0].plan_burn_millis, Some(1000));
+    assert_eq!(prices[0].provider, "openai");
+    assert_eq!(prices[0].model, "gpt-5.6-sol");
+    // $5/M uncached, $30/M output, $0.50/M cached input: the catalogue's own
+    // API-key side for this auth-dependent row.
+    assert_eq!(
+        (
+            prices[0].rates.noncached.clone(),
+            prices[0].rates.output.clone(),
+            prices[0].rates.read.clone()
+        ),
+        (
+            Some(serde_json::from_value(serde_json::json!("5"))?),
+            Some(serde_json::from_value(serde_json::json!("30"))?),
+            Some(serde_json::from_value(serde_json::json!("0.5"))?)
+        )
+    );
+    assert_eq!(attempt.provider, "openai");
     let wrong = Provenance::capture(
         &provider,
         Some(&auth),

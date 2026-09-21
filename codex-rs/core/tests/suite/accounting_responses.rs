@@ -1,5 +1,6 @@
 #[path = "accounting_responses_support.rs"]
 pub(super) mod support;
+use codex_core::config::PriceAuthority;
 use codex_core::config::AccountingMode;
 use codex_protocol::protocol::EventMsg;
 use codex_state::accounting::*;
@@ -11,7 +12,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[tokio::test]
-async fn accounting_chatgpt_subscription_records_plan_rate_and_api_equivalent() -> anyhow::Result<()> {
+async fn accounting_chatgpt_subscription_off_route_collects_without_economics() -> anyhow::Result<()> {
     let server = MockServer::start().await;
     let endpoint = format!("{}/v1", server.uri());
     let mock = responses::mount_sse_once(&server, success(usage(Some(0)))).await;
@@ -21,7 +22,7 @@ async fn accounting_chatgpt_subscription_records_plan_rate_and_api_equivalent() 
         wire_api: codex_model_provider_info::WireApi::Responses,
         approved_endpoint: endpoint.clone(),
         approved_query: None,
-        api_key_pricing: false,
+        pricing: PriceAuthority::Unavailable,
     };
     let test = builder(endpoint, mode)
         .with_auth(codex_login::CodexAuth::from_external_chatgpt_tokens(
@@ -36,26 +37,18 @@ async fn accounting_chatgpt_subscription_records_plan_rate_and_api_equivalent() 
     let records = wait_attempts(&db, 1).await?;
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].provider, "openai");
-    // A subscription turn is not billed per token, so it carries the plan rate
-    // that applied and the API rates as a counterfactual - not as spend.
+    // This fixture talks to a wiremock endpoint, which is nobody's own route.
+    // Tokens are still collected; no economics of either kind are claimed for a
+    // destination the catalogue quotes nothing for.
     let prices: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
-    assert_eq!(prices.len(), 1);
-    assert_eq!(prices[0].basis, Basis::PlanEquivalent);
-    assert_eq!(prices[0].plan_burn_millis, Some(1000));
+    assert!(prices.is_empty());
     wait_observations(&db, 1).await?;
     let total = totals(&db, &records[0]).await?;
     assert_eq!(total.measured[0].known, 100);
-    // Money spent stays zero and incomplete: nothing was charged per token.
     assert_eq!(total.known_usd, Decimal::default());
     assert_eq!(total.unknown_estimates, 1);
-    // 80 uncached at $5/M, 20 cached at $0.50/M, 40 output at $30/M.
-    assert_eq!(
-        serde_json::to_value(total.equivalent_usd)?,
-        json!("0.00161")
-    );
-    assert_eq!(total.unknown_equivalents, 0);
-    assert_eq!(total.plan_attempts, 1);
-    assert_eq!(total.plan_burn_milli_tokens.known, 140 * 1000);
+    assert_eq!(total.equivalent_usd, Decimal::default());
+    assert_eq!(total.plan_attempts, 0);
     assert_eq!(mock.requests().len(), 1);
     stop(&test).await;
     Ok(())

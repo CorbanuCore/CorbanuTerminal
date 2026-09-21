@@ -1,5 +1,6 @@
 #[path = "accounting_chat_support.rs"]
 pub(super) mod support;
+use codex_core::config::PriceAuthority;
 use codex_core::config::AccountingMode;
 use codex_protocol::protocol::{EventMsg, Op};
 use codex_state::accounting::*;
@@ -20,7 +21,7 @@ async fn accounting_chat_custom_provider_collects_with_real_identity() -> anyhow
         wire_api: codex_model_provider_info::WireApi::Chat,
         approved_endpoint: endpoint.clone(),
         approved_query: None,
-        api_key_pricing: false,
+        pricing: PriceAuthority::Unavailable,
     };
     let test = builder(endpoint, mode)
         .with_config(|config| {

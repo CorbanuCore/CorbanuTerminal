@@ -6,6 +6,7 @@
 compile_error!("developer-accounting is debug-only and must not be enabled in distribution builds");
 
 use crate::config::AccountingMode;
+use crate::config::PriceAuthority;
 use codex_api::AnthropicTokenPresence;
 use codex_api::AnthropicUsagePatch;
 use codex_protocol::ThreadId;
@@ -67,7 +68,7 @@ pub(crate) fn developer_accounting_mode(
         wire_api: provider.wire_api,
         approved_endpoint,
         approved_query: canonical_query(provider),
-        api_key_pricing: false,
+        pricing: PriceAuthority::Unavailable,
     }
 }
 
@@ -270,36 +271,58 @@ pub(crate) fn turn_mode(
             })
         })
     };
-    let api_key_pricing = auth_mode == Some(codex_protocol::auth::AuthMode::ApiKey)
-        && provider.aws.is_none()
-        && provider.auth.is_none()
-        && provider.experimental_bearer_token.is_none()
+    // Any built-in provider, at its own default route, in its own dialect. The
+    // catalogue states exact rates per provider row, so restricting money to two
+    // of those providers left every other provider recording tokens with no
+    // economics at all. What must hold is that the request really went to the
+    // route those rates are quoted for. Both bases need this; nothing the
+    // catalogue says about a route survives being pointed somewhere else.
+    // Resolved under the turn's own authentication, because a provider's route
+    // can differ by credential: a ChatGPT plan turn goes to the Codex route, not
+    // to the API-key one, and both are that provider's own.
+    let own_route = codex_model_provider_info::built_in_model_providers(None)
+        .get(provider_id)
+        .is_some_and(|built_in| {
+            built_in.wire_api == provider.wire_api
+                && built_in
+                    .to_api_provider(auth_mode)
+                    .is_ok_and(|api| api.base_url == resolved_endpoint)
+        });
+    // Which economics apply is decided by the authentication actually used, not
+    // by whether per-token rates happen to be available. Treating "API key on a
+    // route this client will not price" as subscription capacity would book
+    // API-key spend as plan work.
+    let pricing = if !own_route {
+        PriceAuthority::Unavailable
+    } else if auth_mode == Some(codex_protocol::auth::AuthMode::ApiKey) {
         // Deliberately NOT gated on `api_key_header_name`: the built-in Anthropic
         // provider declares `x-api-key` as its own credential header, so requiring
         // it to be absent made the Anthropic pricing arm below dead code and left
-        // metered Anthropic turns with no rate at all.
-        && !credential_header(&provider.http_headers)
-        && !credential_header(&provider.env_http_headers)
-        // Any built-in provider, at its own default route, in its own dialect.
-        // The catalogue states exact rates per provider row, so restricting money
-        // to two of those providers left every other metered provider recording
-        // tokens with no price at all. What must hold is that the request really
-        // went to the route those rates are quoted for.
-        && codex_model_provider_info::built_in_model_providers(None)
-            .get(provider_id)
-            .is_some_and(|built_in| {
-                built_in.wire_api == provider.wire_api
-                    && built_in
-                        .to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))
-                        .is_ok_and(|api| api.base_url == resolved_endpoint)
-            });
+        // metered Anthropic turns with no rate at all. What disqualifies per-token
+        // rates is a credential this client cannot attribute to the account the
+        // catalogue quotes.
+        let attributable = provider.aws.is_none()
+            && provider.auth.is_none()
+            && provider.experimental_bearer_token.is_none()
+            && !credential_header(&provider.http_headers)
+            && !credential_header(&provider.env_http_headers);
+        if attributable {
+            PriceAuthority::ApiKeyRates
+        } else {
+            PriceAuthority::Unavailable
+        }
+    } else {
+        // Subscription-style authentication on the provider's own route: a
+        // ChatGPT plan, or a provider whose credential is its own plan login.
+        PriceAuthority::PlanRate
+    };
     AccountingMode::Provider {
         scope: *scope,
         provider_id: provider_id.into(),
         wire_api: provider.wire_api,
         approved_endpoint: resolved_endpoint.into(),
         approved_query: canonical_query(provider),
-        api_key_pricing,
+        pricing,
     }
 }
 
@@ -388,12 +411,38 @@ impl Drop for SamplingScope {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Pricing {
     Anthropic,
     Responses,
     Chat,
     /// Subscription capacity: record the plan rate and the API equivalent, not spend.
     Plan,
+    /// Tokens only: this route and credential state no economics this client can use.
+    Unavailable,
+}
+
+/// The economics a mode admits, shared by admission and by the guards that check
+/// a rebound mode still agrees with the sampling already in flight.
+fn pricing_for(mode: &AccountingMode) -> Pricing {
+    match mode {
+        AccountingMode::Provider {
+            wire_api, pricing, ..
+        } => match pricing {
+            PriceAuthority::ApiKeyRates => match wire_api {
+                codex_model_provider_info::WireApi::Anthropic => Pricing::Anthropic,
+                codex_model_provider_info::WireApi::Responses => Pricing::Responses,
+                codex_model_provider_info::WireApi::Chat => Pricing::Chat,
+            },
+            PriceAuthority::PlanRate => Pricing::Plan,
+            PriceAuthority::Unavailable => Pricing::Unavailable,
+        },
+        AccountingMode::DirectAnthropic { .. } => Pricing::Anthropic,
+        AccountingMode::DirectOpenAiChat { .. } => Pricing::Chat,
+        AccountingMode::DirectOpenAiResponsesHttp { .. }
+        | AccountingMode::DirectOpenAiResponses { .. } => Pricing::Responses,
+        AccountingMode::Disabled => Pricing::Unavailable,
+    }
 }
 
 pub(crate) struct Sampling {
@@ -529,26 +578,7 @@ impl Sampling {
             endpoint: pinned_route(approved_endpoint, approved_query.as_deref(), path),
             provider: provider.into(),
             dialect,
-            pricing: match mode {
-                AccountingMode::Provider {
-                    wire_api,
-                    api_key_pricing: true,
-                    ..
-                } => match wire_api {
-                    codex_model_provider_info::WireApi::Anthropic => Pricing::Anthropic,
-                    codex_model_provider_info::WireApi::Responses => Pricing::Responses,
-                    codex_model_provider_info::WireApi::Chat => Pricing::Chat,
-                },
-                AccountingMode::Provider {
-                    api_key_pricing: false,
-                    ..
-                } => Pricing::Plan,
-                AccountingMode::DirectAnthropic { .. } => Pricing::Anthropic,
-                AccountingMode::DirectOpenAiChat { .. } => Pricing::Chat,
-                AccountingMode::DirectOpenAiResponsesHttp { .. }
-                | AccountingMode::DirectOpenAiResponses { .. } => Pricing::Responses,
-                AccountingMode::Disabled => unreachable!(),
-            },
+            pricing: pricing_for(mode),
             previous: Mutex::new(None),
             failed: AtomicBool::new(false),
         }))
@@ -608,6 +638,7 @@ impl Sampling {
             dispatched_at_ms: dispatched_at.try_into()?,
         };
         let prices = match self.pricing {
+            Pricing::Unavailable => Vec::new(),
             Pricing::Plan => {
                 prices::plan_original(model, &self.provider, self.scope, dispatched_at, tier)?
             }

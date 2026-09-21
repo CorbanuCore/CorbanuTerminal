@@ -359,6 +359,23 @@ pub(crate) async fn test_config() -> Config {
     config
 }
 
+/// Which economics this client may state for a turn, decided by the route and
+/// the authentication actually used.
+///
+/// These are three situations, not two. Conflating "ran on a plan" with "ran
+/// under an API key somewhere this client cannot price" would book API-key spend
+/// as subscription capacity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PriceAuthority {
+    /// Rates the provider charges per token for this route and this credential.
+    ApiKeyRates,
+    /// Subscription capacity: the plan rate that applied, and any API equivalent
+    /// the catalogue states for the same row.
+    PlanRate,
+    /// Neither. Tokens are still recorded; no economics are claimed.
+    Unavailable,
+}
+
 /// Application configuration loaded from disk and merged with overrides.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Permissions {
@@ -657,7 +674,7 @@ pub enum AccountingMode {
         /// to carry them or the endpoint check can never match. They are ordered
         /// here because the provider stores them in a `HashMap`.
         approved_query: Option<String>,
-        api_key_pricing: bool,
+        pricing: PriceAuthority,
     },
     DirectAnthropic {
         scope: uuid::Uuid,
