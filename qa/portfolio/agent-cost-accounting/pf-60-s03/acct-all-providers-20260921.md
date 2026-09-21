@@ -142,10 +142,22 @@ usually lands - route to `compact_remote_v2` and still recorded nothing. Both no
 call the same helper: the attachment logic `session/turn.rs` performed inline is
 extracted into `accounting::attach_turn`, so the paths cannot drift again.
 
-The remote path attaches only when the compaction owns its client session. When
-the session is borrowed from a live turn, that turn's collectors are already
-attached and the compaction request belongs to it, so nothing is replaced
-mid-flight.
+**Retracted.** An earlier revision of this record claimed the remote path need
+attach only when the compaction owns its client session, because a session
+borrowed from a live turn already carries that turn's collectors. That was
+wrong. Inline auto-compaction borrows the turn's session but runs outside the
+turn's sampling scope, so those slots are empty: under the owned-only rule every
+automatic compaction went unrecorded while this document said compaction
+collects. The remote path now attaches for both shapes, and because the borrowed
+slots are empty nothing in flight is displaced.
+
+The claim is no longer taken on argument.
+`accounting_records_manual_compaction` drives a real `/compact` through the
+remote path and asserts a second attempt under a `compact:` turn identity;
+`accounting_records_auto_compaction` drives an automatic pre-turn compaction
+and asserts exactly one `compact:` row among the three. Both fail if the
+compaction's scopes are dropped instead of held, which is how the owned-only
+defect would look.
 
 The turn label is `accounting::compaction_turn_label`, which keeps the identity
 inside the store's 128-byte bound: a long submission id would otherwise make its
@@ -170,3 +182,12 @@ classes, and neither introduced by this work:
 - **Startup prewarm and auxiliary inference.** Outside sampling collection by
   design; they are not turns the operator asked for. That rationale is true for
   these two.
+- **Legacy remote compaction, the `/responses/compact` endpoint.** Reachable
+  only by disabling `remote_compaction_v2`, which is Stable and on by default.
+  It does not stream through `ModelClientSession` at all - it posts through
+  `ApiCompactClient`, which has no collector attachment point - so recording it
+  is a plumbing change, not a flag. Named here rather than quietly implied by
+  "compaction collects". Default-configured operators are unaffected.
+
+Token-budget compaction is not in that list: it installs a fresh context window
+without any model call, so there is no inference to record.
