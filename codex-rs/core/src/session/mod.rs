@@ -1869,6 +1869,17 @@ impl Session {
         state.session_configuration.provider.clone()
     }
 
+    /// The accounting mode and provider identity in force right now.
+    ///
+    /// Read live rather than snapshotted: a session's provider can change, and
+    /// a client that records against the identity it had at startup would
+    /// attribute a request to a provider it no longer uses.
+    pub(crate) async fn accounting_binding(&self) -> (crate::config::AccountingMode, String) {
+        let state = self.state.lock().await;
+        let config = &state.session_configuration.original_config_do_not_use;
+        (config.accounting.clone(), config.model_provider_id.clone())
+    }
+
     pub(crate) async fn refresh_runtime_config(&self, next_config: Config) {
         // Refresh only the user layer from the incoming snapshot. Preserve thread-local
         // layers such as request/session overrides that were present when this session
