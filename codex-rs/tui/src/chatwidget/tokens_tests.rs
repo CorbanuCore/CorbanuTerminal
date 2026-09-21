@@ -704,9 +704,74 @@ async fn accounting_inspect_range_command_refresh_and_refusal() {
     }
 }
 
+/// A day carrying only the money figures these copy tests are about.
+fn money_day(known: Decimal, unknown: i64, attempts: i64) -> DayTotals {
+    DayTotals {
+        known_usd: known,
+        unknown_estimates: unknown,
+        attempts,
+        ..Default::default()
+    }
+}
+
+/// A day of subscription work: plan attempts, the consumption they imply, and
+/// the API equivalent, with `unknown_equivalents` for rows the catalogue does
+/// not price.
+fn plan_day(equivalent: Decimal, burn_milli_tokens: i64, unknown_equivalents: i64) -> DayTotals {
+    DayTotals {
+        attempts: 2,
+        unknown_estimates: 2,
+        equivalent_usd: equivalent,
+        unknown_equivalents,
+        plan_burn_milli_tokens: Metric {
+            known: burn_milli_tokens,
+            unknown: 0,
+        },
+        plan_attempts: 2,
+        ..Default::default()
+    }
+}
+
+#[test]
+fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
+    // Plan work with an API equivalent: the plan rate, what it consumed, and
+    // what the same tokens would have cost - none of it spend.
+    insta::assert_snapshot!(estimate(&plan_day(decimal("0.00161"), 140_000, 0)).join("\n"), @"
+    Estimated token cost: unknown
+    Known estimated token cost: $0.000000 + unknown costs
+    Full recorded estimate: unavailable (2 of 2 attempts incomplete)
+    Subscription capacity: 2 of 2 attempts, not billed per token
+    Plan consumption: 140 tokens at the plan rate that applied
+    Same tokens at API rates: $0.001610
+    ");
+    // A plan row the catalogue states no API price for says so, rather than
+    // reporting zero.
+    insta::assert_snapshot!(estimate(&plan_day(Decimal::default(), 280_000, 2)).join("\n"), @"
+    Estimated token cost: unknown
+    Known estimated token cost: $0.000000 + unknown costs
+    Full recorded estimate: unavailable (2 of 2 attempts incomplete)
+    Subscription capacity: 2 of 2 attempts, not billed per token
+    Plan consumption: 280 tokens at the plan rate that applied
+    Same tokens at API rates: unavailable — the catalogue states no API price for 2 of 2 plan attempts
+    ");
+    // A day with no plan work says nothing about plans at all.
+    assert_eq!(
+        estimate(&money_day(decimal("0.00018"), 0, 1)),
+        vec!["Estimated token cost for recorded attempts: $0.000180"]
+    );
+    // The per-attempt page states the rate that applied at dispatch.
+    let mut q = quote();
+    q.plan_burn_millis = Some(500);
+    assert!(
+        attempt_text(&q)
+            .join("\n")
+            .contains("Plan rate at dispatch: 0.500x")
+    );
+}
+
 #[test]
 fn accounting_inspect_partial_and_unknown_copy() {
-    insta::assert_snapshot!(estimate(decimal("0.00018"), 1, 1).join("\n"), @"
+    insta::assert_snapshot!(estimate(&money_day(decimal("0.00018"), 1, 1)).join("\n"), @"
     Known estimated token cost: $0.000180 + unknown costs
     Full recorded estimate: unavailable (1 of 1 attempts incomplete)
     ");
@@ -727,13 +792,13 @@ fn accounting_inspect_partial_and_unknown_copy() {
 
 #[test]
 fn accounting_inspect_unpriced_zero_and_missing_rate() {
-    insta::assert_snapshot!(estimate(Decimal::default(), 1, 1).join("\n"), @"
+    insta::assert_snapshot!(estimate(&money_day(Decimal::default(), 1, 1)).join("\n"), @"
     Estimated token cost: unknown
     Known estimated token cost: $0.000000 + unknown costs
     Full recorded estimate: unavailable (1 of 1 attempts incomplete)
     ");
     assert_eq!(
-        estimate(Decimal::default(), 0, 1),
+        estimate(&money_day(Decimal::default(), 0, 1)),
         vec!["Estimated token cost for recorded attempts: $0.000000"]
     );
     let mut q = quote();

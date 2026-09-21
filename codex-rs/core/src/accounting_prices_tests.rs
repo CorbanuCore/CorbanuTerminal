@@ -380,3 +380,73 @@ fn accounting_price_projection_retains_absent_read_and_write_and_exact_milli() {
         .is_err()
     );
 }
+
+/// Plan rows are the ones the old projection could not state at all: it had no
+/// plan basis, so every subscription turn recorded tokens and nothing else.
+#[test]
+fn accounting_plan_projection_states_the_rate_and_only_stated_equivalents() {
+    let scope = Uuid::new_v4();
+    let now = chrono::DateTime::parse_from_rfc3339("2026-09-21T12:00:00Z")
+        .unwrap()
+        .timestamp_millis();
+    // A burn-only row: the plan rate is stated, and no API price is invented.
+    let plan = plan_original("claude-opus-5-plan", "claude-plan", scope, now, None)
+        .unwrap()
+        .remove(0);
+    assert_eq!(plan.basis, Basis::PlanEquivalent);
+    assert_eq!(plan.plan_burn_millis, Some(1000));
+    assert_eq!(
+        (
+            plan.rates.noncached,
+            plan.rates.output,
+            plan.rates.read,
+            plan.rates.write
+        ),
+        (None, None, None, None)
+    );
+    assert_eq!(plan.provider, "claude-plan");
+
+    // An auth-dependent row states both: the plan rate that applied and the API
+    // rates the same tokens would have cost.
+    let both = plan_original("gpt-5.6-luna", "openai", scope, now, Some("default"))
+        .unwrap()
+        .remove(0);
+    assert_eq!(both.plan_burn_millis, Some(200));
+    assert_eq!(both.rates.noncached, Some(rate(1000).unwrap()));
+    assert_eq!(both.rates.output, Some(rate(6000).unwrap()));
+    assert_eq!(both.rates.read, Some(rate(100).unwrap()));
+
+    // A scheduled row is resolved at the dispatch instant, not read as a range.
+    let peak = chrono::DateTime::parse_from_rfc3339("2026-09-21T07:00:00Z")
+        .unwrap()
+        .timestamp_millis();
+    assert_eq!(
+        plan_original("glm-5.3", "zai", scope, peak, None)
+            .unwrap()
+            .remove(0)
+            .plan_burn_millis,
+        Some(3000)
+    );
+    assert_eq!(
+        plan_original("glm-5.3", "zai", scope, now, None)
+            .unwrap()
+            .remove(0)
+            .plan_burn_millis,
+        Some(1000)
+    );
+
+    // Nothing is stated for a metered row, another provider's row, an unknown
+    // slug, or a tier the catalogue does not quote.
+    for (model, provider, tier) in [
+        ("claude-opus-5", "anthropic", None),
+        ("claude-opus-5-plan", "anthropic", None),
+        ("no-such-model", "claude-plan", None),
+        ("gpt-5.6-luna", "openai", Some("priority")),
+    ] {
+        assert_eq!(
+            plan_original(model, provider, scope, now, tier).unwrap(),
+            vec![],
+            "{provider}/{model}"
+        );
+    }
+}

@@ -485,3 +485,54 @@ async fn closed_journal_reopens_and_quotes_without_changing_rows_or_positions() 
     runtime.close().await;
     Ok(())
 }
+
+/// Plan work must never reach the spend column, and a plan row the catalogue
+/// does not price must say so rather than report zero.
+#[test]
+fn plan_basis_separates_plan_consumption_from_money_spent() {
+    let attempt = attempt();
+    // In this dialect the patch's `input` is the uncached bucket; total derives.
+    let rows = vec![row(1, json!({"input":100,"read":20,"write":0,"output":40}))];
+    let mut priced = snapshot();
+    priced.basis = Basis::PlanEquivalent;
+    priced.plan_burn_millis = Some(2000);
+    let quote = quote_observations(&attempt, &rows, &[priced.clone()]).unwrap();
+    // 100 uncached at $3/M and 20 cache reads at $0.30/M; output has no rate, so
+    // the equivalent is known only in part.
+    assert_eq!(quote.known_subtotal, Decimal::default());
+    assert_eq!(quote.all_buckets_priced, None);
+    assert_eq!(quote.known_equivalent, decimal("0.000306"));
+    assert_eq!(quote.all_buckets_equivalent, None);
+    assert_eq!(quote.plan_burn_millis, Some(2000));
+    assert_eq!(quote.plan_burn_milli_tokens, Some(320_000));
+
+    let totals = DayTotals::from_quotes([&quote]).unwrap();
+    assert_eq!(totals.known_usd, Decimal::default());
+    assert_eq!(totals.unknown_estimates, 1);
+    assert_eq!(totals.equivalent_usd, decimal("0.000306"));
+    assert_eq!(totals.unknown_equivalents, 1);
+    assert_eq!(totals.plan_attempts, 1);
+    assert_eq!(totals.plan_burn_milli_tokens.known, 320_000);
+
+    // A burn-only row: the rate is recorded, and no money of either kind is.
+    let mut burn_only = priced;
+    burn_only.rates = Rates {
+        noncached: None,
+        read: None,
+        write: None,
+        output: None,
+    };
+    let quote = quote_observations(&attempt, &rows, &[burn_only]).unwrap();
+    assert_eq!(quote.known_subtotal, Decimal::default());
+    assert_eq!(quote.known_equivalent, Decimal::default());
+    assert_eq!(quote.all_buckets_equivalent, None);
+    assert_eq!(quote.plan_burn_milli_tokens, Some(320_000));
+
+    // The two bases cannot be confused for one another.
+    let mut billed_with_burn = snapshot();
+    billed_with_burn.plan_burn_millis = Some(1000);
+    assert!(quote_observations(&attempt, &rows, &[billed_with_burn]).is_err());
+    let mut plan_without_rate = snapshot();
+    plan_without_rate.basis = Basis::PlanEquivalent;
+    assert!(quote_observations(&attempt, &rows, &[plan_without_rate]).is_err());
+}
