@@ -609,6 +609,28 @@ pub(crate) async fn run_turn(
                                 .services
                                 .model_client()
                                 .new_session_for_provider(turn_context.provider.info());
+                            // The classifier is a second model request the
+                            // operator paid for, on a session of its own, so it
+                            // is collected like any other - under the turn it
+                            // assesses. Best effort: an assessment that cannot
+                            // be recorded still runs.
+                            let _accounting = match crate::accounting::attach_turn(
+                                &sess,
+                                turn_context.as_ref(),
+                                &assessment_client_session,
+                                crate::accounting::assessment_turn_label(&turn_context.sub_id),
+                            )
+                            .await
+                            {
+                                Ok(scopes) => Some(scopes),
+                                Err(error) => {
+                                    tracing::warn!(
+                                        %error,
+                                        "accounting: completion assessment proceeding unrecorded"
+                                    );
+                                    None
+                                }
+                            };
                             let assessment_started_at = Instant::now();
                             match assess_turn_completion(
                                 sess.as_ref(),

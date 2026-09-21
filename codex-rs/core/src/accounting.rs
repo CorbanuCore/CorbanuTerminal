@@ -119,13 +119,25 @@ pub(crate) fn compaction_turn_label(sub_id: &str) -> String {
     scoped_turn_label("compact:", sub_id)
 }
 
-/// A bounded turn label for the startup prewarm of `sub_id`.
+/// A turn label for one startup prewarm.
 ///
 /// Prewarm is inference the operator paid for - it primes the model's cache, and
-/// cache writes are charged - so it is recorded as its own turn rather than
-/// escaping collection or being folded into the first real turn's identity.
-pub(crate) fn prewarm_turn_label(sub_id: &str) -> String {
-    scoped_turn_label("prewarm:", sub_id)
+/// the provider charges for the prompt - so it is recorded as its own turn
+/// rather than escaping collection or being folded into the first real turn.
+/// Every prewarm gets its own identity: a session's startup submission id is a
+/// constant, so deriving the label from it would merge the primings of every
+/// reopen of a thread into one turn.
+pub(crate) fn prewarm_turn_label() -> String {
+    format!("prewarm:{}", Uuid::new_v4())
+}
+
+/// A bounded turn label for the completion assessment of `sub_id`.
+///
+/// The classifier is a second model request the operator paid for, issued on its
+/// own client session so it does not queue behind the turn's transport teardown.
+/// It belongs to the turn it assesses and is recorded under that turn's id.
+pub(crate) fn assessment_turn_label(sub_id: &str) -> String {
+    scoped_turn_label("assess:", sub_id)
 }
 
 /// A bounded `prefix` + `sub_id` turn identity.

@@ -78,11 +78,39 @@ suite passes with retries; with retries disabled the compaction suite is
 load-flaky at this tree and at the integration tip alike, with different tests
 failing on each run. Raw logs under `rtx-20260921/`.
 
+## A third class review found: the turn-completion classifier
+
+Review read the claim that startup prewarm was the last auxiliary inference and
+found it false. `session/turn.rs` builds a **fresh** client session for
+`assess_turn_completion` - deliberately, so the classifier does not queue behind
+the turn's transport teardown - and that session had no collector. The
+classifier is a real billable request, and it is reached in ordinary use: the
+built-in Kimi Code provider's stop is `AmbiguousForActionTurns`, so every
+text-stopped action turn on that provider ran a classifier call that was paid
+for and recorded nowhere.
+
+It now attaches through `accounting::attach_turn` under an `assess:<turn id>`
+identity - the classifier belongs to the turn it assesses - and is best effort
+in the same way.
+`accounting_chat_completion_assessment_collects` drives a real Kimi-shaped turn
+and asserts the `assess:` row; dropping the scopes instead of holding them fails
+it.
+
+**A flake I have not explained, stated rather than hidden.** That test failed in
+2 of roughly 8 full-lane runs and never in isolation. In the failing runs the
+classifier request is dispatched - the fixture sees it - and no attempt is
+recorded, with no attach failure reported. The likely mechanism is the limit
+this workstream has already recorded twice: best effort covers attach time, and
+under load the window in which the assessment's scopes are alive can close
+before its stream admits. It is a real, if rare, gap in the classifier's
+coverage, and it is the first thing the next increment should pin down.
+
 ## What this does not claim
 
-- Auxiliary inference other than startup prewarm: there is none. The only three
-  call sites that open their own client session are local compaction, remote
-  compaction and startup prewarm, and all three now attach.
+- Auxiliary inference other than startup prewarm and the completion classifier:
+  there is none that opens its own client session. Local compaction, remote
+  compaction, startup prewarm and the classifier are the four call sites, and
+  all four now attach.
 - The legacy `/responses/compact` endpoint is still uninstrumented; it is
   reachable only by disabling `remote_compaction_v2`, which is Stable and
   default-on, and it posts through `ApiCompactClient`, which has no collector
@@ -91,4 +119,5 @@ failing on each run. Raw logs under `rtx-20260921/`.
   unaffected: those turns record tokens.
 
 With this increment the "what does not collect" list holds no session class
-that ordinary use reaches.
+that ordinary use reaches, with the classifier flake above as the one open
+question about how reliably the newest of them is recorded.

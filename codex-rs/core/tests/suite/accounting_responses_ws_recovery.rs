@@ -461,6 +461,15 @@ async fn accounting_responses_ws_native_delete_rejects_late_usage() -> anyhow::R
     terminal(&test).await?;
     assert_eq!(turn_attempts(&db).await?, unrelated_records);
     assert_eq!(turn_observations(&db).await?, unrelated_usage);
+    // Deletion must take the prewarm rows too: they are attempts of the deleted
+    // thread like any other, so name them rather than filtering them away.
+    for attempt in attempts(&db).await? {
+        assert_eq!(
+            attempt.thread_id, unrelated.session_configured.thread_id,
+            "deleted thread left {} behind",
+            attempt.turn
+        );
+    }
     gate.no_pending().await;
     let home = unrelated.home.clone();
     let rollout = unrelated.codex.rollout_path().unwrap();

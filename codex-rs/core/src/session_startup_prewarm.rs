@@ -321,7 +321,7 @@ async fn schedule_startup_prewarm_inner(
         &session,
         startup_turn_context.as_ref(),
         &client_session,
-        crate::accounting::prewarm_turn_label(&startup_turn_context.sub_id),
+        crate::accounting::prewarm_turn_label(),
     )
     .await
     {

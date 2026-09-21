@@ -12,7 +12,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-/// Captured using already-resolved setup, including unaccounted prewarm.
+/// Captured using already-resolved setup, including prewarm, which is accounted like any other request.
 /// Coupled to connection replacement; never contains credentials or fingerprints.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Provenance {
