@@ -235,7 +235,8 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
     };
     for (auth, expected) in [
         (Some(AuthMode::ApiKey), true),
-        (Some(AuthMode::ChatGPT), false),
+        (Some(AuthMode::Chatgpt), false),
+        (Some(AuthMode::ChatgptAuthTokens), false),
         (None, false),
     ] {
         let bound = super::turn_mode(&mode, "openai", &provider, auth, "https://api.openai.com/v1");
