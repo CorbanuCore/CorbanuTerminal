@@ -255,7 +255,9 @@ pub async fn turn_attempts(
 
 /// The fixture's startup prewarm contribution to a day: 999 in, 999 out, 1998
 /// total, with no cache or reasoning detail, priced at the fixture's own rates.
-pub fn with_prewarm(mut totals: codex_state::accounting::DayTotals) -> codex_state::accounting::DayTotals {
+pub fn with_prewarm(
+    mut totals: codex_state::accounting::DayTotals,
+) -> codex_state::accounting::DayTotals {
     totals.measured[0].known += 999;
     totals.measured[4].known += 999;
     totals.measured[6].known += 1998;
@@ -289,10 +291,11 @@ pub async fn turn_observations(
         .map(|attempt| attempt.attempt_id.to_string())
         .collect();
     let mut conn = connection(db).await?;
-    let rows: Vec<(String, String)> =
-        sqlx::query_as("SELECT attempt_id, payload FROM draft_accounting_observations ORDER BY rowid")
-            .fetch_all(&mut conn)
-            .await?;
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT attempt_id, payload FROM draft_accounting_observations ORDER BY rowid",
+    )
+    .fetch_all(&mut conn)
+    .await?;
     rows.into_iter()
         .filter(|(attempt_id, _)| !prewarm.contains(attempt_id))
         .map(|(_, payload)| Ok(serde_json::from_str(&payload)?))

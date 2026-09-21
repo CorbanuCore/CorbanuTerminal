@@ -604,7 +604,10 @@ async fn accounting_agent_identity_session_collects() -> anyhow::Result<()> {
     )
     .await?;
     let auth = codex_login::CodexAuth::AgentIdentity(identity);
-    assert_eq!(auth.auth_mode(), codex_protocol::auth::AuthMode::AgentIdentity);
+    assert_eq!(
+        auth.auth_mode(),
+        codex_protocol::auth::AuthMode::AgentIdentity
+    );
 
     let server = MockServer::start().await;
     let endpoint = format!("{}/v1", server.uri());

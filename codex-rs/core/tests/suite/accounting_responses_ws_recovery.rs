@@ -251,7 +251,9 @@ async fn accounting_responses_ws_native_two_reopens_and_original_prices() -> any
             assert_eq!(
                 before.known_usd,
                 with_prewarms(
-                    if priced { "0.00161" } else { "0" }.to_string().try_into()?,
+                    if priced { "0.00161" } else { "0" }
+                        .to_string()
+                        .try_into()?,
                     usize::from(priced)
                 )?
             );
@@ -274,8 +276,7 @@ async fn accounting_responses_ws_native_two_reopens_and_original_prices() -> any
             // attempt and its own price, so the day legitimately grows. What
             // must not change is the turn's own evidence and the prices bound
             // to it: an original binding cannot be replaced by a later catalog.
-            let current: Vec<Snapshot> =
-                payloads(&db, "draft_accounting_price_snapshots").await?;
+            let current: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
             for price in &prices {
                 assert!(current.contains(price), "original price replaced on reopen");
             }
