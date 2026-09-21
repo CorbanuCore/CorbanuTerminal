@@ -378,6 +378,53 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
     }
 }
 
+/// The client emits `providerOptions` for the Vercel gateway and `plugins` for
+/// OpenRouter web search. Requiring them to be absent excluded those sessions
+/// from collection on every turn, which is not "available on all providers".
+#[test]
+fn accounting_chat_collects_the_fields_the_client_itself_emits() {
+    use codex_model_provider_info::{ModelProviderInfo, WireApi};
+    let plain = {
+        let mut provider = ModelProviderInfo::create_openai_provider(None);
+        provider.wire_api = WireApi::Chat;
+        provider
+    };
+    let mut with_options = chat_body();
+    with_options.provider_options = Some(serde_json::json!({"gateway": {"only": ["zai"]}}));
+    let mut with_plugins = chat_body();
+    with_plugins.plugins = Some(vec![serde_json::json!({"id": "web"})]);
+
+    // An ordinary provider still refuses both: nothing explains the fields.
+    assert!(!chat::eligible(&plain, None, &with_options));
+    assert!(!chat::eligible(&plain, None, &with_plugins));
+
+    let gateway = {
+        let mut provider = ModelProviderInfo::create_openai_provider(Some(
+            "https://ai-gateway.vercel.sh/v1".to_string(),
+        ));
+        provider.wire_api = WireApi::Chat;
+        provider
+    };
+    assert!(gateway.is_vercel_gateway(), "fixture must be the gateway");
+    assert!(
+        chat::eligible(&gateway, None, &with_options),
+        "the gateway's own vendor pin must not exclude the session"
+    );
+
+    let openrouter = {
+        let mut provider = ModelProviderInfo::create_openai_provider(Some(
+            "https://openrouter.ai/api/v1".to_string(),
+        ));
+        provider.wire_api = WireApi::Chat;
+        provider
+    };
+    assert!(openrouter.is_openrouter(), "fixture must be openrouter");
+    assert!(
+        chat::eligible(&openrouter, None, &with_plugins),
+        "an OpenRouter web-search session must not be excluded"
+    );
+}
+
 fn chat_body() -> codex_api::ChatCompletionsRequest {
     codex_api::ChatCompletionsRequest {
         model: "fixture".into(),
