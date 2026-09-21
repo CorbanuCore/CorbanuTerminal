@@ -58,7 +58,15 @@ impl Provenance {
             deferred.exclude()?;
             return Ok(false);
         }
-        if self.endpoint.as_deref() != Some(expected.as_str())
+        // Compare canonically: the client emits configured query parameters in
+        // `HashMap` order while the pin sorts them, so byte equality would reject
+        // any provider that configures more than one.
+        if self
+            .endpoint
+            .as_deref()
+            .map(super::canonical_route)
+            .as_deref()
+            != Some(super::canonical_route(&expected).as_str())
             || cached.is_some_and(|old| old != self)
         {
             deferred.reject();
@@ -137,7 +145,13 @@ impl ResponsesWebsocketAdmission for Admission {
             let result = async {
                 anyhow::ensure!(
                     self.established.eligible
-                        && self.established.endpoint.as_deref() == Some(self.expected.as_str()),
+                        && self
+                            .established
+                            .endpoint
+                            .as_deref()
+                            .map(super::canonical_route)
+                            .as_deref()
+                            == Some(super::canonical_route(&self.expected).as_str()),
                     FAILURE
                 );
                 self.sampling
