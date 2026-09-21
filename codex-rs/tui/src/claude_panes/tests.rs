@@ -4215,3 +4215,52 @@ async fn passthrough_bridge_reports_inference_and_not_token_counting() {
         "token counting must not be reported as a model request"
     );
 }
+
+/// Every bridge lane must report a route the server will accept, and the two
+/// sides of that agreement live in different crates. When they drift the
+/// failure is silence - the server warns and records nothing - so pin it here
+/// rather than discover it by finding the ledger empty.
+#[test]
+fn every_bridge_profile_reports_its_provider_s_own_route() {
+    use super::bridge::AMBIENT_CHAT_BASE_URL;
+    use super::provider::ClaudeProviderTransport;
+
+    let catalogue = codex_model_provider_info::built_in_model_providers(None);
+    for kind in ClaudeProviderProfileKind::restoration_options() {
+        let profile = kind.profile();
+        // What the bridge will report, built the way the bridge builds it.
+        let reported = match profile.transport {
+            ClaudeProviderTransport::AmbientChatBridge => AMBIENT_CHAT_BASE_URL.to_string(),
+            ClaudeProviderTransport::AnthropicPassthroughBridge => format!(
+                "{}/v1",
+                profile
+                    .base_url
+                    .expect("a passthrough profile names its upstream")
+                    .trim_end_matches('/')
+            ),
+            // The Claude Plan profile has no base URL of its own; its bridge
+            // posts to Anthropic.
+            ClaudeProviderTransport::DirectAnthropic if kind == ClaudeProviderProfileKind::ClaudePlan => {
+                format!(
+                    "{}/v1",
+                    "https://api.anthropic.com".trim_end_matches('/')
+                )
+            }
+            ClaudeProviderTransport::DirectAnthropic => continue,
+        };
+        let provider_id = profile
+            .accounting_provider_id
+            .unwrap_or_else(|| panic!("{kind:?} posts through a bridge and must name its account"));
+        let provider = catalogue
+            .get(provider_id)
+            .unwrap_or_else(|| panic!("{kind:?} names `{provider_id}`, which this build does not ship"));
+        let api = provider
+            .to_api_provider(None)
+            .unwrap_or_else(|_| panic!("{provider_id} resolves to an API provider"));
+        assert_eq!(
+            api.base_url.trim_end_matches('/'),
+            reported,
+            "{kind:?} would report a route `{provider_id}` does not serve"
+        );
+    }
+}
