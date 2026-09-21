@@ -36,7 +36,12 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
                     2 => Some(&subscription),
                     _ => None,
                 };
-                for exclusion in [None, Some("aws"), Some("chat_completions_provider")] {
+                for exclusion in [
+                    None,
+                    Some("aws"),
+                    Some("chat_completions_provider"),
+                    Some("query_params"),
+                ] {
                     let mut provider = ModelProviderInfo::create_openai_provider(None);
                     provider.wire_api = wire;
                     if auth_kind == 3 {
@@ -55,6 +60,16 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
                     }
                     if exclusion == Some("chat_completions_provider") {
                         provider.chat_completions_provider = Some(serde_json::json!({}));
+                    }
+                    // The resolved URL would carry the query string, so it can never
+                    // equal the pinned endpoint: the shape must be refused at all
+                    // three gates rather than admitted and then failed closed.
+                    if exclusion == Some("query_params") {
+                        provider.query_params =
+                            Some(std::collections::HashMap::from([(
+                                "api-version".to_string(),
+                                "2025-04-01-preview".to_string(),
+                            )]));
                     }
                     let selected = developer_accounting_mode(id, &provider);
                     let endpoint = provider
@@ -106,7 +121,7 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
             }
         }
     }
-    assert_eq!(cells, 270);
+    assert_eq!(cells, 360);
     assert!(serde_json::from_value::<WireApi>(serde_json::json!("unknown")).is_err());
     Ok(())
 }
