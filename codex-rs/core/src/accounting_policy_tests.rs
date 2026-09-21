@@ -89,9 +89,11 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
                         auth.map(CodexAuth::auth_mode),
                         &endpoint,
                     );
-                    // Only the query-parameter shape stays uncollected: its resolved
-                    // URL carries a query string the pinned endpoint does not.
-                    let admitted = exclusion != Some("query_params");
+                    // Every provider shape now collects: signing, configured query
+                    // parameters and a configured routing preference are all
+                    // attributable. Only a request-level routing key the
+                    // configuration did not ask for is refused, per request.
+                    let admitted = true;
                     let reason = route_refusal(&provider);
                     assert_eq!(reason.is_none(), admitted, "{id}/{wire}/{exclusion:?}");
                     assert_eq!(!matches!(selected, AccountingMode::Disabled), admitted);
@@ -131,7 +133,15 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
                             WireApi::Chat => "chat/completions",
                             WireApi::Anthropic => "messages",
                         };
-                        assert_eq!(sample.endpoint, format!("{endpoint}/{path}"));
+                        assert_eq!(
+                            sample.endpoint,
+                            super::pinned_route(
+                                &endpoint,
+                                super::canonical_query(&provider).as_deref(),
+                                path
+                            ),
+                            "the stored route must be the one the client requests"
+                        );
                         assert!(
                             sample
                                 .admit("fixture", "http://wrong.invalid")

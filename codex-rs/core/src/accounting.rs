@@ -72,21 +72,69 @@ pub(crate) fn developer_accounting_mode(
 pub(super) fn route_refusal(
     provider: &codex_model_provider_info::ModelProviderInfo,
 ) -> Option<&'static str> {
-    // AWS signing changes how the request is authenticated, not where it goes or
-    // which dialect it speaks, and the endpoint pin still proves the destination.
-    // It cannot supply monetary rates, which `turn_mode` enforces separately.
-    if provider.query_params.is_some() {
-        // The resolved request URL carries the query string, so it can never equal
-        // the pinned `{base}/path`. Refusing the shape leaves such a provider
-        // uncollected; admitting it made every turn fail closed instead.
-        Some("query parameters are not part of the pinned endpoint")
-    } else {
-        None
-    }
+    // Nothing is refused on provider shape any more.
+    //
+    // AWS signing changes how a request is authenticated, not where it goes or
+    // which dialect it speaks. Configured query parameters are part of the route
+    // and are pinned with it. A configured routing preference names the provider
+    // that serves and bills the request. What remains unattributable is a
+    // REQUEST-level routing key the configuration did not ask for, and that is
+    // caught per request rather than per provider.
+    let _ = provider;
+    None
 }
 
 /// Bind developer collection to this turn, including provider switches and the
 /// authentication-dependent default endpoint. Never read credentials here.
+/// Canonical form of a request URL for route comparison.
+///
+/// `ApiProvider::url_for_path` appends configured query parameters by iterating a
+/// `HashMap`, so their order is not stable and the string cannot be reconstructed
+/// and compared byte for byte. Compare the path exactly and the parameters as a
+/// sorted set instead, which is order-independent and still rejects any parameter
+/// the configuration did not ask for.
+pub(crate) fn canonical_route(url: &str) -> String {
+    let (path, query) = match url.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (url, None),
+    };
+    let mut parameters: Vec<&str> = query
+        .map(|query| query.split('&').filter(|item| !item.is_empty()).collect())
+        .unwrap_or_default();
+    parameters.sort_unstable();
+    if parameters.is_empty() {
+        path.to_string()
+    } else {
+        format!("{path}?{}", parameters.join("&"))
+    }
+}
+
+/// Canonical `k=v&k=v` for a provider's configured query parameters.
+pub(crate) fn canonical_query(
+    provider: &codex_model_provider_info::ModelProviderInfo,
+) -> Option<String> {
+    let parameters = provider.query_params.as_ref()?;
+    if parameters.is_empty() {
+        return None;
+    }
+    let mut items: Vec<String> = parameters
+        .iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect();
+    items.sort();
+    Some(items.join("&"))
+}
+
+/// The route the client will actually request for `path`, including configured
+/// query parameters. Compared through `canonical_route`.
+pub(crate) fn pinned_route(approved_endpoint: &str, query: Option<&str>, path: &str) -> String {
+    let route = format!("{}/{path}", approved_endpoint.trim_end_matches('/'));
+    match query {
+        Some(query) if !query.is_empty() => format!("{route}?{query}"),
+        _ => route,
+    }
+}
+
 pub(crate) fn turn_mode(
     mode: &AccountingMode,
     provider_id: &str,
@@ -139,6 +187,7 @@ pub(crate) fn turn_mode(
         provider_id: provider_id.into(),
         wire_api: provider.wire_api,
         approved_endpoint: resolved_endpoint.into(),
+        approved_query: canonical_query(provider),
         api_key_pricing,
     }
 }
@@ -281,12 +330,14 @@ impl Sampling {
         mode: &AccountingMode,
         request: Uuid,
     ) -> Result<Arc<Self>, CodexErr> {
+        let mut approved_query = None;
         let (scope, approved_endpoint, provider, dialect, path) = match mode {
             AccountingMode::Provider {
                 scope,
                 provider_id,
                 wire_api,
                 approved_endpoint,
+                approved_query: query,
                 ..
             } => {
                 use codex_model_provider_info::WireApi;
@@ -295,6 +346,7 @@ impl Sampling {
                     WireApi::Responses => (Dialect::Inclusive, "responses"),
                     WireApi::Chat => (Dialect::Inclusive, "chat/completions"),
                 };
+                approved_query = query.clone();
                 (
                     scope,
                     approved_endpoint,
@@ -362,7 +414,7 @@ impl Sampling {
             turn,
             request,
             scope: *scope,
-            endpoint: format!("{}/{path}", approved_endpoint.trim_end_matches('/')),
+            endpoint: pinned_route(approved_endpoint, approved_query.as_deref(), path),
             provider: provider.into(),
             dialect,
             pricing: match mode {
@@ -413,7 +465,10 @@ impl Sampling {
         tier: Option<&str>,
     ) -> anyhow::Result<Attempt> {
         self.check()?;
-        anyhow::ensure!(endpoint == self.endpoint, "accounting route mismatch");
+        anyhow::ensure!(
+            canonical_route(endpoint) == canonical_route(&self.endpoint),
+            "accounting route mismatch"
+        );
         let _write = WRITES.acquire().await?;
         self.check()?;
         let mut completion = Completion {

@@ -154,7 +154,12 @@ impl DeferredResponsesSampling {
             self.reject();
             return Err(CodexErr::Fatal(FAILURE.into()));
         };
-        if endpoint != format!("{}/responses", approved_endpoint.trim_end_matches('/')) {
+        let pinned = super::pinned_route(
+            approved_endpoint,
+            super::canonical_query(provider).as_deref(),
+            "responses",
+        );
+        if super::canonical_route(endpoint) != super::canonical_route(&pinned) {
             self.reject();
             return Err(CodexErr::Fatal(FAILURE.into()));
         }
