@@ -8,7 +8,7 @@ the requirement. This closes them.
 
 | shape | old reason | what is actually true |
 | --- | --- | --- |
-| `chat_completions_provider` | "overrides the serving provider" | It is an OpenRouter-compatible **configured** routing preference that the client puts in the body as `provider`. Configuration names who serves and bills the turn, so the turn is attributable to the selected provider. |
+| `chat_completions_provider` | "overrides the serving provider" | It is an OpenRouter-compatible **configured** routing preference that the client puts in the body as `provider`. It does not determine which upstream vendor serves the turn - with fallbacks permitted, that is OpenRouter's choice - but the selected gateway is the account that is billed, and that is what the provider id records. |
 | AWS signing | "does not establish the supported endpoint/dialect" | Signing changes how a request is authenticated, not where it goes or which dialect it speaks. The endpoint pin still proves the destination. It cannot supply monetary rates, which is now enforced in the pricing predicate rather than by refusing collection. |
 | `query_params` | "not part of the pinned endpoint" | They are part of the route. The client appends them to every URL, so the pin has to carry them. Refusing was a workaround for a pin that was built as `{base}/{path}` while the client requested `{base}/{path}?{query}`. |
 
@@ -28,6 +28,14 @@ foreign `{"order": ["someone-else"]}` never does.
 pricing predicate, so an AWS route records tokens with money unavailable rather
 than borrowing API-key rates.
 
+**WebSocket routes.** Admitting query parameters also required the Responses
+WebSocket lane to carry them: `Provenance::capture` pins
+`websocket_url_for_path("responses")`, which includes the query, while the
+accounting pin built `{base}/responses` and hard-failed on any query. Left
+unfixed, every such turn would have been rejected outright rather than merely
+uncollected. `websocket::endpoint` now takes the canonical query, and a query the
+configuration did not declare is still refused.
+
 **Query parameters.** The route is pinned as the client builds it.
 `canonical_query` sorts the provider's parameters, because they live in a
 `HashMap` and `url_for_path` emits them in iteration order, so the string cannot
@@ -37,14 +45,29 @@ rejects any parameter the configuration did not ask for. `AccountingMode::Provid
 carries the canonical query so `Sampling`'s stored endpoint is the route that was
 actually requested.
 
-## What is still not collected, and it is one thing
+## Configuration-emitted gateway pins collect as well
 
-A **request-level** routing key the configuration did not ask for - `provider`
-with a foreign value, `providerOptions`, or `plugins`. That body can send the work
-to a different upstream vendor than the one selected, so attributing it to the
-selected provider would be a lie. Such a request is served unrecorded, and the
-transport logs the key that caused it. This is a per-request condition, not a
-provider class: the same provider collects normally on every other turn.
+An earlier version of this record claimed the only remaining refusal was a
+request-level key, and that was false: the client itself emits `providerOptions`
+from configuration whenever the selected provider is the Vercel gateway and the
+model carries a vendor pin. Under the old rule that silently excluded whole
+provider and model classes on every turn, not occasionally.
+
+Those now collect on the same principle as the OpenRouter preference: the
+transport is given the configured value for both keys and admits a body that
+carries exactly it. What it records is the gateway that bills the account. The
+upstream vendor inside that gateway's pool is not pinned by configuration and is
+not claimed to be.
+
+## What is still not collected
+
+A **request-level** routing key that configuration did not ask for: `provider` or
+`providerOptions` with a value other than the configured one, or `plugins`. That
+body can send the work somewhere the selected configuration did not authorise, so
+attributing it to the selected provider would be a lie. Such a request is served
+unrecorded and the transport logs the key that caused it. This is a per-request
+condition, not a provider class: the same provider collects normally on every
+other turn.
 
 ## Verification
 
