@@ -226,3 +226,46 @@ Verified on the RTX workstation: core 137/137, core with the developer feature
 
 Still true: collection remains impossible in any build a user could receive, and
 the plan-burn and API-equivalent numbers you asked for are the next round.
+
+## Update, 21 September, fourth build: money, including on a plan
+
+Your shortcut now opens integration commit `ea7baa25c`. Collection was finished
+in the earlier builds; **money was not**. Two things were missing, and both are
+in now.
+
+**Money existed on two providers.** Only OpenAI and Anthropic, at their own
+default endpoints, could carry prices. OpenRouter, Vercel, DeepSeek, Ambient,
+Baseten, Kimi and the rest recorded tokens with no cost at all, even with a
+plain API key, even though the catalogue states their exact per-token prices.
+Now any built-in provider carries its own rates when the turn really goes to
+that provider's own route with a credential this client can attribute.
+
+**Subscription turns recorded no economics at all.** A ChatGPT-plan or
+Claude-plan session recorded token counts and nothing else. Now you get the two
+numbers you asked for:
+
+- **The plan rate that applied**, where 1000 means 1.0x, resolved at the moment
+  the request went out - so a model with a peak window is recorded at the rate
+  that was actually in force, and a promotion stops on its stated end date.
+- **What the same tokens would have cost on the API**, where the catalogue
+  states an API price for that model.
+
+What you will see in `/usage` for plan work: "Subscription capacity: N of M
+attempts, not billed per token", the plan consumption, and "Same tokens at API
+rates: $X". That API number is never added to money spent, because none of it
+was spent - it is there for comparison, which is what you asked for.
+
+Things it deliberately will not tell you:
+
+- For Claude-plan and Z.ai models the catalogue states **no** API price, so those
+  sessions show the plan rate and explicitly no money. I did not invent a
+  conversion.
+- Point a provider at a proxy or relay and you get tokens and no economics at
+  all. The rates the catalogue quotes are for the vendor's own route, and this
+  client is not told what a relay charges.
+- Plan consumption is in the catalogue's relative units - what the model charges
+  against your pool relative to a 1.0x model. How big your pool is, nothing
+  tells this client.
+
+Verified on the RTX workstation: core 139/139, core with the developer feature
+144/144, state 168/168, usage 92/92.
