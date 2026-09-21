@@ -70,7 +70,7 @@ reopens unchanged.
 ## Verification
 
 Clean-host lanes at this tree, RTX workstation, formatted and fmt-clean:
-`codex-core` accounting **140/140**, with `developer-accounting` **145/145**,
+`codex-core` accounting **141/141**, with `developer-accounting` **146/146**,
 `codex-state` accounting **168/168**, `codex-tui` usage **92/92**, `codex-tui`
 tokens 66 of 67 - the one failure is the stale snapshot that fails identically
 at the integration tip. The `websocket` suite passes 69/69 and the `compact`
