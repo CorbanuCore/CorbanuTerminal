@@ -64,6 +64,7 @@ pub(crate) fn developer_accounting_mode(
         provider_id: provider_id.into(),
         wire_api: provider.wire_api,
         approved_endpoint,
+        approved_query: canonical_query(provider),
         api_key_pricing: false,
     }
 }

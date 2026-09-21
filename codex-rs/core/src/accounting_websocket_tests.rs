@@ -27,6 +27,7 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
         provider_id: "openai".into(),
         wire_api: codex_model_provider_info::WireApi::Responses,
         approved_endpoint: api.base_url.clone(),
+        approved_query: None,
         api_key_pricing: false,
     };
     let fixture = Fixture::new(mode).await?;

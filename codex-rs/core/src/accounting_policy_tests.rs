@@ -291,7 +291,8 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
             provider_id: id.into(),
             wire_api: provider.wire_api,
             approved_endpoint: endpoint.into(),
-            api_key_pricing: false,
+            approved_query: None,
+        api_key_pricing: false,
         };
         let bound = super::turn_mode(
             &mode,
@@ -301,7 +302,8 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
             endpoint,
         );
         let crate::config::AccountingMode::Provider {
-            api_key_pricing, ..
+            approved_query: None,
+        api_key_pricing, ..
         } = bound
         else {
             panic!("{id} provider mode must survive rebinding");
@@ -319,6 +321,7 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
         provider_id: "openai".into(),
         wire_api: WireApi::Responses,
         approved_endpoint: "https://api.openai.com/v1".into(),
+        approved_query: None,
         api_key_pricing: false,
     };
     for (auth, expected) in [
@@ -329,7 +332,8 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
     ] {
         let bound = super::turn_mode(&mode, "openai", &provider, auth, "https://api.openai.com/v1");
         let crate::config::AccountingMode::Provider {
-            api_key_pricing, ..
+            approved_query: None,
+        api_key_pricing, ..
         } = bound
         else {
             panic!("provider mode must survive rebinding for {auth:?}");

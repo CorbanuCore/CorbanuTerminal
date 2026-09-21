@@ -19,6 +19,7 @@ async fn accounting_chat_custom_provider_collects_with_real_identity() -> anyhow
         provider_id: "custom-plan".into(),
         wire_api: codex_model_provider_info::WireApi::Chat,
         approved_endpoint: endpoint.clone(),
+        approved_query: None,
         api_key_pricing: false,
     };
     let test = builder(endpoint, mode)
