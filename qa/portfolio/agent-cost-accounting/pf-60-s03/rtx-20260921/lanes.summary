@@ -1,11 +1,11 @@
 === head-core
-head-core exit=0 ::      Summary [  24.308s] 137 tests run: 137 passed, 3525 skipped
+head-core exit=0 ::      Summary [  24.423s] 139 tests run: 139 passed, 3525 skipped
 === head-core-feature
-head-core-feature exit=0 ::      Summary [  24.391s] 142 tests run: 142 passed, 3525 skipped
+head-core-feature exit=0 ::      Summary [  24.439s] 144 tests run: 144 passed, 3525 skipped
 === head-state
-head-state exit=0 ::      Summary [   9.941s] 166 tests run: 166 passed, 187 skipped
+head-state exit=0 ::      Summary [  10.148s] 168 tests run: 168 passed, 187 skipped
 === head-tui-usage
-head-tui-usage exit=0 ::      Summary [   0.156s] 92 tests run: 92 passed, 4079 skipped
+head-tui-usage exit=0 ::      Summary [   0.159s] 92 tests run: 92 passed, 4080 skipped
 === head-tui-tokens
-head-tui-tokens exit=100 ::      Summary [   0.313s] 66 tests run: 65 passed, 1 failed, 4105 skipped
+head-tui-tokens exit=100 ::      Summary [   0.332s] 67 tests run: 66 passed, 1 failed, 4105 skipped
 LANES DONE

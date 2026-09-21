@@ -43,9 +43,19 @@ impl Metric {
 pub struct DayTotals {
     // Input, noncached, read, write, output, reasoning, total: never price subsets twice.
     pub measured: [Metric; 7],
+    /// Money actually charged. Plan work contributes nothing here, because a plan
+    /// charges capacity rather than tokens.
     pub known_usd: Decimal,
     pub unknown_estimates: i64,
     pub attempts: i64,
+    /// What the plan work of this day would have cost at the catalogue's API
+    /// rates, and how many plan attempts could not be stated that way.
+    pub equivalent_usd: Decimal,
+    pub unknown_equivalents: i64,
+    /// Plan consumption: total tokens scaled by the rate that applied, 1000
+    /// meaning 1.0x. `unknown` counts plan attempts with no stateable figure.
+    pub plan_burn_milli_tokens: Metric,
+    pub plan_attempts: i64,
 }
 
 impl DayTotals {
@@ -82,6 +92,20 @@ impl DayTotals {
             .unknown_estimates
             .checked_add(i64::from(quote.all_buckets_priced.is_none()))
             .context("estimate count overflow")?;
+        let plan = quote.plan_burn_millis.is_some();
+        if plan {
+            self.equivalent_usd = self.equivalent_usd.add(quote.known_equivalent)?;
+            self.unknown_equivalents = self
+                .unknown_equivalents
+                .checked_add(i64::from(quote.all_buckets_equivalent.is_none()))
+                .context("equivalent count overflow")?;
+            self.plan_burn_milli_tokens
+                .add(quote.plan_burn_milli_tokens)?;
+            self.plan_attempts = self
+                .plan_attempts
+                .checked_add(1)
+                .context("plan attempt count overflow")?;
+        }
         self.attempts = self
             .attempts
             .checked_add(1)

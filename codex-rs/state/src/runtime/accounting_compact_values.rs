@@ -23,6 +23,17 @@ struct StoredValues {
     known_usd: Decimal,
     unknown_estimates: i64,
     attempts: i64,
+    // Version 1 days predate plan accounting and carry no plan work by construction.
+    #[serde(default, deserialize_with = "deserialize_amount")]
+    equivalent_usd: Decimal,
+    #[serde(default)]
+    unknown_equivalents: i64,
+    #[serde(default)]
+    plan_burn_known: i64,
+    #[serde(default)]
+    plan_burn_unknown: i64,
+    #[serde(default)]
+    plan_attempts: i64,
 }
 
 fn deserialize_amount<'de, D: serde::Deserializer<'de>>(
@@ -67,7 +78,10 @@ impl CompactValues {
             "expected compact object"
         );
         let stored: StoredValues = serde_json::from_str(text)?;
-        ensure!(stored.version == 1, "unsupported compact version");
+        ensure!(
+            stored.version == 1 || stored.version == 2,
+            "unsupported compact version"
+        );
         Self::from_day_totals(&DayTotals {
             measured: std::array::from_fn(|index| Metric {
                 known: stored.known[index],
@@ -76,18 +90,30 @@ impl CompactValues {
             known_usd: stored.known_usd,
             unknown_estimates: stored.unknown_estimates,
             attempts: stored.attempts,
+            equivalent_usd: stored.equivalent_usd,
+            unknown_equivalents: stored.unknown_equivalents,
+            plan_burn_milli_tokens: Metric {
+                known: stored.plan_burn_known,
+                unknown: stored.plan_burn_unknown,
+            },
+            plan_attempts: stored.plan_attempts,
         })
     }
 
     pub(super) fn encode(&self) -> anyhow::Result<String> {
         self.validate()?;
         serde_json::to_string(&StoredValues {
-            version: 1,
+            version: 2,
             known: std::array::from_fn(|index| self.totals.measured[index].known),
             unknown: std::array::from_fn(|index| self.totals.measured[index].unknown),
             known_usd: self.totals.known_usd,
             unknown_estimates: self.totals.unknown_estimates,
             attempts: self.totals.attempts,
+            equivalent_usd: self.totals.equivalent_usd,
+            unknown_equivalents: self.totals.unknown_equivalents,
+            plan_burn_known: self.totals.plan_burn_milli_tokens.known,
+            plan_burn_unknown: self.totals.plan_burn_milli_tokens.unknown,
+            plan_attempts: self.totals.plan_attempts,
         })
         .context("encode compact values")
     }
@@ -120,6 +146,25 @@ impl CompactValues {
                 .context("unknown overflow")?;
         }
         totals.known_usd = totals.known_usd.add(other.totals.known_usd)?;
+        totals.equivalent_usd = totals.equivalent_usd.add(other.totals.equivalent_usd)?;
+        totals.unknown_equivalents = totals
+            .unknown_equivalents
+            .checked_add(other.totals.unknown_equivalents)
+            .context("unknown equivalent overflow")?;
+        totals.plan_burn_milli_tokens.known = totals
+            .plan_burn_milli_tokens
+            .known
+            .checked_add(other.totals.plan_burn_milli_tokens.known)
+            .context("plan burn overflow")?;
+        totals.plan_burn_milli_tokens.unknown = totals
+            .plan_burn_milli_tokens
+            .unknown
+            .checked_add(other.totals.plan_burn_milli_tokens.unknown)
+            .context("plan burn unknown overflow")?;
+        totals.plan_attempts = totals
+            .plan_attempts
+            .checked_add(other.totals.plan_attempts)
+            .context("plan attempt overflow")?;
         totals.unknown_estimates = totals
             .unknown_estimates
             .checked_add(other.totals.unknown_estimates)
@@ -149,15 +194,38 @@ impl CompactValues {
                 "known count without known constituents"
             );
         }
-        let amount = totals.known_usd;
-        ensure!(amount.scale <= 24, "stored amount scale bound");
+        for amount in [totals.known_usd, totals.equivalent_usd] {
+            ensure!(amount.scale <= 24, "stored amount scale bound");
+            ensure!(
+                Decimal::canonical(amount.coefficient, amount.scale) == amount,
+                "noncanonical stored amount"
+            );
+            ensure!(
+                totals.attempts > 0 || amount.coefficient == 0,
+                "amount without constituents"
+            );
+        }
+        // Plan work is a subset of the day's attempts, and every plan figure is
+        // bounded by it: a plan number larger than the plan work it came from
+        // would be a reporting error rather than a big bill.
         ensure!(
-            Decimal::canonical(amount.coefficient, amount.scale) == amount,
-            "noncanonical stored amount"
+            (0..=totals.attempts).contains(&totals.plan_attempts),
+            "invalid plan attempt count"
         );
         ensure!(
-            totals.attempts > 0 || amount.coefficient == 0,
-            "amount without constituents"
+            (0..=totals.plan_attempts).contains(&totals.unknown_equivalents)
+                && (0..=totals.plan_attempts).contains(&totals.plan_burn_milli_tokens.unknown),
+            "invalid plan unknown count"
+        );
+        ensure!(
+            totals.plan_burn_milli_tokens.known >= 0,
+            "negative plan burn"
+        );
+        ensure!(
+            totals.plan_attempts > 0
+                || (totals.equivalent_usd.coefficient == 0
+                    && totals.plan_burn_milli_tokens.known == 0),
+            "plan figures without plan attempts"
         );
         Ok(())
     }

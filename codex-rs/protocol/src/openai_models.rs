@@ -318,6 +318,52 @@ impl WeekdaySet {
         .filter_map(|(enabled, name)| enabled.then_some(name))
         .collect()
     }
+
+    fn contains(self, weekday: chrono::Weekday) -> bool {
+        match weekday {
+            chrono::Weekday::Mon => self.monday,
+            chrono::Weekday::Tue => self.tuesday,
+            chrono::Weekday::Wed => self.wednesday,
+            chrono::Weekday::Thu => self.thursday,
+            chrono::Weekday::Fri => self.friday,
+            chrono::Weekday::Sat => self.saturday,
+            chrono::Weekday::Sun => self.sunday,
+        }
+    }
+}
+
+/// Whether `at` falls inside a catalogue peak window.
+///
+/// The window is `[start, end)` in UTC hours and may wrap past midnight. When it
+/// wraps, the hours after midnight belong to the window that opened the previous
+/// day, so a weekday restriction is tested against that opening day rather than
+/// against the calendar day of the instant itself.
+fn peak_window_contains(
+    at: chrono::DateTime<chrono::Utc>,
+    start_hour: u8,
+    end_hour: u8,
+    weekdays: Option<WeekdaySet>,
+) -> bool {
+    use chrono::Datelike;
+    use chrono::Timelike;
+    if start_hour > 23 || end_hour > 24 || start_hour == end_hour {
+        return false;
+    }
+    let hour = u8::try_from(at.hour()).unwrap_or(u8::MAX);
+    let (inside, opened_on) = if start_hour < end_hour {
+        (hour >= start_hour && hour < end_hour, at.date_naive())
+    } else {
+        (
+            hour >= start_hour,
+            if hour >= start_hour {
+                at.date_naive()
+            } else {
+                at.date_naive().pred_opt().unwrap_or(at.date_naive())
+            },
+        )
+    };
+    let inside = inside || (start_hour > end_hour && hour < end_hour);
+    inside && weekdays.is_none_or(|days| days.contains(opened_on.weekday()))
 }
 
 /// Billing data for an exact provider/model route.
@@ -375,6 +421,89 @@ pub enum ModelBilling {
 }
 
 impl ModelBilling {
+    /// The subscription-pool burn this row charges for work dispatched at `at_ms`,
+    /// where 1000 means 1.0x. `None` means this row has no plan side at all.
+    ///
+    /// A schedule is resolved against the dispatch instant rather than read as a
+    /// range, because a ledger has to state the rate that actually applied to a
+    /// request, not the rates the model could have charged that day.
+    pub fn plan_burn_millis_at(&self, at_ms: i64) -> Option<u32> {
+        match self {
+            Self::Plan {
+                relative_burn_millis,
+            } => Some(*relative_burn_millis),
+            Self::AuthDependent {
+                plan_relative_burn_millis,
+                ..
+            } => Some(*plan_relative_burn_millis),
+            Self::PlanSchedule {
+                off_peak_relative_burn_millis,
+                peak_relative_burn_millis,
+                peak_start_utc_hour,
+                peak_end_utc_hour,
+                peak_weekdays,
+                promotional_off_peak_relative_burn_millis,
+                promotion_valid_through_utc,
+            } => {
+                let at = chrono::DateTime::from_timestamp_millis(at_ms)?;
+                let peak = peak_window_contains(
+                    at,
+                    *peak_start_utc_hour,
+                    *peak_end_utc_hour,
+                    *peak_weekdays,
+                );
+                if peak {
+                    return Some(*peak_relative_burn_millis);
+                }
+                // A promotion applies only while it is valid, and only if its end is
+                // a timestamp this client can actually read. An unparsable or absent
+                // end is treated as no promotion rather than as an open one.
+                let promotion = promotional_off_peak_relative_burn_millis.filter(|_| {
+                    promotion_valid_through_utc
+                        .as_deref()
+                        .and_then(|through| {
+                            chrono::DateTime::parse_from_rfc3339(through)
+                                .ok()
+                                .map(|end| end.timestamp_millis())
+                        })
+                        .is_some_and(|end| at_ms <= end)
+                });
+                Some(promotion.unwrap_or(*off_peak_relative_burn_millis))
+            }
+            Self::Metered { .. } | Self::Local => None,
+        }
+    }
+
+    /// The exact API-key rates this row would charge for the same tokens, in
+    /// milli-USD per million: input, output, cached input.
+    ///
+    /// Present for rows that carry an API side. `None` means the catalogue states
+    /// no API price for this route, and a client must not invent one.
+    pub fn api_key_rates(&self) -> Option<(u32, u32, Option<u32>)> {
+        match self {
+            Self::Metered {
+                input_milli_usd_per_million_tokens,
+                output_milli_usd_per_million_tokens,
+                cached_input_milli_usd_per_million_tokens,
+            } => Some((
+                *input_milli_usd_per_million_tokens,
+                *output_milli_usd_per_million_tokens,
+                *cached_input_milli_usd_per_million_tokens,
+            )),
+            Self::AuthDependent {
+                api_key_input_milli_usd_per_million_tokens,
+                api_key_output_milli_usd_per_million_tokens,
+                api_key_cached_input_milli_usd_per_million_tokens,
+                ..
+            } => Some((
+                *api_key_input_milli_usd_per_million_tokens,
+                *api_key_output_milli_usd_per_million_tokens,
+                *api_key_cached_input_milli_usd_per_million_tokens,
+            )),
+            Self::Plan { .. } | Self::PlanSchedule { .. } | Self::Local => None,
+        }
+    }
+
     /// Resolve an auth-dependent row for a runtime that knows its active OpenAI auth mode.
     pub fn resolve_auth_mode(&self, api_key: bool) -> Self {
         match self {
@@ -990,6 +1119,172 @@ mod tests {
     use pretty_assertions::assert_eq;
     use serde_json::from_str;
     use serde_json::to_string;
+
+    fn at(text: &str) -> i64 {
+        chrono::DateTime::parse_from_rfc3339(text)
+            .expect("fixture instant")
+            .timestamp_millis()
+    }
+
+    #[test]
+    fn plan_burn_resolves_flat_rows_and_refuses_metered_ones() {
+        let plan = ModelBilling::Plan {
+            relative_burn_millis: 2000,
+        };
+        assert_eq!(
+            plan.plan_burn_millis_at(at("2026-09-21T12:00:00Z")),
+            Some(2000)
+        );
+        assert_eq!(plan.api_key_rates(), None);
+
+        let auth = ModelBilling::AuthDependent {
+            plan_relative_burn_millis: 500,
+            api_key_input_milli_usd_per_million_tokens: 2500,
+            api_key_output_milli_usd_per_million_tokens: 15000,
+            api_key_cached_input_milli_usd_per_million_tokens: Some(250),
+        };
+        assert_eq!(
+            auth.plan_burn_millis_at(at("2026-09-21T12:00:00Z")),
+            Some(500)
+        );
+        assert_eq!(auth.api_key_rates(), Some((2500, 15000, Some(250))));
+
+        let metered = ModelBilling::Metered {
+            input_milli_usd_per_million_tokens: 760,
+            output_milli_usd_per_million_tokens: 2420,
+            cached_input_milli_usd_per_million_tokens: Some(140),
+        };
+        assert_eq!(
+            metered.plan_burn_millis_at(at("2026-09-21T12:00:00Z")),
+            None
+        );
+        assert_eq!(metered.api_key_rates(), Some((760, 2420, Some(140))));
+        assert_eq!(
+            ModelBilling::Local.plan_burn_millis_at(at("2026-09-21T12:00:00Z")),
+            None
+        );
+        assert_eq!(ModelBilling::Local.api_key_rates(), None);
+    }
+
+    #[test]
+    fn plan_schedule_resolves_peak_weekdays_and_promotion_expiry() {
+        // The shipped glm-5.3 row: peak 06:00-10:00 UTC on weekdays only.
+        let weekday_peak = ModelBilling::PlanSchedule {
+            off_peak_relative_burn_millis: 1000,
+            peak_relative_burn_millis: 3000,
+            peak_start_utc_hour: 6,
+            peak_end_utc_hour: 10,
+            peak_weekdays: Some(WeekdaySet::weekdays_only()),
+            promotional_off_peak_relative_burn_millis: None,
+            promotion_valid_through_utc: None,
+        };
+        // 2026-09-21 is a Monday, 2026-09-19 a Saturday.
+        for (instant, expected) in [
+            ("2026-09-21T05:59:59Z", 1000),
+            ("2026-09-21T06:00:00Z", 3000),
+            ("2026-09-21T09:59:59Z", 3000),
+            ("2026-09-21T10:00:00Z", 1000),
+            ("2026-09-19T08:00:00Z", 1000),
+        ] {
+            assert_eq!(
+                weekday_peak.plan_burn_millis_at(at(instant)),
+                Some(expected),
+                "{instant}"
+            );
+        }
+
+        // The shipped glm-5.2 row: every day, with a promotion that ends.
+        let promoted = ModelBilling::PlanSchedule {
+            off_peak_relative_burn_millis: 2000,
+            peak_relative_burn_millis: 3000,
+            peak_start_utc_hour: 6,
+            peak_end_utc_hour: 10,
+            peak_weekdays: None,
+            promotional_off_peak_relative_burn_millis: Some(1000),
+            promotion_valid_through_utc: Some("2026-09-30T23:59:59Z".into()),
+        };
+        for (instant, expected) in [
+            ("2026-09-19T08:00:00Z", 3000),
+            ("2026-09-30T23:59:59Z", 1000),
+            ("2026-10-01T00:00:00Z", 2000),
+        ] {
+            assert_eq!(
+                promoted.plan_burn_millis_at(at(instant)),
+                Some(expected),
+                "{instant}"
+            );
+        }
+
+        // A promotion with no end, or an end this client cannot parse, is not a
+        // promotion: the discount must stop without a catalogue release.
+        for through in [None, Some("whenever".to_string())] {
+            let unbounded = ModelBilling::PlanSchedule {
+                off_peak_relative_burn_millis: 2000,
+                peak_relative_burn_millis: 3000,
+                peak_start_utc_hour: 6,
+                peak_end_utc_hour: 10,
+                peak_weekdays: None,
+                promotional_off_peak_relative_burn_millis: Some(1000),
+                promotion_valid_through_utc: through,
+            };
+            assert_eq!(
+                unbounded.plan_burn_millis_at(at("2026-09-21T12:00:00Z")),
+                Some(2000)
+            );
+        }
+    }
+
+    #[test]
+    fn plan_schedule_peak_window_may_wrap_past_midnight() {
+        // 22:00-02:00 opening on Fridays: the Saturday small hours still belong to
+        // the Friday window, and Saturday night does not open one.
+        let overnight = ModelBilling::PlanSchedule {
+            off_peak_relative_burn_millis: 1000,
+            peak_relative_burn_millis: 4000,
+            peak_start_utc_hour: 22,
+            peak_end_utc_hour: 2,
+            peak_weekdays: Some(WeekdaySet {
+                monday: false,
+                tuesday: false,
+                wednesday: false,
+                thursday: false,
+                friday: true,
+                saturday: false,
+                sunday: false,
+            }),
+            promotional_off_peak_relative_burn_millis: None,
+            promotion_valid_through_utc: None,
+        };
+        // 2026-09-18 is a Friday.
+        for (instant, expected) in [
+            ("2026-09-18T21:59:59Z", 1000),
+            ("2026-09-18T22:30:00Z", 4000),
+            ("2026-09-19T01:59:59Z", 4000),
+            ("2026-09-19T02:00:00Z", 1000),
+            ("2026-09-19T23:00:00Z", 1000),
+        ] {
+            assert_eq!(
+                overnight.plan_burn_millis_at(at(instant)),
+                Some(expected),
+                "{instant}"
+            );
+        }
+
+        // A degenerate window charges off-peak rather than charging peak forever.
+        let degenerate = ModelBilling::PlanSchedule {
+            off_peak_relative_burn_millis: 1000,
+            peak_relative_burn_millis: 4000,
+            peak_start_utc_hour: 6,
+            peak_end_utc_hour: 6,
+            peak_weekdays: None,
+            promotional_off_peak_relative_burn_millis: None,
+            promotion_valid_through_utc: None,
+        };
+        assert_eq!(
+            degenerate.plan_burn_millis_at(at("2026-09-21T06:30:00Z")),
+            Some(1000)
+        );
+    }
 
     fn test_model(spec: Option<ModelMessages>) -> ModelInfo {
         ModelInfo {

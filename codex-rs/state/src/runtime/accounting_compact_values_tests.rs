@@ -9,8 +9,31 @@ use serde_json::Value;
 use serde_json::json;
 
 fn literal() -> Value {
-    json!({"version":1, "known":[0,0,0,0,0,0,0], "unknown":[0,0,0,0,0,0,0],
-        "known_usd":"0", "unknown_estimates":0, "attempts":1})
+    json!({"version":2, "known":[0,0,0,0,0,0,0], "unknown":[0,0,0,0,0,0,0],
+        "known_usd":"0", "unknown_estimates":0, "attempts":1,
+        "equivalent_usd":"0", "unknown_equivalents":0,
+        "plan_burn_known":0, "plan_burn_unknown":0, "plan_attempts":0})
+}
+
+/// Days written before plan accounting existed carry no plan work, and must keep
+/// reading as exactly that rather than failing or inventing a plan figure.
+#[test]
+fn version_one_days_decode_as_days_with_no_plan_work() {
+    let legacy = json!({"version":1, "known":[7,0,0,0,0,0,7], "unknown":[0,0,0,0,0,0,0],
+        "known_usd":"0.000153", "unknown_estimates":0, "attempts":1});
+    let totals = decode(&legacy).to_day_totals().unwrap();
+    assert_eq!(
+        serde_json::to_value(totals.known_usd).unwrap(),
+        json!("0.000153")
+    );
+    assert_eq!(totals.equivalent_usd, Decimal::default());
+    assert_eq!(totals.plan_attempts, 0);
+    assert_eq!(totals.unknown_equivalents, 0);
+    assert_eq!(totals.plan_burn_milli_tokens, Metric::default());
+    // Re-encoding states the current shape; the legacy payload stays readable.
+    let re_encoded: Value = serde_json::from_str(&decode(&legacy).encode().unwrap()).unwrap();
+    assert_eq!(re_encoded["version"], json!(2));
+    assert_eq!(re_encoded["plan_attempts"], json!(0));
 }
 
 fn decode(raw: &Value) -> CompactValues {
@@ -103,15 +126,28 @@ fn malformed_and_noncanonical_stored_amounts_are_rejected() {
 
 #[test]
 fn schema_requires_exact_fields_version_object_and_array_arity() {
+    // Plan fields are optional on purpose: a day written before plan accounting
+    // existed still decodes, as no plan work.
+    const OPTIONAL: [&str; 5] = [
+        "equivalent_usd",
+        "unknown_equivalents",
+        "plan_burn_known",
+        "plan_burn_unknown",
+        "plan_attempts",
+    ];
     for field in literal().as_object().unwrap().keys() {
         let mut raw = literal();
         raw.as_object_mut().unwrap().remove(field);
-        assert!(CompactValues::decode(&raw.to_string()).is_err(), "{field}");
+        assert_eq!(
+            CompactValues::decode(&raw.to_string()).is_err(),
+            !OPTIONAL.contains(&field.as_str()),
+            "{field}"
+        );
     }
     for (field, value) in [
         ("extra", json!(0)),
         ("version", json!(0)),
-        ("version", json!(2)),
+        ("version", json!(3)),
         ("version", json!(256)),
         ("version", json!(1.0)),
         ("version", json!("1")),
@@ -233,8 +269,9 @@ fn composition_preserves_all_seven_independent_populations() {
     let sum = left.checked_add(&right).unwrap();
     assert_literal(
         &sum,
-        json!({"version":1, "known":[17,26,35,44,53,62,71],
-        "unknown":[6,6,6,6,6,6,6], "known_usd":"0.000153", "unknown_estimates":8, "attempts":14}),
+        json!({"version":2, "known":[17,26,35,44,53,62,71],
+        "unknown":[6,6,6,6,6,6,6], "known_usd":"0.000153", "unknown_estimates":8, "attempts":14,
+        "equivalent_usd":"0", "unknown_equivalents":0, "plan_burn_known":0, "plan_burn_unknown":0, "plan_attempts":0}),
     );
     assert_eq!(sum.to_day_totals().unwrap().full_usd(), None);
     assert_eq!(right.checked_add(&left).unwrap(), sum);
@@ -297,8 +334,9 @@ fn mixed_scales_and_known_plus_unknown_keep_exact_subtotals() {
     let combined = known.checked_add(&unknown).unwrap();
     assert_literal(
         &combined,
-        json!({"version":1, "known":[0,0,0,0,0,0,0],
-        "unknown":[1,1,1,1,1,1,1], "known_usd":"0.000153", "unknown_estimates":1, "attempts":3}),
+        json!({"version":2, "known":[0,0,0,0,0,0,0],
+        "unknown":[1,1,1,1,1,1,1], "known_usd":"0.000153", "unknown_estimates":1, "attempts":3,
+        "equivalent_usd":"0", "unknown_equivalents":0, "plan_burn_known":0, "plan_burn_unknown":0, "plan_attempts":0}),
     );
     assert_eq!(combined.to_day_totals().unwrap().full_usd(), None);
 }
@@ -419,13 +457,15 @@ fn actual_quote_reduction_converts_partial_and_twenty_four_place_amounts() {
     for (patch, expected) in [
         (
             json!({"input":50,"read":10}),
-            json!({"version":1, "known":[0,50,10,0,0,0,0],
-            "unknown":[1,0,0,1,1,1,1], "known_usd":"0.000153", "unknown_estimates":1, "attempts":1}),
+            json!({"version":2, "known":[0,50,10,0,0,0,0],
+            "unknown":[1,0,0,1,1,1,1], "known_usd":"0.000153", "unknown_estimates":1, "attempts":1,
+            "equivalent_usd":"0", "unknown_equivalents":0, "plan_burn_known":0, "plan_burn_unknown":0, "plan_attempts":0}),
         ),
         (
             json!({"input":1,"read":0,"write":0,"output":0}),
-            json!({"version":1, "known":[1,1,0,0,0,0,1],
-            "unknown":[0,0,0,0,0,1,0], "known_usd":"0.000000000000000000000001", "unknown_estimates":0, "attempts":1}),
+            json!({"version":2, "known":[1,1,0,0,0,0,1],
+            "unknown":[0,0,0,0,0,1,0], "known_usd":"0.000000000000000000000001", "unknown_estimates":0, "attempts":1,
+            "equivalent_usd":"0", "unknown_equivalents":0, "plan_burn_known":0, "plan_burn_unknown":0, "plan_attempts":0}),
         ),
     ] {
         let row: Observation = serde_json::from_value(json!({"revision":1,

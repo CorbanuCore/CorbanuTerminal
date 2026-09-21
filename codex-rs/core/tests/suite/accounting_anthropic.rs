@@ -1,6 +1,7 @@
 #[path = "accounting_anthropic_support.rs"]
 mod support;
 use codex_core::config::AccountingMode;
+use codex_core::config::PriceAuthority;
 use codex_features::Feature;
 use codex_protocol::protocol::EventMsg;
 use codex_state::accounting::*;
@@ -40,7 +41,7 @@ async fn accounting_plan_identity_zero_usage_and_provider_switch() -> anyhow::Re
             wire_api: WireApi::Anthropic,
             approved_endpoint: endpoint.clone(),
             approved_query: None,
-            api_key_pricing: false,
+            pricing: PriceAuthority::Unavailable,
         };
         let test = builder(endpoint, mode)
             .with_config(move |config| {
@@ -590,6 +591,7 @@ async fn accounting_anthropic_native_presence_prices_and_two_reopens() -> anyhow
                 known_usd: "0.00011".to_string().try_into()?,
                 unknown_estimates: 1,
                 attempts: 1,
+                ..Default::default()
             }
         );
         stop(&reopened).await;
@@ -1046,6 +1048,7 @@ async fn accounting_anthropic_actual_presence_revisions_and_remote_only_price_un
                     .try_into()?,
                 unknown_estimates: 1,
                 attempts: 1,
+                ..Default::default()
             }
         );
         assert_eq!(

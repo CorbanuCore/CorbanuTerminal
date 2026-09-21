@@ -170,6 +170,7 @@ pub(super) fn expected_day(
             known_usd: format!("0.{attempts:06}").try_into()?,
             unknown_estimates: attempts,
             attempts,
+            ..Default::default()
         }),
     })
 }

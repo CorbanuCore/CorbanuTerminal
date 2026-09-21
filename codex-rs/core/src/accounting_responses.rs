@@ -177,11 +177,11 @@ impl DeferredResponsesSampling {
         } else {
             self.mode.clone()
         };
+        // A rebound mode that disagrees with the sampling already in flight would
+        // record this turn's economics under the wrong authority.
         if let Some(existing) = self.sampling.get()
-            && let AccountingMode::Provider {
-                api_key_pricing, ..
-            } = &mode
-            && *api_key_pricing == matches!(existing.pricing, super::Pricing::Unavailable)
+            && matches!(mode, AccountingMode::Provider { .. })
+            && super::pricing_for(&mode) != existing.pricing
         {
             self.reject();
             return Err(CodexErr::Fatal(FAILURE.into()));

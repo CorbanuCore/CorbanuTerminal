@@ -342,29 +342,91 @@ fn exact(value: Decimal) -> String {
         .unwrap_or_else(|| "unavailable".to_string())
 }
 
-fn estimate(known: Decimal, unknown: i64, attempts: i64) -> Vec<String> {
+fn estimate(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
+    let (known, unknown, attempts) = (totals.known_usd, totals.unknown_estimates, totals.attempts);
     if attempts == 0 {
         return vec!["No recorded attempts in this day; collection coverage unknown.".into()];
     }
-    if unknown == 0 {
-        return vec![format!(
+    let mut lines = if unknown == 0 {
+        vec![format!(
             "Estimated token cost for recorded attempts: {}",
             money(known)
-        )];
-    }
-    let mut lines = vec![
-        format!(
-            "Known estimated token cost: {} + unknown costs",
-            money(known)
-        ),
-        format!(
-            "Full recorded estimate: unavailable ({unknown} of {attempts} attempts incomplete)"
-        ),
-    ];
-    if known == Decimal::default() {
-        lines.insert(0, "Estimated token cost: unknown".into());
-    }
+        )]
+    } else {
+        let mut lines = vec![
+            format!(
+                "Known estimated token cost: {} + unknown costs",
+                money(known)
+            ),
+            format!(
+                "Full recorded estimate: unavailable ({unknown} of {attempts} attempts incomplete)"
+            ),
+        ];
+        if known == Decimal::default() {
+            lines.insert(0, "Estimated token cost: unknown".into());
+        }
+        lines
+    };
+    lines.extend(plan(totals));
     lines
+}
+
+/// Plan work stated as plan work: the rate that applied, the consumption it
+/// implies, and what the same tokens would have cost on the API side.
+///
+/// None of this is money spent, and it is never folded into the cost above.
+fn plan(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
+    if totals.plan_attempts == 0 {
+        return Vec::new();
+    }
+    let burn = &totals.plan_burn_milli_tokens;
+    let mut lines = vec![format!(
+        "Subscription capacity: {} of {} attempts, not billed per token",
+        totals.plan_attempts, totals.attempts
+    )];
+    lines.push(if burn.unknown == 0 {
+        format!(
+            "Plan consumption: {} tokens at the plan rate that applied",
+            rate_scaled(burn.known)
+        )
+    } else {
+        format!(
+            "Plan consumption: {} tokens at the plan rate, plus {} attempts with no stateable figure",
+            rate_scaled(burn.known),
+            burn.unknown
+        )
+    });
+    lines.push(if totals.unknown_equivalents == 0 {
+        format!(
+            "Same tokens at API rates: {}",
+            money(totals.equivalent_usd)
+        )
+    } else if totals.equivalent_usd == Decimal::default() {
+        format!(
+            "Same tokens at API rates: unavailable — the catalogue states no API price for {} of {} plan attempts",
+            totals.unknown_equivalents, totals.plan_attempts
+        )
+    } else {
+        format!(
+            "Same tokens at API rates: {} known, plus {} of {} plan attempts the catalogue does not price",
+            money(totals.equivalent_usd),
+            totals.unknown_equivalents,
+            totals.plan_attempts
+        )
+    });
+    lines
+}
+
+/// Plan consumption is carried as tokens scaled by a rate in thousandths, so a
+/// 1.0x turn reads back as exactly its own token count.
+fn rate_scaled(milli_tokens: i64) -> String {
+    let whole = milli_tokens / 1000;
+    let fraction = milli_tokens % 1000;
+    if fraction == 0 {
+        whole.to_string()
+    } else {
+        format!("{whole}.{fraction:03}")
+    }
 }
 
 const METRICS: [&str; 7] = [
@@ -408,10 +470,15 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
     {
         lines.push("Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.".into());
     } else {
-        lines.extend(estimate(
-            q.known_subtotal,
-            i64::from(q.all_buckets_priced.is_none()),
-            1,
+        match codex_state::accounting::DayTotals::from_quotes([q]) {
+            Ok(attempt_totals) => lines.extend(estimate(&attempt_totals)),
+            Err(_) => lines.push("Token cost: unavailable — exact arithmetic overflow".into()),
+        }
+    }
+    if let Some(burn) = q.plan_burn_millis {
+        lines.push(format!(
+            "Plan rate at dispatch: {}x",
+            rate_scaled(i64::from(burn))
         ));
     }
     let u = &q.usage;
@@ -550,9 +617,7 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
     }
     let freshness = pages[0].text.clone();
     let t = &ready.totals;
-    pages[0]
-        .text
-        .splice(0..0, estimate(t.known_usd, t.unknown_estimates, t.attempts));
+    pages[0].text.splice(0..0, estimate(t));
     pages[0].text.extend([
         format!("UTC admission interval: [{}, {}) ms since Unix epoch", ready.utc_day * 86_400_000, (ready.utc_day + 1) * 86_400_000),
         format!("Read at: {} ms UTC; store checkpoint: {} ms UTC; maintenance lag: {} ms",
@@ -656,7 +721,7 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
         );
         match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
             Ok(t) => {
-                text.extend(estimate(t.known_usd, t.unknown_estimates, t.attempts));
+                text.extend(estimate(&t));
                 text.push(format!("Recorded attempts: {}", t.attempts));
                 if t.attempts > 0 {
                     text.push(format!("Known estimate exact USD: {}", exact(t.known_usd)));
@@ -703,7 +768,7 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
         text.push(note);
         text.push("Estimates below cover inspectable attempts only; unavailable threads may have additional unknown costs.".into());
     }
-    text.extend(estimate(u.known_usd, u.unknown_estimates, u.attempts));
+    text.extend(estimate(u));
     text.extend(
         context
             .iter()
@@ -847,11 +912,7 @@ fn range_pages(
             })
             .flat_map(|v| v.requests.values().flatten());
         match codex_state::accounting::DayTotals::from_quotes(quotes) {
-            Ok(total) => pages[0].text.extend(estimate(
-                total.known_usd,
-                total.unknown_estimates,
-                total.attempts,
-            )),
+            Ok(total) => pages[0].text.extend(estimate(&total)),
             Err(_) => pages[0]
                 .text
                 .push("Range total unavailable — arithmetic overflow".into()),

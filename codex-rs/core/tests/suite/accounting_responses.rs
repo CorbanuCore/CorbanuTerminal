@@ -1,6 +1,7 @@
 #[path = "accounting_responses_support.rs"]
 pub(super) mod support;
 use codex_core::config::AccountingMode;
+use codex_core::config::PriceAuthority;
 use codex_protocol::protocol::EventMsg;
 use codex_state::accounting::*;
 use core_test_support::responses;
@@ -11,7 +12,8 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[tokio::test]
-async fn accounting_chatgpt_subscription_collects_without_api_prices() -> anyhow::Result<()> {
+async fn accounting_chatgpt_subscription_off_route_collects_without_economics() -> anyhow::Result<()>
+{
     let server = MockServer::start().await;
     let endpoint = format!("{}/v1", server.uri());
     let mock = responses::mount_sse_once(&server, success(usage(Some(0)))).await;
@@ -21,7 +23,7 @@ async fn accounting_chatgpt_subscription_collects_without_api_prices() -> anyhow
         wire_api: codex_model_provider_info::WireApi::Responses,
         approved_endpoint: endpoint.clone(),
         approved_query: None,
-        api_key_pricing: false,
+        pricing: PriceAuthority::Unavailable,
     };
     let test = builder(endpoint, mode)
         .with_auth(codex_login::CodexAuth::from_external_chatgpt_tokens(
@@ -33,14 +35,21 @@ async fn accounting_chatgpt_subscription_collects_without_api_prices() -> anyhow
         .await?;
     test.submit_turn("subscription accounting").await?;
     let db = test.codex.state_db().unwrap();
-    let records = attempts(&db).await?;
+    let records = wait_attempts(&db, 1).await?;
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].provider, "openai");
+    // This fixture talks to a wiremock endpoint, which is nobody's own route.
+    // Tokens are still collected; no economics of either kind are claimed for a
+    // destination the catalogue quotes nothing for.
     let prices: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
     assert!(prices.is_empty());
+    wait_observations(&db, 1).await?;
     let total = totals(&db, &records[0]).await?;
     assert_eq!(total.measured[0].known, 100);
+    assert_eq!(total.known_usd, Decimal::default());
     assert_eq!(total.unknown_estimates, 1);
+    assert_eq!(total.equivalent_usd, Decimal::default());
+    assert_eq!(total.plan_attempts, 0);
     assert_eq!(mock.requests().len(), 1);
     stop(&test).await;
     Ok(())
@@ -136,6 +145,7 @@ async fn accounting_responses_native_complete_and_partial_goldens() -> anyhow::R
                 .try_into()?,
                 unknown_estimates: i64::from(write.is_none()),
                 attempts: 1,
+                ..Default::default()
             }
         );
         let evidence = observations(&db).await?;
@@ -289,6 +299,7 @@ async fn accounting_responses_native_no_usage_is_unknown() -> anyhow::Result<()>
                 known_usd: "0".to_string().try_into()?,
                 unknown_estimates: 1,
                 attempts: 1,
+                ..Default::default()
             }
         );
         stop(&test).await;
@@ -523,7 +534,10 @@ async fn accounting_records_auto_compaction() -> anyhow::Result<()> {
         compactions.len(),
         1,
         "turns recorded: {:?}",
-        records.iter().map(|record| &record.turn).collect::<Vec<_>>()
+        records
+            .iter()
+            .map(|record| &record.turn)
+            .collect::<Vec<_>>()
     );
     // Thread-wide day total: both turns and the compaction between them.
     wait_observations(&db, 3).await?;

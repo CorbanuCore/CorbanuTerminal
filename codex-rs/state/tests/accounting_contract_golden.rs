@@ -1,6 +1,7 @@
 //! S01's invented numeric fixture through the normal library, not provider evidence.
 use anyhow::Context;
 use codex_protocol::ThreadId;
+use codex_state::accounting::Basis;
 use codex_state::accounting::*;
 use codex_state::*;
 use pretty_assertions::assert_eq;
@@ -84,6 +85,8 @@ impl Fixture {
                 // Synthetic catalog simulation; NOT authentic provider approval.
                 source_reference: Uuid::from_u128(id + 200),
                 source_kind: SourceKind::NativeCatalog,
+                basis: Basis::Billed,
+                plan_burn_millis: None,
                 observed_at_ms: start.try_into()?,
                 approved_at_ms: start.try_into()?,
                 effective_from_ms: start.try_into()?,
@@ -289,6 +292,7 @@ fn totals(
         known_usd: usd.to_owned().try_into()?,
         unknown_estimates,
         attempts,
+        ..Default::default()
     })
 }
 

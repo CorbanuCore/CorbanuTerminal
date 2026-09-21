@@ -5,7 +5,7 @@ use pretty_assertions::assert_eq;
 fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
     let scope = Uuid::new_v4();
     let source = "openai-chat-api-key-bundled-v1";
-    let first = chat_original("gpt-5.6-sol", scope, 1000)?.remove(0);
+    let first = chat_original("gpt-5.6-sol", "openai", scope, 1000)?.remove(0);
     let tuple = serde_json::to_vec(&(
         source,
         "openai",
@@ -39,7 +39,7 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
         ),
         (1000.try_into()?, 1000.try_into()?, 1000.try_into()?, None)
     );
-    let second = chat_original("gpt-5.6-sol", scope, 2000)?.remove(0);
+    let second = chat_original("gpt-5.6-sol", "openai", scope, 2000)?.remove(0);
     assert_ne!(first.id, second.id);
     assert_eq!(first.source_reference, second.source_reference);
     for model in [
@@ -49,7 +49,7 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
         "openai/gpt-5.6-sol",
         "claude-opus-5",
     ] {
-        assert!(chat_original(model, scope, 1000)?.is_empty());
+        assert!(chat_original(model, "openai", scope, 1000)?.is_empty());
     }
     let catalog = codex_models_manager::bundled_models_response()?;
     let row = catalog
@@ -59,16 +59,17 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
         .unwrap()
         .clone();
     assert_eq!(
-        openai_rows(&[row.clone(), row.clone()], &row.slug, scope, 1000, source)?,
-        vec![]
+        billing_for(&[row.clone(), row.clone()], &row.slug, "openai"),
+        None
     );
+    assert_eq!(billing_for(&[row.clone()], &row.slug, "openrouter"), None);
     let mut disabled = row.clone();
     disabled.orchestration = Some(ModelOrchestrationMetadata::Disabled {
         provider_id: "openai".into(),
         capability: codex_protocol::openai_models::ModelCapabilityTier::Frontier,
         reason: "fixture".into(),
     });
-    assert!(openai_rows(&[disabled], &row.slug, scope, 1000, source)?.is_empty());
+    assert_eq!(billing_for(&[disabled], &row.slug, "openai"), None);
     for billing in [
         ModelBilling::Local,
         ModelBilling::Plan {
@@ -84,7 +85,7 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
             promotion_valid_through_utc: None,
         },
     ] {
-        assert!(openai_project("fixture", scope, &billing, 1000, source)?.is_empty());
+        assert!(billed("fixture", "openai", &billing, scope, 1000, source)?.is_empty());
     }
     for read in [None, Some(0)] {
         let billing = ModelBilling::Metered {
@@ -92,7 +93,7 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
             output_milli_usd_per_million_tokens: 2,
             cached_input_milli_usd_per_million_tokens: read,
         };
-        let projected = openai_project("fixture", scope, &billing, 1000, source)?.remove(0);
+        let projected = billed("fixture", "openai", &billing, scope, 1000, source)?.remove(0);
         assert_eq!(
             (projected.rates.read, projected.rates.write),
             (read.map(rate).transpose()?, None)
@@ -106,10 +107,10 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
 #[test]
 fn accounting_responses_prices_exact_and_unknown() {
     let scope = Uuid::new_v4();
-    let first = responses_original("gpt-5.6-sol", scope, 1000, None)
+    let first = responses_original("gpt-5.6-sol", "openai", scope, 1000, None)
         .unwrap()
         .remove(0);
-    let later = responses_original("gpt-5.6-sol", scope, 2000, Some("default"))
+    let later = responses_original("gpt-5.6-sol", "openai", scope, 2000, Some("default"))
         .unwrap()
         .remove(0);
     assert_eq!(
@@ -150,14 +151,14 @@ fn accounting_responses_prices_exact_and_unknown() {
         "claude-opus-5",
     ] {
         assert!(
-            responses_original(model, scope, 1000, None)
+            responses_original(model, "openai", scope, 1000, None)
                 .unwrap()
                 .is_empty()
         );
     }
     for tier in ["priority", "flex", "auto", "unknown"] {
         assert!(
-            responses_original("gpt-5.6-sol", scope, 1000, Some(tier))
+            responses_original("gpt-5.6-sol", "openai", scope, 1000, Some(tier))
                 .unwrap()
                 .is_empty()
         );
@@ -186,11 +187,17 @@ fn accounting_responses_prices_exact_and_unknown() {
         assert_eq!(value.rates.read, read.map(|value| rate(value).unwrap()));
         assert_eq!(value.rates.write, None);
     }
-    let anthropic = original("claude-opus-5", scope, 1000).unwrap().remove(0);
+    let anthropic = anthropic_original("claude-opus-5", "anthropic", scope, 1000)
+        .unwrap()
+        .remove(0);
+    // Every billed projection now states provenance in one shape, including the
+    // authentication and tier the rates are quoted for.
     let source = serde_json::to_vec(&(
         "anthropic-bundled-v1",
         "anthropic",
         "claude-opus-5",
+        "api_key",
+        "default",
         "USD/million",
         5000,
         25000,
@@ -206,8 +213,12 @@ fn accounting_responses_prices_exact_and_unknown() {
 #[test]
 fn accounting_bundled_prices_are_exact_prospective_and_content_identified() {
     let scope = Uuid::new_v4();
-    let first = original("claude-opus-5", scope, 1000).unwrap().remove(0);
-    let second = original("claude-opus-5", scope, 2000).unwrap().remove(0);
+    let first = anthropic_original("claude-opus-5", "anthropic", scope, 1000)
+        .unwrap()
+        .remove(0);
+    let second = anthropic_original("claude-opus-5", "anthropic", scope, 2000)
+        .unwrap()
+        .remove(0);
     assert_ne!(first.id, second.id);
     assert_eq!(first.source_reference, second.source_reference);
     assert_eq!(
@@ -246,7 +257,9 @@ fn accounting_bundled_prices_are_exact_prospective_and_content_identified() {
         ),
         (1000, 1000, 1000, None)
     );
-    let fable = original("claude-fable-5-1", scope, 1000).unwrap().remove(0);
+    let fable = anthropic_original("claude-fable-5-1", "anthropic", scope, 1000)
+        .unwrap()
+        .remove(0);
     assert_ne!(fable.source_reference, first.source_reference);
     assert_eq!(
         fable.rates,
@@ -267,25 +280,53 @@ fn accounting_price_authority_rejects_aliases_remote_and_non_metered_rows() {
         "CLAUDE-OPUS-5",
         "remote-only",
     ] {
-        assert_eq!(original(model, Uuid::nil(), 10).unwrap(), vec![]);
+        assert_eq!(
+            anthropic_original(model, "anthropic", Uuid::nil(), 10).unwrap(),
+            vec![]
+        );
     }
+    // Rows with no per-token price state none, whoever serves them.
     for billing in [
         ModelBilling::Local,
         ModelBilling::Plan {
             relative_burn_millis: 1000,
         },
-        ModelBilling::AuthDependent {
-            plan_relative_burn_millis: 1000,
-            api_key_input_milli_usd_per_million_tokens: 5000,
-            api_key_output_milli_usd_per_million_tokens: 25000,
-            api_key_cached_input_milli_usd_per_million_tokens: None,
-        },
     ] {
         assert_eq!(
-            project("claude-opus-5", Uuid::nil(), &billing, 10).unwrap(),
+            billed(
+                "claude-opus-5",
+                "anthropic",
+                &billing,
+                Uuid::nil(),
+                10,
+                "anthropic-bundled-v1"
+            )
+            .unwrap(),
             vec![]
         );
     }
+    // An auth-dependent row does state one, and under API-key authentication it
+    // is what the provider charges. Refusing it, as this projection used to,
+    // left those turns priceless on the very auth mode that is billed per token.
+    let auth_dependent = ModelBilling::AuthDependent {
+        plan_relative_burn_millis: 1000,
+        api_key_input_milli_usd_per_million_tokens: 5000,
+        api_key_output_milli_usd_per_million_tokens: 25000,
+        api_key_cached_input_milli_usd_per_million_tokens: None,
+    };
+    let priced = billed(
+        "claude-opus-5",
+        "anthropic",
+        &auth_dependent,
+        Uuid::nil(),
+        10,
+        "anthropic-bundled-v1",
+    )
+    .unwrap()
+    .remove(0);
+    assert_eq!(priced.basis, Basis::Billed);
+    assert_eq!(priced.plan_burn_millis, None);
+    assert_eq!(priced.rates.noncached, Some(rate(5000).unwrap()));
 }
 
 #[test]
@@ -306,9 +347,16 @@ fn accounting_price_projection_retains_absent_read_and_write_and_exact_milli() {
         output_milli_usd_per_million_tokens: 2,
         cached_input_milli_usd_per_million_tokens: None,
     };
-    let quote = project("fixture", Uuid::nil(), &billing, 10)
-        .unwrap()
-        .remove(0);
+    let quote = billed(
+        "fixture",
+        "anthropic",
+        &billing,
+        Uuid::nil(),
+        10,
+        "anthropic-bundled-v1",
+    )
+    .unwrap()
+    .remove(0);
     assert_eq!((quote.rates.read, quote.rates.write), (None, None));
     let mut changed = billing.clone();
     if let ModelBilling::Metered {
@@ -320,7 +368,146 @@ fn accounting_price_projection_retains_absent_read_and_write_and_exact_milli() {
     }
     assert_ne!(
         quote.source_reference,
-        project("fixture", Uuid::nil(), &changed, 10).unwrap()[0].source_reference
+        billed(
+            "fixture",
+            "anthropic",
+            &changed,
+            Uuid::nil(),
+            10,
+            "anthropic-bundled-v1"
+        )
+        .unwrap()[0]
+            .source_reference
     );
-    assert!(project("fixture", Uuid::nil(), &billing, -1).is_err());
+    assert!(
+        billed(
+            "fixture",
+            "anthropic",
+            &billing,
+            Uuid::nil(),
+            -1,
+            "anthropic-bundled-v1"
+        )
+        .is_err()
+    );
+}
+
+/// Plan rows are the ones the old projection could not state at all: it had no
+/// plan basis, so every subscription turn recorded tokens and nothing else.
+#[test]
+fn accounting_plan_projection_states_the_rate_and_only_stated_equivalents() {
+    let scope = Uuid::new_v4();
+    let now = chrono::DateTime::parse_from_rfc3339("2026-09-21T12:00:00Z")
+        .unwrap()
+        .timestamp_millis();
+    // A burn-only row: the plan rate is stated, and no API price is invented.
+    let plan = plan_original("claude-opus-5-plan", "claude-plan", scope, now, None)
+        .unwrap()
+        .remove(0);
+    assert_eq!(plan.basis, Basis::PlanEquivalent);
+    assert_eq!(plan.plan_burn_millis, Some(1000));
+    assert_eq!(
+        (
+            plan.rates.noncached,
+            plan.rates.output,
+            plan.rates.read,
+            plan.rates.write
+        ),
+        (None, None, None, None)
+    );
+    assert_eq!(plan.provider, "claude-plan");
+
+    // An auth-dependent row states both: the plan rate that applied and the API
+    // rates the same tokens would have cost.
+    let both = plan_original("gpt-5.6-luna", "openai", scope, now, Some("default"))
+        .unwrap()
+        .remove(0);
+    assert_eq!(both.plan_burn_millis, Some(200));
+    assert_eq!(both.rates.noncached, Some(rate(1000).unwrap()));
+    assert_eq!(both.rates.output, Some(rate(6000).unwrap()));
+    assert_eq!(both.rates.read, Some(rate(100).unwrap()));
+
+    // A scheduled row is resolved at the dispatch instant, not read as a range.
+    let peak = chrono::DateTime::parse_from_rfc3339("2026-09-21T07:00:00Z")
+        .unwrap()
+        .timestamp_millis();
+    assert_eq!(
+        plan_original("glm-5.3", "zai", scope, peak, None)
+            .unwrap()
+            .remove(0)
+            .plan_burn_millis,
+        Some(3000)
+    );
+    assert_eq!(
+        plan_original("glm-5.3", "zai", scope, now, None)
+            .unwrap()
+            .remove(0)
+            .plan_burn_millis,
+        Some(1000)
+    );
+
+    // Nothing is stated for a metered row, another provider's row, an unknown
+    // slug, or a tier the catalogue does not quote.
+    for (model, provider, tier) in [
+        ("claude-opus-5", "anthropic", None),
+        ("claude-opus-5-plan", "anthropic", None),
+        ("no-such-model", "claude-plan", None),
+        ("gpt-5.6-luna", "openai", Some("priority")),
+    ] {
+        assert_eq!(
+            plan_original(model, provider, scope, now, tier).unwrap(),
+            vec![],
+            "{provider}/{model}"
+        );
+    }
+}
+
+/// A provider whose own credential is a plan login carries no Codex auth mode.
+/// Keying the plan side only on `AuthMode` dropped exactly that shape.
+#[test]
+fn accounting_provider_held_plan_login_takes_the_plan_side() {
+    use crate::config::AccountingMode;
+    use crate::config::PriceAuthority;
+    let provider = codex_model_provider_info::ModelProviderInfo::create_claude_plan_provider();
+    assert!(
+        provider.auth.is_some(),
+        "fixture must be a command-auth provider"
+    );
+    let endpoint = provider
+        .to_api_provider(None)
+        .expect("claude-plan route")
+        .base_url;
+    let mode = AccountingMode::Provider {
+        scope: Uuid::new_v4(),
+        provider_id: "claude-plan".into(),
+        wire_api: provider.wire_api,
+        approved_endpoint: endpoint.clone(),
+        approved_query: None,
+        pricing: PriceAuthority::Unavailable,
+    };
+    for auth in [None, Some(codex_protocol::auth::AuthMode::Chatgpt)] {
+        let bound = super::super::turn_mode(&mode, "claude-plan", &provider, auth, &endpoint);
+        assert!(
+            matches!(
+                bound,
+                AccountingMode::Provider {
+                    pricing: PriceAuthority::PlanRate,
+                    ..
+                }
+            ),
+            "claude-plan must take the plan side for {auth:?}"
+        );
+    }
+    // And the plan side of that provider's own rows is burn with no invented price.
+    let plan = super::plan_original(
+        "claude-opus-5-plan",
+        "claude-plan",
+        Uuid::new_v4(),
+        10,
+        None,
+    )
+    .unwrap()
+    .remove(0);
+    assert_eq!(plan.plan_burn_millis, Some(1000));
+    assert_eq!(plan.rates.noncached, None);
 }

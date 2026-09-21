@@ -302,9 +302,10 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
     Ok(())
 }
 
-/// The subscription integration test uses a wiremock endpoint, which already
-/// forces `api_key_pricing` off. Pin the auth-mode half of the rule directly, at
-/// the real default endpoint, so swapping the auth cannot silently keep prices.
+/// Authentication chooses which economics apply, and a route this client cannot
+/// price is not the same thing as a plan. Pin all three outcomes at the real
+/// default endpoint, so swapping the auth cannot silently keep per-token rates
+/// and an unpriceable route cannot silently become subscription capacity.
 #[test]
 fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
     use codex_model_provider_info::{ModelProviderInfo, WireApi};
@@ -330,20 +331,40 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
             wire_api: provider.wire_api,
             approved_endpoint: endpoint.into(),
             approved_query: None,
-            api_key_pricing: false,
+            pricing: PriceAuthority::Unavailable,
         };
         let bound = super::turn_mode(&mode, id, &provider, Some(AuthMode::ApiKey), endpoint);
         let crate::config::AccountingMode::Provider {
             approved_query: None,
-            api_key_pricing,
+            pricing,
             ..
         } = bound
         else {
             panic!("{id} provider mode must survive rebinding");
         };
-        assert!(
-            api_key_pricing,
+        assert_eq!(
+            pricing,
+            PriceAuthority::ApiKeyRates,
             "a metered API-key {id} route at its own default endpoint must be priced"
+        );
+        // The same credential pointed somewhere else states nothing at all: not
+        // rates, and not a plan rate either.
+        let elsewhere = super::turn_mode(
+            &mode,
+            id,
+            &provider,
+            Some(AuthMode::ApiKey),
+            "https://relay.invalid/v1",
+        );
+        assert!(
+            matches!(
+                elsewhere,
+                crate::config::AccountingMode::Provider {
+                    pricing: PriceAuthority::Unavailable,
+                    ..
+                }
+            ),
+            "{id} off its own route must state no economics"
         );
     }
     let provider = ModelProviderInfo::create_openai_provider(None);
@@ -355,32 +376,36 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
         wire_api: WireApi::Responses,
         approved_endpoint: "https://api.openai.com/v1".into(),
         approved_query: None,
-        api_key_pricing: false,
+        pricing: PriceAuthority::Unavailable,
     };
+    // Each credential is checked at the route that credential actually resolves
+    // to: a ChatGPT plan turn goes to the Codex route, an API key to the API one.
     for (auth, expected) in [
-        (Some(AuthMode::ApiKey), true),
-        (Some(AuthMode::Chatgpt), false),
-        (Some(AuthMode::ChatgptAuthTokens), false),
-        (None, false),
+        (Some(AuthMode::ApiKey), PriceAuthority::ApiKeyRates),
+        (Some(AuthMode::Chatgpt), PriceAuthority::PlanRate),
+        (Some(AuthMode::ChatgptAuthTokens), PriceAuthority::PlanRate),
+        (Some(AuthMode::Headers), PriceAuthority::PlanRate),
+        // No visible credential is not a subscription. Recording it as one would
+        // book a turn this client cannot attribute as plan capacity.
+        (None, PriceAuthority::Unavailable),
+        (Some(AuthMode::BedrockApiKey), PriceAuthority::Unavailable),
     ] {
-        let bound = super::turn_mode(
-            &mode,
-            "openai",
-            &provider,
-            auth,
-            "https://api.openai.com/v1",
-        );
+        let endpoint = provider
+            .to_api_provider(auth)
+            .map(|api| api.base_url)
+            .expect("openai route for this credential");
+        let bound = super::turn_mode(&mode, "openai", &provider, auth, &endpoint);
         let crate::config::AccountingMode::Provider {
             approved_query: None,
-            api_key_pricing,
+            pricing,
             ..
         } = bound
         else {
             panic!("provider mode must survive rebinding for {auth:?}");
         };
         assert_eq!(
-            api_key_pricing, expected,
-            "only API-key authority may supply monetary rates ({auth:?})"
+            pricing, expected,
+            "authentication decides which economics apply ({auth:?})"
         );
     }
 }
@@ -444,6 +469,7 @@ fn accounting_chat_collects_the_fields_the_client_itself_emits() {
 fn accounting_every_built_in_provider_collects() {
     use codex_model_provider_info::built_in_model_providers;
     let mut checked = 0;
+    let mut priced_providers: Vec<String> = Vec::new();
     for (id, provider) in built_in_model_providers(None) {
         let selected = developer_accounting_mode(&id, &provider);
         assert!(
@@ -452,8 +478,8 @@ fn accounting_every_built_in_provider_collects() {
             provider.wire_api
         );
         // Bind at the provider's own resolved endpoint and under API-key auth, so
-        // the pricing assertion below can actually fail: with no auth mode,
-        // `api_key_pricing` is false for every entry and proves nothing.
+        // the pricing assertion below can actually fail: with no auth mode every
+        // entry takes the plan side and proves nothing about rates.
         let endpoint = provider
             .to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))
             .map(|api| api.base_url)
@@ -470,17 +496,81 @@ fn accounting_every_built_in_provider_collects() {
             "{id} ({:?}) binds a mode that does not collect",
             provider.wire_api
         );
-        // Only the two metered catalogue entries at their own default endpoints may
-        // carry monetary rates; everything else records tokens with money
-        // unavailable even under API-key authentication.
-        if let AccountingMode::Provider {
-            api_key_pricing, ..
-        } = bound
-        {
-            let metered = matches!(id.as_str(), "openai" | "anthropic");
+        // Monetary rates follow the route, not a hand-picked pair of providers.
+        // Restricting them to openai and anthropic left every other metered
+        // provider recording tokens with no price at all, which is the same
+        // "accounting is unavailable here" the catalogue work set out to end.
+        // What disqualifies per-token rates is a credential this client cannot
+        // attribute to the account the catalogue quotes.
+        if let AccountingMode::Provider { pricing, .. } = bound {
+            let carries_own_credentials = provider.aws.is_some()
+                || provider.auth.is_some()
+                || provider.experimental_bearer_token.is_some();
+            let expected = if carries_own_credentials {
+                PriceAuthority::Unavailable
+            } else {
+                PriceAuthority::ApiKeyRates
+            };
             assert_eq!(
-                api_key_pricing, metered,
+                pricing, expected,
                 "{id} pricing authority under API-key auth"
+            );
+            if !carries_own_credentials {
+                priced_providers.push(id.clone());
+            }
+            // And the authority is bound to that route: the same provider read
+            // through a different endpoint states no economics at all - not
+            // rates, and not a plan rate standing in for them.
+            let elsewhere = turn_mode(
+                &selected,
+                &id,
+                &provider,
+                Some(codex_protocol::auth::AuthMode::ApiKey),
+                "https://relay.invalid/v1",
+            );
+            assert!(
+                matches!(
+                    elsewhere,
+                    AccountingMode::Provider {
+                        pricing: PriceAuthority::Unavailable,
+                        ..
+                    }
+                ),
+                "{id} must not carry rates away from its own route"
+            );
+            // Subscription-style authentication on that provider's own route for
+            // that credential records the plan side instead, never per-token
+            // spend. A turn with no credential at all records neither.
+            let plan_auth = Some(codex_protocol::auth::AuthMode::Headers);
+            if let Ok(plan_route) = provider.to_api_provider(plan_auth) {
+                let on_plan = turn_mode(&selected, &id, &provider, plan_auth, &plan_route.base_url);
+                assert!(
+                    matches!(
+                        on_plan,
+                        AccountingMode::Provider {
+                            pricing: PriceAuthority::PlanRate,
+                            ..
+                        }
+                    ),
+                    "{id} on plan authentication must record the plan side"
+                );
+            }
+            // No Codex credential at all. For a provider whose own credential is
+            // a plan login - `claude-plan`'s command auth - that is exactly how a
+            // subscription turn arrives, and it must still take the plan side.
+            // For every other provider it is a turn this client cannot attribute.
+            let anonymous = turn_mode(&selected, &id, &provider, None, &endpoint);
+            let expected_anonymous = if provider.auth.is_some() {
+                PriceAuthority::PlanRate
+            } else {
+                PriceAuthority::Unavailable
+            };
+            assert!(
+                matches!(
+                    anonymous,
+                    AccountingMode::Provider { pricing, .. } if pricing == expected_anonymous
+                ),
+                "{id} with no Codex credential must state {expected_anonymous:?}"
             );
         }
         // And the per-turn dialect gate must admit it too, not just the selector.
@@ -501,6 +591,19 @@ fn accounting_every_built_in_provider_collects() {
     // The catalogue has twenty-one entries today; assert the real number so a
     // silently shrinking catalogue is visible rather than tolerated.
     assert_eq!(checked, 21, "catalogue size changed");
+    // Money used to exist on two providers. Name the ones that now carry rates,
+    // so losing any of them is a visible change rather than a quiet one.
+    priced_providers.sort();
+    assert!(
+        priced_providers.len() >= 14,
+        "pricing authority shrank to {priced_providers:?}"
+    );
+    for required in ["anthropic", "openai", "openrouter", "vercel", "deepseek"] {
+        assert!(
+            priced_providers.iter().any(|id| id == required),
+            "{required} lost pricing authority: {priced_providers:?}"
+        );
+    }
 }
 
 /// A compaction's turn identity must fit the store's bounded identity, or the

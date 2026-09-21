@@ -1,6 +1,7 @@
 //! Prospective exact estimates from the bundled authority, never model discovery.
 use codex_protocol::openai_models::ModelBilling;
 use codex_protocol::openai_models::ModelOrchestrationMetadata;
+use codex_state::accounting::Basis;
 use codex_state::accounting::Currency;
 use codex_state::accounting::Decimal;
 use codex_state::accounting::Rates;
@@ -9,74 +10,170 @@ use codex_state::accounting::SourceKind;
 use codex_state::accounting::Unit;
 use uuid::Uuid;
 
+/// Rates the provider charges this route, for a turn it bills per token.
 pub(super) fn original(
     model: &str,
+    provider: &str,
     scope: Uuid,
     accepted_at: i64,
+    source: &str,
 ) -> anyhow::Result<Vec<Snapshot>> {
     let catalog = codex_models_manager::bundled_models_response()?;
-    let mut matches = catalog.models.iter().filter(|row| row.slug == model);
-    let Some(row) = matches.next() else {
+    let Some(billing) = billing_for(&catalog.models, model, provider) else {
         return Ok(Vec::new());
     };
-    if matches.next().is_some() {
-        return Ok(Vec::new());
-    }
-    let Some(ModelOrchestrationMetadata::Eligible {
-        provider_id,
-        billing,
-        ..
-    }) = &row.orchestration
-    else {
-        return Ok(Vec::new());
-    };
-    if provider_id != "anthropic" {
-        return Ok(Vec::new());
-    }
-    project(model, scope, billing, accepted_at)
+    billed(model, provider, &billing, scope, accepted_at, source)
 }
 
-fn project(
+/// Rates for a turn billed per token, from an already-resolved catalogue row.
+fn billed(
     model: &str,
-    scope: Uuid,
+    provider: &str,
     billing: &ModelBilling,
+    scope: Uuid,
     accepted_at: i64,
+    source: &str,
 ) -> anyhow::Result<Vec<Snapshot>> {
-    let ModelBilling::Metered {
-        input_milli_usd_per_million_tokens: input,
-        output_milli_usd_per_million_tokens: output,
-        cached_input_milli_usd_per_million_tokens: read,
-    } = billing
-    else {
+    // A plan row states no per-token price, and a plan turn is not billed per
+    // token: either way there is nothing here to charge.
+    let Some((input, output, read)) = billing.api_key_rates() else {
         return Ok(Vec::new());
     };
     // Canonical tuple version is part of provenance. UUIDv5 is a content identity,
     // not an authenticity claim. Null cache-write is deliberate in projection v1.
-    let source = serde_json::to_vec(&(
-        "anthropic-bundled-v1",
-        "anthropic",
+    let reference = serde_json::to_vec(&(
+        source,
+        provider,
         model,
+        "api_key",
+        "default",
         "USD/million",
         input,
         output,
         read,
     ))?;
+    snapshot(
+        model,
+        provider,
+        scope,
+        accepted_at,
+        Rates {
+            noncached: Some(rate(input)?),
+            output: Some(rate(output)?),
+            read: read.map(rate).transpose()?,
+            write: None,
+        },
+        reference,
+        Basis::Billed,
+        None,
+    )
+}
+
+/// Subscription capacity: the plan rate that applied at dispatch, and the API
+/// rates the catalogue states for the same route, if it states any.
+///
+/// A row with no plan side yields nothing. Inventing a burn for a metered row,
+/// or an API equivalent for a row that states no API price, would put a number
+/// in the ledger that no catalogue ever stated.
+pub(super) fn plan_original(
+    model: &str,
+    provider: &str,
+    scope: Uuid,
+    accepted_at: i64,
+    tier: Option<&str>,
+) -> anyhow::Result<Vec<Snapshot>> {
+    if !matches!(tier, None | Some("default")) {
+        return Ok(Vec::new());
+    }
+    let catalog = codex_models_manager::bundled_models_response()?;
+    let Some(billing) = billing_for(&catalog.models, model, provider) else {
+        return Ok(Vec::new());
+    };
+    let Some(burn) = billing.plan_burn_millis_at(accepted_at) else {
+        return Ok(Vec::new());
+    };
+    let equivalent = billing.api_key_rates();
+    let input = equivalent.map(|(input, _, _)| input);
+    let output = equivalent.map(|(_, output, _)| output);
+    let read = equivalent.and_then(|(_, _, read)| read);
+    let reference = serde_json::to_vec(&(
+        "plan-equivalent-bundled-v1",
+        provider,
+        model,
+        "plan",
+        burn,
+        "USD/million",
+        input,
+        output,
+        read,
+    ))?;
+    snapshot(
+        model,
+        provider,
+        scope,
+        accepted_at,
+        Rates {
+            noncached: input.map(rate).transpose()?,
+            output: output.map(rate).transpose()?,
+            read: read.map(rate).transpose()?,
+            write: None,
+        },
+        reference,
+        Basis::PlanEquivalent,
+        Some(burn),
+    )
+}
+
+/// The catalogue's billing for exactly this provider's row, or nothing.
+///
+/// The slug must be unambiguous and the row must belong to the provider the
+/// attempt actually used: a rate from another provider's row would be a guess
+/// wearing this provider's name.
+fn billing_for(
+    rows: &[codex_protocol::openai_models::ModelInfo],
+    model: &str,
+    provider: &str,
+) -> Option<ModelBilling> {
+    let mut matches = rows.iter().filter(|row| row.slug == model);
+    let row = matches.next()?;
+    if matches.next().is_some() {
+        return None;
+    }
+    let ModelOrchestrationMetadata::Eligible {
+        provider_id,
+        billing,
+        ..
+    } = row.orchestration.as_ref()?
+    else {
+        return None;
+    };
+    (provider_id == provider).then(|| billing.clone())
+}
+
+#[expect(clippy::too_many_arguments)]
+fn snapshot(
+    model: &str,
+    provider: &str,
+    scope: Uuid,
+    accepted_at: i64,
+    rates: Rates,
+    reference: Vec<u8>,
+    basis: Basis,
+    plan_burn_millis: Option<u32>,
+) -> anyhow::Result<Vec<Snapshot>> {
     let time = accepted_at.try_into()?;
     Ok(vec![Snapshot {
         id: Uuid::new_v4(),
-        provider: "anthropic".into(),
+        provider: provider.into(),
         model: model.into(),
         scope,
         currency: Currency::Usd,
         unit: Unit::PerMillionTokens,
-        rates: Rates {
-            noncached: Some(rate(*input)?),
-            output: Some(rate(*output)?),
-            read: read.map(rate).transpose()?,
-            write: None,
-        },
-        source_reference: Uuid::new_v5(&Uuid::NAMESPACE_OID, &source),
+        rates,
+        source_reference: Uuid::new_v5(&Uuid::NAMESPACE_OID, &reference),
         source_kind: SourceKind::NativeCatalog,
+        basis,
+        plan_burn_millis,
         observed_at_ms: time,
         approved_at_ms: time,
         effective_from_ms: time,
@@ -86,6 +183,7 @@ fn project(
 
 pub(super) fn responses_original(
     model: &str,
+    provider: &str,
     scope: Uuid,
     accepted_at: i64,
     tier: Option<&str>,
@@ -93,8 +191,9 @@ pub(super) fn responses_original(
     if !matches!(tier, None | Some("default")) {
         return Ok(Vec::new());
     }
-    openai_original(
+    original(
         model,
+        provider,
         scope,
         accepted_at,
         "openai-responses-api-key-bundled-v1",
@@ -103,48 +202,26 @@ pub(super) fn responses_original(
 
 pub(super) fn chat_original(
     model: &str,
+    provider: &str,
     scope: Uuid,
     accepted_at: i64,
 ) -> anyhow::Result<Vec<Snapshot>> {
-    openai_original(model, scope, accepted_at, "openai-chat-api-key-bundled-v1")
+    original(
+        model,
+        provider,
+        scope,
+        accepted_at,
+        "openai-chat-api-key-bundled-v1",
+    )
 }
 
-fn openai_original(
+pub(super) fn anthropic_original(
     model: &str,
+    provider: &str,
     scope: Uuid,
     accepted_at: i64,
-    source: &str,
 ) -> anyhow::Result<Vec<Snapshot>> {
-    let catalog = codex_models_manager::bundled_models_response()?;
-    openai_rows(&catalog.models, model, scope, accepted_at, source)
-}
-
-fn openai_rows(
-    rows: &[codex_protocol::openai_models::ModelInfo],
-    model: &str,
-    scope: Uuid,
-    accepted_at: i64,
-    source: &str,
-) -> anyhow::Result<Vec<Snapshot>> {
-    let mut rows = rows.iter().filter(|row| row.slug == model);
-    let Some(row) = rows.next() else {
-        return Ok(Vec::new());
-    };
-    if rows.next().is_some() {
-        return Ok(Vec::new());
-    }
-    let Some(ModelOrchestrationMetadata::Eligible {
-        provider_id,
-        billing,
-        ..
-    }) = &row.orchestration
-    else {
-        return Ok(Vec::new());
-    };
-    if provider_id != "openai" {
-        return Ok(Vec::new());
-    }
-    openai_project(model, scope, billing, accepted_at, source)
+    original(model, provider, scope, accepted_at, "anthropic-bundled-v1")
 }
 
 #[cfg(test)]
@@ -154,70 +231,14 @@ fn responses_project(
     billing: &ModelBilling,
     accepted_at: i64,
 ) -> anyhow::Result<Vec<Snapshot>> {
-    openai_project(
+    billed(
         model,
-        scope,
+        "openai",
         billing,
+        scope,
         accepted_at,
         "openai-responses-api-key-bundled-v1",
     )
-}
-
-fn openai_project(
-    model: &str,
-    scope: Uuid,
-    billing: &ModelBilling,
-    accepted_at: i64,
-    source: &str,
-) -> anyhow::Result<Vec<Snapshot>> {
-    let (input, output, read) = match billing {
-        ModelBilling::Metered {
-            input_milli_usd_per_million_tokens,
-            output_milli_usd_per_million_tokens,
-            cached_input_milli_usd_per_million_tokens,
-        } => (
-            *input_milli_usd_per_million_tokens,
-            *output_milli_usd_per_million_tokens,
-            *cached_input_milli_usd_per_million_tokens,
-        ),
-        ModelBilling::AuthDependent {
-            api_key_input_milli_usd_per_million_tokens,
-            api_key_output_milli_usd_per_million_tokens,
-            api_key_cached_input_milli_usd_per_million_tokens,
-            ..
-        } => (
-            *api_key_input_milli_usd_per_million_tokens,
-            *api_key_output_milli_usd_per_million_tokens,
-            *api_key_cached_input_milli_usd_per_million_tokens,
-        ),
-        ModelBilling::Plan { .. } | ModelBilling::PlanSchedule { .. } | ModelBilling::Local => {
-            return Ok(Vec::new());
-        }
-    };
-    let mut snapshots = project(
-        model,
-        scope,
-        &ModelBilling::Metered {
-            input_milli_usd_per_million_tokens: input,
-            output_milli_usd_per_million_tokens: output,
-            cached_input_milli_usd_per_million_tokens: read,
-        },
-        accepted_at,
-    )?;
-    let source = serde_json::to_vec(&(
-        source,
-        "openai",
-        model,
-        "api_key",
-        "default",
-        "USD/million",
-        input,
-        output,
-        read,
-    ))?;
-    snapshots[0].provider = "openai".into();
-    snapshots[0].source_reference = Uuid::new_v5(&Uuid::NAMESPACE_OID, &source);
-    Ok(snapshots)
 }
 
 fn rate(milli: u32) -> anyhow::Result<Decimal> {

@@ -127,6 +127,7 @@ pub fn golden(cached: bool, zero: bool, count: i64) -> anyhow::Result<DayTotals>
         .try_into()?,
         unknown_estimates: count,
         attempts: count,
+        ..Default::default()
     })
 }
 pub async fn absent(db: &codex_state::StateRuntime) -> anyhow::Result<()> {

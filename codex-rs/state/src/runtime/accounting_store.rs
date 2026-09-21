@@ -6,6 +6,7 @@ use anyhow::ensure;
 use codex_protocol::ThreadId;
 use sqlx::SqliteConnection;
 
+pub use super::pricing::Basis;
 pub use super::pricing::BucketQuote;
 pub use super::pricing::Currency;
 pub use super::pricing::Current;

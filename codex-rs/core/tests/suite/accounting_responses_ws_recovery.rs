@@ -645,6 +645,7 @@ async fn accounting_responses_ws_native_auxiliary_scope_and_event_parity() -> an
                             .try_into()?,
                         unknown_estimates: i64::from(usage_kind != 2) + i64::from(fallback),
                         attempts: 1 + i64::from(fallback),
+                        ..Default::default()
                     }
                 );
                 eprintln!("metadata matrix passed: mask={mask}, usage={usage_kind}, kind={kind}");
