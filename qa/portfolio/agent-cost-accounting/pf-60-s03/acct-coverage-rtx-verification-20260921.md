@@ -10,6 +10,15 @@ cargo-nextest 0.9.145, Python 3.14.4. Source tree copied from the branch at
 `041b29bb9`; tests run through the same `scripts/isolated_rust_tests.py` wrapper
 the `just test` recipe uses, so profile isolation is identical.
 
+## Raw artifacts
+
+The five lane logs and the run summary are committed beside this record in
+`rtx-20260921/`: `head-core.log`, `head-core-feature.log`, `head-state.log`,
+`head-tui-usage.log`, `head-tui-tokens.log` and `lanes.summary`. They are the
+nextest output copied from `~/corbanu-acct/` on the host, unedited. An earlier
+version of this record stated the conclusion without citing them, which is not
+good enough for evidence that overturns a previous attribution.
+
 ## Result at the branch head
 
 | lane | result |
@@ -50,3 +59,22 @@ manufactures failures faster than a reviewer can attribute them. This lane shoul
 verify on the RTX host by default: the full accounting surface runs in about 60
 seconds there against roughly 45 minutes of wall clock here, and it does not
 require arguing about which failures are real.
+
+## Re-run after the exclusion fix and the added assertions
+
+| lane | result |
+| --- | --- |
+| `codex-core` accounting | **132 run, 132 passed** |
+| `codex-core` accounting, feature | **136 run, 136 passed** |
+| `codex-state` accounting | **166 run, 166 passed** |
+| `codex-tui` usage | **92 run, 92 passed** |
+| `codex-tui` tokens | 66 run, 65 passed, 1 pre-existing failure |
+
+The counts rose by one because
+`accounting_unattributable_request_is_served_without_evidence` now exists: it
+drives the real transport with a gateway-pinned body and asserts the request is
+sent, the turn's sampling still passes `check()`, no attempt row is written, and
+a usage event on the excluded request records nothing instead of failing the
+stream. That is the coverage whose absence let an earlier version of the
+pass-through - which rejected the sampling and sent anyway - go green on every
+lane.
