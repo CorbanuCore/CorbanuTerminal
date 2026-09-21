@@ -435,6 +435,58 @@ fn accounting_chat_collects_the_fields_the_client_itself_emits() {
     );
 }
 
+/// "Available on all providers" should be checked against the product's real
+/// catalogue, not six synthetic identities. Every built-in provider must select a
+/// collecting mode at its own wire dialect; if a future provider is added with a
+/// shape this code cannot attribute, this test is where that shows up.
+#[test]
+fn accounting_every_built_in_provider_collects() {
+    use codex_model_provider_info::built_in_model_providers;
+    let mut checked = 0;
+    for (id, provider) in built_in_model_providers(None) {
+        let selected = developer_accounting_mode(&id, &provider);
+        assert!(
+            !matches!(selected, AccountingMode::Disabled),
+            "{id} ({:?}) selects no accounting mode",
+            provider.wire_api
+        );
+        let bound = turn_mode(
+            &selected,
+            &id,
+            &provider,
+            None,
+            provider
+                .base_url
+                .as_deref()
+                .unwrap_or("https://api.openai.com/v1"),
+        );
+        assert!(
+            collects(&bound, &id, &provider, provider.wire_api),
+            "{id} ({:?}) binds a mode that does not collect",
+            provider.wire_api
+        );
+        // No built-in provider may be priced without API-key authority; that is
+        // checked separately, but assert here that binding without auth never
+        // invents pricing authority for a catalogue entry.
+        if let AccountingMode::Provider {
+            api_key_pricing, ..
+        } = bound
+        {
+            assert!(
+                !api_key_pricing,
+                "{id} must not claim pricing authority without API-key auth"
+            );
+        }
+        checked += 1;
+    }
+    // The catalogue is the product's real provider list; if it shrinks, this
+    // test should be updated deliberately rather than silently covering less.
+    assert!(
+        checked >= 8,
+        "catalogue looked too small: {checked} providers"
+    );
+}
+
 fn chat_body() -> codex_api::ChatCompletionsRequest {
     codex_api::ChatCompletionsRequest {
         model: "fixture".into(),
