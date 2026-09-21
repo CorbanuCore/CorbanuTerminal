@@ -243,8 +243,60 @@ impl<T> AccountingTransport<T> {
 }
 
 impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
+    /// One request, one response, no stream: the compaction endpoint.
+    ///
+    /// It is inference the operator paid for like any other, so it admits an
+    /// attempt before the send and records whatever numbers the body carries.
+    /// A body with no usage records the attempt with usage unknown, which is
+    /// what the provider actually said - not zero.
     async fn execute(&self, request: Request) -> Result<Response, TransportError> {
-        self.inner.execute(request).await
+        let Some(evidence) = &self.evidence else {
+            return self.inner.execute(request).await;
+        };
+        if evidence.attempt.get().is_some() {
+            evidence.sampling.reject();
+            return Err(TransportError::Build(FAILURE.into()));
+        }
+        if let Some(reason) = request_refusal(
+            &request,
+            self.configured_routing.as_ref(),
+            self.configured_routing_options.as_ref(),
+            self.configured_plugins.as_ref(),
+        ) {
+            tracing::warn!(
+                accounting.excluded = reason,
+                "accounting: request not attributable to the selected provider; serving it unrecorded"
+            );
+            evidence.exclude();
+            return self.inner.execute(request).await;
+        }
+        let attempt = evidence
+            .sampling
+            .admit_with_tier(&self.model, &request.url, self.tier.as_deref())
+            .await
+            .map_err(|_| {
+                evidence.sampling.reject();
+                TransportError::Build(FAILURE.into())
+            })?;
+        let response = match self.inner.execute(request).await {
+            Err(TransportError::Http { status, .. }) if status.is_redirection() => {
+                evidence.sampling.reject();
+                return Err(TransportError::Build(FAILURE.into()));
+            }
+            result => result?,
+        };
+        evidence.attempt.set(attempt).map_err(|_| {
+            evidence.sampling.reject();
+            TransportError::Build(FAILURE.into())
+        })?;
+        // One body, one observation: revisions are positive, and this response
+        // has exactly one.
+        if let Ok(Some(usage)) = codex_api::responses_body_usage(&response.body) {
+            codex_api::ResponsesUsageObserver::observe(evidence.as_ref(), 1, Ok(usage))
+                .await
+                .map_err(|_| TransportError::Build(FAILURE.into()))?;
+        }
+        Ok(response)
     }
 
     async fn stream(&self, request: Request) -> Result<StreamResponse, TransportError> {

@@ -76,6 +76,16 @@ fn patch(value: Option<&Value>) -> Result<Option<ResponsesUsagePatch>, InvalidRe
     }))
 }
 
+/// Numeric usage carried by a non-streaming Responses body, if it carries any.
+///
+/// The compaction endpoint answers with one JSON object rather than a stream.
+/// A body with no `usage` is not an error: it means the provider stated no
+/// numbers, which the ledger records as unknown rather than as zero.
+pub fn body_usage(body: &[u8]) -> Result<Option<ResponsesUsagePatch>, InvalidResponsesUsage> {
+    let value: Value = serde_json::from_slice(body).map_err(|_| InvalidResponsesUsage)?;
+    patch(value.get("usage"))
+}
+
 pub(crate) fn decode(data: &str) -> Result<Option<ResponsesUsagePatch>, InvalidResponsesUsage> {
     let value: Value = serde_json::from_str(data).map_err(|_| InvalidResponsesUsage)?;
     match value.get("type").and_then(Value::as_str) {

@@ -70,7 +70,7 @@ reopens unchanged.
 ## Verification
 
 Clean-host lanes at this tree, RTX workstation, formatted and fmt-clean:
-`codex-core` accounting **141/141**, with `developer-accounting` **146/146**,
+`codex-core` accounting **142/142**, with `developer-accounting` **147/147**,
 `codex-state` accounting **168/168**, `codex-tui` usage **92/92**, `codex-tui`
 tokens 66 of 67 - the one failure is the stale snapshot that fails identically
 at the integration tip. The `websocket` suite passes 69/69 and the `compact`
@@ -169,16 +169,69 @@ private hook, keep passing precisely because of the route rule above.
 - Auxiliary inference that opens its own client session: local compaction,
   remote compaction, startup prewarm, the completion classifier and stage-one
   memory extraction. All five attach, the fifth as described above.
-- The legacy `/responses/compact` endpoint is still uninstrumented; it is
-  reachable only by disabling `remote_compaction_v2`, which is Stable and
-  default-on, and it posts through `ApiCompactClient`, which has no collector
-  seam.
+- The legacy `/responses/compact` endpoint collects now too; it has its own
+  section below.
 - Off a provider's own route, economics are still not claimed. Collection is
   unaffected: those turns record tokens.
 
-With this increment the "what does not collect" list holds no session class
-that ordinary use reaches. One exclusion is still reachable by a supported
-toggle: turning off `remote_compaction_v2` - Stable and default-on - routes
-compaction through the legacy `/responses/compact` endpoint, which posts via
-`ApiCompactClient` and has no collector seam. That is the last named path where
-paid inference reaches no ledger, and it is the next one to close.
+## The legacy compaction endpoint
+
+Turning off `remote_compaction_v2` - Stable and default-on - routes compaction
+through `/responses/compact`, which answers with one JSON body rather than a
+stream and posts through `ApiCompactClient`. It never met the streaming
+collector, so every such compaction was paid for and recorded nowhere. It was
+the last named path where that was true.
+
+Three things were needed, and each is the smallest honest version of itself:
+
+- `AccountingTransport::execute` now does for a single response what `stream`
+  does for a stream: admit an attempt before the send, refuse the same
+  routing keys, and record the numbers the body carries. A body with no `usage`
+  records the attempt with its tokens **unknown**, which is what the provider
+  said - not zero.
+- A sampling can be pinned to a path other than its dialect's default.
+  Compaction has its own path under the same approved endpoint; pinning it to
+  `responses` read as a route change and refused the request, which is exactly
+  why this endpoint could not be collected before.
+- The legacy compaction path opens a client session of its own and attaches
+  under the same `compact:` identity as every other compaction, best effort -
+  and, as everywhere else in this workstream, best effort covers **attach**
+  time. Once evidence exists, an admission failure, a route mismatch or a failed
+  observation fails the compaction, which this path could not do before.
+- A collected request here also stops following redirects, the rule the three
+  streaming paths already had: a response from somewhere else must never be
+  attributed to the approved endpoint.
+  `accounting_legacy_compaction_never_follows_a_redirect` sweeps 301 through 308
+  and asserts the redirect target is never reached; reverting the rule fails it.
+
+`accounting_records_legacy_compaction` turns the feature off, drives a real
+`/compact`, and asserts the second attempt is a `compact:` turn whose own
+tokens move the day total to 200. Two existing tests that pinned the opposite -
+that this endpoint records nothing - now assert the row instead.
+
+With this increment every **conversational** path that sends paid inference is
+collected: ordinary turns, all three compaction paths, startup prewarm, the
+completion classifier, agent-identity sessions and stage-one memory extraction.
+No session class and no supported configuration of those is left recording
+nothing.
+
+Review found, while checking that claim, that it is not true of the product as a
+whole. Three non-conversational clients send billed requests with no collector,
+and none of them was in this workstream's scope until now:
+
+- **Image generation.** `ext/image-generation` posts `/v1/images/generations`
+  and `/v1/images/edits` on a bare transport with the session's provider and
+  auth. `Feature::ImageGeneration` is Stable and **default-on**, so this is
+  operator-billed inference recording nothing in a default configuration.
+- **Realtime calls.** `ModelClient::create_realtime_call_with_headers` posts
+  through the plain transport; `realtime_conversation` is under development.
+- **Web search.** `ext/web-search`'s client is in the same shape.
+- **The Claude panes bridge.** `tui/src/claude_panes` posts chat completions to
+  Ambient on a bare client with an operator credential from the vault, and
+  selects an Anthropic OAuth passthrough for the same surface. Operator-paid
+  inference on a shipped surface, with no collector anywhere in the path.
+
+Image generation is the one that matters most: it is on by default. It is the
+next thing to attach, and the panes bridge after it. This list is of clients
+outside the conversational model path; it is where the next increments go, and
+it is stated here rather than left for a reader to discover.

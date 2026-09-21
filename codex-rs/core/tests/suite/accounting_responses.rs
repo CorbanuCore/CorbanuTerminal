@@ -389,7 +389,13 @@ async fn accounting_responses_native_sampling_and_auxiliary_scope() -> anyhow::R
         .await?;
     terminal(&test).await?;
     assert_eq!(compact.single_request().path(), "/v1/responses/compact");
-    assert_eq!(attempts(&db).await?, records);
+    // The legacy compaction endpoint records too, under its own `compact:`
+    // turn. This assertion used to pin the opposite.
+    let after = wait_attempts(&db, 3).await?;
+    assert_eq!(after[..2], records[..]);
+    assert!(after[2].turn.starts_with("compact:"), "{}", after[2].turn);
+    // That fixture's compact body states no usage, so the compaction records an
+    // attempt with its tokens unknown rather than a third observation.
     assert_eq!(observations(&db).await?.len(), 2);
     stop(&test).await;
     Ok(())
@@ -633,5 +639,119 @@ async fn accounting_agent_identity_session_collects() -> anyhow::Result<()> {
     assert_eq!(totals(&db, &records[0]).await?.measured[0].known, 100);
     assert_eq!(mock.requests().len(), 1);
     stop(&test).await;
+    Ok(())
+}
+
+/// The legacy compaction endpoint answers with one JSON body rather than a
+/// stream, so it never met the streaming collector. It is reachable by turning
+/// `remote_compaction_v2` off - a Stable, default-on feature - and every such
+/// compaction was paid for and recorded nowhere.
+#[tokio::test]
+async fn accounting_records_legacy_compaction() -> anyhow::Result<()> {
+    let server = MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    let mock = responses::mount_sse_once(&server, success(usage(Some(0)))).await;
+    let compact = responses::mount_compact_json_once(
+        &server,
+        json!({
+            "output":[{"type":"compaction","encrypted_content":"synthetic-summary"}],
+            "usage":{"input_tokens":100,"input_tokens_details":{"cached_tokens":20},
+                "output_tokens":40,"output_tokens_details":{"reasoning_tokens":10},
+                "total_tokens":140}
+        }),
+    )
+    .await;
+    let test = builder(endpoint.clone(), enabled(&endpoint))
+        .with_config(|config| {
+            config
+                .features
+                .disable(codex_features::Feature::TokenBudget)
+                .unwrap();
+            config
+                .features
+                .disable(codex_features::Feature::RemoteCompactionV2)
+                .unwrap();
+        })
+        .build_with_auto_env(&server)
+        .await?;
+    test.submit_turn("fixture").await?;
+    let db = test.codex.state_db().unwrap();
+    let turn = wait_attempts(&db, 1).await?;
+    test.codex
+        .submit(codex_protocol::protocol::Op::Compact)
+        .await?;
+    terminal(&test).await?;
+    let records = wait_attempts(&db, 2).await?;
+    assert_eq!(records.len(), 2);
+    let compaction = &records[1];
+    assert!(
+        compaction.turn.starts_with("compact:"),
+        "legacy compaction recorded under {}",
+        compaction.turn
+    );
+    assert_ne!(compaction.turn, turn[0].turn);
+    assert_eq!(compact.single_request().path(), "/v1/responses/compact");
+    // The endpoint's own body carried the numbers, so they are recorded: the
+    // turn's 100 input tokens plus the compaction's own 100.
+    wait_observations(&db, 2).await?;
+    assert_eq!(totals(&db, compaction).await?.measured[0].known, 200);
+    assert_eq!(mock.requests().len(), 1);
+    stop(&test).await;
+    Ok(())
+}
+
+/// A collected request must not follow a redirect: a response from somewhere
+/// else would be attributed to the approved endpoint. The streaming paths have
+/// pinned that for a while; the compaction endpoint takes the same branch now.
+#[tokio::test]
+async fn accounting_legacy_compaction_never_follows_a_redirect() -> anyhow::Result<()> {
+    for status in [301, 302, 303, 307, 308] {
+        let origin = MockServer::start().await;
+        let target = MockServer::start().await;
+        let endpoint = format!("{}/v1", origin.uri());
+        let turn = responses::mount_sse_once(&origin, success(usage(Some(0)))).await;
+        Mock::given(method("POST"))
+            .and(path("/v1/responses/compact"))
+            .respond_with(
+                ResponseTemplate::new(status)
+                    .insert_header("location", format!("{}/v1/responses/compact", target.uri())),
+            )
+            .mount(&origin)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/v1/responses/compact"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "output":[{"type":"compaction","encrypted_content":"elsewhere"}]
+            })))
+            .mount(&target)
+            .await;
+        let test = builder(endpoint.clone(), enabled(&endpoint))
+            .with_config(|config| {
+                config
+                    .features
+                    .disable(codex_features::Feature::TokenBudget)
+                    .unwrap();
+                config
+                    .features
+                    .disable(codex_features::Feature::RemoteCompactionV2)
+                    .unwrap();
+            })
+            .build_with_auto_env(&origin)
+            .await?;
+        test.submit_turn("fixture").await?;
+        let db = test.codex.state_db().unwrap();
+        wait_attempts(&db, 1).await?;
+        test.codex
+            .submit(codex_protocol::protocol::Op::Compact)
+            .await?;
+        terminal(&test).await?;
+        assert_eq!(
+            target.received_requests().await.unwrap().len(),
+            0,
+            "{status} redirect was followed"
+        );
+        assert_eq!(turn.requests().len(), 1);
+        stop(&test).await;
+    }
     Ok(())
 }
