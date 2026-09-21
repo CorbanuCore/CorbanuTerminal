@@ -62,8 +62,11 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
                         provider.chat_completions_provider = Some(serde_json::json!({}));
                     }
                     // The resolved URL would carry the query string, so it can never
-                    // equal the pinned endpoint: the shape must be refused at all
-                    // three gates rather than admitted and then failed closed.
+                    // equal the pinned endpoint: the shape must be refused rather
+                    // than admitted and then failed closed. Note that for this
+                    // shape the three gates share `route_refusal`, so these cells
+                    // pin that every gate consults it - not that three independent
+                    // implementations agree.
                     if exclusion == Some("query_params") {
                         provider.query_params =
                             Some(std::collections::HashMap::from([(
@@ -238,6 +241,46 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
 fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
     use codex_model_provider_info::{ModelProviderInfo, WireApi};
     use codex_protocol::auth::AuthMode;
+    // Both built-in metered routes, because the Anthropic arm was dead code until
+    // the predicate stopped rejecting a provider for declaring its own api-key
+    // header, and nothing asserted the positive side of that arm.
+    for (id, provider, endpoint) in [
+        (
+            "openai",
+            ModelProviderInfo::create_openai_provider(None),
+            "https://api.openai.com/v1",
+        ),
+        (
+            "anthropic",
+            ModelProviderInfo::create_anthropic_provider(),
+            codex_model_provider_info::ANTHROPIC_BASE_URL,
+        ),
+    ] {
+        let mode = crate::config::AccountingMode::Provider {
+            scope: uuid::Uuid::new_v4(),
+            provider_id: id.into(),
+            wire_api: provider.wire_api,
+            approved_endpoint: endpoint.into(),
+            api_key_pricing: false,
+        };
+        let bound = super::turn_mode(
+            &mode,
+            id,
+            &provider,
+            Some(AuthMode::ApiKey),
+            endpoint,
+        );
+        let crate::config::AccountingMode::Provider {
+            api_key_pricing, ..
+        } = bound
+        else {
+            panic!("{id} provider mode must survive rebinding");
+        };
+        assert!(
+            api_key_pricing,
+            "a metered API-key {id} route at its own default endpoint must be priced"
+        );
+    }
     let provider = ModelProviderInfo::create_openai_provider(None);
     assert_eq!(provider.wire_api, WireApi::Responses);
     let scope = uuid::Uuid::new_v4();
