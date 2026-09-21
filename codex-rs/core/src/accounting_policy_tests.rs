@@ -142,6 +142,53 @@ fn accounting_chat_request_overrides_are_unattributable() -> Result<()> {
     Ok(())
 }
 
+/// The transport sees the body AFTER preparation, which for this client means
+/// zstd-compressed bytes. Inspecting only plain JSON refused every real turn and
+/// collected nothing, so cover both encodings and both answers here.
+#[test]
+fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
+    use codex_http_client::{Request, RequestCompression};
+    let ordinary = serde_json::json!({"model":"fixture","input":[],"stream":true});
+    for compression in [RequestCompression::None, RequestCompression::Zstd] {
+        let prepared = Request::new(http::Method::POST, ENDPOINT.into())
+            .with_json(&ordinary)
+            .with_compression(compression)
+            .into_prepared()
+            .map_err(anyhow::Error::msg)?;
+        assert_eq!(
+            transport::request_refusal(&prepared),
+            None,
+            "an ordinary prepared body must remain collectable under {compression:?}"
+        );
+        for field in ["provider", "provider_options", "plugins"] {
+            let mut value = ordinary.clone();
+            value[field] = if field == "plugins" {
+                serde_json::json!([])
+            } else {
+                serde_json::json!({})
+            };
+            let prepared = Request::new(http::Method::POST, ENDPOINT.into())
+                .with_json(&value)
+                .with_compression(compression)
+                .into_prepared()
+                .map_err(anyhow::Error::msg)?;
+            assert_eq!(
+                transport::request_refusal(&prepared),
+                Some(field),
+                "{field} must stay unattributable under {compression:?}"
+            );
+        }
+    }
+    let opaque = Request::new(http::Method::POST, ENDPOINT.into())
+        .with_raw_body(vec![0x00, 0x01, 0x02, 0x03]);
+    assert_eq!(
+        transport::request_refusal(&opaque),
+        Some("uninspectable request body"),
+        "a body whose routing keys cannot be read must still be refused"
+    );
+    Ok(())
+}
+
 fn chat_body() -> codex_api::ChatCompletionsRequest {
     codex_api::ChatCompletionsRequest {
         model: "fixture".into(),
