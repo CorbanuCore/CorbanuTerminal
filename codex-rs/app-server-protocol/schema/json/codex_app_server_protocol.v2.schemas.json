@@ -1971,6 +1971,31 @@
           "type": "object"
         },
         {
+          "description": "Report a model request the client sent itself, so it reaches the ledger.",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "thread/recordSentModelRequest"
+              ],
+              "title": "Thread/recordSentModelRequestRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadRecordSentModelRequestParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Thread/recordSentModelRequestRequest",
+          "type": "object"
+        },
+        {
           "properties": {
             "id": {
               "$ref": "#/definitions/RequestId"
@@ -18495,6 +18520,50 @@
         "threadId"
       ],
       "title": "ThreadRealtimeTranscriptDoneNotification",
+      "type": "object"
+    },
+    "ThreadRecordSentModelRequestParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "One model request a client sent itself, reported so the operator's ledger can record spend this process never saw.\n\nThe Claude panes bridge is the caller: it posts to a provider from inside the TUI, which does not run the model client. Only routes the server recognises are recorded.",
+      "properties": {
+        "baseUrl": {
+          "description": "The base URL the request went to, and the endpoint underneath it.",
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "usage": {
+          "description": "The `usage` object the provider's response carried, if it carried one."
+        }
+      },
+      "required": [
+        "baseUrl",
+        "model",
+        "path",
+        "threadId"
+      ],
+      "title": "ThreadRecordSentModelRequestParams",
+      "type": "object"
+    },
+    "ThreadRecordSentModelRequestResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "recorded": {
+          "description": "False when the server is not collecting, or does not recognise the route. Never an error: reporting spend must not fail the work.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "recorded"
+      ],
+      "title": "ThreadRecordSentModelRequestResponse",
       "type": "object"
     },
     "ThreadResumeInitialTurnsPageParams": {

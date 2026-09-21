@@ -87,6 +87,7 @@ pub use crate::endpoint::anthropic_messages::accounting::AnthropicTokenPresence;
 pub use crate::endpoint::anthropic_messages::accounting::AnthropicUsageObserver;
 pub use crate::endpoint::anthropic_messages::accounting::AnthropicUsagePatch;
 pub use crate::endpoint::anthropic_messages::accounting::InvalidAnthropicUsage;
+pub use crate::endpoint::anthropic_messages::accounting::body_usage as anthropic_body_usage;
 pub use crate::endpoint::chat_completions::accounting::ChatTokenPresence;
 pub use crate::endpoint::chat_completions::accounting::ChatUsageObserver;
 pub use crate::endpoint::chat_completions::accounting::ChatUsagePatch;

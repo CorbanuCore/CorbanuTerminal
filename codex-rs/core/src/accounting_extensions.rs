@@ -209,10 +209,20 @@ impl ExtensionAccounting {
                     Err(_) => false,
                 }
             }
-            // The Anthropic dialect reports its usage inside a stream this
-            // client never sees on this path. The call is recorded; its tokens
-            // are unknown rather than invented.
-            codex_model_provider_info::WireApi::Anthropic => true,
+            codex_model_provider_info::WireApi::Anthropic => {
+                match codex_api::anthropic_body_usage(body.as_bytes()) {
+                    Ok(Some(usage)) => {
+                        codex_api::AnthropicUsageObserver::observe(evidence.as_ref(), 1, Ok(usage))
+                            .await
+                            .is_ok()
+                    }
+                    // A streamed Anthropic response reports its usage inside
+                    // events this path never sees. The call is recorded; its
+                    // tokens are unknown rather than invented.
+                    Ok(None) => true,
+                    Err(_) => false,
+                }
+            }
         }
     }
 }

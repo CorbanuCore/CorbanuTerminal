@@ -1545,6 +1545,7 @@ async fn anthropic_passthrough_bridge_replaces_client_auth_and_forwards_oauth_be
                 Arc::new(format!("http://{upstream_addr}")),
                 reqwest::Client::new(),
                 /*proxy_count_tokens*/ true,
+                /*accounting_tx*/ None,
             )
             .await
             .expect("proxy request");
@@ -1611,6 +1612,7 @@ async fn anthropic_compatibility_bridge_keeps_authorized_synthetic_token_counts(
                 Arc::new("http://127.0.0.1:1".to_string()),
                 reqwest::Client::new(),
                 /*proxy_count_tokens*/ false,
+                /*accounting_tx*/ None,
             )
             .await
             .expect("serve compatibility request");

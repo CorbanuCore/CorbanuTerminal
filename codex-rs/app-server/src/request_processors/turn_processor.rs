@@ -2,6 +2,8 @@ use super::*;
 use codex_agent_extension::AgentInvocation;
 use codex_agent_extension::AgentRun;
 use codex_agent_extension::AgentRunner;
+use codex_core::accounting_extensions::SentModelRequest;
+use codex_model_provider_info::WireApi;
 use codex_protocol::crew::AgentClass;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::ContentItem;
@@ -19,6 +21,22 @@ use crate::image_url::is_remote_image_url;
 
 const DIRECT_INPUT_TO_MULTI_AGENT_V2_SUBAGENT_ERROR: &str =
     "direct app-server input is not allowed for multi-agent v2 sub-agents";
+
+/// The routes a client may report a send on, and what each one means.
+///
+/// A reported send names a route; this server decides which account it bills
+/// and which dialect it speaks, so a client cannot enter spend against a
+/// provider of its choosing. These are the upstreams the Claude panes bridge
+/// is built to post to; anything else is not recorded.
+fn recognised_reported_route(base_url: &str, path: &str) -> Option<(&'static str, WireApi)> {
+    let base_url = base_url.trim_end_matches('/');
+    let path = path.trim_start_matches('/');
+    match (base_url, path) {
+        ("https://api.ambient.xyz/v1", "chat/completions") => Some(("ambient", WireApi::Chat)),
+        ("https://api.anthropic.com/v1", "messages") => Some(("anthropic", WireApi::Anthropic)),
+        _ => None,
+    }
+}
 
 /// Mirrors the direct-input policy in both request validation and thread capability responses.
 pub(super) fn can_accept_direct_input(
@@ -238,6 +256,15 @@ impl TurnRequestProcessor {
         params: ThreadInjectItemsParams,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         self.thread_inject_items_response_inner(params)
+            .await
+            .map(|response| Some(response.into()))
+    }
+
+    pub(crate) async fn thread_record_sent_model_request(
+        &self,
+        params: ThreadRecordSentModelRequestParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.thread_record_sent_model_request_inner(params)
             .await
             .map(|response| Some(response.into()))
     }
@@ -1006,6 +1033,46 @@ impl TurnRequestProcessor {
         Ok(ThreadInjectItemsResponse {})
     }
 
+    /// Record a model request a client sent itself.
+    ///
+    /// The Claude panes bridge posts to a provider from inside the TUI, which
+    /// does not run the model client, so those requests reached no ledger at
+    /// all. The client reports the send; the server decides what it means.
+    ///
+    /// Which account is billed and which dialect it speaks are derived here
+    /// from the route, not taken from the client: a route this server does not
+    /// recognise is not recorded, so a client cannot enter spend against an
+    /// arbitrary provider. The numbers still come from the provider's own
+    /// response body, parsed by the dialect's own parser.
+    async fn thread_record_sent_model_request_inner(
+        &self,
+        params: ThreadRecordSentModelRequestParams,
+    ) -> Result<ThreadRecordSentModelRequestResponse, JSONRPCErrorError> {
+        let (_, thread) = self.load_thread(&params.thread_id).await?;
+        let Some((provider_id, wire_api)) =
+            recognised_reported_route(&params.base_url, &params.path)
+        else {
+            tracing::warn!(
+                base_url = %params.base_url,
+                path = %params.path,
+                "accounting: reported send is not on a route this server records"
+            );
+            return Ok(ThreadRecordSentModelRequestResponse { recorded: false });
+        };
+        let recorded = thread
+            .record_sent_model_request(SentModelRequest {
+                provider_id: provider_id.to_string(),
+                endpoint: params.base_url,
+                path: params.path,
+                wire_api,
+                model: params.model,
+                label: "pane".to_string(),
+                usage: params.usage,
+            })
+            .await;
+        Ok(ThreadRecordSentModelRequestResponse { recorded })
+    }
+
     async fn set_app_server_client_info(
         thread: &CodexThread,
         app_server_client_name: Option<String>,
@@ -1745,5 +1812,28 @@ mod tests {
             &source,
             Some("another-client"),
         ));
+    }
+
+    /// Which account a reported send bills is decided here, from the route,
+    /// and not by the client that reports it.
+    #[test]
+    fn only_the_bridge_s_own_upstreams_are_recorded() {
+        assert_eq!(
+            recognised_reported_route("https://api.ambient.xyz/v1", "chat/completions"),
+            Some(("ambient", WireApi::Chat))
+        );
+        assert_eq!(
+            recognised_reported_route("https://api.anthropic.com/v1/", "/messages"),
+            Some(("anthropic", WireApi::Anthropic))
+        );
+        // Not this client's route, and not this client's business to price.
+        assert_eq!(
+            recognised_reported_route("https://evil.example.com/v1", "chat/completions"),
+            None
+        );
+        assert_eq!(
+            recognised_reported_route("https://api.ambient.xyz/v1", "responses"),
+            None
+        );
     }
 }

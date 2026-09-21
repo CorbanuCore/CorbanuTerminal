@@ -5905,6 +5905,14 @@ impl App {
             AppEvent::ClaudePaneTurnProgress { progress } => {
                 self.on_claude_pane_turn_progress(progress);
             }
+            AppEvent::PaneBridgeModelRequestSent {
+                base_url,
+                path,
+                model,
+                usage,
+            } => {
+                self.record_pane_bridge_model_request(app_server, base_url, path, model, usage);
+            }
             AppEvent::StartSide {
                 parent_thread_id,
                 user_message,
