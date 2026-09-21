@@ -216,6 +216,42 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
     Ok(())
 }
 
+/// The subscription integration test uses a wiremock endpoint, which already
+/// forces `api_key_pricing` off. Pin the auth-mode half of the rule directly, at
+/// the real default endpoint, so swapping the auth cannot silently keep prices.
+#[test]
+fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
+    use codex_model_provider_info::{ModelProviderInfo, WireApi};
+    use codex_protocol::auth::AuthMode;
+    let provider = ModelProviderInfo::create_openai_provider(None);
+    assert_eq!(provider.wire_api, WireApi::Responses);
+    let scope = uuid::Uuid::new_v4();
+    let mode = crate::config::AccountingMode::Provider {
+        scope,
+        provider_id: "openai".into(),
+        wire_api: WireApi::Responses,
+        approved_endpoint: "https://api.openai.com/v1".into(),
+        api_key_pricing: false,
+    };
+    for (auth, expected) in [
+        (Some(AuthMode::ApiKey), true),
+        (Some(AuthMode::ChatGPT), false),
+        (None, false),
+    ] {
+        let bound = super::turn_mode(&mode, "openai", &provider, auth, "https://api.openai.com/v1");
+        let crate::config::AccountingMode::Provider {
+            api_key_pricing, ..
+        } = bound
+        else {
+            panic!("provider mode must survive rebinding for {auth:?}");
+        };
+        assert_eq!(
+            api_key_pricing, expected,
+            "only API-key authority may supply monetary rates ({auth:?})"
+        );
+    }
+}
+
 fn chat_body() -> codex_api::ChatCompletionsRequest {
     codex_api::ChatCompletionsRequest {
         model: "fixture".into(),
