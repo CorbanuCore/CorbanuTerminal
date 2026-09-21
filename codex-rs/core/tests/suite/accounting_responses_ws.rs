@@ -71,6 +71,7 @@ async fn accounting_responses_ws_native_complete_and_partial_goldens() -> anyhow
                 .try_into()?,
                 unknown_estimates: i64::from(write.is_none()),
                 attempts: 1,
+                ..Default::default()
             }
         );
         assert_eq!(observations(&db).await?.len(), 1);

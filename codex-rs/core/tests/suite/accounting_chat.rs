@@ -346,6 +346,7 @@ async fn accounting_chat_native_missing_usage_and_correlation() -> anyhow::Resul
                 known_usd: "0".to_string().try_into()?,
                 unknown_estimates: 2,
                 attempts: 2,
+                ..Default::default()
             }
         );
         stop(&test).await;

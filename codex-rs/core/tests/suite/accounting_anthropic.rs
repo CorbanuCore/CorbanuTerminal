@@ -590,6 +590,7 @@ async fn accounting_anthropic_native_presence_prices_and_two_reopens() -> anyhow
                 known_usd: "0.00011".to_string().try_into()?,
                 unknown_estimates: 1,
                 attempts: 1,
+                ..Default::default()
             }
         );
         stop(&reopened).await;
@@ -1046,6 +1047,7 @@ async fn accounting_anthropic_actual_presence_revisions_and_remote_only_price_un
                     .try_into()?,
                 unknown_estimates: 1,
                 attempts: 1,
+                ..Default::default()
             }
         );
         assert_eq!(

@@ -40,7 +40,7 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
         .unwrap();
     assert!(matches!(
         sampling.pricing,
-        super::super::Pricing::Unavailable
+        super::super::Pricing::Plan
     ));
     assert_eq!(sampling.provider, "openai");
     let wrong = Provenance::capture(

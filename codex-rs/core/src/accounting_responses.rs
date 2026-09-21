@@ -181,7 +181,7 @@ impl DeferredResponsesSampling {
             && let AccountingMode::Provider {
                 api_key_pricing, ..
             } = &mode
-            && *api_key_pricing == matches!(existing.pricing, super::Pricing::Unavailable)
+            && *api_key_pricing == matches!(existing.pricing, super::Pricing::Plan)
         {
             self.reject();
             return Err(CodexErr::Fatal(FAILURE.into()));

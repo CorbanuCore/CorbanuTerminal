@@ -444,6 +444,7 @@ fn accounting_chat_collects_the_fields_the_client_itself_emits() {
 fn accounting_every_built_in_provider_collects() {
     use codex_model_provider_info::built_in_model_providers;
     let mut checked = 0;
+    let mut priced_providers: Vec<String> = Vec::new();
     for (id, provider) in built_in_model_providers(None) {
         let selected = developer_accounting_mode(&id, &provider);
         assert!(
@@ -470,17 +471,44 @@ fn accounting_every_built_in_provider_collects() {
             "{id} ({:?}) binds a mode that does not collect",
             provider.wire_api
         );
-        // Only the two metered catalogue entries at their own default endpoints may
-        // carry monetary rates; everything else records tokens with money
-        // unavailable even under API-key authentication.
+        // Monetary rates follow the route, not a hand-picked pair of providers.
+        // Restricting them to openai and anthropic left every other metered
+        // provider recording tokens with no price at all, which is the same
+        // "accounting is unavailable here" the catalogue work set out to end.
+        // What disqualifies a route is a shape whose credentials this client does
+        // not hold or cannot attribute.
         if let AccountingMode::Provider {
             api_key_pricing, ..
         } = bound
         {
-            let metered = matches!(id.as_str(), "openai" | "anthropic");
+            let carries_own_credentials = provider.aws.is_some()
+                || provider.auth.is_some()
+                || provider.experimental_bearer_token.is_some();
             assert_eq!(
-                api_key_pricing, metered,
+                api_key_pricing, !carries_own_credentials,
                 "{id} pricing authority under API-key auth"
+            );
+            if !carries_own_credentials {
+                priced_providers.push(id.clone());
+            }
+            // And the authority is bound to that route: the same provider read
+            // through a different endpoint carries no rates.
+            let elsewhere = turn_mode(
+                &selected,
+                &id,
+                &provider,
+                Some(codex_protocol::auth::AuthMode::ApiKey),
+                "https://relay.invalid/v1",
+            );
+            assert!(
+                matches!(
+                    elsewhere,
+                    AccountingMode::Provider {
+                        api_key_pricing: false,
+                        ..
+                    }
+                ),
+                "{id} must not carry rates away from its own route"
             );
         }
         // And the per-turn dialect gate must admit it too, not just the selector.
@@ -501,6 +529,19 @@ fn accounting_every_built_in_provider_collects() {
     // The catalogue has twenty-one entries today; assert the real number so a
     // silently shrinking catalogue is visible rather than tolerated.
     assert_eq!(checked, 21, "catalogue size changed");
+    // Money used to exist on two providers. Name the ones that now carry rates,
+    // so losing any of them is a visible change rather than a quiet one.
+    priced_providers.sort();
+    assert!(
+        priced_providers.len() >= 14,
+        "pricing authority shrank to {priced_providers:?}"
+    );
+    for required in ["anthropic", "openai", "openrouter", "vercel", "deepseek"] {
+        assert!(
+            priced_providers.iter().any(|id| id == required),
+            "{required} lost pricing authority: {priced_providers:?}"
+        );
+    }
 }
 
 /// A compaction's turn identity must fit the store's bounded identity, or the

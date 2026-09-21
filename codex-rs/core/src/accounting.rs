@@ -280,17 +280,19 @@ pub(crate) fn turn_mode(
         // metered Anthropic turns with no rate at all.
         && !credential_header(&provider.http_headers)
         && !credential_header(&provider.env_http_headers)
-        && match (provider_id, provider.wire_api) {
-            ("anthropic", codex_model_provider_info::WireApi::Anthropic) => {
-                resolved_endpoint == codex_model_provider_info::ANTHROPIC_BASE_URL
-            }
-            (
-                "openai",
-                codex_model_provider_info::WireApi::Responses
-                | codex_model_provider_info::WireApi::Chat,
-            ) => resolved_endpoint == "https://api.openai.com/v1",
-            _ => false,
-        };
+        // Any built-in provider, at its own default route, in its own dialect.
+        // The catalogue states exact rates per provider row, so restricting money
+        // to two of those providers left every other metered provider recording
+        // tokens with no price at all. What must hold is that the request really
+        // went to the route those rates are quoted for.
+        && codex_model_provider_info::built_in_model_providers(None)
+            .get(provider_id)
+            .is_some_and(|built_in| {
+                built_in.wire_api == provider.wire_api
+                    && built_in
+                        .to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))
+                        .is_ok_and(|api| api.base_url == resolved_endpoint)
+            });
     AccountingMode::Provider {
         scope: *scope,
         provider_id: provider_id.into(),
@@ -390,7 +392,8 @@ enum Pricing {
     Anthropic,
     Responses,
     Chat,
-    Unavailable,
+    /// Subscription capacity: record the plan rate and the API equivalent, not spend.
+    Plan,
 }
 
 pub(crate) struct Sampling {
@@ -539,7 +542,7 @@ impl Sampling {
                 AccountingMode::Provider {
                     api_key_pricing: false,
                     ..
-                } => Pricing::Unavailable,
+                } => Pricing::Plan,
                 AccountingMode::DirectAnthropic { .. } => Pricing::Anthropic,
                 AccountingMode::DirectOpenAiChat { .. } => Pricing::Chat,
                 AccountingMode::DirectOpenAiResponsesHttp { .. }
@@ -605,12 +608,18 @@ impl Sampling {
             dispatched_at_ms: dispatched_at.try_into()?,
         };
         let prices = match self.pricing {
-            Pricing::Unavailable => Vec::new(),
-            Pricing::Anthropic => prices::original(model, self.scope, dispatched_at)?,
-            Pricing::Responses => {
-                prices::responses_original(model, self.scope, dispatched_at, tier)?
+            Pricing::Plan => {
+                prices::plan_original(model, &self.provider, self.scope, dispatched_at, tier)?
             }
-            Pricing::Chat => prices::chat_original(model, self.scope, dispatched_at)?,
+            Pricing::Anthropic => {
+                prices::anthropic_original(model, &self.provider, self.scope, dispatched_at)?
+            }
+            Pricing::Responses => {
+                prices::responses_original(model, &self.provider, self.scope, dispatched_at, tier)?
+            }
+            Pricing::Chat => {
+                prices::chat_original(model, &self.provider, self.scope, dispatched_at)?
+            }
         };
         store.admit(self.owner, &attempt, &prices, now()).await?;
         *self.previous.lock().map_err(|_| {
