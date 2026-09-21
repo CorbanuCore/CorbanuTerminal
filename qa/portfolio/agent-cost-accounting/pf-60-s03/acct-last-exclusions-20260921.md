@@ -76,7 +76,14 @@ tokens 66 of 67 - the one failure is the stale snapshot that fails identically
 at the integration tip. The `websocket` suite passes 69/69 and the `compact`
 suite passes with retries; with retries disabled the compaction suite is
 load-flaky at this tree and at the integration tip alike, with different tests
-failing on each run. Raw logs under `rtx-20260921/`.
+failing on each run. The stage-one suite passes 24/24, logged as
+`rtx-20260921/head-memory-stage-one.txt`. Raw logs under `rtx-20260921/`.
+
+One pre-existing flake worth naming because I chased it: `session::tests::
+non_steerable_turn_defers_user_input_until_completion` fails most runs on this
+host at this tree, at the integration tip, and at the older integration base
+alike, in isolation as well as under load. It is not caused by this work; I
+attributed it by running the same test at all three trees.
 
 ## A third class review found: the turn-completion classifier
 
@@ -114,6 +121,36 @@ under test - and raises the idle timeout for this case so the turn is not the
 variable. Eight consecutive full-lane runs were clean; the repeat summaries are retained
 in `rtx-20260921/classifier-repeats.txt`, alongside the failing run the fix
 addresses.
+
+## The fifth call site: stage-one memory extraction
+
+`memory_stage_one::StageOneMemoryClient` builds its own `ModelClient` and
+streams a real billable request. It is reachable in production - `app-server`'s
+turn processor starts the memories task, which reaches it through
+`memories/write`'s phase-one runtime - and it is gated: `Feature::MemoryTool` is
+default-off, and the pipeline is skipped for ephemeral and non-root sessions.
+The feature is Stable and the TUI offers to turn it on, so an operator who
+enables memories was running extraction that reached no ledger.
+
+It now collects, under a `memory:` turn of its own, with two properties this
+path needs and the others did not:
+
+- **Collection inputs are read at admission, not per request.** The binding
+  already denies a request whose owner, provider or policy has drifted; reading
+  session state inside the request path would take the session's own lock while
+  a turn is running.
+- **It collects only on the route the admitted configuration approved.** If the
+  client's provider is not the one the binding validated, the extraction runs
+  and records nothing, rather than failing the route check at admission.
+  Accounting must never be the reason a stage-one request fails - that is the
+  same best-effort rule as compaction, applied to a path whose whole contract is
+  denial-only.
+
+`pf_60_s03_stage_one_extraction_records_its_own_turn` drives a real extraction
+against a mock at the session's own configured route and asserts the `memory:`
+row; dropping the scopes instead of holding them fails it. The existing
+stage-one security fixtures, which substitute a socket endpoint through a
+private hook, keep passing precisely because of the route rule above.
 
 ## What this does not claim
 
