@@ -259,6 +259,16 @@ async fn run_compact_task_inner_impl(
     let max_retries = turn_context.provider.info().stream_max_retries();
     let mut retries = 0;
     let mut client_session = sess.services.new_model_client_session();
+    // A compaction is inference the operator paid for - and `/compact` is one they
+    // asked for directly - so it is collected like any other turn rather than
+    // silently escaping accounting.
+    let _accounting = crate::accounting::attach_turn(
+        &sess,
+        &turn_context,
+        &client_session,
+        format!("compact:{}", turn_context.sub_id),
+    )
+    .await?;
     // Reuse one client session so turn-scoped state (sticky routing, websocket incremental
     // request tracking)
     // survives retries within this compact turn.

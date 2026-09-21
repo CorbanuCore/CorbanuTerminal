@@ -451,41 +451,56 @@ fn accounting_every_built_in_provider_collects() {
             "{id} ({:?}) selects no accounting mode",
             provider.wire_api
         );
+        // Bind at the provider's own resolved endpoint and under API-key auth, so
+        // the pricing assertion below can actually fail: with no auth mode,
+        // `api_key_pricing` is false for every entry and proves nothing.
+        let endpoint = provider
+            .to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))
+            .map(|api| api.base_url)
+            .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
         let bound = turn_mode(
             &selected,
             &id,
             &provider,
-            None,
-            provider
-                .base_url
-                .as_deref()
-                .unwrap_or("https://api.openai.com/v1"),
+            Some(codex_protocol::auth::AuthMode::ApiKey),
+            &endpoint,
         );
         assert!(
             collects(&bound, &id, &provider, provider.wire_api),
             "{id} ({:?}) binds a mode that does not collect",
             provider.wire_api
         );
-        // No built-in provider may be priced without API-key authority; that is
-        // checked separately, but assert here that binding without auth never
-        // invents pricing authority for a catalogue entry.
+        // Only the two metered catalogue entries at their own default endpoints may
+        // carry monetary rates; everything else records tokens with money
+        // unavailable even under API-key authentication.
         if let AccountingMode::Provider {
             api_key_pricing, ..
         } = bound
         {
-            assert!(
-                !api_key_pricing,
-                "{id} must not claim pricing authority without API-key auth"
+            let metered = matches!(id.as_str(), "openai" | "anthropic");
+            assert_eq!(
+                api_key_pricing, metered,
+                "{id} pricing authority under API-key auth"
             );
         }
+        // And the per-turn dialect gate must admit it too, not just the selector.
+        let admitted = match provider.wire_api {
+            codex_model_provider_info::WireApi::Responses => responses::eligible(&provider, None),
+            codex_model_provider_info::WireApi::Chat => {
+                let mut request = chat_body();
+                request.provider = provider.chat_completions_provider.clone();
+                chat::eligible(&provider, None, &request)
+            }
+            codex_model_provider_info::WireApi::Anthropic => route_refusal(&provider).is_none(),
+        };
+        assert!(admitted, "{id} is selected but not admitted per turn");
         checked += 1;
     }
     // The catalogue is the product's real provider list; if it shrinks, this
     // test should be updated deliberately rather than silently covering less.
-    assert!(
-        checked >= 8,
-        "catalogue looked too small: {checked} providers"
-    );
+    // The catalogue has twenty-one entries today; assert the real number so a
+    // silently shrinking catalogue is visible rather than tolerated.
+    assert_eq!(checked, 21, "catalogue size changed");
 }
 
 fn chat_body() -> codex_api::ChatCompletionsRequest {
