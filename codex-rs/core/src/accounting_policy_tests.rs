@@ -390,14 +390,26 @@ async fn accounting_unattributable_request_is_served_without_evidence() -> Resul
     fixture.sampling.check()?;
     // And nothing was recorded for a request we could not attribute.
     assert!(fixture.attempts().await?.is_empty());
-    // A usage event on an excluded request records nothing instead of failing the stream.
+    // A usage event on an excluded request records nothing instead of failing the
+    // stream - on every dialect, because the three observers are three different
+    // code shapes and a future edit could drop the guard from one of them.
     codex_api::ResponsesUsageObserver::observe(
         &*evidence,
         0,
         Ok(codex_api::ResponsesUsagePatch::default()),
     )
     .await
-    .map_err(|error| anyhow::anyhow!("excluded usage must not fail the stream: {error}"))?;
+    .map_err(|error| anyhow::anyhow!("excluded responses usage must not fail: {error}"))?;
+    codex_api::ChatUsageObserver::observe(&*evidence, 0, Ok(codex_api::ChatUsagePatch::default()))
+        .await
+        .map_err(|error| anyhow::anyhow!("excluded chat usage must not fail: {error}"))?;
+    codex_api::AnthropicUsageObserver::observe(
+        &*evidence,
+        0,
+        Ok(codex_api::AnthropicUsagePatch::default()),
+    )
+    .await
+    .map_err(|error| anyhow::anyhow!("excluded anthropic usage must not fail: {error}"))?;
     fixture.sampling.check()?;
     assert!(fixture.attempts().await?.is_empty());
     Ok(())

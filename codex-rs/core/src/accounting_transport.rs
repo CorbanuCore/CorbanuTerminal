@@ -207,7 +207,14 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
         // Anthropic have no typed body check, so failing closed here would end the
         // turn for a request the product is happy to send. Decline to sample and
         // let it through unrecorded.
-        if request_refusal(&request).is_some() {
+        if let Some(reason) = request_refusal(&request) {
+            // Say so once. An excluded request is still billed by the provider,
+            // and silence would make it indistinguishable from a turn that never
+            // sent anything. The key name is routing metadata, not payload.
+            tracing::warn!(
+                accounting.excluded = reason,
+                "accounting: request not attributable to the selected provider; serving it unrecorded"
+            );
             evidence.exclude();
             return self.inner.stream(request).await;
         }
