@@ -74,17 +74,14 @@ async fn accounting_extension_client_records_its_own_request() -> anyhow::Result
     )
     .await?;
 
-    let accounting = ExtensionAccounting::new(
-        Arc::downgrade(&owner),
-        config.accounting.clone(),
-        "openai".into(),
-    );
+    let accounting = ExtensionAccounting::new(Arc::downgrade(&owner));
     let transport = accounting
         .transport(
             codex_api::ReqwestTransport::from_http_client(
                 codex_login::default_client::create_client(),
             ),
             &provider,
+            &endpoint,
             "gpt-image-1",
             "images/generations",
             "image",
@@ -200,11 +197,7 @@ async fn accounting_extension_client_without_its_session_records_nothing() -> an
     .await?;
     session.services.state_db = Some(db.clone());
     let owner = Arc::new(session);
-    let accounting = ExtensionAccounting::new(
-        Arc::downgrade(&owner),
-        config.accounting.clone(),
-        "openai".into(),
-    );
+    let accounting = ExtensionAccounting::new(Arc::downgrade(&owner));
     drop(owner);
 
     let transport = accounting
@@ -213,6 +206,7 @@ async fn accounting_extension_client_without_its_session_records_nothing() -> an
                 codex_login::default_client::create_client(),
             ),
             &provider,
+            &endpoint,
             "gpt-image-1",
             "images/generations",
             "image",

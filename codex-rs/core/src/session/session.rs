@@ -1253,11 +1253,7 @@ impl Session {
             // any other inference. This is how they record. It is inserted once
             // the session exists and holds it weakly.
             sess.services.thread_extension_data.insert(
-                crate::accounting_extensions::ExtensionAccounting::new(
-                    Arc::downgrade(&sess),
-                    config.accounting.clone(),
-                    config.model_provider_id.clone(),
-                ),
+                crate::accounting_extensions::ExtensionAccounting::new(Arc::downgrade(&sess)),
             );
             // Dispatch the SessionConfiguredEvent first and then report any errors.
             // If resuming, include converted initial messages in the payload so UIs can render them immediately.

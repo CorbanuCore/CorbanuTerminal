@@ -24,7 +24,9 @@ inserted into the thread's extension store once the session exists and holding
 it **weakly**. An extension wraps its own transport with it:
 
 ```rust
-let transport = accounting.transport(transport, model, "images/generations", "image").await;
+let transport = accounting
+    .transport(transport, provider, endpoint, model, "images/generations", "image")
+    .await;
 ```
 
 - The recorded turn is `image:<uuid>`. An extension's requests are their own
@@ -39,12 +41,13 @@ let transport = accounting.transport(transport, model, "images/generations", "im
 - The numbers come from the response the provider already sends: the images API
   returns `usage` in the same shape the Responses body parser reads, so tokens
   are recorded rather than left unknown.
-- The provider passed in is the caller's **live** one, not a snapshot taken when
-  the handle was made. `turn_mode` then binds the route the request actually
-  takes, exactly as it does for a turn, so a session whose provider changed
-  records against the new route rather than a stale one. Review caught the
-  snapshot; it would have bound collection to a provider the request no longer
-  used.
+- **Nothing is snapshotted.** The handle holds only the session, weakly. The
+  accounting mode and provider identity are read from the owner at call time,
+  and the provider and endpoint are the caller's own - the very ones the request
+  will use. Review caught two versions of this: first a provider snapshot, then
+  a provider identity still frozen at session start beside a live provider, and
+  an endpoint resolved here through a different auth source than the caller's,
+  which could pin a route the request never takes. All three are gone.
 - One thing does change about the request, and it is the same limit as
   everywhere else: once evidence exists, an accounting fault - a failed
   admission, a route the transport refuses, a failed observation write - fails

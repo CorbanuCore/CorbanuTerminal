@@ -58,7 +58,14 @@ impl CodexImagesBackend {
         let transport = match &self.accounting {
             Some(accounting) => {
                 accounting
-                    .transport(transport, self.provider.info(), model, path, "image")
+                    .transport(
+                        transport,
+                        self.provider.info(),
+                        &provider.base_url,
+                        model,
+                        path,
+                        "image",
+                    )
                     .await
             }
             None => ExtensionAccounting::unrecorded(transport, model),

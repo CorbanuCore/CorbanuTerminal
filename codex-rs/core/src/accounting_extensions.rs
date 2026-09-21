@@ -28,8 +28,6 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct ExtensionAccounting {
     owner: Weak<Session>,
-    accounting: AccountingMode,
-    provider_id: String,
 }
 
 impl std::fmt::Debug for ExtensionAccounting {
@@ -39,22 +37,15 @@ impl std::fmt::Debug for ExtensionAccounting {
 }
 
 impl ExtensionAccounting {
-    pub(crate) fn new(
-        owner: Weak<Session>,
-        accounting: AccountingMode,
-        provider_id: String,
-    ) -> Self {
-        Self {
-            owner,
-            accounting,
-            provider_id,
-        }
+    pub(crate) fn new(owner: Weak<Session>) -> Self {
+        Self { owner }
     }
 
     /// Wrap `transport` so the request it carries is recorded.
     ///
-    /// `path` is the endpoint under the provider's approved route - a request
-    /// to anywhere else is refused at admission rather than attributed here.
+    /// `endpoint` is the base URL the caller's client will send to and `path`
+    /// its endpoint underneath it - a request to anywhere else is refused at
+    /// admission rather than attributed here.
     /// `label` names the kind of work; the recorded turn is `label:<uuid>`,
     /// because an extension's requests are their own units of work and not part
     /// of the turn that happened to trigger them.
@@ -66,11 +57,12 @@ impl ExtensionAccounting {
         &self,
         transport: T,
         provider: &ModelProviderInfo,
+        endpoint: &str,
         model: &str,
         path: &str,
         label: &str,
     ) -> Accounted<T> {
-        match self.evidence(provider, path, label).await {
+        match self.evidence(provider, endpoint, path, label).await {
             Some(evidence) => Accounted {
                 inner: AccountingTransport::new(transport, Some(evidence), model.to_string()),
             },
@@ -87,33 +79,28 @@ impl ExtensionAccounting {
         }
     }
 
-    /// The provider is the caller's own, live one, not a snapshot taken when
-    /// this handle was made. `turn_mode` then binds the route the request
-    /// actually takes, exactly as it does for a turn, so a session whose
-    /// provider changed records against the new route rather than against a
-    /// stale one - or, if that route collects nothing, records nothing.
+    /// Nothing here is snapshotted. The mode and provider identity are read
+    /// from the owner at call time, and the provider and `endpoint` are the
+    /// caller's own - the very ones the request will use - because resolving
+    /// the endpoint here from a different auth source than the caller used
+    /// would pin a route the request never takes.
     async fn evidence(
         &self,
         provider: &ModelProviderInfo,
+        endpoint: &str,
         path: &str,
         label: &str,
     ) -> Option<Arc<ResponseEvidence>> {
         let owner = self.owner.upgrade()?;
+        let (accounting, provider_id) = owner.accounting_binding().await;
         let auth = owner.services.auth_manager.auth().await;
         let auth_mode = auth.as_ref().map(codex_login::CodexAuth::auth_mode);
-        let api = provider.to_api_provider(auth_mode).ok()?;
-        let mode = if matches!(self.accounting, AccountingMode::Provider { .. }) {
-            crate::accounting::turn_mode(
-                &self.accounting,
-                &self.provider_id,
-                provider,
-                auth_mode,
-                &api.base_url,
-            )
+        let mode = if matches!(accounting, AccountingMode::Provider { .. }) {
+            crate::accounting::turn_mode(&accounting, &provider_id, provider, auth_mode, endpoint)
         } else {
-            self.accounting.clone()
+            accounting
         };
-        if !crate::accounting::collects(&mode, &self.provider_id, provider, provider.wire_api) {
+        if !crate::accounting::collects(&mode, &provider_id, provider, provider.wire_api) {
             return None;
         }
         owner.try_ensure_rollout_materialized().await.ok()?;
