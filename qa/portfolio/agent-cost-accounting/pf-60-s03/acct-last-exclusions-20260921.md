@@ -67,6 +67,17 @@ session starts its own prewarm and whether that has landed is a race; what it
 still asserts is that the turn's own evidence and its bound prices survive two
 reopens unchanged.
 
+## Verification
+
+Clean-host lanes at this tree, RTX workstation, formatted and fmt-clean:
+`codex-core` accounting **140/140**, with `developer-accounting` **145/145**,
+`codex-state` accounting **168/168**, `codex-tui` usage **92/92**, `codex-tui`
+tokens 66 of 67 - the one failure is the stale snapshot that fails identically
+at the integration tip. The `websocket` suite passes 69/69 and the `compact`
+suite passes with retries; with retries disabled the compaction suite is
+load-flaky at this tree and at the integration tip alike, with different tests
+failing on each run. Raw logs under `rtx-20260921/`.
+
 ## What this does not claim
 
 - Auxiliary inference other than startup prewarm: there is none. The only three
