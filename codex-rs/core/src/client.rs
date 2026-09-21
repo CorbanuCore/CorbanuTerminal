@@ -2607,6 +2607,11 @@ impl ModelClientSession {
                         .then(|| vercel_gateway_provider_options(&request.model))
                         .flatten(),
                 )
+                .with_configured_plugins(
+                    serde_json::to_value(request.plugins.clone())
+                        .ok()
+                        .filter(|value| !value.is_null()),
+                )
             });
             let client = ApiAnthropicMessagesClient::new(
                 transport,
@@ -3124,6 +3129,11 @@ impl ModelClientSession {
                         .then(|| vercel_gateway_provider_options(&request.model))
                         .flatten(),
                 )
+                .with_configured_plugins(
+                    serde_json::to_value(request.plugins.clone())
+                        .ok()
+                        .filter(|value| !value.is_null()),
+                )
             });
             let inference_trace_attempt = inference_trace.start_attempt();
             inference_trace_attempt.add_request_headers(&mut options.extra_headers);
@@ -3349,6 +3359,11 @@ impl ModelClientSession {
                         .is_vercel_gateway()
                         .then(|| vercel_gateway_provider_options(&request.model))
                         .flatten(),
+                )
+                .with_configured_plugins(
+                    serde_json::to_value(request.plugins.clone())
+                        .ok()
+                        .filter(|value| !value.is_null()),
                 )
                 .with_tier(request.service_tier.clone())
             });

@@ -155,6 +155,7 @@ pub(super) fn request_refusal(
     request: &Request,
     configured_routing: Option<&serde_json::Value>,
     configured_routing_options: Option<&serde_json::Value>,
+    configured_plugins: Option<&serde_json::Value>,
 ) -> Option<&'static str> {
     let Some(value) = request.body.as_ref()?.inspectable_json() else {
         return Some("uninspectable request body");
@@ -170,6 +171,7 @@ pub(super) fn request_refusal(
             let expected = match *key {
                 "provider" => configured_routing,
                 "providerOptions" | "provider_options" => configured_routing_options,
+                "plugins" => configured_plugins,
                 _ => None,
             };
             match (value.get(*key), expected) {
@@ -195,6 +197,10 @@ pub(crate) struct AccountingTransport<T> {
     /// DIFFERENT value, or a key configuration did not ask for, is not.
     configured_routing: Option<serde_json::Value>,
     configured_routing_options: Option<serde_json::Value>,
+    /// OpenRouter web search rides the request-level `plugins` field, emitted by
+    /// this client from the provider and the session's tool set. Same principle:
+    /// the value the client itself constructed stays attributable.
+    configured_plugins: Option<serde_json::Value>,
     model: String,
     tier: Option<String>,
 }
@@ -208,6 +214,7 @@ impl<T> AccountingTransport<T> {
             tier: None,
             configured_routing: None,
             configured_routing_options: None,
+            configured_plugins: None,
         }
     }
 
@@ -226,6 +233,11 @@ impl<T> AccountingTransport<T> {
         options: Option<serde_json::Value>,
     ) -> Self {
         self.configured_routing_options = options;
+        self
+    }
+
+    pub(crate) fn with_configured_plugins(mut self, plugins: Option<serde_json::Value>) -> Self {
+        self.configured_plugins = plugins;
         self
     }
 }
@@ -253,6 +265,7 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
             &request,
             self.configured_routing.as_ref(),
             self.configured_routing_options.as_ref(),
+            self.configured_plugins.as_ref(),
         ) {
             // Say so once. An excluded request is still billed by the provider,
             // and silence would make it indistinguishable from a turn that never
