@@ -555,16 +555,22 @@ fn accounting_every_built_in_provider_collects() {
                     "{id} on plan authentication must record the plan side"
                 );
             }
+            // No Codex credential at all. For a provider whose own credential is
+            // a plan login - `claude-plan`'s command auth - that is exactly how a
+            // subscription turn arrives, and it must still take the plan side.
+            // For every other provider it is a turn this client cannot attribute.
             let anonymous = turn_mode(&selected, &id, &provider, None, &endpoint);
+            let expected_anonymous = if provider.auth.is_some() {
+                PriceAuthority::PlanRate
+            } else {
+                PriceAuthority::Unavailable
+            };
             assert!(
                 matches!(
                     anonymous,
-                    AccountingMode::Provider {
-                        pricing: PriceAuthority::Unavailable,
-                        ..
-                    }
+                    AccountingMode::Provider { pricing, .. } if pricing == expected_anonymous
                 ),
-                "{id} with no credential must state no economics"
+                "{id} with no Codex credential must state {expected_anonymous:?}"
             );
         }
         // And the per-turn dialect gate must admit it too, not just the selector.

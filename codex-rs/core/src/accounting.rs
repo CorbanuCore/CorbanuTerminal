@@ -297,7 +297,7 @@ pub(crate) fn turn_mode(
     // turn with no visible credential, or one whose credential is supplied out of
     // band, into subscription capacity - the same substitution in the other
     // direction.
-    let subscription = matches!(
+    let codex_subscription = matches!(
         auth_mode,
         Some(
             AuthMode::Chatgpt
@@ -307,6 +307,13 @@ pub(crate) fn turn_mode(
                 | AuthMode::PersonalAccessToken
         )
     );
+    // A provider whose own credential is a plan login, as the built-in
+    // `claude-plan` provider's command auth is. Such a turn carries no Codex auth
+    // mode of its own, so keying only on `AuthMode` dropped it to no economics -
+    // and gave it the plan side only when an unrelated ChatGPT login happened to
+    // exist. The shape is named here rather than inferred from that accident.
+    let provider_plan_login = provider.auth.is_some() && auth_mode != Some(AuthMode::ApiKey);
+    let subscription = codex_subscription || provider_plan_login;
     let pricing = if !own_route {
         PriceAuthority::Unavailable
     } else if auth_mode == Some(AuthMode::ApiKey) {
@@ -327,13 +334,12 @@ pub(crate) fn turn_mode(
             PriceAuthority::Unavailable
         }
     } else if subscription {
-        // Subscription-style authentication on the provider's own route: a
-        // ChatGPT plan, or a provider whose credential is its own plan login,
-        // as the built-in `claude-plan` provider's command auth is.
         PriceAuthority::PlanRate
     } else {
-        // No visible credential, a bearer token, or a Bedrock key: this client
-        // cannot say which side of the catalogue such a turn is charged on.
+        // No credential this client can name: not an API key it can attribute,
+        // not a Codex subscription, not a provider-held plan login. It cannot say
+        // which side of the catalogue such a turn is charged on, so it says
+        // nothing.
         PriceAuthority::Unavailable
     };
     AccountingMode::Provider {

@@ -80,8 +80,13 @@ had their API-key spend booked as plan work.
   headers and no provider-held credential shape (AWS signing, command auth, an
   experimental bearer token).
 - **`PlanRate`** - that same route under subscription-style authentication,
-  named positively: ChatGPT, externally supplied ChatGPT tokens, header auth,
-  agent identity, personal access token. The route is resolved per credential,
+  named positively in two shapes: a Codex-backed subscription credential
+  (ChatGPT, externally supplied ChatGPT tokens, header auth, agent identity,
+  personal access token), or a provider whose **own** credential is a plan
+  login, as the built-in `claude-plan` provider's command auth is. The second
+  shape carries no Codex auth mode at all, so naming only the first dropped
+  Claude-plan turns to no economics - and gave them the plan side only when an
+  unrelated ChatGPT login happened to exist. Review caught that too. The route is resolved per credential,
   because a ChatGPT plan turn goes to the Codex route and an API key to the API
   one, and both are OpenAI's own. Defining this side as "not an API key" made a
   turn with no visible credential into subscription capacity - the same
@@ -90,10 +95,13 @@ had their API-key spend booked as plan work.
 - **`Unavailable`** - anything else. Tokens are still collected; no economics of
   either kind are claimed for a destination the catalogue quotes nothing for.
 
-`accounting_every_built_in_provider_collects` asserts all four outcomes per
+`accounting_every_built_in_provider_collects` asserts four outcomes per
 provider: rates on its own route under an API key, the plan side on that
 credential's own route under header authentication, nothing at all through a
-relay, and nothing at all with no credential.
+relay, and - with no Codex credential at all - the plan side for a command-auth
+provider and nothing for everyone else.
+`accounting_provider_held_plan_login_takes_the_plan_side` pins the
+`claude-plan` case directly, with and without an unrelated ChatGPT login.
 
 `billed` also stopped refusing `AuthDependent` rows. Under API-key
 authentication those rows' API rates are precisely what the provider charges;
@@ -157,10 +165,10 @@ checked on the same host. Raw logs under `rtx-20260921/`.
   replacing it.
 - Provider-held credential shapes (AWS signing, command auth, bearer tokens)
   carry no per-token rates: what that account is charged is not something the
-  catalogue states for this client. On the provider's own route they do take the
-  plan side when the credential is not an API key, which is exactly how the
-  built-in `claude-plan` provider - command auth, plan rows - gets its burn
-  recorded.
+  catalogue states for this client. A command-auth provider on its own route
+  takes the plan side instead, which is how the built-in `claude-plan` provider
+  - command auth, burn-only rows - gets its burn recorded. AWS signing and
+  bearer tokens are named by neither side and record tokens only.
 - Off a provider's own route, nothing is claimed at all. That is deliberate: a
   proxy or relay may or may not charge what the catalogue quotes, and this client
   is not told which.

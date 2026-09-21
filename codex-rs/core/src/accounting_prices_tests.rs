@@ -461,3 +461,53 @@ fn accounting_plan_projection_states_the_rate_and_only_stated_equivalents() {
         );
     }
 }
+
+/// A provider whose own credential is a plan login carries no Codex auth mode.
+/// Keying the plan side only on `AuthMode` dropped exactly that shape.
+#[test]
+fn accounting_provider_held_plan_login_takes_the_plan_side() {
+    use crate::config::AccountingMode;
+    use crate::config::PriceAuthority;
+    let provider = codex_model_provider_info::ModelProviderInfo::create_claude_plan_provider();
+    assert!(
+        provider.auth.is_some(),
+        "fixture must be a command-auth provider"
+    );
+    let endpoint = provider
+        .to_api_provider(None)
+        .expect("claude-plan route")
+        .base_url;
+    let mode = AccountingMode::Provider {
+        scope: Uuid::new_v4(),
+        provider_id: "claude-plan".into(),
+        wire_api: provider.wire_api,
+        approved_endpoint: endpoint.clone(),
+        approved_query: None,
+        pricing: PriceAuthority::Unavailable,
+    };
+    for auth in [None, Some(codex_protocol::auth::AuthMode::Chatgpt)] {
+        let bound = super::super::turn_mode(&mode, "claude-plan", &provider, auth, &endpoint);
+        assert!(
+            matches!(
+                bound,
+                AccountingMode::Provider {
+                    pricing: PriceAuthority::PlanRate,
+                    ..
+                }
+            ),
+            "claude-plan must take the plan side for {auth:?}"
+        );
+    }
+    // And the plan side of that provider's own rows is burn with no invented price.
+    let plan = super::plan_original(
+        "claude-opus-5-plan",
+        "claude-plan",
+        Uuid::new_v4(),
+        10,
+        None,
+    )
+    .unwrap()
+    .remove(0);
+    assert_eq!(plan.plan_burn_millis, Some(1000));
+    assert_eq!(plan.rates.noncached, None);
+}
