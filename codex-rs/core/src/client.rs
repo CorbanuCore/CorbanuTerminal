@@ -2726,7 +2726,7 @@ impl ModelClientSession {
                 crate::accounting::transport::AccountingTransport::new(
                     inner,
                     evidence.clone(),
-                    request.model.clone(),
+                    accounting_model_identity(&model_info.slug),
                 )
                 .with_configured_routing(
                     self.client
@@ -3242,7 +3242,7 @@ impl ModelClientSession {
                 crate::accounting::transport::AccountingTransport::new(
                     inner,
                     evidence.clone(),
-                    request.model.clone(),
+                    accounting_model_identity(&model_info.slug),
                 )
                 .with_configured_routing(
                     self.client
@@ -3469,7 +3469,7 @@ impl ModelClientSession {
                 crate::accounting::transport::AccountingTransport::new(
                     inner,
                     evidence.clone(),
-                    request.model.clone(),
+                    accounting_model_identity(&model_info.slug),
                 )
                 .with_configured_routing(
                     self.client
@@ -4993,6 +4993,26 @@ fn anthropic_reasoning_for_model_and_effort(
     }
 
     (anthropic_thinking_for_effort(effort), None)
+}
+
+/// The identity an accounting attempt records.
+///
+/// Pricing is a catalogue lookup keyed by (slug, provider), so the ledger must
+/// record the identity the catalogue keys rather than the name this client puts
+/// on the wire. Those two differ wherever the client maps one to the other, and
+/// for every Claude Plan model and every gateway-prefixed model the catalogue
+/// keys the selected slug - which is why recording the wire name left those
+/// turns unpriceable.
+///
+/// Ambient's retired `zai-org/GLM-5.2-FP8` alias is the one mapping that runs
+/// the other way: it has no catalogue row of its own, and the priced Ambient row
+/// is the name it maps to. Following the mapping there is not a return to the
+/// wire name, it is the same rule - use whatever string the catalogue keys.
+fn accounting_model_identity(slug: &str) -> String {
+    match slug.trim() {
+        AMBIENT_LEGACY_GLM_5_2_FP8_MODEL => AMBIENT_DEFAULT_MODEL.to_string(),
+        _ => slug.to_string(),
+    }
 }
 
 fn chat_completions_upstream_model<'a>(model: &'a str, provider: &ModelProviderInfo) -> &'a str {
