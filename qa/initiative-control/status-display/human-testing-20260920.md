@@ -342,3 +342,62 @@ it by how I happen to wire it.
 
 Verified on the RTX workstation: core 146/146, core with the developer feature
 151/151, state 168/168, usage 92/92, image-generation extension 10/10.
+
+## Update, 22 September, seventh build: the money pass, and what it will and will not show you
+
+Your shortcut opens the current integration tip. Everything below is in it.
+
+**The panes bridge is recorded, and I chose the option rather than leaving it
+open.** It reports each send to the app server, which holds the core session
+and uses the one implementation of the policy - option 1, the one I
+recommended. The product question underneath is still yours to confirm or
+reverse: **pane turns now land in your ledger**, so `/usage` is your total
+cost including another agent's spend on your credential. Tokens only, no money
+claimed, because the pane's credential is not one this session can attribute.
+
+**Four more clients record now.** Realtime call creation, web search, the
+`memories/trace_summarize` endpoint, and the three pane profiles that talk to
+their provider directly with no bridge at all. That last set came out of an
+audit of every client in the workspace that can send a model request - the
+audit is `qa/portfolio/agent-cost-accounting/pf-60-s03/acct-coverage-audit-20260921.md`
+and it names everything, including what is still not collected and why.
+
+**Streamed pane turns now carry real numbers** instead of "tokens unknown",
+which mattered because Claude Code always streams.
+
+### What to do
+
+1. Run some turns, generate an image, use a pane, then `/usage`.
+2. You should see your turns plus `prewarm:`, `compact:`, `assess:`, `image:`,
+   `search:`, `realtime:` and `pane:` rows.
+3. Open a day and read the money lines.
+
+### What you will see, and the one thing I want you to look at hardest
+
+**Money is the catalogue's statement, not mine.** The bundled catalogue owns
+billing - a remote payload may never change it - and here is what it actually
+states today:
+
+- `gpt-5.6-sol`, `-terra`, `-luna`: **priced.** These show a plan rate, the
+  plan consumption it implies, and what the same tokens would have cost on the
+  API side. This is the number nobody has looked at yet, and it is the reason
+  for this build.
+- `gpt-5.5`, `gpt-6-astra`, `muse-spark-1.1`, `codex-auto-review`: **no rate
+  in the catalogue at all.** Turns on those record tokens and state no money.
+
+That second case used to render as a bare "unavailable", which is
+indistinguishable from a broken collector. It now names the rows: *"No
+catalogue price for: openai/gpt-5.5. Their tokens are recorded; the money is
+not stated because no rate was."* If you see that line, the collector worked
+and the catalogue is the thing to fix - and fixing it is a catalogue decision,
+not a code change, because I will not invent a rate.
+
+**So: if you run your money pass on gpt-5.5 you will see no money, correctly.
+Run it on a `gpt-5.6-*` model to see the plan rate and the API equivalent.**
+
+Please tell me whether those two numbers look right to you. Everything else in
+this workstream is downstream of that judgement.
+
+Verified on the RTX workstation: core 148/148, core with the developer feature
+153/153, the new pf-60 lane 3/3, state 168/168, usage 93/93, pane tests
+105/105, codex-api 236/236, app-server-protocol 287/287.
