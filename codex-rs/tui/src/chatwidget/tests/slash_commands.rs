@@ -1454,8 +1454,15 @@ async fn signed_out_usage_command_with_args_reports_chatgpt_login_requirement() 
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        rendered.contains("Sign in with ChatGPT to view OpenAI usage with /usage."),
+        rendered.contains("Sign in with ChatGPT to view OpenAI account usage."),
         "expected ChatGPT login requirement, got: {rendered:?}"
+    );
+    // The account view needs that sign-in; what a turn cost does not, and an
+    // operator on another provider must be told where to look instead of being
+    // left to conclude the feature does not exist.
+    assert!(
+        rendered.contains("/usage requests"),
+        "expected the recorded-cost view to be named, got: {rendered:?}"
     );
     assert_eq!(recall_latest_after_clearing(&mut chat), "/usage weekly");
 }
