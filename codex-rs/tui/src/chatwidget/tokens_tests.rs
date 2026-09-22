@@ -1037,15 +1037,62 @@ async fn accounting_inspect_maintenance_with_stale_raw_renders_refresh() -> anyh
 }
 
 #[tokio::test]
-async fn accounting_inspect_maintenance_with_healthy_raw_renders_lag() -> anyhow::Result<()> {
+async fn accounting_inspect_maintenance_with_current_contributions_renders_raw_totals()
+-> anyhow::Result<()> {
     let result = maintenance_inspection("").await?;
     let text = inspection_pages(Ok(result))[0].text.join("\n");
+    // What this pins changed with `5c0634ed3`, which bounded inspection by the
+    // selected scope instead of consulting the stored aggregate's
+    // `RetainedDay`. Before it, a day whose aggregate needed maintenance
+    // returned `CheckpointLag` and the page said only that the snapshot was
+    // not current - which is what the old assertion here held, correctly, when
+    // it was written. It kept asserting that for six days after the behaviour
+    // moved, and I reported the failure as pre-existing rather than reading it.
+    //
+    // The behaviour that replaced it is the one worth having: the totals come
+    // from the raw attempts in scope, so a pending aggregate does not make
+    // them wrong, and an attempt whose contribution is NOT current still
+    // returns `NeedsRefresh` - the sibling test pins that. What must never
+    // happen is this page presenting an authoritative total for a day it
+    // cannot complete, so the assertions below pin the disclosure rather than
+    // only the pixels.
     insta::assert_snapshot!(text, @"
-    Snapshot is not current; newer activity is unverified
+    Estimated token cost: unknown
+    Known estimated token cost: $0.000000 + unknown costs
+    Full recorded estimate: unavailable (1 of 1 attempts incomplete)
     Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
     Billed cost: unavailable — no settlement evidence
     Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
+    UTC admission interval: [8640000000, 8726400000) ms since Unix epoch
+    Read at: 8640000000 ms UTC; store checkpoint: 8640000000 ms UTC; maintenance lag: 0 ms
+    90-day wall-clock detail cutoff: Some(864000000); aggregate day floor at checkpoint: 0; oldest recorded day: Some(0)
+    Known subtotal exact USD: 0
+    Input: 0 known + unknown in 1 attempts
+    Noncached input (derived for inclusive input): 0 known + unknown in 1 attempts
+    Cache read: 0 known + unknown in 1 attempts
+    Cache write: 0 known + unknown in 1 attempts
+    Output: 0 known + unknown in 1 attempts
+    Reasoning (subset, not separately billed): 0 known + unknown in 1 attempts
+    Total (not separately billed): 0 known + unknown in 1 attempts
+    Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
+    Unknown parent population: 0 attempts, excluded from root total
+    Estimate versus billed difference: unknown — no settlement evidence
     ");
+    // The fixture's day-100 attempt was admitted with no observations, so the
+    // page must say it cannot complete the estimate rather than presenting the
+    // zero it could compute.
+    assert!(
+        text.contains("Estimated token cost: unknown")
+            && text.contains("Full recorded estimate: unavailable (1 of 1 attempts incomplete)"),
+        "a day it cannot complete is never presented as a total: {text}"
+    );
+    // And it states no staleness, because the read and the checkpoint are the
+    // same instant. A page that warned here would be crying wolf on every
+    // healthy day.
+    assert!(
+        !text.contains("Snapshot is not current"),
+        "nothing is stale at the checkpoint: {text}"
+    );
     Ok(())
 }
 
