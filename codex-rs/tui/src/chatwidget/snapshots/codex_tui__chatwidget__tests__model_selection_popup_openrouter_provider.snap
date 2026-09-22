@@ -1,13 +1,13 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
-assertion_line: 3385
+assertion_line: 3398
 expression: popup
 ---
   Select Model and Effort
   OpenRouter API key
 
-  OpenAI  Ambient  Kimi Code  Z.AI  DeepSeek  Claude Plan  Anthropic  Meta  Vercel  Baseten
-  [OpenRouter]
+  OpenAI  Ambient  Corbanu API  Kimi Code  Z.AI  DeepSeek  Claude Plan  Anthropic  Meta  Vercel
+  Baseten  [OpenRouter]
 
   3. OpenRouter Gemini 3.5 Flash        Model: google/gemini-3.5-flash. OpenRouter: Gemini 3.5
                                         Flash - $1.50/M input, $9.00/M output.
