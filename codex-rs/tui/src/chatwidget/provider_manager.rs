@@ -146,25 +146,32 @@ impl ChatWidget {
                     "Make this configured provider eligible for use again.",
                 ));
             }
-            _ => {
-                for capability in entry.setup_capabilities.iter() {
-                    if interactive(capability) {
-                        let provider_id = status.id.clone();
-                        let capability = capability.clone();
-                        items.push(SelectionItem {
-                            name: setup_label(status, &capability),
-                            description: Some(setup_description(&capability)),
-                            actions: vec![Box::new(move |tx| {
-                                tx.send(AppEvent::ProviderManagerBeginAuthentication {
-                                    provider_id: provider_id.clone(),
-                                    capability: capability.clone(),
-                                });
-                            })],
-                            dismiss_on_select: true,
-                            ..Default::default()
+            _ => {}
+        }
+        for capability in entry.setup_capabilities.iter() {
+            if interactive(capability)
+                && (status.configuration != ProviderConfigurationState::Configured
+                    || matches!(
+                        capability,
+                        ProviderSetupCapability::ClaudeAccount
+                            | ProviderSetupCapability::OpenAiAccount
+                            | ProviderSetupCapability::ApiKey { .. }
+                    ))
+            {
+                let provider_id = status.id.clone();
+                let capability = capability.clone();
+                items.push(SelectionItem {
+                    name: setup_label(status, &capability),
+                    description: Some(setup_description(&capability)),
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::ProviderManagerBeginAuthentication {
+                            provider_id: provider_id.clone(),
+                            capability: capability.clone(),
                         });
-                    }
-                }
+                    })],
+                    dismiss_on_select: true,
+                    ..Default::default()
+                });
             }
         }
         self.show_selection_view(SelectionViewParams {
@@ -293,10 +300,10 @@ fn interactive(capability: &ProviderSetupCapability) -> bool {
 }
 
 fn setup_label(status: &ProviderStatusSnapshot, capability: &ProviderSetupCapability) -> String {
-    let verb = if status.configuration == ProviderConfigurationState::RecoveryRequired {
-        "Recover"
-    } else {
-        "Set up"
+    let verb = match status.configuration {
+        ProviderConfigurationState::Configured => "Replace",
+        ProviderConfigurationState::RecoveryRequired => "Recover",
+        _ => "Set up",
     };
     format!("{verb} with {}", setup_description(capability))
 }
@@ -316,6 +323,55 @@ fn setup_description(capability: &ProviderSetupCapability) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[tokio::test]
+    async fn configured_credentials_can_be_replaced_while_active_or_inactive() {
+        for provider in ["claude-plan", "anthropic", "openai"] {
+            for eligibility in [
+                ProviderEligibilityState::Active,
+                ProviderEligibilityState::Inactive,
+            ] {
+                let (mut chat, _tx, mut rx, _op_rx) =
+                    crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+                let catalog =
+                    ProviderCatalog::from_runtime_providers(&chat.config_ref().model_providers);
+                let entry = catalog.get(provider).expect("built-in provider");
+                let status = ProviderStatusSnapshot {
+                    id: entry.id.clone(),
+                    methods: Vec::new(),
+                    configuration: ProviderConfigurationState::Configured,
+                    eligibility,
+                    current: ProviderCurrentState::NotCurrent,
+                    availability: ProviderAvailabilityState::Ready,
+                };
+                chat.open_provider_manager_actions(entry, &status);
+                insta::assert_snapshot!(
+                    format!("provider_replace_{provider}_{eligibility:?}"),
+                    crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 90)
+                );
+                for key in [
+                    crossterm::event::KeyCode::Down,
+                    crossterm::event::KeyCode::Enter,
+                ] {
+                    chat.handle_key_event(crossterm::event::KeyEvent::new(
+                        key,
+                        crossterm::event::KeyModifiers::NONE,
+                    ));
+                }
+                let event = rx.try_recv().expect("replacement action");
+                let AppEvent::ProviderManagerBeginAuthentication {
+                    provider_id,
+                    capability,
+                } = event
+                else {
+                    panic!("replacement must start authentication");
+                };
+                assert_eq!(provider_id, entry.id);
+                assert_eq!(capability, entry.setup_capabilities.primary);
+            }
+        }
+    }
 
     #[tokio::test]
     async fn provider_manager_uses_shared_status_copy_snapshot() {
