@@ -238,8 +238,7 @@ impl SlashCommand {
     /// Whether this command can be run while a task is in progress.
     pub fn available_during_task(self) -> bool {
         match self {
-            SlashCommand::Cost
-            | SlashCommand::New
+            SlashCommand::New
             | SlashCommand::Fork
             | SlashCommand::Init
             | SlashCommand::Compact
@@ -256,7 +255,8 @@ impl SlashCommand {
             | SlashCommand::Logout
             | SlashCommand::MemoryDrop
             | SlashCommand::MemoryUpdate => false,
-            SlashCommand::Diff
+            SlashCommand::Cost
+            | SlashCommand::Diff
             | SlashCommand::Archive
             | SlashCommand::Delete
             | SlashCommand::Docs
@@ -312,6 +312,12 @@ impl SlashCommand {
             SlashCommand::Copy => !cfg!(target_os = "android"),
             SlashCommand::App => cfg!(any(target_os = "macos", target_os = "windows")),
             SlashCommand::Rollout | SlashCommand::TestApproval => cfg!(debug_assertions),
+            // The recorded-request view is held: collection cannot exist in a
+            // shipped binary, and advertising the view there was never
+            // authorised. Listing it is gated on the same build that can
+            // collect. Typing it still works, exactly as `/usage requests`
+            // already did, so nothing new is reachable in a shipped build.
+            SlashCommand::Cost => cfg!(feature = "developer-accounting"),
             _ => true,
         }
     }
