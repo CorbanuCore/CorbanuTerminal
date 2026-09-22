@@ -1895,18 +1895,23 @@ fn bundled_orchestration_states_published_rates_for_opus_5_5_and_gpt_6_sol() {
     assert_eq!(model("claude-opus-5-5").context_window, Some(1_000_000));
     assert_eq!(model("claude-opus-5-5").max_output_tokens, Some(128_000));
 
-    // OpenAI: $2 / $10 per million, cache reads $0.20 per million. The plan
-    // burn is this repository's own frontier-tier weighting, not a vendor rate.
+    // OpenAI: $2 / $10 per million, cache reads $0.20 per million.
+    //
+    // Metered, not auth-dependent. OpenAI publishes those API rates and nothing
+    // about subscription capacity for this model, and Codex rejects it outright
+    // on some ChatGPT accounts. An `AuthDependent` row would state a plan burn
+    // no vendor quoted, for capacity the account may not have; `Metered` prices
+    // an API-key turn exactly and leaves a subscription turn recording tokens
+    // with no money claimed, which is the truthful answer here.
     assert_eq!(
         model("gpt-6-sol").orchestration,
         Some(ModelOrchestrationMetadata::Eligible {
             provider_id: "openai".to_string(),
             capability: ModelCapabilityTier::Frontier,
-            billing: ModelBilling::AuthDependent {
-                plan_relative_burn_millis: 1_000,
-                api_key_input_milli_usd_per_million_tokens: 2_000,
-                api_key_output_milli_usd_per_million_tokens: 10_000,
-                api_key_cached_input_milli_usd_per_million_tokens: Some(200),
+            billing: ModelBilling::Metered {
+                input_milli_usd_per_million_tokens: 2_000,
+                output_milli_usd_per_million_tokens: 10_000,
+                cached_input_milli_usd_per_million_tokens: Some(200),
             },
         })
     );
