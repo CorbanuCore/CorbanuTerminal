@@ -1446,6 +1446,21 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider(CLAUDE_FABLE_5_MODEL, AMBIENT_PROVIDER_ID),
         Some(CLAUDE_PLAN_PROVIDER_ID)
     );
+    // Opus 5.5 is corrected onto Anthropic rather than the plan route the other
+    // bare Claude slugs take, because the plan route has no row for it and
+    // would substitute `claude-opus-5-plan` without saying so.
+    assert_eq!(
+        corrected_catalog_provider(ANTHROPIC_OPUS_5_5_MODEL, AMBIENT_PROVIDER_ID),
+        Some(ANTHROPIC_PROVIDER_ID)
+    );
+    assert_eq!(
+        corrected_catalog_provider(ANTHROPIC_OPUS_5_5_MODEL, CLAUDE_PLAN_PROVIDER_ID),
+        Some(ANTHROPIC_PROVIDER_ID)
+    );
+    assert_eq!(
+        corrected_catalog_provider(ANTHROPIC_OPUS_5_5_MODEL, ANTHROPIC_PROVIDER_ID),
+        None
+    );
     assert_eq!(
         corrected_catalog_provider(CLAUDE_FABLE_5_MODEL, ANTHROPIC_PROVIDER_ID),
         None
@@ -1590,6 +1605,11 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         ),
         (BASETEN_DEFAULT_MODEL, BASETEN_PROVIDER_ID),
         ("gpt-5.6-sol", OPENAI_PROVIDER_ID),
+        ("gpt-6-sol", OPENAI_PROVIDER_ID),
+        // Not `claude-plan`, unlike the bare Claude slugs above. There is no
+        // Opus 5.5 plan row, so the plan provider would resolve this pair to
+        // `claude-opus-5-plan`: a different model at a different rate.
+        (ANTHROPIC_OPUS_5_5_MODEL, ANTHROPIC_PROVIDER_ID),
     ] {
         assert_eq!(
             canonical_catalog_provider(model),

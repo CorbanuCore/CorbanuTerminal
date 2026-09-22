@@ -1863,6 +1863,57 @@ fn bundled_orchestration_policy_distinguishes_gpt_5_6_tiers_and_disables_gpt_5_5
     );
 }
 
+/// The money in a user's ledger is whatever these two rows state, and a wrong
+/// rate is silent: the turn still runs, still records tokens, and still prints
+/// a total. So the published figures are pinned here, exactly, the same way the
+/// 5.6 tiers are.
+#[test]
+fn bundled_orchestration_states_published_rates_for_opus_5_5_and_gpt_6_sol() {
+    let response = crate::bundled_models_response()
+        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
+    let model = |slug: &str| {
+        response
+            .models
+            .iter()
+            .find(|model| model.slug == slug)
+            .unwrap_or_else(|| panic!("{slug} must be in the bundled catalogue"))
+    };
+
+    // Anthropic: $4 / $20 per million, cache reads $0.20 per million.
+    assert_eq!(
+        model("claude-opus-5-5").orchestration,
+        Some(ModelOrchestrationMetadata::Eligible {
+            provider_id: "anthropic".to_string(),
+            capability: ModelCapabilityTier::Frontier,
+            billing: ModelBilling::Metered {
+                input_milli_usd_per_million_tokens: 4_000,
+                output_milli_usd_per_million_tokens: 20_000,
+                cached_input_milli_usd_per_million_tokens: Some(200),
+            },
+        })
+    );
+    assert_eq!(model("claude-opus-5-5").context_window, Some(1_000_000));
+    assert_eq!(model("claude-opus-5-5").max_output_tokens, Some(128_000));
+
+    // OpenAI: $2 / $10 per million, cache reads $0.20 per million. The plan
+    // burn is this repository's own frontier-tier weighting, not a vendor rate.
+    assert_eq!(
+        model("gpt-6-sol").orchestration,
+        Some(ModelOrchestrationMetadata::Eligible {
+            provider_id: "openai".to_string(),
+            capability: ModelCapabilityTier::Frontier,
+            billing: ModelBilling::AuthDependent {
+                plan_relative_burn_millis: 1_000,
+                api_key_input_milli_usd_per_million_tokens: 2_000,
+                api_key_output_milli_usd_per_million_tokens: 10_000,
+                api_key_cached_input_milli_usd_per_million_tokens: Some(200),
+            },
+        })
+    );
+    assert_eq!(model("gpt-6-sol").context_window, Some(1_050_000));
+    assert_eq!(model("gpt-6-sol").max_output_tokens, Some(128_000));
+}
+
 #[test]
 fn bundled_models_json_contains_ambient_and_zai_models() {
     let response = crate::bundled_models_response()
