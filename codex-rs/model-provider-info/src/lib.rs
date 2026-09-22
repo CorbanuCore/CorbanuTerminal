@@ -352,13 +352,18 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     ) {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
-    if matches!(
-        model,
-        ANTHROPIC_DEFAULT_MODEL
-            | ANTHROPIC_OPUS_5_5_MODEL
-            | CLAUDE_FABLE_5_1_MODEL
-            | CLAUDE_FABLE_5_MODEL
-    ) {
+    // Opus 5.5 has no subscription route in this catalogue. The other bare
+    // Claude slugs below are deliberately claimed by `claude-plan`, but each
+    // has an exact plan translation; this one would fall through
+    // `resolve_model_for_provider`'s catch-all and become `claude-opus-5-plan`,
+    // which is a different model at a different price. It owns the provider its
+    // own catalogue row states instead.
+    if model == ANTHROPIC_OPUS_5_5_MODEL {
+        return Some(ANTHROPIC_PROVIDER_ID);
+    }
+    if model == ANTHROPIC_DEFAULT_MODEL
+        || matches!(model, CLAUDE_FABLE_5_1_MODEL | CLAUDE_FABLE_5_MODEL)
+    {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
     if model == META_DEFAULT_MODEL {
@@ -467,6 +472,13 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     ) && provider != CLAUDE_PLAN_PROVIDER_ID
     {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
+    }
+    // Same reason as in `canonical_catalog_provider`: correcting Opus 5.5 onto
+    // `claude-plan` would hand the session `claude-opus-5-plan`, silently
+    // swapping the model and its rate. Correct it onto the provider its row
+    // states, where the slug survives untranslated.
+    if model == ANTHROPIC_OPUS_5_5_MODEL && provider != ANTHROPIC_PROVIDER_ID {
+        return Some(ANTHROPIC_PROVIDER_ID);
     }
     if model.starts_with("claude-")
         && provider != ANTHROPIC_PROVIDER_ID
