@@ -421,8 +421,9 @@ pub(crate) fn turn_mode(
         // metered Anthropic turns with no rate at all. What disqualifies per-token
         // rates is a credential this client cannot attribute to the account the
         // catalogue quotes.
+        // `provider.auth` is deliberately absent from this list: a provider
+        // holding its own plan credential no longer reaches this arm at all.
         let attributable = provider.aws.is_none()
-            && provider.auth.is_none()
             && provider.experimental_bearer_token.is_none()
             && !credential_header(&provider.http_headers)
             && !credential_header(&provider.env_http_headers);

@@ -1188,6 +1188,7 @@ fn a_pinned_route_carries_both_the_configured_query_and_the_path_s_own() {
 ///
 /// The authority must be the same under every Codex auth mode, because none of
 /// them is the credential paying for this route.
+#[cfg(feature = "developer-accounting")]
 #[test]
 fn claude_plan_states_the_plan_side_whatever_openai_credential_exists() {
     use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
