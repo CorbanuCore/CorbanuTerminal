@@ -8,6 +8,7 @@ use codex_protocol::config_types::CollaborationModeMask;
 use codex_protocol::error::Result as CoreResult;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelPreset;
+use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::ModelsResponse;
 use std::fmt;
 use std::future::Future;
@@ -434,10 +435,11 @@ impl OpenAiModelsManager {
                 .position(|existing| existing.slug == model.slug)
             {
                 let bundled = &existing_models[existing_index];
-                // Keep the retired Ambient option hidden even with an older cache
-                // or discovery response. Retain metadata for existing sessions.
-                if model.slug == "moonshotai/kimi-k2.7-code" {
-                    model.visibility = bundled.visibility;
+                // A stale cache or discovery response must not resurrect options retired
+                // from the bundled picker. Keep their metadata for explicit selection and
+                // existing sessions; the server may still hide otherwise-visible models.
+                if bundled.visibility == ModelVisibility::Hide {
+                    model.visibility = ModelVisibility::Hide;
                 }
                 // Provider discovery owns availability and presentation. The bundled catalogue
                 // owns spend authorization, capability classification, and allowed effort. A

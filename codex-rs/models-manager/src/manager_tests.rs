@@ -723,6 +723,53 @@ async fn remote_overlay_keeps_retired_ambient_model_out_of_picker() {
 }
 
 #[tokio::test]
+async fn remote_and_cached_overlays_cannot_resurrect_bundled_hidden_models() {
+    let retired = load_remote_models_from_file()
+        .expect("bundled models")
+        .into_iter()
+        .filter(|model| model.visibility == ModelVisibility::Hide)
+        .collect::<Vec<_>>();
+    assert!(!retired.is_empty());
+    let advertised = retired
+        .iter()
+        .cloned()
+        .map(|mut model| {
+            model.visibility = ModelVisibility::List;
+            model
+        })
+        .collect::<Vec<_>>();
+    let codex_home = tempdir().expect("temp dir");
+    let manager = openai_manager_for_tests(
+        codex_home.path().to_path_buf(),
+        TestModelsEndpoint::new(vec![advertised]),
+    );
+    let online = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
+    let cached_endpoint = TestModelsEndpoint::new(Vec::new());
+    let cached = openai_manager_for_tests(codex_home.path().to_path_buf(), cached_endpoint.clone())
+        .list_models(
+            RefreshStrategy::OnlineIfUncached,
+            DEFAULT_HTTP_CLIENT_FACTORY,
+        )
+        .await;
+    assert_eq!(cached, online);
+    assert_eq!(cached_endpoint.fetch_count(), 0);
+    for retired_model in retired {
+        let preset = online
+            .iter()
+            .find(|model| model.model == retired_model.slug)
+            .expect("hidden metadata retained");
+        assert!(!preset.show_in_picker, "{} resurrected", preset.model);
+        let explicit = manager
+            .get_model_info(&retired_model.slug, &ModelsManagerConfig::default())
+            .await;
+        assert_eq!(explicit.slug, retired_model.slug);
+        assert!(!explicit.used_fallback_model_metadata);
+    }
+}
+
+#[tokio::test]
 async fn remote_model_overlay_preserves_bundled_orchestration_metadata() {
     let mut remote_models = vec![remote_model(
         "gpt-5.6-sol",
@@ -845,6 +892,8 @@ async fn chatgpt_catalog_keeps_bundled_openai_models_when_remote_omits_them() {
 
     for slug in [
         "gpt-6-astra",
+        "gpt-6-sol",
+        "gpt-6-luna",
         "gpt-5.6-sol",
         "gpt-5.6-terra",
         "gpt-5.6-luna",
@@ -1578,6 +1627,7 @@ fn bundled_models_json_tracks_verified_image_capabilities() {
         "minimax/minimax-m3",
         "google/gemini-3.5-flash",
         "claude-opus-5-plan",
+        "claude-opus-5-5-plan",
         "claude-fable-5-1-plan",
         "claude-fable-5-plan",
         "claude-opus-5",
@@ -1609,6 +1659,7 @@ fn bundled_claude_5_models_have_provider_reported_output_limits() {
 
     for (slug, max_output_tokens) in [
         ("claude-opus-5-plan", 128_000),
+        ("claude-opus-5-5-plan", 128_000),
         ("claude-fable-5-1-plan", 128_000),
         ("claude-fable-5-plan", 128_000),
         ("claude-opus-5", 128_000),
@@ -2071,6 +2122,7 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
         "tencent/hy3:free",
         "muse-spark-1.1",
         "claude-opus-5-plan",
+        "claude-opus-5-5-plan",
         "claude-fable-5-1-plan",
         "claude-fable-5-plan",
         "claude-opus-5",
@@ -2183,7 +2235,7 @@ fn bundled_models_json_contains_openrouter_models() {
     assert_eq!(openrouter_owl.context_window, Some(1_048_756));
     assert_eq!(openrouter_owl.default_reasoning_level, None);
     assert!(openrouter_owl.supported_reasoning_levels.is_empty());
-    assert_eq!(openrouter_owl.visibility, ModelVisibility::List);
+    assert_eq!(openrouter_owl.visibility, ModelVisibility::Hide);
     assert!(
         openrouter_owl
             .description
@@ -2352,7 +2404,20 @@ fn bundled_models_json_contains_openrouter_models() {
             .contains("$3.00/M input, $0.30/M cached input, $15.00/M output")
     );
 
-    for model in [grok, deepseek_pro, deepseek_flash, hy3, kimi] {
+    for model in [
+        grok,
+        deepseek_pro,
+        deepseek_pro_0813,
+        deepseek_flash,
+        openrouter_owl,
+    ] {
+        assert_eq!(model.visibility, ModelVisibility::Hide);
+        assert!(matches!(
+            model.orchestration,
+            Some(ModelOrchestrationMetadata::Disabled { .. })
+        ));
+    }
+    for model in [hy3, kimi] {
         assert_eq!(model.visibility, ModelVisibility::List);
         assert!(!model.supports_parallel_tool_calls);
         assert_standard_base(&model.base_instructions);

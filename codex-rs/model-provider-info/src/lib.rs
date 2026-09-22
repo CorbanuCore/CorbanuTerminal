@@ -90,6 +90,7 @@ pub const ANTHROPIC_API_KEY_ENV_VAR: &str = "ANTHROPIC_API_KEY";
 const CLAUDE_PLAN_PROVIDER_NAME: &str = "Claude Plan";
 pub const CLAUDE_PLAN_PROVIDER_ID: &str = "claude-plan";
 pub const CLAUDE_PLAN_MODEL: &str = "claude-opus-5-plan";
+pub const CLAUDE_OPUS_5_5_PLAN_MODEL: &str = "claude-opus-5-5-plan";
 pub const CLAUDE_PLAN_UPSTREAM_MODEL: &str = ANTHROPIC_DEFAULT_MODEL;
 pub const CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL: &str = "claude-opus-4-8-plan";
 pub const CLAUDE_FABLE_5_1_PLAN_MODEL: &str = "claude-fable-5-1-plan";
@@ -192,6 +193,7 @@ const OPENROUTER_ANTHROPIC_PROVIDER_NAME: &str = "OpenRouter Anthropic";
 pub const OPENROUTER_ANTHROPIC_PROVIDER_ID: &str = "openrouter-anthropic";
 pub const OPENROUTER_DEFAULT_MODEL: &str = "z-ai/glm-5.2";
 pub const OPENROUTER_GROK_4_6_MODEL: &str = "x-ai/grok-4.6";
+pub const OPENROUTER_GROK_4_7_MODEL: &str = "x-ai/grok-4.7";
 pub const OPENROUTER_API_KEY_ENV_VAR: &str = "OPENROUTER_API_KEY";
 const DEEPSEEK_PROVIDER_NAME: &str = "DeepSeek";
 pub const DEEPSEEK_PROVIDER_ID: &str = "deepseek";
@@ -346,18 +348,16 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     if matches!(
         model,
         CLAUDE_PLAN_MODEL
+            | CLAUDE_OPUS_5_5_PLAN_MODEL
             | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
             | CLAUDE_FABLE_5_1_PLAN_MODEL
             | CLAUDE_FABLE_5_PLAN_MODEL
     ) {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
-    // Opus 5.5 has no subscription route in this catalogue. The other bare
-    // Claude slugs below are deliberately claimed by `claude-plan`, but each
-    // has an exact plan translation; this one would fall through
-    // `resolve_model_for_provider`'s catch-all and become `claude-opus-5-plan`,
-    // which is a different model at a different price. It owns the provider its
-    // own catalogue row states instead.
+    // Keep the API row's ownership distinct from the explicit Plan row.
+    // An explicitly selected Claude Plan provider can resolve this bare slug
+    // to its exact subscription alias without changing the model.
     if model == ANTHROPIC_OPUS_5_5_MODEL {
         return Some(ANTHROPIC_PROVIDER_ID);
     }
@@ -379,6 +379,10 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
             | "openrouter/owl-alpha"
             | "google/gemini-3.5-flash"
             | OPENROUTER_GROK_4_6_MODEL
+            | OPENROUTER_GROK_4_7_MODEL
+            | "deepseek/deepseek-v4.1-flash"
+            | "z-ai/glm-5.3-flash"
+            | "nvidia/nemotron-3-ultra-550b-a55b:free"
             | "x-ai/grok-4.5"
             | OPENROUTER_DEEPSEEK_V4_PRO_0813_MODEL
             | "deepseek/deepseek-v4-pro"
@@ -466,6 +470,7 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     if matches!(
         model,
         CLAUDE_PLAN_MODEL
+            | CLAUDE_OPUS_5_5_PLAN_MODEL
             | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
             | CLAUDE_FABLE_5_1_PLAN_MODEL
             | CLAUDE_FABLE_5_PLAN_MODEL
@@ -473,11 +478,12 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
-    // Same reason as in `canonical_catalog_provider`: correcting Opus 5.5 onto
-    // `claude-plan` would hand the session `claude-opus-5-plan`, silently
-    // swapping the model and its rate. Correct it onto the provider its row
-    // states, where the slug survives untranslated.
-    if model == ANTHROPIC_OPUS_5_5_MODEL && provider != ANTHROPIC_PROVIDER_ID {
+    // Both explicit Opus 5.5 routes are valid; never replace a chosen Plan
+    // route with API billing. Impossible pairs use the bare API row's owner.
+    if model == ANTHROPIC_OPUS_5_5_MODEL
+        && provider != ANTHROPIC_PROVIDER_ID
+        && provider != CLAUDE_PLAN_PROVIDER_ID
+    {
         return Some(ANTHROPIC_PROVIDER_ID);
     }
     if model.starts_with("claude-")
@@ -566,6 +572,7 @@ pub fn resolve_model_for_provider(
             Some(model)
                 if model.trim().starts_with("claude-")
                     && model.trim() != CLAUDE_PLAN_MODEL
+                    && model.trim() != CLAUDE_OPUS_5_5_PLAN_MODEL
                     && model.trim() != CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
                     && model.trim() != CLAUDE_FABLE_5_1_PLAN_MODEL
                     && model.trim() != CLAUDE_FABLE_5_PLAN_MODEL =>
@@ -575,6 +582,9 @@ pub fn resolve_model_for_provider(
             _ => Some(ANTHROPIC_DEFAULT_MODEL.to_string()),
         },
         CLAUDE_PLAN_PROVIDER_ID => match model {
+            Some(model) if model.trim() == ANTHROPIC_OPUS_5_5_MODEL => {
+                Some(CLAUDE_OPUS_5_5_PLAN_MODEL.to_string())
+            }
             Some(model) if model.trim() == ANTHROPIC_DEFAULT_MODEL => {
                 Some(CLAUDE_PLAN_MODEL.to_string())
             }
@@ -591,6 +601,7 @@ pub fn resolve_model_for_provider(
                 if matches!(
                     model.trim(),
                     CLAUDE_PLAN_MODEL
+                        | CLAUDE_OPUS_5_5_PLAN_MODEL
                         | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
                         | CLAUDE_FABLE_5_1_PLAN_MODEL
                         | CLAUDE_FABLE_5_PLAN_MODEL

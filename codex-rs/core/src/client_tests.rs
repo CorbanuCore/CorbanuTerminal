@@ -907,8 +907,12 @@ fn anthropic_api_request_repairs_tool_result_after_trailing_assistant_text() {
 }
 
 #[test]
-fn claude_plan_fable_versions_use_exact_upstream_slugs() {
+fn claude_plan_versions_use_exact_upstream_slugs() {
     for (plan_model, upstream_model) in [
+        (
+            codex_model_provider_info::CLAUDE_OPUS_5_5_PLAN_MODEL,
+            codex_model_provider_info::ANTHROPIC_OPUS_5_5_MODEL,
+        ),
         (CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_FABLE_5_MODEL),
         (CLAUDE_FABLE_5_1_PLAN_MODEL, CLAUDE_FABLE_5_1_MODEL),
     ] {
@@ -1465,6 +1469,72 @@ fn ambient_required_low_reasoning_is_enabled_without_duplicate_scalar_control() 
 }
 
 #[test]
+fn refreshed_provider_models_keep_exact_request_routes_and_reasoning() {
+    let models = codex_models_manager::bundled_models_response()
+        .expect("bundled catalogue")
+        .models;
+    for (slug, provider) in [
+        ("glm-5.3-flash", ModelProviderInfo::create_zai_provider()),
+        (
+            "z-ai/glm-5.3-flash",
+            ModelProviderInfo::create_openrouter_provider(),
+        ),
+        (
+            "x-ai/grok-4.7",
+            ModelProviderInfo::create_openrouter_provider(),
+        ),
+        (
+            "deepseek/deepseek-v4.1-flash",
+            ModelProviderInfo::create_openrouter_provider(),
+        ),
+        (
+            "nvidia/nemotron-3-ultra-550b-a55b:free",
+            ModelProviderInfo::create_openrouter_provider(),
+        ),
+    ] {
+        let model = models
+            .iter()
+            .find(|model| model.slug == slug)
+            .expect("model");
+        let client = test_model_client(SessionSource::Cli).for_provider(&provider);
+        let metadata = test_responses_metadata_for_client(
+            &client,
+            /*turn_id*/ None,
+            format!("{}:0", client.state.thread_id),
+            /*parent_thread_id*/ None,
+            TestCodexResponsesRequestKind::Turn,
+        );
+        for level in &model.supported_reasoning_levels {
+            let request = client
+                .build_chat_completions_request(
+                    &Prompt::default(),
+                    model,
+                    Some(level.effort.clone()),
+                    &metadata,
+                )
+                .expect("supported effort must serialize");
+            assert_eq!(request.model, slug);
+            if provider.is_zai() {
+                assert_eq!(request.enable_thinking, Some(true));
+                assert_eq!(
+                    request.reasoning_effort.as_deref(),
+                    Some(level.effort.as_str())
+                );
+            } else {
+                assert_eq!(
+                    request
+                        .reasoning
+                        .as_ref()
+                        .and_then(|reasoning| reasoning.get("effort"))
+                        .and_then(serde_json::Value::as_str),
+                    Some(level.effort.as_str()),
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn zai_glm_5_3_replays_preserved_reasoning_with_tool_calls_and_outputs() {
     let model = codex_models_manager::bundled_models_response()
         .expect("bundled model catalogue")
@@ -1642,6 +1712,27 @@ fn test_claude_plan_model_info() -> ModelInfo {
     model.slug = CLAUDE_PLAN_MODEL.to_string();
     model.display_name = "Claude Opus 5 Plan".to_string();
     model
+}
+
+#[test]
+fn opus_5_5_plan_request_preserves_exact_model_and_subscription_identity() {
+    let mut model = test_claude_plan_model_info();
+    model.slug = codex_model_provider_info::CLAUDE_OPUS_5_5_PLAN_MODEL.to_string();
+    let request = test_model_client(SessionSource::Cli)
+        .build_anthropic_messages_request(
+            &super::Prompt::default(),
+            &model,
+            Some(ReasoningEffort::High),
+        )
+        .expect("Opus 5.5 Plan request");
+    let body = serde_json::to_value(request).expect("request JSON");
+    assert_eq!(body["model"], json!("claude-opus-5-5"));
+    assert_eq!(
+        body["system"][0]["text"],
+        json!(super::CLAUDE_CODE_IDENTITY_PROMPT)
+    );
+    assert_eq!(body["thinking"]["type"], json!("adaptive"));
+    assert_eq!(body["output_config"]["effort"], json!("high"));
 }
 
 #[test]

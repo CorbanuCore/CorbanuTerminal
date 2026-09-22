@@ -169,7 +169,7 @@ to use.
 | Provider     | Provider id   | Credential           | Current model examples                                                               |
 | ------------ | ------------- | -------------------- | ------------------------------------------------------------------------------------ |
 | OpenAI Codex | `openai`      | Codex account login  | `gpt-5.6-sol`, `gpt-5.6-luna`, `gpt-5.6-terra`                                       |
-| Claude Plan  | `claude-plan` | Claude Code login    | `claude-opus-5-plan`, `claude-fable-5-1-plan`, `claude-fable-5-plan`                 |
+| Claude Plan  | `claude-plan` | Claude Code login    | `claude-opus-5-5-plan`, `claude-opus-5-plan`, `claude-fable-5-1-plan`, `claude-fable-5-plan`                 |
 | Anthropic    | `anthropic`   | `ANTHROPIC_API_KEY`  | `claude-opus-5`, `claude-fable-5-1`, `claude-fable-5`                               |
 | Ambient      | `ambient`     | `AMBIENT_API_KEY`    | `z-ai/glm-5.2`                                                                     |
 | Kimi Code    | `kimi-code`   | `KIMI_API_KEY`       | `k3`                                                                                 |

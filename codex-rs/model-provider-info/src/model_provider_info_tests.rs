@@ -1446,16 +1446,15 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider(CLAUDE_FABLE_5_MODEL, AMBIENT_PROVIDER_ID),
         Some(CLAUDE_PLAN_PROVIDER_ID)
     );
-    // Opus 5.5 is corrected onto Anthropic rather than the plan route the other
-    // bare Claude slugs take, because the plan route has no row for it and
-    // would substitute `claude-opus-5-plan` without saying so.
+    // A bare API row retains its owner for impossible pairs, while an
+    // explicitly selected Plan route now has an exact Opus 5.5 translation.
     assert_eq!(
         corrected_catalog_provider(ANTHROPIC_OPUS_5_5_MODEL, AMBIENT_PROVIDER_ID),
         Some(ANTHROPIC_PROVIDER_ID)
     );
     assert_eq!(
         corrected_catalog_provider(ANTHROPIC_OPUS_5_5_MODEL, CLAUDE_PLAN_PROVIDER_ID),
-        Some(ANTHROPIC_PROVIDER_ID)
+        None
     );
     assert_eq!(
         corrected_catalog_provider(ANTHROPIC_OPUS_5_5_MODEL, ANTHROPIC_PROVIDER_ID),
@@ -1584,6 +1583,14 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (CLAUDE_FABLE_5_1_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (OPENROUTER_GROK_4_6_MODEL, OPENROUTER_PROVIDER_ID),
+        (OPENROUTER_GROK_4_7_MODEL, OPENROUTER_PROVIDER_ID),
+        ("deepseek/deepseek-v4.1-flash", OPENROUTER_PROVIDER_ID),
+        ("z-ai/glm-5.3-flash", OPENROUTER_PROVIDER_ID),
+        (
+            "nvidia/nemotron-3-ultra-550b-a55b:free",
+            OPENROUTER_PROVIDER_ID,
+        ),
+        ("glm-5.3-flash", ZAI_PROVIDER_ID),
         ("x-ai/grok-4.5", OPENROUTER_PROVIDER_ID),
         ("moonshotai/kimi-k3", OPENROUTER_PROVIDER_ID),
         (DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PROVIDER_ID),
@@ -1606,10 +1613,9 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (BASETEN_DEFAULT_MODEL, BASETEN_PROVIDER_ID),
         ("gpt-5.6-sol", OPENAI_PROVIDER_ID),
         ("gpt-6-sol", OPENAI_PROVIDER_ID),
-        // Not `claude-plan`, unlike the bare Claude slugs above. There is no
-        // Opus 5.5 plan row, so the plan provider would resolve this pair to
-        // `claude-opus-5-plan`: a different model at a different rate.
+        // The bare API row and explicit Plan row keep separate ownership.
         (ANTHROPIC_OPUS_5_5_MODEL, ANTHROPIC_PROVIDER_ID),
+        (CLAUDE_OPUS_5_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
     ] {
         assert_eq!(
             canonical_catalog_provider(model),
@@ -1622,8 +1628,9 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
 }
 
 #[test]
-fn fable_plan_versions_resolve_to_their_exact_upstream_models() {
+fn claude_plan_versions_resolve_to_their_exact_upstream_models() {
     for (upstream_model, plan_model) in [
+        (ANTHROPIC_OPUS_5_5_MODEL, CLAUDE_OPUS_5_5_PLAN_MODEL),
         (CLAUDE_FABLE_5_MODEL, CLAUDE_FABLE_5_PLAN_MODEL),
         (CLAUDE_FABLE_5_1_MODEL, CLAUDE_FABLE_5_1_PLAN_MODEL),
     ] {
