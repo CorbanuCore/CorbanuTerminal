@@ -3017,6 +3017,7 @@ fn interrupt_turn_cancels_prepared_claude_token_and_finishes_cleanly() {
         status: ClaudePaneTurnStatus::Interrupted,
         session_id: None,
         usage_summary: None,
+        turn_usage_summary: None,
         usage_status: ClaudePaneUsageStatus::Missing,
         artifact_path: dir.path().join("turn-0001.jsonl"),
         audit_path: dir.path().join("turn-0001.audit.json"),
@@ -3399,6 +3400,7 @@ fn registry_locks_turns_and_resumes_stored_session() {
         status: ClaudePaneTurnStatus::Success,
         session_id: Some("11111111-2222-4333-8444-555555555555".to_string()),
         usage_summary: None,
+        turn_usage_summary: None,
         usage_status: ClaudePaneUsageStatus::Missing,
         artifact_path: dir.path().join("turn-0001.jsonl"),
         audit_path: dir.path().join("turn-0001.audit.json"),
@@ -3491,6 +3493,7 @@ fn provider_error_clears_resume_session_for_next_turn() {
         status: ClaudePaneTurnStatus::ProviderError,
         session_id: Some("11111111-2222-4333-8444-555555555555".to_string()),
         usage_summary: None,
+        turn_usage_summary: None,
         usage_status: ClaudePaneUsageStatus::Untrusted,
         artifact_path: dir.path().join("turn-0001.jsonl"),
         audit_path: dir.path().join("turn-0001.audit.json"),
@@ -3538,6 +3541,7 @@ fn max_turn_output_keeps_resume_guidance_and_audit_hint() {
         status: ClaudePaneTurnStatus::MaxTurnsPause,
         session_id: Some("44444444-4444-4444-8444-444444444444".to_string()),
         usage_summary: Some(r#"{"input_tokens":10}"#.to_string()),
+        turn_usage_summary: None,
         usage_status: ClaudePaneUsageStatus::Reported,
         artifact_path: dir.path().join("turn-0001.jsonl"),
         audit_path: dir.path().join("turn-0001.audit.json"),
@@ -3602,6 +3606,7 @@ fn turn_audit_counts_tool_events_not_unique_tool_names() {
         status: ClaudePaneTurnStatus::Success,
         session_id: Some("11111111-2222-4333-8444-555555555555".to_string()),
         usage_summary: None,
+        turn_usage_summary: None,
         usage_status: ClaudePaneUsageStatus::Missing,
         artifact_path: plan.artifact_path.clone(),
         audit_path: plan.audit_path.clone(),
@@ -3650,6 +3655,7 @@ fn turn_audit_serializes_reasoning_events() {
         status: ClaudePaneTurnStatus::Success,
         session_id: Some("11111111-2222-4333-8444-555555555555".to_string()),
         usage_summary: None,
+        turn_usage_summary: None,
         usage_status: ClaudePaneUsageStatus::Missing,
         artifact_path: plan.artifact_path.clone(),
         audit_path: plan.audit_path.clone(),
@@ -4253,7 +4259,16 @@ fn every_pane_profile_reports_its_provider_s_own_route() {
             {
                 format!("{}/v1", "https://api.anthropic.com".trim_end_matches('/'))
             }
-            ClaudeProviderTransport::DirectAnthropic => continue,
+            // A direct profile has no bridge at all: the pane talks to the
+            // provider itself, and the turn is recorded from what it reports
+            // against that same route.
+            ClaudeProviderTransport::DirectAnthropic => format!(
+                "{}/v1",
+                profile
+                    .base_url
+                    .expect("a direct profile names its provider")
+                    .trim_end_matches('/')
+            ),
         };
         let provider_id = profile
             .accounting_provider_id
@@ -4412,4 +4427,45 @@ fn only_a_pane_without_a_bridge_is_recorded_from_its_own_report() {
         plan.direct_accounting.is_none(),
         "a bridged turn is recorded send by send, and must not be recorded twice"
     );
+}
+
+/// The display summary is the first usage a transcript carries, which is one
+/// model request. A turn that ran a tool loop made several, and only the pane
+/// knows their total. Recording the first request's numbers in a turn-shaped
+/// row undercounts every aggregate a reader of the ledger computes.
+#[test]
+fn a_turn_s_usage_is_the_total_the_pane_stated_not_its_first_request() {
+    let parsed = parse_claude_output(
+        r#"{"type":"assistant","message":{"content":[{"type":"text","text":"one"}],"usage":{"input_tokens":10,"output_tokens":2}}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"two"}],"usage":{"input_tokens":400,"output_tokens":9}}}
+{"type":"result","result":"done","session_id":"22222222-2222-4222-8222-222222222222","usage":{"input_tokens":410,"cache_read_input_tokens":64,"output_tokens":11}}"#,
+    )
+    .expect("parse");
+
+    // Unchanged: the display still shows the shape the turn started with.
+    assert_eq!(
+        parsed.usage_summary.as_deref(),
+        Some(r#"{"input_tokens":10,"output_tokens":2}"#)
+    );
+    // Accounting takes the turn's own total.
+    let total: serde_json::Value =
+        serde_json::from_str(parsed.turn_usage_summary.as_deref().expect("a stated total"))
+            .expect("the total is a usage object");
+    assert_eq!(total["input_tokens"], 410);
+    assert_eq!(total["cache_read_input_tokens"], 64);
+    assert_eq!(total["output_tokens"], 11);
+}
+
+/// A turn that stopped before stating a total states no total. Summing the
+/// requests would be this client inventing one, so nothing is recorded.
+#[test]
+fn a_turn_that_stated_no_total_records_none() {
+    let parsed = parse_claude_output(
+        r#"{"type":"assistant","message":{"content":[{"type":"text","text":"one"}],"usage":{"input_tokens":10}}}
+{"type":"result","result":"done","session_id":"22222222-2222-4222-8222-222222222222"}"#,
+    )
+    .expect("parse");
+
+    assert!(parsed.usage_summary.is_some());
+    assert_eq!(parsed.turn_usage_summary, None);
 }

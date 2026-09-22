@@ -60,6 +60,19 @@ pub(crate) fn usage_summary_from_value(value: &Value) -> Option<String> {
     Some(usage.to_string())
 }
 
+/// What a `result` event states the whole turn cost.
+///
+/// The pane emits one of these when a turn ends, carrying the cumulative
+/// numbers for every model request it made. Any other event's usage is one
+/// request's, so only this event is read here.
+pub(crate) fn turn_usage_summary_from_value(value: &Value) -> Option<String> {
+    if value.get("type").and_then(Value::as_str) != Some("result") {
+        return None;
+    }
+    let usage = value.get("usage")?;
+    usage.is_object().then(|| usage.to_string())
+}
+
 pub(crate) fn usage_status_from_summary(summary: Option<&str>) -> ClaudePaneUsageStatus {
     let Some(summary) = summary else {
         return ClaudePaneUsageStatus::Missing;

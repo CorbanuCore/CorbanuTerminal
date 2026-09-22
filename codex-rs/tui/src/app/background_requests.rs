@@ -1627,7 +1627,10 @@ impl App {
     ///
     /// One turn, one record: a pane turn can be many model requests, and this
     /// client saw none of them individually. The count of attempts is
-    /// therefore turns, not requests, which is what the numbers describe.
+    /// therefore turns, not requests, and the numbers are the turn's total -
+    /// the one the pane states when the turn ends. The first usage a
+    /// transcript carries is one request's, and recording that beside a
+    /// turn-shaped row would undercount every aggregate a reader computes.
     pub(super) fn record_direct_pane_turn(
         &mut self,
         app_server: &AppServerSession,
@@ -1639,12 +1642,13 @@ impl App {
         let Some(accounting) = output.direct_accounting.clone() else {
             return;
         };
-        // No numbers means the pane reported nothing this client can stand
-        // behind, and a turn recorded with nothing stated is not worth a row
-        // here: unlike a send, there is no request whose existence is itself
-        // the fact being recorded.
+        // A turn that stated no total - an interrupt before the pane reported
+        // one - is not recorded. Unlike a send, there is no request here whose
+        // existence is itself the fact being recorded, only numbers, and
+        // summing per-request usage into a total would be this client
+        // inventing one.
         let Some(usage) = output
-            .usage_summary
+            .turn_usage_summary
             .as_deref()
             .and_then(|usage| serde_json::from_str::<serde_json::Value>(usage).ok())
             .filter(serde_json::Value::is_object)

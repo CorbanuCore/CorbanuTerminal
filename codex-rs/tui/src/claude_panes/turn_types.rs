@@ -28,6 +28,8 @@ pub(crate) struct ClaudePaneTurnOutput {
     pub(crate) status: ClaudePaneTurnStatus,
     pub(crate) session_id: Option<String>,
     pub(crate) usage_summary: Option<String>,
+    /// What the pane stated the whole turn cost, when it stated it.
+    pub(crate) turn_usage_summary: Option<String>,
     pub(crate) usage_status: ClaudePaneUsageStatus,
     pub(crate) artifact_path: PathBuf,
     pub(crate) audit_path: PathBuf,

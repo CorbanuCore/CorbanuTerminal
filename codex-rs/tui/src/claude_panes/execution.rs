@@ -632,6 +632,7 @@ fn turn_output_from_parsed(
             .or_else(|| Some(plan.command_session_id.clone())),
         usage_status: usage_status_from_summary(parsed.usage_summary.as_deref()),
         usage_summary: parsed.usage_summary,
+        turn_usage_summary: parsed.turn_usage_summary,
         direct_accounting: plan.direct_accounting.clone(),
         artifact_path: plan.artifact_path.clone(),
         audit_path: plan.audit_path.clone(),
@@ -657,9 +658,10 @@ pub(crate) fn failed_turn_output(
         status,
         session_id: None,
         usage_summary: None,
+        turn_usage_summary: None,
         usage_status: ClaudePaneUsageStatus::Missing,
-        // A turn that failed before it reported anything has nothing to
-        // record; a failed turn that did report is recorded by the caller.
+        // Nothing stated, nothing recorded. A partial turn that did state a
+        // total gets its accounting back below, where the statement is read.
         direct_accounting: None,
         artifact_path: plan.artifact_path.clone(),
         audit_path: plan.audit_path.clone(),
@@ -691,6 +693,13 @@ pub(crate) fn partial_failed_turn_output(
             .or_else(|| Some(plan.command_session_id.clone()));
         output.usage_status = usage_status_from_summary(parsed.usage_summary.as_deref());
         output.usage_summary = parsed.usage_summary;
+        // An interrupted or timed-out turn still spent whatever it spent. If
+        // the pane managed to state the turn's total before it stopped, that
+        // statement is as good as any other and the turn is recorded from it.
+        output.turn_usage_summary = parsed.turn_usage_summary;
+        if output.turn_usage_summary.is_some() {
+            output.direct_accounting = plan.direct_accounting.clone();
+        }
         if output.terminal_reason.is_none() {
             output.terminal_reason = parsed.terminal_reason;
         }
