@@ -83,6 +83,13 @@ Claude Code's normal rotating platform login. A successful choice persists;
 Corbanu never silently falls back to another source, account, or billing path.
 Claude Code must be installed, and neither option uses an Anthropic API key.
 
+In `/model`, **Claude Opus 5.5 Plan** selects `claude-opus-5-5-plan` on
+`claude-plan`, using the exact upstream `claude-opus-5-5` model. The separate
+**Claude Opus 5.5** entry uses Anthropic API billing. The Plan entry does not
+substitute Opus 5 when access is unavailable; provider access errors remain
+visible. Its orchestration weight inherits the existing Opus Plan weight, not
+a vendor-published subscription price.
+
 OpenAI and Claude account state have separate owners and lifecycles. Signing in
 or out of one does not authenticate or erase the other.
 

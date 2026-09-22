@@ -3386,7 +3386,40 @@ async fn model_selection_popup_openai_provider_snapshot() {
 
 #[tokio::test]
 async fn model_selection_popup_openrouter_provider_snapshot() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("moonshotai/kimi-k3")).await;
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("x-ai/grok-4.7")).await;
+    chat.config.model_provider_id = "openrouter".to_string();
+    chat.set_model("x-ai/grok-4.7");
+    chat.thread_id = Some(ThreadId::new());
+    let presets = chat
+        .model_catalog
+        .try_list_models()
+        .expect("model catalog should load");
+    chat.open_all_models_popup(presets);
+
+    let popup = render_bottom_popup_with_height(&chat, /*width*/ 130, /*height*/ 44);
+    for model in [
+        "x-ai/grok-4.7",
+        "deepseek/deepseek-v4.1-flash",
+        "z-ai/glm-5.3-flash",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+    ] {
+        assert!(popup.contains(model), "missing {model}: {popup}");
+    }
+    for retired in [
+        "grok-4.5",
+        "grok-4.6",
+        "deepseek-v4-pro",
+        "deepseek-v4-flash",
+        "owl-alpha",
+    ] {
+        assert!(!popup.contains(retired), "retired {retired}: {popup}");
+    }
+    assert_chatwidget_snapshot!("model_selection_popup_openrouter_provider", popup);
+}
+
+#[tokio::test]
+async fn model_selection_popup_zai_flash_provider_snapshot() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("glm-5.3-flash")).await;
     chat.thread_id = Some(ThreadId::new());
     let presets = chat
         .model_catalog
@@ -3395,7 +3428,7 @@ async fn model_selection_popup_openrouter_provider_snapshot() {
     chat.open_all_models_popup(presets);
 
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 32);
-    assert_chatwidget_snapshot!("model_selection_popup_openrouter_provider", popup);
+    assert_chatwidget_snapshot!("model_selection_popup_zai_flash_provider", popup);
 }
 
 #[tokio::test]
