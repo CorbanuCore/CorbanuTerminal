@@ -1124,3 +1124,100 @@ async fn accounting_anthropic_http_and_payload_retries_are_separate_durable_atte
     }
     Ok(())
 }
+
+/// The regression this guards is the whole money pass: a Claude Plan turn that
+/// records tokens and no price at all.
+///
+/// `anthropic_upstream_model` rewrites `claude-opus-5-plan` to `claude-opus-5`
+/// before dispatch, because that is the name Anthropic answers to. The
+/// catalogue keys the plan rate under `claude-opus-5-plan` on `claude-plan`,
+/// and `claude-opus-5` exists only under `anthropic` at metered API rates. So
+/// recording the wire name did not merely fail to find a rate - it named a row
+/// that would have priced a subscription turn at another provider's API rates,
+/// and only the provider check stopped it.
+///
+/// This runs the real client end to end, which the unit tests beside
+/// `plan_original` cannot: those call the pricer with the catalogue slug
+/// directly and stay green no matter what the runtime records. Here the wire
+/// body still says `claude-opus-5` while the ledger says `claude-opus-5-plan`,
+/// and that recorded pair is checked against the bundled catalogue, so the
+/// assertion is "whatever identity the runtime wrote down, the catalogue can
+/// price it". Revert any of the three `AccountingTransport::new` call sites and
+/// this fails.
+///
+/// What it deliberately does not assert is that a snapshot row was written.
+/// `turn_mode` grants price authority only when the request went to the
+/// provider's own resolved route, and a wiremock endpoint is by construction
+/// not that route, so every fixture turn here states `Unavailable`. That half
+/// of the chain is covered against the real built-in providers in
+/// `accounting_policy_tests`.
+#[tokio::test]
+async fn accounting_plan_turn_records_the_identity_the_catalogue_prices() -> anyhow::Result<()> {
+    use codex_model_provider_info::WireApi;
+    use codex_protocol::openai_models::ModelOrchestrationMetadata;
+
+    let server = MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .respond_with(success(
+            json!({"input_tokens":11,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}),
+            json!({"output_tokens":5}),
+        ))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let mode = AccountingMode::Provider {
+        scope: uuid::Uuid::new_v4(),
+        provider_id: "claude-plan".into(),
+        wire_api: WireApi::Anthropic,
+        approved_endpoint: endpoint.clone(),
+        approved_query: None,
+        pricing: PriceAuthority::Unavailable,
+    };
+    let test = builder(endpoint, mode)
+        .with_config(|config| {
+            config.model = Some("claude-opus-5-plan".into());
+            config.model_provider_id = "claude-plan".into();
+            config
+                .model_providers
+                .insert("claude-plan".into(), config.model_provider.clone());
+        })
+        .build_with_auto_env(&server)
+        .await?;
+    test.submit_turn("price this plan turn").await?;
+
+    let requests = server.received_requests().await.unwrap();
+    assert_eq!(requests.len(), 1);
+    let body: serde_json::Value = requests[0].body_json()?;
+    assert_eq!(
+        body.get("model").and_then(serde_json::Value::as_str),
+        Some("claude-opus-5"),
+        "the wire name must stay the one Anthropic answers to"
+    );
+
+    let db = test.codex.state_db().unwrap();
+    let records = attempts(&db).await?;
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].model, "claude-opus-5-plan");
+    assert_eq!(records[0].provider, "claude-plan");
+
+    let catalog = codex_models_manager::bundled_models_response()?;
+    let priced = catalog.models.iter().any(|row| {
+        row.slug == records[0].model
+            && matches!(
+                row.orchestration.as_ref(),
+                Some(ModelOrchestrationMetadata::Eligible { provider_id, .. })
+                    if *provider_id == records[0].provider
+            )
+    });
+    assert!(
+        priced,
+        "the ledger recorded {}/{}, which the bundled catalogue states no billing for",
+        records[0].provider, records[0].model
+    );
+
+    stop(&test).await;
+    Ok(())
+}
