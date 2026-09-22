@@ -1,6 +1,5 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
-assertion_line: 3908
 expression: claude_plan_popup
 ---
   Select Model and Effort

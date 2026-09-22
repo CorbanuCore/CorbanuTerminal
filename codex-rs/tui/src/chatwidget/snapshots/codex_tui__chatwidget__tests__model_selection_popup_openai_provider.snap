@@ -1,12 +1,13 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
+assertion_line: 3384
 expression: popup
 ---
   Select Model and Effort
   OpenAI Codex plan
 
-  [OpenAI]  Ambient  Kimi Code  Z.AI  DeepSeek  Claude Plan  Anthropic  Meta
-  Vercel  Baseten  OpenRouter
+  [OpenAI]  Ambient  Corbanu API  Kimi Code  Z.AI  DeepSeek  Claude Plan
+  Anthropic  Meta  Vercel  Baseten  OpenRouter
 
 › 1. GPT-5.6-Sol (default)  Model: gpt-5.6-sol. Latest frontier agentic coding
                             model.

@@ -1,16 +1,15 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
+assertion_line: 3456
 expression: popup
 ---
   Select Model and Effort
-  Kimi Code plan
+  Ambient coding plan
 
-  OpenAI  Ambient  [Kimi Code]  Z.AI  DeepSeek  Claude Plan  Anthropic  Meta  Vercel  Baseten
-  OpenRouter
+  OpenAI  [Ambient]  Corbanu API  Kimi Code  Z.AI  DeepSeek  Claude Plan  Anthropic  Meta  Vercel
+  Baseten  OpenRouter
 
-› 1. Kimi Code K3 (current)  Model: k3. Kimi K3 through your Kimi Code plan. Context is plan-
-                             dependent: up to 256K on Moderato (the default assumption) and up to
-                             1M on Allegretto and above. Set model_context_window = 1048576 in
-                             config.toml if your plan entitles 1M.
+› 1. Ambient GLM 5.2 (default)  Model: z-ai/glm-5.2. Ambient: GLM 5.2 - $0.76/M input, $0.14/M
+                                cached input, $2.42/M output.
 
   Use Left/Right to switch providers. Press Enter to confirm or Esc to go back

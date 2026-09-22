@@ -74,7 +74,11 @@ pub(crate) fn builtins_for_input(flags: BuiltinCommandFlags) -> Vec<(&'static st
         .filter(|(_, cmd)| flags.collaboration_modes_enabled || *cmd != SlashCommand::Plan)
         .filter(|(_, cmd)| flags.connectors_enabled || *cmd != SlashCommand::Apps)
         .filter(|(_, cmd)| flags.plugins_command_enabled || *cmd != SlashCommand::Plugins)
-        .filter(|(_, cmd)| flags.token_activity_command_enabled || *cmd != SlashCommand::Usage)
+        // `/usage` is not hidden without a ChatGPT sign-in. Its account view
+        // needs one; its recorded-request view does not, and that view is the
+        // only way to see what a turn cost on any other provider. Hiding the
+        // whole command made cost unreachable on every provider but one, and
+        // unreachable in a way that looked like it had never been built.
         .filter(|(_, cmd)| flags.goal_command_enabled || *cmd != SlashCommand::Goal)
         .filter(|(_, cmd)| flags.personality_command_enabled || *cmd != SlashCommand::Personality)
         .filter(|(_, cmd)| !flags.side_conversation_active || cmd.available_in_side_conversation())
@@ -267,15 +271,20 @@ mod tests {
         assert_eq!(find_builtin_command("goal", flags), None);
     }
 
+    /// Cost has to be reachable on the provider the operator is actually
+    /// using. `/usage` used to disappear from the list without a ChatGPT
+    /// sign-in, which hid the recorded-request view - the only way to see what
+    /// a turn cost on Anthropic, a gateway, or a rented endpoint - and hid it
+    /// so completely that it looked unbuilt.
     #[test]
-    fn usage_command_is_hidden_from_input_when_account_token_activity_is_disabled() {
+    fn usage_command_is_listed_without_account_token_activity() {
         let mut flags = all_enabled_flags();
         flags.token_activity_command_enabled = false;
         assert_eq!(
             builtins_for_input(flags)
                 .into_iter()
                 .find(|(_, command)| *command == SlashCommand::Usage),
-            None
+            Some(("usage", SlashCommand::Usage))
         );
     }
 
@@ -313,6 +322,7 @@ mod tests {
                 SlashCommand::Mention,
                 SlashCommand::Status,
                 SlashCommand::Usage,
+                SlashCommand::Cost,
                 SlashCommand::Providers,
                 SlashCommand::Telegram,
                 SlashCommand::Wallet,

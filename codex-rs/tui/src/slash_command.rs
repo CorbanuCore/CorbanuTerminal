@@ -56,6 +56,7 @@ pub enum SlashCommand {
     Mention,
     Status,
     Usage,
+    Cost,
     DebugConfig,
     Title,
     Statusline,
@@ -117,7 +118,10 @@ impl SlashCommand {
             SlashCommand::Import => "import setup, this project, and recent chats from Claude Code",
             SlashCommand::Hooks => "view and manage lifecycle hooks",
             SlashCommand::Status => "show current session configuration and token usage",
-            SlashCommand::Usage => "view account usage or use a rate-limit reset",
+            SlashCommand::Usage => {
+                "view recorded request cost, account usage, or use a rate-limit reset"
+            }
+            SlashCommand::Cost => "what your turns cost, on whichever provider served them",
             SlashCommand::DebugConfig => "show config layers and requirement sources for debugging",
             SlashCommand::Title => "configure which items appear in the terminal title",
             SlashCommand::Statusline => "configure which items appear in the status line",
@@ -192,6 +196,7 @@ impl SlashCommand {
                 | SlashCommand::Raw
                 | SlashCommand::Docs
                 | SlashCommand::Usage
+                | SlashCommand::Cost
                 | SlashCommand::Pets
                 | SlashCommand::Side
                 | SlashCommand::Btw
@@ -218,6 +223,7 @@ impl SlashCommand {
                 | SlashCommand::Mention
                 | SlashCommand::Status
                 | SlashCommand::Usage
+                | SlashCommand::Cost
                 | SlashCommand::Ide
                 | SlashCommand::Providers
                 | SlashCommand::Telegram
@@ -232,7 +238,8 @@ impl SlashCommand {
     /// Whether this command can be run while a task is in progress.
     pub fn available_during_task(self) -> bool {
         match self {
-            SlashCommand::New
+            SlashCommand::Cost
+            | SlashCommand::New
             | SlashCommand::Fork
             | SlashCommand::Init
             | SlashCommand::Compact
