@@ -425,9 +425,29 @@ fn unpriced_rows<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -> 
 }
 
 fn estimate(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
-    let (known, unknown, attempts) = (totals.known_usd, totals.unknown_estimates, totals.attempts);
-    if attempts == 0 {
+    if totals.attempts == 0 {
         return vec!["No recorded attempts in this day; collection coverage unknown.".into()];
+    }
+    // Count the per-token-billed population on its own. A plan attempt has no
+    // billed price by construction - `all_buckets_priced` is `Some` only when
+    // the attempt is complete and not plan work - so every plan attempt adds
+    // one to `unknown_estimates`. Reporting that against every attempt made a
+    // day of pure subscription work read as "2 of 2 attempts incomplete"
+    // directly above the lines stating that day's consumption exactly. Both
+    // subtractions are exact rather than defensive, and compacted days carry
+    // all three figures.
+    let known = totals.known_usd;
+    let attempts = totals.attempts.saturating_sub(totals.plan_attempts);
+    let unknown = totals
+        .unknown_estimates
+        .saturating_sub(totals.plan_attempts);
+    // Nothing this day was billed per token. Saying the cost is "unknown" here
+    // was false and read as a failure: the plan lines below state the day
+    // exactly, and there is no per-token spend that went missing.
+    if attempts == 0 {
+        let mut lines = vec!["No attempt this day was billed per token.".to_string()];
+        lines.extend(plan(totals));
+        return lines;
     }
     let mut lines = if unknown == 0 {
         vec![format!(
@@ -441,7 +461,7 @@ fn estimate(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
                 money(known)
             ),
             format!(
-                "Full recorded estimate: unavailable ({unknown} of {attempts} attempts incomplete)"
+                "Full recorded estimate: unavailable ({unknown} of {attempts} billed attempts incomplete)"
             ),
         ];
         if known == Decimal::default() {

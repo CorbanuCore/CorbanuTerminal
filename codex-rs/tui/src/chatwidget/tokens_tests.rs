@@ -737,9 +737,7 @@ fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
     // Plan work with an API equivalent: the plan rate, what it consumed, and
     // what the same tokens would have cost - none of it spend.
     insta::assert_snapshot!(estimate(&plan_day(decimal("0.00161"), 140_000, 0)).join("\n"), @"
-    Estimated token cost: unknown
-    Known estimated token cost: $0.000000 + unknown costs
-    Full recorded estimate: unavailable (2 of 2 attempts incomplete)
+    No attempt this day was billed per token.
     Subscription capacity: 2 of 2 attempts, not billed per token
     Plan consumption: 140 tokens at the plan rate that applied
     Same tokens at API rates: $0.001610
@@ -747,9 +745,7 @@ fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
     // A plan row the catalogue states no API price for says so, rather than
     // reporting zero.
     insta::assert_snapshot!(estimate(&plan_day(Decimal::default(), 280_000, 2)).join("\n"), @"
-    Estimated token cost: unknown
-    Known estimated token cost: $0.000000 + unknown costs
-    Full recorded estimate: unavailable (2 of 2 attempts incomplete)
+    No attempt this day was billed per token.
     Subscription capacity: 2 of 2 attempts, not billed per token
     Plan consumption: 280 tokens at the plan rate that applied
     Same tokens at API rates: unavailable — the catalogue states no API price for 2 of 2 plan attempts
@@ -759,6 +755,45 @@ fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
         estimate(&money_day(decimal("0.00018"), 0, 1)),
         vec!["Estimated token cost for recorded attempts: $0.000180"]
     );
+    // A mixed day is the case the two populations exist for. Three attempts,
+    // two of them plan work: the plan pair must not be counted as billed
+    // attempts whose price went missing, so the billed line speaks for the one
+    // attempt that was actually charged per token.
+    let mixed = DayTotals {
+        attempts: 3,
+        // Every plan attempt contributes one here by construction, and the
+        // billed attempt was priced in full.
+        unknown_estimates: 2,
+        known_usd: decimal("0.00018"),
+        plan_attempts: 2,
+        plan_burn_milli_tokens: Metric {
+            known: 140_000,
+            unknown: 0,
+        },
+        equivalent_usd: decimal("0.00161"),
+        ..Default::default()
+    };
+    insta::assert_snapshot!(estimate(&mixed).join("\n"), @"
+    Estimated token cost for recorded attempts: $0.000180
+    Subscription capacity: 2 of 3 attempts, not billed per token
+    Plan consumption: 140 tokens at the plan rate that applied
+    Same tokens at API rates: $0.001610
+    ");
+    // And the same day with its one billed attempt unpriced counts exactly
+    // that one, not all three.
+    let mixed_unpriced = DayTotals {
+        unknown_estimates: 3,
+        known_usd: Decimal::default(),
+        ..mixed
+    };
+    insta::assert_snapshot!(estimate(&mixed_unpriced).join("\n"), @"
+    Estimated token cost: unknown
+    Known estimated token cost: $0.000000 + unknown costs
+    Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
+    Subscription capacity: 2 of 3 attempts, not billed per token
+    Plan consumption: 140 tokens at the plan rate that applied
+    Same tokens at API rates: $0.001610
+    ");
     // The per-attempt page states the rate that applied at dispatch.
     let mut q = quote();
     q.plan_burn_millis = Some(500);
@@ -773,7 +808,7 @@ fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
 fn accounting_inspect_partial_and_unknown_copy() {
     insta::assert_snapshot!(estimate(&money_day(decimal("0.00018"), 1, 1)).join("\n"), @"
     Known estimated token cost: $0.000180 + unknown costs
-    Full recorded estimate: unavailable (1 of 1 attempts incomplete)
+    Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
     ");
     let pages = inspection_pages(Ok(packet()));
     let summary = pages[0].text.join("\n");
@@ -795,7 +830,7 @@ fn accounting_inspect_unpriced_zero_and_missing_rate() {
     insta::assert_snapshot!(estimate(&money_day(Decimal::default(), 1, 1)).join("\n"), @"
     Estimated token cost: unknown
     Known estimated token cost: $0.000000 + unknown costs
-    Full recorded estimate: unavailable (1 of 1 attempts incomplete)
+    Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
     ");
     assert_eq!(
         estimate(&money_day(Decimal::default(), 0, 1)),
@@ -1059,7 +1094,7 @@ async fn accounting_inspect_maintenance_with_current_contributions_renders_raw_t
     insta::assert_snapshot!(text, @"
     Estimated token cost: unknown
     Known estimated token cost: $0.000000 + unknown costs
-    Full recorded estimate: unavailable (1 of 1 attempts incomplete)
+    Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
     Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
     Billed cost: unavailable — no settlement evidence
     Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
@@ -1083,7 +1118,9 @@ async fn accounting_inspect_maintenance_with_current_contributions_renders_raw_t
     // zero it could compute.
     assert!(
         text.contains("Estimated token cost: unknown")
-            && text.contains("Full recorded estimate: unavailable (1 of 1 attempts incomplete)"),
+            && text.contains(
+                "Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)"
+            ),
         "a day it cannot complete is never presented as a total: {text}"
     );
     // And it states no staleness, because the read and the checkpoint are the
