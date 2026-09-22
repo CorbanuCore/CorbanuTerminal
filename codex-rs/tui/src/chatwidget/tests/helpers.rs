@@ -191,12 +191,22 @@ fn set_config_provider_for_test_model(config: &mut Config, model: &str) {
             codex_model_provider_info::ZAI_PROVIDER_ID.to_string(),
             codex_model_provider_info::ModelProviderInfo::create_zai_provider(),
         ))
+    } else if trimmed == codex_model_provider_info::KIMI_CODE_K3_MODEL {
+        Some((
+            codex_model_provider_info::KIMI_CODE_PROVIDER_ID.to_string(),
+            codex_model_provider_info::ModelProviderInfo::create_kimi_code_provider(),
+        ))
     } else if matches!(
         trimmed,
         codex_model_provider_info::OPENROUTER_DEFAULT_MODEL
             | "minimax/minimax-m3"
             | "openrouter/owl-alpha"
             | "google/gemini-3.5-flash"
+            // Served by OpenRouter and by Vercel both, so the model alone
+            // cannot say which provider a session is on. That is precisely why
+            // the picker reads the configured provider, and why this mapping
+            // has to exist for a fixture that claims to be on OpenRouter.
+            | "moonshotai/kimi-k3"
     ) {
         Some((
             codex_model_provider_info::OPENROUTER_PROVIDER_ID.to_string(),
