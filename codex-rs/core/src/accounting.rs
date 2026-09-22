@@ -402,11 +402,19 @@ pub(crate) fn turn_mode(
     // mode of its own, so keying only on `AuthMode` dropped it to no economics -
     // and gave it the plan side only when an unrelated ChatGPT login happened to
     // exist. The shape is named here rather than inferred from that accident.
-    let provider_plan_login = provider.auth.is_some() && auth_mode != Some(AuthMode::ApiKey);
+    //
+    // Deliberately NOT qualified by the Codex auth mode. `auth_mode` describes
+    // the OpenAI credential this profile happens to hold, which has nothing to
+    // say about how a Claude subscription route is paid for. Excluding
+    // `AuthMode::ApiKey` meant an unrelated OpenAI API key sitting in the same
+    // profile silently dropped every Claude Plan turn to no economics at all -
+    // the same accident this predicate was written to end, with the other
+    // credential playing the part.
+    let provider_plan_login = provider.auth.is_some();
     let subscription = codex_subscription || provider_plan_login;
     let pricing = if !own_route {
         PriceAuthority::Unavailable
-    } else if auth_mode == Some(AuthMode::ApiKey) {
+    } else if auth_mode == Some(AuthMode::ApiKey) && !provider_plan_login {
         // Deliberately NOT gated on `api_key_header_name`: the built-in Anthropic
         // provider declares `x-api-key` as its own credential header, so requiring
         // it to be absent made the Anthropic pricing arm below dead code and left

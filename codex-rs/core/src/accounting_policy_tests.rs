@@ -506,7 +506,13 @@ fn accounting_every_built_in_provider_collects() {
             let carries_own_credentials = provider.aws.is_some()
                 || provider.auth.is_some()
                 || provider.experimental_bearer_token.is_some();
-            let expected = if carries_own_credentials {
+            // A provider holding its own plan credential states the plan side
+            // whatever OpenAI credential this profile happens to carry, because
+            // the Codex auth mode describes a different account entirely. The
+            // remaining own-credential shapes are still unattributable.
+            let expected = if provider.auth.is_some() {
+                PriceAuthority::PlanRate
+            } else if carries_own_credentials {
                 PriceAuthority::Unavailable
             } else {
                 PriceAuthority::ApiKeyRates
@@ -1167,4 +1173,77 @@ fn a_pinned_route_carries_both_the_configured_query_and_the_path_s_own() {
         )),
         canonical_route("https://example.com/v1/realtime/calls?intent=quicksilver&key=value")
     );
+}
+
+/// A Claude Plan turn is paid for by the Claude subscription, and by nothing
+/// else in the profile.
+///
+/// Found live: a session on `claude-opus-5-plan` recorded its tokens and no
+/// money at all, and the reason was an OpenAI API key sitting in the same
+/// profile for an unrelated provider. `provider_plan_login` excluded
+/// `AuthMode::ApiKey`, so the Codex credential decided the economics of a route
+/// it has nothing to do with, and the API-key arm then rejected the route for
+/// carrying its own credential. Every Claude Plan turn on such a profile was
+/// unpriceable, which is the same silent hole the catalogue work keeps closing.
+///
+/// The authority must be the same under every Codex auth mode, because none of
+/// them is the credential paying for this route.
+#[test]
+fn claude_plan_states_the_plan_side_whatever_openai_credential_exists() {
+    use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+    use codex_model_provider_info::built_in_model_providers;
+    use codex_protocol::auth::AuthMode;
+
+    let providers = built_in_model_providers(None);
+    let provider = providers
+        .get(CLAUDE_PLAN_PROVIDER_ID)
+        .expect("built-in claude-plan provider")
+        .clone();
+    let selected = developer_accounting_mode(CLAUDE_PLAN_PROVIDER_ID, &provider);
+    let endpoint = provider
+        .to_api_provider(None)
+        .expect("claude-plan route")
+        .base_url;
+
+    for auth_mode in [
+        None,
+        Some(AuthMode::ApiKey),
+        Some(AuthMode::Chatgpt),
+        Some(AuthMode::Headers),
+    ] {
+        let bound = turn_mode(
+            &selected,
+            CLAUDE_PLAN_PROVIDER_ID,
+            &provider,
+            auth_mode,
+            &endpoint,
+        );
+        assert!(
+            matches!(
+                bound,
+                AccountingMode::Provider {
+                    pricing: PriceAuthority::PlanRate,
+                    ..
+                }
+            ),
+            "claude-plan under {auth_mode:?} must state the plan side, got {bound:?}"
+        );
+    }
+
+    // And it is still bound to its own route: pointed elsewhere it claims
+    // nothing, an API key in the profile notwithstanding.
+    let elsewhere = turn_mode(
+        &selected,
+        CLAUDE_PLAN_PROVIDER_ID,
+        &provider,
+        Some(AuthMode::ApiKey),
+        "https://relay.invalid/v1",
+    );
+    assert!(matches!(
+        elsewhere,
+        AccountingMode::Provider {
+            pricing: PriceAuthority::Unavailable,
+            ..
+        }
+    ));
 }
