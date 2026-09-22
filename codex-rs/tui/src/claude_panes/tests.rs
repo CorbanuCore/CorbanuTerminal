@@ -4560,8 +4560,12 @@ this line is not json and makes the transcript unparsable"#;
         .expect("an interrupted turn that stated a total is recorded");
     assert_eq!(usage["input_tokens"], 410);
 
-    // A turn that stopped before stating one is not.
-    let silent = r#"{"type":"assistant","message":{"content":[{"type":"text","text":"one"}],"usage":{"input_tokens":10}}}"#;
+    // A turn that stopped before stating one is not - and this transcript is
+    // unparsable too, so the salvage path really runs and really finds no
+    // total. A reader that took the last usage-bearing line instead of the
+    // `result` line would record this request's tokens as the turn's.
+    let silent = r#"{"type":"assistant","message":{"content":[{"type":"text","text":"one"}],"usage":{"input_tokens":10}}}
+this line is not json and makes the transcript unparsable"#;
     let output = partial_failed_turn_output(
         &plan,
         /*duration_ms*/ 5,

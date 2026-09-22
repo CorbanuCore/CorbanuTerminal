@@ -86,6 +86,7 @@ pub(crate) async fn run_claude_command_plan(
                     Some("interrupted_during_auth".to_string()),
                     "Claude pane turn interrupted before authentication completed.".to_string(),
                 );
+                report_direct_turn(progress_tx.as_ref(), &output);
                 write_turn_audit(
                     &plan,
                     &output,
@@ -300,6 +301,7 @@ pub(crate) async fn run_claude_command_plan(
             ),
             &stdout_text,
         );
+        report_direct_turn(progress_tx.as_ref(), &output);
         write_turn_audit(
             &plan,
             &output,
@@ -319,6 +321,7 @@ pub(crate) async fn run_claude_command_plan(
             "Claude pane turn interrupted by user.".to_string(),
             &stdout_text,
         );
+        report_direct_turn(progress_tx.as_ref(), &output);
         write_turn_audit(
             &plan,
             &output,
@@ -338,6 +341,7 @@ pub(crate) async fn run_claude_command_plan(
             "Claude stdout closed, but the Claude process did not exit within the cleanup grace period. Type `continue` in this pane to resume if a Claude session id was captured.".to_string(),
             &stdout_text,
         );
+        report_direct_turn(progress_tx.as_ref(), &output);
         write_turn_audit(
             &plan,
             &output,
@@ -359,6 +363,7 @@ pub(crate) async fn run_claude_command_plan(
                 format!("failed to wait for Claude process: {err}"),
                 &stdout_text,
             );
+            report_direct_turn(progress_tx.as_ref(), &output);
             write_turn_audit(
                 &plan,
                 &output,
@@ -386,6 +391,7 @@ pub(crate) async fn run_claude_command_plan(
                 &stdout_text,
             ),
         };
+        report_direct_turn(progress_tx.as_ref(), &output);
         write_turn_audit(
             &plan,
             &output,
@@ -408,6 +414,7 @@ pub(crate) async fn run_claude_command_plan(
                 truncate_for_display(stderr.trim(), /*max_chars*/ 1_000)
             ),
         );
+        report_direct_turn(progress_tx.as_ref(), &output);
         write_turn_audit(
             &plan,
             &output,
@@ -425,6 +432,7 @@ pub(crate) async fn run_claude_command_plan(
         Some("empty_output".to_string()),
         "Claude returned empty output".to_string(),
     );
+    report_direct_turn(progress_tx.as_ref(), &output);
     write_turn_audit(
         &plan,
         &output,
@@ -746,6 +754,28 @@ pub(crate) fn session_id_from_stdout(stdout: &str) -> Option<String> {
                 .and_then(Value::as_str)
                 .map(ToString::to_string)
         })
+}
+
+/// Report a direct pane turn's spend, before anything that can fail.
+///
+/// The turn has already been paid for by the time any of this runs. Reporting
+/// it from the turn's `Result` would mean a failed audit write - a full disk -
+/// dropped a real charge from the operator's ledger, so it is sent from here,
+/// where the output exists and nothing downstream can discard it. Recording is
+/// idempotent per turn because this runs once per audit write, which is once
+/// per turn.
+fn report_direct_turn(progress_tx: Option<&AppEventSender>, output: &ClaudePaneTurnOutput) {
+    let (Some(progress_tx), Some((accounting, usage))) = (progress_tx, output.direct_turn_record())
+    else {
+        return;
+    };
+    progress_tx.send(AppEvent::PaneBridgeModelRequestSent {
+        provider_id: accounting.provider_id,
+        base_url: accounting.base_url,
+        path: "messages".to_string(),
+        model: accounting.model,
+        usage: Some(usage),
+    });
 }
 
 pub(crate) fn write_turn_audit(

@@ -1616,39 +1616,6 @@ mod tests {
 }
 
 impl App {
-    /// Record a pane turn whose requests this process never saw.
-    ///
-    /// The direct profiles hand Claude Code a provider base URL and a vault
-    /// credential and let it talk to the provider itself, so there is no send
-    /// to observe and no bridge to observe it. What comes back is the pane's
-    /// own report of what the turn cost - the provider's numbers relayed by
-    /// it - so the turn is recorded once, from that, rather than left out of
-    /// the operator's ledger entirely.
-    ///
-    /// One turn, one record: a pane turn can be many model requests, and this
-    /// client saw none of them individually. The count of attempts is
-    /// therefore turns, not requests, and the numbers are the turn's total.
-    /// What exactly gets recorded is decided by `direct_turn_record`, where it
-    /// can be tested; this only sends it.
-    pub(super) fn record_direct_pane_turn(
-        &mut self,
-        app_server: &AppServerSession,
-        output: Option<&crate::claude_panes::ClaudePaneTurnOutput>,
-    ) {
-        let Some((accounting, usage)) = output.and_then(|output| output.direct_turn_record())
-        else {
-            return;
-        };
-        self.record_pane_bridge_model_request(
-            app_server,
-            accounting.provider_id,
-            accounting.base_url,
-            "messages".to_string(),
-            accounting.model,
-            Some(usage),
-        );
-    }
-
     /// Record a model request a pane bridge sent on the operator's credential.
     ///
     /// The bridge posts upstream from inside this process, which does not run
