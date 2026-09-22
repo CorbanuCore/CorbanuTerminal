@@ -61,6 +61,28 @@ pub(crate) struct PaneDirectAccounting {
     pub(crate) model: String,
 }
 
+impl ClaudePaneTurnOutput {
+    /// What to record for this turn, when this process saw none of its sends.
+    ///
+    /// The numbers are the turn's total, as the pane stated it. They are
+    /// deliberately not `usage_summary`, which is the first request's usage
+    /// and exists for the display: a turn-shaped row carrying one request's
+    /// tokens undercounts every aggregate a reader of the ledger computes.
+    ///
+    /// `None` when a bridge carried the turn - the bridge reports each send
+    /// itself, and recording here as well would count the same spend twice -
+    /// or when the turn stated no total.
+    pub(crate) fn direct_turn_record(&self) -> Option<(PaneDirectAccounting, serde_json::Value)> {
+        let accounting = self.direct_accounting.clone()?;
+        let usage = self
+            .turn_usage_summary
+            .as_deref()
+            .and_then(|usage| serde_json::from_str::<serde_json::Value>(usage).ok())
+            .filter(serde_json::Value::is_object)?;
+        Some((accounting, usage))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct ClaudePaneToolEvent {
     pub(crate) name: String,
@@ -128,6 +150,10 @@ pub(crate) struct ClaudePaneTurnAudit {
     pub(crate) last_progress_elapsed_ms: Option<i64>,
     pub(crate) duration_ms: i64,
     pub(crate) usage: Option<Value>,
+    /// What the pane stated the whole turn cost, which is what the ledger
+    /// records. `usage` above is the first request's, as the display shows it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) turn_usage: Option<Value>,
     pub(crate) usage_status: ClaudePaneUsageStatus,
     pub(crate) terminal_reason: Option<String>,
     pub(crate) status: ClaudePaneTurnStatus,

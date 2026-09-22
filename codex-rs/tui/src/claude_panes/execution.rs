@@ -41,6 +41,7 @@ use super::progress::progresses_from_claude_value;
 use super::progress::reasoning_events_from_stdout;
 use super::progress::tool_events_from_stdout;
 use super::progress::truncate_for_display;
+use super::progress::turn_usage_summary_from_stdout;
 use super::progress::unix_epoch_ms;
 use super::progress::usage_status_from_summary;
 use super::turn_types::ClaudeCommandPlan;
@@ -373,12 +374,16 @@ pub(crate) async fn run_claude_command_plan(
     if !stdout_text.trim().is_empty() {
         let output = match parse_claude_output(&stdout_text) {
             Ok(parsed) => turn_output_from_parsed(&plan, parsed, duration_ms),
-            Err(err) => failed_turn_output(
+            // A transcript this client cannot parse is still a turn that
+            // spent money, and the line stating what it spent may be sitting
+            // in that same stdout. Salvage it rather than drop the turn.
+            Err(err) => partial_failed_turn_output(
                 &plan,
                 duration_ms,
                 ClaudePaneTurnStatus::ParseFailure,
                 Some("parse_failure".to_string()),
                 format!("{err:#}"),
+                &stdout_text,
             ),
         };
         write_turn_audit(
@@ -707,6 +712,10 @@ pub(crate) fn partial_failed_turn_output(
         output.tool_events = parsed.tool_events;
         output.reasoning_events = parsed.reasoning_events;
     } else {
+        output.turn_usage_summary = turn_usage_summary_from_stdout(stdout);
+        if output.turn_usage_summary.is_some() {
+            output.direct_accounting = plan.direct_accounting.clone();
+        }
         output.tool_events = tool_events_from_stdout(stdout);
         output.tool_names = dedupe_tool_names(
             output
@@ -764,6 +773,13 @@ pub(crate) fn write_turn_audit(
         duration_ms: output.duration_ms,
         usage: output
             .usage_summary
+            .as_deref()
+            .and_then(|usage| serde_json::from_str::<Value>(usage).ok()),
+        // The ledger records the turn's total; the audit is the operator's
+        // evidence for the same turn and states the same number, beside the
+        // first-request figure the display uses.
+        turn_usage: output
+            .turn_usage_summary
             .as_deref()
             .and_then(|usage| serde_json::from_str::<Value>(usage).ok()),
         usage_status: output.usage_status,

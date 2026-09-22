@@ -24,10 +24,10 @@ use super::provider::ClaudeProviderProfileKind;
 use super::provider::ClaudeProviderTransport;
 use super::turn_types::ClaudeBridgeKind;
 use super::turn_types::ClaudeBridgePlan;
-use super::turn_types::PaneDirectAccounting;
 use super::turn_types::ClaudeCommandPlan;
 use super::turn_types::DeferredClaudePlanAuth;
 use super::turn_types::DeferredVaultSecret;
+use super::turn_types::PaneDirectAccounting;
 
 const ANTHROPIC_AUTH_ENV_KEYS: [&str; 2] = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
 const CLAUDE_CREDENTIAL_ENV_KEYS: [&str; 4] = [
@@ -305,7 +305,11 @@ pub(crate) fn build_claude_command_plan(
     // With a bridge, every send passes through this process and is reported
     // there. Without one, the pane talks to the provider itself and the only
     // account of what it cost is the one the pane gives back.
-    let direct_accounting = match (bridge.is_none(), profile.accounting_provider_id, profile.base_url) {
+    let direct_accounting = match (
+        bridge.is_none(),
+        profile.accounting_provider_id,
+        profile.base_url,
+    ) {
         (true, Some(provider_id), Some(base_url)) => Some(PaneDirectAccounting {
             provider_id: provider_id.to_string(),
             base_url: format!("{}/v1", base_url.trim_end_matches('/')),

@@ -80,6 +80,7 @@ use super::turn_types::ClaudePaneReasoningEvent;
 use super::turn_types::ClaudePaneToolEvent;
 use super::turn_types::ClaudePaneTurnOutput;
 use super::turn_types::ClaudePaneTurnProgress;
+use super::turn_types::PaneDirectAccounting;
 
 use std::path::PathBuf;
 use tokio::process::Command;
@@ -4448,9 +4449,13 @@ fn a_turn_s_usage_is_the_total_the_pane_stated_not_its_first_request() {
         Some(r#"{"input_tokens":10,"output_tokens":2}"#)
     );
     // Accounting takes the turn's own total.
-    let total: serde_json::Value =
-        serde_json::from_str(parsed.turn_usage_summary.as_deref().expect("a stated total"))
-            .expect("the total is a usage object");
+    let total: serde_json::Value = serde_json::from_str(
+        parsed
+            .turn_usage_summary
+            .as_deref()
+            .expect("a stated total"),
+    )
+    .expect("the total is a usage object");
     assert_eq!(total["input_tokens"], 410);
     assert_eq!(total["cache_read_input_tokens"], 64);
     assert_eq!(total["output_tokens"], 11);
@@ -4468,4 +4473,102 @@ fn a_turn_that_stated_no_total_records_none() {
 
     assert!(parsed.usage_summary.is_some());
     assert_eq!(parsed.turn_usage_summary, None);
+}
+
+/// What a direct turn records, pinned where it is decided. The row is the
+/// turn's, so the numbers must be the turn's: recording the first request's
+/// usage here undercounts every aggregate computed from these rows.
+#[test]
+fn a_direct_turn_records_the_turn_s_total_and_only_when_there_is_one() {
+    let base = |turn_usage_summary: Option<&str>,
+                direct: Option<PaneDirectAccounting>|
+     -> ClaudePaneTurnOutput {
+        ClaudePaneTurnOutput {
+            text: "done".to_string(),
+            status: ClaudePaneTurnStatus::Success,
+            session_id: None,
+            // The first request's usage, which the display shows and the
+            // ledger must not take.
+            usage_summary: Some(r#"{"input_tokens":10,"output_tokens":2}"#.to_string()),
+            turn_usage_summary: turn_usage_summary.map(ToString::to_string),
+            usage_status: ClaudePaneUsageStatus::Reported,
+            direct_accounting: direct,
+            artifact_path: PathBuf::from("artifact.jsonl"),
+            audit_path: PathBuf::from("audit.json"),
+            duration_ms: 1,
+            terminal_reason: None,
+            error_summary: None,
+            tool_names: Vec::new(),
+            tool_events: Vec::new(),
+            reasoning_events: Vec::new(),
+            command_mode: ClaudeCommandMode::NewSession,
+        }
+    };
+    let direct = PaneDirectAccounting {
+        provider_id: "zai-anthropic".to_string(),
+        base_url: "https://api.z.ai/api/anthropic/v1".to_string(),
+        model: "glm-5.2".to_string(),
+    };
+
+    let (accounting, usage) = base(
+        Some(r#"{"input_tokens":410,"cache_read_input_tokens":64,"output_tokens":11}"#),
+        Some(direct.clone()),
+    )
+    .direct_turn_record()
+    .expect("a direct turn with a stated total is recorded");
+    assert_eq!(accounting, direct);
+    assert_eq!(usage["input_tokens"], 410);
+    assert_eq!(usage["output_tokens"], 11);
+
+    // A turn that stated no total states nothing this client can stand behind.
+    assert!(
+        base(None, Some(direct.clone()))
+            .direct_turn_record()
+            .is_none()
+    );
+    // A bridged turn is recorded send by send and must not be recorded again.
+    assert!(
+        base(Some(r#"{"input_tokens":410}"#), None)
+            .direct_turn_record()
+            .is_none()
+    );
+}
+
+/// An interrupted turn spent what it spent. If the pane stated the total
+/// before it stopped - even in a transcript that no longer parses as a whole -
+/// that turn is recorded.
+#[test]
+fn an_interrupted_direct_turn_is_recorded_when_it_stated_a_total() {
+    let (_home, pane) = pane(ClaudeProviderProfileKind::ZaiGlm52);
+    let home = tempfile::tempdir().expect("codex home");
+    let plan = build_claude_command_plan(&pane, "prompt".to_string(), home.path())
+        .expect("plan for a direct profile");
+
+    let stated = r#"{"type":"assistant","message":{"content":[{"type":"text","text":"one"}],"usage":{"input_tokens":10}}}
+{"type":"result","result":"done","usage":{"input_tokens":410,"output_tokens":11}}
+this line is not json and makes the transcript unparsable"#;
+    let output = partial_failed_turn_output(
+        &plan,
+        /*duration_ms*/ 5,
+        ClaudePaneTurnStatus::Interrupted,
+        Some("interrupted".to_string()),
+        "interrupted".to_string(),
+        stated,
+    );
+    let (_, usage) = output
+        .direct_turn_record()
+        .expect("an interrupted turn that stated a total is recorded");
+    assert_eq!(usage["input_tokens"], 410);
+
+    // A turn that stopped before stating one is not.
+    let silent = r#"{"type":"assistant","message":{"content":[{"type":"text","text":"one"}],"usage":{"input_tokens":10}}}"#;
+    let output = partial_failed_turn_output(
+        &plan,
+        /*duration_ms*/ 5,
+        ClaudePaneTurnStatus::Interrupted,
+        Some("interrupted".to_string()),
+        "interrupted".to_string(),
+        silent,
+    );
+    assert!(output.direct_turn_record().is_none());
 }
