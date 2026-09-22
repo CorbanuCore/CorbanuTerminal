@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use super::pane::ClaudePaneTurnStatus;
 use super::progress::dedupe_tool_names;
+use super::progress::turn_usage_summary_from_value;
 use super::progress::usage_summary_from_value;
 use super::progress_summarize::string_field;
 use super::progress_summarize::summarize_reasoning_text;
@@ -19,6 +20,15 @@ pub(crate) struct ParsedClaudeOutput {
     pub(crate) status: ClaudePaneTurnStatus,
     pub(crate) session_id: Option<String>,
     pub(crate) usage_summary: Option<String>,
+    /// What the turn as a whole cost, as the `result` event stated it.
+    ///
+    /// `usage_summary` is the FIRST usage this transcript carries, which is
+    /// one model request - the display wants the shape a turn starts with.
+    /// Accounting wants the total, and a turn that made several requests has
+    /// only one true total: the one the pane states at the end. A transcript
+    /// with no `result` event states no total, and that is `None` rather than
+    /// a sum this client would be inventing.
+    pub(crate) turn_usage_summary: Option<String>,
     pub(crate) terminal_reason: Option<String>,
     pub(crate) error_summary: Option<String>,
     pub(crate) tool_names: Vec<String>,
@@ -40,6 +50,7 @@ pub(crate) fn parse_claude_output(stdout: &str) -> Result<ParsedClaudeOutput> {
     let mut final_result = None;
     let mut session_id = None;
     let mut usage_summary = None;
+    let mut turn_usage_summary = None;
     let mut error_value = None;
     let mut saw_result_event = false;
     let mut tool_names = Vec::new();
@@ -68,6 +79,11 @@ pub(crate) fn parse_claude_output(stdout: &str) -> Result<ParsedClaudeOutput> {
         if usage_summary.is_none() {
             usage_summary = usage_summary_from_value(&value);
         }
+        // Last-wins, unlike the display summary: the pane restates the turn's
+        // total when it ends, and that statement is the one to record.
+        if let Some(total) = turn_usage_summary_from_value(&value) {
+            turn_usage_summary = Some(total);
+        }
     }
 
     if let Some(error_value) = error_value {
@@ -78,6 +94,7 @@ pub(crate) fn parse_claude_output(stdout: &str) -> Result<ParsedClaudeOutput> {
             status,
             session_id,
             usage_summary,
+            turn_usage_summary,
             terminal_reason: error_value
                 .get("terminal_reason")
                 .and_then(Value::as_str)
@@ -106,6 +123,7 @@ pub(crate) fn parse_claude_output(stdout: &str) -> Result<ParsedClaudeOutput> {
         status: ClaudePaneTurnStatus::Success,
         session_id,
         usage_summary,
+        turn_usage_summary,
         terminal_reason: None,
         error_summary: None,
         tool_names: dedupe_tool_names(tool_names),
@@ -130,6 +148,7 @@ pub(crate) fn parsed_from_value(value: &Value) -> Result<ParsedClaudeOutput> {
                 .and_then(Value::as_str)
                 .map(ToString::to_string),
             usage_summary: usage_summary_from_value(value),
+            turn_usage_summary: turn_usage_summary_from_value(value),
             terminal_reason: value
                 .get("terminal_reason")
                 .and_then(Value::as_str)
@@ -165,6 +184,7 @@ pub(crate) fn parsed_from_value(value: &Value) -> Result<ParsedClaudeOutput> {
             .and_then(Value::as_str)
             .map(ToString::to_string),
         usage_summary: usage_summary_from_value(value),
+        turn_usage_summary: turn_usage_summary_from_value(value),
         terminal_reason: None,
         error_summary: None,
         tool_names: dedupe_tool_names(tool_names),

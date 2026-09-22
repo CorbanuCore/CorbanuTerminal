@@ -4977,6 +4977,7 @@ async fn direct_six_orc_turn_reports_are_visible_to_claude_troll_context() {
                     status: crate::claude_panes::ClaudePaneTurnStatus::Success,
                     session_id: Some("claude-session".to_string()),
                     usage_summary: None,
+                    turn_usage_summary: None,
                     usage_status: crate::claude_panes::ClaudePaneUsageStatus::Missing,
                     artifact_path: app
                         .config
@@ -4995,6 +4996,7 @@ async fn direct_six_orc_turn_reports_are_visible_to_claude_troll_context() {
                     tool_events: Vec::new(),
                     reasoning_events: Vec::new(),
                     command_mode: crate::claude_panes::ClaudeCommandMode::NewSession,
+                    direct_accounting: None,
                 }),
             );
         }
@@ -5275,6 +5277,7 @@ async fn claude_orc_completion_is_reported_to_parent_troll_context() {
             status: crate::claude_panes::ClaudePaneTurnStatus::Success,
             session_id: Some("claude-session".to_string()),
             usage_summary: None,
+            turn_usage_summary: None,
             usage_status: crate::claude_panes::ClaudePaneUsageStatus::Missing,
             artifact_path,
             audit_path,
@@ -5285,6 +5288,7 @@ async fn claude_orc_completion_is_reported_to_parent_troll_context() {
             tool_events: Vec::new(),
             reasoning_events: Vec::new(),
             command_mode: crate::claude_panes::ClaudeCommandMode::NewSession,
+            direct_accounting: None,
         }),
     );
 
@@ -7347,6 +7351,7 @@ async fn claude_orc_completion_uses_core_edge_message_not_native_prompt_reinject
             status: crate::claude_panes::ClaudePaneTurnStatus::Success,
             session_id: Some("claude-session".to_string()),
             usage_summary: None,
+            turn_usage_summary: None,
             usage_status: crate::claude_panes::ClaudePaneUsageStatus::Missing,
             artifact_path: app.config.cwd.join("turn-0001.jsonl").to_path_buf(),
             audit_path: app.config.cwd.join("turn-0001.audit.json").to_path_buf(),
@@ -7357,6 +7362,7 @@ async fn claude_orc_completion_uses_core_edge_message_not_native_prompt_reinject
             tool_events: Vec::new(),
             reasoning_events: Vec::new(),
             command_mode: crate::claude_panes::ClaudeCommandMode::NewSession,
+            direct_accounting: None,
         }),
     );
 

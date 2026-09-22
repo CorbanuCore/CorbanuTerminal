@@ -41,6 +41,7 @@ use super::progress::progresses_from_claude_value;
 use super::progress::reasoning_events_from_stdout;
 use super::progress::tool_events_from_stdout;
 use super::progress::truncate_for_display;
+use super::progress::turn_usage_summary_from_stdout;
 use super::progress::unix_epoch_ms;
 use super::progress::usage_status_from_summary;
 use super::turn_types::ClaudeCommandPlan;
@@ -85,6 +86,7 @@ pub(crate) async fn run_claude_command_plan(
                     Some("interrupted_during_auth".to_string()),
                     "Claude pane turn interrupted before authentication completed.".to_string(),
                 );
+                report_direct_turn(progress_tx.as_ref(), &output);
                 write_turn_audit(
                     &plan,
                     &output,
@@ -299,6 +301,7 @@ pub(crate) async fn run_claude_command_plan(
             ),
             &stdout_text,
         );
+        report_direct_turn(progress_tx.as_ref(), &output);
         write_turn_audit(
             &plan,
             &output,
@@ -318,6 +321,7 @@ pub(crate) async fn run_claude_command_plan(
             "Claude pane turn interrupted by user.".to_string(),
             &stdout_text,
         );
+        report_direct_turn(progress_tx.as_ref(), &output);
         write_turn_audit(
             &plan,
             &output,
@@ -337,6 +341,7 @@ pub(crate) async fn run_claude_command_plan(
             "Claude stdout closed, but the Claude process did not exit within the cleanup grace period. Type `continue` in this pane to resume if a Claude session id was captured.".to_string(),
             &stdout_text,
         );
+        report_direct_turn(progress_tx.as_ref(), &output);
         write_turn_audit(
             &plan,
             &output,
@@ -358,6 +363,7 @@ pub(crate) async fn run_claude_command_plan(
                 format!("failed to wait for Claude process: {err}"),
                 &stdout_text,
             );
+            report_direct_turn(progress_tx.as_ref(), &output);
             write_turn_audit(
                 &plan,
                 &output,
@@ -373,14 +379,19 @@ pub(crate) async fn run_claude_command_plan(
     if !stdout_text.trim().is_empty() {
         let output = match parse_claude_output(&stdout_text) {
             Ok(parsed) => turn_output_from_parsed(&plan, parsed, duration_ms),
-            Err(err) => failed_turn_output(
+            // A transcript this client cannot parse is still a turn that
+            // spent money, and the line stating what it spent may be sitting
+            // in that same stdout. Salvage it rather than drop the turn.
+            Err(err) => partial_failed_turn_output(
                 &plan,
                 duration_ms,
                 ClaudePaneTurnStatus::ParseFailure,
                 Some("parse_failure".to_string()),
                 format!("{err:#}"),
+                &stdout_text,
             ),
         };
+        report_direct_turn(progress_tx.as_ref(), &output);
         write_turn_audit(
             &plan,
             &output,
@@ -403,6 +414,7 @@ pub(crate) async fn run_claude_command_plan(
                 truncate_for_display(stderr.trim(), /*max_chars*/ 1_000)
             ),
         );
+        report_direct_turn(progress_tx.as_ref(), &output);
         write_turn_audit(
             &plan,
             &output,
@@ -420,6 +432,7 @@ pub(crate) async fn run_claude_command_plan(
         Some("empty_output".to_string()),
         "Claude returned empty output".to_string(),
     );
+    report_direct_turn(progress_tx.as_ref(), &output);
     write_turn_audit(
         &plan,
         &output,
@@ -632,6 +645,8 @@ fn turn_output_from_parsed(
             .or_else(|| Some(plan.command_session_id.clone())),
         usage_status: usage_status_from_summary(parsed.usage_summary.as_deref()),
         usage_summary: parsed.usage_summary,
+        turn_usage_summary: parsed.turn_usage_summary,
+        direct_accounting: plan.direct_accounting.clone(),
         artifact_path: plan.artifact_path.clone(),
         audit_path: plan.audit_path.clone(),
         duration_ms,
@@ -656,7 +671,11 @@ pub(crate) fn failed_turn_output(
         status,
         session_id: None,
         usage_summary: None,
+        turn_usage_summary: None,
         usage_status: ClaudePaneUsageStatus::Missing,
+        // Nothing stated, nothing recorded. A partial turn that did state a
+        // total gets its accounting back below, where the statement is read.
+        direct_accounting: None,
         artifact_path: plan.artifact_path.clone(),
         audit_path: plan.audit_path.clone(),
         duration_ms,
@@ -687,6 +706,13 @@ pub(crate) fn partial_failed_turn_output(
             .or_else(|| Some(plan.command_session_id.clone()));
         output.usage_status = usage_status_from_summary(parsed.usage_summary.as_deref());
         output.usage_summary = parsed.usage_summary;
+        // An interrupted or timed-out turn still spent whatever it spent. If
+        // the pane managed to state the turn's total before it stopped, that
+        // statement is as good as any other and the turn is recorded from it.
+        output.turn_usage_summary = parsed.turn_usage_summary;
+        if output.turn_usage_summary.is_some() {
+            output.direct_accounting = plan.direct_accounting.clone();
+        }
         if output.terminal_reason.is_none() {
             output.terminal_reason = parsed.terminal_reason;
         }
@@ -694,6 +720,10 @@ pub(crate) fn partial_failed_turn_output(
         output.tool_events = parsed.tool_events;
         output.reasoning_events = parsed.reasoning_events;
     } else {
+        output.turn_usage_summary = turn_usage_summary_from_stdout(stdout);
+        if output.turn_usage_summary.is_some() {
+            output.direct_accounting = plan.direct_accounting.clone();
+        }
         output.tool_events = tool_events_from_stdout(stdout);
         output.tool_names = dedupe_tool_names(
             output
@@ -726,6 +756,28 @@ pub(crate) fn session_id_from_stdout(stdout: &str) -> Option<String> {
         })
 }
 
+/// Report a direct pane turn's spend, before anything that can fail.
+///
+/// The turn has already been paid for by the time any of this runs. Reporting
+/// it from the turn's `Result` would mean a failed audit write - a full disk -
+/// dropped a real charge from the operator's ledger, so it is sent from here,
+/// where the output exists and nothing downstream can discard it. Recording is
+/// idempotent per turn because this runs once per audit write, which is once
+/// per turn.
+fn report_direct_turn(progress_tx: Option<&AppEventSender>, output: &ClaudePaneTurnOutput) {
+    let (Some(progress_tx), Some((accounting, usage))) = (progress_tx, output.direct_turn_record())
+    else {
+        return;
+    };
+    progress_tx.send(AppEvent::PaneBridgeModelRequestSent {
+        provider_id: accounting.provider_id,
+        base_url: accounting.base_url,
+        path: "messages".to_string(),
+        model: accounting.model,
+        usage: Some(usage),
+    });
+}
+
 pub(crate) fn write_turn_audit(
     plan: &ClaudeCommandPlan,
     output: &ClaudePaneTurnOutput,
@@ -751,6 +803,13 @@ pub(crate) fn write_turn_audit(
         duration_ms: output.duration_ms,
         usage: output
             .usage_summary
+            .as_deref()
+            .and_then(|usage| serde_json::from_str::<Value>(usage).ok()),
+        // The ledger records the turn's total; the audit is the operator's
+        // evidence for the same turn and states the same number, beside the
+        // first-request figure the display uses.
+        turn_usage: output
+            .turn_usage_summary
             .as_deref()
             .and_then(|usage| serde_json::from_str::<Value>(usage).ok()),
         usage_status: output.usage_status,

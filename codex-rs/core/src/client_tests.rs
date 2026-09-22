@@ -2257,6 +2257,7 @@ async fn summarize_memories_returns_empty_for_empty_input() {
             &model_info,
             /*effort*/ None,
             &session_telemetry,
+            /*accounting*/ &Default::default(),
         )
         .await
         .expect("empty summarize request should succeed");
@@ -2582,4 +2583,128 @@ async fn non_chatgpt_codex_endpoints_omit_attestation_generation() {
         None,
     );
     assert_eq!(attestation_calls.load(Ordering::Relaxed), 0);
+}
+
+/// Summarising memories names a model and a reasoning effort, so it is
+/// inference the operator pays for. It answers with one body rather than a
+/// stream, which is how it escaped the streaming collector entirely.
+#[tokio::test]
+async fn pf_60_s03_memory_summarize_is_recorded() -> anyhow::Result<()> {
+    use codex_state::SqliteConfig;
+    use codex_state::StateRuntime;
+    use codex_state::ThreadMetadataBuilder;
+    use codex_utils_absolute_path::AbsolutePathBuf;
+    use std::sync::Arc;
+
+    let server = wiremock::MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/v1/memories/trace_summarize"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "output": [],
+                "usage": {"input_tokens": 90, "output_tokens": 12, "total_tokens": 102}
+            })),
+        )
+        .mount(&server)
+        .await;
+
+    let home = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path()).await;
+    config.model_provider = codex_model_provider_info::ModelProviderInfo {
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        supports_websockets: false,
+        ..codex_model_provider_info::ModelProviderInfo::create_openai_provider(Some(
+            endpoint.clone(),
+        ))
+    };
+    config.model_provider_id = "openai".into();
+    config.accounting = crate::config::AccountingMode::Provider {
+        scope: uuid::Uuid::new_v4(),
+        provider_id: "openai".into(),
+        wire_api: codex_model_provider_info::WireApi::Responses,
+        approved_endpoint: endpoint.clone(),
+        approved_query: None,
+        pricing: crate::config::PriceAuthority::Unavailable,
+    };
+    config
+        .features
+        .enable(codex_features::Feature::Sqlite)
+        .expect("sqlite for the ledger");
+
+    let (mut session, _context) =
+        crate::session::tests::make_session_and_context_for_config(config).await;
+    let db = StateRuntime::init(
+        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        "openai".into(),
+    )
+    .await?;
+    session.services.state_db = Some(db.clone());
+    let owner = Arc::new(session);
+    db.upsert_thread(
+        &ThreadMetadataBuilder::new(
+            owner.thread_id,
+            home.path().join("memory-fixture.jsonl"),
+            chrono::Utc::now(),
+            codex_protocol::protocol::SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+
+    let client_session = owner.services.new_model_client_session();
+    let provider = owner.provider().await;
+    let (accounting, provider_id) = owner.accounting_binding().await;
+    let auth = owner.services.auth_manager.auth().await;
+    let _scopes = crate::accounting::attach_scopes(
+        &owner,
+        &accounting,
+        &provider_id,
+        &provider,
+        auth.as_ref().map(codex_login::CodexAuth::auth_mode),
+        &endpoint,
+        &client_session,
+        "memory-summarize:fixture".to_string(),
+    )
+    .await?;
+
+    owner
+        .services
+        .model_client()
+        .summarize_memories(
+            vec![codex_api::RawMemory {
+                id: "fixture".into(),
+                metadata: codex_api::RawMemoryMetadata {
+                    source_path: "fixture.jsonl".into(),
+                },
+                items: Vec::new(),
+            }],
+            &test_model_info(),
+            /*effort*/ None,
+            &test_session_telemetry(),
+            &client_session.responses_accounting,
+        )
+        .await?;
+
+    let pool = db
+        .sqlite()
+        .open_read_only_pool(&db.sqlite().state_db_path())
+        .await?;
+    let attempts: Vec<String> =
+        sqlx::query_scalar("SELECT payload FROM draft_accounting_attempts ORDER BY rowid")
+            .fetch_all(&pool)
+            .await?;
+    assert_eq!(attempts.len(), 1, "attempts recorded: {attempts:?}");
+    let attempt: serde_json::Value = serde_json::from_str(&attempts[0])?;
+    assert_eq!(attempt["model"], "gpt-test");
+    assert_eq!(attempt["turn"], "memory-summarize:fixture");
+    // The endpoint states its usage in the body it answers with, so the tokens
+    // are recorded rather than left unknown.
+    let observations: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM draft_accounting_observations")
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(observations, 1);
+    Ok(())
 }

@@ -509,9 +509,7 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
     // `/v1/messages/count_tokens` differs before the query.
     if status.is_success() && upstream_path.split('?').next() == Some("/v1/messages") {
         // The model this turn asked for is the pane's own choice, carried in
-        // the request it proxied. A streamed response reports its numbers in
-        // events rather than in a body, so usage is often absent here; the
-        // ledger records the call with its tokens unknown rather than as zero.
+        // the request it proxied.
         let request: Option<Value> = serde_json::from_slice(body).ok();
         report_bridge_model_request(
             accounting_tx.as_ref(),
@@ -523,9 +521,14 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
                 .and_then(|request| request.get("model"))
                 .and_then(Value::as_str)
                 .unwrap_or_default(),
+            // Anthropic states a streamed response's numbers in its events
+            // and a single response's in its body. This handler buffers the
+            // whole response either way, so both are readable; which shape it
+            // is stays with the dialect rather than being decided here.
             serde_json::from_slice::<Value>(response_body.as_ref())
                 .ok()
-                .and_then(|body| body.get("usage").cloned()),
+                .and_then(|body| body.get("usage").cloned())
+                .or_else(|| codex_api::anthropic_stream_usage(response_body.as_ref())),
         );
     }
     write_raw_http_response(
