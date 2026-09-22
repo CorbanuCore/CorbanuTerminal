@@ -21,6 +21,11 @@ doctest = false
 [lints]
 workspace = true
 
+[features]
+# Lists `/cost`. The view it opens reads a ledger that only a
+# developer-accounting build can write, so the two are enabled together.
+developer-accounting = []
+
 [dependencies]
 anyhow = { workspace = true }
 base64 = { workspace = true }

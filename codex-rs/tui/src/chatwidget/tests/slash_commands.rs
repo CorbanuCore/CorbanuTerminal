@@ -3436,13 +3436,23 @@ async fn cost_command_is_listed_and_runs_without_chatgpt_auth() {
     })
     .into_iter()
     .any(|(name, command)| name == "cost" && command == SlashCommand::Cost);
-    assert!(listed, "`/cost` is offered without a ChatGPT sign-in");
+    // Both directions matter. In a build that can collect, cost must be
+    // offered without any sign-in - that is the defect this fixes. In a build
+    // that cannot, the view is a held surface and must not be advertised.
+    assert_eq!(
+        listed,
+        cfg!(feature = "developer-accounting"),
+        "`/cost` is listed exactly in builds that can record"
+    );
 
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.dispatch_command_with_args(SlashCommand::Cost, String::new(), Vec::new());
 
     // It opens the recorded-request inspector rather than the account view, so
-    // it must not ask the backend for account token activity.
+    // it must not ask the backend for account token activity - and it must not
+    // answer with the sign-in refusal. Both are read from one drain: draining
+    // twice silently empties the channel and makes the second assertion
+    // unfailable.
     let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
     assert!(
         !events
@@ -3450,9 +3460,18 @@ async fn cost_command_is_listed_and_runs_without_chatgpt_auth() {
             .any(|event| matches!(event, AppEvent::RefreshTokenActivity { .. })),
         "`/cost` reads the local ledger, not the account API"
     );
-    let rendered = drain_insert_history(&mut rx)
+    let rendered = events
         .iter()
-        .map(|cell| lines_to_single_string(cell))
+        .filter_map(|event| match event {
+            AppEvent::InsertHistoryCell(cell) => Some(
+                cell.display_lines(/*width*/ 80)
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
+            _ => None,
+        })
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
