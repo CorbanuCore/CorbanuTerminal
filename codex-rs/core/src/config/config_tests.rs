@@ -12668,6 +12668,43 @@ async fn default_provider_does_not_force_the_api_only_login_path() -> std::io::R
     .await?;
     assert_eq!(overridden.forced_login_method, Some(ForcedLoginMethod::Api));
 
+    // A rented GPU provider that no longer exists falls back to the same
+    // Ambient default. The provider was stated, but what it named is gone, so
+    // this is the one case where an explicit request is deliberately not
+    // treated as one - and it reached the same dead end.
+    let stale_gpu = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            model_provider: Some("gpu-does-not-exist".to_string()),
+            ..ConfigToml::default()
+        },
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(
+        stale_gpu.model_provider_id,
+        codex_model_provider_info::AMBIENT_PROVIDER_ID
+    );
+    assert_eq!(stale_gpu.forced_login_method, None);
+
+    // A model that implies an API-key-only provider still forces the API path,
+    // because naming that model is a choice of provider by another route. Here
+    // no provider is set and the pair correction resolves it.
+    let implied = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            model: Some("glm-5.3".to_string()),
+            ..ConfigToml::default()
+        },
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(
+        implied.model_provider_id,
+        codex_model_provider_info::ZAI_PROVIDER_ID
+    );
+    assert_eq!(implied.forced_login_method, Some(ForcedLoginMethod::Api));
+
     // An explicit OpenAI selection never forced it and must not start.
     let openai = Config::load_from_base_config_with_overrides(
         ConfigToml {
