@@ -4297,19 +4297,27 @@ impl Config {
         let zai_chat_provider_selected = model_provider_id == ZAI_PROVIDER_ID;
         let zai_provider_selected =
             matches!(model_provider_id.as_str(), ZAI_PROVIDER_ID | ZAI_ANTHROPIC_PROVIDER_ID);
-        let forced_login_method = cfg
-            .forced_login_method
-            .or_else(|| {
-                (ambient_provider_selected
+        // Forcing API-key-only sign-in is right for someone who chose one of
+        // these providers, and wrong for someone who chose nothing at all. An
+        // unconfigured install has no `model_provider`, so it lands on the
+        // Ambient default above, and forcing the API path there collapsed
+        // first-run onboarding to a single "Use your Ambient API key" prompt
+        // with no way to reach ChatGPT, Claude, or Corbanu Plan: the picker is
+        // switched off precisely when a login method is forced. The same thing
+        // happened after a rented GPU provider expired, which falls back to the
+        // same default. Gate it on the provider actually having been asked for.
+        let forced_login_method = cfg.forced_login_method.or_else(|| {
+            (model_provider_was_explicit
+                && (ambient_provider_selected
                     || kimi_code_provider_selected
                     || anthropic_provider_selected
                     || meta_provider_selected
                     || baseten_provider_selected
                     || openrouter_provider_selected
                     || vercel_provider_selected
-                    || zai_provider_selected)
-                    .then_some(ForcedLoginMethod::Api)
-            });
+                    || zai_provider_selected))
+                .then_some(ForcedLoginMethod::Api)
+        });
 
         let model_reasoning_effort = if (ambient_provider_selected && !model_without_explicit_provider)
             || zai_chat_provider_selected

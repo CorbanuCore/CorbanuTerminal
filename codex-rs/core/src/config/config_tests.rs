@@ -77,6 +77,7 @@ use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
 use codex_model_provider_info::WireApi;
 use codex_models_manager::bundled_models_response;
 use codex_network_proxy::NetworkMode;
+use codex_protocol::config_types::ForcedLoginMethod;
 use codex_protocol::config_types::ModelProviderAuthInfo;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_protocol::config_types::ServiceTier;
@@ -12620,5 +12621,63 @@ async fn corbanu_plan_provider_alias_normalizes_to_legacy_persisted_id() -> std:
 
     assert_eq!(config.model_provider_id, PFTERMINAL_PLAN_PROVIDER_ID);
     assert!(config.model_provider.is_pfterminal_plan());
+    Ok(())
+}
+
+/// A fresh install has no `model_provider`, so it takes the Ambient default a
+/// few lines above this - and forcing the API-key login path on that default
+/// switched the provider picker off, leaving first-run onboarding with one
+/// option: "Use your Ambient API key". No ChatGPT, no Claude, no Corbanu Plan,
+/// and no way to reach them. Forcing that path is only right when the provider
+/// was actually asked for.
+#[tokio::test]
+async fn default_provider_does_not_force_the_api_only_login_path() -> std::io::Result<()> {
+    let unconfigured = Config::load_from_base_config_with_overrides(
+        ConfigToml::default(),
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(
+        unconfigured.model_provider_id,
+        codex_model_provider_info::AMBIENT_PROVIDER_ID
+    );
+    assert_eq!(unconfigured.forced_login_method, None);
+
+    // Asking for the same provider still does, because then it is a choice.
+    let chosen = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            model_provider: Some(codex_model_provider_info::AMBIENT_PROVIDER_ID.to_string()),
+            ..ConfigToml::default()
+        },
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(chosen.forced_login_method, Some(ForcedLoginMethod::Api));
+
+    // And so does asking for it at runtime rather than in the config file.
+    let overridden = Config::load_from_base_config_with_overrides(
+        ConfigToml::default(),
+        ConfigOverrides {
+            model_provider: Some(codex_model_provider_info::ZAI_PROVIDER_ID.to_string()),
+            ..Default::default()
+        },
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(overridden.forced_login_method, Some(ForcedLoginMethod::Api));
+
+    // An explicit OpenAI selection never forced it and must not start.
+    let openai = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            model_provider: Some(codex_model_provider_info::OPENAI_PROVIDER_ID.to_string()),
+            ..ConfigToml::default()
+        },
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(openai.forced_login_method, None);
     Ok(())
 }
