@@ -1455,3 +1455,268 @@ fn loaded_state_freezes_chart_anchor_date_at_completion() {
         other => panic!("expected loaded state, got {other:?}"),
     }
 }
+
+/// A blank money figure has two very different causes - an attempt that
+/// recorded no tokens, and tokens recorded with no rate to price them - and
+/// they are fixed in different places. The view names the second kind, and
+/// says nothing about why the rate was absent, because the ledger does not
+/// know: a catalogue with no rate for the row, an unattributable credential
+/// and a service tier the rates are not quoted for all look identical here.
+#[test]
+fn accounting_inspect_names_the_rows_whose_tokens_have_no_price() {
+    let priced = quote();
+    let mut unpriced = quote();
+    unpriced.attempt.provider = "openai".into();
+    unpriced.attempt.model = "gpt-5.5".into();
+    unpriced.snapshot = None;
+    unpriced.known_subtotal = Decimal::default();
+    unpriced.known_equivalent = Decimal::default();
+    // The pricer reads `noncached`, not `input`; the buckets below are only
+    // meaningful beside the counts they priced.
+    unpriced.usage = Usage {
+        input: Some(120),
+        noncached: Some(100),
+        read: Some(20),
+        output: Some(40),
+        ..Usage::default()
+    };
+    unpriced.buckets = [
+        BucketQuote::MissingRate,
+        BucketQuote::MissingRate,
+        BucketQuote::MissingRate,
+        BucketQuote::MissingRate,
+    ];
+    let mut also_unpriced = unpriced.clone();
+    also_unpriced.attempt.model = "gpt-6-astra".into();
+    // The same row twice is named once.
+    let duplicate = unpriced.clone();
+    // An attempt that recorded no tokens at all is a different gap: nothing
+    // was recorded, so there is nothing here to say went unpriced.
+    let mut no_usage = unpriced.clone();
+    no_usage.attempt.model = "recorded-nothing".into();
+    no_usage.usage = Usage::default();
+    no_usage.buckets = [
+        BucketQuote::MissingUsage,
+        BucketQuote::MissingUsage,
+        BucketQuote::MissingUsage,
+        BucketQuote::MissingUsage,
+    ];
+    // A bucket priced at zero is not money stated. A provider that reports a
+    // cache bucket as `0` rather than omitting it must not hide a row whose
+    // real tokens went unpriced.
+    let mut zero_bucket = unpriced.clone();
+    zero_bucket.attempt.model = "zero-cache-bucket".into();
+    zero_bucket.usage = Usage {
+        read: Some(0),
+        ..unpriced.usage.clone()
+    };
+    zero_bucket.buckets = [
+        BucketQuote::MissingRate,
+        BucketQuote::Priced(Decimal::default()),
+        BucketQuote::Priced(Decimal::default()),
+        BucketQuote::MissingRate,
+    ];
+    // An attempt whose recorded counts are all zero cost nothing whatever the
+    // rate, so it is not named either.
+    let mut zero_usage = unpriced.clone();
+    zero_usage.attempt.model = "recorded-zeroes".into();
+    zero_usage.usage = Usage {
+        input: Some(0),
+        noncached: Some(0),
+        read: Some(0),
+        output: Some(0),
+        ..Usage::default()
+    };
+    // A rate of zero is a price. An attempt whose recorded tokens were priced
+    // by one states no money and is not missing a price.
+    let mut zero_rate = unpriced.clone();
+    zero_rate.attempt.model = "priced-at-zero".into();
+    zero_rate.buckets = [
+        BucketQuote::Priced(Decimal::default()),
+        BucketQuote::MissingRate,
+        BucketQuote::MissingRate,
+        BucketQuote::MissingRate,
+    ];
+    // The same model can have priced and unpriced attempts in one day - a rate
+    // whose window starts mid-day, or a different credential - so the claim is
+    // about attempts, never about the model.
+    let mut mixed_priced = unpriced.clone();
+    mixed_priced.attempt.model = "mixed".into();
+    mixed_priced.buckets = [
+        BucketQuote::Priced(decimal("0.00002")),
+        BucketQuote::Priced(decimal("0.00001")),
+        BucketQuote::MissingUsage,
+        BucketQuote::Priced(decimal("0.00016")),
+    ];
+    mixed_priced.known_subtotal = decimal("0.00019");
+    let mut mixed_unpriced = unpriced.clone();
+    mixed_unpriced.attempt.model = "mixed".into();
+    // Subscription work is not billed per token. Its gap is a missing API
+    // equivalent, which the plan lines state in their own terms, and calling
+    // it missing money would contradict them.
+    let mut plan_attempt = unpriced.clone();
+    plan_attempt.attempt.model = "plan-burn-only".into();
+    plan_attempt.plan_burn_millis = Some(1000);
+    plan_attempt.plan_burn_milli_tokens = Some(160_000);
+    // A partly priced attempt is not named: its money is stated, and the
+    // structural cache-write gap would otherwise name almost every row.
+    let mut partly_priced = unpriced.clone();
+    partly_priced.attempt.model = "partly-priced".into();
+    partly_priced.known_subtotal = decimal("0.00002");
+    partly_priced.buckets = [
+        BucketQuote::Priced(decimal("0.00002")),
+        BucketQuote::MissingRate,
+        BucketQuote::MissingRate,
+        BucketQuote::MissingRate,
+    ];
+
+    let lines = super::unpriced_rows([
+        &priced,
+        &unpriced,
+        &also_unpriced,
+        &duplicate,
+        &no_usage,
+        &zero_bucket,
+        &zero_usage,
+        &plan_attempt,
+        &zero_rate,
+        &mixed_priced,
+        &mixed_unpriced,
+        &partly_priced,
+    ]);
+
+    assert_eq!(
+        lines.len(),
+        1,
+        "one line names every unpriced row: {lines:?}"
+    );
+    assert!(
+        lines[0].contains("openai/gpt-5.5") && lines[0].contains("openai/gpt-6-astra"),
+        "both rows are named: {lines:?}"
+    );
+    assert!(
+        !lines[0].contains("synthetic-model"),
+        "a priced row is not named as unpriced: {lines:?}"
+    );
+    assert!(
+        !lines[0].contains("recorded-nothing"),
+        "an attempt that recorded no tokens is a different gap: {lines:?}"
+    );
+    assert!(
+        lines[0].contains("zero-cache-bucket"),
+        "a bucket priced at zero does not hide an unpriced row: {lines:?}"
+    );
+    assert!(
+        !lines[0].contains("recorded-zeroes"),
+        "zero tokens cost nothing whatever the rate: {lines:?}"
+    );
+    assert!(
+        !lines[0].contains("priced-at-zero"),
+        "a rate of zero is a price: {lines:?}"
+    );
+    // The mixed model is named, and named as attempts rather than as the row,
+    // because some of its attempts were priced.
+    assert!(
+        lines[0].contains("1 on openai/mixed"),
+        "the claim counts attempts, not models: {lines:?}"
+    );
+    assert!(
+        lines[0].contains("says nothing about the other attempts on the same model"),
+        "and says so: {lines:?}"
+    );
+    assert!(
+        !lines[0].contains("plan-burn-only"),
+        "subscription work is not billed per token and has no missing money: {lines:?}"
+    );
+    assert!(
+        !lines[0].contains("partly-priced"),
+        "a partly priced attempt states money and is not named: {lines:?}"
+    );
+    assert_eq!(lines[0].matches("openai/gpt-5.5").count(), 1);
+    // The line says what is missing, never why. Every cause the ledger cannot
+    // tell apart is offered, and none is asserted.
+    for cause in [
+        "catalogue states no rate",
+        "credential",
+        "in effect at dispatch",
+    ] {
+        assert!(
+            lines[0].contains(cause),
+            "the cause `{cause}` is offered: {lines:?}"
+        );
+    }
+    assert!(
+        lines[0].contains("or because"),
+        "the causes are alternatives, not an assertion: {lines:?}"
+    );
+    assert!(
+        lines[0].contains("not a zero-cost claim"),
+        "a blank is not a zero: {lines:?}"
+    );
+
+    // Nothing to say when everything carried a rate.
+    assert!(super::unpriced_rows([&priced]).is_empty());
+}
+
+/// The line has to land on the page the operator actually reads - the one
+/// showing the blank it explains - not only on the group pages beneath it.
+/// Pinning the helper alone let the placement regress silently once already.
+#[test]
+fn accounting_inspect_day_entry_page_names_rows_whose_tokens_have_no_price() {
+    let InspectionDay::Ready(mut view) = packet() else {
+        panic!("packet is a ready day")
+    };
+    let quote = view
+        .requests
+        .values_mut()
+        .flatten()
+        .next()
+        .expect("the fixture has one attempt");
+    quote.attempt.provider = "openai".into();
+    quote.attempt.model = "gpt-5.5".into();
+    quote.snapshot = None;
+    quote.buckets = [BucketQuote::MissingRate; 4];
+    quote.known_subtotal = Decimal::default();
+    quote.known_equivalent = Decimal::default();
+
+    let pages = inspection_pages(Ok(InspectionDay::Ready(view)));
+    let entry = pages[0].text.join("\n");
+
+    assert!(
+        entry.contains("openai/gpt-5.5"),
+        "the entry page names the row: {entry}"
+    );
+    assert!(
+        entry.contains("not a zero-cost claim"),
+        "and says a blank is not a zero: {entry}"
+    );
+}
+
+/// The same, for the range view's total page.
+#[test]
+fn accounting_inspect_range_entry_page_names_rows_whose_tokens_have_no_price() {
+    let InspectionDay::Ready(mut view) = packet() else {
+        panic!("packet is a ready day")
+    };
+    view.read_at_ms = view.coverage.completed_as_of_ms;
+    let quote = view
+        .requests
+        .values_mut()
+        .flatten()
+        .next()
+        .expect("the fixture has one attempt");
+    quote.attempt.provider = "openai".into();
+    quote.attempt.model = "gpt-6-astra".into();
+    quote.snapshot = None;
+    quote.buckets = [BucketQuote::MissingRate; 4];
+    quote.known_subtotal = Decimal::default();
+    quote.known_equivalent = Decimal::default();
+
+    let pages = inspection_pages(Ok(range_packet(false, InspectionDay::Ready(view))));
+    let entry = pages[0].text.join("\n");
+
+    assert!(
+        entry.contains("openai/gpt-6-astra"),
+        "the range total page names the row: {entry}"
+    );
+}

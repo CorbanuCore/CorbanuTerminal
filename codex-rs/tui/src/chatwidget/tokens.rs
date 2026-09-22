@@ -342,6 +342,88 @@ fn exact(value: Decimal) -> String {
         .unwrap_or_else(|| "unavailable".to_string())
 }
 
+/// The provider and model of every attempt that recorded tokens and no price
+/// for any of them.
+///
+/// A blank money figure leaves an operator unable to tell a collector that
+/// recorded nothing from a request whose tokens were recorded with no rate to
+/// price them, and those are different problems. This names the second kind,
+/// and only that kind: a row appears when at least one bucket carries usage
+/// with no rate (`MissingRate`) and none could be priced. An attempt that
+/// recorded no usage at all is a different gap and is counted elsewhere as an
+/// incomplete attempt, not named here.
+///
+/// What it must not do is say WHY there was no rate. The ledger does not know:
+/// a missing price can mean the catalogue states no rate for the row, or that
+/// the route's credential could not be attributed to the account a rate is
+/// quoted for, or that the turn ran on a service tier the rates are not quoted
+/// for. Naming the rows is actionable; guessing the cause would send the
+/// operator to fix the wrong thing.
+fn unpriced_rows<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -> Vec<String> {
+    let mut rows: Vec<(String, u64)> = Vec::new();
+    for quote in quotes {
+        // Subscription work is not billed per token, so it has no money to be
+        // missing. Its own gap - an API equivalent the catalogue does not
+        // state - is already stated as such beside the plan rate that applied,
+        // and naming it here would assert unstated money next to a line saying
+        // the turn was never billed that way.
+        if quote.plan_burn_millis.is_some() {
+            continue;
+        }
+        let usage = &quote.usage;
+        // Only tokens that were actually recorded and are not zero count here.
+        // Zero tokens cost nothing whatever the rate, and a bucket priced at
+        // zero because its count was zero says nothing about whether a rate
+        // exists - which is why this reads the counts rather than the bucket
+        // variants alone, and why money is not the test either: a bucket
+        // priced by a real rate of zero states a price, and states no money.
+        let recorded = [usage.noncached, usage.read, usage.write, usage.output]
+            .into_iter()
+            .zip(quote.buckets)
+            .filter(|(count, _)| count.is_some_and(|count| count > 0));
+        let mut priced = false;
+        let mut unpriced = false;
+        for (_, bucket) in recorded {
+            match bucket {
+                BucketQuote::Priced(_) => priced = true,
+                BucketQuote::MissingRate => unpriced = true,
+                BucketQuote::MissingUsage => {}
+            }
+        }
+        if priced || !unpriced {
+            continue;
+        }
+        let attributed = |value: &str| {
+            if value.trim().is_empty() {
+                "unknown (attribution absent)".to_string()
+            } else {
+                value.to_string()
+            }
+        };
+        let row = format!(
+            "{}/{}",
+            attributed(&quote.attempt.provider),
+            attributed(&quote.attempt.model)
+        );
+        match rows.iter_mut().find(|(named, _)| *named == row) {
+            Some((_, attempts)) => *attempts += 1,
+            None => rows.push((row, 1)),
+        }
+    }
+    rows.sort();
+    if rows.is_empty() {
+        Vec::new()
+    } else {
+        vec![format!(
+            "Attempts with no price for any recorded tokens: {}. No money is stated for those attempts, which is not a zero-cost claim, and says nothing about the other attempts on the same model. A price can be absent because the catalogue states no rate for the row, because this route's credential or service tier is not one the quoted rates apply to, or because no rate was in effect at dispatch.",
+            rows.iter()
+                .map(|(row, attempts)| format!("{attempts} on {row}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )]
+    }
+}
+
 fn estimate(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
     let (known, unknown, attempts) = (totals.known_usd, totals.unknown_estimates, totals.attempts);
     if attempts == 0 {
@@ -618,6 +700,9 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
     let freshness = pages[0].text.clone();
     let t = &ready.totals;
     pages[0].text.splice(0..0, estimate(t));
+    pages[0]
+        .text
+        .extend(unpriced_rows(ready.requests.values().flatten()));
     pages[0].text.extend([
         format!("UTC admission interval: [{}, {}) ms since Unix epoch", ready.utc_day * 86_400_000, (ready.utc_day + 1) * 86_400_000),
         format!("Read at: {} ms UTC; store checkpoint: {} ms UTC; maintenance lag: {} ms",
@@ -911,11 +996,20 @@ fn range_pages(
                 _ => None,
             })
             .flat_map(|v| v.requests.values().flatten());
+        let named = unpriced_rows(quotes.clone());
         match codex_state::accounting::DayTotals::from_quotes(quotes) {
-            Ok(total) => pages[0].text.extend(estimate(&total)),
-            Err(_) => pages[0]
-                .text
-                .push("Range total unavailable — arithmetic overflow".into()),
+            Ok(total) => {
+                pages[0].text.extend(estimate(&total));
+                pages[0].text.extend(named);
+            }
+            // A total this client cannot compute does not unsay which attempts
+            // went unpriced; that is a separate statement about the same rows.
+            Err(_) => {
+                pages[0]
+                    .text
+                    .push("Range total unavailable — arithmetic overflow".into());
+                pages[0].text.extend(named);
+            }
         }
     } else {
         pages[0].text.push(
