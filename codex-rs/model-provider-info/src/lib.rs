@@ -82,6 +82,7 @@ const ANTHROPIC_PROVIDER_NAME: &str = "Anthropic";
 pub const ANTHROPIC_PROVIDER_ID: &str = "anthropic";
 pub const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1";
 pub const ANTHROPIC_DEFAULT_MODEL: &str = "claude-opus-5";
+pub const ANTHROPIC_OPUS_5_5_MODEL: &str = "claude-opus-5-5";
 pub const ANTHROPIC_LEGACY_OPUS_4_8_MODEL: &str = "claude-opus-4-8";
 pub const CLAUDE_FABLE_5_1_MODEL: &str = "claude-fable-5-1";
 pub const CLAUDE_FABLE_5_MODEL: &str = "claude-fable-5";
@@ -351,9 +352,13 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     ) {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
-    if model == ANTHROPIC_DEFAULT_MODEL
-        || matches!(model, CLAUDE_FABLE_5_1_MODEL | CLAUDE_FABLE_5_MODEL)
-    {
+    if matches!(
+        model,
+        ANTHROPIC_DEFAULT_MODEL
+            | ANTHROPIC_OPUS_5_5_MODEL
+            | CLAUDE_FABLE_5_1_MODEL
+            | CLAUDE_FABLE_5_MODEL
+    ) {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
     if model == META_DEFAULT_MODEL {
