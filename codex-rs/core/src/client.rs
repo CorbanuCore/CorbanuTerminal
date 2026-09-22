@@ -2726,7 +2726,13 @@ impl ModelClientSession {
                 crate::accounting::transport::AccountingTransport::new(
                     inner,
                     evidence.clone(),
-                    request.model.clone(),
+                    // The catalogue identity, not the wire name. They differ
+                    // wherever this client maps one to the other - every
+                    // Claude Plan model, and every gateway-prefixed one - and
+                    // the catalogue is keyed by the identity the operator
+                    // selected, so recording the wire name made those turns
+                    // unpriceable by construction.
+                    model_info.slug.clone(),
                 )
                 .with_configured_routing(
                     self.client
@@ -3242,7 +3248,13 @@ impl ModelClientSession {
                 crate::accounting::transport::AccountingTransport::new(
                     inner,
                     evidence.clone(),
-                    request.model.clone(),
+                    // The catalogue identity, not the wire name. They differ
+                    // wherever this client maps one to the other - every
+                    // Claude Plan model, and every gateway-prefixed one - and
+                    // the catalogue is keyed by the identity the operator
+                    // selected, so recording the wire name made those turns
+                    // unpriceable by construction.
+                    model_info.slug.clone(),
                 )
                 .with_configured_routing(
                     self.client
@@ -3469,7 +3481,13 @@ impl ModelClientSession {
                 crate::accounting::transport::AccountingTransport::new(
                     inner,
                     evidence.clone(),
-                    request.model.clone(),
+                    // The catalogue identity, not the wire name. They differ
+                    // wherever this client maps one to the other - every
+                    // Claude Plan model, and every gateway-prefixed one - and
+                    // the catalogue is keyed by the identity the operator
+                    // selected, so recording the wire name made those turns
+                    // unpriceable by construction.
+                    model_info.slug.clone(),
                 )
                 .with_configured_routing(
                     self.client

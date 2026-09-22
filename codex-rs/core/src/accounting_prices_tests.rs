@@ -511,3 +511,52 @@ fn accounting_provider_held_plan_login_takes_the_plan_side() {
     assert_eq!(plan.plan_burn_millis, Some(1000));
     assert_eq!(plan.rates.noncached, None);
 }
+
+/// The wire name is not the catalogue identity, and pricing is a catalogue
+/// lookup. A Claude Plan turn goes out as `claude-opus-5` because that is what
+/// Anthropic is asked for, while the row that states its plan rate is keyed
+/// `claude-opus-5-plan` - so recording the wire name left every turn on that
+/// provider with no rate at all, which is what an operator saw as a ledger
+/// full of unknowns.
+#[test]
+fn pf_60_s03_claude_plan_prices_by_catalogue_identity_not_wire_name() {
+    let scope = Uuid::new_v4();
+    let now = chrono::DateTime::parse_from_rfc3339("2026-09-22T12:00:00Z")
+        .unwrap()
+        .timestamp_millis();
+
+    // What the catalogue keys, and what the ledger must therefore record.
+    let priced = plan_original(
+        codex_model_provider_info::CLAUDE_PLAN_MODEL,
+        codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID,
+        scope,
+        now,
+        None,
+    )
+    .expect("the catalogue states a plan rate for this row");
+    assert_eq!(priced.len(), 1, "the plan row is priced");
+    assert_eq!(priced[0].plan_burn_millis, Some(1000));
+
+    // What this client sends on the wire for that same turn. It is a real
+    // catalogue slug - under a different provider - so the lookup does not
+    // merely miss, it could have matched the wrong row.
+    let wire = codex_model_provider_info::CLAUDE_PLAN_UPSTREAM_MODEL;
+    assert_ne!(
+        wire,
+        codex_model_provider_info::CLAUDE_PLAN_MODEL,
+        "this test only means anything while the two differ"
+    );
+    assert!(
+        plan_original(
+            wire,
+            codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID,
+            scope,
+            now,
+            None,
+        )
+        .expect("lookup succeeds")
+        .is_empty(),
+        "the wire name states no plan rate under this provider, so recording \
+         it is how a plan turn became unpriceable"
+    );
+}
