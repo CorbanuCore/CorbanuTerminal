@@ -4101,27 +4101,31 @@ impl Config {
             .then_some(requested_model_for_pair_validation.as_deref())
             .flatten()
             .and_then(|value| corrected_catalog_provider(value, &model_provider_id));
-        let (model_provider_id, model_provider, model) = match corrected_provider
-            .and_then(|corrected| {
+        // Whether the correction actually applied, not merely whether one was
+        // proposed: a correction naming a provider this install does not have
+        // leaves the pair alone, and the login policy below follows the
+        // provider the session really resolved to.
+        let (model_provider_id, model_provider, model, provider_was_corrected) =
+            match corrected_provider.and_then(|corrected| {
                 model_providers
                     .get(corrected)
                     .map(|info| (corrected, info.clone()))
             }) {
-            Some((corrected, info)) => {
+                Some((corrected, info)) => {
                 tracing::warn!(
                     model = model.as_deref().unwrap_or_default(),
                     stored_provider = %model_provider_id,
                     corrected_provider = corrected,
                     "correcting impossible model/provider pair during config derivation"
                 );
-                let corrected_model = resolve_model_for_provider(
-                    requested_model_for_pair_validation,
-                    corrected,
-                );
-                (corrected.to_string(), info, corrected_model)
-            }
-            None => (model_provider_id, model_provider, model),
-        };
+                    let corrected_model = resolve_model_for_provider(
+                        requested_model_for_pair_validation,
+                        corrected,
+                    );
+                    (corrected.to_string(), info, corrected_model, true)
+                }
+                None => (model_provider_id, model_provider, model, false),
+            };
         let shell_environment_policy = cfg.shell_environment_policy.into();
         let allow_login_shell = cfg.allow_login_shell.unwrap_or(true);
 
@@ -4297,19 +4301,31 @@ impl Config {
         let zai_chat_provider_selected = model_provider_id == ZAI_PROVIDER_ID;
         let zai_provider_selected =
             matches!(model_provider_id.as_str(), ZAI_PROVIDER_ID | ZAI_ANTHROPIC_PROVIDER_ID);
-        let forced_login_method = cfg
-            .forced_login_method
-            .or_else(|| {
-                (ambient_provider_selected
+        // Forcing API-key-only sign-in is right for someone who chose one of
+        // these providers, and wrong for someone who chose nothing at all. An
+        // unconfigured install has no `model_provider`, so it lands on the
+        // Ambient default above, and forcing the API path there collapsed
+        // first-run onboarding to a single "Use your Ambient API key" prompt
+        // with no way to reach ChatGPT, Claude, or Corbanu Plan: the picker is
+        // switched off precisely when a login method is forced. The same thing
+        // happened after a rented GPU provider expired, which falls back to the
+        // same default. Gate it on the provider actually having been asked for.
+        // A model the operator named can imply a provider as surely as naming
+        // the provider does, and the pair correction above acts on exactly that.
+        // Only "nothing was stated at all" should stop forcing.
+        let provider_selection_was_stated = model_provider_was_explicit || provider_was_corrected;
+        let forced_login_method = cfg.forced_login_method.or_else(|| {
+            (provider_selection_was_stated
+                && (ambient_provider_selected
                     || kimi_code_provider_selected
                     || anthropic_provider_selected
                     || meta_provider_selected
                     || baseten_provider_selected
                     || openrouter_provider_selected
                     || vercel_provider_selected
-                    || zai_provider_selected)
-                    .then_some(ForcedLoginMethod::Api)
-            });
+                    || zai_provider_selected))
+                .then_some(ForcedLoginMethod::Api)
+        });
 
         let model_reasoning_effort = if (ambient_provider_selected && !model_without_explicit_provider)
             || zai_chat_provider_selected
