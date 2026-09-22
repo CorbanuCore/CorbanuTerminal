@@ -1188,7 +1188,6 @@ fn a_pinned_route_carries_both_the_configured_query_and_the_path_s_own() {
 ///
 /// The authority must be the same under every Codex auth mode, because none of
 /// them is the credential paying for this route.
-#[cfg(feature = "developer-accounting")]
 #[test]
 fn claude_plan_states_the_plan_side_whatever_openai_credential_exists() {
     use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
@@ -1200,11 +1199,24 @@ fn claude_plan_states_the_plan_side_whatever_openai_credential_exists() {
         .get(CLAUDE_PLAN_PROVIDER_ID)
         .expect("built-in claude-plan provider")
         .clone();
-    let selected = developer_accounting_mode(CLAUDE_PLAN_PROVIDER_ID, &provider);
     let endpoint = provider
         .to_api_provider(None)
         .expect("claude-plan route")
         .base_url;
+    // Seeded literally rather than through `developer_accounting_mode`, which
+    // lives behind the `developer-accounting` feature. What is under test -
+    // `turn_mode` and `provider_plan_login` - is ordinary production code, so
+    // gating this test on that feature would leave the live regression it
+    // guards with no assertion in the default lane, which passes no crate
+    // features at all.
+    let selected = crate::config::AccountingMode::Provider {
+        scope: uuid::Uuid::new_v4(),
+        provider_id: CLAUDE_PLAN_PROVIDER_ID.into(),
+        wire_api: provider.wire_api,
+        approved_endpoint: endpoint.clone(),
+        approved_query: super::canonical_query(&provider),
+        pricing: PriceAuthority::Unavailable,
+    };
 
     for auth_mode in [
         None,
