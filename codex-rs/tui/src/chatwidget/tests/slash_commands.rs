@@ -3410,3 +3410,53 @@ async fn test_approval_command_resolves_locally_on_cancel() {
     }
     assert!(rendered_resolution, "expected an explicit local resolution");
 }
+
+/// Cost has to be reachable by name, by an operator who is not signed in with
+/// ChatGPT, on whatever provider served the turn. It was previously an
+/// undocumented argument to a command that hid itself without that sign-in,
+/// which is indistinguishable from the feature not existing.
+#[tokio::test]
+async fn cost_command_is_listed_and_runs_without_chatgpt_auth() {
+    use crate::bottom_pane::slash_commands::BuiltinCommandFlags;
+    use crate::bottom_pane::slash_commands::builtins_for_input;
+
+    let listed = builtins_for_input(BuiltinCommandFlags {
+        token_activity_command_enabled: false,
+        ..BuiltinCommandFlags {
+            collaboration_modes_enabled: true,
+            connectors_enabled: true,
+            plugins_command_enabled: true,
+            token_activity_command_enabled: false,
+            service_tier_commands_enabled: true,
+            goal_command_enabled: true,
+            personality_command_enabled: true,
+            allow_elevate_sandbox: true,
+            side_conversation_active: false,
+        }
+    })
+    .into_iter()
+    .any(|(name, command)| name == "cost" && command == SlashCommand::Cost);
+    assert!(listed, "`/cost` is offered without a ChatGPT sign-in");
+
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.dispatch_command_with_args(SlashCommand::Cost, String::new(), Vec::new());
+
+    // It opens the recorded-request inspector rather than the account view, so
+    // it must not ask the backend for account token activity.
+    let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, AppEvent::RefreshTokenActivity { .. })),
+        "`/cost` reads the local ledger, not the account API"
+    );
+    let rendered = drain_insert_history(&mut rx)
+        .iter()
+        .map(|cell| lines_to_single_string(cell))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !rendered.contains("Sign in with ChatGPT"),
+        "`/cost` never demands a ChatGPT sign-in, got: {rendered:?}"
+    );
+}

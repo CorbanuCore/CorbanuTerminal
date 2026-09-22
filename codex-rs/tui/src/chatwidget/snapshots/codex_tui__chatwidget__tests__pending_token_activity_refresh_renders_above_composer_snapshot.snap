@@ -1,6 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/slash_commands.rs
-assertion_line: 1490
+assertion_line: 1587
 expression: normalize_snapshot_paths(term.backend().vt100().screen().contents())
 ---
 
@@ -12,4 +12,4 @@ expression: normalize_snapshot_paths(term.backend().vt100().screen().contents())
 
 › Ask Corbanu Terminal to do anything
 
-  Ambient GLM 5.2 standard · /tmp/project · Corbanu Terminal · TPS: -- tok/s
+  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Terminal · TPS:…

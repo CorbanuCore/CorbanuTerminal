@@ -1,12 +1,13 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
+assertion_line: 3736
 expression: popup
 ---
   Select Model and Effort
   OpenAI Codex plan
 
-  [OpenAI]  Ambient  Kimi Code  Z.AI  DeepSeek  Claude Plan  Anthropic  Meta  Vercel  Baseten
-  OpenRouter
+  [OpenAI]  Ambient  Corbanu API  Kimi Code  Z.AI  DeepSeek  Claude Plan  Anthropic  Meta  Vercel
+  Baseten  OpenRouter
 
   1. GPT-5.5                Model: gpt-5.5. Frontier model for complex coding, research, and real-
                             world work.

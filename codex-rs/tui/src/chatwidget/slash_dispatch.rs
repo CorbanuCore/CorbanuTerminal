@@ -516,6 +516,11 @@ impl ChatWidget {
                     self.open_usage_menu();
                 }
             }
+            // No arguments means the current UTC day, which is the question an
+            // operator actually has when they type this.
+            SlashCommand::Cost => {
+                self.open_accounting_command("requests", chrono::Utc::now().date_naive());
+            }
             SlashCommand::Ide => {
                 self.handle_ide_command();
             }
@@ -773,6 +778,19 @@ impl ChatWidget {
                         ),
                     }
                 }
+            }
+            // The recorded-request view, reachable by its own name. It reads
+            // this machine's ledger for whatever provider served the turn, so
+            // unlike account usage it needs no particular sign-in - and it was
+            // previously reachable only as an undocumented argument to a
+            // command that hid itself without one.
+            SlashCommand::Cost => {
+                let args = if trimmed.is_empty() {
+                    "requests".to_string()
+                } else {
+                    format!("requests {trimmed}")
+                };
+                self.open_accounting_command(&args, chrono::Utc::now().date_naive());
             }
             SlashCommand::Ide => {
                 self.handle_ide_command_args(trimmed);
@@ -1406,6 +1424,7 @@ impl ChatWidget {
             SlashCommand::Ide
             | SlashCommand::Status
             | SlashCommand::Usage
+            | SlashCommand::Cost
             | SlashCommand::DebugConfig
             | SlashCommand::Ps
             | SlashCommand::Stop

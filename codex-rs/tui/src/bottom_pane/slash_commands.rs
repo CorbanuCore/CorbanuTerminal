@@ -322,6 +322,7 @@ mod tests {
                 SlashCommand::Mention,
                 SlashCommand::Status,
                 SlashCommand::Usage,
+                SlashCommand::Cost,
                 SlashCommand::Providers,
                 SlashCommand::Telegram,
                 SlashCommand::Wallet,
