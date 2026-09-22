@@ -83,7 +83,8 @@ class ControlTests(unittest.TestCase):
     def test_facilities_page_indexes_all_machine_interfaces(self):
         with patch.object(socket, "create_connection", side_effect=AssertionError("static index must not probe services")):
             body = control.facilities()
-        for name, endpoint in (("ComfyUI", "http://100.99.88.49:8188/"),
+        for name, endpoint in (("Breeze TTS 2", "http://100.99.88.49:7868/"),
+                               ("ComfyUI", "http://100.99.88.49:8188/"),
                                ("YuE2 (YuE)", "http://100.99.88.49:7861/"),
                                ("YuE2 Real Audio", "http://100.99.88.49:7867/"),
                                ("ACE-Step", "http://100.99.88.49:7862/"),
@@ -99,11 +100,11 @@ class ControlTests(unittest.TestCase):
         self.assertIn('href="https://huggingface.co/Mothersuperior/yue2-mothersuperior-realaudio-tokenizer-v4"', body)
         self.assertIn("authorized audio only", body)
         self.assertIn("non-commercial (CC BY-NC 4.0)", body)
-        self.assertIn("8 registered interfaces", body)
-        self.assertIn("Live service status for 7", body)
-        self.assertEqual(body.count('<article class="test facility-card"'), 8)
-        self.assertEqual(body.count('data-facility-action="start"'), 7)
-        self.assertEqual(body.count('data-facility-action="stop"'), 7)
+        self.assertIn("10 registered interfaces", body)
+        self.assertIn("Live service status for 8", body)
+        self.assertEqual(body.count('<article class="test facility-card"'), 10)
+        self.assertEqual(body.count('data-facility-action="start"'), 8)
+        self.assertEqual(body.count('data-facility-action="stop"'), 8)
         self.assertIn('data-control-endpoint="http://127.0.0.1:8770"', body)
         self.assertIn("Live service status", body)
         self.assertIn("At a glance", body)
@@ -124,6 +125,21 @@ class ControlTests(unittest.TestCase):
             code, payload = facility_control.action("music-studio", "start", Path("/tmp/unused-key"))
         self.assertEqual(code, 404)
         self.assertFalse(payload["ok"])
+
+    def test_performance_transfer_link_only(self):
+        import facility_control
+
+        body = control.facilities()
+        self.assertEqual(body.count('href="http://100.99.88.49:7869/"'), 3)
+        card = body.split('id="performance-transfer">', 1)[1].split('</article>', 1)[0]
+        for text in ('Seed-VC', 'Chatterbox VC', 'Vevo2', 'CC-BY-NC-ND-4.0', 'Private Tailscale access required'):
+            self.assertIn(text, card)
+        self.assertNotIn('data-facility-action', card)
+        self.assertNotIn('data-facility-status', card)
+        with patch.object(facility_control, '_run_remote', side_effect=AssertionError('link grants no authority')):
+            code, payload = facility_control.action('performance-transfer', 'start', Path('/tmp/unused-key'))
+        self.assertEqual(code, 404)
+        self.assertFalse(payload['ok'])
 
     def test_top_navigation_links_facilities(self):
         for title in ("Initiative map", "Facilities", "Sprint document"):

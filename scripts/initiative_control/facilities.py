@@ -5,9 +5,21 @@ from urllib.parse import urlsplit
 
 # Link-only integration: listing this UI does not add bridge action authority.
 MUSIC_STUDIO_URL = "http://100.99.88.49:7864/"
+PERFORMANCE_TRANSFER_URL = "http://100.99.88.49:7869/"
 
 
 FACILITIES = (
+    {
+        "id": "breeze-tts",
+        "name": "Breeze TTS 2",
+        "machine": "RTX PRO 6000",
+        "purpose": "Speech: voice clone, voice design, voice direction · English / Chinese · research / non-commercial model AND outputs",
+        "url": "http://100.99.88.49:7868/",
+        "upstream": "https://huggingface.co/BreezeBlue/Breeze-TTS-2",
+        "host": "100.99.88.49",
+        "service_units": ("breeze-tts.service",),
+        "detail": "Streaming 24 kHz speech; GPU loads on demand and unloads after five idle minutes. UI running does not mean the model is resident.",
+    },
     {
         "id": "comfyui",
         "name": "ComfyUI",
@@ -99,7 +111,7 @@ def facilities():
              'the dashboard host never stores machine passwords. An unavailable machine remains unavailable rather than being '
              'treated as stopped.</aside>')
     body += ('<section data-facilities-root data-control-endpoint="http://127.0.0.1:8770">'
-             '<div class="section-title"><h2>Machine interfaces</h2><span>8 registered interfaces · Live service status for 7 · refreshes every 15 seconds</span></div>'
+             '<div class="section-title"><h2>Machine interfaces</h2><span>10 registered interfaces · Live service status for 8 · refreshes every 15 seconds</span></div>'
              '<div class="test-grid">')
     for item in FACILITIES:
         detail = item.get("detail", "Service status and controls are provided by the local operator bridge.")
@@ -123,6 +135,18 @@ def facilities():
              f'<div class="facility-controls"><a class="facility-open" href="{MUSIC_STUDIO_URL}" '
              'rel="noreferrer noopener">Open Music Studio ↗</a></div>'
              '<small>Private wrapper; no upstream repository.</small></article>')
+    body += ('<article class="test facility-card" id="performance-transfer">'
+             '<div class="lane-top"><span class="facility-status">Link only</span>'
+             '<span class="muted">RTX PRO 6000</span></div>'
+             f'<h3><a href="{PERFORMANCE_TRANSFER_URL}" rel="noreferrer noopener">Performance Transfer</a></h3>'
+             '<p>Shared speech-conversion comparison: Seed-VC, Chatterbox VC and Vevo2.</p>'
+             '<p class="muted">Private Tailscale access required. Vevo2 checkpoint: non-commercial research '
+             '(CC-BY-NC-ND-4.0). Installation status is inside the studio; no dashboard start/stop controls.</p>'
+             f'<div class="facility-controls"><a class="facility-open" href="{PERFORMANCE_TRANSFER_URL}" '
+             'rel="noreferrer noopener">Open Performance Transfer ↗</a></div>'
+             '<small>Upstream: <a href="https://github.com/Plachtaa/seed-vc" rel="noreferrer noopener">Seed-VC</a> · '
+             '<a href="https://github.com/resemble-ai/chatterbox" rel="noreferrer noopener">Chatterbox</a> · '
+             '<a href="https://huggingface.co/RMSnow/Vevo2" rel="noreferrer noopener">Vevo2</a></small></article>')
     body += '</div></section><section><h2>At a glance</h2><div class="table-wrap"><table><thead><tr><th>Facility</th><th>Machine</th><th>Address / port</th><th>Primary use</th><th>Status</th></tr></thead><tbody>'
     for item in FACILITIES:
         body += (f'<tr data-facility-row data-facility-id="{escape(item["id"])}">'
@@ -131,5 +155,8 @@ def facilities():
                  f'<td>{escape(item["purpose"])}</td><td><span class="facility-status status-checking" data-facility-status>Checking…</span></td></tr>')
     body += (f'<tr><td><a href="{MUSIC_STUDIO_URL}" rel="noreferrer noopener">Music Studio</a></td>'
              '<td>RTX PRO 6000</td><td>100.99.88.49:7864</td><td>Shared music workspace</td>'
+             '<td>Link only · not monitored</td></tr>')
+    body += (f'<tr><td><a href="{PERFORMANCE_TRANSFER_URL}" rel="noreferrer noopener">Performance Transfer</a></td>'
+             '<td>RTX PRO 6000</td><td>100.99.88.49:7869</td><td>Seed-VC / Chatterbox VC / Vevo2</td>'
              '<td>Link only · not monitored</td></tr>')
     return body + '</tbody></table></div></section>'

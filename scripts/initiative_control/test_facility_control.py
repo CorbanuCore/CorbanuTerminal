@@ -10,6 +10,7 @@ class FacilityControlTests(unittest.TestCase):
     def test_status_groups_units_by_host_and_fails_closed(self):
         key = pathlib.Path("/tmp/owner-only-key")
         states = {
+            "breeze-tts.service": "active",
             "comfyui-ui.service": "active",
             "yue2-ui.service": "active",
             "yue2-realaudio.service": "active",
@@ -31,6 +32,7 @@ class FacilityControlTests(unittest.TestCase):
 
         self.assertEqual(remote.call_count, 2)
         self.assertEqual(records["comfyui"]["status"], "running")
+        self.assertEqual(records["breeze-tts"]["status"], "running")
         self.assertEqual(records["yue2-realaudio"]["status"], "running")
         self.assertEqual(records["minimax-music3"]["status"], "initializing")
         self.assertFalse(records["minimax-music3"]["actions"]["start"])
@@ -68,6 +70,15 @@ class FacilityControlTests(unittest.TestCase):
                                  ("100.99.88.49", key, ["systemctl", "--user", verb, "yue2-realaudio.service"]))
                 self.assertEqual(remote.call_args_list[1].args,
                                  ("100.99.88.49", key, ["systemctl", "--user", "is-active", "yue2-realaudio.service"]))
+
+    def test_breeze_controls_only_breeze(self):
+        item = facility_control.facility_map()["breeze-tts"]
+        self.assertEqual(item["service_units"], ("breeze-tts.service",))
+        for verb, state, code in (("start", "active", 0), ("stop", "inactive", 3)):
+            with patch.object(facility_control, "_run_remote", side_effect=[([], None, 0), ([state], None, code)]) as remote:
+                ok, _ = facility_control._perform_action(item, verb, pathlib.Path("/tmp/unused-key"))
+                self.assertTrue(ok)
+                self.assertEqual(remote.call_args_list[0].args[2], ["systemctl", "--user", verb, "breeze-tts.service"])
 
     def test_action_requires_zero_exit_from_start_stop_command(self):
         item = next(item for item in FACILITIES if item["id"] == "comfyui")

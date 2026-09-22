@@ -401,3 +401,10 @@ this workstream is downstream of that judgement.
 Verified on the RTX workstation: core 148/148, core with the developer feature
 153/153, the new pf-60 lane 3/3, state 168/168, usage 93/93, pane tests
 105/105, codex-api 236/236, app-server-protocol 287/287.
+
+### The build itself
+
+Integration commit `ddcf127cd`, signed `com.corbanu.corbanu`, sha256
+`e938a1c934eca238927204015256fc61ece482320f3afb32fd1ae08ae8aa69e0`, developer
+marker present. `/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/bin/corbanu`
+points at it, so your shortcut opens it with no further action.
