@@ -140,3 +140,27 @@ which never matched those tests, so they only ran when I ran them by hand -
 and a mutation I had reverted locally came back when I pulled formatted
 sources off the verifier and landed in a commit. Independent review caught it
 in the same round the new lane did.
+
+## Two things review left standing, recorded rather than changed
+
+**The accounting lanes are green now.** `accounting_inspect_maintenance_..._renders_lag`
+had failed in every lane run of this workstream and I reported it as
+pre-existing rather than reading it. It was not stale from before: it was
+correct when written, and `5c0634ed3` - earlier on this branch - moved the
+behaviour when it bounded inspection by the selected scope instead of
+consulting the stored aggregate's `RetainedDay`. A maintenance-pending day now
+derives its totals from the raw attempts in scope, which a pending aggregate
+cannot make wrong, and a non-current contribution still returns
+`NeedsRefresh`. The test is renamed to what it proves and now pins the
+disclosure - that a day it cannot complete says so rather than presenting the
+zero it could compute - instead of only the pixels.
+
+**A wording decision that is Travis's, not mine.** The day page prints
+`maintenance lag: 0 ms` on a day whose stored aggregate is pending
+maintenance. That field means checkpoint recency, not aggregate health, so the
+label reads as an all-clear it does not mean. Review confirmed no operator is
+shown an aggregate-derived number that could contradict the page - the paths
+where the aggregate would be the only authority return `DetailUnavailable`,
+`CheckpointLag` or `NeedsRefresh` first - so this is a user-visible wording
+change with no correctness defect behind it. It is named here rather than
+changed quietly.
