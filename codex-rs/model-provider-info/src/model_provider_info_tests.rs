@@ -1461,6 +1461,27 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider(ANTHROPIC_OPUS_5_5_MODEL, ANTHROPIC_PROVIDER_ID),
         None
     );
+    // The plan slug is the plan route's, and survives being read anywhere else.
+    assert_eq!(
+        corrected_catalog_provider(CLAUDE_OPUS_5_5_PLAN_MODEL, AMBIENT_PROVIDER_ID),
+        Some(CLAUDE_PLAN_PROVIDER_ID)
+    );
+    // Selecting bare Opus 5.5 on the plan provider resolves to the plan row
+    // rather than falling through to Opus 5, which is a different model.
+    assert_eq!(
+        resolve_model_for_provider(
+            Some(ANTHROPIC_OPUS_5_5_MODEL.to_string()),
+            CLAUDE_PLAN_PROVIDER_ID
+        ),
+        Some(CLAUDE_OPUS_5_5_PLAN_MODEL.to_string())
+    );
+    assert_eq!(
+        resolve_model_for_provider(
+            Some(CLAUDE_OPUS_5_5_PLAN_MODEL.to_string()),
+            CLAUDE_PLAN_PROVIDER_ID
+        ),
+        Some(CLAUDE_OPUS_5_5_PLAN_MODEL.to_string())
+    );
     assert_eq!(
         corrected_catalog_provider(CLAUDE_FABLE_5_MODEL, ANTHROPIC_PROVIDER_ID),
         None
@@ -1578,6 +1599,7 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (ZAI_DEFAULT_MODEL, ZAI_PROVIDER_ID),
         ("glm-5.3", ZAI_PROVIDER_ID),
         (CLAUDE_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
+        (CLAUDE_OPUS_5_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_1_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (ANTHROPIC_DEFAULT_MODEL, CLAUDE_PLAN_PROVIDER_ID),

@@ -92,6 +92,8 @@ pub const CLAUDE_PLAN_PROVIDER_ID: &str = "claude-plan";
 pub const CLAUDE_PLAN_MODEL: &str = "claude-opus-5-plan";
 pub const CLAUDE_PLAN_UPSTREAM_MODEL: &str = ANTHROPIC_DEFAULT_MODEL;
 pub const CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL: &str = "claude-opus-4-8-plan";
+pub const CLAUDE_OPUS_5_5_PLAN_MODEL: &str = "claude-opus-5-5-plan";
+pub const CLAUDE_OPUS_5_5_PLAN_UPSTREAM_MODEL: &str = ANTHROPIC_OPUS_5_5_MODEL;
 pub const CLAUDE_FABLE_5_1_PLAN_MODEL: &str = "claude-fable-5-1-plan";
 pub const CLAUDE_FABLE_5_1_PLAN_UPSTREAM_MODEL: &str = CLAUDE_FABLE_5_1_MODEL;
 pub const CLAUDE_FABLE_5_PLAN_MODEL: &str = "claude-fable-5-plan";
@@ -346,6 +348,7 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     if matches!(
         model,
         CLAUDE_PLAN_MODEL
+            | CLAUDE_OPUS_5_5_PLAN_MODEL
             | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
             | CLAUDE_FABLE_5_1_PLAN_MODEL
             | CLAUDE_FABLE_5_PLAN_MODEL
@@ -466,6 +469,7 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     if matches!(
         model,
         CLAUDE_PLAN_MODEL
+            | CLAUDE_OPUS_5_5_PLAN_MODEL
             | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
             | CLAUDE_FABLE_5_1_PLAN_MODEL
             | CLAUDE_FABLE_5_PLAN_MODEL
@@ -566,6 +570,7 @@ pub fn resolve_model_for_provider(
             Some(model)
                 if model.trim().starts_with("claude-")
                     && model.trim() != CLAUDE_PLAN_MODEL
+                    && model.trim() != CLAUDE_OPUS_5_5_PLAN_MODEL
                     && model.trim() != CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
                     && model.trim() != CLAUDE_FABLE_5_1_PLAN_MODEL
                     && model.trim() != CLAUDE_FABLE_5_PLAN_MODEL =>
@@ -581,6 +586,9 @@ pub fn resolve_model_for_provider(
             Some(model) if model.trim() == ANTHROPIC_LEGACY_OPUS_4_8_MODEL => {
                 Some(CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL.to_string())
             }
+            Some(model) if model.trim() == ANTHROPIC_OPUS_5_5_MODEL => {
+                Some(CLAUDE_OPUS_5_5_PLAN_MODEL.to_string())
+            }
             Some(model) if model.trim() == CLAUDE_FABLE_5_1_MODEL => {
                 Some(CLAUDE_FABLE_5_1_PLAN_MODEL.to_string())
             }
@@ -591,6 +599,7 @@ pub fn resolve_model_for_provider(
                 if matches!(
                     model.trim(),
                     CLAUDE_PLAN_MODEL
+                        | CLAUDE_OPUS_5_5_PLAN_MODEL
                         | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
                         | CLAUDE_FABLE_5_1_PLAN_MODEL
                         | CLAUDE_FABLE_5_PLAN_MODEL
