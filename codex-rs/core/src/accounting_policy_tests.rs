@@ -1260,3 +1260,55 @@ fn claude_plan_states_the_plan_side_whatever_openai_credential_exists() {
         }
     ));
 }
+
+#[test]
+fn accounting_deepseek_unreported_cache_write_is_zero_and_other_providers_stay_unknown()
+-> Result<()> {
+    let count = |n: i64| -> Result<Presence> { Ok(Presence::Number(n.try_into()?)) };
+    // DeepSeek's Responses usage reports input and cached (hit) tokens only.
+    let reported = Patch {
+        input: count(34_329)?,
+        read: count(0)?,
+        output: count(57)?,
+        ..Patch::default()
+    };
+    assert_eq!(reported.write, Presence::Missing);
+
+    let deepseek = with_known_cache_write(
+        codex_model_provider_info::DEEPSEEK_PROVIDER_ID,
+        reported.clone(),
+    )?;
+    assert_eq!(deepseek.write, count(0)?);
+    assert_eq!(
+        Patch {
+            write: Presence::Missing,
+            ..deepseek
+        },
+        reported,
+        "only the cache-write slot may change"
+    );
+
+    // A provider that can bill cache writes keeps the gap, so input stays unpriced.
+    for provider in ["openai", "openrouter", "zai", "pfterminal-plan"] {
+        assert_eq!(
+            with_known_cache_write(provider, reported.clone())?,
+            reported,
+            "{provider}"
+        );
+    }
+    // Explicit evidence is never overwritten, including an explicit null.
+    for write in [Presence::Null, count(12)?] {
+        let explicit = Patch {
+            write,
+            ..reported.clone()
+        };
+        assert_eq!(
+            with_known_cache_write(
+                codex_model_provider_info::DEEPSEEK_PROVIDER_ID,
+                explicit.clone()
+            )?,
+            explicit
+        );
+    }
+    Ok(())
+}

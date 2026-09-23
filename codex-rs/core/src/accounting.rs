@@ -838,7 +838,7 @@ impl Sampling {
             source,
             revision: position,
             sequence: position,
-            patch,
+            patch: with_known_cache_write(&attempt.provider, patch)?,
         };
         let _write = WRITES.acquire().await?;
         self.check()?;
@@ -853,6 +853,20 @@ impl Sampling {
         completion.complete = true;
         Ok(())
     }
+}
+
+/// Providers whose published price sheet has no cache-write charge: every input
+/// token is billed as either a cache hit or a cache miss. Their wire usage never
+/// reports cache writes, and for them an unreported count is exactly zero rather
+/// than unknown, so the cache-miss input can be priced. DeepSeek lists only
+/// cache-hit and cache-miss input (api-docs.deepseek.com/quick_start/pricing).
+const NO_CACHE_WRITE_PROVIDERS: [&str; 1] = [codex_model_provider_info::DEEPSEEK_PROVIDER_ID];
+
+fn with_known_cache_write(provider: &str, mut patch: Patch) -> anyhow::Result<Patch> {
+    if patch.write == Presence::Missing && NO_CACHE_WRITE_PROVIDERS.contains(&provider) {
+        patch.write = Presence::Number(0.try_into()?);
+    }
+    Ok(patch)
 }
 
 fn presence(value: AnthropicTokenPresence) -> anyhow::Result<Presence> {
