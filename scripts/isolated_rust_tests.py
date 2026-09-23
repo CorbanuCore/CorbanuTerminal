@@ -69,12 +69,17 @@ def validate_debug_run(args: list[str], env: dict[str, str]) -> None:
 # Integration suites locate these binaries with `cargo_bin`, but cargo only
 # builds a package's own binaries when testing it. Build them first so a
 # package-scoped run does not fail on a missing sibling executable.
+_SUITE_HELPERS = [
+    "-p", "codex-cli",
+    "-p", "codex-wallet-daemon",
+    "-p", "codex-rmcp-client",
+    "-p", "codex-code-mode-host",
+    "--bins",
+]
 HELPER_BINARIES = {
-    "codex-core": ["-p", "codex-cli", "--bin", "codex"],
-    "codex-tui": [
-        "-p", "codex-cli", "--bin", "codex",
-        "-p", "codex-wallet-daemon", "--bin", "corbanu-walletd",
-    ],
+    "codex-core": _SUITE_HELPERS,
+    "codex-app-server": _SUITE_HELPERS,
+    "codex-tui": _SUITE_HELPERS,
 }
 
 
@@ -85,9 +90,8 @@ def helper_build_args(args: list[str]) -> list[str]:
         if flag in ("-p", "--package")
     ] + [arg.split("=", 1)[1] for arg in args if arg.startswith("--package=")]
     build: list[str] = []
-    for package in packages:
-        for arg in HELPER_BINARIES.get(package, []):
-            build.append(arg)
+    if any(package in HELPER_BINARIES for package in packages):
+        build = list(_SUITE_HELPERS)
     if build and ("--offline" in args or "--frozen" in args):
         build.append("--offline")
     return build
