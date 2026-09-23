@@ -12603,6 +12603,42 @@ async fn explicit_claude_plan_normalizes_bare_claude_alias() -> std::io::Result<
     Ok(())
 }
 
+/// `corbanu -m claude-opus-5-5 -c model_provider="claude-plan"`: a bare slug
+/// requested at runtime used to be sent verbatim, which the subscription refuses
+/// (429) and the ledger cannot price. It is sent as its exact plan slug; plan
+/// slugs and slugs without a plan translation are left untouched.
+#[tokio::test]
+async fn explicit_runtime_bare_claude_on_claude_plan_uses_the_plan_slug() -> std::io::Result<()> {
+    use codex_model_provider_info::ANTHROPIC_OPUS_5_5_MODEL;
+    use codex_model_provider_info::CLAUDE_FABLE_5_1_MODEL;
+    use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
+    use codex_model_provider_info::CLAUDE_OPUS_5_5_PLAN_MODEL;
+    use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+
+    for (requested, sent) in [
+        (ANTHROPIC_OPUS_5_5_MODEL, CLAUDE_OPUS_5_5_PLAN_MODEL),
+        (CLAUDE_FABLE_5_1_MODEL, CLAUDE_FABLE_5_1_PLAN_MODEL),
+        (CLAUDE_OPUS_5_5_PLAN_MODEL, CLAUDE_OPUS_5_5_PLAN_MODEL),
+    ] {
+        let config = Config::load_from_base_config_with_overrides(
+            toml::from_str::<ConfigToml>("").expect("config should deserialize"),
+            ConfigOverrides {
+                model: Some(requested.to_string()),
+                model_provider: Some(CLAUDE_PLAN_PROVIDER_ID.to_string()),
+                ..ConfigOverrides::default()
+            },
+            tempdir()?.abs(),
+        )
+        .await?;
+        assert_eq!(
+            config.model_provider_id, CLAUDE_PLAN_PROVIDER_ID,
+            "{requested}"
+        );
+        assert_eq!(config.model.as_deref(), Some(sent), "{requested}");
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn corbanu_plan_provider_alias_normalizes_to_legacy_persisted_id() -> std::io::Result<()> {
     use codex_model_provider_info::CORBANU_PLAN_PROVIDER_ID;

@@ -103,6 +103,7 @@ use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_model_provider_info::built_in_model_providers;
 use codex_model_provider_info::canonical_provider_id;
+use codex_model_provider_info::claude_plan_translation;
 use codex_model_provider_info::corrected_catalog_provider;
 use codex_model_provider_info::create_oss_provider_with_base_url;
 use codex_model_provider_info::default_model_context_window_for_provider;
@@ -4087,6 +4088,12 @@ impl Config {
             None
         } else {
             match model {
+            // An explicit bare Claude slug on the subscription is sent as its exact
+            // plan slug; any other override is honoured verbatim.
+            Some(model_override) if model_provider_id == CLAUDE_PLAN_PROVIDER_ID => Some(
+                claude_plan_translation(&model_override)
+                    .map_or(model_override, str::to_string),
+            ),
             Some(model_override) => Some(model_override),
             None if stale_runtime_provider => resolve_model_for_provider(/*model*/ None, &model_provider_id),
             None if model_without_explicit_provider => cfg.model,

@@ -521,6 +521,21 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     None
 }
 
+/// The subscription slug `claude-plan` serves a bare Anthropic slug as, when it
+/// has an exact one. The subscription only answers requests carrying its plan
+/// identity, which is keyed on these slugs, and the ledger prices the plan slug;
+/// a bare slug sent as-is is refused upstream and left unpriced.
+pub fn claude_plan_translation(model: &str) -> Option<&'static str> {
+    match model.trim() {
+        ANTHROPIC_DEFAULT_MODEL => Some(CLAUDE_PLAN_MODEL),
+        ANTHROPIC_LEGACY_OPUS_4_8_MODEL => Some(CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL),
+        ANTHROPIC_OPUS_5_5_MODEL => Some(CLAUDE_OPUS_5_5_PLAN_MODEL),
+        CLAUDE_FABLE_5_1_MODEL => Some(CLAUDE_FABLE_5_1_PLAN_MODEL),
+        CLAUDE_FABLE_5_MODEL => Some(CLAUDE_FABLE_5_PLAN_MODEL),
+        _ => None,
+    }
+}
+
 pub fn resolve_model_for_provider(
     model: Option<String>,
     model_provider_id: &str,
@@ -589,20 +604,8 @@ pub fn resolve_model_for_provider(
             _ => Some(ANTHROPIC_DEFAULT_MODEL.to_string()),
         },
         CLAUDE_PLAN_PROVIDER_ID => match model {
-            Some(model) if model.trim() == ANTHROPIC_DEFAULT_MODEL => {
-                Some(CLAUDE_PLAN_MODEL.to_string())
-            }
-            Some(model) if model.trim() == ANTHROPIC_LEGACY_OPUS_4_8_MODEL => {
-                Some(CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL.to_string())
-            }
-            Some(model) if model.trim() == ANTHROPIC_OPUS_5_5_MODEL => {
-                Some(CLAUDE_OPUS_5_5_PLAN_MODEL.to_string())
-            }
-            Some(model) if model.trim() == CLAUDE_FABLE_5_1_MODEL => {
-                Some(CLAUDE_FABLE_5_1_PLAN_MODEL.to_string())
-            }
-            Some(model) if model.trim() == CLAUDE_FABLE_5_MODEL => {
-                Some(CLAUDE_FABLE_5_PLAN_MODEL.to_string())
+            Some(model) if claude_plan_translation(&model).is_some() => {
+                claude_plan_translation(&model).map(str::to_string)
             }
             Some(model)
                 if matches!(
