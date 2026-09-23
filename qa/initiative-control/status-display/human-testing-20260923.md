@@ -16,7 +16,7 @@ distribution, which is why installing needs one extra command (step 3 below).
 ## Installing, about five minutes
 
 You need a Mac with Apple silicon (M1 or later) and the zip file Travis sends
-you, named `corbanu-terminal-8c5294084.zip`, saved in your Downloads folder.
+you, named `corbanu-terminal-8c5294084-cost.zip`, saved in your Downloads folder.
 
 1. Open the **Terminal** app (press Command-Space, type `Terminal`, press
    Return).
@@ -25,7 +25,7 @@ you, named `corbanu-terminal-8c5294084.zip`, saved in your Downloads folder.
 
    ```sh
    mkdir -p ~/Applications
-   unzip -o ~/Downloads/corbanu-terminal-8c5294084.zip -d ~/Applications
+   unzip -o ~/Downloads/corbanu-terminal-8c5294084-cost.zip -d ~/Applications
    ```
 
 3. Tell macOS the files came from Travis, not from an unknown website (without
@@ -91,10 +91,17 @@ paste it), and ask `What is in this picture?`. The description should match.
 - Providers other than OpenAI ask for an API key or another sign-in. Press
   Escape to back out; nothing should break.
 
-### 5. Status, five minutes
+### 5. Status and cost, fifteen minutes
 
-Type `/status`. Check that the model, the folder and the permissions it shows
-make sense to you, and note anything you cannot understand.
+- Type `/status`. Check that the model, the folder and the permissions it
+  shows make sense to you, and note anything you cannot understand.
+- Do a few requests with each provider you can use, then type `/cost`. It lists
+  the requests recorded today. Work done on a subscription (your ChatGPT or
+  Claude sign-in) should say it was not billed per request and show what the
+  same work would have cost at pay-per-use prices; work on an API key (such as
+  DeepSeek) should show an estimated cost. Does each figure seem plausible,
+  and is the wording understandable?
+- Recording starts with this build, so earlier conversations will not appear.
 
 ### 6. Interrupting and resuming, ten minutes
 
@@ -119,12 +126,12 @@ the `corbanu-test` folder.
 
 ## For Travis
 
-- The hand-off zip is the distribution-clean package from the canonical package
-  builder (`dev-small` profile) at `8c5294084`, signed with the usual Developer
+- The hand-off zip is the package from the canonical package builder
+  (`dev-small` profile) at `8c5294084`, signed with the usual Developer
   ID and identifiers, with a secure timestamp. It is **not notarized**:
   notarization needs the App Store Connect API key, which lives in the release
   workflow's secrets and not on this Mac. Hence the `xattr` step.
-- It is not the developer-accounting build. Per your ruling that build is
-  marked never-for-distribution, so `/cost` is not in the hand-off zip. Your
-  own shortcut still opens the developer-accounting build for your own
-  cost-tracking pass.
+- This zip carries the developer-accounting build of `corbanu` (cost
+  collection compiled in, marked never-for-distribution) so she can test
+  `/cost`; the other executables are from the distribution-clean package.
+  Keep it within the household test.
