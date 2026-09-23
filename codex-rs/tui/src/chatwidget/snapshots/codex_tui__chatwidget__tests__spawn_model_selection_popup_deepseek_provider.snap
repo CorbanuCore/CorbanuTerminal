@@ -8,14 +8,16 @@ expression: popup
   OpenAI  Ambient  Corbanu API  Kimi Code  Z.AI  [DeepSeek]  Claude Plan  Anthropic  Meta  Vercel  Baseten
   OpenRouter
 
-  1. DeepSeek V4 Pro (Direct)                   Model: deepseek-v4-pro. DeepSeek API: V4 Pro - $0.435/M
-                                                input, $0.003625/M cached input, $0.87/M output.
-  2. DeepSeek V4.1 Flash (Direct)               Model: deepseek-flash. DeepSeek Responses API: V4.1 Flash -
-                                                $0.30/M input, $0.006/M cached input, $1.20/M output (peak
-                                                rates; off-peak is half).
-› 3. DeepSeek V4 Flash 0731 (Direct) (current)  Model: deepseek-v4-flash. DeepSeek Responses API: legacy
-                                                name, now served by V4.1 Flash and billed at its price -
-                                                $0.30/M input, $0.006/M cached input, $1.20/M output (peak
-                                                rates; off-peak is half).
+  1. DeepSeek V4 Pro (Direct)                Model: deepseek-v4-pro. DeepSeek API: V4 Pro - $0.435/M input,
+                                             $0.003625/M cached input, $0.87/M output.
+› 2. DeepSeek V4.1 Flash (Direct) (current)  Model: deepseek-flash. DeepSeek Responses API: V4.1 Flash -
+                                             $0.15/M input, $0.003/M cached input, $0.60/M output off-peak;
+                                             double at peak (01:00-04:00 and 06:00-10:00 UTC, Monday-Friday,
+                                             except Chinese public holidays).
+  3. DeepSeek V4 Flash 0731 (Direct)         Model: deepseek-v4-flash. DeepSeek Responses API: legacy name,
+                                             now served by V4.1 Flash and billed at its price - $0.15/M
+                                             input, $0.003/M cached input, $0.60/M output off-peak; double
+                                             at peak (01:00-04:00 and 06:00-10:00 UTC, Monday-Friday, except
+                                             Chinese public holidays).
 
   Use Left/Right to switch providers. Press Enter to confirm or Esc to go back

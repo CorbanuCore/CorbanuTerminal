@@ -174,7 +174,7 @@ to use.
 | Ambient      | `ambient`     | `AMBIENT_API_KEY`    | `z-ai/glm-5.2`                                                                     |
 | Kimi Code    | `kimi-code`   | `KIMI_API_KEY`       | `k3`                                                                                 |
 | Z.AI         | `zai`         | `ZAI_API_KEY`        | `glm-5.2`                                                                            |
-| DeepSeek     | `deepseek`    | `DEEPSEEK_API_KEY`   | `deepseek-v4-flash`, `deepseek-flash`                                                |
+| DeepSeek     | `deepseek`    | `DEEPSEEK_API_KEY`   | `deepseek-flash`, `deepseek-v4-flash`                                                |
 | OpenRouter   | `openrouter`  | `OPENROUTER_API_KEY` | `deepseek/deepseek-v4-flash-0731`, `moonshotai/kimi-k3`, and other catalogued routes |
 | Meta         | `meta`        | `MODEL_API_KEY`      | `muse-spark-1.1`                                                                     |
 | Baseten      | `baseten`     | `BASETEN_API_KEY`    | `zai-org/GLM-5.2`                                                                    |

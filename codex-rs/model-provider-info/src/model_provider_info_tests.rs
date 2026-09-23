@@ -922,6 +922,7 @@ fn test_built_in_model_providers_include_deepseek_flash_responses() {
         resolve_model_for_provider(/*model*/ None, DEEPSEEK_PROVIDER_ID).as_deref(),
         Some(DEEPSEEK_DEFAULT_MODEL)
     );
+    assert_eq!(DEEPSEEK_DEFAULT_MODEL, "deepseek-flash");
     assert_eq!(
         resolve_model_for_provider(
             Some(DEEPSEEK_DEFAULT_MODEL.to_string()),
@@ -938,12 +939,12 @@ fn test_built_in_model_providers_include_deepseek_flash_responses() {
     );
     assert_eq!(
         resolve_model_for_provider(
-            Some(DEEPSEEK_V4_1_FLASH_MODEL.to_string()),
+            Some(DEEPSEEK_LEGACY_FLASH_MODEL.to_string()),
             DEEPSEEK_PROVIDER_ID,
         )
         .as_deref(),
-        Some(DEEPSEEK_V4_1_FLASH_MODEL),
-        "DeepSeek V4.1 Flash must not be rewritten to the legacy Flash name"
+        Some(DEEPSEEK_LEGACY_FLASH_MODEL),
+        "the legacy Flash name is still accepted verbatim; DeepSeek serves V4.1 Flash on it"
     );
 }
 
@@ -1584,11 +1585,11 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         Some(DEEPSEEK_PROVIDER_ID)
     );
     assert_eq!(
-        corrected_catalog_provider(DEEPSEEK_V4_1_FLASH_MODEL, OPENAI_PROVIDER_ID),
+        corrected_catalog_provider(DEEPSEEK_LEGACY_FLASH_MODEL, OPENAI_PROVIDER_ID),
         Some(DEEPSEEK_PROVIDER_ID)
     );
     assert_eq!(
-        corrected_catalog_provider(DEEPSEEK_V4_1_FLASH_MODEL, DEEPSEEK_PROVIDER_ID),
+        corrected_catalog_provider(DEEPSEEK_LEGACY_FLASH_MODEL, DEEPSEEK_PROVIDER_ID),
         None
     );
 
@@ -1632,7 +1633,7 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         ("x-ai/grok-4.5", OPENROUTER_PROVIDER_ID),
         ("moonshotai/kimi-k3", OPENROUTER_PROVIDER_ID),
         (DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PROVIDER_ID),
-        (DEEPSEEK_V4_1_FLASH_MODEL, DEEPSEEK_PROVIDER_ID),
+        (DEEPSEEK_LEGACY_FLASH_MODEL, DEEPSEEK_PROVIDER_ID),
         (DEEPSEEK_PRO_MODEL, DEEPSEEK_PROVIDER_ID),
         (
             OPENROUTER_DEEPSEEK_V4_PRO_0813_MODEL,

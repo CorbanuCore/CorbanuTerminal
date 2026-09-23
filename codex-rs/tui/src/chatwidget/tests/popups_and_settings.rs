@@ -3419,7 +3419,7 @@ async fn spawn_model_selection_popup_deepseek_provider_snapshot() {
     assert_chatwidget_snapshot!("spawn_model_selection_popup_deepseek_provider", popup);
     assert!(popup.contains("Corbanu Terminal Orc pane - DeepSeek API key"));
     assert!(popup.contains("[DeepSeek]"));
-    assert!(popup.contains("DeepSeek V4 Flash 0731 (Direct) (current)"));
+    assert!(popup.contains("DeepSeek V4.1 Flash (Direct) (current)"));
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
     let (preset, purpose) = loop {
