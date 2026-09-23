@@ -975,10 +975,17 @@ async fn chatgpt_catalog_shows_server_advertised_gpt_5_6_models() {
     let available = manager
         .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
         .await;
+    // The server did not advertise gpt-6-sol to this account, so the bundled
+    // entry stays selectable but the default falls back to gpt-5.6-sol.
     assert!(
         available
             .iter()
-            .any(|model| model.model == "gpt-6-sol" && model.is_default)
+            .any(|model| model.model == "gpt-5.6-sol" && model.is_default)
+    );
+    assert!(
+        available
+            .iter()
+            .any(|model| model.model == "gpt-6-sol" && !model.is_default)
     );
     let sol = available
         .iter()
