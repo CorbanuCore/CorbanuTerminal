@@ -5,7 +5,15 @@ use pretty_assertions::assert_eq;
 async fn custom_model_routes_are_distinguishable_before_selection() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("fixture-model")).await;
     chat.config.model_provider_id = "qa-a".to_string();
-    let mut preset = chat.model_catalog.try_list_models().unwrap().remove(0);
+    // Start from a plain bundled row; the catalogue's first row can carry
+    // provider-specific selection behaviour that this fixture is not about.
+    let mut preset = chat
+        .model_catalog
+        .try_list_models()
+        .unwrap()
+        .into_iter()
+        .find(|preset| preset.model == "gpt-5.6-luna")
+        .expect("bundled gpt-5.6-luna");
     preset.model = "fixture-model".to_string();
     preset.display_name = "fixture-model".to_string();
     preset.description = "Configured runtime provider".to_string();

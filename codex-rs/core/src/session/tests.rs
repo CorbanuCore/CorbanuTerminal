@@ -5690,7 +5690,8 @@ async fn session_configuration_apply_preserves_absolute_cwd_write_root_on_cwd_up
 async fn session_update_settings_does_not_rewrite_sticky_environment_cwds() {
     let (session, turn_context) = make_session_and_context().await;
     #[allow(deprecated)]
-    let updated_cwd = turn_context.cwd.join("project");
+    let scratch = ScratchSubdir::new(&turn_context.cwd, "project");
+    let updated_cwd = scratch.0.clone();
     let current_environments = {
         let state = session.state.lock().await;
         state
@@ -5699,7 +5700,6 @@ async fn session_update_settings_does_not_rewrite_sticky_environment_cwds() {
             .to_vec()
     };
     let expected_environments = current_environments.clone();
-    std::fs::create_dir_all(updated_cwd.as_path()).expect("create project dir");
 
     session
         .update_settings(SessionSettingsUpdate {
@@ -5744,8 +5744,8 @@ async fn relative_cwd_update_without_environments_resolves_under_session_cwd() {
         state.session_configuration.environments.environments = Vec::new();
         state.session_configuration.cwd().clone()
     };
-    let updated_cwd = original_cwd.join("project");
-    std::fs::create_dir_all(updated_cwd.as_path()).expect("create project dir");
+    let scratch = ScratchSubdir::new(&original_cwd, "project");
+    let updated_cwd = scratch.0.clone();
 
     session
         .update_settings(SessionSettingsUpdate {
@@ -5779,8 +5779,8 @@ async fn environment_settings_preserve_explicit_primary_cwd() {
         state.session_configuration.environments.environments = environments.clone();
         (original_cwd, environment_cwd, environments)
     };
-    let updated_cwd = original_cwd.join("project");
-    std::fs::create_dir_all(updated_cwd.as_path()).expect("create project dir");
+    let scratch = ScratchSubdir::new(&original_cwd, "project");
+    let updated_cwd = scratch.0.clone();
 
     session
         .update_settings(SessionSettingsUpdate {
@@ -5804,11 +5804,12 @@ async fn environment_settings_preserve_explicit_primary_cwd() {
 #[tokio::test]
 async fn absolute_cwd_update_with_turn_environment_is_allowed() {
     let (session, _turn_context, _rx) = make_session_and_context_with_rx().await;
-    let absolute_cwd = {
+    let session_cwd = {
         let state = session.state.lock().await;
-        state.session_configuration.cwd().join("absolute-turn")
+        state.session_configuration.cwd().clone()
     };
-    std::fs::create_dir_all(absolute_cwd.as_path()).expect("create absolute turn dir");
+    let scratch = ScratchSubdir::new(&session_cwd, "absolute-turn");
+    let absolute_cwd = scratch.0.clone();
 
     let turn_context = session
         .new_turn_with_sub_id(
@@ -6870,12 +6871,10 @@ async fn request_permissions_emits_event_when_granular_policy_allows_requests() 
 async fn request_permissions_tool_resolves_relative_paths_against_selected_environment() {
     let (session, mut turn_context, rx) = make_session_and_context_with_rx().await;
     *session.active_turn.lock().await = Some(ActiveTurn::default());
-    let environment_cwd = {
-        #[allow(deprecated)]
-        let legacy_cwd = turn_context.cwd.clone();
-        legacy_cwd.join("request-permissions-environment")
-    };
-    std::fs::create_dir_all(environment_cwd.as_path()).expect("create environment cwd");
+    #[allow(deprecated)]
+    let legacy_cwd = turn_context.cwd.clone();
+    let scratch = ScratchSubdir::new(&legacy_cwd, "request-permissions-environment");
+    let environment_cwd = scratch.0.clone();
     let turn_context_mut = Arc::get_mut(&mut turn_context).expect("single thread settings ref");
     turn_context_mut
         .approval_policy
@@ -13696,4 +13695,23 @@ async fn session_start_hooks_require_project_trust_without_config_toml() -> std:
     }
 
     Ok(())
+}
+
+/// A uniquely named directory below `parent`, removed on drop. Session fixtures
+/// run with the crate directory as their cwd, so tests that need a real path
+/// below it must not leave one behind (or collide with a parallel test).
+struct ScratchSubdir(AbsolutePathBuf);
+
+impl ScratchSubdir {
+    fn new(parent: &AbsolutePathBuf, name: &str) -> Self {
+        let path = parent.join(format!("{name}-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(path.as_path()).expect("create scratch dir");
+        Self(path)
+    }
+}
+
+impl Drop for ScratchSubdir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(self.0.as_path());
+    }
 }

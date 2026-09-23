@@ -1,6 +1,5 @@
 ---
 source: tui/src/chatwidget/tests/exec_flow.rs
-assertion_line: 788
 expression: normalize_snapshot_paths(rendered)
 ---
 • Waiting for background terminal (0s • esc to …
@@ -9,4 +8,4 @@ expression: normalize_snapshot_paths(rendered)
 
 › Ask Corbanu Terminal to do anything
 
-  Ambient GLM 5.2 via ambient standard · /tmp/p…
+  Z.AI GLM 5.3 Flash via zai default · /tmp/pro…

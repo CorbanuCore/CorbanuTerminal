@@ -506,7 +506,11 @@ fn recorded_rules_are_read_from_the_payload() {
     assert_eq!(recorded_rules(r#"{"known_subtotal":"0"}"#).unwrap(), 1);
     assert_eq!(recorded_rules(r#"{"pricing_rules":2}"#).unwrap(), 2);
     // Version 1 is never written explicitly, so an explicit 1 is not canonical.
-    for payload in [r#"{"pricing_rules":1}"#, r#"{"pricing_rules":"2"}"#, r#"{"pricing_rules":-2}"#] {
+    for payload in [
+        r#"{"pricing_rules":1}"#,
+        r#"{"pricing_rules":"2"}"#,
+        r#"{"pricing_rules":-2}"#,
+    ] {
         assert!(recorded_rules(payload).is_err(), "{payload}");
     }
 }
@@ -544,7 +548,10 @@ async fn estimates_from_newer_rules_are_named_and_current_ones_stand() -> anyhow
         .read_estimate(a.attempt_id, &evidence)
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("newer than this build"), "{error}");
+    assert!(
+        error.to_string().contains("newer than this build"),
+        "{error}"
+    );
     runtime.close().await;
     Ok(())
 }

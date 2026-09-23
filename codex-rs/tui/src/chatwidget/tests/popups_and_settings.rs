@@ -4221,9 +4221,13 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         "expected MiniMax M3 price description in /model picker:\n{minimax_popup}"
     );
     assert!(
-        minimax_popup.contains("openrouter/owl-alpha")
-            && minimax_popup.contains("OpenRouter: Owl Alpha - $0/M input, $0/M output."),
+        minimax_popup.contains("x-ai/grok-4.7"),
         "expected OpenRouter models to share the OpenRouter tab:\n{minimax_popup}"
+    );
+    // Owl Alpha is retired from the picker; it stays selectable by exact name.
+    assert!(
+        !minimax_popup.contains("openrouter/owl-alpha"),
+        "a hidden OpenRouter row is not offered:\n{minimax_popup}"
     );
     move_model_picker_selection_to(&mut minimax_chat, "moonshotai/kimi-k3");
     let kimi_openrouter_popup =
@@ -4247,8 +4251,12 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     let openai_popup =
         render_bottom_popup_with_height(&openai_chat, /*width*/ 140, /*height*/ 28);
     assert!(
-        openai_popup.contains("[OpenAI]") && openai_popup.contains("gpt-5.5"),
-        "expected GPT-5.5 in the OpenAI tab:\n{openai_popup}"
+        openai_popup.contains("[OpenAI]") && openai_popup.contains("gpt-6-sol"),
+        "expected GPT-6 Sol in the OpenAI tab:\n{openai_popup}"
+    );
+    assert!(
+        !openai_popup.contains("Model: gpt-5.5."),
+        "expected retired GPT-5.5 to be hidden from /model picker:\n{openai_popup}"
     );
     assert!(
         !openai_popup.contains("gpt-5.4"),

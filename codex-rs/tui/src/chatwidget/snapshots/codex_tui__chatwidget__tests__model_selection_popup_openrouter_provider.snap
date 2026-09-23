@@ -1,13 +1,11 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
-assertion_line: 3398
 expression: popup
 ---
   Select Model and Effort
   OpenRouter API key
 
-  OpenAI  Ambient  Corbanu API  Kimi Code  Z.AI  DeepSeek  Claude Plan  Anthropic  Meta  Vercel
-  Baseten  [OpenRouter]
+  OpenAI  Ambient  Corbanu API  Kimi Code  Z.AI  DeepSeek  Claude Plan  Anthropic  Meta  Vercel  Baseten  [OpenRouter]
 
 › 1. OpenRouter Grok 4.7 (current)     Model: x-ai/grok-4.7. OpenRouter: Grok 4.7 — $1.60/M input, $4.8/M output. Rates double
                                        above 200K prompt tokens.

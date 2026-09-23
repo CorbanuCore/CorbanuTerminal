@@ -1,6 +1,5 @@
 ---
 source: tui/src/chatwidget/tests/mcp_startup.rs
-assertion_line: 403
 expression: normalize_snapshot_paths(term.backend().vt100().screen().contents())
 ---
 
@@ -12,4 +11,4 @@ expression: normalize_snapshot_paths(term.backend().vt100().screen().contents())
 
 › Ask Corbanu Terminal to do anything
 
-  Ambient GLM 5.2 via ambient standard · /tmp/project · Corbanu Terminal · TPS: -- tok/s
+  Z.AI GLM 5.3 Flash via zai default · /tmp/project · Corbanu Terminal · TPS: -- tok/s

@@ -55,15 +55,14 @@ impl Default for ProviderAccountMetadata {
 impl ProviderAccountMetadata {
     pub(crate) async fn discover(config: &Config) -> Self {
         let codex_home = config.codex_home.to_path_buf();
-        let auth_manager = codex_login::AuthManager::shared_from_config(
+        let openai = codex_login::discover_openai_auth_metadata(
             config, /*enable_codex_api_key_env*/ true,
         );
         let claude_status = crate::chatwidget::claude_code_login::current_status_with_timeout(
             codex_home.as_path(),
             std::time::Duration::from_secs(10),
         );
-        let (auth_manager, claude_status) = tokio::join!(auth_manager, claude_status);
-        let openai = auth_manager.openai_auth_metadata();
+        let (openai, claude_status) = tokio::join!(openai, claude_status);
         let claude = match claude_status {
             crate::chatwidget::claude_code_login::ClaudeCodePlanStatus::ManagedToken {
                 stored: true,

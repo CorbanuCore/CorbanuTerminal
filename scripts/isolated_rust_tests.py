@@ -66,6 +66,57 @@ def validate_debug_run(args: list[str], env: dict[str, str]) -> None:
             )
 
 
+# Integration suites locate these binaries with `cargo_bin`, but cargo only
+# builds a package's own binaries when testing it. Build them first so a
+# package-scoped run does not fail on a missing sibling executable.
+HELPER_BINARIES = {
+    "codex-core": ["-p", "codex-cli", "--bin", "codex"],
+    "codex-tui": [
+        "-p", "codex-cli", "--bin", "codex",
+        "-p", "codex-wallet-daemon", "--bin", "corbanu-walletd",
+    ],
+}
+
+
+def helper_build_args(args: list[str]) -> list[str]:
+    packages = [
+        value
+        for flag, value in zip(args, args[1:])
+        if flag in ("-p", "--package")
+    ] + [arg.split("=", 1)[1] for arg in args if arg.startswith("--package=")]
+    build: list[str] = []
+    for package in packages:
+        for arg in HELPER_BINARIES.get(package, []):
+            build.append(arg)
+    if build and ("--offline" in args or "--frozen" in args):
+        build.append("--offline")
+    return build
+
+
+# The Linux sandbox mounts empty read-only directories over missing `.git`,
+# `.codex` and `.agents` below a writable cwd. When a test kills the sandbox
+# helper before it cleans up, those empty mount targets are left in the crate
+# directory (the tests' cwd), where they make later runs see a bogus repository
+# or project config. Fixtures that use the system temp directory as their cwd
+# leak there too. Remove only empty ones, before and after each run.
+SANDBOX_MOUNT_TARGETS = (".git", ".codex", ".agents")
+
+
+def remove_leaked_mount_targets(workspace: Path) -> None:
+    # Some fixtures use the literal system temp directory as their cwd.
+    system_temp = Path(tempfile.gettempdir())
+    for package in [system_temp, workspace, *workspace.iterdir()]:
+        if not package.is_dir():
+            continue
+        for name in SANDBOX_MOUNT_TARGETS:
+            target = package / name
+            if target.is_dir() and not target.is_symlink() and not any(target.iterdir()):
+                try:
+                    target.rmdir()
+                except OSError:
+                    pass
+
+
 def main(args: list[str]) -> int:
     try:
         validate_debug_run(args, dict(os.environ))
@@ -76,20 +127,41 @@ def main(args: list[str]) -> int:
     if cargo is None:
         print("Test isolation: cargo is not on PATH", file=sys.stderr)
         return 2
+    workspace = Path(__file__).resolve().parents[1] / "codex-rs"
+    remove_leaked_mount_targets(workspace)
     with tempfile.TemporaryDirectory(prefix="corbanu-tests-") as root:
         home = Path(root) / "profile"
         home.mkdir(mode=0o700)
         env = test_environment(dict(os.environ), home)
+        # Keep temp files, and anything a killed sandbox leaves in them, inside
+        # this run's directory instead of the shared system temp directory.
+        scratch = Path(root) / "tmp"
+        scratch.mkdir(mode=0o700)
+        env["TMPDIR"] = str(scratch)
         print(
             "Test isolation: disposable profile; native keyring disabled (debug lane)",
             flush=True,
         )
-        return subprocess.run(
-            [cargo, "nextest", "run", "--no-fail-fast", *args],
-            cwd=Path(__file__).resolve().parents[1] / "codex-rs",
-            env=env,
-            check=False,
-        ).returncode
+        helpers = helper_build_args(args)
+        if helpers:
+            built = subprocess.run(
+                [cargo, "build", *helpers],
+                cwd=workspace,
+                env=env,
+                check=False,
+            )
+            if built.returncode != 0:
+                print("Test isolation: helper binaries failed to build", file=sys.stderr)
+                return built.returncode
+        try:
+            return subprocess.run(
+                [cargo, "nextest", "run", "--no-fail-fast", *args],
+                cwd=workspace,
+                env=env,
+                check=False,
+            ).returncode
+        finally:
+            remove_leaked_mount_targets(workspace)
 
 
 if __name__ == "__main__":

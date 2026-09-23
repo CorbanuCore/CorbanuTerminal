@@ -53,6 +53,7 @@ pub use auth::RefreshTokenError;
 pub use auth::UnauthorizedRecovery;
 pub use auth::default_client;
 pub use auth::delete_provider_api_key;
+pub use auth::discover_openai_auth_metadata;
 pub use auth::enforce_login_restrictions;
 pub use auth::legacy_codex_home_for_product_home;
 pub use auth::load_auth_dot_json;
