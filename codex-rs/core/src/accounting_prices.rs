@@ -88,12 +88,14 @@ fn billed(
     )
 }
 
-/// Subscription capacity: the plan rate that applied at dispatch, and the API
-/// rates the catalogue states for the same route, if it states any.
+/// Subscription capacity: the plan rate that applied at dispatch, if the
+/// catalogue states one, and the API rates it states for the same route, if any.
 ///
-/// A row with no plan side yields nothing. Inventing a burn for a metered row,
-/// or an API equivalent for a row that states no API price, would put a number
-/// in the ledger that no catalogue ever stated.
+/// A metered row reached through a subscription (the vendor published API
+/// rates and no plan figure) records its API equivalent with no plan rate. A
+/// row that states neither yields nothing: inventing a burn, or an equivalent
+/// for a row with no API price, would put a number in the ledger that no
+/// catalogue ever stated.
 pub(super) fn plan_original(
     model: &str,
     provider: &str,
@@ -108,10 +110,11 @@ pub(super) fn plan_original(
     let Some(billing) = billing_for(&catalog.models, model, provider) else {
         return Ok(Vec::new());
     };
-    let Some(burn) = billing.plan_burn_millis_at(accepted_at) else {
-        return Ok(Vec::new());
-    };
+    let burn = billing.plan_burn_millis_at(accepted_at);
     let equivalent = billing.api_key_rates_at(accepted_at);
+    if burn.is_none() && equivalent.is_none() {
+        return Ok(Vec::new());
+    }
     let input = equivalent.map(|(input, _, _)| input);
     let output = equivalent.map(|(_, output, _)| output);
     let read = equivalent.and_then(|(_, _, read)| read);
@@ -139,7 +142,7 @@ pub(super) fn plan_original(
         },
         reference,
         Basis::PlanEquivalent,
-        Some(burn),
+        burn,
     )
 }
 

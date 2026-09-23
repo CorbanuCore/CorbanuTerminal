@@ -795,6 +795,24 @@ fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
     Plan consumption: 140 tokens at the plan rate that applied
     Same tokens at API rates: $0.001610
     ");
+    // A subscription attempt on a row with API rates and no published plan
+    // rate states the equivalent and says the consumption is not stated.
+    let unstated_rate = DayTotals {
+        attempts: 1,
+        plan_attempts: 1,
+        unknown_estimates: 1,
+        plan_burn_milli_tokens: Metric {
+            known: 0,
+            unknown: 1,
+        },
+        equivalent_usd: decimal("0.00161"),
+        ..Default::default()
+    };
+    insta::assert_snapshot!(plan(&unstated_rate).join("\n"), @"
+    Subscription capacity: 1 of 1 attempts, not billed per token
+    Plan consumption: unavailable — no plan rate is stated for 1 of 1 plan attempts
+    Same tokens at API rates: $0.001610
+    ");
     // The per-attempt page states the rate that applied at dispatch.
     let mut q = quote();
     q.plan_burn_millis = Some(500);

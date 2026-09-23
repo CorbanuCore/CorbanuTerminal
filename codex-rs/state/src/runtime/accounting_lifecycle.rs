@@ -92,7 +92,7 @@ impl DayTotals {
             .unknown_estimates
             .checked_add(i64::from(quote.all_buckets_priced.is_none()))
             .context("estimate count overflow")?;
-        let plan = quote.plan_burn_millis.is_some();
+        let plan = quote.is_plan();
         if plan {
             self.equivalent_usd = self.equivalent_usd.add(quote.known_equivalent)?;
             self.unknown_equivalents = self

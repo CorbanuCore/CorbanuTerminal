@@ -535,9 +535,22 @@ fn plan_basis_separates_plan_consumption_from_money_spent() {
     let mut billed_with_burn = snapshot();
     billed_with_burn.plan_burn_millis = Some(1000);
     assert!(quote_observations(&attempt, &rows, &[billed_with_burn]).is_err());
+
+    // A plan snapshot with API rates and no stated plan rate: the equivalent is
+    // known, the consumption is not, and it still counts as plan work.
     let mut plan_without_rate = snapshot();
     plan_without_rate.basis = Basis::PlanEquivalent;
-    assert!(quote_observations(&attempt, &rows, &[plan_without_rate]).is_err());
+    let quote = quote_observations(&attempt, &rows, &[plan_without_rate]).unwrap();
+    assert!(quote.is_plan());
+    assert_eq!(quote.known_subtotal, Decimal::default());
+    assert_eq!(quote.known_equivalent, decimal("0.000306"));
+    assert_eq!(quote.plan_burn_millis, None);
+    assert_eq!(quote.plan_burn_milli_tokens, None);
+    let totals = DayTotals::from_quotes([&quote]).unwrap();
+    assert_eq!(totals.plan_attempts, 1);
+    assert_eq!(totals.equivalent_usd, decimal("0.000306"));
+    assert_eq!(totals.plan_burn_milli_tokens.unknown, 1);
+    assert_eq!(totals.known_usd, Decimal::default());
 }
 
 /// DeepSeek's usage never reports cache writes and its price sheet has none, so
@@ -598,7 +611,7 @@ fn free_cache_write_prices_cache_miss_input_without_inventing_evidence() {
     assert_eq!(q.buckets[0], BucketQuote::Priced(decimal("0.0000372")));
 
     // Only the inclusive dialect's input means miss + hit.
-    let mut native = a.clone();
+    let mut native = a;
     native.dialect = Dialect::NativeAnthropic;
     let q = quote_observations(&native, &rows, &[sheet(Some("0"))]).unwrap();
     assert_eq!(q.buckets[2], BucketQuote::MissingUsage);

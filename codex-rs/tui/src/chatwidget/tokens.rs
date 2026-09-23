@@ -367,7 +367,7 @@ fn unpriced_rows<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -> 
         // state - is already stated as such beside the plan rate that applied,
         // and naming it here would assert unstated money next to a line saying
         // the turn was never billed that way.
-        if quote.plan_burn_millis.is_some() {
+        if quote.is_plan() {
             continue;
         }
         let usage = &quote.usage;
@@ -493,6 +493,11 @@ fn plan(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
             "Plan consumption: {} tokens at the plan rate that applied",
             rate_scaled(burn.known)
         )
+    } else if burn.known == 0 {
+        format!(
+            "Plan consumption: unavailable — no plan rate is stated for {} of {} plan attempts",
+            burn.unknown, totals.plan_attempts
+        )
     } else {
         format!(
             "Plan consumption: {} tokens at the plan rate, plus {} attempts with no stateable figure",
@@ -584,6 +589,8 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
             "Plan rate at dispatch: {}x",
             rate_scaled(i64::from(burn))
         ));
+    } else if q.is_plan() {
+        lines.push("Plan rate at dispatch: not stated by the vendor".into());
     }
     let u = &q.usage;
     for (index, (label, value)) in METRICS

@@ -446,10 +446,21 @@ fn accounting_plan_projection_states_the_rate_and_only_stated_equivalents() {
         Some(1000)
     );
 
-    // Nothing is stated for a metered row, another provider's row, an unknown
-    // slug, or a tier the catalogue does not quote.
+    // A metered row reached through a subscription: the vendor published API
+    // rates and no plan figure, so the equivalent is stated and the plan rate
+    // is not invented.
+    let metered = plan_original("gpt-6-sol", "openai", scope, now, Some("default"))
+        .unwrap()
+        .remove(0);
+    assert_eq!(metered.basis, Basis::PlanEquivalent);
+    assert_eq!(metered.plan_burn_millis, None);
+    assert_eq!(metered.rates.noncached, Some(rate(2000).unwrap()));
+    assert_eq!(metered.rates.output, Some(rate(10000).unwrap()));
+    assert_eq!(metered.rates.read, Some(rate(200).unwrap()));
+
+    // Nothing is stated for another provider's row, an unknown slug, or a tier
+    // the catalogue does not quote.
     for (model, provider, tier) in [
-        ("claude-opus-5", "anthropic", None),
         ("claude-opus-5-plan", "anthropic", None),
         ("no-such-model", "claude-plan", None),
         ("gpt-5.6-luna", "openai", Some("priority")),

@@ -213,10 +213,11 @@ impl Snapshot {
                 .is_none_or(|end| i64::from(end) > start),
             "invalid snapshot interval"
         );
-        // A plan rate is the whole point of the plan basis, and it has no meaning
-        // under billed rates: keep the two from being mistaken for each other.
+        // A plan rate has no meaning under billed rates: keep the two from
+        // being mistaken for each other. A plan snapshot may state no plan rate
+        // when the vendor published API rates but no subscription figure.
         ensure!(
-            self.plan_burn_millis.is_some() == matches!(self.basis, Basis::PlanEquivalent),
+            self.plan_burn_millis.is_none() || matches!(self.basis, Basis::PlanEquivalent),
             "plan rate does not match price basis"
         );
         Ok(())
@@ -242,6 +243,8 @@ pub enum BucketQuote {
 /// failed verification stops accounting - which stops every accounted turn.
 pub const PRICING_RULES: u16 = 1;
 
+// serde's `skip_serializing_if` passes the field by reference.
+#[allow(clippy::trivially_copy_pass_by_ref)]
 fn is_first_rules(rules: &u16) -> bool {
     *rules == 1
 }
@@ -271,6 +274,18 @@ pub struct ObservationQuote {
     /// so every estimate recorded before versioning keeps its exact bytes.
     #[serde(skip_serializing_if = "is_first_rules")]
     pub pricing_rules: u16,
+}
+
+impl ObservationQuote {
+    /// Whether the attempt ran on subscription capacity, whether or not a plan
+    /// rate was stated for it.
+    pub fn is_plan(&self) -> bool {
+        self.plan_burn_millis.is_some()
+            || self
+                .snapshot
+                .as_ref()
+                .is_some_and(|snapshot| matches!(snapshot.basis, Basis::PlanEquivalent))
+    }
 }
 
 /// Token counts for the four priced buckets. Usage stays exactly as observed -
