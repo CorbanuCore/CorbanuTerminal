@@ -253,3 +253,63 @@ async fn vercel_server_state_rejection_self_heals_with_full_context_retry() -> R
     );
     Ok(())
 }
+
+/// Some gateway/model pairs (Kimi K3 on Vercel) reject every
+/// `previous_response_id` continuation. After the first rejection the session
+/// must stay on full-context requests instead of paying a failed round trip on
+/// every later turn.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn vercel_server_state_rejection_is_sticky_for_the_session() -> Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let server = responses::start_mock_server().await;
+    let sse_ok = |response_id: &str, text: &str| {
+        ResponseTemplate::new(200)
+            .insert_header("content-type", "text/event-stream")
+            .set_body_raw(
+                sse(vec![
+                    ev_response_created(response_id),
+                    ev_assistant_message(&format!("msg-{response_id}"), text),
+                    ev_completed(response_id),
+                ]),
+                "text/event-stream",
+            )
+    };
+    let response_mock = mount_response_sequence(
+        &server,
+        vec![
+            sse_ok("resp1", "hi"),
+            ResponseTemplate::new(400).set_body_json(serde_json::json!({
+                "error": {
+                    "type": "AI_APICallError",
+                    "message": "Kimi K3 tool messages need a resolvable tool name"
+                }
+            })),
+            sse_ok("resp2", "recovered"),
+            sse_ok("resp3", "still fine"),
+        ],
+    )
+    .await;
+
+    let mut builder = vercel_test_codex();
+    let test = builder.build(&server).await?;
+    test.submit_turn("hello").await?;
+    test.submit_turn("continue please").await?;
+    test.submit_turn("and once more").await?;
+
+    let requests = response_mock.requests();
+    assert_eq!(
+        requests.len(),
+        4,
+        "only the first continuation may be rejected"
+    );
+    assert_eq!(previous_response_id(&requests[1]).as_deref(), Some("resp1"));
+    assert_eq!(previous_response_id(&requests[2]), None);
+    assert_eq!(
+        previous_response_id(&requests[3]),
+        None,
+        "after a rejection the session must not retry server-state continuations"
+    );
+    assert!(input_has_user_message(&requests[3]));
+    Ok(())
+}

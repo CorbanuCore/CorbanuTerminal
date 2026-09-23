@@ -262,6 +262,10 @@ struct ModelClientState {
     agent_identity_session_fallback: AgentIdentitySessionFallback,
     cached_websocket_session: StdMutex<WebsocketSession>,
     server_conversation_state: SharedServerConversationState,
+    /// Set once the gateway rejects a `previous_response_id` continuation for
+    /// this session. Some upstream models (Kimi K3 on Vercel) reject every
+    /// incremental continuation; retrying it each turn doubles the requests.
+    http_server_state_rejected: AtomicBool,
 }
 
 /// Resolved API client setup for a single request attempt.
@@ -757,6 +761,7 @@ impl ModelClient {
                 agent_identity_session_fallback: AgentIdentitySessionFallback::default(),
                 cached_websocket_session: StdMutex::new(WebsocketSession::default()),
                 server_conversation_state: Arc::new(StdMutex::new(None)),
+                http_server_state_rejected: AtomicBool::new(false),
             }),
             agent_identity_policy,
             prompt_cache_key_override: None,
@@ -1012,6 +1017,7 @@ impl ModelClient {
                 agent_identity_session_fallback: self.state.agent_identity_session_fallback.clone(),
                 cached_websocket_session: StdMutex::new(WebsocketSession::default()),
                 server_conversation_state: Arc::new(StdMutex::new(None)),
+                http_server_state_rejected: AtomicBool::new(false),
             }),
             agent_identity_policy: self.agent_identity_policy,
             prompt_cache_key_override: self.prompt_cache_key_override.clone(),
@@ -3146,7 +3152,12 @@ impl ModelClientSession {
                 responses_metadata,
             )?;
             let logical_request = request.clone();
-            let uses_http_server_state = self.client.state.provider.info().is_vercel();
+            let uses_http_server_state = self.client.state.provider.info().is_vercel()
+                && !self
+                    .client
+                    .state
+                    .http_server_state_rejected
+                    .load(Ordering::Relaxed);
             let append_user_turn = self
                 .client
                 .responses_input_needs_synthetic_user_turn(&logical_request.input);
@@ -3241,8 +3252,12 @@ impl ModelClientSession {
                         /*output_items*/ &[],
                     );
                     warn!(
-                        "server-state responses continuation rejected with 400; clearing server conversation state and retrying with full context"
+                        "server-state responses continuation rejected with 400; using full-context requests for the rest of this session"
                     );
+                    self.client
+                        .state
+                        .http_server_state_rejected
+                        .store(true, Ordering::Relaxed);
                     self.clear_http_server_conversation_state();
                     server_state_retry_used = true;
                     continue;
