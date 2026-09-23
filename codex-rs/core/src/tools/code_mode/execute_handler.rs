@@ -128,10 +128,21 @@ impl CodeModeExecuteHandler {
                 .execute(session, turn, call_id, source)
                 .await
                 .map(boxed_tool_output),
-            None => Err(FunctionCallError::RespondToModel(format!(
-                "{PUBLIC_TOOL_NAME} expects raw JavaScript source text"
-            ))),
+            None => Err(FunctionCallError::RespondToModel(
+                invalid_exec_payload_message(&payload),
+            )),
         }
+    }
+}
+
+fn invalid_exec_payload_message(payload: &ToolPayload) -> String {
+    match payload {
+        ToolPayload::Function { .. } => format!(
+            "{PUBLIC_TOOL_NAME} arguments must be a JSON object with one string field `input` \
+             holding the JavaScript source. The call was not run: its arguments were not valid \
+             JSON of that shape. Escape every `\"` and `\\` inside `input`, then retry."
+        ),
+        _ => format!("{PUBLIC_TOOL_NAME} expects raw JavaScript source text"),
     }
 }
 

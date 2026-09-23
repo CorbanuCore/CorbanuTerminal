@@ -3891,6 +3891,58 @@ fn append_chat_messages_for_response_item(
     );
 }
 
+/// Largest slice of malformed tool-call arguments replayed to the model.
+const MALFORMED_CHAT_ARGUMENTS_REPLAY_CHARS: usize = 4_000;
+
+/// Chat Completions providers reject tool calls whose arguments are not JSON.
+/// Rather than dropping such a call and the error it produced, which leaves the
+/// model unaware that its call failed, replay the raw text inside a JSON
+/// object so the call and its error output stay visible.
+fn chat_replay_function_arguments(arguments: String) -> String {
+    if serde_json::from_str::<Value>(&arguments).is_ok() {
+        return arguments;
+    }
+    let total_chars = arguments.chars().count();
+    let mut raw: String = arguments
+        .chars()
+        .take(MALFORMED_CHAT_ARGUMENTS_REPLAY_CHARS)
+        .collect();
+    if total_chars > MALFORMED_CHAT_ARGUMENTS_REPLAY_CHARS {
+        raw.push_str(&format!(
+            "…[{} more characters omitted]",
+            total_chars - MALFORMED_CHAT_ARGUMENTS_REPLAY_CHARS
+        ));
+    }
+    json!({ "malformed_arguments": raw }).to_string()
+}
+
+fn push_chat_tool_call(
+    messages: &mut Vec<ChatMessage>,
+    call_id: String,
+    name: String,
+    arguments: String,
+) {
+    let tool_call = ChatToolCall {
+        id: call_id,
+        kind: "function".to_string(),
+        function: ChatToolFunction { name, arguments },
+    };
+    if let Some(message) = messages
+        .last_mut()
+        .filter(|message| message.role == "assistant" && message.tool_call_id.is_none())
+    {
+        message.tool_calls.push(tool_call);
+    } else {
+        messages.push(ChatMessage {
+            role: "assistant".to_string(),
+            content: None,
+            reasoning_content: None,
+            tool_call_id: None,
+            tool_calls: vec![tool_call],
+        });
+    }
+}
+
 fn append_chat_messages_for_response_items(
     items: impl IntoIterator<Item = ResponseItem>,
     messages: &mut Vec<ChatMessage>,
@@ -4008,41 +4060,20 @@ fn append_chat_message_for_response_item(
             arguments,
             call_id,
             ..
+        } => {
+            let arguments = chat_replay_function_arguments(arguments);
+            push_chat_tool_call(messages, call_id, name, arguments);
         }
-        | ResponseItem::CustomToolCall {
+        ResponseItem::CustomToolCall {
             name,
-            input: arguments,
+            input,
             call_id,
             ..
         } => {
-            if serde_json::from_str::<Value>(&arguments).is_err() {
-                debug!(
-                    call_id = %call_id,
-                    name = %name,
-                    "skipping malformed historical chat tool call arguments during replay"
-                );
-                skipped_tool_call_ids.insert(call_id);
-                return;
-            }
-            let tool_call = ChatToolCall {
-                id: call_id,
-                kind: "function".to_string(),
-                function: ChatToolFunction { name, arguments },
-            };
-            if let Some(message) = messages
-                .last_mut()
-                .filter(|message| message.role == "assistant" && message.tool_call_id.is_none())
-            {
-                message.tool_calls.push(tool_call);
-            } else {
-                messages.push(ChatMessage {
-                    role: "assistant".to_string(),
-                    content: None,
-                    reasoning_content: None,
-                    tool_call_id: None,
-                    tool_calls: vec![tool_call],
-                });
-            }
+            // Chat Completions exposes freeform tools as `{"input": string}`
+            // functions, so replay custom calls in that same shape.
+            let arguments = json!({ "input": input }).to_string();
+            push_chat_tool_call(messages, call_id, name, arguments);
         }
         ResponseItem::FunctionCallOutput {
             call_id, output, ..
@@ -4967,7 +4998,7 @@ fn responses_tool_to_anthropic_tool(mut tool: Value) -> Option<Value> {
 }
 
 fn freeform_tool_to_anthropic_tool(tool: &codex_tools::FreeformTool) -> Value {
-    let chat_tool = freeform_tool_to_chat_tool(tool, /*strip_strict*/ true);
+    let chat_tool = freeform_tool_to_chat_tool(tool);
     let function = chat_tool
         .get("function")
         .and_then(Value::as_object)
@@ -5010,7 +5041,7 @@ fn tool_spec_to_chat_tool(
                 })
             },
         )),
-        ToolSpec::Freeform(tool) => Some(Ok(freeform_tool_to_chat_tool(tool, strip_strict))),
+        ToolSpec::Freeform(tool) => Some(Ok(freeform_tool_to_chat_tool(tool))),
         ToolSpec::WebSearch { .. } if zai_native_web_search => Some(Ok(zai_web_search_tool())),
         ToolSpec::Namespace(_) | ToolSpec::ToolSearch { .. } | ToolSpec::WebSearch { .. } => None,
     }
@@ -5077,13 +5108,19 @@ fn responses_tool_to_chat_tool(mut tool: Value, strip_strict: bool) -> Option<Va
     }))
 }
 
-fn freeform_tool_to_chat_tool(tool: &codex_tools::FreeformTool, strip_strict: bool) -> Value {
+/// Wraps a freeform tool as a Chat Completions function with one `input`
+/// string. The wrapper is never `strict`: constrained decoding cannot recover
+/// from an unescaped quote in the raw input, because once the string closes the
+/// schema only permits whitespace. GPT-6 Sol spent 65,536 completion tokens on
+/// whitespace that way. Without `strict`, the same slip yields malformed
+/// arguments that the tool rejects with a correctable error.
+fn freeform_tool_to_chat_tool(tool: &codex_tools::FreeformTool) -> Value {
     let description = chat_completions_freeform_tool_description(tool);
     let input_description = format!(
         "Raw {} input. Put the tool payload directly in this string; do not nest JSON, shell commands, or heredocs inside it.",
         tool.name.as_str()
     );
-    let mut value = json!({
+    json!({
         "type": "function",
         "function": {
             "name": tool.name.as_str(),
@@ -5099,14 +5136,8 @@ fn freeform_tool_to_chat_tool(tool: &codex_tools::FreeformTool, strip_strict: bo
                 "required": ["input"],
                 "additionalProperties": false,
             },
-            "strict": true,
         },
-    });
-    if strip_strict && let Some(function) = value.get_mut("function").and_then(Value::as_object_mut)
-    {
-        function.remove("strict");
-    }
-    value
+    })
 }
 
 fn chat_completions_freeform_tool_description(tool: &codex_tools::FreeformTool) -> String {
