@@ -441,11 +441,13 @@ fn estimate(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
     let unknown = totals
         .unknown_estimates
         .saturating_sub(totals.plan_attempts);
-    // Nothing this day was billed per token. Saying the cost is "unknown" here
-    // was false and read as a failure: the plan lines below state the day
-    // exactly, and there is no per-token spend that went missing.
+    // Nothing in these totals was billed per token. Saying the cost is
+    // "unknown" here was false and read as a failure: the plan lines below state
+    // it exactly, and there is no per-token spend that went missing. The same
+    // totals back a whole day and a single attempt's page, so the sentence speaks
+    // only for the attempts it was computed from, never for the day around them.
     if attempts == 0 {
-        let mut lines = vec!["No attempt this day was billed per token.".to_string()];
+        let mut lines = vec!["No recorded attempt here was billed per token.".to_string()];
         lines.extend(plan(totals));
         return lines;
     }

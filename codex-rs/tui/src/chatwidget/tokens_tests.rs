@@ -737,7 +737,7 @@ fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
     // Plan work with an API equivalent: the plan rate, what it consumed, and
     // what the same tokens would have cost - none of it spend.
     insta::assert_snapshot!(estimate(&plan_day(decimal("0.00161"), 140_000, 0)).join("\n"), @"
-    No attempt this day was billed per token.
+    No recorded attempt here was billed per token.
     Subscription capacity: 2 of 2 attempts, not billed per token
     Plan consumption: 140 tokens at the plan rate that applied
     Same tokens at API rates: $0.001610
@@ -745,7 +745,7 @@ fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
     // A plan row the catalogue states no API price for says so, rather than
     // reporting zero.
     insta::assert_snapshot!(estimate(&plan_day(Decimal::default(), 280_000, 2)).join("\n"), @"
-    No attempt this day was billed per token.
+    No recorded attempt here was billed per token.
     Subscription capacity: 2 of 2 attempts, not billed per token
     Plan consumption: 280 tokens at the plan rate that applied
     Same tokens at API rates: unavailable — the catalogue states no API price for 2 of 2 plan attempts
@@ -797,11 +797,12 @@ fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
     // The per-attempt page states the rate that applied at dispatch.
     let mut q = quote();
     q.plan_burn_millis = Some(500);
-    assert!(
-        attempt_text(&q)
-            .join("\n")
-            .contains("Plan rate at dispatch: 0.500x")
-    );
+    let page = attempt_text(&q).join("\n");
+    assert!(page.contains("Plan rate at dispatch: 0.500x"));
+    // A single plan attempt's page speaks for that attempt only. The same day
+    // may hold billed attempts, so a day-wide claim here could be false.
+    assert!(page.contains("No recorded attempt here was billed per token."));
+    assert!(!page.contains("this day"), "{page}");
 }
 
 #[test]

@@ -911,6 +911,10 @@ fn claude_plan_fable_versions_use_exact_upstream_slugs() {
     for (plan_model, upstream_model) in [
         (CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_FABLE_5_MODEL),
         (CLAUDE_FABLE_5_1_PLAN_MODEL, CLAUDE_FABLE_5_1_MODEL),
+        (
+            codex_model_provider_info::CLAUDE_OPUS_5_5_PLAN_MODEL,
+            codex_model_provider_info::ANTHROPIC_OPUS_5_5_MODEL,
+        ),
     ] {
         assert_eq!(super::anthropic_upstream_model(plan_model), upstream_model);
         assert!(super::is_claude_plan_model_slug(plan_model));

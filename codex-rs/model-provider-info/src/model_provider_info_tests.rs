@@ -1455,16 +1455,16 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider(CLAUDE_FABLE_5_MODEL, AMBIENT_PROVIDER_ID),
         Some(CLAUDE_PLAN_PROVIDER_ID)
     );
-    // Opus 5.5 is corrected onto Anthropic rather than the plan route the other
-    // bare Claude slugs take, because the plan route has no row for it and
-    // would substitute `claude-opus-5-plan` without saying so.
+    // Bare Opus 5.5 off both of its routes is corrected onto the provider its
+    // row states. On the subscription it is left alone: `claude-plan`
+    // translates it exactly, and moving it would turn plan work into spend.
     assert_eq!(
         corrected_catalog_provider(ANTHROPIC_OPUS_5_5_MODEL, AMBIENT_PROVIDER_ID),
         Some(ANTHROPIC_PROVIDER_ID)
     );
     assert_eq!(
         corrected_catalog_provider(ANTHROPIC_OPUS_5_5_MODEL, CLAUDE_PLAN_PROVIDER_ID),
-        Some(ANTHROPIC_PROVIDER_ID)
+        None
     );
     assert_eq!(
         corrected_catalog_provider(ANTHROPIC_OPUS_5_5_MODEL, ANTHROPIC_PROVIDER_ID),
@@ -1473,6 +1473,12 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
     // The plan slug is the plan route's, and survives being read anywhere else.
     assert_eq!(
         corrected_catalog_provider(CLAUDE_OPUS_5_5_PLAN_MODEL, AMBIENT_PROVIDER_ID),
+        Some(CLAUDE_PLAN_PROVIDER_ID)
+    );
+    // Only the plan slug's own arm moves it off metered Anthropic; the generic
+    // `claude-*` correction exempts that provider.
+    assert_eq!(
+        corrected_catalog_provider(CLAUDE_OPUS_5_5_PLAN_MODEL, ANTHROPIC_PROVIDER_ID),
         Some(CLAUDE_PLAN_PROVIDER_ID)
     );
     // Selecting bare Opus 5.5 on the plan provider resolves to the plan row

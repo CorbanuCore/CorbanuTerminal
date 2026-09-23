@@ -357,12 +357,10 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     ) {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
-    // Opus 5.5 has no subscription route in this catalogue. The other bare
-    // Claude slugs below are deliberately claimed by `claude-plan`, but each
-    // has an exact plan translation; this one would fall through
-    // `resolve_model_for_provider`'s catch-all and become `claude-opus-5-plan`,
-    // which is a different model at a different price. It owns the provider its
-    // own catalogue row states instead.
+    // Bare Opus 5.5 is catalogued on the metered `anthropic` provider, so the
+    // picker owns it there. `claude-plan` also serves it, translated exactly to
+    // `claude-opus-5-5-plan`, so `corrected_catalog_provider` leaves that pair
+    // alone rather than moving a subscription session onto per-token billing.
     if model == ANTHROPIC_OPUS_5_5_MODEL {
         return Some(ANTHROPIC_PROVIDER_ID);
     }
@@ -482,11 +480,15 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
-    // Same reason as in `canonical_catalog_provider`: correcting Opus 5.5 onto
-    // `claude-plan` would hand the session `claude-opus-5-plan`, silently
-    // swapping the model and its rate. Correct it onto the provider its row
-    // states, where the slug survives untranslated.
-    if model == ANTHROPIC_OPUS_5_5_MODEL && provider != ANTHROPIC_PROVIDER_ID {
+    // Bare Opus 5.5 is servable on its own metered row and, translated exactly
+    // to `claude-opus-5-5-plan`, on the subscription. Anywhere else it is
+    // corrected onto the provider its row states, where the slug survives
+    // untranslated. Moving a `claude-plan` session off the subscription would
+    // silently turn plan capacity into per-token spend.
+    if model == ANTHROPIC_OPUS_5_5_MODEL
+        && provider != ANTHROPIC_PROVIDER_ID
+        && provider != CLAUDE_PLAN_PROVIDER_ID
+    {
         return Some(ANTHROPIC_PROVIDER_ID);
     }
     if model.starts_with("claude-")
