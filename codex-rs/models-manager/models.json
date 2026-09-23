@@ -2353,7 +2353,7 @@
       },
       "display_name": "GPT-6 Sol",
       "description": "Cost-efficient high-end GPT-6 reasoning and coding, below Astra and above Luna. Requires eligible OpenAI account access; ChatGPT sign-in may reject it.",
-      "default_reasoning_level": "medium",
+      "default_reasoning_level": "high",
       "supported_reasoning_levels": [
         {
           "effort": "low",

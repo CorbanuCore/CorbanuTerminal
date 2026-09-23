@@ -969,6 +969,17 @@ async fn default_falls_back_to_gpt_5_6_sol_when_the_server_hides_gpt_6_sol() {
     assert_eq!(defaults, vec!["gpt-5.6-sol"]);
 }
 
+#[test]
+fn gpt_6_sol_defaults_to_high_effort() {
+    let sol = crate::bundled_models_response()
+        .expect("bundled models should parse")
+        .models
+        .into_iter()
+        .find(|model| model.slug == "gpt-6-sol")
+        .expect("bundled gpt-6-sol");
+    assert_eq!(sol.default_reasoning_level, Some(ReasoningEffort::High));
+}
+
 #[tokio::test]
 async fn default_ignores_a_server_list_that_names_neither_sol_candidate() {
     let remote_models = crate::bundled_models_response()
