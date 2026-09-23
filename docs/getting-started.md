@@ -36,7 +36,7 @@ Corbanu Terminal currently ships these provider paths:
 | Ambient coding plan       | Ambient            | `z-ai/glm-5.2`                                                                                                 |
 | Kimi coding plan          | Kimi Code          | `k3`                                                                                                             |
 | Z.AI coding plan          | Z.AI               | `glm-5.2`                                                                                                        |
-| Direct DeepSeek Responses | DeepSeek           | `deepseek-v4-flash` (DeepSeek V4 Flash 0731)                                                                     |
+| Direct DeepSeek Responses | DeepSeek           | `deepseek-flash` (DeepSeek V4.1 Flash); legacy `deepseek-v4-flash`, now served by V4.1 Flash                     |
 | Metered model gateway     | OpenRouter         | `deepseek/deepseek-v4-flash-0731`, `deepseek/deepseek-v4-pro`, `moonshotai/kimi-k3`, and other catalogued routes |
 | Meta API                  | Meta               | `muse-spark-1.1`                                                                                                 |
 | Metered GLM               | Baseten            | `zai-org/GLM-5.2`                                                                                                |
@@ -54,7 +54,7 @@ Open `/model` to switch models. You can also start with a specific model:
 
 ```bash
 corbanu -m glm-5.2
-corbanu -m deepseek-v4-flash
+corbanu -m deepseek-flash
 corbanu -m deepseek/deepseek-v4-flash-0731
 corbanu -m gpt-5.6-luna
 ```

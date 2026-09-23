@@ -73,7 +73,7 @@ DeepSeek direct:
 
 ```toml
 model_provider = "deepseek"
-model = "deepseek-v4-flash"
+model = "deepseek-flash"
 ```
 
 Z.AI:
@@ -139,7 +139,7 @@ You can also select a model per run:
 ```bash
 corbanu -m glm-5.2
 corbanu -m gpt-5.6-luna
-corbanu -m deepseek-v4-flash
+corbanu -m deepseek-flash
 corbanu -m deepseek/deepseek-v4-flash-0731
 corbanu -m zai-org/GLM-5.2
 corbanu -m zai/glm-5.2
