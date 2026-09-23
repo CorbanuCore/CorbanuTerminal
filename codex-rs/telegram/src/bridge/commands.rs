@@ -131,13 +131,13 @@ impl BridgeRuntime {
         }
 
         self.sessions
-            .set_model(chat_id, resolution.model.clone(), choice.provider.clone())
+            .set_model(chat_id, choice.model.clone(), choice.provider.clone())
             .await?;
         let applied_to_thread = self
             .apply_thread_settings_update_if_thread_loaded(
                 chat_id,
                 ThreadSettingsUpdateParams {
-                    model: Some(resolution.model.clone()),
+                    model: Some(choice.model.clone()),
                     model_provider: Some(choice.provider.clone()),
                     ..ThreadSettingsUpdateParams::default()
                 },
@@ -153,12 +153,12 @@ impl BridgeRuntime {
         let headline = if choice.changed {
             format!(
                 "Model changed: {old_model} ({old_provider}) -> {} ({}).",
-                resolution.model, choice.provider
+                choice.model, choice.provider
             )
         } else {
             format!(
                 "Model changed: {old_model} -> {}.\nProvider unchanged: {}.",
-                resolution.model, choice.provider
+                choice.model, choice.provider
             )
         };
         self.notify_after_effect(

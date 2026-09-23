@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use codex_core::config::Config;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
+use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::claude_plan_translation;
 use codex_model_provider_info::corrected_catalog_provider;
 use sha2::Digest;
 use sha2::Sha256;
@@ -154,6 +156,9 @@ pub(crate) fn resolve_model(input: &str, catalog: &[CatalogModel]) -> ModelResol
 pub(crate) struct ProviderChoice {
     pub provider: String,
     pub changed: bool,
+    /// The slug to run: a bare Claude slug on the subscription becomes its exact
+    /// plan slug, which the subscription requires and the ledger prices.
+    pub model: String,
 }
 
 /// Resolve the provider for `model`.
@@ -165,15 +170,16 @@ pub(crate) struct ProviderChoice {
 /// routing decision — callers must report `changed: false` rather than print a
 /// provider next to the new model and imply a switch happened.
 pub(crate) fn provider_for_model(model: &str, current_provider: &str) -> ProviderChoice {
-    match corrected_catalog_provider(model, current_provider) {
-        Some(provider) => ProviderChoice {
-            provider: provider.to_string(),
-            changed: provider != current_provider,
-        },
-        None => ProviderChoice {
-            provider: current_provider.to_string(),
-            changed: false,
-        },
+    let provider = corrected_catalog_provider(model, current_provider).unwrap_or(current_provider);
+    let model = if provider == CLAUDE_PLAN_PROVIDER_ID {
+        claude_plan_translation(model).unwrap_or(model)
+    } else {
+        model
+    };
+    ProviderChoice {
+        provider: provider.to_string(),
+        changed: provider != current_provider,
+        model: model.to_string(),
     }
 }
 
