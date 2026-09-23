@@ -2632,3 +2632,142 @@ async fn non_chatgpt_codex_endpoints_omit_attestation_generation() {
     );
     assert_eq!(attestation_calls.load(Ordering::Relaxed), 0);
 }
+
+#[test]
+fn chat_freeform_tool_wrappers_are_never_strict() {
+    let tool = codex_tools::ToolSpec::Freeform(codex_tools::FreeformTool {
+        name: "exec".to_string(),
+        description: "Run JavaScript.".to_string(),
+        format: codex_tools::FreeformToolFormat {
+            r#type: "grammar".to_string(),
+            syntax: "lark".to_string(),
+            definition: "start: /.+/".to_string(),
+        },
+    });
+
+    for strip_strict in [false, true] {
+        let tools = super::create_tools_json_for_chat_completions(
+            std::slice::from_ref(&tool),
+            strip_strict,
+            /*zai_native_web_search*/ false,
+        )
+        .expect("chat tools");
+        let function = &tools[0]["function"];
+        assert_eq!(function["name"], "exec");
+        assert_eq!(function.get("strict"), None, "strip_strict={strip_strict}");
+        assert_eq!(
+            function["parameters"]["required"],
+            serde_json::json!(["input"])
+        );
+    }
+    assert_eq!(
+        super::freeform_tool_to_anthropic_tool(match &tool {
+            codex_tools::ToolSpec::Freeform(tool) => tool,
+            _ => unreachable!(),
+        })
+        .get("strict"),
+        None
+    );
+}
+
+#[test]
+fn chat_replay_keeps_malformed_tool_calls_and_their_errors_visible() {
+    let call = |arguments: &str, call_id: &str| ResponseItem::FunctionCall {
+        id: None,
+        name: "exec".to_string(),
+        namespace: None,
+        arguments: arguments.to_string(),
+        call_id: call_id.to_string(),
+        encrypted_function_args: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let output = |call_id: &str, text: &str| ResponseItem::FunctionCallOutput {
+        id: None,
+        call_id: call_id.to_string(),
+        output: FunctionCallOutputPayload::from_text(text.to_string()),
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let unescaped_quote = r#"{"input":"load_csv("x,y")"}"#;
+    let truncated_stream = format!(r#"{{"input":"{}"#, "a".repeat(5_000));
+    let mut messages = Vec::new();
+    let mut skipped = std::collections::HashSet::new();
+
+    super::append_chat_messages_for_response_items(
+        vec![
+            call(unescaped_quote, "call-quote"),
+            output("call-quote", "exec arguments must be a JSON object"),
+            call(&truncated_stream, "call-truncated"),
+            output("call-truncated", "exec arguments must be a JSON object"),
+            call(r#"{"input":"text(1)"}"#, "call-ok"),
+            output("call-ok", "1"),
+        ],
+        &mut messages,
+        &mut skipped,
+        ChatReasoningProtocol::Independent,
+    );
+
+    let calls: Vec<_> = messages
+        .iter()
+        .flat_map(|message| message.tool_calls.iter())
+        .map(|call| {
+            let arguments: serde_json::Value =
+                serde_json::from_str(&call.function.arguments).expect("replayed JSON arguments");
+            (call.id.clone(), arguments)
+        })
+        .collect();
+    assert_eq!(calls.len(), 3);
+    assert_eq!(
+        calls[0],
+        (
+            "call-quote".to_string(),
+            serde_json::json!({ "malformed_arguments": unescaped_quote })
+        )
+    );
+    let truncated = calls[1].1["malformed_arguments"]
+        .as_str()
+        .expect("truncated raw arguments");
+    assert!(truncated.starts_with(r#"{"input":"aaa"#));
+    assert!(truncated.ends_with("…[1010 more characters omitted]"));
+    assert_eq!(
+        calls[2],
+        (
+            "call-ok".to_string(),
+            serde_json::json!({ "input": "text(1)" })
+        )
+    );
+
+    let outputs: Vec<_> = messages
+        .iter()
+        .filter(|message| message.role == "tool")
+        .filter_map(|message| message.tool_call_id.clone())
+        .collect();
+    assert_eq!(outputs, vec!["call-quote", "call-truncated", "call-ok"]);
+    assert!(skipped.is_empty());
+}
+
+#[test]
+fn chat_replay_wraps_custom_tool_calls_as_input_functions() {
+    let mut messages = Vec::new();
+    let mut skipped = std::collections::HashSet::new();
+    super::append_chat_messages_for_response_items(
+        vec![ResponseItem::CustomToolCall {
+            id: None,
+            status: None,
+            call_id: "call-patch".to_string(),
+            name: "apply_patch".to_string(),
+            namespace: None,
+            input: "*** Begin Patch\n*** End Patch".to_string(),
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        &mut messages,
+        &mut skipped,
+        ChatReasoningProtocol::Independent,
+    );
+
+    let call = &messages[0].tool_calls[0];
+    assert_eq!(call.function.name, "apply_patch");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&call.function.arguments).expect("JSON"),
+        serde_json::json!({ "input": "*** Begin Patch\n*** End Patch" })
+    );
+}
