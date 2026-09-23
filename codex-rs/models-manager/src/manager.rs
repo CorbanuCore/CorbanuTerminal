@@ -141,21 +141,26 @@ pub trait ModelsManager: fmt::Debug + Send + Sync {
         presets = ModelPreset::filter_by_auth(presets, uses_codex_backend);
 
         ModelPreset::mark_default_by_picker_visibility(&mut presets);
-        let advertised = self
+        let candidates = [OPENAI_DEFAULT_MODEL, OPENAI_FALLBACK_DEFAULT_MODEL];
+        let pick = |advertised: Option<&[String]>| {
+            candidates
+                .iter()
+                .filter(|slug| {
+                    advertised
+                        .is_none_or(|advertised| advertised.iter().any(|model| model == **slug))
+                })
+                .find_map(|slug| {
+                    presets
+                        .iter()
+                        .position(|preset| preset.model == *slug && preset.show_in_picker)
+                })
+        };
+        // Prefer a candidate the server advertised; a list that names neither
+        // (or no list at all) says nothing about them, so keep catalogue order.
+        let default_index = self
             .server_advertised_models()
-            .filter(|advertised| !advertised.is_empty());
-        let default_index = [OPENAI_DEFAULT_MODEL, OPENAI_FALLBACK_DEFAULT_MODEL]
-            .iter()
-            .filter(|slug| {
-                advertised
-                    .as_ref()
-                    .is_none_or(|advertised| advertised.iter().any(|model| model == **slug))
-            })
-            .find_map(|slug| {
-                presets
-                    .iter()
-                    .position(|preset| preset.model == *slug && preset.show_in_picker)
-            });
+            .and_then(|advertised| pick(Some(&advertised)))
+            .or_else(|| pick(None));
         if let Some(sol_index) = default_index {
             for preset in &mut presets {
                 preset.is_default = false;

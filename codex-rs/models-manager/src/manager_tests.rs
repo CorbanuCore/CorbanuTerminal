@@ -921,6 +921,29 @@ async fn default_falls_back_to_gpt_5_6_sol_when_the_server_hides_gpt_6_sol() {
 }
 
 #[tokio::test]
+async fn default_ignores_a_server_list_that_names_neither_sol_candidate() {
+    let remote_models = crate::bundled_models_response()
+        .expect("bundled models should parse")
+        .models
+        .into_iter()
+        .filter(|model| model.slug == "gpt-5.6-luna")
+        .collect::<Vec<_>>();
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = TestModelsEndpoint::new(vec![remote_models]);
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+
+    let available = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
+    let defaults = available
+        .iter()
+        .filter(|model| model.is_default)
+        .map(|model| model.model.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(defaults, vec!["gpt-6-sol"]);
+}
+
+#[tokio::test]
 async fn astra_remote_overlay_keeps_manual_policy_and_supported_efforts() {
     let bundled = crate::bundled_models_response()
         .expect("bundled catalog")
