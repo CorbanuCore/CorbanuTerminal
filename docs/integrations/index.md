@@ -52,7 +52,7 @@ Avoid spreading provider assumptions through prompts or docs-only instructions. 
 
 ## Reading Path
 
-1. [Ambient](ambient.md) for the default provider path.
+1. [Ambient](ambient.md) for the Ambient coding-plan path (the default provider is OpenAI).
 2. [Z.AI GLM 5.2](zai-glm-52.md) for the direct Z.AI coding-plan path.
 3. [OpenRouter](openrouter.md) for metered OpenRouter models.
 4. [Baseten](baseten.md) for metered Baseten GLM 5.2.

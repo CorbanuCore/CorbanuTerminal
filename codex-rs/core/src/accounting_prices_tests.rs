@@ -561,12 +561,9 @@ fn pf_60_s03_claude_plan_prices_by_catalogue_identity_not_wire_name() {
     );
 }
 
-/// DeepSeek's price sheet has cache hits and misses and no cache-write charge,
-/// so its snapshot states a zero cache-write rate; that is what lets pricing
-/// charge the miss when DeepSeek's usage omits cache writes. Its rates change
-/// by time of day, and a snapshot states the rate in force at dispatch. Every
-/// other provider keeps the null cache-write of projection v1, and with it its
-/// content identity.
+/// Baseten's sheet has no cache-write charge either, so its snapshot states a
+/// zero cache-write rate; a provider not on `NO_CACHE_WRITE_CHARGE` keeps the
+/// null cache-write of projection v1, and with it its content identity.
 #[test]
 fn accounting_baseten_states_a_free_cache_write() -> anyhow::Result<()> {
     let scope = Uuid::from_u128(8);
@@ -587,6 +584,12 @@ fn accounting_baseten_states_a_free_cache_write() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// DeepSeek's price sheet has cache hits and misses and no cache-write charge,
+/// so its snapshot states a zero cache-write rate; that is what lets pricing
+/// charge the miss when DeepSeek's usage omits cache writes. Its rates change
+/// by time of day, and a snapshot states the rate in force at dispatch. Every
+/// provider not on `NO_CACHE_WRITE_CHARGE` keeps the null cache-write of projection v1, and with it its
+/// content identity.
 #[test]
 fn accounting_deepseek_states_the_rate_in_force_and_a_free_cache_write() -> anyhow::Result<()> {
     let scope = Uuid::from_u128(7);

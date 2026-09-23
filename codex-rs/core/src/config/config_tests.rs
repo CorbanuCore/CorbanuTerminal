@@ -12685,6 +12685,45 @@ async fn default_provider_does_not_force_the_api_only_login_path() -> std::io::R
         Some(ReasoningEffort::High)
     );
 
+    // Onboarding writes the provider down; the default effort survives that,
+    // but never overrides an effort or a model someone named.
+    let onboarded = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            model_provider: Some(codex_model_provider_info::OPENAI_PROVIDER_ID.to_string()),
+            ..ConfigToml::default()
+        },
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(
+        onboarded.model_reasoning_effort,
+        Some(ReasoningEffort::High)
+    );
+    let named_effort = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            model_reasoning_effort: Some(ReasoningEffort::Low),
+            ..ConfigToml::default()
+        },
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(
+        named_effort.model_reasoning_effort,
+        Some(ReasoningEffort::Low)
+    );
+    let named_model = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            model: Some("gpt-5.6-terra".to_string()),
+            ..ConfigToml::default()
+        },
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(named_model.model_reasoning_effort, None);
+
     // Asking for the same provider still does, because then it is a choice.
     let chosen = Config::load_from_base_config_with_overrides(
         ConfigToml {
@@ -12725,6 +12764,10 @@ async fn default_provider_does_not_force_the_api_only_login_path() -> std::io::R
     assert_eq!(
         stale_gpu.model_provider_id,
         codex_model_provider_info::OPENAI_PROVIDER_ID
+    );
+    assert_eq!(
+        stale_gpu.model_reasoning_effort,
+        Some(ReasoningEffort::High)
     );
     assert_eq!(stale_gpu.forced_login_method, None);
 

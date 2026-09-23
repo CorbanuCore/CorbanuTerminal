@@ -4083,8 +4083,6 @@ impl Config {
         }
 
         let model_without_explicit_provider = !model_provider_was_explicit && cfg.model.is_some();
-        // Nothing stated at all: the default model runs at the default effort.
-        let nothing_stated = !model_provider_was_explicit && model.is_none() && cfg.model.is_none();
         let model = if incompatible_explicit_provider.is_some()
             && allow_provider_model_fallback
         {
@@ -4106,6 +4104,8 @@ impl Config {
             None => resolve_model_for_provider(cfg.model, &model_provider_id),
             }
         };
+        // No model named (or a stale one dropped): the provider's catalog picks it.
+        let catalog_default_model = model.is_none();
         // Final pair validation: a stored or inherited provider that cannot serve the resolved
         // model (stale thread metadata, dropped spawn override, config default recorded next to
         // a role-derived model) would 400/404 at the remote with "Unknown model". Correct the
@@ -4346,7 +4346,9 @@ impl Config {
         {
             cfg.model_reasoning_effort
                 .map(normalize_ambient_reasoning_effort)
-        } else if nothing_stated && model_provider_id == DEFAULT_MODEL_PROVIDER_ID {
+        } else if catalog_default_model && model_provider_id == DEFAULT_MODEL_PROVIDER_ID {
+            // The default provider's default model runs at the default effort,
+            // whether or not onboarding has since written the provider down.
             cfg.model_reasoning_effort.or(Some(DEFAULT_REASONING_EFFORT))
         } else {
             cfg.model_reasoning_effort

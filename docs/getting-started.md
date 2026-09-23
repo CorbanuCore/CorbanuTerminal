@@ -28,9 +28,11 @@ in the encrypted vault, not in the chat transcript.
 
 Corbanu Terminal currently ships these provider paths:
 
+With nothing configured, Corbanu Terminal uses OpenAI with GPT-6 Sol at high reasoning effort.
+
 | Use case                  | Provider           | Current release-visible model examples                                                                           |
 | ------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| OpenAI Codex account      | OpenAI             | `gpt-5.6-sol`, `gpt-5.6-luna`, `gpt-5.6-terra`                                                                   |
+| OpenAI Codex account (default) | OpenAI        | `gpt-6-sol` (default, high effort; `gpt-5.6-sol` if your account does not offer it), `gpt-5.6-luna`, `gpt-5.6-terra` |
 | Claude subscription       | Claude Plan        | `claude-opus-5-plan`, `claude-fable-5-1-plan`, `claude-fable-5-plan`                                             |
 | Direct Claude API         | Anthropic          | `claude-opus-5`, `claude-fable-5-1`, `claude-fable-5`                                                           |
 | Ambient coding plan       | Ambient            | `z-ai/glm-5.2`                                                                                                 |
