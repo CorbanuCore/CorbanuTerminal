@@ -123,20 +123,90 @@ impl CodeModeExecuteHandler {
             ..
         } = invocation;
 
-        match payload {
-            ToolPayload::Custom { input } if is_exec_tool_name(&tool_name) => self
-                .execute(session, turn, call_id, input)
+        match exec_source(&tool_name, &payload) {
+            Some(source) => self
+                .execute(session, turn, call_id, source)
                 .await
                 .map(boxed_tool_output),
-            _ => Err(FunctionCallError::RespondToModel(format!(
+            None => Err(FunctionCallError::RespondToModel(format!(
                 "{PUBLIC_TOOL_NAME} expects raw JavaScript source text"
             ))),
         }
     }
 }
 
+/// Resolves the JavaScript source of an `exec` call. Chat Completions and
+/// Anthropic adapters expose the freeform `exec` tool as a function with a
+/// single `input` string, so both payload shapes carry the same source.
+fn exec_source(tool_name: &ToolName, payload: &ToolPayload) -> Option<String> {
+    if !is_exec_tool_name(tool_name) {
+        return None;
+    }
+    payload.freeform_input()
+}
+
 impl CoreToolRuntime for CodeModeExecuteHandler {
     fn matches_kind(&self, payload: &ToolPayload) -> bool {
-        matches!(payload, ToolPayload::Custom { .. })
+        matches!(
+            payload,
+            ToolPayload::Custom { .. } | ToolPayload::Function { .. }
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use codex_tools::FreeformTool;
+    use codex_tools::FreeformToolFormat;
+    use pretty_assertions::assert_eq;
+
+    fn handler() -> CodeModeExecuteHandler {
+        CodeModeExecuteHandler::new(
+            ToolSpec::Freeform(FreeformTool {
+                name: PUBLIC_TOOL_NAME.to_string(),
+                description: String::new(),
+                format: FreeformToolFormat {
+                    r#type: "grammar".to_string(),
+                    syntax: "lark".to_string(),
+                    definition: "start: /.+/".to_string(),
+                },
+            }),
+            Vec::new(),
+        )
+    }
+
+    #[test]
+    fn exec_accepts_custom_and_function_wrapped_payloads() {
+        let handler = handler();
+        let custom = ToolPayload::Custom {
+            input: "text(1)".to_string(),
+        };
+        let function = ToolPayload::Function {
+            arguments: r#"{"input":"text(1)"}"#.to_string(),
+        };
+        let exec = ToolName::plain(PUBLIC_TOOL_NAME);
+
+        assert!(handler.matches_kind(&custom));
+        assert!(handler.matches_kind(&function));
+        assert_eq!(exec_source(&exec, &custom).as_deref(), Some("text(1)"));
+        assert_eq!(exec_source(&exec, &function).as_deref(), Some("text(1)"));
+    }
+
+    #[test]
+    fn exec_rejects_malformed_function_payloads_and_other_tool_names() {
+        let exec = ToolName::plain(PUBLIC_TOOL_NAME);
+        for arguments in ["", "{}", r#"{"code":"text(1)"}"#, r#"{"input":1}"#] {
+            let payload = ToolPayload::Function {
+                arguments: arguments.to_string(),
+            };
+            assert_eq!(exec_source(&exec, &payload), None, "{arguments}");
+        }
+
+        let other = ToolName::plain("wait");
+        let payload = ToolPayload::Custom {
+            input: "text(1)".to_string(),
+        };
+        assert_eq!(exec_source(&other, &payload), None);
     }
 }
