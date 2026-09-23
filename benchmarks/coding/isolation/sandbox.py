@@ -334,15 +334,25 @@ def summarize_run_records(records: Path, expected_model: str) -> dict[str, Any]:
         "rejection_reasons": sorted({str(event.get("reason")) for event in rejected}),
         "upstream_errors": sum(1 for event in events if event.get("decision") == "upstream_error"),
         "models_served": served,
-        "route_verified": bool(ok_rows) and all(
-            model == expected_model or model.startswith(expected_model + "-")
-            for model in served
-        ),
+        "route_verified": bool(ok_rows) and all(_same_model(model, expected_model) for model in served),
         "relay_cost_usd": round(sum(costs), 8) if costs else None,
         "requests_missing_cost": missing_cost,
         "generation_ids": [gid for row in usage_rows for gid in row.get("generation_ids") or []],
         "usage_totals": _usage_totals(usage_rows),
     }
+
+
+def _model_key(model: str) -> str:
+    return model.lower().replace(".", "/").rsplit("/", 1)[-1]
+
+
+def _same_model(served: str, expected: str) -> bool:
+    """Gateways echo provider spellings (``global.moonshotai.kimi-k3``,
+    ``moonshotai/Kimi-K3``) or dated slugs; the relay already pinned the
+    requested model, so compare the final model segment."""
+
+    served_key, expected_key = _model_key(served), _model_key(expected)
+    return served_key == expected_key or served_key.startswith(expected_key + "-")
 
 
 def _usage_totals(rows: list[dict[str, Any]]) -> dict[str, int]:

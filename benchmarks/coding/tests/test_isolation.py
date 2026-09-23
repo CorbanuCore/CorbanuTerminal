@@ -295,6 +295,9 @@ class SandboxTests(unittest.TestCase):
             self.assertEqual(summary["usage_totals"]["prompt_tokens"], 30)
             other = sandbox.summarize_run_records(records, "moonshotai/kimi-k3")
             self.assertFalse(other["route_verified"])
+        self.assertTrue(sandbox._same_model("global.moonshotai.kimi-k3", "moonshotai/kimi-k3"))
+        self.assertTrue(sandbox._same_model("moonshotai/Kimi-K3", "moonshotai/kimi-k3"))
+        self.assertFalse(sandbox._same_model("moonshotai/kimi-k2.6", "moonshotai/kimi-k3"))
 
 
 class RunnerIsolationTests(unittest.TestCase):
