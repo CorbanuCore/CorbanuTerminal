@@ -71,7 +71,6 @@ use codex_core_plugins::PluginsManager;
 use codex_exec_server::LOCAL_FS;
 use codex_features::Feature;
 use codex_features::FeaturesToml;
-use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID;
 use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
 use codex_model_provider_info::WireApi;
@@ -6157,10 +6156,9 @@ model = "gpt-project-local"
         .build()
         .await?;
 
-    // The Ambient provider always resolves to a default model even when no
-    // model is explicitly configured, so the ignored project-local profile
-    // does not leave the model as `None`.
-    assert_eq!(config.model.as_deref(), Some(AMBIENT_DEFAULT_MODEL));
+    // The ignored project-local profile does not set the model; the default
+    // provider leaves model selection to its catalog.
+    assert_eq!(config.model, None);
     assert!(
         config.startup_warnings.iter().any(|warning| {
             warning.contains("profile")
@@ -6238,7 +6236,7 @@ async fn responses_websocket_features_do_not_change_wire_api() -> std::io::Resul
         )
         .await?;
 
-        assert_eq!(config.model_provider.wire_api, WireApi::Chat);
+        assert_eq!(config.model_provider.wire_api, WireApi::Responses);
     }
 
     Ok(())
@@ -12676,9 +12674,16 @@ async fn default_provider_does_not_force_the_api_only_login_path() -> std::io::R
     .await?;
     assert_eq!(
         unconfigured.model_provider_id,
-        codex_model_provider_info::AMBIENT_PROVIDER_ID
+        codex_model_provider_info::OPENAI_PROVIDER_ID
     );
     assert_eq!(unconfigured.forced_login_method, None);
+    // The overall default is GPT-6 Sol at high effort; the OpenAI catalog
+    // supplies the model, the config supplies the effort.
+    assert_eq!(unconfigured.model, None);
+    assert_eq!(
+        unconfigured.model_reasoning_effort,
+        Some(ReasoningEffort::High)
+    );
 
     // Asking for the same provider still does, because then it is a choice.
     let chosen = Config::load_from_base_config_with_overrides(
@@ -12705,7 +12710,7 @@ async fn default_provider_does_not_force_the_api_only_login_path() -> std::io::R
     assert_eq!(overridden.forced_login_method, Some(ForcedLoginMethod::Api));
 
     // A rented GPU provider that no longer exists falls back to the same
-    // Ambient default. The provider was stated, but what it named is gone, so
+    // default provider. The provider was stated, but what it named is gone, so
     // this is the one case where an explicit request is deliberately not
     // treated as one - and it reached the same dead end.
     let stale_gpu = Config::load_from_base_config_with_overrides(
@@ -12719,7 +12724,7 @@ async fn default_provider_does_not_force_the_api_only_login_path() -> std::io::R
     .await?;
     assert_eq!(
         stale_gpu.model_provider_id,
-        codex_model_provider_info::AMBIENT_PROVIDER_ID
+        codex_model_provider_info::OPENAI_PROVIDER_ID
     );
     assert_eq!(stale_gpu.forced_login_method, None);
 

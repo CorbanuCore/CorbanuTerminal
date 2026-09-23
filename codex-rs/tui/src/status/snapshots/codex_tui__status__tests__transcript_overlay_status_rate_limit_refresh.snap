@@ -6,23 +6,23 @@ before:
 / T R A N S C R I P T / / / / / / / / / / / / / / / / / / / / / / / / / / / / /
 /status
 
-╭──────────────────────────────────────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v<V>)                                              │
-│                                                                          │
-│  Model:            gpt-5.1-codex-max                                     │
-│  Model provider:   Ambient                                               │
-│  Directory: [[workspace]]                                                │
-│  Permissions:      Next turn: Custom (workspace with network access, Ask │
-│                    for approval)                                         │
-│  Security:         Requested Permissive; effective protection unverified │
-│                    (/security)                                           │
-│  Agents.md:        <none>                                                │
-│                                                                          │
-│  Token usage:      0 total  (0 input + 0 output)                         │
-│  Limits:           refresh requested; run /status again shortly.         │
-╰──────────────────────────────────────────────────────────────────────────╯
-~
-~
+╭───────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v<V>)                                               │
+│                                                                           │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date             │
+│ information on rate limits and credits                                    │
+│                                                                           │
+│  Model:         gpt-5.1-codex-max (reasoning high, summaries auto)        │
+│  Directory: [[workspace]]                                                 │
+│  Permissions:   Next turn: Custom (workspace with network access, Ask for │
+│                 approval)                                                 │
+│  Security:      Requested Permissive; effective protection unverified (/  │
+│                 security)                                                 │
+│  Agents.md:     <none>                                                    │
+│                                                                           │
+│  Token usage:   0 total  (0 input + 0 output)                             │
+│  Limits:        refresh requested; run /status again shortly.             │
+╰───────────────────────────────────────────────────────────────────────────╯
 ~
 ~
 ~
@@ -38,27 +38,27 @@ after:
 / T R A N S C R I P T / / / / / / / / / / / / / / / / / / / / / / / / / / / / /
 /status
 
-╭──────────────────────────────────────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v<V>)                                              │
-│                                                                          │
-│  Model:            gpt-5.1-codex-max                                     │
-│  Model provider:   Ambient                                               │
-│  Directory: [[workspace]]                                                │
-│  Permissions:      Next turn: Custom (workspace with network access, Ask │
-│                    for approval)                                         │
-│  Security:         Requested Permissive; effective protection unverified │
-│                    (/security)                                           │
-│  Agents.md:        <none>                                                │
-│                                                                          │
-│  Token usage:      0 total  (0 input + 0 output)                         │
-│  spark limit:                                                            │
-│  5h limit:         [███████████░░░░░░░░░] 55% left (resets soon)         │
-│  Weekly limit:     [██████████████░░░░░░] 70% left (resets later)        │
-╰──────────────────────────────────────────────────────────────────────────╯
+╭────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v<V>)                                                │
+│                                                                            │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date              │
+│ information on rate limits and credits                                     │
+│                                                                            │
+│  Model:          gpt-5.1-codex-max (reasoning high, summaries auto)        │
+│  Directory: [[workspace]]                                                  │
+│  Permissions:    Next turn: Custom (workspace with network access, Ask for │
+│                  approval)                                                 │
+│  Security:       Requested Permissive; effective protection unverified (/  │
+│                  security)                                                 │
+│  Agents.md:      <none>                                                    │
+│                                                                            │
+│  Token usage:    0 total  (0 input + 0 output)                             │
+│  spark limit:                                                              │
+│  5h limit:       [███████████░░░░░░░░░] 55% left (resets soon)             │
+│  Weekly limit:   [██████████████░░░░░░] 70% left (resets later)            │
+╰────────────────────────────────────────────────────────────────────────────╯
 
 next message
-~
-~
 ~
 ~
 ───────────────────────────────────────────────────────────────────────── 100% ─

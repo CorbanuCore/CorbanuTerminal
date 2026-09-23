@@ -87,6 +87,7 @@ use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+use codex_model_provider_info::DEFAULT_MODEL_PROVIDER_ID;
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
 use codex_model_provider_info::META_PROVIDER_ID;
@@ -131,6 +132,9 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::models::SandboxEnforcement;
 use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::openai_models::ReasoningEffort;
+
+/// Effort for the default model when nothing names a provider, model, or effort.
+const DEFAULT_REASONING_EFFORT: ReasoningEffort = ReasoningEffort::High;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::protocol::AskForApproval;
@@ -4014,7 +4018,7 @@ impl Config {
             model_provider.is_some() || cfg.model_provider.is_some();
         let requested_model_provider_id = model_provider
             .or(cfg.model_provider)
-            .unwrap_or_else(|| AMBIENT_PROVIDER_ID.to_string());
+            .unwrap_or_else(|| DEFAULT_MODEL_PROVIDER_ID.to_string());
         let requested_model_provider_id =
             canonical_provider_id(&requested_model_provider_id).to_string();
         let stale_runtime_provider = requested_model_provider_id.starts_with("gpu-")
@@ -4027,7 +4031,7 @@ impl Config {
         let model_provider_was_explicit =
             requested_provider_was_explicit && !stale_runtime_provider;
         let model_provider_id = if stale_runtime_provider {
-            AMBIENT_PROVIDER_ID.to_string()
+            DEFAULT_MODEL_PROVIDER_ID.to_string()
         } else {
             requested_model_provider_id
         };
@@ -4079,6 +4083,8 @@ impl Config {
         }
 
         let model_without_explicit_provider = !model_provider_was_explicit && cfg.model.is_some();
+        // Nothing stated at all: the default model runs at the default effort.
+        let nothing_stated = !model_provider_was_explicit && model.is_none() && cfg.model.is_none();
         let model = if incompatible_explicit_provider.is_some()
             && allow_provider_model_fallback
         {
@@ -4311,7 +4317,8 @@ impl Config {
         // Forcing API-key-only sign-in is right for someone who chose one of
         // these providers, and wrong for someone who chose nothing at all. An
         // unconfigured install has no `model_provider`, so it lands on the
-        // Ambient default above, and forcing the API path there collapsed
+        // default provider above; forcing the API path there (when that
+        // default was Ambient) collapsed
         // first-run onboarding to a single "Use your Ambient API key" prompt
         // with no way to reach ChatGPT, Claude, or Corbanu Plan: the picker is
         // switched off precisely when a login method is forced. The same thing
@@ -4339,6 +4346,8 @@ impl Config {
         {
             cfg.model_reasoning_effort
                 .map(normalize_ambient_reasoning_effort)
+        } else if nothing_stated && model_provider_id == DEFAULT_MODEL_PROVIDER_ID {
+            cfg.model_reasoning_effort.or(Some(DEFAULT_REASONING_EFFORT))
         } else {
             cfg.model_reasoning_effort
         };

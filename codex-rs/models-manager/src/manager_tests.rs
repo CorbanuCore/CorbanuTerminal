@@ -861,8 +861,8 @@ async fn chatgpt_catalog_keeps_bundled_openai_models_when_remote_omits_them() {
     assert!(
         available
             .iter()
-            .any(|model| model.model == "gpt-5.6-sol" && model.is_default),
-        "Sol should be the default visible preset"
+            .any(|model| model.model == "gpt-6-sol" && model.is_default),
+        "GPT-6 Sol should be the default visible preset"
     );
 }
 
@@ -892,6 +892,32 @@ async fn chatgpt_catalog_honors_explicit_remote_hiding_for_current_openai_models
             .all(|model| !model.show_in_picker),
         "an explicit hidden response must override bundled visibility"
     );
+}
+
+#[tokio::test]
+async fn default_falls_back_to_gpt_5_6_sol_when_the_server_hides_gpt_6_sol() {
+    let mut remote_models = crate::bundled_models_response()
+        .expect("bundled models should parse")
+        .models
+        .into_iter()
+        .filter(|model| model.slug == "gpt-6-sol")
+        .collect::<Vec<_>>();
+    for model in &mut remote_models {
+        model.visibility = ModelVisibility::Hide;
+    }
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = TestModelsEndpoint::new(vec![remote_models]);
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+
+    let available = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
+    let defaults = available
+        .iter()
+        .filter(|model| model.is_default)
+        .map(|model| model.model.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(defaults, vec!["gpt-5.6-sol"]);
 }
 
 #[tokio::test]
@@ -952,7 +978,7 @@ async fn chatgpt_catalog_shows_server_advertised_gpt_5_6_models() {
     assert!(
         available
             .iter()
-            .any(|model| model.model == "gpt-5.6-sol" && model.is_default)
+            .any(|model| model.model == "gpt-6-sol" && model.is_default)
     );
     let sol = available
         .iter()

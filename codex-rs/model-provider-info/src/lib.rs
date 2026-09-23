@@ -71,6 +71,8 @@ fn claude_provider_auth_cwd() -> AbsolutePathBuf {
 const OPENAI_PROVIDER_NAME: &str = "OpenAI";
 const OPENAI_ACTOR_AUTHORIZATION_HEADER: &str = "x-openai-actor-authorization";
 pub const OPENAI_PROVIDER_ID: &str = "openai";
+/// Provider an install uses when nothing names one.
+pub const DEFAULT_MODEL_PROVIDER_ID: &str = OPENAI_PROVIDER_ID;
 /// OpenAI backend compatibility version for protocol-gated model access.
 ///
 /// This is intentionally separate from Corbanu Terminal's product version. The OpenAI

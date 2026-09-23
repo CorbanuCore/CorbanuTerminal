@@ -21,6 +21,11 @@ use tracing::Instrument as _;
 use tracing::error;
 use tracing::info;
 
+/// OpenAI's default model, and so the overall default.
+pub const OPENAI_DEFAULT_MODEL: &str = "gpt-6-sol";
+/// OpenAI default used when the catalog does not offer `gpt-6-sol`.
+pub const OPENAI_FALLBACK_DEFAULT_MODEL: &str = "gpt-5.6-sol";
+
 const MODEL_CACHE_FILE: &str = "models_cache.json";
 const DEFAULT_MODEL_CACHE_TTL: Duration = Duration::from_secs(300);
 
@@ -128,10 +133,14 @@ pub trait ModelsManager: fmt::Debug + Send + Sync {
         presets = ModelPreset::filter_by_auth(presets, uses_codex_backend);
 
         ModelPreset::mark_default_by_picker_visibility(&mut presets);
-        if let Some(sol_index) = presets
+        let default_index = [OPENAI_DEFAULT_MODEL, OPENAI_FALLBACK_DEFAULT_MODEL]
             .iter()
-            .position(|preset| preset.model == "gpt-5.6-sol" && preset.show_in_picker)
-        {
+            .find_map(|slug| {
+                presets
+                    .iter()
+                    .position(|preset| preset.model == *slug && preset.show_in_picker)
+            });
+        if let Some(sol_index) = default_index {
             for preset in &mut presets {
                 preset.is_default = false;
             }
