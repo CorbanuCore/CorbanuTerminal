@@ -268,6 +268,10 @@ struct ModelClientState {
     /// this session. Some upstream models (Kimi K3 on Vercel) reject every
     /// incremental continuation; retrying it each turn doubles the requests.
     http_server_state_rejected: AtomicBool,
+    /// Set once the Vercel gateway refuses the pinned Z.AI upstream because an
+    /// account policy (for example zero data retention) excludes it. The
+    /// session then uses the gateway's own routing.
+    vercel_vendor_pin_rejected: AtomicBool,
     /// Set once a provider rejects a tool continuation that ends in tool output after an
     /// assistant message. The session then restores the legacy synthetic `Continue.` turn.
     legacy_synthetic_continuation: AtomicBool,
@@ -811,6 +815,7 @@ impl ModelClient {
                 cached_websocket_session: StdMutex::new(WebsocketSession::default()),
                 server_conversation_state: Arc::new(StdMutex::new(None)),
                 http_server_state_rejected: AtomicBool::new(false),
+                vercel_vendor_pin_rejected: AtomicBool::new(false),
                 legacy_synthetic_continuation: AtomicBool::new(false),
             }),
             agent_identity_policy,
@@ -1068,6 +1073,7 @@ impl ModelClient {
                 cached_websocket_session: StdMutex::new(WebsocketSession::default()),
                 server_conversation_state: Arc::new(StdMutex::new(None)),
                 http_server_state_rejected: AtomicBool::new(false),
+                vercel_vendor_pin_rejected: AtomicBool::new(false),
                 legacy_synthetic_continuation: AtomicBool::new(false),
             }),
             agent_identity_policy: self.agent_identity_policy,
@@ -1718,7 +1724,7 @@ impl ModelClient {
             &model_info.slug
         };
         let vercel_provider_options = is_vercel_gateway
-            .then(|| vercel_gateway_provider_options(upstream_model))
+            .then(|| self.vercel_gateway_provider_options(upstream_model))
             .flatten();
         let (instructions, tools) = if model_info.use_responses_lite {
             let tools = create_tools_json_for_responses_api(&prompt.tools)?;
@@ -1942,7 +1948,7 @@ impl ModelClient {
             .provider
             .info()
             .is_vercel_gateway()
-            .then(|| vercel_gateway_provider_options(upstream_model))
+            .then(|| self.vercel_gateway_provider_options(upstream_model))
             .flatten();
         let provider_reasoning = if self.state.provider.info().is_openrouter() {
             Self::openrouter_reasoning(model_info, effort.as_ref())?
@@ -2068,7 +2074,7 @@ impl ModelClient {
             .provider
             .info()
             .is_vercel_gateway()
-            .then(|| vercel_gateway_provider_options(upstream_model))
+            .then(|| self.vercel_gateway_provider_options(upstream_model))
             .flatten();
         // Third-party slugs on this wire think by default, so an omitted
         // `thinking` block is not the same as thinking off. Only Anthropic's
@@ -2140,6 +2146,39 @@ impl ModelClient {
                 item.set_id(/*new_id*/ None);
             }
         }
+    }
+
+    fn vercel_gateway_provider_options(&self, upstream_model: &str) -> Option<Value> {
+        if self
+            .state
+            .vercel_vendor_pin_rejected
+            .load(Ordering::Relaxed)
+        {
+            return None;
+        }
+        vercel_gateway_provider_options(upstream_model)
+    }
+
+    /// Records a policy exclusion of the pinned Vercel upstream. Returns true
+    /// when this is the first one for the session, so the caller retries the
+    /// request once with the gateway's own routing.
+    fn drop_vercel_vendor_pin_after_policy_exclusion(&self, err: &ApiError) -> bool {
+        if !self.state.provider.info().is_vercel_gateway()
+            || !is_vercel_gateway_policy_exclusion(err)
+        {
+            return false;
+        }
+        let first = !self
+            .state
+            .vercel_vendor_pin_rejected
+            .swap(true, Ordering::Relaxed);
+        if first {
+            warn!(
+                "Vercel gateway skipped every provider for the pinned upstream under this \
+                 account's policy; using gateway routing for the rest of this session"
+            );
+        }
+        first
     }
 
     fn responses_input_needs_synthetic_user_turn(&self, input: &[ResponseItem]) -> bool {
@@ -2717,6 +2756,21 @@ impl ModelClientSession {
                     payload_retry_used = true;
                     continue;
                 }
+                Err(err)
+                    if self
+                        .client
+                        .drop_vercel_vendor_pin_after_policy_exclusion(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    continue;
+                }
                 Err(err) => {
                     let response_debug_context =
                         extract_response_debug_context_from_api_error(&err);
@@ -3132,6 +3186,21 @@ impl ModelClientSession {
                     );
                     continue;
                 }
+                Err(err)
+                    if self
+                        .client
+                        .drop_vercel_vendor_pin_after_policy_exclusion(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    continue;
+                }
                 Err(err) => {
                     let response_debug_context =
                         extract_response_debug_context_from_api_error(&err);
@@ -3355,6 +3424,21 @@ impl ModelClientSession {
                         .legacy_synthetic_continuation
                         .store(true, Ordering::Relaxed);
                     legacy_continuation_retry_used = true;
+                    continue;
+                }
+                Err(err)
+                    if self
+                        .client
+                        .drop_vercel_vendor_pin_after_policy_exclusion(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
                     continue;
                 }
                 Err(err) => {
@@ -4848,6 +4932,33 @@ fn vercel_gateway_vendor_pin(model: &str) -> Option<&'static str> {
         "zai" => Some("zai"),
         _ => None,
     }
+}
+
+/// True when the Vercel gateway rejected a request without attempting any
+/// upstream because an account policy skipped every candidate, as reported in
+/// its structured routing metadata. With a vendor pin in place the pinned
+/// upstream is the only candidate, so zero-data-retention accounts get this
+/// for every Z.AI-pinned request while unpinned routing succeeds.
+fn is_vercel_gateway_policy_exclusion(err: &ApiError) -> bool {
+    let ApiError::Transport(TransportError::Http {
+        status,
+        body: Some(body),
+        ..
+    }) = err
+    else {
+        return false;
+    };
+    if *status != StatusCode::BAD_REQUEST {
+        return false;
+    }
+    let Ok(body) = serde_json::from_str::<Value>(body) else {
+        return false;
+    };
+    let routing = &body["providerMetadata"]["gateway"]["routing"];
+    routing["totalProviderAttemptCount"].as_u64() == Some(0)
+        && routing["skippedProviderAttempts"]
+            .as_array()
+            .is_some_and(|skipped| !skipped.is_empty())
 }
 
 fn vercel_gateway_provider_options(model: &str) -> Option<Value> {
