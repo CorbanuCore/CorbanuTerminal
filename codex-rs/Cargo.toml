@@ -596,6 +596,11 @@ ignored = [
 # Keep line tables/backtraces while avoiding expensive full variable debug info
 # across local dev builds.
 debug = "limited"
+# macOS defaults to "unpacked", which keeps one object file per codegen unit for
+# the debugger. Cargo never deletes stale ones, so a long-lived target grew to
+# ~930k files in debug/deps and every rustc invocation slowed to a crawl while
+# listing it. "off" is already the default on Linux.
+split-debuginfo = "off"
 
 # Vault passphrases use the production scrypt work factor in every profile.
 # Optimize the CPU-heavy primitives so debug builds stay responsive without
