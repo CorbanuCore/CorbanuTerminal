@@ -3545,7 +3545,7 @@ dependencies = [
 
 [[package]]
 name = "codex-linux-pidfd-spawn"
-version = "0.1.42"
+version = "0.1.44"
 dependencies = [
  "libc",
  "pretty_assertions",
