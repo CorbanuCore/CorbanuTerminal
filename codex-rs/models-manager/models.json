@@ -1444,7 +1444,8 @@
       "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text",
       "input_modalities": [
-        "text"
+        "text",
+        "image"
       ],
       "supports_image_detail_original": false,
       "truncation_policy": {
@@ -1536,7 +1537,8 @@
       "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text",
       "input_modalities": [
-        "text"
+        "text",
+        "image"
       ],
       "supports_image_detail_original": false,
       "truncation_policy": {
