@@ -2,19 +2,37 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Corbanu coding benchmark config",
   "type": "object",
-  "required": ["run_dir", "waves", "caps", "agents", "tasks"],
+  "required": [
+    "run_dir",
+    "waves",
+    "caps",
+    "agents",
+    "tasks"
+  ],
   "properties": {
     "run_dir": {
       "type": "string",
       "description": "Absolute path or path relative to the config file."
     },
-    "waves": {"type": "integer", "minimum": 1},
+    "waves": {
+      "type": "integer",
+      "minimum": 1
+    },
     "caps": {
       "type": "object",
-      "required": ["timeout_seconds", "max_total_runs"],
+      "required": [
+        "timeout_seconds",
+        "max_total_runs"
+      ],
       "properties": {
-        "timeout_seconds": {"type": "integer", "minimum": 1},
-        "max_total_runs": {"type": "integer", "minimum": 1}
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_total_runs": {
+          "type": "integer",
+          "minimum": 1
+        }
       },
       "additionalProperties": false
     },
@@ -23,27 +41,56 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["name", "kind", "binary", "provider", "model", "lane"],
+        "required": [
+          "name",
+          "kind",
+          "binary",
+          "provider",
+          "model",
+          "lane"
+        ],
         "properties": {
-          "name": {"type": "string"},
+          "name": {
+            "type": "string"
+          },
           "kind": {
             "type": "string",
-            "enum": ["corbanu", "hermes", "kilo", "codex", "claude-code"]
+            "enum": [
+              "corbanu",
+              "hermes",
+              "kilo",
+              "codex",
+              "claude-code"
+            ]
           },
-          "binary": {"type": "string"},
-          "provider": {"type": "string"},
-          "model": {"type": "string"},
-          "lane": {"type": "string"},
+          "binary": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "lane": {
+            "type": "string"
+          },
           "required_env": {
             "type": "array",
-            "items": {"type": "string"}
+            "items": {
+              "type": "string"
+            }
           },
           "command": {
             "type": "array",
-            "items": {"type": "string"},
+            "items": {
+              "type": "string"
+            },
             "description": "Optional argv template. No shell is used."
           },
-          "stdin_prompt": {"type": "boolean"}
+          "stdin_prompt": {
+            "type": "boolean"
+          }
         },
         "additionalProperties": false
       }
@@ -53,21 +100,79 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["name", "baseline", "prompt", "verifier"],
+        "required": [
+          "name",
+          "baseline",
+          "prompt",
+          "verifier"
+        ],
         "properties": {
-          "name": {"type": "string"},
-          "baseline": {"type": "string"},
-          "prompt": {"type": "string"},
-          "verifier": {"type": "string"},
-          "core_rel": {"type": "string"},
-          "timeout_seconds": {"type": "integer", "minimum": 1},
+          "name": {
+            "type": "string"
+          },
+          "baseline": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "verifier": {
+            "type": "string"
+          },
+          "core_rel": {
+            "type": "string"
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "minimum": 1
+          },
           "visible_command": {
             "type": "array",
-            "items": {"type": "string"}
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
       }
+    },
+    "isolation": {
+      "type": "object",
+      "description": "Leak isolation. Contestants run in per-run Docker containers that see only their candidate workspace and an empty home; the only network route is the OpenRouter relay.",
+      "required": [
+        "mode",
+        "images"
+      ],
+      "properties": {
+        "mode": {
+          "const": "docker"
+        },
+        "relay_image": {
+          "type": "string"
+        },
+        "upstream_key_env": {
+          "type": "string"
+        },
+        "cpus": {
+          "type": "string"
+        },
+        "memory": {
+          "type": "string"
+        },
+        "pids_limit": {
+          "type": "integer",
+          "minimum": 64
+        },
+        "images": {
+          "type": "object",
+          "description": "One pinned image per harness kind so a contestant sees only its own CLI.",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "minProperties": 1
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

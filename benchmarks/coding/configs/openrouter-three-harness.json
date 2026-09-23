@@ -1,0 +1,160 @@
+{
+  "run_dir": "${CORBANU_BENCH_RUNS}/openrouter-three-harness",
+  "waves": 3,
+  "caps": {
+    "timeout_seconds": 1200,
+    "max_total_runs": 270
+  },
+  "isolation": {
+    "mode": "docker",
+    "images": {
+      "corbanu": "corbanu-bench-corbanu:c0.1.44-h2026.9.21-k7.7.9",
+      "hermes": "corbanu-bench-hermes:c0.1.44-h2026.9.21-k7.7.9",
+      "kilo": "corbanu-bench-kilo:c0.1.44-h2026.9.21-k7.7.9"
+    },
+    "upstream_key_env": "OPENROUTER_API_KEY",
+    "cpus": "4",
+    "memory": "8g"
+  },
+  "agents": [
+    {
+      "name": "corbanu-kimi-k3",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "openrouter",
+      "model": "moonshotai/kimi-k3",
+      "lane": "kimi-k3"
+    },
+    {
+      "name": "hermes-kimi-k3",
+      "kind": "hermes",
+      "binary": "hermes",
+      "provider": "openrouter",
+      "model": "moonshotai/kimi-k3",
+      "lane": "kimi-k3"
+    },
+    {
+      "name": "kilo-kimi-k3",
+      "kind": "kilo",
+      "binary": "kilo",
+      "provider": "openrouter",
+      "model": "moonshotai/kimi-k3",
+      "lane": "kimi-k3"
+    },
+    {
+      "name": "corbanu-glm-5.3",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.3",
+      "lane": "glm-5.3"
+    },
+    {
+      "name": "hermes-glm-5.3",
+      "kind": "hermes",
+      "binary": "hermes",
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.3",
+      "lane": "glm-5.3"
+    },
+    {
+      "name": "kilo-glm-5.3",
+      "kind": "kilo",
+      "binary": "kilo",
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.3",
+      "lane": "glm-5.3"
+    },
+    {
+      "name": "corbanu-opus-5.5",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "openrouter",
+      "model": "anthropic/claude-opus-5.5",
+      "lane": "opus-5.5"
+    },
+    {
+      "name": "hermes-opus-5.5",
+      "kind": "hermes",
+      "binary": "hermes",
+      "provider": "openrouter",
+      "model": "anthropic/claude-opus-5.5",
+      "lane": "opus-5.5"
+    },
+    {
+      "name": "kilo-opus-5.5",
+      "kind": "kilo",
+      "binary": "kilo",
+      "provider": "openrouter",
+      "model": "anthropic/claude-opus-5.5",
+      "lane": "opus-5.5"
+    }
+  ],
+  "tasks": [
+    {
+      "name": "eventforge",
+      "baseline": "../tasks/eventforge/baseline",
+      "prompt": "../tasks/eventforge/task_prompt.md",
+      "verifier": "../tasks/eventforge/verifier/verify.py",
+      "core_rel": "src/eventforge/core.py"
+    },
+    {
+      "name": "logtriage",
+      "baseline": "../tasks/logtriage/baseline",
+      "prompt": "../tasks/logtriage/task_prompt.md",
+      "verifier": "../tasks/logtriage/verifier/verify.py",
+      "core_rel": "src/logtriage/core.py"
+    },
+    {
+      "name": "rategate",
+      "baseline": "../tasks/rategate/baseline",
+      "prompt": "../tasks/rategate/task_prompt.md",
+      "verifier": "../tasks/rategate/verifier/verify.py",
+      "core_rel": "src/rategate/core.py"
+    },
+    {
+      "name": "chronoledger",
+      "baseline": "../tasks/chronoledger/baseline",
+      "prompt": "../tasks/chronoledger/task_prompt.md",
+      "verifier": "../tasks/chronoledger/verifier/verify.py",
+      "core_rel": "src/chronoledger/engine.py"
+    },
+    {
+      "name": "queryforge",
+      "baseline": "../tasks/queryforge/baseline",
+      "prompt": "../tasks/queryforge/task_prompt.md",
+      "verifier": "../tasks/queryforge/verifier/verify.py",
+      "core_rel": "src/queryforge/__init__.py"
+    },
+    {
+      "name": "apigate",
+      "baseline": "../tasks/apigate/bugged",
+      "prompt": "../tasks/apigate/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/apigate/verifier/verify.py"
+    },
+    {
+      "name": "confclerk",
+      "baseline": "../tasks/confclerk/bugged",
+      "prompt": "../tasks/confclerk/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/confclerk/verifier/verify.py"
+    },
+    {
+      "name": "pipeflow",
+      "baseline": "../tasks/pipeflow/bugged",
+      "prompt": "../tasks/pipeflow/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/pipeflow/verifier/verify.py"
+    },
+    {
+      "name": "queuecraft",
+      "baseline": "../tasks/queuecraft/bugged",
+      "prompt": "../tasks/queuecraft/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/queuecraft/verifier/verify.py"
+    },
+    {
+      "name": "textwright",
+      "baseline": "../tasks/textwright/bugged",
+      "prompt": "../tasks/textwright/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/textwright/verifier/verify.py"
+    }
+  ]
+}

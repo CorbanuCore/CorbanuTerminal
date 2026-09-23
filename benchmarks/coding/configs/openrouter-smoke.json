@@ -1,0 +1,54 @@
+{
+  "run_dir": "${CORBANU_BENCH_RUNS}/openrouter-smoke",
+  "waves": 1,
+  "caps": {
+    "timeout_seconds": 1200,
+    "max_total_runs": 3
+  },
+  "isolation": {
+    "mode": "docker",
+    "images": {
+      "corbanu": "corbanu-bench-corbanu:c0.1.44-h2026.9.21-k7.7.9",
+      "hermes": "corbanu-bench-hermes:c0.1.44-h2026.9.21-k7.7.9",
+      "kilo": "corbanu-bench-kilo:c0.1.44-h2026.9.21-k7.7.9"
+    },
+    "upstream_key_env": "OPENROUTER_API_KEY",
+    "cpus": "4",
+    "memory": "8g"
+  },
+  "agents": [
+    {
+      "name": "corbanu-glm-5.3",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.3",
+      "lane": "glm-5.3"
+    },
+    {
+      "name": "hermes-glm-5.3",
+      "kind": "hermes",
+      "binary": "hermes",
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.3",
+      "lane": "glm-5.3"
+    },
+    {
+      "name": "kilo-glm-5.3",
+      "kind": "kilo",
+      "binary": "kilo",
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.3",
+      "lane": "glm-5.3"
+    }
+  ],
+  "tasks": [
+    {
+      "name": "rategate",
+      "baseline": "../tasks/rategate/baseline",
+      "prompt": "../tasks/rategate/task_prompt.md",
+      "verifier": "../tasks/rategate/verifier/verify.py",
+      "core_rel": "src/rategate/core.py"
+    }
+  ]
+}

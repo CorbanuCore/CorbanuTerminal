@@ -21,6 +21,15 @@ from typing import Any, Iterable
 
 BENCH_ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG = BENCH_ROOT / "configs" / "example.json"
+if str(BENCH_ROOT) not in sys.path:
+    sys.path.insert(0, str(BENCH_ROOT))
+
+import leak_audit  # noqa: E402
+from isolation import sandbox  # noqa: E402
+
+# Host environment passed to the docker CLI in isolated mode. Contestants never
+# inherit it: their environment is exactly the per-run env file.
+DOCKER_CLI_ENV = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT", "XDG_RUNTIME_DIR")
 
 
 @dataclass(frozen=True)
@@ -650,12 +659,63 @@ def route_and_usage(run: RunSpec) -> dict[str, Any]:
     }
 
 
+def isolated_run_id(task: TaskSpec, agent: AgentSpec, wave: int) -> str:
+    raw = f"{task.name}--{agent.name}--w{wave:03d}"
+    return "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in raw)
+
+
+def run_isolated_agent(
+    run: RunSpec,
+    prompt: str,
+    campaign: sandbox.Campaign,
+    home: Path,
+) -> tuple[dict[str, Any], str]:
+    run_id = isolated_run_id(run.task, run.agent, run.wave)
+    token, registration = campaign.register(run_id, run.agent.model, run.task.timeout_seconds)
+    try:
+        argv, env, stdin_payload = sandbox.prepare_agent(
+            run.agent.kind, run.agent.model, prompt, home, token
+        )
+        env_file = run.result_dir / "container.env"
+        sandbox.write_env_file(env_file, env)
+        name = f"{campaign.network}-{hashlib.sha256(run_id.encode()).hexdigest()[:12]}"
+        command = campaign.container_argv(
+            name=name,
+            kind=run.agent.kind,
+            workspace=run.workspace,
+            home=home,
+            env_file=env_file,
+            interactive=stdin_payload is not None,
+            agent_argv=argv,
+        )
+        host_env = {key: os.environ[key] for key in DOCKER_CLI_ENV if key in os.environ}
+        try:
+            agent_run = run_process(
+                command,
+                run.workspace,
+                host_env,
+                stdin_payload,
+                run.result_dir / f"{run.agent.name}.stdout",
+                run.result_dir / f"{run.agent.name}.stderr",
+                run.task.timeout_seconds,
+            )
+        finally:
+            sandbox.kill_container(name)
+        agent_run["container"] = name
+        agent_run["agent_argv_head"] = argv[:2]
+    finally:
+        registration.unlink(missing_ok=True)
+    return agent_run, run_id
+
+
 def run_one(
     task: TaskSpec,
     agent: AgentSpec,
     wave: int,
     run_root: Path,
     expected_source_digest: str | None = None,
+    campaign: sandbox.Campaign | None = None,
+    hidden_literals: set[str] | None = None,
 ) -> dict[str, Any]:
     workspace = run_root / "workspaces" / task.name / agent.name / f"wave-{wave:03d}"
     result_dir = run_root / "results" / task.name / agent.name / f"wave-{wave:03d}"
@@ -666,16 +726,29 @@ def run_one(
     source_before = expected_source_digest or source_tree_digest()
     baseline = prepare_workspace(task, workspace)
     prompt = task.prompt.read_text(encoding="utf-8")
-    command, env, stdin_payload = build_command(run, prompt)
-    agent_run = run_process(
-        command,
-        workspace,
-        env,
-        stdin_payload,
-        result_dir / f"{agent.name}.stdout",
-        result_dir / f"{agent.name}.stderr",
-        task.timeout_seconds,
-    )
+    isolation: dict[str, Any] | None = None
+    if campaign is not None:
+        home = run_root / "homes" / task.name / agent.name / f"wave-{wave:03d}"
+        agent_run, run_id = run_isolated_agent(run, prompt, campaign, home)
+        records = campaign.run_records(run_id)
+        isolation = {
+            "run_id": run_id,
+            "relay_records": str(records),
+            "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+            **sandbox.summarize_run_records(records, agent.model),
+            "leak_scan": leak_audit.scan_requests(records, hidden_literals or set(), prompt),
+        }
+    else:
+        command, env, stdin_payload = build_command(run, prompt)
+        agent_run = run_process(
+            command,
+            workspace,
+            env,
+            stdin_payload,
+            result_dir / f"{agent.name}.stdout",
+            result_dir / f"{agent.name}.stderr",
+            task.timeout_seconds,
+        )
     integrity = test_integrity(task, workspace)
     source_after = source_tree_digest()
     source_integrity = {
@@ -685,6 +758,17 @@ def run_one(
     }
     verification = verify_workspace(run, integrity, source_integrity)
     route = route_and_usage(run)
+    if isolation is not None:
+        route = {
+            **route,
+            "route_verified": isolation["route_verified"],
+            "models_observed": isolation["models_served"],
+            "native_cost_usd": isolation["relay_cost_usd"],
+            "cost_source": "openrouter_usage_cost_via_relay",
+        }
+    passed = bool(verification["ok"]) and agent_run["returncode"] == 0
+    if isolation is not None:
+        passed = passed and bool(isolation["route_verified"])
     summary = {
         "task": task.name,
         "agent": agent.name,
@@ -697,7 +781,8 @@ def run_one(
         "verification": verification,
         "source_integrity": source_integrity,
         "route_and_usage": route,
-        "passed": bool(verification["ok"]) and agent_run["returncode"] == 0,
+        "isolation": isolation,
+        "passed": passed,
         "workspace_tree_sha256_after": tree_digest(workspace),
     }
     write_json(result_dir / "summary.json", summary)
@@ -717,6 +802,15 @@ def run_one(
     return summary
 
 
+def ensure_outside_repository(path: Path) -> None:
+    """Isolated campaigns keep candidates and records away from task sources."""
+
+    resolved = path.resolve()
+    for parent in (resolved, *resolved.parents):
+        if (parent / ".git").exists():
+            raise RuntimeError(f"isolated run_dir must be outside any git checkout: {resolved} is inside {parent}")
+
+
 def collect_summaries(run_root: Path) -> list[dict[str, Any]]:
     summaries = []
     for path in sorted((run_root / "results").glob("*/*/wave-*/summary.json")):
@@ -726,19 +820,49 @@ def collect_summaries(run_root: Path) -> list[dict[str, Any]]:
     return summaries
 
 
+def agent_rollup(rows: list[dict[str, Any]]) -> list[str]:
+    """Per-agent pass rate, median wall time and spend; unknown cost stays unknown."""
+
+    by_agent: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        by_agent.setdefault(str(row.get("agent")), []).append(row)
+    lines = [
+        "| Agent | Runs | Passes | Pass rate | Median wall s | Total cost USD | Runs missing cost | Prompt not verbatim | Leak suspects |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for agent, group in sorted(by_agent.items()):
+        walls = sorted(float((r.get("agent_run") or {}).get("wall_seconds") or 0.0) for r in group)
+        costs = [(r.get("route_and_usage") or {}).get("native_cost_usd") for r in group]
+        known = [float(c) for c in costs if isinstance(c, (int, float))]
+        scans = [((r.get("isolation") or {}).get("leak_scan") or {}) for r in group]
+        passes = sum(1 for r in group if r.get("passed"))
+        middle = len(walls) // 2
+        median = walls[middle] if len(walls) % 2 else (walls[middle - 1] + walls[middle]) / 2
+        lines.append(
+            f"| {agent} | {len(group)} | {passes} | {passes / len(group):.0%} | {median:.1f} | "
+            f"{sum(known):.4f} | {len(costs) - len(known)} | "
+            f"{sum(1 for s in scans if s and not s.get('prompt_delivered'))} | "
+            f"{sum(1 for s in scans if s.get('leak_suspect'))} |"
+        )
+    return lines
+
+
 def write_report(run_root: Path) -> Path:
     rows = collect_summaries(run_root)
     lines = [
         "# Coding benchmark report",
         "",
-        "| Task | Agent | Wave | Pass | Route | Wall seconds | Native cost USD | Evidence |",
-        "| --- | --- | ---: | --- | --- | ---: | ---: | --- |",
+        *agent_rollup(rows),
+        "",
+        "| Task | Agent | Wave | Pass | Route | Wall seconds | Cost USD | Rejected requests | Leak suspect | Evidence |",
+        "| --- | --- | ---: | --- | --- | ---: | ---: | ---: | --- | --- |",
     ]
     for row in rows:
         route = row.get("route_and_usage") or {}
         agent_run = row.get("agent_run") or {}
+        isolation = row.get("isolation") or {}
         lines.append(
-            "| {task} | {agent} | {wave} | {passed} | {route} | {wall} | {cost} | `{evidence}` |".format(
+            "| {task} | {agent} | {wave} | {passed} | {route} | {wall} | {cost} | {rejected} | {leak} | `{evidence}` |".format(
                 task=row.get("task"),
                 agent=row.get("agent"),
                 wave=row.get("wave"),
@@ -746,6 +870,8 @@ def write_report(run_root: Path) -> Path:
                 route=route.get("route_verified"),
                 wall=agent_run.get("wall_seconds"),
                 cost=route.get("native_cost_usd"),
+                rejected=isolation.get("rejected_requests", "n/a"),
+                leak=(isolation.get("leak_scan") or {}).get("leak_suspect", "not isolated"),
                 evidence=Path(str(row.get("result_dir"))) / "summary.json",
             )
         )
@@ -768,13 +894,32 @@ def run_campaign(
         raise RuntimeError(f"planned runs {total} exceed caps.max_total_runs {max_runs}")
     if run_root.exists() and any(run_root.iterdir()):
         raise RuntimeError(f"refusing to reuse nonempty run root: {run_root}")
+    isolation_raw = config.get("isolation")
+    spec = sandbox.IsolationSpec.from_config(isolation_raw) if isolation_raw else None
+    if spec is not None:
+        ensure_outside_repository(run_root)
+    audits = {
+        task.name: leak_audit.preflight(task.baseline, task.prompt, task.verifier) for task in tasks
+    }
+    failed_audits = [name for name, audit in audits.items() if not audit["ok"]]
+    if failed_audits:
+        raise RuntimeError(f"task packets expose hidden verifier content: {failed_audits}")
+    hidden = {
+        task.name: leak_audit.hidden_only_literals(task.baseline, task.prompt, task.verifier)
+        for task in tasks
+    }
     run_root.mkdir(parents=True, exist_ok=True)
     lane_plan = schedule(tasks, agents, waves)
     expected_source_digest = source_tree_digest()
+    campaign = sandbox.Campaign(spec, run_root) if spec is not None else None
+    isolation_manifest = campaign.start() if campaign is not None else None
     write_json(
         run_root / "manifest.json",
         {
             "created_at": utc_now(),
+            "isolation": isolation_manifest,
+            "leak_preflight": audits,
+            "agents_detail": [asdict(agent) for agent in agents],
             "waves": waves,
             "tasks": [task.name for task in tasks],
             "agents": [agent.name for agent in agents],
@@ -791,15 +936,27 @@ def run_campaign(
 
     def run_lane(steps: list[tuple[TaskSpec, AgentSpec, int]]) -> list[dict[str, Any]]:
         return [
-            run_one(task, agent, wave, run_root, expected_source_digest)
+            run_one(
+                task,
+                agent,
+                wave,
+                run_root,
+                expected_source_digest,
+                campaign=campaign,
+                hidden_literals=hidden[task.name],
+            )
             for task, agent, wave in steps
         ]
 
     results: list[dict[str, Any]] = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(lane_plan)) as pool:
-        futures = [pool.submit(run_lane, steps) for steps in lane_plan.values()]
-        for future in concurrent.futures.as_completed(futures):
-            results.extend(future.result())
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(lane_plan)) as pool:
+            futures = [pool.submit(run_lane, steps) for steps in lane_plan.values()]
+            for future in concurrent.futures.as_completed(futures):
+                results.extend(future.result())
+    finally:
+        if campaign is not None:
+            campaign.stop()
     report = write_report(run_root)
     print(str(report))
     return 0 if results and all(result["passed"] for result in results) else 1
@@ -810,6 +967,7 @@ def main() -> int:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("plan")
+    subparsers.add_parser("audit", help="No-spend answer-leak pre-flight for every task packet")
     run = subparsers.add_parser("run")
     run.add_argument("--confirm-paid-run", action="store_true")
     subparsers.add_parser("report")
@@ -817,18 +975,33 @@ def main() -> int:
 
     config, tasks, agents, run_root = load_specs(args.config)
     waves = int(config.get("waves") or 1)
+    isolated = bool(config.get("isolation"))
     errors = validate_inputs(
         tasks,
         agents,
-        paid=args.command == "run",
-        require_binaries=args.command == "run",
+        paid=args.command == "run" and not isolated,
+        require_binaries=args.command == "run" and not isolated,
     )
+    if isolated and args.command == "run":
+        spec = sandbox.IsolationSpec.from_config(config["isolation"])
+        unsupported = [agent.name for agent in agents if agent.kind not in spec.images]
+        if unsupported:
+            errors.append(f"docker isolation supports corbanu, hermes and kilo only: {unsupported}")
+        if not os.environ.get(spec.upstream_key_env, "").strip():
+            errors.append(f"missing {spec.upstream_key_env} for the relay")
     if errors:
         raise SystemExit("\n".join(errors))
 
     if args.command == "plan":
         print(json.dumps(plan_payload(args.config, tasks, agents, run_root, waves), indent=2, default=str))
         return 0
+    if args.command == "audit":
+        audits = {
+            task.name: leak_audit.preflight(task.baseline, task.prompt, task.verifier)
+            for task in tasks
+        }
+        print(json.dumps(audits, indent=2))
+        return 0 if all(audit["ok"] for audit in audits.values()) else 1
     if args.command == "report":
         print(write_report(run_root))
         return 0
