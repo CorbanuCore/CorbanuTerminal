@@ -71,6 +71,7 @@ fn partial_expected(observations: Vec<Observation>) -> ObservationQuote {
         all_buckets_equivalent: None,
         plan_burn_millis: None,
         plan_burn_milli_tokens: None,
+        pricing_rules: 1,
     }
 }
 
@@ -129,6 +130,7 @@ fn inclusive_revisions_replace_and_reasoning_is_not_charged_twice() {
             all_buckets_equivalent: None,
             plan_burn_millis: None,
             plan_burn_milli_tokens: None,
+            pricing_rules: 1,
         }
     );
 }
@@ -157,6 +159,7 @@ fn absent_null_zero_and_missing_rates_remain_distinct() {
                 all_buckets_equivalent: None,
                 plan_burn_millis: None,
                 plan_burn_milli_tokens: None,
+                pricing_rules: 1,
             }
         );
     }
@@ -599,4 +602,48 @@ fn free_cache_write_prices_cache_miss_input_without_inventing_evidence() {
     native.dialect = Dialect::NativeAnthropic;
     let q = quote_observations(&native, &rows, &[sheet(Some("0"))]).unwrap();
     assert_eq!(q.buckets[2], BucketQuote::MissingUsage);
+}
+
+/// Recorded estimates are re-verified byte for byte by recomputing them under
+/// the rules they were recorded with. These are version-1 payloads as recorded;
+/// if this test fails, a change altered how version 1 computes or serializes a
+/// quote. Do not update the expected bytes: add a new `PRICING_RULES` version
+/// and keep version 1 reproducible, or every recorded estimate stops verifying
+/// and accounting stops every accounted turn.
+#[test]
+fn recorded_version_one_payloads_stay_byte_identical() {
+    let mut inclusive = attempt();
+    inclusive.dialect = Dialect::Inclusive;
+    let rows = vec![row(3, json!({"input":60,"read":10,"write":0,"output":2,"reasoning":2}))];
+    let mut billed = snapshot();
+    billed.rates.output = Some(decimal("2"));
+    let billed = quote_observations_under(1, &inclusive, &rows, &[billed]).unwrap();
+    assert_eq!(serde_json::to_string(&billed).unwrap(), GOLDEN_BILLED);
+
+    let mut plan = snapshot();
+    plan.basis = Basis::PlanEquivalent;
+    plan.plan_burn_millis = Some(2000);
+    let rows = vec![row(1, json!({"input":50,"read":10,"output":4}))];
+    let plan = quote_observations_under(1, &attempt(), &rows, &[plan]).unwrap();
+    assert_eq!(serde_json::to_string(&plan).unwrap(), GOLDEN_PLAN);
+
+    // New work is quoted, and recorded, under the current rules.
+    let current = quote_observations(&attempt(), &[], &[]).unwrap();
+    assert_eq!(current.pricing_rules, PRICING_RULES);
+}
+
+const GOLDEN_BILLED: &str =
+    r###"{"attempt":{"attempt_id":"00000000-0000-0000-0000-000000000001","request_id":"00000000-0000-0000-0000-000000000002","thread_id":"00000000-0000-0000-0000-000000000003","turn":"fixture","retry_of":null,"provider":"synthetic","model":"fixture-model","scope":"00000000-0000-0000-0000-000000000004","dialect":"Inclusive","dispatched_at_ms":100},"observations":[{"revision":3,"source":"00000000-0000-0000-0000-000000000005","sequence":30,"patch":{"input":60,"read":10,"write":0,"output":2,"reasoning":2}}],"usage":{"input":60,"noncached":50,"read":10,"write":0,"output":2,"reasoning":2,"total":null},"snapshot":{"id":"00000000-0000-0000-0000-000000000010","provider":"synthetic","model":"fixture-model","scope":"00000000-0000-0000-0000-000000000004","currency":"USD","unit":"PerMillionTokens","rates":{"noncached":"3","read":"0.3","write":null,"output":"2"},"source_reference":"00000000-0000-0000-0000-000000000011","source_kind":"ProviderPublished","basis":"Billed","plan_burn_millis":null,"observed_at_ms":80,"approved_at_ms":90,"effective_from_ms":100,"effective_end_ms":200},"buckets":[{"Priced":"0.00015"},{"Priced":"0.000003"},{"Priced":"0"},{"Priced":"0.000004"}],"known_subtotal":"0.000157","all_buckets_priced":"0.000157","subtotal_display":{"text":"0.000157","rounded":false,"nonzero_sub_micro":false},"known_equivalent":"0","all_buckets_equivalent":null,"plan_burn_millis":null,"plan_burn_milli_tokens":null}"###;
+const GOLDEN_PLAN: &str =
+    r###"{"attempt":{"attempt_id":"00000000-0000-0000-0000-000000000001","request_id":"00000000-0000-0000-0000-000000000002","thread_id":"00000000-0000-0000-0000-000000000003","turn":"fixture","retry_of":null,"provider":"synthetic","model":"fixture-model","scope":"00000000-0000-0000-0000-000000000004","dialect":"NativeAnthropic","dispatched_at_ms":100},"observations":[{"revision":1,"source":"00000000-0000-0000-0000-000000000005","sequence":10,"patch":{"input":50,"read":10,"output":4}}],"usage":{"input":null,"noncached":50,"read":10,"write":null,"output":4,"reasoning":null,"total":null},"snapshot":{"id":"00000000-0000-0000-0000-000000000010","provider":"synthetic","model":"fixture-model","scope":"00000000-0000-0000-0000-000000000004","currency":"USD","unit":"PerMillionTokens","rates":{"noncached":"3","read":"0.3","write":null,"output":null},"source_reference":"00000000-0000-0000-0000-000000000011","source_kind":"ProviderPublished","basis":"PlanEquivalent","plan_burn_millis":2000,"observed_at_ms":80,"approved_at_ms":90,"effective_from_ms":100,"effective_end_ms":200},"buckets":[{"Priced":"0.00015"},{"Priced":"0.000003"},"MissingUsage","MissingRate"],"known_subtotal":"0","all_buckets_priced":null,"subtotal_display":{"text":"0.000000","rounded":false,"nonzero_sub_micro":false},"known_equivalent":"0.000153","all_buckets_equivalent":null,"plan_burn_millis":2000,"plan_burn_milli_tokens":null}"###;
+
+#[test]
+fn quotes_refuse_rules_this_build_does_not_have() {
+    for rules in [0, PRICING_RULES + 1] {
+        let error = quote_observations_under(rules, &attempt(), &[], &[]).unwrap_err();
+        assert!(
+            rules == 0 || error.to_string().contains("newer than this build"),
+            "{error}"
+        );
+    }
 }

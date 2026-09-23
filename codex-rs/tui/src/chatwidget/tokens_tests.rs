@@ -256,6 +256,7 @@ fn quote() -> ObservationQuote {
         all_buckets_equivalent: None,
         plan_burn_millis: None,
         plan_burn_milli_tokens: None,
+        pricing_rules: 1,
     }
 }
 

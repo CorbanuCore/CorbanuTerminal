@@ -450,7 +450,7 @@ impl Journal<'_> {
             let quote = if versions <= 1 {
                 Journal::inspect_quote_on_connection(conn, uuid).await?
             } else {
-                bound_quote(conn, &attempt, &observations, binding).await?
+                recorded_or_current(conn, &attempt, &observations, binding).await?
             };
             let dispatch = i64::from(quote.attempt.dispatched_at_ms);
             ensure!(dispatch <= checkpoint, "future dispatch");

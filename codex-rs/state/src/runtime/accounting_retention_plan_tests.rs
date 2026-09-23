@@ -63,6 +63,7 @@ fn expected_raw(
             all_buckets_equivalent: None,
             plan_burn_millis: None,
             plan_burn_milli_tokens: None,
+            pricing_rules: 1,
         },
         day: key(0),
         detail_expires_at_ms: DETAIL_MS,

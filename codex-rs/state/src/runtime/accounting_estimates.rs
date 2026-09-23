@@ -91,7 +91,7 @@ impl<'a> EstimateStore<'a> {
                 .context("missing retained estimate")?;
         }
         match binding {
-            Some(binding) => bound_quote(conn, &attempt, &observations, binding).await,
+            Some(binding) => recorded_or_current(conn, &attempt, &observations, binding).await,
             None => quote_observations(&attempt, &observations, &[]),
         }
     }
@@ -138,7 +138,8 @@ impl<'a> EstimateStore<'a> {
                 );
             }
             let binding = binding(conn, id).await?.context("missing binding")?;
-            let quote = bound_quote(conn, &attempt, &observations, binding).await?;
+            let rules = recorded_rules(&payload)?;
+            let quote = bound_quote(conn, rules, &attempt, &observations, binding).await?;
             // Do not deserialize quote decimals through the stricter rate parser.
             ensure!(
                 serde_json::to_string(&quote)? == payload,
@@ -182,8 +183,42 @@ async fn read_snapshot(conn: &mut SqliteConnection, id: &str) -> anyhow::Result<
         .transpose()
 }
 
+/// The pricing rules a recorded estimate payload was computed under. Version 1
+/// predates the field and is the only version that omits it.
+fn recorded_rules(payload: &str) -> anyhow::Result<u16> {
+    let value: serde_json::Value = serde_json::from_str(payload)?;
+    match value.get("pricing_rules") {
+        None => Ok(1),
+        Some(rules) => {
+            let rules = rules.as_u64().context("noncanonical pricing rules")?;
+            ensure!(rules > 1, "noncanonical pricing rules");
+            Ok(u16::try_from(rules)?)
+        }
+    }
+}
+
+/// The quote for exactly this evidence: the recorded estimate when there is
+/// one, verified under the rules it was recorded with, otherwise a fresh quote
+/// under the current rules. A recorded estimate is never re-priced by a build
+/// whose rules changed since it was written.
+async fn recorded_or_current(
+    conn: &mut SqliteConnection,
+    attempt: &Attempt,
+    observations: &[Observation],
+    binding: Option<String>,
+) -> anyhow::Result<ObservationQuote> {
+    let evidence = serde_json::to_string(observations)?;
+    if let Some(recorded) =
+        EstimateStore::read_on_connection(conn, attempt.attempt_id, &evidence).await?
+    {
+        return Ok(recorded);
+    }
+    bound_quote(conn, PRICING_RULES, attempt, observations, binding).await
+}
+
 async fn bound_quote(
     conn: &mut SqliteConnection,
+    rules: u16,
     attempt: &Attempt,
     observations: &[Observation],
     binding: Option<String>,
@@ -196,7 +231,7 @@ async fn bound_quote(
         ),
         None => None,
     };
-    let quote = quote_observations(attempt, observations, snapshot.as_slice())?;
+    let quote = quote_observations_under(rules, attempt, observations, snapshot.as_slice())?;
     ensure!(quote.snapshot == snapshot, "ineligible bound snapshot");
     Ok(quote)
 }
@@ -278,8 +313,19 @@ impl Journal<'_> {
             }
         }
         let binding = binding(conn, id).await?;
+        if binding.is_some() {
+            let evidence = serde_json::to_string(&observations)?;
+            // Already recorded: that estimate stands, verified under its own
+            // rules. Recomputing it here under today's rules would turn any
+            // pricing change into an "immutable estimate conflict".
+            if let Some(recorded) = EstimateStore::read_on_connection(conn, id, &evidence).await? {
+                return Ok(recorded);
+            }
+        }
         let quote = match binding {
-            Some(binding) => bound_quote(conn, &attempt, &observations, binding).await?,
+            Some(binding) => {
+                bound_quote(conn, PRICING_RULES, &attempt, &observations, binding).await?
+            }
             None => quote_observations(&attempt, &observations, candidates)?,
         };
         if let Some(snapshot) = &quote.snapshot {

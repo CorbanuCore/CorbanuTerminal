@@ -230,6 +230,22 @@ pub enum BucketQuote {
     MissingRate,
 }
 
+/// The pricing rules new estimates are computed under.
+///
+/// A recorded estimate is history: it is re-verified by recomputing it under
+/// the rules that produced it, never under whatever this build would compute
+/// today. So any change to how a quote is computed or serialized must add a
+/// version here, keep every earlier version reproducible in
+/// `quote_observations_under`, and leave the version-1 payload bytes pinned by
+/// `recorded_version_one_payloads_stay_byte_identical` untouched. Changing a
+/// rule in place would make every recorded estimate fail verification, and a
+/// failed verification stops accounting - which stops every accounted turn.
+pub const PRICING_RULES: u16 = 1;
+
+fn is_first_rules(rules: &u16) -> bool {
+    *rules == 1
+}
+
 /// An observation-bound estimate has no terminal-coverage or billing claim.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ObservationQuote {
@@ -251,6 +267,10 @@ pub struct ObservationQuote {
     /// consumption it implies: total tokens scaled by that rate.
     pub plan_burn_millis: Option<u32>,
     pub plan_burn_milli_tokens: Option<i64>,
+    /// The rules this quote was computed under. Version 1 is not serialized,
+    /// so every estimate recorded before versioning keeps its exact bytes.
+    #[serde(skip_serializing_if = "is_first_rules")]
+    pub pricing_rules: u16,
 }
 
 /// Token counts for the four priced buckets. Usage stays exactly as observed -
@@ -279,6 +299,21 @@ fn quote_observations(
     observations: &[Observation],
     snapshots: &[Snapshot],
 ) -> anyhow::Result<ObservationQuote> {
+    quote_observations_under(PRICING_RULES, attempt, observations, snapshots)
+}
+
+/// Quote under a named version of the pricing rules. Every version ever
+/// recorded must stay reproducible here; see `PRICING_RULES`.
+fn quote_observations_under(
+    rules: u16,
+    attempt: &Attempt,
+    observations: &[Observation],
+    snapshots: &[Snapshot],
+) -> anyhow::Result<ObservationQuote> {
+    ensure!(
+        (1..=PRICING_RULES).contains(&rules),
+        "estimate recorded under pricing rules {rules}, newer than this build's {PRICING_RULES}"
+    );
     attempt.validate()?;
     let usage = replay(attempt.dialect, observations)?;
     ensure!(snapshots.len() <= 64, "snapshot candidate bound");
@@ -354,6 +389,7 @@ fn quote_observations(
         all_buckets_equivalent: (complete && plan).then_some(known_equivalent),
         plan_burn_millis,
         plan_burn_milli_tokens,
+        pricing_rules: rules,
     })
 }
 

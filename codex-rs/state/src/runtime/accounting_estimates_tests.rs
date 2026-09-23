@@ -498,3 +498,53 @@ async fn retained_journal_keys_payload_and_evidence_are_checked() -> anyhow::Res
     runtime.close().await;
     Ok(())
 }
+
+/// A recorded estimate is verified under the pricing rules it was recorded
+/// with, named in its payload; version 1 predates the field and omits it.
+#[test]
+fn recorded_rules_are_read_from_the_payload() {
+    assert_eq!(recorded_rules(r#"{"known_subtotal":"0"}"#).unwrap(), 1);
+    assert_eq!(recorded_rules(r#"{"pricing_rules":2}"#).unwrap(), 2);
+    // Version 1 is never written explicitly, so an explicit 1 is not canonical.
+    for payload in [r#"{"pricing_rules":1}"#, r#"{"pricing_rules":"2"}"#, r#"{"pricing_rules":-2}"#] {
+        assert!(recorded_rules(payload).is_err(), "{payload}");
+    }
+}
+
+/// An estimate recorded by a newer build (after a downgrade) cannot be
+/// re-verified here, and says so rather than looking like corruption. One
+/// recorded under this build's rules still reads and re-persists as recorded.
+#[tokio::test]
+async fn estimates_from_newer_rules_are_named_and_current_ones_stand() -> anyhow::Result<()> {
+    let home = home();
+    let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
+    let store = EstimateStore::create_for_tests(&runtime).await?;
+    let a = attempt();
+    store
+        .journal
+        .append_observation(&a, &[row(1, json!({"input":50,"read":10}))])
+        .await?;
+    let quote = store
+        .persist_current(a.attempt_id, &[snapshot("3")])
+        .await?;
+    let evidence = serde_json::to_string(&quote.observations)?;
+    assert_eq!(store.persist_current(a.attempt_id, &[]).await?, quote);
+    assert_eq!(
+        store.read_estimate(a.attempt_id, &evidence).await?,
+        Some(quote.clone())
+    );
+
+    let mut newer = serde_json::to_value(&quote)?;
+    newer["pricing_rules"] = json!(PRICING_RULES + 1);
+    sqlx::query("UPDATE draft_accounting_estimates SET payload = ?")
+        .bind(serde_json::to_string(&newer)?)
+        .execute(runtime.pool.as_ref())
+        .await?;
+    let error = store
+        .read_estimate(a.attempt_id, &evidence)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("newer than this build"), "{error}");
+    runtime.close().await;
+    Ok(())
+}

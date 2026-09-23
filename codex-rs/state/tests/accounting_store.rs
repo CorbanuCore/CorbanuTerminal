@@ -1158,7 +1158,9 @@ async fn original_price_null_unknown_zero_and_reordered_replay_survive_restart()
     let zero_quote = store
         .observe(missing.thread_id, &missing, &[zero.clone()], 0)
         .await?;
-    assert_eq!(zero_quote.all_buckets_priced, Some(Decimal::default()));
+    // No price was bound, so even an all-zero attempt makes no zero-cost claim
+    // (see 20034d7d2: an absent rate is not a zero cost).
+    assert_eq!(zero_quote.all_buckets_priced, None);
     assert_eq!(zero_quote.snapshot, None);
     let expected_day = store.read_day(a.thread_id, 0, 0).await?;
     runtime.close().await;
