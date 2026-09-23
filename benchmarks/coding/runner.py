@@ -55,6 +55,7 @@ class AgentSpec:
     command: tuple[str, ...] | None = None
     stdin_prompt: bool | None = None
     agent_args: tuple[str, ...] = ()
+    cli_model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -178,6 +179,7 @@ def load_specs(config_path: Path) -> tuple[dict[str, Any], list[TaskSpec], list[
                 command=tuple(str(item) for item in raw["command"]) if raw.get("command") else None,
                 stdin_prompt=bool(raw["stdin_prompt"]) if "stdin_prompt" in raw else None,
                 agent_args=tuple(str(item) for item in raw.get("agent_args") or []),
+                cli_model=str(raw["cli_model"]) if raw.get("cli_model") else None,
             )
         )
 
@@ -673,10 +675,19 @@ def run_isolated_agent(
     home: Path,
 ) -> tuple[dict[str, Any], str]:
     run_id = isolated_run_id(run.task, run.agent, run.wave)
-    token, registration = campaign.register(run_id, run.agent.model, run.task.timeout_seconds)
+    token, registration = campaign.register(
+        run_id, run.agent.model, run.task.timeout_seconds, run.agent.provider or "openrouter"
+    )
     try:
         argv, env, stdin_payload = sandbox.prepare_agent(
-            run.agent.kind, run.agent.model, prompt, home, token, run.agent.agent_args
+            run.agent.kind,
+            run.agent.model,
+            prompt,
+            home,
+            token,
+            run.agent.agent_args,
+            route=run.agent.provider or "openrouter",
+            cli_model=run.agent.cli_model,
         )
         env_file = run.result_dir / "container.env"
         sandbox.write_env_file(env_file, env)
@@ -989,8 +1000,12 @@ def main() -> int:
         unsupported = [agent.name for agent in agents if agent.kind not in spec.images]
         if unsupported:
             errors.append(f"docker isolation supports corbanu, hermes and kilo only: {unsupported}")
-        if not os.environ.get(spec.upstream_key_env, "").strip():
-            errors.append(f"missing {spec.upstream_key_env} for the relay")
+        for agent in agents:
+            route = agent.provider or "openrouter"
+            if route not in sandbox.GATEWAYS:
+                errors.append(f"agent {agent.name}: unsupported gateway {route!r}")
+            elif not os.environ.get(sandbox.GATEWAYS[route][1], "").strip():
+                errors.append(f"agent {agent.name}: missing {sandbox.GATEWAYS[route][1]} for the relay")
     if errors:
         raise SystemExit("\n".join(errors))
 

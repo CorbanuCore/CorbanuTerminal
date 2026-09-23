@@ -25,6 +25,11 @@ RELAY_SOURCE = ISOLATION_DIR / "relay.py"
 CONTAINER_HOME = "/home/bench"
 CONTAINER_WORKSPACE = "/workspace"
 CONTAINER_CA = "/bench-ca/ca.pem"
+# Gateway hostname -> (relay key variable, harness route name).
+GATEWAYS = {
+    "openrouter": ("openrouter.ai", "OPENROUTER_API_KEY"),
+    "vercel": ("ai-gateway.vercel.sh", "AI_GATEWAY_API_KEY"),
+}
 # Toolsets that fetch network content. They are disabled identically for every
 # harness; the network boundary would block them anyway.
 HERMES_DISABLED_TOOLSETS = ["web", "search", "browser", "x_search"]
@@ -90,20 +95,20 @@ class Campaign:
 
     # -- lifecycle ---------------------------------------------------------
     def start(self) -> dict[str, Any]:
-        key = os.environ.get(self.spec.upstream_key_env, "").strip()
-        if not key:
-            raise RuntimeError(f"{self.spec.upstream_key_env} is required for the relay")
+        key_envs = [env for _, env in GATEWAYS.values() if os.environ.get(env, "").strip()]
+        if not key_envs:
+            raise RuntimeError("a gateway key (OPENROUTER_API_KEY or AI_GATEWAY_API_KEY) is required")
         for image in self.spec.images.values():
             _docker("image", "inspect", image)
         (self.records / "registrations").mkdir(parents=True, exist_ok=True)
         self._issue_certificate()
         _docker("network", "create", "--internal", self.network)
-        env = {**os.environ, "OPENROUTER_API_KEY": key}
+        env_args = [arg for env in key_envs for arg in ("--env", env)]
         _docker(
             "run", "-d", "--name", self.relay_name,
             "--user", f"{os.getuid()}:{os.getgid()}",
             "--sysctl", "net.ipv4.ip_unprivileged_port_start=443",
-            "--env", "OPENROUTER_API_KEY",
+            *env_args,
             "--mount", f"type=bind,src={RELAY_SOURCE},dst=/relay.py,readonly",
             "--mount", f"type=bind,src={self.tls / 'relay.pem'},dst=/tls/relay.pem,readonly",
             "--mount", f"type=bind,src={self.tls / 'relay.key'},dst=/tls/relay.key,readonly",
@@ -111,7 +116,6 @@ class Campaign:
             self.spec.relay_image,
             "python3", "/relay.py", "--records", "/records",
             "--cert", "/tls/relay.pem", "--key", "/tls/relay.key", "--port", "443",
-            env=env,
         )
         _docker("network", "connect", self.network, self.relay_name)
         self.relay_ip = _docker(
@@ -130,6 +134,7 @@ class Campaign:
                 for kind, image in self.spec.images.items()
             },
             "relay_source_sha256": hashlib.sha256(RELAY_SOURCE.read_bytes()).hexdigest(),
+            "gateway_keys_present": key_envs,
         }
 
     def stop(self) -> None:
@@ -147,8 +152,9 @@ class Campaign:
                  "-addext", "keyUsage=critical,keyCertSign,cRLSign")
         _openssl("req", "-newkey", "rsa:2048", "-nodes", "-keyout", str(key), "-out", str(csr),
                  "-subj", "/CN=openrouter.ai")
+        names = ",".join(f"DNS:{host}" for host, _ in GATEWAYS.values())
         ext.write_text(
-            "subjectAltName=DNS:openrouter.ai\nbasicConstraints=CA:FALSE\n"
+            f"subjectAltName={names}\nbasicConstraints=CA:FALSE\n"
             "extendedKeyUsage=serverAuth\nkeyUsage=digitalSignature,keyEncipherment\n",
             encoding="utf-8",
         )
@@ -160,11 +166,18 @@ class Campaign:
         key.chmod(0o600)
 
     # -- per run -----------------------------------------------------------
-    def register(self, run_id: str, model: str, timeout_seconds: int) -> tuple[str, Path]:
+    def register(
+        self, run_id: str, model: str, timeout_seconds: int, route: str = "openrouter"
+    ) -> tuple[str, Path]:
         token = secrets.token_urlsafe(32)
         path = self.records / "registrations" / f"{hashlib.sha256(token.encode()).hexdigest()}.json"
         path.write_text(
-            json.dumps({"run_id": run_id, "model": model, "expires_at": time.time() + timeout_seconds + 300}),
+            json.dumps({
+                "run_id": run_id,
+                "model": model,
+                "upstream": GATEWAYS[route][0],
+                "expires_at": time.time() + timeout_seconds + 300,
+            }),
             encoding="utf-8",
         )
         return token, path
@@ -184,7 +197,8 @@ class Campaign:
             raise RuntimeError("campaign relay is not running")
         return [
             "docker", "run", "--rm", "--init", "--name", name,
-            "--network", self.network, "--add-host", f"openrouter.ai:{self.relay_ip}",
+            "--network", self.network,
+            *[arg for host, _ in GATEWAYS.values() for arg in ("--add-host", f"{host}:{self.relay_ip}")],
             "--user", f"{os.getuid()}:{os.getgid()}",
             "--cpus", self.spec.cpus, "--memory", self.spec.memory,
             "--pids-limit", str(self.spec.pids_limit),
@@ -214,6 +228,8 @@ def prepare_agent(
     home: Path,
     token: str,
     extra_args: tuple[str, ...] = (),
+    route: str = "openrouter",
+    cli_model: str | None = None,
 ) -> tuple[list[str], dict[str, str], str | None]:
     """Write the harness's fresh home and return (argv, env, stdin payload).
 
@@ -222,8 +238,11 @@ def prepare_agent(
     """
 
     home.mkdir(parents=True, exist_ok=True)
+    if route not in GATEWAYS:
+        raise ValueError(f"unsupported gateway route {route!r}")
+    cli_model = cli_model or model
     env = {
-        "OPENROUTER_API_KEY": token,
+        GATEWAYS[route][1]: token,
         "SSL_CERT_FILE": CONTAINER_CA,
         "REQUESTS_CA_BUNDLE": CONTAINER_CA,
         "NODE_EXTRA_CA_CERTS": CONTAINER_CA,
@@ -235,7 +254,8 @@ def prepare_agent(
         argv = [
             "corbanu", "exec", "--json", "--skip-git-repo-check",
             "--dangerously-bypass-approvals-and-sandbox", "-C", CONTAINER_WORKSPACE,
-            "-c", 'model_provider="openrouter"', "-m", model, *extra_args, "-",
+            "-c", f'model_provider="{route}"', "-c", 'web_search="disabled"',
+            "-m", cli_model, *extra_args, "-",
         ]
         return argv, env, prompt
     if kind == "hermes":
@@ -250,7 +270,8 @@ def prepare_agent(
         # file tools anchor at $HOME inside a container.
         env["TERMINAL_CWD"] = CONTAINER_WORKSPACE
         argv = [
-            "hermes", "--provider", "openrouter", "-m", model, "--yolo", "--accept-hooks",
+            "hermes", "--provider", {"openrouter": "openrouter", "vercel": "ai-gateway"}[route],
+            "-m", cli_model, "--yolo", "--accept-hooks",
             "--usage-file", f"{CONTAINER_HOME}/hermes-usage.json", *extra_args, "-z", prompt,
         ]
         return argv, env, None
@@ -272,7 +293,7 @@ def prepare_agent(
         # Kilo quotes and backslash-escapes a multi-line argv message, so the
         # model would see a corrupted prompt. Piped stdin arrives verbatim.
         argv = [
-            "kilo", "run", "--model", f"openrouter/{model}", "--dir", CONTAINER_WORKSPACE,
+            "kilo", "run", "--model", f"{route}/{cli_model}", "--dir", CONTAINER_WORKSPACE,
             "--format", "json", "--auto", "--title", "benchmark", *extra_args,
         ]
         return argv, env, prompt
@@ -296,17 +317,16 @@ def summarize_run_records(records: Path, expected_model: str) -> dict[str, Any]:
     events = _jsonl(records / "events.jsonl")
     rejected = [event for event in events if event.get("decision") == "rejected"]
     served = sorted({model for row in usage_rows for model in row.get("observed_models") or []})
-    costs = [
-        float(row["usage"]["cost"])
-        for row in usage_rows
-        if isinstance(row.get("usage"), dict) and isinstance(row["usage"].get("cost"), (int, float))
-    ]
+    def charged(row: dict[str, Any]) -> float | None:
+        value = row.get("charged_cost_usd")
+        if isinstance(value, (int, float)):
+            return float(value)
+        usage = row.get("usage") if isinstance(row.get("usage"), dict) else {}
+        return float(usage["cost"]) if isinstance(usage.get("cost"), (int, float)) else None
+
+    costs = [cost for cost in (charged(row) for row in usage_rows) if cost is not None]
     ok_rows = [row for row in usage_rows if row.get("status") == 200]
-    missing_cost = [
-        row.get("request_id")
-        for row in ok_rows
-        if not isinstance((row.get("usage") or {}).get("cost"), (int, float))
-    ]
+    missing_cost = [row.get("request_id") for row in ok_rows if charged(row) is None]
     return {
         "inference_requests": len(usage_rows),
         "successful_inference_requests": len(ok_rows),
@@ -333,9 +353,14 @@ def _usage_totals(rows: list[dict[str, Any]]) -> dict[str, int]:
             value = usage.get(key)
             if isinstance(value, int):
                 totals[key] = totals.get(key, 0) + value
-        details = usage.get("prompt_tokens_details") or {}
-        if isinstance(details.get("cached_tokens"), int):
-            totals["cached_tokens"] = totals.get("cached_tokens", 0) + details["cached_tokens"]
+        for details_key in ("prompt_tokens_details", "input_tokens_details"):
+            details = usage.get(details_key) or {}
+            if isinstance(details.get("cached_tokens"), int):
+                totals["cached_tokens"] = totals.get("cached_tokens", 0) + details["cached_tokens"]
+        for details_key in ("completion_tokens_details", "output_tokens_details"):
+            details = usage.get(details_key) or {}
+            if isinstance(details.get("reasoning_tokens"), int):
+                totals["reasoning_tokens"] = totals.get("reasoning_tokens", 0) + details["reasoning_tokens"]
     return totals
 
 

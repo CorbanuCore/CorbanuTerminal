@@ -131,6 +131,102 @@ class RelayPolicyTests(unittest.TestCase):
         self.assertEqual(relay.response_facts(message, "application/json")["observed_models"], ["anthropic/claude-opus-5.5"])
 
 
+class FakeUpstreamResponse:
+    def __init__(self, body: bytes) -> None:
+        self.status = 200
+        self._chunks = [body]
+
+    def getheader(self, name: str, default: str = "") -> str:
+        return "text/event-stream" if name.lower() == "content-type" else default
+
+    def read1(self, _size: int) -> bytes:
+        return self._chunks.pop(0) if self._chunks else b""
+
+
+class FakeUpstreamConnection:
+    requests: list[tuple[str, str, str, dict]] = []
+    body = b""
+
+    def __init__(self, host: str, timeout: int) -> None:
+        self.host = host
+
+    def request(self, method, path, body=None, headers=None) -> None:
+        FakeUpstreamConnection.requests.append((self.host, method, path, dict(headers or {})))
+
+    def getresponse(self) -> FakeUpstreamResponse:
+        return FakeUpstreamResponse(FakeUpstreamConnection.body)
+
+    def close(self) -> None:
+        return
+
+
+class RelayRoundTripTests(unittest.TestCase):
+    def setUp(self) -> None:
+        import hashlib
+        import http.client
+        import threading
+        import time
+        from http.server import ThreadingHTTPServer
+
+        self.temporary = tempfile.TemporaryDirectory()
+        self.records = Path(self.temporary.name)
+        (self.records / "registrations").mkdir()
+        for token, route in (("tok-vercel", "ai-gateway.vercel.sh"), ("tok-or", "openrouter.ai")):
+            (self.records / "registrations" / f"{hashlib.sha256(token.encode()).hexdigest()}.json").write_text(
+                json.dumps({"run_id": f"run-{route}", "model": "moonshotai/kimi-k3", "upstream": route,
+                            "expires_at": time.time() + 60}),
+                encoding="utf-8",
+            )
+        self.original_connection = relay.http.client.HTTPSConnection
+        relay.http.client.HTTPSConnection = FakeUpstreamConnection
+        FakeUpstreamConnection.requests = []
+        relay.Relay.records = self.records
+        relay.Relay.api_keys = {"ai-gateway.vercel.sh": "real-vercel-key", "openrouter.ai": "real-or-key"}
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), relay.Relay)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.http = http.client
+
+    def tearDown(self) -> None:
+        self.server.shutdown()
+        relay.http.client.HTTPSConnection = self.original_connection
+        self.temporary.cleanup()
+
+    def post(self, host: str, token: str, body: dict) -> int:
+        connection = self.http.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=10)
+        connection.request("POST", "/v1/chat/completions", body=json.dumps(body),
+                           headers={"Host": host, "Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+        response = connection.getresponse()
+        response.read()
+        connection.close()
+        return response.status
+
+    def test_vercel_run_is_forwarded_with_real_key_and_charged_cost_recorded(self) -> None:
+        FakeUpstreamConnection.body = (
+            b'data: {"id":"gen_1","model":"moonshotai/kimi-k3","choices":[{"delta":{"provider_metadata":'
+            b'{"gateway":{"cost":"0.03","gatewayCost":"0.0301","generationId":"gen_1"}}}}],'
+            b'"usage":{"prompt_tokens":10,"completion_tokens":2,"cost":0.03}}\n\ndata: [DONE]\n\n'
+        )
+        status = self.post("ai-gateway.vercel.sh", "tok-vercel", {"model": "moonshotai/kimi-k3", "messages": []})
+        self.assertEqual(status, 200)
+        host, _, path, headers = FakeUpstreamConnection.requests[-1]
+        self.assertEqual((host, path, headers["Authorization"]), ("ai-gateway.vercel.sh", "/v1/chat/completions", "Bearer real-vercel-key"))
+        usage_path = self.records / "runs" / "run-ai-gateway.vercel.sh" / "usage.jsonl"
+        import time
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and not (usage_path.exists() and usage_path.read_text().strip()):
+            time.sleep(0.02)  # accounting is written after the stream closes
+        rows = [json.loads(line) for line in usage_path.read_text().splitlines()]
+        self.assertEqual(rows[0]["upstream"], "ai-gateway.vercel.sh")
+        self.assertEqual(rows[0]["charged_cost_usd"], 0.0301)
+        self.assertEqual(rows[0]["generation_ids"], ["gen_1"])
+
+    def test_tokens_are_bound_to_their_gateway_and_model(self) -> None:
+        self.assertEqual(self.post("ai-gateway.vercel.sh", "tok-or", {"model": "moonshotai/kimi-k3"}), 401)
+        self.assertEqual(self.post("ai-gateway.vercel.sh", "tok-vercel", {"model": "moonshotai/kimi-k2.6"}), 400)
+        self.assertEqual(self.post("evil.example", "tok-vercel", {"model": "moonshotai/kimi-k3"}), 421)
+        self.assertEqual(FakeUpstreamConnection.requests, [])
+
+
 class SandboxTests(unittest.TestCase):
     def test_every_harness_gets_same_prompt_native_openrouter_and_no_host_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -145,6 +241,17 @@ class SandboxTests(unittest.TestCase):
                 for value in env.values():
                     self.assertFalse(value.startswith(str(Path.home())))
             self.assertEqual(set(seen.values()), {PROMPT})
+            vercel_argv, vercel_env, _ = sandbox.prepare_agent(
+                "corbanu", "moonshotai/kimi-k3", PROMPT, root / "cv", "t",
+                route="vercel", cli_model="vercel/moonshotai/kimi-k3",
+            )
+            self.assertEqual(vercel_env["AI_GATEWAY_API_KEY"], "t")
+            self.assertNotIn("OPENROUTER_API_KEY", vercel_env)
+            self.assertIn('model_provider="vercel"', vercel_argv)
+            self.assertIn("vercel/moonshotai/kimi-k3", vercel_argv)
+            self.assertIn('web_search="disabled"', vercel_argv)
+            hermes_argv, _, _ = sandbox.prepare_agent("hermes", "moonshotai/kimi-k3", PROMPT, root / "hv", "t", route="vercel")
+            self.assertEqual(hermes_argv[hermes_argv.index("--provider") + 1], "ai-gateway")
             kilo_argv, _, kilo_stdin = sandbox.prepare_agent("kilo", "m", PROMPT, root / "k2", "t")
             self.assertEqual(kilo_stdin, PROMPT)
             self.assertNotIn(PROMPT, kilo_argv)
@@ -166,6 +273,7 @@ class SandboxTests(unittest.TestCase):
             ["src=/runs/x/ws", "src=/runs/x/home", f"src={campaign.tls / 'ca.pem'}"],
         )
         self.assertIn("openrouter.ai:10.0.0.2", argv)
+        self.assertIn("ai-gateway.vercel.sh:10.0.0.2", argv)
         self.assertEqual(argv[argv.index("--network") + 1], campaign.network)
         self.assertNotIn("--privileged", argv)
         self.assertIn("img-c", argv)

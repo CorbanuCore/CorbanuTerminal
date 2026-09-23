@@ -97,6 +97,10 @@
               "type": "string"
             },
             "description": "Isolated mode only: extra harness CLI arguments, recorded in the manifest (for example a disclosed reasoning override). Empty means harness defaults."
+          },
+          "cli_model": {
+            "type": "string",
+            "description": "Isolated mode only: model name passed to the harness when it differs from the gateway wire model pinned by the relay (for example vercel/moonshotai/kimi-k3)."
           }
         },
         "additionalProperties": false
