@@ -41,6 +41,14 @@ breakpoints.
 - New regression tests: `chat_cache_breakpoints_follow_the_newest_tool_turn` and
   `chat_cache_breakpoints_skip_messages_without_text`.
 - `cargo test -p codex-core --lib client::` on the fix commit: **50/50 passed**.
+- Versioned release tree, `cargo nextest run` (8 MiB stack, local profile) for
+  `codex-core`, `codex-model-provider-info` and `codex-models-manager` libraries:
+  2555 run, 2551 passed (2 flaky passed on retry), 4 failed under full parallel
+  load. Rerun in isolation, three of those (`snapshot_shell_does_not_inherit_stdin`,
+  `completed_pipe_commands_preserve_exit_code`,
+  `shell_tool_cancellation_waits_for_runtime_cleanup`) passed.
+  `spawn_agent_allows_depth_up_to_configured_max_depth` fails identically with
+  this fix reverted, so it predates this release. It is not claimed as passed.
 - Leak-isolated benchmark (repository harness `benchmarks/coding`, per-run
   containers, OpenRouter relay, Opus 5.5, one wave each):
 
