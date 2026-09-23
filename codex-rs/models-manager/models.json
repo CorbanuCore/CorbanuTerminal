@@ -400,13 +400,48 @@
         "provider_id": "deepseek",
         "capability": "balanced",
         "billing": {
-          "kind": "metered",
-          "input_milli_usd_per_million_tokens": 435,
-          "output_milli_usd_per_million_tokens": 870
+          "kind": "metered_schedule",
+          "off_peak": {
+            "input_milli_usd_per_million_tokens": 660,
+            "output_milli_usd_per_million_tokens": 1980,
+            "cached_input_milli_usd_per_million_tokens": 22
+          },
+          "peak": {
+            "input_milli_usd_per_million_tokens": 1320,
+            "output_milli_usd_per_million_tokens": 3960,
+            "cached_input_milli_usd_per_million_tokens": 44
+          },
+          "peak_windows": [
+            {
+              "start_utc_hour": 1,
+              "end_utc_hour": 4
+            },
+            {
+              "start_utc_hour": 6,
+              "end_utc_hour": 10
+            }
+          ],
+          "peak_weekdays": {
+            "monday": true,
+            "tuesday": true,
+            "wednesday": true,
+            "thursday": true,
+            "friday": true,
+            "saturday": false,
+            "sunday": false
+          },
+          "off_peak_dates_utc": [
+            "2026-09-25",
+            "2026-10-01",
+            "2026-10-02",
+            "2026-10-05",
+            "2026-10-06",
+            "2026-10-07"
+          ]
         }
       },
       "display_name": "DeepSeek V4 Pro (Direct)",
-      "description": "DeepSeek API: V4 Pro - $0.435/M input, $0.003625/M cached input, $0.87/M output.",
+      "description": "DeepSeek API: V4 Pro - $0.66/M input, $0.022/M cached input, $1.98/M output off-peak; double at peak (01:00-04:00 and 06:00-10:00 UTC, Monday-Friday, except Chinese public holidays).",
       "default_reasoning_level": "high",
       "supported_reasoning_levels": [
         {

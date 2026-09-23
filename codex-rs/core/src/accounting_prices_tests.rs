@@ -588,8 +588,8 @@ fn accounting_baseten_states_a_free_cache_write() -> anyhow::Result<()> {
 /// so its snapshot states a zero cache-write rate; that is what lets pricing
 /// charge the miss when DeepSeek's usage omits cache writes. Its rates change
 /// by time of day, and a snapshot states the rate in force at dispatch. Every
-/// provider not on `NO_CACHE_WRITE_CHARGE` keeps the null cache-write of projection v1, and with it its
-/// content identity.
+/// provider not on `NO_CACHE_WRITE_CHARGE` keeps the null cache-write of
+/// projection v1, and with it its content identity.
 #[test]
 fn accounting_deepseek_states_the_rate_in_force_and_a_free_cache_write() -> anyhow::Result<()> {
     let scope = Uuid::from_u128(7);
@@ -599,11 +599,31 @@ fn accounting_deepseek_states_the_rate_in_force_and_a_free_cache_write() -> anyh
     };
     let peak_at = at("2026-09-22T02:00:00Z")?; // Tuesday, inside 01:00-04:00 UTC
     let off_peak_at = at("2026-09-22T05:00:00Z")?; // between the peak windows
-    for (accepted_at, input, read, output) in [
-        (peak_at, "0.3", "0.006", "1.2"),
-        (off_peak_at, "0.15", "0.003", "0.6"),
+    for (models, accepted_at, input, read, output) in [
+        (
+            &["deepseek-flash", "deepseek-v4-flash"][..],
+            peak_at,
+            "0.3",
+            "0.006",
+            "1.2",
+        ),
+        (
+            &["deepseek-flash", "deepseek-v4-flash"][..],
+            off_peak_at,
+            "0.15",
+            "0.003",
+            "0.6",
+        ),
+        (&["deepseek-v4-pro"][..], peak_at, "1.32", "0.044", "3.96"),
+        (
+            &["deepseek-v4-pro"][..],
+            off_peak_at,
+            "0.66",
+            "0.022",
+            "1.98",
+        ),
     ] {
-        for model in ["deepseek-flash", "deepseek-v4-flash"] {
+        for model in models {
             let snapshot =
                 original(model, "deepseek", scope, accepted_at, "bundled-models-v1")?.remove(0);
             assert_eq!(

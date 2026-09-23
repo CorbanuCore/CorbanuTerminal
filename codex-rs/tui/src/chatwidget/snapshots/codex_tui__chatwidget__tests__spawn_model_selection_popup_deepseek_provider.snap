@@ -8,8 +8,10 @@ expression: popup
   OpenAI  Ambient  Corbanu API  Kimi Code  Z.AI  [DeepSeek]  Claude Plan  Anthropic  Meta  Vercel  Baseten
   OpenRouter
 
-  1. DeepSeek V4 Pro (Direct)                Model: deepseek-v4-pro. DeepSeek API: V4 Pro - $0.435/M input,
-                                             $0.003625/M cached input, $0.87/M output.
+  1. DeepSeek V4 Pro (Direct)                Model: deepseek-v4-pro. DeepSeek API: V4 Pro - $0.66/M input,
+                                             $0.022/M cached input, $1.98/M output off-peak; double at peak
+                                             (01:00-04:00 and 06:00-10:00 UTC, Monday-Friday, except Chinese
+                                             public holidays).
 › 2. DeepSeek V4.1 Flash (Direct) (current)  Model: deepseek-flash. DeepSeek Responses API: V4.1 Flash -
                                              $0.15/M input, $0.003/M cached input, $0.60/M output off-peak;
                                              double at peak (01:00-04:00 and 06:00-10:00 UTC, Monday-Friday,
