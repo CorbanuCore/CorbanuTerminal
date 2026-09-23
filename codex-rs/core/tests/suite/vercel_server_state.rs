@@ -139,11 +139,25 @@ async fn vercel_tool_followup_falls_back_to_full_context_and_keeps_state() -> Re
     Ok(())
 }
 
-/// A visible assistant commentary message before a tool call requires a
-/// synthetic user turn on Vercel's wire. That wire-only item must not enter
-/// the canonical continuation baseline or force later full-context replays.
+fn input_has_synthetic_continue(request: &ResponsesRequest) -> bool {
+    input_items(request).iter().any(|item| {
+        item.get("role").and_then(Value::as_str) == Some("user")
+            && item
+                .get("content")
+                .and_then(Value::as_array)
+                .is_some_and(|parts| {
+                    parts
+                        .iter()
+                        .any(|part| part.get("text").and_then(Value::as_str) == Some("Continue."))
+                })
+    })
+}
+
+/// A visible assistant commentary message before a tool call is not a prefill: the request ends
+/// in tool output. It must not gain a synthetic `Continue.` user turn, which models read as the
+/// user interjecting after every tool result.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn vercel_commentary_tool_followups_keep_incremental_server_state() -> Result<()> {
+async fn vercel_commentary_tool_followups_carry_no_synthetic_user_turn() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = responses::start_mock_server().await;
@@ -178,15 +192,76 @@ async fn vercel_commentary_tool_followups_keep_incremental_server_state() -> Res
 
     let requests = response_mock.requests();
     assert_eq!(requests.len(), 3);
-    assert_eq!(previous_response_id(&requests[0]), None);
+    for (index, call_id) in [(1, first_call_id), (2, second_call_id)] {
+        assert!(input_has_function_call_output(&requests[index], call_id));
+        assert!(
+            !input_has_synthetic_continue(&requests[index]),
+            "tool follow-up {index} must not carry a synthetic Continue. turn"
+        );
+        // Vercel requires a user message in a previous_response_id continuation, so a tool
+        // follow-up without one is sent with full context.
+        assert_eq!(previous_response_id(&requests[index]), None);
+        assert!(input_has_user_message(&requests[index]));
+    }
+    Ok(())
+}
 
-    assert_eq!(previous_response_id(&requests[1]).as_deref(), Some("resp1"));
-    assert!(input_has_function_call_output(&requests[1], first_call_id));
-    assert!(input_has_user_message(&requests[1]));
+/// A provider that still rejects a tool continuation ending in tool output after assistant
+/// commentary gets one retry with the legacy synthetic turn, and the session keeps using it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn vercel_rejected_tool_continuation_restores_synthetic_turn_for_session() -> Result<()> {
+    skip_if_no_network!(Ok(()));
 
-    assert_eq!(previous_response_id(&requests[2]).as_deref(), Some("resp2"));
-    assert!(input_has_function_call_output(&requests[2], second_call_id));
-    assert!(input_has_user_message(&requests[2]));
+    let server = responses::start_mock_server().await;
+    let sse_template = |events: Vec<Value>| {
+        ResponseTemplate::new(200)
+            .insert_header("content-type", "text/event-stream")
+            .set_body_raw(sse(events), "text/event-stream")
+    };
+    let response_mock = mount_response_sequence(
+        &server,
+        vec![
+            sse_template(vec![
+                ev_response_created("resp1"),
+                ev_assistant_message("msg-1", "I will inspect this first."),
+                ev_function_call("call-a", "nonexistent_tool", "{}"),
+                ev_completed("resp1"),
+            ]),
+            ResponseTemplate::new(400).set_body_json(serde_json::json!({
+                "error": {
+                    "type": "invalid_request_error",
+                    "message": "The conversation must end with a user message."
+                }
+            })),
+            sse_template(vec![
+                ev_response_created("resp2"),
+                ev_function_call("call-b", "nonexistent_tool", "{}"),
+                ev_completed("resp2"),
+            ]),
+            sse_template(vec![
+                ev_response_created("resp3"),
+                ev_assistant_message("msg-2", "done"),
+                ev_completed("resp3"),
+            ]),
+        ],
+    )
+    .await;
+
+    let mut builder = vercel_test_codex();
+    let test = builder.build(&server).await?;
+    test.submit_turn("please inspect the repository").await?;
+
+    let requests = response_mock.requests();
+    assert_eq!(requests.len(), 4, "only one rejected request may be spent");
+    assert!(!input_has_synthetic_continue(&requests[1]));
+    assert!(
+        input_has_synthetic_continue(&requests[2]),
+        "the retry restores the synthetic turn"
+    );
+    assert!(
+        input_has_synthetic_continue(&requests[3]),
+        "the session keeps the legacy shape after a rejection"
+    );
     Ok(())
 }
 

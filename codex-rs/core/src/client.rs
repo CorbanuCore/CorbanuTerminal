@@ -268,6 +268,9 @@ struct ModelClientState {
     /// this session. Some upstream models (Kimi K3 on Vercel) reject every
     /// incremental continuation; retrying it each turn doubles the requests.
     http_server_state_rejected: AtomicBool,
+    /// Set once a provider rejects a tool continuation that ends in tool output after an
+    /// assistant message. The session then restores the legacy synthetic `Continue.` turn.
+    legacy_synthetic_continuation: AtomicBool,
 }
 
 /// Resolved API client setup for a single request attempt.
@@ -512,10 +515,12 @@ fn items_after_last_model_output(input: &[ResponseItem]) -> Option<Vec<ResponseI
 /// Prevent a completed assistant message from becoming an accidental prefill on the next model
 /// request.
 ///
-/// Responses requests can contain tool activity after a visible assistant message. Some upstream
-/// models ignore those non-message items when validating conversation shape and reject the request
-/// because its latest message is still `assistant`. The continuation is request-only: it does not
-/// rewrite the durable conversation history.
+/// Only a request whose conversation genuinely ends with assistant output is a prefill; some
+/// upstream models reject that shape (Claude via Vercel: "This model does not support assistant
+/// message prefill"). Tool results after an assistant message are an ordinary tool continuation
+/// and are accepted by Kimi K3, GLM 5.3, Claude and DeepSeek V4 on the Vercel Responses route.
+/// Appending `Continue.` there made models read a user interjection after every tool result.
+/// The continuation is request-only: it does not rewrite the durable conversation history.
 fn responses_input_needs_synthetic_user_turn(input: &[ResponseItem]) -> bool {
     // A compaction trigger is itself the terminal request control. Appending anything after it is
     // invalid, and it does not need the user-message continuation used for ordinary sampling.
@@ -526,16 +531,58 @@ fn responses_input_needs_synthetic_user_turn(input: &[ResponseItem]) -> bool {
         return false;
     }
 
+    input
+        .iter()
+        .rev()
+        .find_map(terminal_item_is_assistant_output)
+        == Some(true)
+}
+
+/// Legacy session fallback: treat the conversation as a prefill whenever the latest *message* is
+/// assistant, even when tool activity follows. Used only after a provider rejects the narrower
+/// shape in this session.
+fn responses_input_latest_message_is_assistant(input: &[ResponseItem]) -> bool {
+    if input
+        .iter()
+        .any(|item| matches!(item, ResponseItem::CompactionTrigger { .. }))
+    {
+        return false;
+    }
     let latest_message_is_assistant = input.iter().rev().find_map(|item| match item {
         ResponseItem::Message { role, .. } => Some(role == "assistant"),
         // Incoming collaboration mail is serialized as an assistant-originated message by the
-        // Responses adapters. Treat it as message-shaped here as well; otherwise child completion
-        // mail arriving after a turn leaves the next request in the same invalid prefill shape as
-        // a trailing ordinary assistant message.
+        // Responses adapters. Treat it as message-shaped here as well.
         ResponseItem::AgentMessage { .. } => Some(true),
         _ => None,
     });
     latest_message_is_assistant == Some(true)
+}
+
+/// Classifies the item that ends a request: `Some(true)` for assistant output (a prefill),
+/// `Some(false)` for user input or tool activity, `None` for items that do not reach the model as
+/// conversation turns and are skipped.
+fn terminal_item_is_assistant_output(item: &ResponseItem) -> Option<bool> {
+    match item {
+        ResponseItem::Message { role, .. } => Some(role == "assistant"),
+        // Incoming collaboration mail is serialized as an assistant-originated message by the
+        // Responses adapters; child completion mail arriving after a turn is a prefill shape.
+        ResponseItem::AgentMessage { .. } => Some(true),
+        ResponseItem::LocalShellCall { .. }
+        | ResponseItem::FunctionCall { .. }
+        | ResponseItem::ToolSearchCall { .. }
+        | ResponseItem::FunctionCallOutput { .. }
+        | ResponseItem::CustomToolCall { .. }
+        | ResponseItem::CustomToolCallOutput { .. }
+        | ResponseItem::ToolSearchOutput { .. }
+        | ResponseItem::WebSearchCall { .. }
+        | ResponseItem::ImageGenerationCall { .. }
+        | ResponseItem::Compaction { .. }
+        | ResponseItem::ContextCompaction { .. } => Some(false),
+        ResponseItem::AdditionalTools { .. }
+        | ResponseItem::Reasoning { .. }
+        | ResponseItem::CompactionTrigger { .. }
+        | ResponseItem::Other => None,
+    }
 }
 
 fn append_synthetic_responses_user_turn(input: &mut Vec<ResponseItem>) {
@@ -764,6 +811,7 @@ impl ModelClient {
                 cached_websocket_session: StdMutex::new(WebsocketSession::default()),
                 server_conversation_state: Arc::new(StdMutex::new(None)),
                 http_server_state_rejected: AtomicBool::new(false),
+                legacy_synthetic_continuation: AtomicBool::new(false),
             }),
             agent_identity_policy,
             prompt_cache_key_override: None,
@@ -1020,6 +1068,7 @@ impl ModelClient {
                 cached_websocket_session: StdMutex::new(WebsocketSession::default()),
                 server_conversation_state: Arc::new(StdMutex::new(None)),
                 http_server_state_rejected: AtomicBool::new(false),
+                legacy_synthetic_continuation: AtomicBool::new(false),
             }),
             agent_identity_policy: self.agent_identity_policy,
             prompt_cache_key_override: self.prompt_cache_key_override.clone(),
@@ -2099,6 +2148,22 @@ impl ModelClient {
         // endpoint; when either is terminal, append a request-only user continuation so the next
         // sample cannot be interpreted as an assistant prefill.
         responses_input_needs_synthetic_user_turn(input)
+            || (self
+                .state
+                .legacy_synthetic_continuation
+                .load(Ordering::Relaxed)
+                && responses_input_latest_message_is_assistant(input))
+    }
+
+    /// True when this request omits the synthetic turn only because of the narrower prefill
+    /// rule, so a 400 may come from a provider that still needs the legacy shape.
+    fn responses_input_omits_legacy_synthetic_turn(&self, input: &[ResponseItem]) -> bool {
+        !self
+            .state
+            .legacy_synthetic_continuation
+            .load(Ordering::Relaxed)
+            && responses_input_latest_message_is_assistant(input)
+            && !responses_input_needs_synthetic_user_turn(input)
     }
 
     /// Returns whether the Responses-over-WebSocket transport is active for this session.
@@ -3113,6 +3178,7 @@ impl ModelClientSession {
         let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
         let mut server_state_retry_used = false;
+        let mut legacy_continuation_retry_used = false;
         loop {
             let provider_request_started_at = Instant::now();
             trace_stream_timing(
@@ -3163,6 +3229,9 @@ impl ModelClientSession {
             let append_user_turn = self
                 .client
                 .responses_input_needs_synthetic_user_turn(&logical_request.input);
+            let omitted_legacy_synthetic_turn = self
+                .client
+                .responses_input_omits_legacy_synthetic_turn(&logical_request.input);
             if uses_http_server_state {
                 self.prepare_http_server_state_request(
                     &mut request,
@@ -3262,6 +3331,30 @@ impl ModelClientSession {
                         .store(true, Ordering::Relaxed);
                     self.clear_http_server_conversation_state();
                     server_state_retry_used = true;
+                    continue;
+                }
+                Err(ApiError::Transport(
+                    bad_request_transport @ TransportError::Http { status, .. },
+                )) if status == StatusCode::BAD_REQUEST
+                    && !request_used_server_state
+                    && omitted_legacy_synthetic_turn
+                    && !legacy_continuation_retry_used =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context(&bad_request_transport);
+                    inference_trace_attempt.record_failed(
+                        &bad_request_transport,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    warn!(
+                        "provider rejected a tool continuation without a synthetic user turn; restoring it for this session"
+                    );
+                    self.client
+                        .state
+                        .legacy_synthetic_continuation
+                        .store(true, Ordering::Relaxed);
+                    legacy_continuation_retry_used = true;
                     continue;
                 }
                 Err(err) => {
