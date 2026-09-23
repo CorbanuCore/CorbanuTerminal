@@ -495,7 +495,7 @@ fn plan(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
         )
     } else if burn.known == 0 {
         format!(
-            "Plan consumption: unavailable — no plan rate is stated for {} of {} plan attempts",
+            "Plan consumption: unavailable — no plan rate or token total for {} of {} plan attempts",
             burn.unknown, totals.plan_attempts
         )
     } else {

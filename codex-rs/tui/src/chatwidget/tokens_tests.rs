@@ -810,7 +810,7 @@ fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
     };
     insta::assert_snapshot!(plan(&unstated_rate).join("\n"), @"
     Subscription capacity: 1 of 1 attempts, not billed per token
-    Plan consumption: unavailable — no plan rate is stated for 1 of 1 plan attempts
+    Plan consumption: unavailable — no plan rate or token total for 1 of 1 plan attempts
     Same tokens at API rates: $0.001610
     ");
     // The per-attempt page states the rate that applied at dispatch.

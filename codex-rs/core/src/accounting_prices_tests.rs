@@ -458,9 +458,12 @@ fn accounting_plan_projection_states_the_rate_and_only_stated_equivalents() {
     assert_eq!(metered.rates.output, Some(rate(10000).unwrap()));
     assert_eq!(metered.rates.read, Some(rate(200).unwrap()));
 
-    // Nothing is stated for another provider's row, an unknown slug, or a tier
-    // the catalogue does not quote.
+    // Nothing is stated for another vendor's metered row (its own API key may
+    // pay for it), another provider's row, an unknown slug, or a tier the
+    // catalogue does not quote.
     for (model, provider, tier) in [
+        ("claude-opus-5", "anthropic", None),
+        ("deepseek-flash", "deepseek", None),
         ("claude-opus-5-plan", "anthropic", None),
         ("no-such-model", "claude-plan", None),
         ("gpt-5.6-luna", "openai", Some("priority")),

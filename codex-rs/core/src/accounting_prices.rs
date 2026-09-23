@@ -91,9 +91,13 @@ fn billed(
 /// Subscription capacity: the plan rate that applied at dispatch, if the
 /// catalogue states one, and the API rates it states for the same route, if any.
 ///
-/// A metered row reached through a subscription (the vendor published API
-/// rates and no plan figure) records its API equivalent with no plan rate. A
-/// row that states neither yields nothing: inventing a burn, or an equivalent
+/// An OpenAI metered row reached through a ChatGPT subscription (the vendor
+/// published API rates and no plan figure, e.g. GPT-6 Sol) records its API
+/// equivalent with no plan rate. That is limited to OpenAI because a
+/// subscription-style Codex login classifies every built-in provider's route as
+/// plan-priced, and another vendor's metered row there may be paid by that
+/// vendor's own API key: recording it as plan work would hide real spend.
+/// A row that states neither yields nothing: inventing a burn, or an equivalent
 /// for a row with no API price, would put a number in the ledger that no
 /// catalogue ever stated.
 pub(super) fn plan_original(
@@ -112,7 +116,9 @@ pub(super) fn plan_original(
     };
     let burn = billing.plan_burn_millis_at(accepted_at);
     let equivalent = billing.api_key_rates_at(accepted_at);
-    if burn.is_none() && equivalent.is_none() {
+    if burn.is_none()
+        && (equivalent.is_none() || provider != codex_model_provider_info::OPENAI_PROVIDER_ID)
+    {
         return Ok(Vec::new());
     }
     let input = equivalent.map(|(input, _, _)| input);
