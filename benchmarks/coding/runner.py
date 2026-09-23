@@ -505,13 +505,16 @@ def file_map(root: Path) -> dict[str, str]:
 
 
 def test_integrity(task: TaskSpec, workspace: Path) -> dict[str, Any]:
+    """Baseline tests must survive unchanged. Task prompts only forbid removing
+    tests, so agent-added test files are recorded but do not fail a run; the
+    hidden verifier runs in its own process and cannot see them."""
     expected = file_map(task.baseline / "tests")
     actual = file_map(workspace / "tests")
     modified = sorted(path for path in expected.keys() & actual.keys() if expected[path] != actual[path])
     missing = sorted(expected.keys() - actual.keys())
     extra = sorted(actual.keys() - expected.keys())
     return {
-        "ok": not modified and not missing and not extra,
+        "ok": not modified and not missing,
         "modified": modified,
         "missing": missing,
         "extra": extra,

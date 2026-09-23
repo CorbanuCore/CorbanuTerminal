@@ -17,6 +17,36 @@ SPEC.loader.exec_module(runner)
 
 
 class CodingBenchmarkRunnerTests(unittest.TestCase):
+    def test_integrity_allows_added_tests_but_not_edited_or_removed_ones(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            baseline = root / "baseline"
+            workspace = root / "workspace"
+            for base in (baseline, workspace):
+                (base / "tests").mkdir(parents=True)
+                (base / "tests" / "test_a.py").write_text("a\n")
+                (base / "tests" / "test_b.py").write_text("b\n")
+            task = runner.TaskSpec(
+                name="demo",
+                baseline=baseline,
+                prompt=root / "prompt",
+                verifier=root / "verifier",
+                timeout_seconds=10,
+                visible_command=("python",),
+            )
+
+            (workspace / "tests" / "test_extra.py").write_text("extra\n")
+            added = runner.test_integrity(task, workspace)
+            self.assertTrue(added["ok"])
+            self.assertEqual(added["extra"], ["test_extra.py"])
+
+            (workspace / "tests" / "test_a.py").write_text("edited\n")
+            (workspace / "tests" / "test_b.py").unlink()
+            changed = runner.test_integrity(task, workspace)
+            self.assertFalse(changed["ok"])
+            self.assertEqual(changed["modified"], ["test_a.py"])
+            self.assertEqual(changed["missing"], ["test_b.py"])
+
     def test_lane_schedule_serializes_agents_by_wave(self) -> None:
         task = runner.TaskSpec(
             name="demo",

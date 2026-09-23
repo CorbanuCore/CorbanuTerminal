@@ -74,7 +74,8 @@ def test_03_malformed_expression_has_defined_error(api) -> None:
     try:
         table.filter("qty * and 2")
     except api.ExpressionSyntaxError as exc:
-        assert "unexpected" in str(exc).lower() or "syntax" in str(exc).lower()
+        # The task only asks for "a useful message"; do not grade exact wording.
+        assert str(exc).strip(), "ExpressionSyntaxError must carry a message"
     else:
         raise AssertionError("malformed expression did not raise ExpressionSyntaxError")
 
