@@ -560,3 +560,44 @@ fn pf_60_s03_claude_plan_prices_by_catalogue_identity_not_wire_name() {
          it is how a plan turn became unpriceable"
     );
 }
+
+/// DeepSeek's price sheet has cache hits and misses and no cache-write charge,
+/// so its snapshot states a zero cache-write rate; that is what lets pricing
+/// charge the miss when DeepSeek's usage omits cache writes. Every other
+/// provider keeps the null of projection v1, and with it its content identity.
+#[test]
+fn accounting_deepseek_states_a_free_cache_write_and_no_one_else_does() -> anyhow::Result<()> {
+    let scope = Uuid::from_u128(7);
+    let deepseek = original(
+        "deepseek-flash",
+        "deepseek",
+        scope,
+        1000,
+        "bundled-models-v1",
+    )?
+    .remove(0);
+    let decimal = |text: &str| Decimal::try_from(text.to_owned());
+    assert_eq!(
+        deepseek.rates,
+        Rates {
+            noncached: Some(decimal("0.3")?),
+            read: Some(decimal("0.006")?),
+            write: Some(Decimal::default()),
+            output: Some(decimal("1.2")?),
+        }
+    );
+    let legacy = original(
+        "deepseek-v4-flash",
+        "deepseek",
+        scope,
+        1000,
+        "bundled-models-v1",
+    )?
+    .remove(0);
+    assert_eq!(legacy.rates.write, Some(Decimal::default()));
+    assert_ne!(deepseek.source_reference, legacy.source_reference);
+
+    let openai = chat_original("gpt-5.6-sol", "openai", scope, 1000)?.remove(0);
+    assert_eq!(openai.rates.write, None);
+    Ok(())
+}

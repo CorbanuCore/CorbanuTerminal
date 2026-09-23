@@ -538,29 +538,28 @@ fn plan_basis_separates_plan_consumption_from_money_spent() {
 }
 
 /// DeepSeek's usage never reports cache writes and its price sheet has none, so
-/// a live turn used to price only its output. Pricing now charges the miss;
-/// the observed usage still says the cache-write count was not reported.
+/// a live turn used to price only its output. A snapshot stating a zero
+/// cache-write rate now prices the miss; the observed usage still says the
+/// cache-write count was not reported.
 #[test]
-fn deepseek_prices_cache_miss_input_without_inventing_observed_evidence() {
-    let deepseek = |dialect| {
-        let mut a = attempt();
-        a.provider = "deepseek".into();
-        a.dialect = dialect;
-        a
-    };
-    let priced = |a: &Attempt| {
+fn free_cache_write_prices_cache_miss_input_without_inventing_evidence() {
+    let mut a = attempt();
+    a.dialect = Dialect::Inclusive;
+    let sheet = |write: Option<&str>| {
         let mut s = snapshot();
-        s.provider = a.provider.clone();
         s.rates.noncached = Some(decimal("0.3"));
         s.rates.read = Some(decimal("0.006"));
+        s.rates.write = write.map(decimal);
         s.rates.output = Some(decimal("1.2"));
         s
     };
     // The live turn: input 34331 of which 34176 were cache hits, 2 output.
-    let rows = vec![row(9, json!({"input":34331,"read":34176,"output":2,"total":34333}))];
+    let rows = vec![row(
+        9,
+        json!({"input":34331,"read":34176,"output":2,"total":34333}),
+    )];
 
-    let a = deepseek(Dialect::Inclusive);
-    let q = quote_observations(&a, &rows, &[priced(&a)]).unwrap();
+    let q = quote_observations(&a, &rows, &[sheet(Some("0"))]).unwrap();
     assert_eq!(q.usage.write, None, "observed usage is not rewritten");
     assert_eq!(q.usage.noncached, None, "observed usage is not rewritten");
     assert_eq!(
@@ -574,34 +573,30 @@ fn deepseek_prices_cache_miss_input_without_inventing_observed_evidence() {
     );
     assert_eq!(q.all_buckets_priced, Some(decimal("0.000253956")));
 
-    // Any other provider keeps the unknown split and leaves input unpriced.
-    let mut other = a.clone();
-    other.provider = "openai".into();
-    let q = quote_observations(&other, &rows, &[priced(&other)]).unwrap();
-    assert_eq!(q.buckets[0], BucketQuote::MissingUsage);
-    assert_eq!(q.all_buckets_priced, None);
-
-    // No catalogue price (e.g. a user-defined route reusing the id): no claim.
+    // A sheet that states no cache-write rate (every earlier snapshot), or a
+    // nonzero one, keeps the unknown split and leaves input unpriced - so an
+    // attempt already quoted under such a sheet is quoted identically.
+    for write in [None, Some("0.3")] {
+        let q = quote_observations(&a, &rows, &[sheet(write)]).unwrap();
+        assert_eq!(q.buckets[0], BucketQuote::MissingUsage, "{write:?}");
+        assert_eq!(q.all_buckets_priced, None, "{write:?}");
+    }
+    // No price at all: no claim.
     let q = quote_observations(&a, &rows, &[]).unwrap();
     assert_eq!(q.buckets[0], BucketQuote::MissingUsage);
 
-    // A price sheet that does state a cache-write rate is not overridden.
-    let mut with_write = priced(&a);
-    with_write.rates.write = Some(decimal("0.3"));
-    let q = quote_observations(&a, &rows, &[with_write]).unwrap();
-    assert_eq!(q.buckets[2], BucketQuote::MissingUsage);
-
     // A reported cache-write count is used as reported.
-    let rows_with_write = vec![row(
+    let reported = vec![row(
         9,
         json!({"input":34331,"read":34176,"write":31,"output":2}),
     )];
-    let q = quote_observations(&a, &rows_with_write, &[priced(&a)]).unwrap();
+    let q = quote_observations(&a, &reported, &[sheet(Some("0"))]).unwrap();
     assert_eq!(q.usage.write, Some(31));
     assert_eq!(q.buckets[0], BucketQuote::Priced(decimal("0.0000372")));
 
     // Only the inclusive dialect's input means miss + hit.
-    let native = deepseek(Dialect::NativeAnthropic);
-    let q = quote_observations(&native, &rows, &[priced(&native)]).unwrap();
+    let mut native = a.clone();
+    native.dialect = Dialect::NativeAnthropic;
+    let q = quote_observations(&native, &rows, &[sheet(Some("0"))]).unwrap();
     assert_eq!(q.buckets[2], BucketQuote::MissingUsage);
 }

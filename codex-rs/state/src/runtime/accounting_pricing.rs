@@ -253,27 +253,16 @@ pub struct ObservationQuote {
     pub plan_burn_milli_tokens: Option<i64>,
 }
 
-/// Providers whose published price sheet bills input only as a cache hit or a
-/// cache miss, with no cache-write charge, and whose wire usage never reports
-/// cache writes. DeepSeek: api-docs.deepseek.com/quick_start/pricing.
-const NO_CACHE_WRITE_PROVIDERS: [&str; 1] = ["deepseek"];
-
 /// Token counts for the four priced buckets. Usage stays exactly as observed -
-/// an unreported cache-write count is still unknown there. Only pricing treats
-/// it as nothing to charge, and only when the provider's price sheet has no
-/// such charge, the dialect is inclusive (input = miss + hit), and a catalogue
-/// price was selected: a snapshot exists only on the provider's own built-in
-/// route, so a user-defined relay reusing the id is never assumed.
-fn priced_counts(
-    attempt: &Attempt,
-    usage: &Usage,
-    snapshot: Option<&Snapshot>,
-) -> [Option<i64>; 4] {
-    let no_cache_write = attempt.dialect == Dialect::Inclusive
-        && usage.write.is_none()
-        && NO_CACHE_WRITE_PROVIDERS.contains(&attempt.provider.as_str())
-        && snapshot.is_some_and(|snapshot| snapshot.rates.write.is_none());
-    if no_cache_write {
+/// an unreported cache-write count is still unknown there. Pricing alone treats
+/// it as nothing to charge, and only when the price snapshot bound at dispatch
+/// states cache writes cost zero (a price sheet with cache hits and misses and
+/// no write charge, such as DeepSeek's) and the dialect is inclusive, so input
+/// is exactly miss + hit. Snapshots are immutable, so attempts priced under an
+/// earlier sheet keep the quote they were given.
+fn priced_counts(usage: &Usage, dialect: Dialect, snapshot: Option<&Snapshot>) -> [Option<i64>; 4] {
+    let write_is_free = snapshot.is_some_and(|s| s.rates.write == Some(Decimal::default()));
+    if dialect == Dialect::Inclusive && usage.write.is_none() && write_is_free {
         // Replay has already checked the cache read does not exceed input.
         let miss = usage
             .input
@@ -324,7 +313,7 @@ fn quote_observations(
     let mut complete = true;
     for ((bucket, count), rate) in buckets
         .iter_mut()
-        .zip(priced_counts(attempt, &usage, selected))
+        .zip(priced_counts(&usage, attempt.dialect, selected))
         .zip(rates)
     {
         *bucket = match (count, rate) {

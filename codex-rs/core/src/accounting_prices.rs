@@ -10,6 +10,11 @@ use codex_state::accounting::SourceKind;
 use codex_state::accounting::Unit;
 use uuid::Uuid;
 
+/// Providers whose published price sheet bills input only as a cache hit or a
+/// cache miss, with no cache-write charge. DeepSeek:
+/// api-docs.deepseek.com/quick_start/pricing.
+const NO_CACHE_WRITE_CHARGE: [&str; 1] = [codex_model_provider_info::DEEPSEEK_PROVIDER_ID];
+
 /// Rates the provider charges this route, for a turn it bills per token.
 pub(super) fn original(
     model: &str,
@@ -40,8 +45,11 @@ fn billed(
         return Ok(Vec::new());
     };
     // Canonical tuple version is part of provenance. UUIDv5 is a content identity,
-    // not an authenticity claim. Null cache-write is deliberate in projection v1.
-    let reference = serde_json::to_vec(&(
+    // not an authenticity claim. Null cache-write is deliberate in projection v1;
+    // a provider whose price sheet has no cache-write charge states zero, which
+    // extends the tuple so every other identity is unchanged.
+    let free_cache_write = NO_CACHE_WRITE_CHARGE.contains(&provider);
+    let v1 = (
         source,
         provider,
         model,
@@ -51,7 +59,12 @@ fn billed(
         input,
         output,
         read,
-    ))?;
+    );
+    let reference = if free_cache_write {
+        serde_json::to_vec(&(v1, "cache_write", 0))?
+    } else {
+        serde_json::to_vec(&v1)?
+    };
     snapshot(
         model,
         provider,
@@ -61,7 +74,7 @@ fn billed(
             noncached: Some(rate(input)?),
             output: Some(rate(output)?),
             read: read.map(rate).transpose()?,
-            write: None,
+            write: free_cache_write.then(|| rate(0)).transpose()?,
         },
         reference,
         Basis::Billed,
