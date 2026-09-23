@@ -2673,3 +2673,77 @@ async fn non_chatgpt_codex_endpoints_omit_attestation_generation() {
     );
     assert_eq!(attestation_calls.load(Ordering::Relaxed), 0);
 }
+
+fn chat_message(role: &str, text: Option<&str>) -> codex_api::ChatMessage {
+    codex_api::ChatMessage {
+        role: role.to_string(),
+        content: text.map(codex_api::ChatMessageContent::text),
+        reasoning_content: None,
+        tool_call_id: None,
+        tool_calls: Vec::new(),
+    }
+}
+
+fn cache_marked_roles(messages: &[codex_api::ChatMessage]) -> Vec<(usize, String)> {
+    messages
+        .iter()
+        .enumerate()
+        .filter(|(_, message)| {
+            serde_json::to_value(message)
+                .map(|value| count_cache_control_markers(&value) > 0)
+                .unwrap_or(false)
+        })
+        .map(|(index, message)| (index, message.role.clone()))
+        .collect()
+}
+
+#[test]
+fn chat_cache_breakpoints_follow_the_newest_tool_turn() {
+    // An agent loop: one user task, then assistant tool calls and tool results.
+    let mut messages = vec![
+        chat_message("system", Some("instructions")),
+        chat_message("user", Some("environment context")),
+        chat_message("user", Some("fix the queue")),
+        chat_message("assistant", None),
+        chat_message("tool", Some("ls output")),
+        chat_message("assistant", Some("")),
+        chat_message("tool", Some("test output")),
+        chat_message("assistant", Some("reading scheduler")),
+        chat_message("tool", Some("scheduler source")),
+    ];
+
+    super::apply_chat_cache_control(&mut messages);
+
+    assert_eq!(
+        cache_marked_roles(&messages),
+        vec![
+            (0, "system".to_string()),
+            (7, "assistant".to_string()),
+            (8, "tool".to_string()),
+        ],
+        "breakpoints must sit on the newest turn, not the first user messages"
+    );
+}
+
+#[test]
+fn chat_cache_breakpoints_skip_messages_without_text() {
+    let mut messages = vec![
+        chat_message("system", Some("instructions")),
+        chat_message("user", Some("task")),
+        chat_message("tool", Some("result")),
+        chat_message("assistant", None),
+        chat_message("assistant", Some("   ")),
+    ];
+
+    super::apply_chat_cache_control(&mut messages);
+
+    assert_eq!(
+        cache_marked_roles(&messages),
+        vec![
+            (0, "system".to_string()),
+            (1, "user".to_string()),
+            (2, "tool".to_string()),
+        ]
+    );
+    assert!(messages[3].content.is_none());
+}
