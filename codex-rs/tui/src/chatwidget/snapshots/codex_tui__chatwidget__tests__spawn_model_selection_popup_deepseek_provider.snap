@@ -1,6 +1,5 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
-assertion_line: 3419
 expression: popup
 ---
   Select Model and Effort
@@ -11,8 +10,12 @@ expression: popup
 
   1. DeepSeek V4 Pro (Direct)                   Model: deepseek-v4-pro. DeepSeek API: V4 Pro - $0.435/M
                                                 input, $0.003625/M cached input, $0.87/M output.
-› 2. DeepSeek V4 Flash 0731 (Direct) (current)  Model: deepseek-v4-flash. DeepSeek Responses API: V4 Flash
-                                                0731 - $0.14/M input, $0.0028/M cached input, $0.28/M
-                                                output.
+  2. DeepSeek V4.1 Flash (Direct)               Model: deepseek-flash. DeepSeek Responses API: V4.1 Flash -
+                                                $0.30/M input, $0.006/M cached input, $1.20/M output (peak
+                                                rates; off-peak is half).
+› 3. DeepSeek V4 Flash 0731 (Direct) (current)  Model: deepseek-v4-flash. DeepSeek Responses API: legacy
+                                                name, now served by V4.1 Flash and billed at its price -
+                                                $0.30/M input, $0.006/M cached input, $1.20/M output (peak
+                                                rates; off-peak is half).
 
   Use Left/Right to switch providers. Press Enter to confirm or Esc to go back
