@@ -2065,6 +2065,7 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
         "openrouter/owl-alpha",
         "google/gemini-3.5-flash",
         "x-ai/grok-4.5",
+        "deepseek-flash",
         "deepseek-v4-flash",
         "deepseek/deepseek-v4-pro",
         "deepseek/deepseek-v4-flash-0731",
@@ -2639,39 +2640,47 @@ fn bundled_models_json_contains_openrouter_models() {
 fn bundled_models_json_contains_direct_deepseek_flash() {
     let response = crate::bundled_models_response()
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
-    let deepseek = response
-        .models
-        .iter()
-        .find(|model| model.slug == "deepseek-v4-flash")
-        .expect("bundled models.json should include direct DeepSeek V4 Flash");
-
-    assert_eq!(deepseek.display_name, "DeepSeek V4 Flash 0731 (Direct)");
-    assert_eq!(deepseek.context_window, Some(1_048_576));
-    assert_eq!(deepseek.max_context_window, Some(1_048_576));
-    assert_eq!(deepseek.max_output_tokens, Some(384_000));
-    assert_eq!(
-        deepseek.default_reasoning_level,
-        Some(ReasoningEffort::High)
-    );
-    assert_eq!(
-        deepseek
-            .supported_reasoning_levels
+    // DeepSeek's pricing page (2026-09-10): V4.1 Flash is served as
+    // `deepseek-flash`; the legacy `deepseek-v4-flash` name is still accepted but is
+    // served by V4.1 Flash and billed at its price. Rates are the published peak
+    // rates (off-peak is half), so estimates are a ceiling rather than an undercount.
+    let v4_1_peak = Some(ModelOrchestrationMetadata::Eligible {
+        provider_id: "deepseek".to_string(),
+        capability: ModelCapabilityTier::Fast,
+        billing: ModelBilling::Metered {
+            input_milli_usd_per_million_tokens: 300,
+            output_milli_usd_per_million_tokens: 1_200,
+            cached_input_milli_usd_per_million_tokens: Some(6),
+        },
+    });
+    for (slug, display_name) in [
+        ("deepseek-flash", "DeepSeek V4.1 Flash (Direct)"),
+        ("deepseek-v4-flash", "DeepSeek V4 Flash 0731 (Direct)"),
+    ] {
+        let deepseek = response
+            .models
             .iter()
-            .map(|level| level.effort.clone())
-            .collect::<Vec<_>>(),
-        vec![ReasoningEffort::High, ReasoningEffort::Max]
-    );
-    assert_eq!(
-        deepseek.orchestration,
-        Some(ModelOrchestrationMetadata::Eligible {
-            provider_id: "deepseek".to_string(),
-            capability: ModelCapabilityTier::Fast,
-            billing: ModelBilling::Metered {
-                input_milli_usd_per_million_tokens: 140,
-                output_milli_usd_per_million_tokens: 280,
-                cached_input_milli_usd_per_million_tokens: Some(3),
-            },
-        })
-    );
-    assert_standard_base(&deepseek.base_instructions);
+            .find(|model| model.slug == slug)
+            .unwrap_or_else(|| panic!("bundled models.json should include {slug}"));
+
+        assert_eq!(deepseek.display_name, display_name);
+        assert_eq!(deepseek.visibility, ModelVisibility::List);
+        assert_eq!(deepseek.context_window, Some(1_048_576));
+        assert_eq!(deepseek.max_context_window, Some(1_048_576));
+        assert_eq!(deepseek.max_output_tokens, Some(384_000));
+        assert_eq!(
+            deepseek.default_reasoning_level,
+            Some(ReasoningEffort::High)
+        );
+        assert_eq!(
+            deepseek
+                .supported_reasoning_levels
+                .iter()
+                .map(|level| level.effort.clone())
+                .collect::<Vec<_>>(),
+            vec![ReasoningEffort::High, ReasoningEffort::Max]
+        );
+        assert_eq!(deepseek.orchestration, v4_1_peak, "{slug}");
+        assert_standard_base(&deepseek.base_instructions);
+    }
 }

@@ -1453,6 +1453,13 @@ mod tests {
             Some(DEEPSEEK_PROVIDER_ID)
         );
         assert_eq!(
+            ChatWidget::model_provider_for_selection(
+                codex_model_provider_info::DEEPSEEK_V4_1_FLASH_MODEL
+            )
+            .as_deref(),
+            Some(DEEPSEEK_PROVIDER_ID)
+        );
+        assert_eq!(
             ChatWidget::model_provider_for_selection(META_DEFAULT_MODEL).as_deref(),
             Some(META_PROVIDER_ID)
         );
