@@ -118,6 +118,27 @@ class RelayPolicyTests(unittest.TestCase):
         ordinary = {"tools": [{"type": "function", "function": {"name": "exec"}}], "plugins": [{"id": "response-healing"}]}
         self.assertIsNone(relay.server_side_web_access(ordinary, "m"))
 
+    def test_openrouter_provider_pin_is_identical_for_every_harness(self) -> None:
+        corbanu = {"model": "z-ai/glm-5.3", "reasoning": {"effort": "high"}, "parallel_tool_calls": True}
+        hermes = {"model": "z-ai/glm-5.3", "reasoning": {"enabled": True, "effort": "high"},
+                  "provider": {"order": ["Wafer"]}}
+        for body in (corbanu, hermes):
+            pinned = json.loads(relay.pin_openrouter_provider(body, "Together"))
+            self.assertEqual(pinned["provider"], {"order": ["Together"], "allow_fallbacks": False})
+            self.assertEqual({k: v for k, v in pinned.items() if k != "provider"},
+                             {k: v for k, v in body.items() if k != "provider"})
+        spec = sandbox.IsolationSpec.from_config(
+            {"mode": "docker", "images": {"corbanu": "c"}, "openrouter_provider": "Together"})
+        self.assertEqual(spec.openrouter_provider, "Together")
+        with tempfile.TemporaryDirectory() as tmp:
+            campaign = sandbox.Campaign(spec, Path(tmp))
+            campaign.records.mkdir(parents=True, exist_ok=True)
+            (campaign.records / "registrations").mkdir(exist_ok=True)
+            _, openrouter_reg = campaign.register("r1", "z-ai/glm-5.3", 60, route="openrouter")
+            _, vercel_reg = campaign.register("r2", "zai/glm-5.3", 60, route="vercel")
+            self.assertEqual(json.loads(openrouter_reg.read_text())["openrouter_provider"], "Together")
+            self.assertIsNone(json.loads(vercel_reg.read_text())["openrouter_provider"])
+
     def test_response_facts_from_sse_and_json(self) -> None:
         sse = (
             'data: {"id":"gen-1","model":"z-ai/glm-5.3","choices":[]}\n\n'

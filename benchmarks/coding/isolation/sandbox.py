@@ -61,6 +61,9 @@ class IsolationSpec:
     cpus: str = "4"
     memory: str = "8g"
     pids_limit: int = 2048
+    # One OpenRouter host (e.g. "Together") applied by the relay to every
+    # harness's requests, so all contestants are served by the same upstream.
+    openrouter_provider: str | None = None
 
     @classmethod
     def from_config(cls, raw: dict[str, Any]) -> "IsolationSpec":
@@ -76,6 +79,7 @@ class IsolationSpec:
             cpus=str(raw.get("cpus") or cls.cpus),
             memory=str(raw.get("memory") or cls.memory),
             pids_limit=int(raw.get("pids_limit") or cls.pids_limit),
+            openrouter_provider=(str(raw["openrouter_provider"]) if raw.get("openrouter_provider") else None),
         )
 
 
@@ -176,6 +180,7 @@ class Campaign:
                 "run_id": run_id,
                 "model": model,
                 "upstream": GATEWAYS[route][0],
+                "openrouter_provider": self.spec.openrouter_provider if route == "openrouter" else None,
                 "expires_at": time.time() + timeout_seconds + 300,
             }),
             encoding="utf-8",

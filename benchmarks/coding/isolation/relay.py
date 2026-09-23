@@ -83,6 +83,14 @@ def server_side_web_access(body: dict[str, Any], model: str) -> str | None:
     return None
 
 
+def pin_openrouter_provider(body: dict[str, Any], provider: str) -> bytes:
+    """Route the request to exactly one OpenRouter host, identically for every
+    harness. Any provider preferences the contestant sent are replaced."""
+    pinned = dict(body)
+    pinned["provider"] = {"order": [provider], "allow_fallbacks": False}
+    return json.dumps(pinned).encode()
+
+
 def response_facts(raw: bytes, content_type: str) -> dict[str, Any]:
     """Generation ids, usage, and served models from a JSON or SSE response."""
 
@@ -265,9 +273,15 @@ class Relay(BaseHTTPRequestHandler):
         request_id = f"{time.time_ns()}"
         run_dir = self.records / "runs" / reg["run_id"]
         run_dir.mkdir(parents=True, exist_ok=True)
+        # The recorded request is exactly what the contestant sent.
         (run_dir / f"{request_id}.request.json").write_bytes(raw)
-        self.audit(reg, {"decision": "forwarded", "request_id": request_id, "model": model,
-                         "request_sha256": hashlib.sha256(raw).hexdigest()})
+        pin = reg.get("openrouter_provider")
+        event = {"decision": "forwarded", "request_id": request_id, "model": model,
+                 "request_sha256": hashlib.sha256(raw).hexdigest()}
+        if pin and upstream == "openrouter.ai":
+            raw = pin_openrouter_provider(body, pin)
+            event["openrouter_provider"] = pin
+        self.audit(reg, event)
         self.forward(reg, raw, request_id=request_id)
 
     def forward(self, reg: dict[str, Any] | None, raw: bytes, *, request_id: str | None) -> None:
