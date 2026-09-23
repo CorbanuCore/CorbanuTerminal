@@ -1,6 +1,7 @@
 //! Exact quotation over caller-provided price descriptors; not approval authority.
 use super::types::Attempt;
 use super::types::Count;
+use super::types::Dialect;
 use super::types::Observation;
 use super::types::Usage;
 use super::types::replay;
@@ -252,6 +253,38 @@ pub struct ObservationQuote {
     pub plan_burn_milli_tokens: Option<i64>,
 }
 
+/// Providers whose published price sheet bills input only as a cache hit or a
+/// cache miss, with no cache-write charge, and whose wire usage never reports
+/// cache writes. DeepSeek: api-docs.deepseek.com/quick_start/pricing.
+const NO_CACHE_WRITE_PROVIDERS: [&str; 1] = ["deepseek"];
+
+/// Token counts for the four priced buckets. Usage stays exactly as observed -
+/// an unreported cache-write count is still unknown there. Only pricing treats
+/// it as nothing to charge, and only when the provider's price sheet has no
+/// such charge, the dialect is inclusive (input = miss + hit), and a catalogue
+/// price was selected: a snapshot exists only on the provider's own built-in
+/// route, so a user-defined relay reusing the id is never assumed.
+fn priced_counts(
+    attempt: &Attempt,
+    usage: &Usage,
+    snapshot: Option<&Snapshot>,
+) -> [Option<i64>; 4] {
+    let no_cache_write = attempt.dialect == Dialect::Inclusive
+        && usage.write.is_none()
+        && NO_CACHE_WRITE_PROVIDERS.contains(&attempt.provider.as_str())
+        && snapshot.is_some_and(|snapshot| snapshot.rates.write.is_none());
+    if no_cache_write {
+        // Replay has already checked the cache read does not exceed input.
+        let miss = usage
+            .input
+            .zip(usage.read)
+            .and_then(|(input, read)| input.checked_sub(read));
+        [miss, usage.read, Some(0), usage.output]
+    } else {
+        [usage.noncached, usage.read, usage.write, usage.output]
+    }
+}
+
 fn quote_observations(
     attempt: &Attempt,
     observations: &[Observation],
@@ -291,7 +324,7 @@ fn quote_observations(
     let mut complete = true;
     for ((bucket, count), rate) in buckets
         .iter_mut()
-        .zip([usage.noncached, usage.read, usage.write, usage.output])
+        .zip(priced_counts(attempt, &usage, selected))
         .zip(rates)
     {
         *bucket = match (count, rate) {
