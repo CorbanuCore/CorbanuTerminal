@@ -1301,9 +1301,9 @@ async fn logout_managed_bedrock_restores_default_account() -> Result<()> {
         read_account(&mut mcp).await?,
         GetAccountResponse {
             account: None,
-            // Removing the temporary Bedrock override restores PFTerminal's
-            // Ambient default, which does not require OpenAI authentication.
-            requires_openai_auth: false,
+            // Removing the temporary Bedrock override restores the OpenAI
+            // default, which requires OpenAI authentication.
+            requires_openai_auth: true,
         }
     );
     Ok(())
