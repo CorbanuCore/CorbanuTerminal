@@ -283,21 +283,7 @@ fn write_permissions_for_paths(
 
 /// Extracts the raw patch text used as the command-shaped hook input for apply_patch.
 fn apply_patch_payload_command(payload: &ToolPayload) -> Option<String> {
-    match payload {
-        ToolPayload::Custom { input } => Some(input.clone()),
-        ToolPayload::Function { arguments } => {
-            let value: serde_json::Value = serde_json::from_str(arguments).ok()?;
-            match value {
-                serde_json::Value::String(input) => Some(input),
-                serde_json::Value::Object(map) => map
-                    .get("input")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_string),
-                _ => None,
-            }
-        }
-        _ => None,
-    }
+    payload.freeform_input()
 }
 
 async fn effective_patch_permissions(
