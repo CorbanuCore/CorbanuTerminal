@@ -608,6 +608,56 @@ fn responses_input_normalizes_accidental_assistant_prefill_without_changing_user
         super::ensure_responses_input_ends_with_user_turn(&mut input);
         assert_eq!(input, expected);
     }
+
+    // Tool results after assistant commentary are an ordinary tool continuation, not a prefill.
+    // A synthetic `Continue.` here reads to the model as a user interjection after every tool
+    // result.
+    let call = ResponseItem::FunctionCall {
+        id: None,
+        name: "shell".to_string(),
+        namespace: None,
+        arguments: "{}".to_string(),
+        call_id: "call-1".to_string(),
+        encrypted_function_args: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let output = ResponseItem::FunctionCallOutput {
+        id: None,
+        call_id: "call-1".to_string(),
+        output: FunctionCallOutputPayload::from_text("ok".to_string()),
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let reasoning = ResponseItem::Reasoning {
+        id: None,
+        summary: Vec::new(),
+        content: None,
+        encrypted_content: None,
+        anthropic_content_block: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let tool_continuation = vec![
+        message("user", "Fix the defect."),
+        message("assistant", "I will inspect the repository."),
+        call,
+        output,
+    ];
+    let mut unchanged = tool_continuation.clone();
+    super::ensure_responses_input_ends_with_user_turn(&mut unchanged);
+    assert_eq!(unchanged, tool_continuation);
+    assert!(super::responses_input_latest_message_is_assistant(
+        &tool_continuation
+    ));
+
+    let mut trailing_reasoning = vec![
+        message("user", "Summarize."),
+        message("assistant", "Done."),
+        reasoning,
+    ];
+    super::ensure_responses_input_ends_with_user_turn(&mut trailing_reasoning);
+    assert_eq!(
+        trailing_reasoning.last(),
+        Some(&message("user", "Continue."))
+    );
 }
 
 #[test]
