@@ -1,0 +1,84 @@
+{
+  "run_dir": "${CORBANU_BENCH_RUNS}/kimi-k3-matched-high-continuefix",
+  "waves": 2,
+  "caps": {
+    "timeout_seconds": 1200,
+    "max_total_runs": 16
+  },
+  "isolation": {
+    "mode": "docker",
+    "images": {
+      "corbanu": "corbanu-bench-corbanu:c0.1.45-continuefix",
+      "hermes": "corbanu-bench-hermes:c0.1.44-h2026.9.21-k7.7.9"
+    },
+    "upstream_key_env": "OPENROUTER_API_KEY",
+    "cpus": "4",
+    "memory": "8g"
+  },
+  "agents": [
+    {
+      "name": "corbanu-kimi-k3-openrouter-high",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "openrouter",
+      "model": "moonshotai/kimi-k3",
+      "lane": "corbanu-openrouter-high",
+      "agent_args": [
+        "-c",
+        "model_reasoning_effort=\"high\""
+      ]
+    },
+    {
+      "name": "hermes-kimi-k3-openrouter-high",
+      "kind": "hermes",
+      "binary": "hermes",
+      "provider": "openrouter",
+      "model": "moonshotai/kimi-k3",
+      "lane": "hermes-openrouter-high",
+      "agent_args": [
+        "--reasoning",
+        "high"
+      ]
+    },
+    {
+      "name": "corbanu-kimi-k3-vercel-high",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "vercel",
+      "model": "moonshotai/kimi-k3",
+      "lane": "corbanu-vercel-high",
+      "cli_model": "vercel/moonshotai/kimi-k3",
+      "agent_args": [
+        "-c",
+        "model_reasoning_effort=\"high\""
+      ]
+    },
+    {
+      "name": "hermes-kimi-k3-vercel-high",
+      "kind": "hermes",
+      "binary": "hermes",
+      "provider": "vercel",
+      "model": "moonshotai/kimi-k3",
+      "lane": "hermes-vercel-high",
+      "agent_args": [
+        "--reasoning",
+        "high"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "name": "queryforge",
+      "baseline": "../tasks/queryforge/baseline",
+      "prompt": "../tasks/queryforge/task_prompt.md",
+      "verifier": "../tasks/queryforge/verifier/verify.py",
+      "core_rel": "src/queryforge/__init__.py"
+    },
+    {
+      "name": "queuecraft",
+      "baseline": "../tasks/queuecraft/bugged",
+      "prompt": "../tasks/queuecraft/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/queuecraft/verifier/verify.py"
+    }
+  ]
+}
