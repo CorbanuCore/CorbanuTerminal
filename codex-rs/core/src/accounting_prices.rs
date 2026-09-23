@@ -12,8 +12,14 @@ use uuid::Uuid;
 
 /// Providers whose published price sheet bills input only as a cache hit or a
 /// cache miss, with no cache-write charge. DeepSeek:
-/// api-docs.deepseek.com/quick_start/pricing.
-const NO_CACHE_WRITE_CHARGE: [&str; 1] = [codex_model_provider_info::DEEPSEEK_PROVIDER_ID];
+/// api-docs.deepseek.com/quick_start/pricing. Baseten Model APIs:
+/// baseten.co/pricing (input, cache input, output). Not Moonshot (the K3 sheet
+/// charges cache writes), OpenAI (GPT-5.6+ bills cache writes), or the routers
+/// (OpenRouter, Vercel), which pass upstream cache-write charges through.
+const NO_CACHE_WRITE_CHARGE: [&str; 2] = [
+    codex_model_provider_info::DEEPSEEK_PROVIDER_ID,
+    codex_model_provider_info::BASETEN_PROVIDER_ID,
+];
 
 /// Rates the provider charges this route, for a turn it bills per token.
 pub(super) fn original(

@@ -568,6 +568,26 @@ fn pf_60_s03_claude_plan_prices_by_catalogue_identity_not_wire_name() {
 /// other provider keeps the null cache-write of projection v1, and with it its
 /// content identity.
 #[test]
+fn accounting_baseten_states_a_free_cache_write() -> anyhow::Result<()> {
+    let scope = Uuid::from_u128(8);
+    let decimal = |text: &str| Decimal::try_from(text.to_owned());
+    let snapshot = original("zai-org/GLM-5.2", "baseten", scope, 1, "bundled-models-v1")?.remove(0);
+    assert_eq!(
+        snapshot.rates,
+        Rates {
+            noncached: Some(decimal("1.4")?),
+            read: Some(decimal("0.14")?),
+            write: Some(Decimal::default()),
+            output: Some(decimal("4.4")?),
+        }
+    );
+    // A provider not on the list keeps the unknown cache-write rate.
+    let routed = original("z-ai/glm-5.2", "ambient", scope, 1, "bundled-models-v1")?.remove(0);
+    assert_eq!(routed.rates.write, None);
+    Ok(())
+}
+
+#[test]
 fn accounting_deepseek_states_the_rate_in_force_and_a_free_cache_write() -> anyhow::Result<()> {
     let scope = Uuid::from_u128(7);
     let decimal = |text: &str| Decimal::try_from(text.to_owned());
