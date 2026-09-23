@@ -1,5 +1,5 @@
 {
-  "run_dir": "${CORBANU_BENCH_RUNS}/kimi-k3-matched-high",
+  "run_dir": "${CORBANU_BENCH_RUNS}/kimi-k3-matched-high-v2",
   "waves": 1,
   "caps": {
     "timeout_seconds": 1200,
@@ -8,7 +8,7 @@
   "isolation": {
     "mode": "docker",
     "images": {
-      "corbanu": "corbanu-bench-corbanu:c0.1.44-h2026.9.21-k7.7.9",
+      "corbanu": "corbanu-bench-corbanu:c0.1.45-parity",
       "hermes": "corbanu-bench-hermes:c0.1.44-h2026.9.21-k7.7.9"
     },
     "upstream_key_env": "OPENROUTER_API_KEY",
