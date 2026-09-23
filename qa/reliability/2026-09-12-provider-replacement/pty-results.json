@@ -1,0 +1,58 @@
+{
+  "results": [
+    {
+      "repo": "/mnt/HC_Volume_101713660/pfrpc/scratch/corbanu-0.1.42-qa/tensorcash",
+      "base": "dd6e92024254090de0f596b090bd5c74c4d97b90",
+      "home": "/mnt/HC_Volume_101713660/pfrpc/scratch/provider-replacement-qa/tensorcash-745997",
+      "passed": true
+    },
+    {
+      "repo": "/mnt/HC_Volume_101713660/pfrpc/scratch/corbanu-0.1.42-qa/isometricgame",
+      "base": "a5427fc7a44c59b9985462e19603210ca649475f",
+      "home": "/mnt/HC_Volume_101713660/pfrpc/scratch/provider-replacement-qa/isometricgame-745997",
+      "passed": true
+    }
+  ],
+  "requests": [
+    {
+      "accepted": false,
+      "model": "claude-fable-5-1"
+    },
+    {
+      "accepted": false,
+      "model": "claude-fable-5-1"
+    },
+    {
+      "accepted": false,
+      "model": "claude-fable-5-1"
+    },
+    {
+      "accepted": true,
+      "model": "claude-fable-5-1"
+    },
+    {
+      "accepted": true,
+      "model": "claude-fable-5-1"
+    },
+    {
+      "accepted": false,
+      "model": "claude-fable-5-1"
+    },
+    {
+      "accepted": false,
+      "model": "claude-fable-5-1"
+    },
+    {
+      "accepted": false,
+      "model": "claude-fable-5-1"
+    },
+    {
+      "accepted": true,
+      "model": "claude-fable-5-1"
+    },
+    {
+      "accepted": true,
+      "model": "claude-fable-5-1"
+    }
+  ]
+}

@@ -10,7 +10,7 @@ use codex_model_provider_info::KIMI_CODE_K3_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
-use codex_model_provider_info::OPENROUTER_GROK_4_6_MODEL;
+use codex_model_provider_info::OPENROUTER_GROK_4_7_MODEL;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
@@ -26,7 +26,7 @@ pub(crate) const STANDARD_NAZGUL_MODEL: &str = CLAUDE_FABLE_5_PLAN_MODEL;
 pub(crate) const STANDARD_TROLL_MODEL: &str = "gpt-5.6-sol";
 pub(crate) const STANDARD_ORC_MODEL: &str = "gpt-5.6-luna";
 pub(crate) const STANDARD_ORC_2_MODEL: &str = "gpt-5.6-terra";
-pub(crate) const STANDARD_ORC_3_MODEL: &str = OPENROUTER_GROK_4_6_MODEL;
+pub(crate) const STANDARD_ORC_3_MODEL: &str = OPENROUTER_GROK_4_7_MODEL;
 pub(crate) const CORBANU_API_NAZGUL_MODEL: &str = CORBANU_API_KIMI_K3_MODEL;
 pub(crate) const CORBANU_API_TROLL_MODEL: &str = CORBANU_API_GPT_5_6_LUNA_MODEL;
 pub(crate) const CORBANU_API_ORC_MODEL: &str = CORBANU_API_GLM_5_3_FLASH_MODEL;
@@ -216,7 +216,7 @@ pub(crate) fn multimodel_qualification_crew_spec() -> CrewSpec {
             Some("manager"),
             RuntimeRequest::exact(
                 OPENROUTER_PROVIDER_ID,
-                OPENROUTER_GROK_4_6_MODEL,
+                OPENROUTER_GROK_4_7_MODEL,
                 /*reasoning_effort*/ None,
             ),
         ),

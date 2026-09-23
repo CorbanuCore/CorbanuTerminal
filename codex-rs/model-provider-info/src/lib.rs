@@ -196,6 +196,7 @@ const OPENROUTER_ANTHROPIC_PROVIDER_NAME: &str = "OpenRouter Anthropic";
 pub const OPENROUTER_ANTHROPIC_PROVIDER_ID: &str = "openrouter-anthropic";
 pub const OPENROUTER_DEFAULT_MODEL: &str = "z-ai/glm-5.2";
 pub const OPENROUTER_GROK_4_6_MODEL: &str = "x-ai/grok-4.6";
+pub const OPENROUTER_GROK_4_7_MODEL: &str = "x-ai/grok-4.7";
 pub const OPENROUTER_API_KEY_ENV_VAR: &str = "OPENROUTER_API_KEY";
 const DEEPSEEK_PROVIDER_NAME: &str = "DeepSeek";
 pub const DEEPSEEK_PROVIDER_ID: &str = "deepseek";
@@ -389,6 +390,10 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
             | "openrouter/owl-alpha"
             | "google/gemini-3.5-flash"
             | OPENROUTER_GROK_4_6_MODEL
+            | OPENROUTER_GROK_4_7_MODEL
+            | "deepseek/deepseek-v4.1-flash"
+            | "z-ai/glm-5.3-flash"
+            | "nvidia/nemotron-3-ultra-550b-a55b:free"
             | "x-ai/grok-4.5"
             | OPENROUTER_DEEPSEEK_V4_PRO_0813_MODEL
             | "deepseek/deepseek-v4-pro"

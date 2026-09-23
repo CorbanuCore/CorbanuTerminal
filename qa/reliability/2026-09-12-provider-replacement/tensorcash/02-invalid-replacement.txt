@@ -1,0 +1,44 @@
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                         │
+│                                                       │
+│ model:       claude-fable-5-1-plan   /model to change │
+│ directory:   /mnt/…/corbanu-0.1.42-qa/tensorcash      │
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────╯
+
+
+› Reply briefly without tools.
+
+
+■ unexpected status 401 Unauthorized: Invalid bearer token,
+url: http://127.0.0.1:44271/v1/messages
+
+
+  Authentication needs attention
+  The subscription token was not accepted. Run claude
+  setup-token in a private terminal, then retry with its
+  token.
+
+› 1. Retry authentication
+  2. Back to providers
+
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

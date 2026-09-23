@@ -158,6 +158,7 @@ use codex_model_provider::create_model_provider;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::AMBIENT_LEGACY_GLM_5_2_FP8_MODEL;
 use codex_model_provider_info::ANTHROPIC_LEGACY_OPUS_4_8_MODEL;
+use codex_model_provider_info::ANTHROPIC_OPUS_5_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_UPSTREAM_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;

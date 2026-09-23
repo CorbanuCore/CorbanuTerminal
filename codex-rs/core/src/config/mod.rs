@@ -4341,8 +4341,21 @@ impl Config {
                 .then_some(ForcedLoginMethod::Api)
         });
 
-        let model_reasoning_effort = if (ambient_provider_selected && !model_without_explicit_provider)
-            || zai_chat_provider_selected
+        // Exact catalogue dialects must survive config load/resume. The legacy
+        // Ambient/Z.AI mapping converts even low/max into xhigh, which GLM 5.3
+        // routes reject; retain that compatibility mapping only for legacy models.
+        let exact_catalogue_effort = model.as_deref().is_some_and(|slug| {
+            codex_models_manager::bundled_models_response().is_ok_and(|catalogue| {
+                catalogue.models.iter().any(|entry| {
+                    entry.slug == slug
+                        && entry.chat_completions.reasoning_effort_protocol
+                            != codex_protocol::openai_models::ChatReasoningEffortProtocol::ProviderDefault
+                })
+            })
+        });
+        let model_reasoning_effort = if !exact_catalogue_effort
+            && ((ambient_provider_selected && !model_without_explicit_provider)
+                || zai_chat_provider_selected)
         {
             cfg.model_reasoning_effort
                 .map(normalize_ambient_reasoning_effort)
@@ -5179,6 +5192,10 @@ pub async fn apply_agent_role_to_config(
 #[cfg(test)]
 #[path = "config_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "catalogue_effort_tests.rs"]
+mod catalogue_effort_tests;
 
 #[cfg(test)]
 #[path = "config_loader_tests.rs"]
