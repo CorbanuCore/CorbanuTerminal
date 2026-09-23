@@ -1612,7 +1612,7 @@ fn accounting_inspect_names_the_rows_whose_tokens_have_no_price() {
     zero_bucket.attempt.model = "zero-cache-bucket".into();
     zero_bucket.usage = Usage {
         read: Some(0),
-        ..unpriced.usage.clone()
+        ..unpriced.usage
     };
     zero_bucket.buckets = [
         BucketQuote::MissingRate,

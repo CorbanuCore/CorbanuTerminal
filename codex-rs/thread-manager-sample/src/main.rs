@@ -9,6 +9,7 @@ use anyhow::Context;
 use anyhow::bail;
 use clap::Parser;
 use codex_core_api::AbsolutePathBuf;
+use codex_core_api::AccountingMode;
 use codex_core_api::AltScreenMode;
 use codex_core_api::ApprovalsReviewer;
 use codex_core_api::Arg0DispatchPaths;
@@ -185,6 +186,7 @@ fn new_config(model: Option<String>, arg0_paths: Arg0DispatchPaths) -> anyhow::R
         .clone();
 
     let mut config = Config {
+        accounting: AccountingMode::Disabled,
         config_layer_stack: ConfigLayerStack::default(),
         startup_warnings: Vec::new(),
         bypass_hook_trust: false,

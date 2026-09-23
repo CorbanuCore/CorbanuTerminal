@@ -325,6 +325,10 @@ pub(crate) struct ThreadStateManager {
 }
 
 impl ThreadStateManager {
+    #[expect(
+        clippy::await_holding_invalid_type,
+        reason = "connection liveness and pending settings change together under the manager lock"
+    )]
     pub(crate) async fn register_settings_confirmation(
         &self,
         thread_id: ThreadId,
@@ -603,6 +607,10 @@ impl ThreadStateManager {
         true
     }
 
+    #[expect(
+        clippy::await_holding_invalid_type,
+        reason = "connection liveness and pending settings change together under the manager lock"
+    )]
     pub(crate) async fn remove_connection(&self, connection_id: ConnectionId) -> Vec<ThreadId> {
         {
             let mut state = self.state.lock().await;

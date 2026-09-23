@@ -12101,6 +12101,10 @@ async fn assert_authorization_changed_model_admission(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "the test inspects the active turn while holding it, as the session does"
+)]
 async fn authorization_changed_user_input_runs_after_completion_with_latest_permissions() {
     let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
     sess.spawn_task(
@@ -12202,6 +12206,10 @@ async fn authorization_changed_deferred_input_survives_interrupt() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "the test inspects the active turn while holding it, as the session does"
+)]
 async fn authorization_changed_interrupted_input_wakes_fresh_admission() {
     let (sess, tc, rx) = make_session_and_context_with_submission_loop_and_rx().await;
     sess.spawn_task(
@@ -12250,6 +12258,10 @@ async fn authorization_changed_interrupted_input_wakes_fresh_admission() {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "the test inspects the active turn while holding it, as the session does"
+)]
 async fn interrupted_input_cannot_be_spliced_into_review_task() {
     let (sess, tc, _rx) = make_session_and_context_with_rx().await;
     sess.spawn_task(
@@ -12332,6 +12344,10 @@ async fn interrupted_input_cannot_be_spliced_into_review_task() {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "the test inspects the active turn while holding it, as the session does"
+)]
 async fn deferred_input_does_not_interrupt_turn_local_sleep() {
     let (sess, tc, _rx) = make_session_and_context_with_rx().await;
     sess.spawn_task(
@@ -12558,6 +12574,10 @@ async fn abort_does_not_advance_unrelated_queue_only_mail() {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "the test inspects the active turn while holding it, as the session does"
+)]
 async fn authorization_changed_turn_receives_code_mode_notify_and_user_shell_output() {
     struct CaptureDelegate(
         std::sync::Mutex<Option<Arc<dyn codex_code_mode::CodeModeSessionDelegate>>>,

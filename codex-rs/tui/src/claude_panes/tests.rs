@@ -4522,7 +4522,7 @@ fn a_direct_turn_records_the_turn_s_total_and_only_when_there_is_one() {
 
     // A turn that stated no total states nothing this client can stand behind.
     assert!(
-        base(None, Some(direct.clone()))
+        base(None, Some(direct))
             .direct_turn_record()
             .is_none()
     );

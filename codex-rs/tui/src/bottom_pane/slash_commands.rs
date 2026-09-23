@@ -306,14 +306,10 @@ mod tests {
         })
         .into_iter()
         .map(|(_, command)| command)
-        .collect::<Vec<_>>();
-
         // `/cost` is listed only in a build that can record, so the expectation
         // follows the same condition rather than hard-coding one shape.
-        let commands = commands
-            .into_iter()
-            .filter(|command| *command != SlashCommand::Cost)
-            .collect::<Vec<_>>();
+        .filter(|command| *command != SlashCommand::Cost)
+        .collect::<Vec<_>>();
         assert_eq!(
             commands,
             vec![

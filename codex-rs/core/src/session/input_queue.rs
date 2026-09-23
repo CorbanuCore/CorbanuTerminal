@@ -270,14 +270,16 @@ impl InputQueue {
 
     /// Clear any pending waiters and input buffered for the current turn.
     pub(crate) async fn clear_pending(&self, active_turn: &ActiveTurn) {
-        let mut turn_state = active_turn.turn_state.lock().await;
-        turn_state.clear_pending_waiters();
-        turn_state.pending_input.items.clear();
-        if !turn_state.pending_input.deferred.is_empty() {
-            self.interrupted_deferred_input
-                .lock()
-                .await
-                .extend(std::mem::take(&mut turn_state.pending_input.deferred));
+        // Release the turn-state lock before taking the interrupted-input lock:
+        // holding one tokio mutex guard across another await is disallowed.
+        let deferred = {
+            let mut turn_state = active_turn.turn_state.lock().await;
+            turn_state.clear_pending_waiters();
+            turn_state.pending_input.items.clear();
+            std::mem::take(&mut turn_state.pending_input.deferred)
+        };
+        if !deferred.is_empty() {
+            self.interrupted_deferred_input.lock().await.extend(deferred);
             self.interrupted_input_ready.notify_one();
         }
     }

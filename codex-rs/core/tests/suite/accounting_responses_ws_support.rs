@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 pub use super::accounting_responses::support::absent;
 pub use super::accounting_responses::support::connection;
 pub use super::accounting_responses::support::event;

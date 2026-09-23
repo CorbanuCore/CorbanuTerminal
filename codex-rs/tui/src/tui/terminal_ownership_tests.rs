@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used)]
+
 use std::fs::File;
 use std::io::Read;
 use std::mem::MaybeUninit;

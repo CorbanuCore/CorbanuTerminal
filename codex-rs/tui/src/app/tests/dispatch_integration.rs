@@ -545,6 +545,10 @@ fn operator_pane_dispatch_starts_normal_turn_with_target_session_model() -> Resu
 }
 
 #[test]
+#[expect(
+    clippy::await_holding_invalid_type,
+    reason = "the test holds the thread store lock to prove dispatch does not block on it"
+)]
 fn operator_pane_dispatch_defers_contended_store_without_blocking_ui() -> Result<()> {
     run_dispatch_integration(|| async {
         let mock = MockServer::start().await;

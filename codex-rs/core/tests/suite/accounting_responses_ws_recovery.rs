@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use super::accounting_responses_ws_support::*;
 use codex_protocol::protocol::{EventMsg, Op};
 use codex_state::accounting::*;

@@ -889,7 +889,7 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
             .filter(|s| s.starts_with("Read at:") || s.starts_with("UTC admission interval:"))
             .cloned(),
     );
-    text.extend(freshness.clone());
+    text.extend(freshness);
     pages.push(InspectorPage {
         title: "Unknown parent population".into(),
         text,
@@ -939,10 +939,11 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
 }
 
 fn interval(start: i64, end: i64) -> String {
-    let utc = |ms| {
-        chrono::DateTime::from_timestamp_millis(ms)
-            .unwrap()
-            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+    let utc = |ms: i64| {
+        chrono::DateTime::from_timestamp_millis(ms).map_or_else(
+            || format!("{ms} ms"),
+            |at| at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        )
     };
     format!("[{}, {})", utc(start), utc(end))
 }
@@ -1248,10 +1249,10 @@ impl Inspector {
             view_id: Some(INSPECTOR_VIEW),
             title: Some(page.title.clone()),
             subtitle: self.range.is_none().then(|| {
-                let date = chrono::DateTime::from_timestamp(self.day * 86_400, 0)
-                    .unwrap()
-                    .date_naive();
-                format!("Requested UTC day: {date}")
+                chrono::DateTime::from_timestamp(self.day * 86_400, 0).map_or_else(
+                    || format!("Requested UTC day: day {} since the epoch", self.day),
+                    |date| format!("Requested UTC day: {}", date.date_naive()),
+                )
             }),
             items,
             allow_number_shortcuts: false,
@@ -1298,7 +1299,7 @@ impl ChatWidget {
                         anyhow::ensure!(date.to_string() == value, "invalid UTC date");
                         return Ok(date
                             .and_hms_opt(0, 0, 0)
-                            .unwrap()
+                            .ok_or_else(|| anyhow::anyhow!("invalid UTC date"))?
                             .and_utc()
                             .timestamp_millis());
                     }
@@ -1323,9 +1324,11 @@ impl ChatWidget {
                     },
                 };
                 range.validate()?;
+                let today_start = today
+                    .and_hms_opt(0, 0, 0)
+                    .ok_or_else(|| anyhow::anyhow!("invalid UTC date"))?;
                 anyhow::ensure!(
-                    range.start_ms / 86_400_000
-                        <= today.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp() / 86_400,
+                    range.start_ms / 86_400_000 <= today_start.and_utc().timestamp() / 86_400,
                     "future start is unavailable"
                 );
                 Ok(range)

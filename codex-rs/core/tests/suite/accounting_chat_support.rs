@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 #[path = "accounting_anthropic_support.rs"]
 #[allow(dead_code)]
 mod existing;
