@@ -101,10 +101,10 @@ impl App {
         selection_id: uuid::Uuid,
         result: PermissionConfirmationResult,
     ) -> Option<ApprovalsReviewer> {
-        if !self
+        if self
             .pending_permission_confirmation
             .as_ref()
-            .is_some_and(|pending| pending.selection_id == selection_id)
+            .is_none_or(|pending| pending.selection_id != selection_id)
         {
             return None;
         }

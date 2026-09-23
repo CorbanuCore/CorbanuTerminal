@@ -24,6 +24,7 @@ use types::replay;
 mod tests;
 
 struct Journal<'a> {
+    #[cfg_attr(not(test), allow(dead_code))]
     runtime: &'a StateRuntime,
 }
 
@@ -46,11 +47,13 @@ impl<'a> Journal<'a> {
         Ok(Self { runtime })
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     async fn begin_attempt(&self, attempt: &Attempt) -> anyhow::Result<()> {
         self.append_observation(attempt, &[]).await
     }
 
     /// All identity, patch and source-position writes either commit together or roll back.
+    #[cfg_attr(not(test), allow(dead_code))]
     async fn append_observation(
         &self,
         attempt: &Attempt,
@@ -159,6 +162,7 @@ impl<'a> Journal<'a> {
         anyhow::Ok(())
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     async fn read_observations(
         &self,
         id: Uuid,

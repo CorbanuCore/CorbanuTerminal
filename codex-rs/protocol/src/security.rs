@@ -23,6 +23,7 @@ pub struct SecurityInspectorEvent {
     pub epoch: AuthorityEpoch,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SecurityControlAction {

@@ -141,7 +141,7 @@ async fn accounting_late_import_writer_orders_and_read_snapshot() -> anyhow::Res
             Journal::import_retained_on_connection(
                 &mut tx,
                 e.attempt.thread_id,
-                &[e.clone()],
+                std::slice::from_ref(&e),
                 100 * DAY,
             )
             .await?;
@@ -542,7 +542,7 @@ async fn accounting_late_import_sql_faults_full_rollback_reopen_retry() -> anyho
             .await?;
         let before = dump(&mut conn).await?;
         let error = store
-            .import_retained(e.attempt.thread_id, &[e.clone()], 100 * DAY)
+            .import_retained(e.attempt.thread_id, std::slice::from_ref(&e), 100 * DAY)
             .await
             .expect_err("injected SQL fault");
         assert!(format!("{error:#}").contains(marker), "{error:#}");
@@ -586,7 +586,7 @@ async fn accounting_late_import_deferred_commit_failure_rolls_back() -> anyhow::
     let before = dump(&mut conn).await?;
     let store = AccountingStore::open(&runtime, 99 * DAY).await?;
     let error = store
-        .import_retained(e.attempt.thread_id, &[e.clone()], 100 * DAY)
+        .import_retained(e.attempt.thread_id, std::slice::from_ref(&e), 100 * DAY)
         .await
         .expect_err("commit FK failure");
     assert!(format!("{error:#}").contains("FOREIGN KEY"));
@@ -641,7 +641,7 @@ async fn accounting_late_import_boundaries_and_no_raw_staging() -> anyhow::Resul
         raw_insert_guards(&mut conn).await?;
         let before = dump(&mut conn).await?;
         let result = store
-            .import_retained(e.attempt.thread_id, &[e.clone()], as_of)
+            .import_retained(e.attempt.thread_id, std::slice::from_ref(&e), as_of)
             .await;
         match expected {
             None => {
@@ -735,7 +735,7 @@ async fn accounting_late_import_replay_price_and_two_reopens() -> anyhow::Result
         assert_eq!(dump(&mut conn).await?, before);
         assert!(
             store
-                .import_retained(e.attempt.thread_id, &[e.clone()], 99 * DAY)
+                .import_retained(e.attempt.thread_id, std::slice::from_ref(&e), 99 * DAY)
                 .await
                 .is_err()
         );

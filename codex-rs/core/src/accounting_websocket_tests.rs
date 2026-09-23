@@ -60,9 +60,9 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
     // API-key side for this auth-dependent row.
     assert_eq!(
         (
-            prices[0].rates.noncached.clone(),
-            prices[0].rates.output.clone(),
-            prices[0].rates.read.clone()
+            prices[0].rates.noncached,
+            prices[0].rates.output,
+            prices[0].rates.read
         ),
         (
             Some(serde_json::from_value(serde_json::json!("5"))?),

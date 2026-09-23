@@ -1,3 +1,5 @@
+// Each accounting suite module carries its own copy of the shared fixtures.
+#[allow(clippy::duplicate_mod)]
 #[path = "accounting_anthropic_support.rs"]
 mod support;
 use codex_protocol::protocol::EventMsg;
@@ -248,9 +250,7 @@ async fn accounting_anthropic_missing_optional_state_is_only_fatal_when_enabled(
             .with_config(|config| {
                 let path = config.codex_home.join("unusable-sqlite-home");
                 std::fs::write(&path, b"synthetic non-directory").unwrap();
-                config.sqlite = codex_state::SqliteConfig::from_sqlite_home(
-                    codex_utils_absolute_path::AbsolutePathBuf::try_from(path).unwrap(),
-                );
+                config.sqlite = codex_state::SqliteConfig::from_sqlite_home(path);
             })
             .build_with_auto_env(&server)
             .await?;

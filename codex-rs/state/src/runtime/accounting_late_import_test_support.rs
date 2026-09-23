@@ -1,3 +1,5 @@
+// Shared by several test modules; each uses a subset.
+#![allow(dead_code)]
 use super::*;
 use codex_protocol::protocol::SessionSource;
 use codex_utils_absolute_path::AbsolutePathBuf;

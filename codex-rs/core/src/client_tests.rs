@@ -1780,20 +1780,6 @@ fn test_claude_fable_plan_model_info() -> ModelInfo {
     model
 }
 
-fn count_cache_control_markers(value: &serde_json::Value) -> usize {
-    match value {
-        serde_json::Value::Array(values) => values.iter().map(count_cache_control_markers).sum(),
-        serde_json::Value::Object(object) => {
-            usize::from(object.contains_key("cache_control"))
-                + object
-                    .values()
-                    .map(count_cache_control_markers)
-                    .sum::<usize>()
-        }
-        _ => 0,
-    }
-}
-
 fn test_vercel_model_info() -> ModelInfo {
     serde_json::from_value(json!({
         "slug": VERCEL_DEFAULT_MODEL,
@@ -2017,47 +2003,6 @@ fn vercel_anthropic_requests_translate_provider_qualified_model_slugs() {
             ),
         ]
     );
-}
-
-fn test_openrouter_gemini_model_info() -> ModelInfo {
-    serde_json::from_value(json!({
-        "slug": "google/gemini-3.5-flash",
-        "display_name": "OpenRouter Gemini 3.5 Flash",
-        "description": "OpenRouter Gemini 3.5 Flash",
-        "default_reasoning_level": null,
-        "supported_reasoning_levels": [
-            {"effort": "minimal", "description": "Minimal"},
-            {"effort": "low", "description": "Low"},
-            {"effort": "medium", "description": "Medium"},
-            {"effort": "high", "description": "High"}
-        ],
-        "shell_type": "shell_command",
-        "visibility": "list",
-        "supported_in_api": true,
-        "priority": 1,
-        "upgrade": null,
-        "base_instructions": "base instructions",
-        "model_messages": null,
-        "supports_reasoning_summaries": false,
-        "support_verbosity": false,
-        "default_verbosity": null,
-        "apply_patch_tool_type": null,
-        "truncation_policy": {"mode": "tokens", "limit": 10000},
-        "supports_parallel_tool_calls": true,
-        "supports_image_detail_original": false,
-        "context_window": 1048576,
-        "auto_compact_token_limit": null,
-        "experimental_supported_tools": []
-    }))
-    .expect("deserialize OpenRouter Gemini test model info")
-}
-
-fn test_openrouter_anthropic_model_info() -> ModelInfo {
-    let mut model_info = test_openrouter_gemini_model_info();
-    model_info.slug = "anthropic/claude-sonnet-4.6".to_string();
-    model_info.display_name = "OpenRouter Claude Sonnet 4.6".to_string();
-    model_info.description = Some("OpenRouter Claude Sonnet 4.6".to_string());
-    model_info
 }
 
 fn test_session_telemetry() -> SessionTelemetry {

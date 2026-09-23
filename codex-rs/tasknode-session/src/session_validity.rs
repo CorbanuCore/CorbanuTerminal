@@ -1,4 +1,6 @@
 //! Private identity-at-check pipeline; no enabled caller or durable validity.
+// Exercised by its tests only until a caller is enabled.
+#![cfg_attr(not(test), allow(dead_code))]
 use crate::ActiveSession;
 use crate::Client;
 use crate::ClientError;

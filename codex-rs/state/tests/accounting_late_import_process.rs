@@ -97,7 +97,7 @@ async fn accounting_late_import_process_queued_cancel_and_lost_ack_replay() -> a
             };
             assert_eq!(
                 store
-                    .import_retained(e.attempt.thread_id, &[e.clone()], 100 * DAY)
+                    .import_retained(e.attempt.thread_id, std::slice::from_ref(&e), 100 * DAY)
                     .await?,
                 vec![outcome]
             );

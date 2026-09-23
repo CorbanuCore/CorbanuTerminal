@@ -315,6 +315,8 @@ pub(crate) enum WalletUnlockContinuation {
     OpenCorbanuApi {
         deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
     },
+    // Handled when sent; nothing constructs it in this build.
+    #[allow(dead_code)]
     OpenPlans {
         mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode,
     },
@@ -1800,6 +1802,8 @@ pub(crate) enum AppEvent {
         result: Option<Result<String, String>>,
     },
 
+    // Handled when sent; nothing constructs it in this build.
+    #[allow(dead_code)]
     /// Latest provider credential statuses loaded away from the TUI event thread.
     ProviderCredentialStatusesReady {
         claude_status: crate::chatwidget::claude_code_login::ClaudeCodePlanStatus,
@@ -1967,10 +1971,14 @@ pub(crate) enum AppEvent {
         selection_policy: WalletPlanReceiptSelectionPolicy,
         receipt: crate::chatwidget::wallet_receipt::WalletPlanReceipt,
     },
+    // Handled when sent; nothing constructs it in this build.
+    #[allow(dead_code)]
     OpenWalletPlanReceipt {
         receipt: crate::chatwidget::wallet_receipt::WalletPlanReceipt,
     },
     CloseWalletPlanReceipt,
+    // Handled when sent; nothing constructs it in this build.
+    #[allow(dead_code)]
     WalletRecoverPlanRequested,
 
     /// Open the vault credential list.
@@ -2114,6 +2122,8 @@ pub(crate) enum AppEvent {
     /// Update the current approval policy in the running app and widget.
     UpdateAskForApprovalPolicy(AskForApproval),
 
+    // Handled when sent; nothing constructs it in this build.
+    #[allow(dead_code)]
     /// Update the current built-in active permission profile in the running app and widget.
     UpdateActivePermissionProfile(ActivePermissionProfile),
 

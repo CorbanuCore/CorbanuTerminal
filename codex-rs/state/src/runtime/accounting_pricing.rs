@@ -68,6 +68,7 @@ impl Decimal {
     }
 
     /// Exact addition, the only way amounts are ever combined in this ledger.
+    #[allow(clippy::should_implement_trait)] // checked: returns an error on overflow
     pub fn add(self, other: Self) -> anyhow::Result<Self> {
         if self.coefficient == 0 {
             return Ok(other);

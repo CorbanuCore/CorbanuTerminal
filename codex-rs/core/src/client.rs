@@ -158,7 +158,6 @@ use codex_model_provider::create_model_provider;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::AMBIENT_LEGACY_GLM_5_2_FP8_MODEL;
 use codex_model_provider_info::ANTHROPIC_LEGACY_OPUS_4_8_MODEL;
-use codex_model_provider_info::ANTHROPIC_OPUS_5_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_UPSTREAM_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
@@ -212,6 +211,7 @@ const RESPONSES_COMPACT_ENDPOINT: &str = "/responses/compact";
 // `/responses/compact` is unary, so the timeout covers the full response rather than one idle
 // period between stream events.
 const COMPACT_REQUEST_TIMEOUT_IDLE_MULTIPLIER: u32 = 4;
+#[cfg_attr(not(test), allow(dead_code))]
 const MEMORIES_SUMMARIZE_ENDPOINT: &str = "/memories/trace_summarize";
 #[cfg(test)]
 pub(crate) const WEBSOCKET_CONNECT_TIMEOUT: Duration =
@@ -1323,13 +1323,14 @@ impl ModelClient {
         })
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     /// Builds memory summaries for each provided normalized raw memory.
     ///
     /// This is a unary call (no streaming) to `/v1/memories/trace_summarize`.
     ///
     /// The model selection, reasoning effort, and telemetry context are passed explicitly to keep
     /// `ModelClient` session-scoped.
-    pub async fn summarize_memories(
+    pub(crate) async fn summarize_memories(
         &self,
         raw_memories: Vec<ApiRawMemory>,
         model_info: &ModelInfo,
@@ -1427,6 +1428,7 @@ impl ModelClient {
             .map_err(|error| self.state.provider.map_api_error(error))
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     fn build_subagent_headers(&self) -> ApiHeaderMap {
         let mut extra_headers = ApiHeaderMap::new();
         add_originator_header(&mut extra_headers, self.state.originator.as_str());
@@ -4130,20 +4132,6 @@ fn mark_chat_message_cache_control(message: &mut ChatMessage) -> bool {
 
     message.content = Some(marked_content);
     true
-}
-
-#[cfg(test)]
-fn append_chat_messages_for_response_item(
-    item: ResponseItem,
-    messages: &mut Vec<ChatMessage>,
-    skipped_tool_call_ids: &mut HashSet<String>,
-) {
-    append_chat_messages_for_response_items(
-        std::iter::once(item),
-        messages,
-        skipped_tool_call_ids,
-        ChatReasoningProtocol::Independent,
-    );
 }
 
 fn append_chat_messages_for_response_items(

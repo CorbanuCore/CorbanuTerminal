@@ -424,44 +424,6 @@ impl AgentControl {
         result
     }
 
-    #[cfg_attr(not(test), allow(dead_code))]
-    async fn submit_inter_agent_communication(
-        &self,
-        agent_id: ThreadId,
-        state: &Arc<ThreadManagerState>,
-        communication: InterAgentCommunication,
-        context: AgentCommunicationContext,
-        parent_turn_id: Option<String>,
-    ) -> CodexResult<String> {
-        let communication_for_log =
-            crate::agent_communication::logging_enabled().then(|| communication.clone());
-        let parent_turn_id = parent_turn_id.filter(|_| communication.trigger_turn);
-        let result = self
-            .handle_thread_request_result(
-                agent_id,
-                state,
-                state
-                    .send_op(
-                        agent_id,
-                        Op::InterAgentCommunication { communication },
-                        parent_turn_id,
-                    )
-                    .await,
-            )
-            .await;
-        if let (Some(communication), Ok(communication_id)) =
-            (communication_for_log, result.as_ref())
-        {
-            crate::agent_communication::emit_agent_communication_send(
-                communication_id,
-                &context,
-                &communication,
-                agent_id,
-            );
-        }
-        result
-    }
-
     /// Interrupt the current task for an existing agent thread.
     pub(crate) async fn interrupt_agent(&self, agent_id: ThreadId) -> CodexResult<String> {
         let state = self.upgrade()?;

@@ -50,6 +50,7 @@ pub(crate) struct WalletPlanChoice {
     pub(crate) deferred_setup: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
 }
 
+#[allow(dead_code)] // The plan purchase flow is handled but currently has no entry point.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WalletPlanPurchaseMode {
     New,
@@ -111,6 +112,7 @@ fn wallet_balance_endpoint(
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WalletPlanStatus {
+    #[allow(dead_code)] // Part of the plan status wire shape.
     pub(crate) wallet_address: String,
     pub(crate) period: WalletPlanPeriod,
     pub(crate) weekly: WalletUsageWindow,
@@ -1405,6 +1407,7 @@ impl ChatWidget {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn on_wallet_plan_credential_persistence_finished(
         &mut self,
         attempt_id: WalletPlanPersistenceAttemptId,

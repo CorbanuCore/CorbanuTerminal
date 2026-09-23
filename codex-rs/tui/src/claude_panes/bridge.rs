@@ -385,6 +385,7 @@ pub(crate) async fn handle_ambient_bridge_connection(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
     mut stream: tokio::net::TcpStream,
     client_auth_token: Arc<String>,

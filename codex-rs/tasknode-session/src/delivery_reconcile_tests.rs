@@ -365,7 +365,8 @@ fn all_raw_and_current_bindings_and_method_path_are_fenced() {
 
 #[test]
 fn cancellation_session_changes_expiry_and_staleness_preserve_existing_holds() {
-    let changes: [(fn(&mut Current), Hold); 12] = [
+    type Change = (fn(&mut Current), Hold);
+    let changes: [Change; 12] = [
         (|c| c.cancelled = true, Hold::Cancelled),
         (|c| c.session.expires_at = None, Hold::ExpiryUnknown),
         (

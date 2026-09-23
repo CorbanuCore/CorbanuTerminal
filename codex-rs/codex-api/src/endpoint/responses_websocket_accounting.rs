@@ -7,6 +7,10 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
+/// Resolves to the usage observer for an admitted request.
+pub type AdmissionFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<Arc<dyn ResponsesUsageObserver>, ApiError>> + Send + 'a>>;
+
 /// A validated sampling route. Admission must durably bind the final request's
 /// model and tier before returning its immutable, physical-response observer.
 /// Cancellation may have committed an unknown intent; implementations must fail
@@ -17,11 +21,7 @@ pub trait ResponsesWebsocketAdmission: Send + Sync {
         Box::pin(async { Ok(()) })
     }
 
-    fn admit(
-        &self,
-        model: String,
-        tier: Option<String>,
-    ) -> Pin<Box<dyn Future<Output = Result<Arc<dyn ResponsesUsageObserver>, ApiError>> + Send + '_>>;
+    fn admit(&self, model: String, tier: Option<String>) -> AdmissionFuture<'_>;
 }
 
 pub(super) struct Dispatch {

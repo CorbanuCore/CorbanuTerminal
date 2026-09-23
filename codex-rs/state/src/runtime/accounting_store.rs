@@ -141,6 +141,7 @@ pub struct InspectionBucket {
     pub days: Vec<InspectionDay>,
 }
 
+#[allow(clippy::large_enum_variant)]
 /// Unavailability never carries a partial amount.
 #[derive(Debug, PartialEq, Eq)]
 pub enum InspectionDay {
@@ -164,6 +165,7 @@ pub enum InspectionDay {
     Ready(Inspection),
 }
 
+#[allow(clippy::large_enum_variant)]
 /// Original dispatch-time evidence, never a catalog to select a replacement from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OriginalPriceEvidence {

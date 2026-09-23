@@ -279,7 +279,10 @@ impl InputQueue {
             std::mem::take(&mut turn_state.pending_input.deferred)
         };
         if !deferred.is_empty() {
-            self.interrupted_deferred_input.lock().await.extend(deferred);
+            self.interrupted_deferred_input
+                .lock()
+                .await
+                .extend(deferred);
             self.interrupted_input_ready.notify_one();
         }
     }

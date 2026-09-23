@@ -50,6 +50,7 @@ impl Journal<'_> {
         Ok(quote)
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(in crate::runtime::accounting) async fn append_native(
         &self,
         owner: ThreadId,

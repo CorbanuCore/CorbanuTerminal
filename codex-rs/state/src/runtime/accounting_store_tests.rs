@@ -701,14 +701,13 @@ async fn accounting_inspect_descendant_stale_and_compact_refuse_tree_total() -> 
     let path = home();
     let runtime = open(&path).await?;
     tree_fixture(&runtime).await?;
-    let store = AccountingStore::open(&runtime, 90 * 86_400_000).await?;
+    let _store = AccountingStore::open(&runtime, 90 * 86_400_000).await?;
     let before = rows(&runtime).await?;
     assert!(matches!(
         AccountingStore::inspect_day(&runtime, attempt(1).thread_id, 0, 90 * 86_400_000).await?,
         InspectionDay::DetailUnavailable { compact: true, .. }
     ));
     assert_eq!(rows(&runtime).await?, before);
-    drop(store);
     runtime.close().await;
     Ok(())
 }

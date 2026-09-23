@@ -22,6 +22,7 @@ pub struct Metric {
 }
 
 impl Metric {
+    #[cfg_attr(not(test), allow(dead_code))]
     fn full(&self) -> Option<i64> {
         (self.unknown == 0).then_some(self.known)
     }
@@ -70,6 +71,7 @@ impl DayTotals {
         Ok(totals)
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     fn full_usd(&self) -> Option<Decimal> {
         (self.attempts > 0 && self.unknown_estimates == 0).then_some(self.known_usd)
     }
@@ -114,6 +116,7 @@ impl DayTotals {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 struct Lifecycle<'a> {
     estimates: EstimateStore<'a>,
 }
@@ -135,6 +138,7 @@ impl<'a> Lifecycle<'a> {
         Ok(Self { estimates })
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     async fn refresh_current(&self, id: Uuid) -> anyhow::Result<Current<()>> {
         let mut tx = self
             .estimates
@@ -156,6 +160,7 @@ impl<'a> Lifecycle<'a> {
         }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     async fn read_day(&self, thread: ThreadId, day: i64) -> anyhow::Result<Current<DayTotals>> {
         ensure!(day >= 0, "negative day");
         let mut tx = self.estimates.journal.runtime.pool.begin().await?;
@@ -199,6 +204,7 @@ impl<'a> Lifecycle<'a> {
         })
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     async fn delete_recorded_thread(&self, thread: ThreadId, as_of_ms: i64) -> anyhow::Result<()> {
         ensure!(as_of_ms >= 0, "negative deletion time");
         let mut tx = self

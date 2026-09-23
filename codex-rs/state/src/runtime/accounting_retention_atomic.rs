@@ -38,6 +38,7 @@ pub struct RetentionCoverage {
     pub oldest_recorded_day: Option<i64>,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, PartialEq, Eq)]
 pub enum RetainedDay {
     NeedsActivation,
@@ -52,6 +53,7 @@ pub enum RetainedDay {
 }
 
 impl Lifecycle<'_> {
+    #[cfg_attr(not(test), allow(dead_code))]
     async fn maintain_retention(&self, as_of_ms: i64) -> anyhow::Result<()> {
         let mut tx = self
             .estimates
@@ -70,6 +72,7 @@ impl Lifecycle<'_> {
         Ok(())
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(in crate::runtime::accounting::pricing::storage::lifecycle) async fn read_retained_day(
         &self,
         thread: ThreadId,

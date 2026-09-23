@@ -1130,7 +1130,9 @@ async fn original_price_null_unknown_zero_and_reordered_replay_survive_restart()
     store.admit(a.thread_id, &a, &[snapshot()?], 0).await?;
     store.admit(missing.thread_id, &missing, &[], 0).await?;
     let patch = observation(&a, 2, 1)?;
-    let quote = store.observe(a.thread_id, &a, &[patch.clone()], 0).await?;
+    let quote = store
+        .observe(a.thread_id, &a, std::slice::from_ref(&patch), 0)
+        .await?;
     assert_eq!(
         serde_json::to_value(quote.known_subtotal)?,
         json!("0.000000000000000000000001")

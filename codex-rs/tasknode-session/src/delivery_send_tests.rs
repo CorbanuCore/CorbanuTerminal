@@ -157,7 +157,7 @@ fn success_records_exact_approved_payload_once_and_preserves_advisory() {
     }
     impl<T: ?Sized> AmbiguousIfClone<()> for T {}
     struct Cloned;
-    impl<T: ?Sized + Clone> AmbiguousIfClone<Cloned> for T {}
+    impl<T: Clone> AmbiguousIfClone<Cloned> for T {}
     let _ = <Attempt as AmbiguousIfClone<_>>::check;
 }
 

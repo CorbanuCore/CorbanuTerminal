@@ -4521,11 +4521,7 @@ fn a_direct_turn_records_the_turn_s_total_and_only_when_there_is_one() {
     assert_eq!(usage["output_tokens"], 11);
 
     // A turn that stated no total states nothing this client can stand behind.
-    assert!(
-        base(None, Some(direct))
-            .direct_turn_record()
-            .is_none()
-    );
+    assert!(base(None, Some(direct)).direct_turn_record().is_none());
     // A bridged turn is recorded send by send and must not be recorded again.
     assert!(
         base(Some(r#"{"input_tokens":410}"#), None)

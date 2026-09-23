@@ -62,7 +62,10 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
         billing_for(&[row.clone(), row.clone()], &row.slug, "openai"),
         None
     );
-    assert_eq!(billing_for(&[row.clone()], &row.slug, "openrouter"), None);
+    assert_eq!(
+        billing_for(std::slice::from_ref(&row), &row.slug, "openrouter"),
+        None
+    );
     let mut disabled = row.clone();
     disabled.orchestration = Some(ModelOrchestrationMetadata::Disabled {
         provider_id: "openai".into(),

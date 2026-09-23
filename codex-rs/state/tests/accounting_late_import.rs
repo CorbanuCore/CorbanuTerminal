@@ -360,7 +360,7 @@ async fn accounting_late_import_public_delete_off_recreated_owner_and_snapshot_g
     let before = dump(&mut conn).await?;
     assert!(
         store
-            .import_retained(e.attempt.thread_id, &[e.clone()], later)
+            .import_retained(e.attempt.thread_id, std::slice::from_ref(&e), later)
             .await
             .is_err()
     );
@@ -368,7 +368,7 @@ async fn accounting_late_import_public_delete_off_recreated_owner_and_snapshot_g
     native(&runtime, e.attempt.thread_id).await?;
     assert_eq!(
         store
-            .import_retained(e.attempt.thread_id, &[e.clone()], later)
+            .import_retained(e.attempt.thread_id, std::slice::from_ref(&e), later)
             .await?,
         vec![RetainedImportOutcome::SuppressedByReplayRecord]
     );
@@ -399,7 +399,7 @@ async fn accounting_late_import_public_delete_off_recreated_owner_and_snapshot_g
             store
                 .import_retained(
                     e.attempt.thread_id,
-                    &[e.clone()],
+                    std::slice::from_ref(&e),
                     chrono::Utc::now().timestamp_millis()
                 )
                 .await?,

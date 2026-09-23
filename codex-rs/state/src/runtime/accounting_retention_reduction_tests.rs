@@ -54,7 +54,7 @@ async fn whole_store_mixed_days_shared_snapshots_and_two_reopens() -> anyhow::Re
     b.thread_id = ThreadId::from_string(&Uuid::from_u128(8).to_string())?;
     let fresh = attempt(3, 91 * DAY_MS);
     for a in [&a, &b, &fresh] {
-        save(&store, a, &[price.clone()]).await?;
+        save(&store, a, std::slice::from_ref(&price)).await?;
     }
     // Old stored quote is 1e-24; latest source is 3e-24 under the original binding.
     store

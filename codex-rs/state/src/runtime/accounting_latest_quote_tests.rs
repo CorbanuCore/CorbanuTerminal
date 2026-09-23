@@ -131,11 +131,11 @@ async fn current_stale_reordered_and_caller_rollback_survive_two_reopens() -> an
     let first = row(3, json!({"input":50,"read":10}));
     store
         .journal
-        .append_observation(&a, &[first.clone()])
+        .append_observation(&a, std::slice::from_ref(&first))
         .await?;
     let historical = expected(
         &a,
-        &[first.clone()],
+        std::slice::from_ref(&first),
         Some(&price),
         [None, Some(50), Some(10), None, None, None, None],
         json!([{"Priced":"0.00015"},{"Priced":"0.000003"},"MissingUsage","MissingUsage"]),
@@ -144,7 +144,7 @@ async fn current_stale_reordered_and_caller_rollback_survive_two_reopens() -> an
     assert_eq!(
         serde_json::to_value(
             store
-                .persist_current(a.attempt_id, &[price.clone()])
+                .persist_current(a.attempt_id, std::slice::from_ref(&price))
                 .await?
         )?,
         historical

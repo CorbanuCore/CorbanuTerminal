@@ -1,3 +1,5 @@
+// Each accounting suite module carries its own copy of the shared fixtures.
+#[allow(clippy::duplicate_mod)]
 #[path = "accounting_anthropic_support.rs"]
 mod support;
 use codex_core::config::AccountingMode;

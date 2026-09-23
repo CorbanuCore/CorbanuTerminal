@@ -1,4 +1,6 @@
 //! Synthetic state and exercised connection/fault support for C1 and its C2 successor.
+// Shared by several test modules; each uses a subset.
+#![allow(dead_code)]
 use super::*;
 use pretty_assertions::assert_eq;
 

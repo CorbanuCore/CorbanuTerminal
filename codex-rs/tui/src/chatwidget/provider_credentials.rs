@@ -24,14 +24,12 @@ use codex_model_provider_info::VERCEL_API_KEY_ENV_VAR;
 use codex_model_provider_info::VERCEL_PROVIDER_ID;
 use codex_model_provider_info::ZAI_API_KEY_ENV_VAR;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
-use std::path::Path;
-use std::time::Duration;
 
 const PROVIDER_CREDENTIALS_VIEW_ID: &str = "provider-credentials";
 const CODEX_ACCOUNT_DEVICE_LOGIN_VIEW_ID: &str = "codex-account-device-login";
 const PROVIDER_API_KEY_SAVE_VIEW_ID: &str = "provider-api-key-save";
-const PROVIDER_STATUS_TIMEOUT: Duration = Duration::from_secs(10);
 
+#[allow(dead_code)] // Statuses for the provider credentials view, which has no opener now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ProviderApiKeyStatus {
     Checking,
@@ -105,16 +103,6 @@ const PROVIDER_CREDENTIAL_OPTIONS: &[ProviderCredentialOption] = &[
 ];
 
 impl ChatWidget {
-    pub(crate) fn open_provider_credentials_menu(&mut self) {
-        let params = self.provider_credentials_params(
-            &ClaudeCodePlanStatus::Checking,
-            &PfTerminalPlanStatus::Checking,
-            &[],
-        );
-        self.show_selection_view(params);
-        self.refresh_provider_credentials_status_in_background();
-    }
-
     pub(crate) fn refresh_provider_credentials_status(
         &mut self,
         claude_status: ClaudeCodePlanStatus,
@@ -132,44 +120,6 @@ impl ChatWidget {
         params.initial_selected_idx = selected_index;
         self.bottom_pane
             .replace_selection_view_if_present(PROVIDER_CREDENTIALS_VIEW_ID, params);
-    }
-
-    fn refresh_provider_credentials_status_in_background(&self) {
-        let codex_home = self.config.codex_home.clone();
-        let plan_home = codex_home.clone();
-        let auth_store_mode = self.config.cli_auth_credentials_store_mode;
-        let keyring_backend_kind = self.config.auth_keyring_backend_kind();
-        let app_event_tx = self.app_event_tx.clone();
-        tokio::spawn(async move {
-            let claude_status = crate::chatwidget::claude_code_login::current_status_with_timeout(
-                plan_home.as_path(),
-                PROVIDER_STATUS_TIMEOUT,
-            );
-            let api_key_statuses = tokio::task::spawn_blocking(move || {
-                provider_api_key_statuses(codex_home.as_path())
-            });
-            let pfterminal_plan_status = super::pfterminal_plan_status::load(
-                plan_home.to_path_buf(),
-                auth_store_mode,
-                keyring_backend_kind,
-            );
-            let (claude_status, pfterminal_plan_status, api_key_statuses) = tokio::join!(
-                claude_status,
-                tokio::time::timeout(PROVIDER_STATUS_TIMEOUT, pfterminal_plan_status),
-                tokio::time::timeout(PROVIDER_STATUS_TIMEOUT, api_key_statuses)
-            );
-            let pfterminal_plan_status =
-                pfterminal_plan_status.unwrap_or(PfTerminalPlanStatus::Unavailable);
-            let api_key_statuses = match api_key_statuses {
-                Ok(Ok(statuses)) => statuses,
-                Ok(Err(_)) | Err(_) => provider_api_key_unavailable_statuses(),
-            };
-            app_event_tx.send(AppEvent::ProviderCredentialStatusesReady {
-                claude_status,
-                pfterminal_plan_status,
-                api_key_statuses,
-            });
-        });
     }
 
     fn provider_credentials_params(
@@ -373,49 +323,6 @@ fn provider_credential_items(
                 pfterminal_plan_status,
                 &api_key_status,
             )
-        })
-        .collect()
-}
-
-fn provider_api_key_statuses(codex_home: &Path) -> Vec<(String, ProviderApiKeyStatus)> {
-    let stored_labels = match codex_vault::Vault::new(codex_home.to_path_buf()).list() {
-        Ok(credentials) => credentials
-            .into_iter()
-            .map(|credential| credential.label)
-            .collect::<std::collections::HashSet<_>>(),
-        Err(_) => return provider_api_key_unavailable_statuses(),
-    };
-    PROVIDER_CREDENTIAL_OPTIONS
-        .iter()
-        .filter_map(|option| {
-            let ProviderCredentialOption::ProviderApiKey { env_key, .. } = option else {
-                return None;
-            };
-            let status = if std::env::var(env_key)
-                .ok()
-                .is_some_and(|value| !value.trim().is_empty())
-            {
-                ProviderApiKeyStatus::AvailableFromEnvironment
-            } else if stored_labels.contains(&provider_vault_label(env_key)) {
-                ProviderApiKeyStatus::Stored
-            } else {
-                ProviderApiKeyStatus::NotConfigured
-            };
-            Some((env_key.to_string(), status))
-        })
-        .collect()
-}
-
-fn provider_api_key_unavailable_statuses() -> Vec<(String, ProviderApiKeyStatus)> {
-    PROVIDER_CREDENTIAL_OPTIONS
-        .iter()
-        .filter_map(|option| match option {
-            ProviderCredentialOption::ProviderApiKey { env_key, .. } => {
-                Some((env_key.to_string(), ProviderApiKeyStatus::Unavailable))
-            }
-            ProviderCredentialOption::CodexAccount
-            | ProviderCredentialOption::ClaudeCodePlan
-            | ProviderCredentialOption::PfTerminalPlan => None,
         })
         .collect()
 }

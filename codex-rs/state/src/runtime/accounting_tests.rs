@@ -184,7 +184,8 @@ async fn conflicting_batch_rolls_back_identity_rows_and_positions() -> anyhow::R
             .is_err()
     );
     assert_eq!(j.read_observations(a.attempt_id).await?, None);
-    j.append_observation(&a, &[first.clone()]).await?;
+    j.append_observation(&a, std::slice::from_ref(&first))
+        .await?;
     let second = observation(2, r#"{"output":2}"#);
     assert!(
         j.append_observation(&a, &[second.clone(), conflict])
@@ -198,12 +199,13 @@ async fn conflicting_batch_rolls_back_identity_rows_and_positions() -> anyhow::R
     let mut other = a.clone();
     other.attempt_id = Uuid::from_u128(9);
     assert!(
-        j.append_observation(&other, &[first.clone()])
+        j.append_observation(&other, std::slice::from_ref(&first))
             .await
             .is_err()
     );
     assert_eq!(j.read_observations(other.attempt_id).await?, None);
-    j.append_observation(&other, &[second.clone()]).await?;
+    j.append_observation(&other, std::slice::from_ref(&second))
+        .await?;
     assert_eq!(
         j.read_observations(other.attempt_id).await?,
         Some((other, vec![second]))
@@ -218,7 +220,7 @@ async fn duplicate_revision_cannot_change_source_position_or_presence() -> anyho
     let j = Journal::create_for_tests(&f.runtime).await?;
     let a = attempt();
     let row = observation(1, "{}");
-    j.append_observation(&a, &[row.clone()]).await?;
+    j.append_observation(&a, std::slice::from_ref(&row)).await?;
     let mut moved = row.clone();
     moved.sequence = Count::try_from(99)?;
     let mut source = row.clone();
@@ -277,7 +279,8 @@ async fn reordered_prefix_validation_rolls_back_without_erasing_knowns() -> anyh
     let j = Journal::create_for_tests(&f.runtime).await?;
     let a = attempt();
     let final_row = observation(3, r#"{"input":30,"read":20}"#);
-    j.append_observation(&a, &[final_row.clone()]).await?;
+    j.append_observation(&a, std::slice::from_ref(&final_row))
+        .await?;
     let early = observation(1, r#"{"input":10,"read":20}"#);
     assert!(j.append_observation(&a, &[early]).await.is_err());
     let null_input = observation(4, r#"{"input":null,"read":31}"#);

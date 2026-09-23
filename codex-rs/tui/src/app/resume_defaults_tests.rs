@@ -14,7 +14,7 @@ async fn resume_defaults_remember_acknowledged_selection_and_standard_tier() -> 
         .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
         .build()
         .await?;
-    let mut server = crate::start_embedded_app_server_for_picker(&config).await?;
+    let server = crate::start_embedded_app_server_for_picker(&config).await?;
     let mut session =
         super::super::tests::test_thread_session(ThreadId::new(), home.path().to_path_buf());
     session.model = "claude-fable-5-1-plan".to_string();

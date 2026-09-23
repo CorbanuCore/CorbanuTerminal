@@ -725,7 +725,7 @@ async fn latest_original_price_null_binding_intent_and_known_zero() -> anyhow::R
         .await?;
     store
         .estimates
-        .persist_current(a.attempt_id, &[price.clone()])
+        .persist_current(a.attempt_id, std::slice::from_ref(&price))
         .await?;
     assert_eq!(
         store.refresh_current(a.attempt_id).await?,

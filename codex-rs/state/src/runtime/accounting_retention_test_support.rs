@@ -1,4 +1,6 @@
 //! Synthetic fixture installation and complete storage/no-write evidence only.
+// Shared by several test modules; each uses a subset.
+#![allow(dead_code)]
 use super::*;
 use pretty_assertions::assert_eq;
 

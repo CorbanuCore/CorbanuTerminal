@@ -103,6 +103,7 @@ impl CwdSelection {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_cwd_selection_prompt(
     tui: &mut Tui,
     config: &Config,

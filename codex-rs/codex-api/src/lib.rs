@@ -101,6 +101,7 @@ pub use crate::endpoint::responses::accounting::ResponsesTokenPresence;
 pub use crate::endpoint::responses::accounting::ResponsesUsageObserver;
 pub use crate::endpoint::responses::accounting::ResponsesUsagePatch;
 pub use crate::endpoint::responses::accounting::body_usage as responses_body_usage;
+pub use crate::endpoint::responses_websocket::accounting::AdmissionFuture;
 pub use crate::endpoint::responses_websocket::accounting::ResponsesWebsocketAdmission;
 pub use crate::endpoint::session_update_session_json;
 pub use crate::error::ApiError;

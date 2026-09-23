@@ -109,6 +109,8 @@ pub(crate) struct Admission {
 }
 
 impl Admission {
+    // Callers hold the admission behind the trait object this returns.
+    #[allow(clippy::new_ret_no_self)]
     pub(crate) fn new(
         sampling: Arc<Sampling>,
         established: Provenance,

@@ -1,4 +1,6 @@
 #![cfg(any(not(debug_assertions), test))]
+// Release-only; debug test builds compile it for its unit tests alone.
+#![cfg_attr(all(debug_assertions, test), allow(dead_code))]
 
 use crate::legacy_core::config::Config;
 use crate::update_action;

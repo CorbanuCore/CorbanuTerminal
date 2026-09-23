@@ -24,6 +24,7 @@ impl Serialize for Decimal {
 }
 
 struct EstimateStore<'a> {
+    #[cfg_attr(not(test), allow(dead_code))]
     journal: Journal<'a>,
 }
 
@@ -47,6 +48,7 @@ impl<'a> EstimateStore<'a> {
         Ok(Self { journal })
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     async fn persist_current(
         &self,
         id: Uuid,
@@ -96,6 +98,7 @@ impl<'a> EstimateStore<'a> {
         }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     async fn read_estimate(
         &self,
         id: Uuid,
