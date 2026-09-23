@@ -100,6 +100,7 @@ Required table operations:
 
 Definition of done:
 
-- `python3 -m unittest discover -s tests` passes.
+- `PYTHONPATH=src python3 -m unittest discover -s tests` passes.
+- The package stays at `src/queryforge/`; the verifier imports it from there.
 - The benchmark harness's external verifier passes.
 - Keep code readable and scoped.

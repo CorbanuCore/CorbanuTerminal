@@ -104,6 +104,7 @@ Required semantics:
 30. No network dependencies or third-party packages.
 
 Definition of done:
-- `python3 -m unittest discover -s tests` passes.
+- `PYTHONPATH=src python3 -m unittest discover -s tests` passes.
+- The package stays at `src/chronoledger/`; the verifier imports it from there.
 - The benchmark harness's external verifier passes.
 - Keep code readable and scoped.

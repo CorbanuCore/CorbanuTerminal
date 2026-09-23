@@ -329,3 +329,23 @@ class RunnerIsolationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TaskPacketConsistencyTests(unittest.TestCase):
+    def test_src_layout_packets_tell_contestants_how_the_grader_imports_them(self) -> None:
+        """A prompt whose stated done-command cannot import a ``src/`` package invites
+        agents to move the package, which the verifier then rejects outright."""
+        tasks = BENCH_ROOT / "tasks"
+        for task in sorted(path for path in tasks.iterdir() if path.is_dir()):
+            candidate = task / "baseline" if (task / "baseline").is_dir() else task / "bugged"
+            src = candidate / "src"
+            if not src.is_dir():
+                continue
+            prompt_path = task / "task_prompt.md" if (task / "task_prompt.md").exists() else candidate / "BENCHMARK_TASK.md"
+            prompt = prompt_path.read_text(encoding="utf-8")
+            with self.subTest(task=task.name):
+                self.assertIn("PYTHONPATH=src", prompt)
+                if "python3 -m unittest" in prompt:
+                    for line in prompt.splitlines():
+                        if "python3 -m unittest" in line:
+                            self.assertIn("PYTHONPATH=src", line)
