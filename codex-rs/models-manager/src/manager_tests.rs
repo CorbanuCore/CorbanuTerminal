@@ -14,6 +14,7 @@ use codex_protocol::auth::AuthMode;
 use codex_protocol::openai_models::ChatReasoningEffortProtocol;
 use codex_protocol::openai_models::ChatReasoningProtocol;
 use codex_protocol::openai_models::InputModality;
+use codex_protocol::openai_models::MeteredRates;
 use codex_protocol::openai_models::ModelBilling;
 use codex_protocol::openai_models::ModelCapabilityTier;
 use codex_protocol::openai_models::ModelOrchestrationMetadata;
@@ -21,6 +22,8 @@ use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ReasoningEffortPreset;
+use codex_protocol::openai_models::UtcHourWindow;
+use codex_protocol::openai_models::WeekdaySet;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::collections::VecDeque;
@@ -1788,6 +1791,35 @@ fn bundled_models_have_complete_orchestration_contracts() {
                 // Both values are required by the enum; zero remains valid for an
                 // explicitly free metered route.
                 ModelBilling::Metered { .. } => {}
+                ModelBilling::MeteredSchedule {
+                    peak_windows,
+                    peak_weekdays,
+                    off_peak_dates_utc,
+                    ..
+                } => {
+                    assert!(
+                        !peak_windows.is_empty()
+                            && peak_windows.iter().all(|window| {
+                                window.start_utc_hour < 24
+                                    && window.end_utc_hour <= 24
+                                    && window.start_utc_hour != window.end_utc_hour
+                            }),
+                        "{} must have valid UTC peak windows",
+                        model.slug
+                    );
+                    assert!(
+                        peak_weekdays.is_none_or(|weekdays| !weekdays.is_empty()),
+                        "{} must not specify an empty peak weekday set",
+                        model.slug
+                    );
+                    for date in off_peak_dates_utc {
+                        assert!(
+                            chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").is_ok(),
+                            "{}: off-peak date {date} must be YYYY-MM-DD",
+                            model.slug
+                        );
+                    }
+                }
                 ModelBilling::AuthDependent { .. } => {}
                 ModelBilling::Local => {}
             },
@@ -2642,15 +2674,36 @@ fn bundled_models_json_contains_direct_deepseek_flash() {
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
     // DeepSeek's pricing page (2026-09-10): V4.1 Flash is served as
     // `deepseek-flash`; the legacy `deepseek-v4-flash` name is still accepted but is
-    // served by V4.1 Flash and billed at its price. Rates are the published peak
-    // rates (off-peak is half), so estimates are a ceiling rather than an undercount.
+    // served by V4.1 Flash and billed at its price. Peak is 01:00-04:00 and
+    // 06:00-10:00 UTC Monday-Friday, except Chinese public holidays; off-peak is half.
+    let rates = |input, output, cached| MeteredRates {
+        input_milli_usd_per_million_tokens: input,
+        output_milli_usd_per_million_tokens: output,
+        cached_input_milli_usd_per_million_tokens: Some(cached),
+    };
+    let window = |start_utc_hour, end_utc_hour| UtcHourWindow {
+        start_utc_hour,
+        end_utc_hour,
+    };
     let v4_1_peak = Some(ModelOrchestrationMetadata::Eligible {
         provider_id: "deepseek".to_string(),
         capability: ModelCapabilityTier::Fast,
-        billing: ModelBilling::Metered {
-            input_milli_usd_per_million_tokens: 300,
-            output_milli_usd_per_million_tokens: 1_200,
-            cached_input_milli_usd_per_million_tokens: Some(6),
+        billing: ModelBilling::MeteredSchedule {
+            off_peak: rates(150, 600, 3),
+            peak: rates(300, 1_200, 6),
+            peak_windows: vec![window(1, 4), window(6, 10)],
+            peak_weekdays: Some(WeekdaySet::weekdays_only()),
+            // State Council 2026 schedule: the remaining weekday holidays.
+            off_peak_dates_utc: [
+                "2026-09-25",
+                "2026-10-01",
+                "2026-10-02",
+                "2026-10-05",
+                "2026-10-06",
+                "2026-10-07",
+            ]
+            .map(String::from)
+            .to_vec(),
         },
     });
     for (slug, display_name) in [

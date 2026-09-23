@@ -1274,6 +1274,36 @@ fn format_model_billing(billing: &ModelBilling) -> String {
             format_millis(*input_milli_usd_per_million_tokens),
             format_millis(*output_milli_usd_per_million_tokens)
         ),
+        ModelBilling::MeteredSchedule {
+            off_peak,
+            peak,
+            peak_windows,
+            peak_weekdays,
+            ..
+        } => {
+            let windows = peak_windows
+                .iter()
+                .map(|window| {
+                    format!(
+                        "{:02}:00-{:02}:00",
+                        window.start_utc_hour, window.end_utc_hour
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            let peak_days = peak_weekdays
+                .filter(|weekdays| !weekdays.is_every_day())
+                .map_or_else(String::new, |weekdays| {
+                    format!(" on {}", weekdays.names().join("/"))
+                });
+            format!(
+                "metered ${}/${} per M tok off-peak, ${}/${} at {windows} UTC{peak_days}",
+                format_millis(off_peak.input_milli_usd_per_million_tokens),
+                format_millis(off_peak.output_milli_usd_per_million_tokens),
+                format_millis(peak.input_milli_usd_per_million_tokens),
+                format_millis(peak.output_milli_usd_per_million_tokens),
+            )
+        }
         ModelBilling::AuthDependent {
             plan_relative_burn_millis,
             api_key_input_milli_usd_per_million_tokens,

@@ -27,6 +27,35 @@
         }
       ]
     },
+    "MeteredRates": {
+      "description": "Per-token API rates, in milli-USD per million tokens.",
+      "properties": {
+        "cached_input_milli_usd_per_million_tokens": {
+          "default": null,
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "input_milli_usd_per_million_tokens": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "output_milli_usd_per_million_tokens": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "input_milli_usd_per_million_tokens",
+        "output_milli_usd_per_million_tokens"
+      ],
+      "type": "object"
+    },
     "Model": {
       "properties": {
         "additionalSpeedTiers": {
@@ -285,6 +314,57 @@
           "type": "object"
         },
         {
+          "description": "Per-token rates that differ between peak windows and the rest of the week.\n\nThe rate that applies is the one in force at the dispatch instant, so a ledger states what a request was actually charged, not a range.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "metered_schedule"
+              ],
+              "type": "string"
+            },
+            "off_peak": {
+              "$ref": "#/definitions/MeteredRates"
+            },
+            "off_peak_dates_utc": {
+              "default": [],
+              "description": "UTC calendar dates (`YYYY-MM-DD`) with no peak at all, such as the provider's published holidays.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "peak": {
+              "$ref": "#/definitions/MeteredRates"
+            },
+            "peak_weekdays": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/WeekdaySet"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "UTC weekdays on which the peak windows apply. Omitted means every day."
+            },
+            "peak_windows": {
+              "description": "Peak windows. Outside every window the off-peak rates apply.",
+              "items": {
+                "$ref": "#/definitions/UtcHourWindow"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "off_peak",
+            "peak",
+            "peak_windows"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The same provider/model route can use subscription capacity or API-key billing.\n\nBoth sides are exact. Runtime consumers resolve the active side from authentication; catalogue consumers that do not know authentication must present both, never guess.",
           "properties": {
             "api_key_cached_input_milli_usd_per_million_tokens": {
@@ -478,6 +558,26 @@
       "required": [
         "description",
         "reasoningEffort"
+      ],
+      "type": "object"
+    },
+    "UtcHourWindow": {
+      "description": "A `[start, end)` window in whole UTC hours; it may wrap past midnight.",
+      "properties": {
+        "end_utc_hour": {
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "start_utc_hour": {
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "end_utc_hour",
+        "start_utc_hour"
       ],
       "type": "object"
     },

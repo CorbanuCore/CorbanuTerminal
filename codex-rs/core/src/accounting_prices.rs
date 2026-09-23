@@ -41,7 +41,7 @@ fn billed(
 ) -> anyhow::Result<Vec<Snapshot>> {
     // A plan row states no per-token price, and a plan turn is not billed per
     // token: either way there is nothing here to charge.
-    let Some((input, output, read)) = billing.api_key_rates() else {
+    let Some((input, output, read)) = billing.api_key_rates_at(accepted_at) else {
         return Ok(Vec::new());
     };
     // Canonical tuple version is part of provenance. UUIDv5 is a content identity,
@@ -105,7 +105,7 @@ pub(super) fn plan_original(
     let Some(burn) = billing.plan_burn_millis_at(accepted_at) else {
         return Ok(Vec::new());
     };
-    let equivalent = billing.api_key_rates();
+    let equivalent = billing.api_key_rates_at(accepted_at);
     let input = equivalent.map(|(input, _, _)| input);
     let output = equivalent.map(|(_, output, _)| output);
     let read = equivalent.and_then(|(_, _, read)| read);

@@ -563,39 +563,53 @@ fn pf_60_s03_claude_plan_prices_by_catalogue_identity_not_wire_name() {
 
 /// DeepSeek's price sheet has cache hits and misses and no cache-write charge,
 /// so its snapshot states a zero cache-write rate; that is what lets pricing
-/// charge the miss when DeepSeek's usage omits cache writes. Every other
-/// provider keeps the null of projection v1, and with it its content identity.
+/// charge the miss when DeepSeek's usage omits cache writes. Its rates change
+/// by time of day, and a snapshot states the rate in force at dispatch. Every
+/// other provider keeps the null cache-write of projection v1, and with it its
+/// content identity.
 #[test]
-fn accounting_deepseek_states_a_free_cache_write_and_no_one_else_does() -> anyhow::Result<()> {
+fn accounting_deepseek_states_the_rate_in_force_and_a_free_cache_write() -> anyhow::Result<()> {
     let scope = Uuid::from_u128(7);
-    let deepseek = original(
+    let decimal = |text: &str| Decimal::try_from(text.to_owned());
+    let at = |text: &str| -> anyhow::Result<i64> {
+        Ok(chrono::DateTime::parse_from_rfc3339(text)?.timestamp_millis())
+    };
+    let peak_at = at("2026-09-22T02:00:00Z")?; // Tuesday, inside 01:00-04:00 UTC
+    let off_peak_at = at("2026-09-22T05:00:00Z")?; // between the peak windows
+    for (accepted_at, input, read, output) in [
+        (peak_at, "0.3", "0.006", "1.2"),
+        (off_peak_at, "0.15", "0.003", "0.6"),
+    ] {
+        for model in ["deepseek-flash", "deepseek-v4-flash"] {
+            let snapshot =
+                original(model, "deepseek", scope, accepted_at, "bundled-models-v1")?.remove(0);
+            assert_eq!(
+                snapshot.rates,
+                Rates {
+                    noncached: Some(decimal(input)?),
+                    read: Some(decimal(read)?),
+                    write: Some(Decimal::default()),
+                    output: Some(decimal(output)?),
+                },
+                "{model} at {accepted_at}"
+            );
+        }
+    }
+    let peak = original(
         "deepseek-flash",
         "deepseek",
         scope,
-        1000,
+        peak_at,
         "bundled-models-v1",
-    )?
-    .remove(0);
-    let decimal = |text: &str| Decimal::try_from(text.to_owned());
-    assert_eq!(
-        deepseek.rates,
-        Rates {
-            noncached: Some(decimal("0.3")?),
-            read: Some(decimal("0.006")?),
-            write: Some(Decimal::default()),
-            output: Some(decimal("1.2")?),
-        }
-    );
-    let legacy = original(
-        "deepseek-v4-flash",
+    )?;
+    let off_peak = original(
+        "deepseek-flash",
         "deepseek",
         scope,
-        1000,
+        off_peak_at,
         "bundled-models-v1",
-    )?
-    .remove(0);
-    assert_eq!(legacy.rates.write, Some(Decimal::default()));
-    assert_ne!(deepseek.source_reference, legacy.source_reference);
+    )?;
+    assert_ne!(peak[0].source_reference, off_peak[0].source_reference);
 
     let openai = chat_original("gpt-5.6-sol", "openai", scope, 1000)?.remove(0);
     assert_eq!(openai.rates.write, None);

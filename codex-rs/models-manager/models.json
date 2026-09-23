@@ -1132,14 +1132,48 @@
         "provider_id": "deepseek",
         "capability": "fast",
         "billing": {
-          "kind": "metered",
-          "input_milli_usd_per_million_tokens": 300,
-          "output_milli_usd_per_million_tokens": 1200,
-          "cached_input_milli_usd_per_million_tokens": 6
+          "kind": "metered_schedule",
+          "off_peak": {
+            "input_milli_usd_per_million_tokens": 150,
+            "output_milli_usd_per_million_tokens": 600,
+            "cached_input_milli_usd_per_million_tokens": 3
+          },
+          "peak": {
+            "input_milli_usd_per_million_tokens": 300,
+            "output_milli_usd_per_million_tokens": 1200,
+            "cached_input_milli_usd_per_million_tokens": 6
+          },
+          "peak_windows": [
+            {
+              "start_utc_hour": 1,
+              "end_utc_hour": 4
+            },
+            {
+              "start_utc_hour": 6,
+              "end_utc_hour": 10
+            }
+          ],
+          "peak_weekdays": {
+            "monday": true,
+            "tuesday": true,
+            "wednesday": true,
+            "thursday": true,
+            "friday": true,
+            "saturday": false,
+            "sunday": false
+          },
+          "off_peak_dates_utc": [
+            "2026-09-25",
+            "2026-10-01",
+            "2026-10-02",
+            "2026-10-05",
+            "2026-10-06",
+            "2026-10-07"
+          ]
         }
       },
       "display_name": "DeepSeek V4.1 Flash (Direct)",
-      "description": "DeepSeek Responses API: V4.1 Flash - $0.30/M input, $0.006/M cached input, $1.20/M output (peak rates; off-peak is half).",
+      "description": "DeepSeek Responses API: V4.1 Flash - $0.15/M input, $0.003/M cached input, $0.60/M output off-peak; double at peak (01:00-04:00 and 06:00-10:00 UTC, Monday-Friday, except Chinese public holidays).",
       "default_reasoning_level": "high",
       "supported_reasoning_levels": [
         {
@@ -1190,14 +1224,48 @@
         "provider_id": "deepseek",
         "capability": "fast",
         "billing": {
-          "kind": "metered",
-          "input_milli_usd_per_million_tokens": 300,
-          "output_milli_usd_per_million_tokens": 1200,
-          "cached_input_milli_usd_per_million_tokens": 6
+          "kind": "metered_schedule",
+          "off_peak": {
+            "input_milli_usd_per_million_tokens": 150,
+            "output_milli_usd_per_million_tokens": 600,
+            "cached_input_milli_usd_per_million_tokens": 3
+          },
+          "peak": {
+            "input_milli_usd_per_million_tokens": 300,
+            "output_milli_usd_per_million_tokens": 1200,
+            "cached_input_milli_usd_per_million_tokens": 6
+          },
+          "peak_windows": [
+            {
+              "start_utc_hour": 1,
+              "end_utc_hour": 4
+            },
+            {
+              "start_utc_hour": 6,
+              "end_utc_hour": 10
+            }
+          ],
+          "peak_weekdays": {
+            "monday": true,
+            "tuesday": true,
+            "wednesday": true,
+            "thursday": true,
+            "friday": true,
+            "saturday": false,
+            "sunday": false
+          },
+          "off_peak_dates_utc": [
+            "2026-09-25",
+            "2026-10-01",
+            "2026-10-02",
+            "2026-10-05",
+            "2026-10-06",
+            "2026-10-07"
+          ]
         }
       },
       "display_name": "DeepSeek V4 Flash 0731 (Direct)",
-      "description": "DeepSeek Responses API: legacy name, now served by V4.1 Flash and billed at its price - $0.30/M input, $0.006/M cached input, $1.20/M output (peak rates; off-peak is half).",
+      "description": "DeepSeek Responses API: legacy name, now served by V4.1 Flash and billed at its price - $0.15/M input, $0.003/M cached input, $0.60/M output off-peak; double at peak (01:00-04:00 and 06:00-10:00 UTC, Monday-Friday, except Chinese public holidays).",
       "default_reasoning_level": "high",
       "supported_reasoning_levels": [
         {

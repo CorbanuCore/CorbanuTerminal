@@ -366,6 +366,32 @@ fn peak_window_contains(
     inside && weekdays.is_none_or(|days| days.contains(opened_on.weekday()))
 }
 
+/// Per-token API rates, in milli-USD per million tokens.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, JsonSchema, PartialEq, Eq)]
+pub struct MeteredRates {
+    pub input_milli_usd_per_million_tokens: u32,
+    pub output_milli_usd_per_million_tokens: u32,
+    #[serde(default)]
+    pub cached_input_milli_usd_per_million_tokens: Option<u32>,
+}
+
+impl MeteredRates {
+    fn tuple(self) -> (u32, u32, Option<u32>) {
+        (
+            self.input_milli_usd_per_million_tokens,
+            self.output_milli_usd_per_million_tokens,
+            self.cached_input_milli_usd_per_million_tokens,
+        )
+    }
+}
+
+/// A `[start, end)` window in whole UTC hours; it may wrap past midnight.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, JsonSchema, PartialEq, Eq)]
+pub struct UtcHourWindow {
+    pub start_utc_hour: u8,
+    pub end_utc_hour: u8,
+}
+
 /// Billing data for an exact provider/model route.
 ///
 /// Monetary values use milli-USD per million tokens so catalogue metadata remains exact,
@@ -405,6 +431,23 @@ pub enum ModelBilling {
         output_milli_usd_per_million_tokens: u32,
         #[serde(default)]
         cached_input_milli_usd_per_million_tokens: Option<u32>,
+    },
+    /// Per-token rates that differ between peak windows and the rest of the week.
+    ///
+    /// The rate that applies is the one in force at the dispatch instant, so a
+    /// ledger states what a request was actually charged, not a range.
+    MeteredSchedule {
+        off_peak: MeteredRates,
+        peak: MeteredRates,
+        /// Peak windows. Outside every window the off-peak rates apply.
+        peak_windows: Vec<UtcHourWindow>,
+        /// UTC weekdays on which the peak windows apply. Omitted means every day.
+        #[serde(default)]
+        peak_weekdays: Option<WeekdaySet>,
+        /// UTC calendar dates (`YYYY-MM-DD`) with no peak at all, such as the
+        /// provider's published holidays.
+        #[serde(default)]
+        off_peak_dates_utc: Vec<String>,
     },
     /// The same provider/model route can use subscription capacity or API-key billing.
     ///
@@ -470,15 +513,48 @@ impl ModelBilling {
                 });
                 Some(promotion.unwrap_or(*off_peak_relative_burn_millis))
             }
-            Self::Metered { .. } | Self::Local => None,
+            Self::Metered { .. } | Self::MeteredSchedule { .. } | Self::Local => None,
+        }
+    }
+
+    /// The exact API-key rates this row charges for work dispatched at `at_ms`,
+    /// in milli-USD per million: input, output, cached input.
+    ///
+    /// `None` means the catalogue states no API price for this route, and a
+    /// client must not invent one. A schedule is resolved against the dispatch
+    /// instant; an instant that cannot be read has no stateable rate.
+    pub fn api_key_rates_at(&self, at_ms: i64) -> Option<(u32, u32, Option<u32>)> {
+        match self {
+            Self::MeteredSchedule {
+                off_peak,
+                peak,
+                peak_windows,
+                peak_weekdays,
+                off_peak_dates_utc,
+            } => {
+                let at = chrono::DateTime::from_timestamp_millis(at_ms)?;
+                let date = at.date_naive().format("%Y-%m-%d").to_string();
+                let peak_now = !off_peak_dates_utc.contains(&date)
+                    && peak_windows.iter().any(|window| {
+                        peak_window_contains(
+                            at,
+                            window.start_utc_hour,
+                            window.end_utc_hour,
+                            *peak_weekdays,
+                        )
+                    });
+                Some(if peak_now { peak } else { off_peak }.tuple())
+            }
+            billing => billing.api_key_rates(),
         }
     }
 
     /// The exact API-key rates this row would charge for the same tokens, in
     /// milli-USD per million: input, output, cached input.
     ///
-    /// Present for rows that carry an API side. `None` means the catalogue states
-    /// no API price for this route, and a client must not invent one.
+    /// Present for rows that carry a flat API side. `None` means the catalogue
+    /// states no flat API price for this route, and a client must not invent
+    /// one; a scheduled row's price depends on the instant, see `api_key_rates_at`.
     pub fn api_key_rates(&self) -> Option<(u32, u32, Option<u32>)> {
         match self {
             Self::Metered {
@@ -500,7 +576,10 @@ impl ModelBilling {
                 *api_key_output_milli_usd_per_million_tokens,
                 *api_key_cached_input_milli_usd_per_million_tokens,
             )),
-            Self::Plan { .. } | Self::PlanSchedule { .. } | Self::Local => None,
+            Self::Plan { .. }
+            | Self::PlanSchedule { .. }
+            | Self::MeteredSchedule { .. }
+            | Self::Local => None,
         }
     }
 
@@ -1119,6 +1198,68 @@ mod tests {
     use pretty_assertions::assert_eq;
     use serde_json::from_str;
     use serde_json::to_string;
+
+    /// DeepSeek V4.1 Flash as published: off-peak half of peak; peak 01-04 and
+    /// 06-10 UTC Monday-Friday; no peak on Chinese public holidays.
+    #[test]
+    fn metered_schedule_charges_the_rate_in_force_at_dispatch() {
+        let rates = |input, output, cached| MeteredRates {
+            input_milli_usd_per_million_tokens: input,
+            output_milli_usd_per_million_tokens: output,
+            cached_input_milli_usd_per_million_tokens: Some(cached),
+        };
+        let billing: ModelBilling = from_str(
+            r#"{"kind":"metered_schedule",
+                "off_peak":{"input_milli_usd_per_million_tokens":150,"output_milli_usd_per_million_tokens":600,"cached_input_milli_usd_per_million_tokens":3},
+                "peak":{"input_milli_usd_per_million_tokens":300,"output_milli_usd_per_million_tokens":1200,"cached_input_milli_usd_per_million_tokens":6},
+                "peak_windows":[{"start_utc_hour":1,"end_utc_hour":4},{"start_utc_hour":6,"end_utc_hour":10}],
+                "peak_weekdays":{"monday":true,"tuesday":true,"wednesday":true,"thursday":true,"friday":true,"saturday":false,"sunday":false},
+                "off_peak_dates_utc":["2026-10-01"]}"#,
+        )
+        .expect("schedule parses");
+        let at = |text: &str| {
+            chrono::DateTime::parse_from_rfc3339(text)
+                .expect("fixture instant")
+                .timestamp_millis()
+        };
+        let peak = Some(rates(300, 1_200, 6).tuple());
+        let off_peak = Some(rates(150, 600, 3).tuple());
+        for (instant, expected) in [
+            ("2026-09-21T01:00:00Z", peak),     // Monday, first window opens
+            ("2026-09-21T03:59:59Z", peak),     // still inside
+            ("2026-09-21T04:00:00Z", off_peak), // end is exclusive
+            ("2026-09-21T05:30:00Z", off_peak), // between the windows
+            ("2026-09-22T06:00:00Z", peak),     // Tuesday, second window
+            ("2026-09-22T09:59:59Z", peak),
+            ("2026-09-22T10:00:00Z", off_peak),
+            ("2026-09-22T00:59:59Z", off_peak),
+            ("2026-09-26T02:00:00Z", off_peak), // Saturday
+            ("2026-09-27T07:00:00Z", off_peak), // Sunday
+            ("2026-10-01T02:00:00Z", off_peak), // Thursday, a listed holiday
+            ("2026-10-08T02:00:00Z", peak),     // Thursday after it
+        ] {
+            assert_eq!(billing.api_key_rates_at(at(instant)), expected, "{instant}");
+        }
+        // A schedule has no flat rate: nothing may read one without an instant.
+        assert_eq!(billing.api_key_rates(), None);
+        assert_eq!(
+            billing.plan_burn_millis_at(at("2026-09-21T02:00:00Z")),
+            None
+        );
+        // An unreadable instant has no stateable rate.
+        assert_eq!(billing.api_key_rates_at(i64::MAX), None);
+        // Flat rows are unchanged at every instant.
+        let flat = ModelBilling::Metered {
+            input_milli_usd_per_million_tokens: 1,
+            output_milli_usd_per_million_tokens: 2,
+            cached_input_milli_usd_per_million_tokens: None,
+        };
+        assert_eq!(
+            flat.api_key_rates_at(at("2026-09-21T02:00:00Z")),
+            Some((1, 2, None))
+        );
+        assert_eq!(billing, from_str(&to_string(&billing).unwrap()).unwrap());
+    }
 
     fn at(text: &str) -> i64 {
         chrono::DateTime::parse_from_rfc3339(text)

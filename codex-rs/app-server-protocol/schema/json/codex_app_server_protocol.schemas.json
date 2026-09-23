@@ -13450,6 +13450,35 @@
           }
         ]
       },
+      "MeteredRates": {
+        "description": "Per-token API rates, in milli-USD per million tokens.",
+        "properties": {
+          "cached_input_milli_usd_per_million_tokens": {
+            "default": null,
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "input_milli_usd_per_million_tokens": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "output_milli_usd_per_million_tokens": {
+            "format": "uint32",
+            "minimum": 0.0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "input_milli_usd_per_million_tokens",
+          "output_milli_usd_per_million_tokens"
+        ],
+        "type": "object"
+      },
       "MigrationDetails": {
         "properties": {
           "commands": {
@@ -13772,6 +13801,57 @@
               "input_milli_usd_per_million_tokens",
               "kind",
               "output_milli_usd_per_million_tokens"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Per-token rates that differ between peak windows and the rest of the week.\n\nThe rate that applies is the one in force at the dispatch instant, so a ledger states what a request was actually charged, not a range.",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "metered_schedule"
+                ],
+                "type": "string"
+              },
+              "off_peak": {
+                "$ref": "#/definitions/v2/MeteredRates"
+              },
+              "off_peak_dates_utc": {
+                "default": [],
+                "description": "UTC calendar dates (`YYYY-MM-DD`) with no peak at all, such as the provider's published holidays.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "peak": {
+                "$ref": "#/definitions/v2/MeteredRates"
+              },
+              "peak_weekdays": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/v2/WeekdaySet"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "UTC weekdays on which the peak windows apply. Omitted means every day."
+              },
+              "peak_windows": {
+                "description": "Peak windows. Outside every window the off-peak rates apply.",
+                "items": {
+                  "$ref": "#/definitions/v2/UtcHourWindow"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "kind",
+              "off_peak",
+              "peak",
+              "peak_windows"
             ],
             "type": "object"
           },
@@ -22560,6 +22640,26 @@
             "type": "object"
           }
         ]
+      },
+      "UtcHourWindow": {
+        "description": "A `[start, end)` window in whole UTC hours; it may wrap past midnight.",
+        "properties": {
+          "end_utc_hour": {
+            "format": "uint8",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "start_utc_hour": {
+            "format": "uint8",
+            "minimum": 0.0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "end_utc_hour",
+          "start_utc_hour"
+        ],
+        "type": "object"
       },
       "Verbosity": {
         "description": "Controls output length/detail on GPT-5 models via the Responses API. Serialized with lowercase values to match the OpenAI API.",
