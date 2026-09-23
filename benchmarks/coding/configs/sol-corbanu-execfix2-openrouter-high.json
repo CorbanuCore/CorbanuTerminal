@@ -1,0 +1,46 @@
+{
+  "run_dir": "${CORBANU_BENCH_RUNS}/sol-corbanu-execfix2-openrouter-high",
+  "waves": 2,
+  "caps": {
+    "timeout_seconds": 1200,
+    "max_total_runs": 4
+  },
+  "isolation": {
+    "mode": "docker",
+    "images": {
+      "corbanu": "corbanu-bench-corbanu:c0.1.45-solfix2"
+    },
+    "upstream_key_env": "OPENROUTER_API_KEY",
+    "cpus": "4",
+    "memory": "8g"
+  },
+  "agents": [
+    {
+      "name": "corbanu-gpt-6-sol-openrouter-high",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "openrouter",
+      "model": "openai/gpt-6-sol",
+      "lane": "corbanu-gpt-6-sol",
+      "agent_args": [
+        "-c",
+        "model_reasoning_effort=\"high\""
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "name": "queryforge",
+      "baseline": "../tasks/queryforge/baseline",
+      "prompt": "../tasks/queryforge/task_prompt.md",
+      "verifier": "../tasks/queryforge/verifier/verify.py",
+      "core_rel": "src/queryforge/__init__.py"
+    },
+    {
+      "name": "queuecraft",
+      "baseline": "../tasks/queuecraft/bugged",
+      "prompt": "../tasks/queuecraft/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/queuecraft/verifier/verify.py"
+    }
+  ]
+}
