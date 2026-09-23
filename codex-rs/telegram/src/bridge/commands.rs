@@ -391,11 +391,16 @@ impl BridgeRuntime {
             .model_provider(chat_id)
             .await
             .unwrap_or_else(|| self.config.model_provider_id.clone());
-        let provider = model
-            .as_deref()
-            .map(|model| provider_for_model(model, &provider).provider)
-            .unwrap_or(provider);
-        (model, provider)
+        // Read through the same choice `/model` writes, so a bare Claude slug
+        // stored by an older build (or inherited from config) on the
+        // subscription starts threads as its plan slug too.
+        match model {
+            Some(model) => {
+                let choice = provider_for_model(&model, &provider);
+                (Some(choice.model), choice.provider)
+            }
+            None => (None, provider),
+        }
     }
 
     pub(super) async fn active_approval_policy(&self, chat_id: ConversationKey) -> AskForApproval {
