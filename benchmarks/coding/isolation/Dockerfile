@@ -22,7 +22,9 @@ WORKDIR /workspace
 
 FROM base AS corbanu
 COPY corbanu /opt/corbanu
-RUN ln -s /opt/corbanu/bin/corbanu /usr/local/bin/corbanu \
+# Releases before the rename ship the same CLI as bin/pfterminal.
+RUN if [ -x /opt/corbanu/bin/corbanu ]; then ln -s /opt/corbanu/bin/corbanu /usr/local/bin/corbanu; \
+    else ln -s /opt/corbanu/bin/pfterminal /usr/local/bin/corbanu; fi \
     && HOME=/tmp/build-home corbanu --version && rm -rf /tmp/build-home
 USER bench
 

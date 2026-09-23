@@ -90,6 +90,13 @@
           },
           "stdin_prompt": {
             "type": "boolean"
+          },
+          "agent_args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Isolated mode only: extra harness CLI arguments, recorded in the manifest (for example a disclosed reasoning override). Empty means harness defaults."
           }
         },
         "additionalProperties": false

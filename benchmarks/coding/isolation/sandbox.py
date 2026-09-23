@@ -207,7 +207,14 @@ def kill_container(name: str) -> None:
     _docker("rm", "-f", name, check=False)
 
 
-def prepare_agent(kind: str, model: str, prompt: str, home: Path, token: str) -> tuple[list[str], dict[str, str], str | None]:
+def prepare_agent(
+    kind: str,
+    model: str,
+    prompt: str,
+    home: Path,
+    token: str,
+    extra_args: tuple[str, ...] = (),
+) -> tuple[list[str], dict[str, str], str | None]:
     """Write the harness's fresh home and return (argv, env, stdin payload).
 
     Every harness uses its native OpenRouter provider and its own defaults;
@@ -228,7 +235,7 @@ def prepare_agent(kind: str, model: str, prompt: str, home: Path, token: str) ->
         argv = [
             "corbanu", "exec", "--json", "--skip-git-repo-check",
             "--dangerously-bypass-approvals-and-sandbox", "-C", CONTAINER_WORKSPACE,
-            "-c", 'model_provider="openrouter"', "-m", model, "-",
+            "-c", 'model_provider="openrouter"', "-m", model, *extra_args, "-",
         ]
         return argv, env, prompt
     if kind == "hermes":
@@ -244,7 +251,7 @@ def prepare_agent(kind: str, model: str, prompt: str, home: Path, token: str) ->
         env["TERMINAL_CWD"] = CONTAINER_WORKSPACE
         argv = [
             "hermes", "--provider", "openrouter", "-m", model, "--yolo", "--accept-hooks",
-            "--usage-file", f"{CONTAINER_HOME}/hermes-usage.json", "-z", prompt,
+            "--usage-file", f"{CONTAINER_HOME}/hermes-usage.json", *extra_args, "-z", prompt,
         ]
         return argv, env, None
     if kind == "kilo":
@@ -266,7 +273,7 @@ def prepare_agent(kind: str, model: str, prompt: str, home: Path, token: str) ->
         # model would see a corrupted prompt. Piped stdin arrives verbatim.
         argv = [
             "kilo", "run", "--model", f"openrouter/{model}", "--dir", CONTAINER_WORKSPACE,
-            "--format", "json", "--auto", "--title", "benchmark",
+            "--format", "json", "--auto", "--title", "benchmark", *extra_args,
         ]
         return argv, env, prompt
     raise ValueError(f"docker isolation does not support agent kind {kind!r}")

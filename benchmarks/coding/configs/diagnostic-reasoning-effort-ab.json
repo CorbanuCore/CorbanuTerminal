@@ -1,0 +1,81 @@
+{
+  "run_dir": "${CORBANU_BENCH_RUNS}/reasoning-effort-ab-queuecraft",
+  "waves": 1,
+  "caps": {
+    "timeout_seconds": 1200,
+    "max_total_runs": 5
+  },
+  "isolation": {
+    "mode": "docker",
+    "images": {
+      "corbanu": "corbanu-bench-corbanu:c0.1.44-h2026.9.21-k7.7.9",
+      "hermes": "corbanu-bench-hermes:c0.1.44-h2026.9.21-k7.7.9",
+      "kilo": "corbanu-bench-kilo:c0.1.44-h2026.9.21-k7.7.9"
+    },
+    "upstream_key_env": "OPENROUTER_API_KEY",
+    "cpus": "4",
+    "memory": "8g"
+  },
+  "agents": [
+    {
+      "name": "corbanu-glm-5.3-default",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.3",
+      "lane": "corbanu-glm-5.3-default"
+    },
+    {
+      "name": "corbanu-glm-5.3-medium",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.3",
+      "lane": "corbanu-glm-5.3-medium",
+      "agent_args": [
+        "-c",
+        "model_reasoning_effort=\"medium\""
+      ]
+    },
+    {
+      "name": "hermes-glm-5.3",
+      "kind": "hermes",
+      "binary": "hermes",
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.3",
+      "lane": "hermes-glm-5.3"
+    },
+    {
+      "name": "corbanu-opus-5.5-none",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "openrouter",
+      "model": "anthropic/claude-opus-5.5",
+      "lane": "corbanu-opus-5.5-none",
+      "agent_args": [
+        "-c",
+        "model_reasoning_effort=\"none\""
+      ]
+    },
+    {
+      "name": "corbanu-opus-5.5-medium",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "openrouter",
+      "model": "anthropic/claude-opus-5.5",
+      "lane": "corbanu-opus-5.5-medium",
+      "agent_args": [
+        "-c",
+        "model_reasoning_effort=\"medium\""
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "name": "queuecraft",
+      "baseline": "../tasks/queuecraft/bugged",
+      "prompt": "../tasks/queuecraft/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/queuecraft/verifier/verify.py"
+    }
+  ]
+}

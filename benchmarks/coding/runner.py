@@ -54,6 +54,7 @@ class AgentSpec:
     required_env: tuple[str, ...]
     command: tuple[str, ...] | None = None
     stdin_prompt: bool | None = None
+    agent_args: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -176,6 +177,7 @@ def load_specs(config_path: Path) -> tuple[dict[str, Any], list[TaskSpec], list[
                 required_env=tuple(str(item) for item in raw.get("required_env") or []),
                 command=tuple(str(item) for item in raw["command"]) if raw.get("command") else None,
                 stdin_prompt=bool(raw["stdin_prompt"]) if "stdin_prompt" in raw else None,
+                agent_args=tuple(str(item) for item in raw.get("agent_args") or []),
             )
         )
 
@@ -674,7 +676,7 @@ def run_isolated_agent(
     token, registration = campaign.register(run_id, run.agent.model, run.task.timeout_seconds)
     try:
         argv, env, stdin_payload = sandbox.prepare_agent(
-            run.agent.kind, run.agent.model, prompt, home, token
+            run.agent.kind, run.agent.model, prompt, home, token, run.agent.agent_args
         )
         env_file = run.result_dir / "container.env"
         sandbox.write_env_file(env_file, env)
