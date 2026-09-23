@@ -2771,3 +2771,114 @@ fn chat_replay_wraps_custom_tool_calls_as_input_functions() {
         serde_json::json!({ "input": "*** Begin Patch\n*** End Patch" })
     );
 }
+
+fn vercel_gateway_error(status: http::StatusCode, body: serde_json::Value) -> ApiError {
+    ApiError::Transport(TransportError::Http {
+        status,
+        url: None,
+        headers: None,
+        body: Some(body.to_string()),
+    })
+}
+
+fn vercel_zdr_exclusion_body() -> serde_json::Value {
+    json!({
+        "error": {
+            "type": "no_zdr_providers_available",
+            "message": "None of the providers considered for zai/glm-5.3 support ZDR"
+        },
+        "providerMetadata": {"gateway": {"routing": {
+            "resolvedProvider": "zai",
+            "totalProviderAttemptCount": 0,
+            "skippedProviderAttempts": [
+                {"credentialType": "system", "provider": "zai", "reason": "zdr_not_supported"}
+            ]
+        }}}
+    })
+}
+
+#[test]
+fn vercel_policy_exclusion_is_read_from_gateway_routing_metadata() {
+    assert!(super::is_vercel_gateway_policy_exclusion(
+        &vercel_gateway_error(http::StatusCode::BAD_REQUEST, vercel_zdr_exclusion_body(),)
+    ));
+
+    let mut attempted = vercel_zdr_exclusion_body();
+    attempted["providerMetadata"]["gateway"]["routing"]["totalProviderAttemptCount"] = json!(1);
+    let mut nothing_skipped = vercel_zdr_exclusion_body();
+    nothing_skipped["providerMetadata"]["gateway"]["routing"]["skippedProviderAttempts"] =
+        json!([]);
+    for (status, body) in [
+        (http::StatusCode::BAD_REQUEST, attempted),
+        (http::StatusCode::BAD_REQUEST, nothing_skipped),
+        (
+            http::StatusCode::BAD_REQUEST,
+            json!({"error": {"message": "bad input"}}),
+        ),
+        (
+            http::StatusCode::TOO_MANY_REQUESTS,
+            vercel_zdr_exclusion_body(),
+        ),
+    ] {
+        assert!(!super::is_vercel_gateway_policy_exclusion(
+            &vercel_gateway_error(status, body)
+        ));
+    }
+}
+
+#[test]
+fn vercel_policy_exclusion_drops_the_zai_pin_for_the_session() {
+    let client = test_model_client_with_provider(
+        ThreadId::new(),
+        SessionSource::Cli,
+        ModelProviderInfo::create_vercel_anthropic_provider(),
+    );
+    let prompt = Prompt {
+        input: vec![ResponseItem::Message {
+            id: None,
+            role: "user".to_string(),
+            content: vec![ContentItem::InputText {
+                text: "Inspect the repository.".to_string(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        ..Default::default()
+    };
+    let mut glm = test_vercel_kimi_model_info();
+    glm.slug = "zai/glm-5.3".to_string();
+    let provider_options = || {
+        client
+            .build_anthropic_messages_request(&prompt, &glm, /*effort*/ None)
+            .expect("Vercel GLM request")
+            .provider_options
+    };
+
+    assert_eq!(
+        provider_options(),
+        Some(json!({"gateway": {"only": ["zai"]}}))
+    );
+    let exclusion =
+        vercel_gateway_error(http::StatusCode::BAD_REQUEST, vercel_zdr_exclusion_body());
+    assert!(
+        client.drop_vercel_vendor_pin_after_policy_exclusion(&exclusion),
+        "the first exclusion retries without the pin"
+    );
+    assert_eq!(provider_options(), None);
+    assert!(
+        !client.drop_vercel_vendor_pin_after_policy_exclusion(&exclusion),
+        "an unpinned request that is still excluded must surface the error"
+    );
+}
+
+#[test]
+fn policy_exclusion_bodies_do_not_drop_pins_off_the_vercel_gateway() {
+    let client = test_model_client(SessionSource::Cli)
+        .for_provider(&ModelProviderInfo::create_zai_provider());
+    assert!(
+        !client.drop_vercel_vendor_pin_after_policy_exclusion(&vercel_gateway_error(
+            http::StatusCode::BAD_REQUEST,
+            vercel_zdr_exclusion_body(),
+        ))
+    );
+}
