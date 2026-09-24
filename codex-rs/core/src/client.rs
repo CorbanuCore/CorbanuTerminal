@@ -133,7 +133,9 @@ use tracing::instrument;
 use tracing::trace;
 use tracing::warn;
 
+use crate::anthropic_payload::ImageDimensionReport;
 use crate::anthropic_payload::enforce_anthropic_payload_budget;
+use crate::anthropic_payload::fit_anthropic_image_dimensions;
 use crate::anthropic_payload::is_anthropic_payload_too_large;
 use crate::attestation::AttestationContext;
 use crate::attestation::AttestationProvider;
@@ -2100,6 +2102,14 @@ impl ModelClient {
             output_config,
             provider_options,
         };
+        let image_report = fit_anthropic_image_dimensions(&mut request);
+        if image_report != ImageDimensionReport::default() {
+            warn!(
+                resized_images = image_report.resized_images,
+                omitted_images = image_report.omitted_images,
+                "fitted Anthropic request images to the provider's dimension limits"
+            );
+        }
         let payload_report = enforce_anthropic_payload_budget(
             &mut request,
             self.state
