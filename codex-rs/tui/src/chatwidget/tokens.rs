@@ -697,7 +697,7 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
     {
         return range_pages(requested, oldest_aggregate_day, read_at_ms, buckets);
     }
-    let mut pages = vec![InspectorPage { title: "Recorded requests — root and descendants".into(), text: vec![
+    let mut pages = vec![InspectorPage { title: "Cost — this conversation".into(), text: vec![
         "Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.".into(),
         "Billed cost: unavailable — no settlement evidence".into(),
         "Logical requests may have attempts on other days; this UTC day is not their complete lifetime.".into(),
@@ -752,19 +752,17 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
         let request_page = pages.len();
         request_pages.insert(*request, request_page);
         let number = pages[0].links.len() + 1;
-        let label = match (
-            request_route(quotes),
-            codex_state::accounting::DayTotals::from_quotes(quotes.iter()),
-        ) {
-            (Some(route), Ok(t)) => {
-                format!("Request {number} · {route} · {}", plain_cost(&t))
-            }
-            _ => format!("Request {number}"),
+        let attempts: Vec<&ObservationQuote> = quotes.iter().collect();
+        let label = match request_route(quotes) {
+            Some(route) => format!("Request {number} · {route} · {}", short_cost(&attempts)),
+            None => format!("Request {number}"),
         };
         pages[0].links.push((label, request_page));
+        let mut text = plain_header(&attempts);
+        text.push(format!("Request: {request}"));
         pages.push(InspectorPage {
-            title: "Logical request".into(),
-            text: request_summary(*request, quotes),
+            title: "Request".into(),
+            text,
             links: Vec::new(),
             parent: Some(0),
             selected: Arc::default(),
@@ -773,10 +771,12 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
             let target = pages.len();
             pages[request_page]
                 .links
-                .push((format!("Attempt {}", index + 1), target));
+                .push((format!("Technical details (attempt {})", index + 1), target));
+            let mut text = plain_header(&[quote]);
+            text.extend(attempt_text(quote));
             pages.push(InspectorPage {
                 title: "Attempt, components and original price".into(),
-                text: attempt_text(quote),
+                text,
                 links: Vec::new(),
                 parent: Some(request_page),
                 selected: Arc::default(),
@@ -833,7 +833,13 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
         groups.push(("Unknown provider/model attribution".into(), Vec::new()));
     }
     for (title, quotes) in groups {
-        let mut text = freshness.clone();
+        let provider_group = title.starts_with("Provider: ") && !quotes.is_empty();
+        let mut text = if provider_group {
+            plain_header(&quotes)
+        } else {
+            Vec::new()
+        };
+        text.extend(freshness.iter().cloned());
         text.extend(
             context
                 .iter()
@@ -862,7 +868,17 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
             .into_iter()
             .collect();
         let target = pages.len();
-        pages[0].links.push((title.clone(), target));
+        let label = if provider_group {
+            format!(
+                "{} — {} ({})",
+                route_name(quotes[0]),
+                short_cost(&quotes),
+                request_count(&quotes)
+            )
+        } else {
+            title.clone()
+        };
+        pages[0].links.push((label, target));
         pages.push(InspectorPage {
             title,
             text,
@@ -944,29 +960,80 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
     }
     // Plain first screen: the total stays first, then one line per provider
     // and model, then the auditing detail below a divider.
-    let at_a_glance = plain_breakdown(ready.requests.values().flatten());
-    let after_total = estimate(t).len();
-    pages[0].text.splice(after_total..after_total, at_a_glance);
-    // Provider/model groups first and the per-request list, which can run to
-    // dozens of entries, last.
-    pages[0].links.sort_by_key(|(label, _)| {
-        if label.starts_with("Provider: ") {
+    let overview = plain_overview(ready.requests.values().flatten());
+    pages[0].text.splice(0..0, overview);
+    // Provider/model groups first, then each request, then the auditing
+    // groups (own/descendant attempts, attribution, unknown parents).
+    let mut links = std::mem::take(&mut pages[0].links);
+    links.sort_by_key(|(label, target)| {
+        if pages[*target].title.starts_with("Provider: ") {
             0
         } else if label.starts_with("Request ") {
-            2
-        } else {
             1
+        } else {
+            2
         }
     });
+    pages[0].links = links;
     pages
 }
 
-/// `provider/model` of a request's attempts, or every distinct route when a
-/// retry moved to another one.
+/// The provider's display name ("Claude Account", "DeepSeek"), else its id.
+fn provider_name(id: &str) -> String {
+    static NAMES: std::sync::OnceLock<std::collections::HashMap<String, String>> =
+        std::sync::OnceLock::new();
+    if id.trim().is_empty() {
+        return "Unknown provider".to_string();
+    }
+    NAMES
+        .get_or_init(|| {
+            codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)
+                .into_iter()
+                .map(|(id, info)| (id, info.name))
+                .collect()
+        })
+        .get(id)
+        .cloned()
+        .unwrap_or_else(|| id.to_string())
+}
+
+/// The model's catalogue display name ("GPT-6 Sol"), else its slug.
+fn model_name(slug: &str) -> String {
+    static NAMES: std::sync::OnceLock<std::collections::HashMap<String, String>> =
+        std::sync::OnceLock::new();
+    if slug.trim().is_empty() {
+        return "unknown model".to_string();
+    }
+    NAMES
+        .get_or_init(|| {
+            codex_models_manager::bundled_models_response()
+                .map(|catalog| {
+                    catalog
+                        .models
+                        .into_iter()
+                        .map(|model| (model.slug, model.display_name))
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+        .get(slug)
+        .cloned()
+        .unwrap_or_else(|| slug.to_string())
+}
+
+fn route_name(quote: &ObservationQuote) -> String {
+    format!(
+        "{} · {}",
+        provider_name(&quote.attempt.provider),
+        model_name(&quote.attempt.model)
+    )
+}
+
+/// The route of a request's attempts, or every distinct route when a retry
+/// moved to another one.
 fn request_route(quotes: &[ObservationQuote]) -> Option<String> {
     let mut routes: Vec<String> = Vec::new();
-    for quote in quotes {
-        let route = format!("{}/{}", quote.attempt.provider, quote.attempt.model);
+    for route in quotes.iter().map(route_name) {
         if !routes.contains(&route) {
             routes.push(route);
         }
@@ -976,19 +1043,6 @@ fn request_route(quotes: &[ObservationQuote]) -> Option<String> {
         1 => routes.pop(),
         _ => Some(format!("several routes ({})", routes.join(", "))),
     }
-}
-
-/// A request page's plain header: what served it and what it cost.
-fn request_summary(request: Uuid, quotes: &[ObservationQuote]) -> Vec<String> {
-    let mut lines = vec![format!("Request: {request}")];
-    if let Some(route) = request_route(quotes) {
-        lines.push(format!("Provider / model: {route}"));
-    }
-    if let Ok(t) = codex_state::accounting::DayTotals::from_quotes(quotes.iter()) {
-        lines.push(format!("Tokens: {}", plain_tokens(&t)));
-        lines.push(format!("Cost: {}", plain_cost(&t)));
-    }
-    lines
 }
 
 /// `12345` as `12,345`.
@@ -1004,38 +1058,48 @@ fn grouped(n: i64) -> String {
     if n < 0 { format!("-{out}") } else { out }
 }
 
-/// One plain-language cost phrase for a set of attempts: pay-per-token
-/// estimate, subscription with its API-rate equivalent, or no price.
-fn plain_cost(t: &codex_state::accounting::DayTotals) -> String {
+const COVERED: &str = "Covered by your subscription (not billed per request)";
+const PAY_PER_USE: &str = "Pay per use";
+
+/// How a set of attempts is paid for, and the one money figure that goes
+/// with it. Subscription work is never stated as money spent: its figure is
+/// what the same work would cost at API prices.
+fn plain_billing(t: &codex_state::accounting::DayTotals) -> (&'static str, String) {
     let billed = t.attempts.saturating_sub(t.plan_attempts);
     let unknown = t.unknown_estimates.saturating_sub(t.plan_attempts);
-    let per_token = if billed == 0 {
-        None
-    } else if unknown == 0 {
-        Some(format!("{} estimated (pay per token)", money(t.known_usd)))
-    } else if t.known_usd == Decimal::default() {
-        Some("no price available (pay per token)".to_string())
-    } else {
-        Some(format!(
-            "at least {} estimated (pay per token; {unknown} {} unpriced)",
-            money(t.known_usd),
-            if unknown == 1 { "attempt" } else { "attempts" }
-        ))
-    };
-    let plan = (t.plan_attempts > 0).then(|| {
-        if t.unknown_equivalents == 0 {
-            format!(
-                "subscription, not billed per token (same tokens at API rates: {})",
-                money(t.equivalent_usd)
-            )
+    let per_use = (billed > 0).then(|| {
+        if unknown == 0 {
+            format!("Estimated cost: {}", money(t.known_usd))
+        } else if t.known_usd == Decimal::default() {
+            "Estimated cost: no price available".to_string()
         } else {
-            "subscription, not billed per token (API-rate equivalent unavailable)".to_string()
+            format!(
+                "Estimated cost: at least {} ({unknown} {} had no price)",
+                money(t.known_usd),
+                if unknown == 1 { "attempt" } else { "attempts" }
+            )
         }
     });
-    match (per_token, plan) {
-        (Some(per_token), Some(plan)) => format!("{per_token}; plus {plan}"),
-        (Some(text), None) | (None, Some(text)) => text,
-        (None, None) => "no requests".to_string(),
+    let covered = (t.plan_attempts > 0).then(|| {
+        if t.unknown_equivalents == 0 {
+            format!("Same work at API prices: {}", money(t.equivalent_usd))
+        } else if t.equivalent_usd == Decimal::default() {
+            "Same work at API prices: not available".to_string()
+        } else {
+            format!(
+                "Same work at API prices: at least {}",
+                money(t.equivalent_usd)
+            )
+        }
+    });
+    match (per_use, covered) {
+        (Some(per_use), None) => (PAY_PER_USE, per_use),
+        (None, Some(covered)) => (COVERED, covered),
+        (Some(per_use), Some(covered)) => (
+            "Partly subscription, partly pay per use",
+            format!("{per_use}; subscription part — {}", lower_first(&covered)),
+        ),
+        (None, None) => (PAY_PER_USE, "No requests".to_string()),
     }
 }
 
@@ -1057,50 +1121,133 @@ fn plain_tokens(t: &codex_state::accounting::DayTotals) -> String {
     }
 }
 
-/// The plain "who cost what" block for the first screen.
-fn plain_breakdown<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -> Vec<String> {
+/// "Same work at API prices" as "same work at API prices".
+fn lower_first(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_lowercase().chain(chars).collect()
+    })
+}
+
+fn request_count(quotes: &[&ObservationQuote]) -> String {
+    let requests = quotes
+        .iter()
+        .map(|q| q.attempt.request_id)
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+    format!(
+        "{requests} {}",
+        if requests == 1 { "request" } else { "requests" }
+    )
+}
+
+/// A short link label figure: the cost, or that a subscription covered it.
+fn short_cost(quotes: &[&ObservationQuote]) -> String {
+    match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
+        Ok(t) => match plain_billing(&t) {
+            (COVERED, _) => "covered by subscription".to_string(),
+            (_, cost) => cost.replacen("Estimated cost: ", "estimated ", 1),
+        },
+        Err(_) => "cost unavailable".to_string(),
+    }
+}
+
+/// The plain header of a provider, request or attempt page: what served the
+/// work, how it is paid for and what it cost, then a divider above the
+/// auditing detail.
+fn plain_header(quotes: &[&ObservationQuote]) -> Vec<String> {
+    let mut routes: Vec<(String, String)> = Vec::new();
+    for quote in quotes {
+        let route = (
+            provider_name(&quote.attempt.provider),
+            model_name(&quote.attempt.model),
+        );
+        if !routes.contains(&route) {
+            routes.push(route);
+        }
+    }
+    let mut lines = match routes.as_slice() {
+        [(provider, model)] => vec![format!("Provider: {provider}"), format!("Model: {model}")],
+        _ => vec![format!(
+            "Providers and models: {}",
+            routes
+                .iter()
+                .map(|(provider, model)| format!("{provider} · {model}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )],
+    };
+    match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
+        Ok(t) => {
+            let (billing, cost) = plain_billing(&t);
+            lines.push(format!("Billing: {billing}"));
+            lines.push(cost);
+            lines.push(format!("Tokens: {}", plain_tokens(&t)));
+        }
+        Err(_) => lines.push("Cost unavailable".to_string()),
+    }
+    lines.push("—— Details ——".to_string());
+    lines
+}
+
+/// The first screen: one line per provider and model, stating how it is paid
+/// for before anything else, then the day's totals by billing type.
+fn plain_overview<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -> Vec<String> {
     let mut groups: std::collections::BTreeMap<(String, String), Vec<&ObservationQuote>> =
         std::collections::BTreeMap::new();
     for quote in quotes {
-        let name = |value: &str| {
-            if value.trim().is_empty() {
-                "unknown".to_string()
-            } else {
-                value.to_string()
-            }
-        };
         groups
-            .entry((name(&quote.attempt.provider), name(&quote.attempt.model)))
+            .entry((quote.attempt.provider.clone(), quote.attempt.model.clone()))
             .or_default()
             .push(quote);
     }
     if groups.is_empty() {
         return Vec::new();
     }
-    let mut lines = vec!["By provider and model:".to_string()];
-    for ((provider, model), quotes) in groups {
-        let requests = quotes
-            .iter()
-            .map(|q| q.attempt.request_id)
-            .collect::<std::collections::BTreeSet<_>>()
-            .len();
-        let noun = if requests == 1 { "request" } else { "requests" };
+    let mut lines = vec!["Today (UTC) in this conversation:".to_string()];
+    for quotes in groups.values() {
+        let route = route_name(quotes[0]);
         lines.push(
             match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
-                Ok(t) => format!(
-                    "  {provider} / {model}: {requests} {noun}, {}, {}",
-                    plain_tokens(&t),
-                    plain_cost(&t)
-                ),
-                Err(_) => format!("  {provider} / {model}: {requests} {noun}, cost unavailable"),
+                Ok(t) => {
+                    let (billing, cost) = plain_billing(&t);
+                    format!(
+                        "• {route} — {billing}. {}, {}. {cost}.",
+                        request_count(quotes),
+                        plain_tokens(&t)
+                    )
+                }
+                Err(_) => format!("• {route} — cost unavailable."),
             },
         );
+    }
+    let all: Vec<&ObservationQuote> = groups.values().flatten().copied().collect();
+    if let Ok(t) = codex_state::accounting::DayTotals::from_quotes(all.iter().copied()) {
+        let billed = t.attempts.saturating_sub(t.plan_attempts);
+        if billed > 0 && t.plan_attempts > 0 {
+            let per_use = codex_state::accounting::DayTotals::from_quotes(
+                all.iter().copied().filter(|q| !q.is_plan()),
+            );
+            let covered = codex_state::accounting::DayTotals::from_quotes(
+                all.iter().copied().filter(|q| q.is_plan()),
+            );
+            if let (Ok(per_use), Ok(covered)) = (per_use, covered) {
+                lines.push(format!(
+                    "Pay-per-use total — {}",
+                    lower_first(&plain_billing(&per_use).1)
+                ));
+                lines.push(format!(
+                    "Subscription work — {}",
+                    lower_first(&plain_billing(&covered).1)
+                ));
+            }
+        }
     }
     lines.push(
         "Costs are estimates from published prices; your provider's bill is the final amount."
             .to_string(),
     );
-    lines.push("Open a provider line below for its requests. Auditing detail follows.".to_string());
+    lines.push("Select a provider below to see its requests.".to_string());
     lines.push("—— Details ——".to_string());
     lines
 }
@@ -1538,7 +1685,7 @@ impl ChatWidget {
             day,
             range,
             pages: vec![InspectorPage {
-                title: "Recorded requests".into(),
+                title: "Cost — this conversation".into(),
                 text: vec![match range {
                     Some(r) => format!(
                         "Loading recorded requests… Requested: {}; timezone: UTC; grouping: {:?}; effective coverage and bucket boundaries pending",

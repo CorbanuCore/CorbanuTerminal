@@ -56,7 +56,7 @@ async fn accounting_inspect_cancel_refresh_generation() {
         Ok(codex_state::accounting::InspectionDay::Absent),
     );
     chat.navigate_accounting_inspector(generation, 0);
-    assert!(!render_bottom_popup(&chat, 80).contains("Recorded requests"));
+    assert!(!render_bottom_popup(&chat, 80).contains("Cost — this conversation"));
     assert_matches!(rx.try_recv(), Ok(AppEvent::CloseAccountingInspector { .. }));
     chat.close_accounting_inspector(generation);
     assert!(chat.accounting_inspector.is_none());
@@ -87,7 +87,7 @@ async fn accounting_inspect_cancel_refresh_generation() {
     );
     chat.update_account_state(None, None, false, false);
     assert!(chat.accounting_inspector.is_none());
-    assert!(!render_bottom_popup(&chat, 80).contains("Recorded requests"));
+    assert!(!render_bottom_popup(&chat, 80).contains("Cost — this conversation"));
 }
 
 fn reset_credits(available_count: i64) -> RateLimitResetCreditsSummary {

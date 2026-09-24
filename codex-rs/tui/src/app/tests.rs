@@ -192,7 +192,7 @@ async fn accounting_inspect_app_thread_switch_stale_reply() -> anyhow::Result<()
         .handle_thread_session_quiet(test_thread_session(other, path.path().to_path_buf()));
     app.active_thread_id = Some(other);
     app.handle_accounting_inspector_event(held_result);
-    assert!(!render_bottom_popup(&app.chat_widget, 80).contains("Recorded requests"));
+    assert!(!render_bottom_popup(&app.chat_widget, 80).contains("Cost — this conversation"));
     let next = accounting_load(&mut app, &mut rx, day).await;
     assert!(matches!(next, AppEvent::AccountingInspectorLoaded {
         thread: Some(id), result: Ok(codex_state::accounting::InspectionDay::MissingThread), ..
@@ -244,7 +244,7 @@ async fn accounting_inspect_app_error_retry_and_timeout() -> anyhow::Result<()> 
             crossterm::event::KeyModifiers::NONE,
         ));
     app.handle_accounting_inspector_event(rx.recv().await.unwrap());
-    assert!(!render_bottom_popup(&app.chat_widget, 80).contains("Recorded requests"));
+    assert!(!render_bottom_popup(&app.chat_widget, 80).contains("Cost — this conversation"));
     Ok(())
 }
 

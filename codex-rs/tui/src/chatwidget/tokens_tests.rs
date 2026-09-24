@@ -55,7 +55,7 @@ async fn accounting_inspect_usability_wrap_tracks_resize() {
         .collect::<Vec<_>>()
         .join("\n");
     insta::assert_snapshot!(first_lines, @"
-    Recorded requests — root and descendants
+    Cost — this conversation
     Requested UTC day: 2026-09-16
     › Unavailable — accounting ledger not installed. Collection remains off.
     ");
@@ -1112,14 +1112,14 @@ async fn accounting_inspect_maintenance_with_current_contributions_renders_raw_t
     // cannot complete, so the assertions below pin the disclosure rather than
     // only the pixels.
     insta::assert_snapshot!(text, @"
+    Today (UTC) in this conversation:
+    • synthetic · synthetic-model — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
+    Costs are estimates from published prices; your provider's bill is the final amount.
+    Select a provider below to see its requests.
+    —— Details ——
     Estimated token cost: unknown
     Known estimated token cost: $0.000000 + unknown costs
     Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
-    By provider and model:
-      synthetic / synthetic-model: 1 request, tokens not reported, no price available (pay per token)
-    Costs are estimates from published prices; your provider's bill is the final amount.
-    Open a provider line below for its requests. Auditing detail follows.
-    —— Details ——
     Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
     Billed cost: unavailable — no settlement evidence
     Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
@@ -1220,7 +1220,10 @@ fn accounting_inspect_coverage_never_claims_run_complete() {
     let text = inspection_pages(Ok(InspectionDay::Ready(view)))[0]
         .text
         .join("\n");
-    assert!(text.starts_with("Estimated token cost for recorded attempts:"));
+    // The plain overview leads; the ledger's own totals open the detail.
+    let (overview, details) = text.split_once("—— Details ——\n").unwrap();
+    assert!(overview.starts_with("Today (UTC) in this conversation:"));
+    assert!(details.starts_with("Estimated token cost for recorded attempts:"));
     for caveat in [
         "Collection coverage: unknown",
         "resolved descendants only",
@@ -1265,7 +1268,7 @@ async fn accounting_inspect_snapshot_navigation_roundtrip() {
             .selected_index_for_active_view(INSPECTOR_VIEW),
         Some(1)
     );
-    assert!(render_bottom_popup(&chat, 40).contains("Recorded requests"));
+    assert!(render_bottom_popup(&chat, 40).contains("Cost — this conversation"));
 }
 
 fn breakdown_packet() -> InspectionDay {
@@ -1368,7 +1371,7 @@ fn accounting_inspect_rendered_tree_and_provider_model_reconcile() {
     );
     for group in provider_pages {
         for (_, request) in &group.links {
-            assert_eq!(pages[*request].title, "Logical request");
+            assert_eq!(pages[*request].title, "Request");
             assert_eq!(
                 pages[pages[*request].links[0].1].title,
                 "Attempt, components and original price"
@@ -1847,31 +1850,47 @@ fn accounting_inspect_first_screen_names_provider_model_and_billing_type() {
     plan.all_buckets_equivalent = Some(decimal("0.5"));
     view.requests.insert(plan.attempt.request_id, vec![plan]);
     view.totals = DayTotals::from_quotes(view.requests.values().flatten()).unwrap();
-    let totals_lines = estimate(&view.totals);
     let pages = inspection_pages(Ok(InspectionDay::Ready(view)));
     let root = &pages[0];
+    let claude = provider_name("claude-plan");
+    assert_eq!(claude, "Claude Plan");
 
-    let start = root
-        .text
-        .iter()
-        .position(|s| s == "By provider and model:")
-        .expect("plain breakdown present");
-    // Only the totals precede it.
-    assert_eq!(root.text[..start].to_vec(), totals_lines);
+    // The first thing on screen: each route with how it is paid for, then the
+    // totals by billing type. Nothing technical above the divider.
+    let details = root.text.iter().position(|s| s == "—— Details ——").unwrap();
     assert_eq!(
-        root.text[start + 1..start + 5].to_vec(),
+        root.text[..details].to_vec(),
         vec![
-            "  alpha / one: 1 request, 140 tokens, $0.000001 estimated (pay per token)".to_string(),
-            "  alpha / two: 1 request, 140 tokens, $0.000002 estimated (pay per token)".to_string(),
+            "Today (UTC) in this conversation:".to_string(),
             format!(
-                "  claude-plan / opus: 1 request, 140 tokens, subscription, not billed per token (same tokens at API rates: {})",
+                "• Unknown provider · unknown model — Pay per use. 1 request, 140 tokens. Estimated cost: {}.",
+                money(decimal("0.000004"))
+            ),
+            format!(
+                "• alpha · one — Pay per use. 1 request, 140 tokens. Estimated cost: {}.",
+                money(decimal("0.000001"))
+            ),
+            format!(
+                "• alpha · two — Pay per use. 1 request, 140 tokens. Estimated cost: {}.",
+                money(decimal("0.000002"))
+            ),
+            format!(
+                "• {claude} · opus — Covered by your subscription (not billed per request). 1 request, 140 tokens. Same work at API prices: {}.",
                 money(decimal("0.5"))
             ),
-            "  unknown / unknown: 1 request, 140 tokens, $0.000004 estimated (pay per token)"
+            format!(
+                "Pay-per-use total — estimated cost: {}",
+                money(decimal("0.000007"))
+            ),
+            format!(
+                "Subscription work — same work at API prices: {}",
+                money(decimal("0.5"))
+            ),
+            "Costs are estimates from published prices; your provider's bill is the final amount."
                 .to_string(),
+            "Select a provider below to see its requests.".to_string(),
         ]
     );
-    let details = root.text.iter().position(|s| s == "—— Details ——").unwrap();
     for technical in [
         "Billed cost:",
         "Collection coverage:",
@@ -1885,33 +1904,56 @@ fn accounting_inspect_first_screen_names_provider_model_and_billing_type() {
         assert!(at > details, "{technical} stays below the divider");
     }
 
-    // Groups first, individual requests last and self-describing.
+    // Provider groups first, each naming its billing; requests last.
     let labels: Vec<_> = root.links.iter().map(|(label, _)| label.as_str()).collect();
-    assert!(labels[0].starts_with("Provider: "), "{labels:?}");
+    let covered = format!("{claude} · opus — covered by subscription (1 request)");
+    let alpha = format!(
+        "alpha · one — estimated {} (1 request)",
+        money(decimal("0.000001"))
+    );
+    assert!(labels[..4].contains(&covered.as_str()), "{labels:?}");
+    assert!(labels[..4].contains(&alpha.as_str()), "{labels:?}");
+    // Then the requests, then the auditing groups.
     let first_request = labels
         .iter()
         .position(|l| l.starts_with("Request "))
         .unwrap();
+    assert_eq!(first_request, 4, "{labels:?}");
     assert!(
-        labels[first_request..]
-            .iter()
-            .all(|l| l.starts_with("Request "))
+        labels[4..8].iter().all(|l| l.starts_with("Request ")),
+        "{labels:?}"
     );
-    assert!(labels.contains(&"Request 1 · alpha/one · $0.000001 estimated (pay per token)"));
+    assert_eq!(
+        labels.last(),
+        Some(&"Unknown parent population"),
+        "{labels:?}"
+    );
+    let request_one = format!(
+        "Request 1 · alpha · one · estimated {}",
+        money(decimal("0.000001"))
+    );
+    assert!(labels.contains(&request_one.as_str()), "{labels:?}");
 
-    // A request page states what served it and what it cost.
+    // A request page, and the attempt page under it, open on the plain header.
     let (_, page) = root
         .links
         .iter()
-        .find(|(label, _)| label.contains("claude-plan/opus"))
+        .find(|(label, _)| label.starts_with("Request ") && label.contains("opus"))
         .unwrap();
-    let text = &pages[*page].text;
-    assert!(text.contains(&"Provider / model: claude-plan/opus".to_string()));
-    assert!(text.contains(&"Tokens: 140 tokens".to_string()));
-    assert!(
-        text.iter()
-            .any(|s| s.starts_with("Cost: subscription, not billed per token"))
+    let request = &pages[*page];
+    assert_eq!(
+        request.text[..5].to_vec(),
+        vec![
+            format!("Provider: {claude}"),
+            "Model: opus".to_string(),
+            "Billing: Covered by your subscription (not billed per request)".to_string(),
+            format!("Same work at API prices: {}", money(decimal("0.5"))),
+            "Tokens: 140 tokens".to_string(),
+        ]
     );
+    assert_eq!(request.links[0].0, "Technical details (attempt 1)");
+    let attempt = &pages[request.links[0].1];
+    assert_eq!(attempt.text[..3], request.text[..3]);
 }
 
 #[test]
@@ -1927,18 +1969,24 @@ fn accounting_inspect_plain_wording_counts_attempts_and_names_every_route() {
     let quotes = vec![first, retry];
     let totals = DayTotals::from_quotes(quotes.iter()).unwrap();
     assert_eq!(
-        plain_cost(&totals),
-        format!(
-            "at least {} estimated (pay per token; 2 attempts unpriced)",
-            money(decimal("0.00002"))
+        plain_billing(&totals),
+        (
+            "Pay per use",
+            format!(
+                "Estimated cost: at least {} (2 attempts had no price)",
+                money(decimal("0.00002"))
+            )
         )
     );
     assert_eq!(
         request_route(&quotes).as_deref(),
-        Some("several routes (synthetic/synthetic-model, synthetic/other-model)")
+        Some("several routes (synthetic · synthetic-model, synthetic · other-model)")
     );
     assert_eq!(
         request_route(&quotes[..1]).as_deref(),
-        Some("synthetic/synthetic-model")
+        Some("synthetic · synthetic-model")
     );
+    // Real routes read by their display names.
+    assert_eq!(model_name("gpt-6-sol"), "GPT-6 Sol");
+    assert_eq!(provider_name("deepseek"), "DeepSeek");
 }
