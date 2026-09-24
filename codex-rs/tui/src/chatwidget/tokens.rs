@@ -752,12 +752,22 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
         let request_page = pages.len();
         request_pages.insert(*request, request_page);
         let number = pages[0].links.len() + 1;
-        pages[0]
-            .links
-            .push((format!("Request {number}"), request_page));
+        let label = match (
+            quotes.last(),
+            codex_state::accounting::DayTotals::from_quotes(quotes.iter()),
+        ) {
+            (Some(last), Ok(t)) => format!(
+                "Request {number} · {}/{} · {}",
+                last.attempt.provider,
+                last.attempt.model,
+                plain_cost(&t)
+            ),
+            _ => format!("Request {number}"),
+        };
+        pages[0].links.push((label, request_page));
         pages.push(InspectorPage {
             title: "Logical request".into(),
-            text: vec![format!("Request: {request}")],
+            text: request_summary(*request, quotes),
             links: Vec::new(),
             parent: Some(0),
             selected: Arc::default(),
@@ -935,7 +945,152 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
                 .push("Snapshot is not current; newer activity is unverified".into());
         }
     }
+    // Plain first screen: the total stays first, then one line per provider
+    // and model, then the auditing detail below a divider.
+    let at_a_glance = plain_breakdown(ready.requests.values().flatten());
+    let after_total = estimate(t).len();
+    pages[0].text.splice(after_total..after_total, at_a_glance);
+    // Provider/model groups first and the per-request list, which can run to
+    // dozens of entries, last.
+    pages[0].links.sort_by_key(|(label, _)| {
+        if label.starts_with("Provider: ") {
+            0
+        } else if label.starts_with("Request ") {
+            2
+        } else {
+            1
+        }
+    });
     pages
+}
+
+/// A request page's plain header: what served it and what it cost.
+fn request_summary(request: Uuid, quotes: &[ObservationQuote]) -> Vec<String> {
+    let mut lines = vec![format!("Request: {request}")];
+    if let Some(last) = quotes.last() {
+        lines.push(format!(
+            "Provider / model: {} / {}",
+            last.attempt.provider, last.attempt.model
+        ));
+    }
+    if let Ok(t) = codex_state::accounting::DayTotals::from_quotes(quotes.iter()) {
+        lines.push(format!("Tokens: {}", plain_tokens(&t)));
+        lines.push(format!("Cost: {}", plain_cost(&t)));
+    }
+    lines
+}
+
+/// `12345` as `12,345`.
+fn grouped(n: i64) -> String {
+    let digits = n.unsigned_abs().to_string();
+    let mut out = String::new();
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(digit);
+    }
+    if n < 0 { format!("-{out}") } else { out }
+}
+
+/// One plain-language cost phrase for a set of attempts: pay-per-token
+/// estimate, subscription with its API-rate equivalent, or no price.
+fn plain_cost(t: &codex_state::accounting::DayTotals) -> String {
+    let billed = t.attempts.saturating_sub(t.plan_attempts);
+    let unknown = t.unknown_estimates.saturating_sub(t.plan_attempts);
+    let per_token = if billed == 0 {
+        None
+    } else if unknown == 0 {
+        Some(format!("{} estimated (pay per token)", money(t.known_usd)))
+    } else if t.known_usd == Decimal::default() {
+        Some("no price available (pay per token)".to_string())
+    } else {
+        Some(format!(
+            "at least {} estimated (pay per token; {unknown} requests unpriced)",
+            money(t.known_usd)
+        ))
+    };
+    let plan = (t.plan_attempts > 0).then(|| {
+        if t.unknown_equivalents == 0 {
+            format!(
+                "subscription, not billed per token (same tokens at API rates: {})",
+                money(t.equivalent_usd)
+            )
+        } else {
+            "subscription, not billed per token (API-rate equivalent unavailable)".to_string()
+        }
+    });
+    match (per_token, plan) {
+        (Some(per_token), Some(plan)) => format!("{per_token}; plus {plan}"),
+        (Some(text), None) | (None, Some(text)) => text,
+        (None, None) => "no requests".to_string(),
+    }
+}
+
+/// Total tokens, or input plus output where a provider reports no total.
+fn plain_tokens(t: &codex_state::accounting::DayTotals) -> String {
+    let [input, _, _, _, output, _, total] = &t.measured;
+    let (known, unknown) = if total.unknown == 0 {
+        (total.known, 0)
+    } else {
+        (
+            input.known.saturating_add(output.known),
+            input.unknown.max(output.unknown),
+        )
+    };
+    match (known, unknown) {
+        (0, unknown) if unknown > 0 => "tokens not reported".to_string(),
+        (known, 0) => format!("{} tokens", grouped(known)),
+        (known, _) => format!("{}+ tokens", grouped(known)),
+    }
+}
+
+/// The plain "who cost what" block for the first screen.
+fn plain_breakdown<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -> Vec<String> {
+    let mut groups: std::collections::BTreeMap<(String, String), Vec<&ObservationQuote>> =
+        std::collections::BTreeMap::new();
+    for quote in quotes {
+        let name = |value: &str| {
+            if value.trim().is_empty() {
+                "unknown".to_string()
+            } else {
+                value.to_string()
+            }
+        };
+        groups
+            .entry((name(&quote.attempt.provider), name(&quote.attempt.model)))
+            .or_default()
+            .push(quote);
+    }
+    if groups.is_empty() {
+        return Vec::new();
+    }
+    let mut lines = vec!["By provider and model:".to_string()];
+    for ((provider, model), quotes) in groups {
+        let requests = quotes
+            .iter()
+            .map(|q| q.attempt.request_id)
+            .collect::<std::collections::BTreeSet<_>>()
+            .len();
+        let noun = if requests == 1 { "request" } else { "requests" };
+        lines.push(
+            match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
+                Ok(t) => format!(
+                    "  {provider} / {model}: {requests} {noun}, {}, {}",
+                    plain_tokens(&t),
+                    plain_cost(&t)
+                ),
+                Err(_) => format!("  {provider} / {model}: {requests} {noun}, cost unavailable"),
+            },
+        );
+    }
+    lines.push(
+        "Costs are estimates from published prices; your provider's bill is the final amount."
+            .to_string(),
+    );
+    lines.push("Open a provider line below for its requests. Auditing detail follows.".to_string());
+    lines.push("—— Details ——".to_string());
+    lines
 }
 
 fn interval(start: i64, end: i64) -> String {

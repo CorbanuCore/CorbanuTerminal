@@ -1115,6 +1115,11 @@ async fn accounting_inspect_maintenance_with_current_contributions_renders_raw_t
     Estimated token cost: unknown
     Known estimated token cost: $0.000000 + unknown costs
     Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
+    By provider and model:
+      synthetic / synthetic-model: 1 request, tokens not reported, no price available (pay per token)
+    Costs are estimates from published prices; your provider's bill is the final amount.
+    Open a provider line below for its requests. Auditing detail follows.
+    —— Details ——
     Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
     Billed cost: unavailable — no settlement evidence
     Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
@@ -1822,5 +1827,89 @@ fn accounting_inspect_range_entry_page_names_rows_whose_tokens_have_no_price() {
     assert!(
         entry.contains("openai/gpt-6-astra"),
         "the range total page names the row: {entry}"
+    );
+}
+
+#[test]
+fn accounting_inspect_first_screen_names_provider_model_and_billing_type() {
+    let InspectionDay::Ready(mut view) = breakdown_packet() else {
+        unreachable!()
+    };
+    let mut plan = quote();
+    plan.attempt.attempt_id = Uuid::from_u128(5);
+    plan.attempt.request_id = Uuid::from_u128(105);
+    plan.attempt.thread_id = view.owner;
+    plan.attempt.provider = "claude-plan".into();
+    plan.attempt.model = "opus".into();
+    plan.known_subtotal = Decimal::default();
+    plan.plan_burn_millis = Some(1000);
+    plan.known_equivalent = decimal("0.5");
+    plan.all_buckets_equivalent = Some(decimal("0.5"));
+    view.requests.insert(plan.attempt.request_id, vec![plan]);
+    view.totals = DayTotals::from_quotes(view.requests.values().flatten()).unwrap();
+    let totals_lines = estimate(&view.totals);
+    let pages = inspection_pages(Ok(InspectionDay::Ready(view)));
+    let root = &pages[0];
+
+    let start = root
+        .text
+        .iter()
+        .position(|s| s == "By provider and model:")
+        .expect("plain breakdown present");
+    // Only the totals precede it.
+    assert_eq!(root.text[..start].to_vec(), totals_lines);
+    assert_eq!(
+        root.text[start + 1..start + 5].to_vec(),
+        vec![
+            "  alpha / one: 1 request, 140 tokens, $0.000001 estimated (pay per token)".to_string(),
+            "  alpha / two: 1 request, 140 tokens, $0.000002 estimated (pay per token)".to_string(),
+            format!(
+                "  claude-plan / opus: 1 request, 140 tokens, subscription, not billed per token (same tokens at API rates: {})",
+                money(decimal("0.5"))
+            ),
+            "  unknown / unknown: 1 request, 140 tokens, $0.000004 estimated (pay per token)"
+                .to_string(),
+        ]
+    );
+    let details = root.text.iter().position(|s| s == "—— Details ——").unwrap();
+    for technical in [
+        "Billed cost:",
+        "Collection coverage:",
+        "Known subtotal exact USD:",
+    ] {
+        let at = root
+            .text
+            .iter()
+            .position(|s| s.starts_with(technical))
+            .unwrap();
+        assert!(at > details, "{technical} stays below the divider");
+    }
+
+    // Groups first, individual requests last and self-describing.
+    let labels: Vec<_> = root.links.iter().map(|(label, _)| label.as_str()).collect();
+    assert!(labels[0].starts_with("Provider: "), "{labels:?}");
+    let first_request = labels
+        .iter()
+        .position(|l| l.starts_with("Request "))
+        .unwrap();
+    assert!(
+        labels[first_request..]
+            .iter()
+            .all(|l| l.starts_with("Request "))
+    );
+    assert!(labels.contains(&"Request 1 · alpha/one · $0.000001 estimated (pay per token)"));
+
+    // A request page states what served it and what it cost.
+    let (_, page) = root
+        .links
+        .iter()
+        .find(|(label, _)| label.contains("claude-plan/opus"))
+        .unwrap();
+    let text = &pages[*page].text;
+    assert!(text.contains(&"Provider / model: claude-plan / opus".to_string()));
+    assert!(text.contains(&"Tokens: 140 tokens".to_string()));
+    assert!(
+        text.iter()
+            .any(|s| s.starts_with("Cost: subscription, not billed per token"))
     );
 }
