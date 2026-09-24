@@ -1,0 +1,86 @@
+{
+  "run_dir": "${CORBANU_BENCH_RUNS}/glm53-flash-vercel-loop-ab-before",
+  "waves": 2,
+  "caps": {
+    "timeout_seconds": 1200,
+    "max_total_runs": 16
+  },
+  "isolation": {
+    "mode": "docker",
+    "images": {
+      "corbanu": "corbanu-bench-corbanu:c0.1.45-zdrfix"
+    },
+    "upstream_key_env": "OPENROUTER_API_KEY",
+    "cpus": "4",
+    "memory": "8g"
+  },
+  "agents": [
+    {
+      "name": "corbanu-glm-5.3-flash-vercel-before-l1",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "vercel",
+      "model": "zai/glm-5.3-flash",
+      "lane": "corbanu-glm-5.3-flash-vercel-before-l1",
+      "agent_args": [
+        "-c",
+        "model_reasoning_effort=\"high\""
+      ],
+      "cli_model": "zai/glm-5.3-flash"
+    },
+    {
+      "name": "corbanu-glm-5.3-flash-vercel-before-l2",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "vercel",
+      "model": "zai/glm-5.3-flash",
+      "lane": "corbanu-glm-5.3-flash-vercel-before-l2",
+      "agent_args": [
+        "-c",
+        "model_reasoning_effort=\"high\""
+      ],
+      "cli_model": "zai/glm-5.3-flash"
+    },
+    {
+      "name": "corbanu-glm-5.3-flash-vercel-before-l3",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "vercel",
+      "model": "zai/glm-5.3-flash",
+      "lane": "corbanu-glm-5.3-flash-vercel-before-l3",
+      "agent_args": [
+        "-c",
+        "model_reasoning_effort=\"high\""
+      ],
+      "cli_model": "zai/glm-5.3-flash"
+    },
+    {
+      "name": "corbanu-glm-5.3-flash-vercel-before-l4",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "vercel",
+      "model": "zai/glm-5.3-flash",
+      "lane": "corbanu-glm-5.3-flash-vercel-before-l4",
+      "agent_args": [
+        "-c",
+        "model_reasoning_effort=\"high\""
+      ],
+      "cli_model": "zai/glm-5.3-flash"
+    }
+  ],
+  "tasks": [
+    {
+      "name": "queryforge",
+      "baseline": "../tasks/queryforge/baseline",
+      "prompt": "../tasks/queryforge/task_prompt.md",
+      "verifier": "../tasks/queryforge/verifier/verify.py",
+      "core_rel": "src/queryforge/__init__.py"
+    },
+    {
+      "name": "queuecraft",
+      "baseline": "../tasks/queuecraft/bugged",
+      "prompt": "../tasks/queuecraft/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/queuecraft/verifier/verify.py"
+    }
+  ]
+}
