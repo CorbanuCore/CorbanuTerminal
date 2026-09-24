@@ -1032,7 +1032,8 @@ async fn apply_patch_fallback_preserves_tools_and_uses_structured_edit_inner() -
 
 /// A model that re-issues the same call once per request must be stopped at
 /// turn scope: each sampling request builds a fresh tool runtime, so the old
-/// per-runtime counter never saw more than one repeat.
+/// per-runtime counter never saw more than one repeat. Three calls run, the
+/// next seven are refused, and the eighth refusal stops the turn.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn identical_call_loop_across_model_requests_is_refused_then_stopped() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
@@ -1042,7 +1043,7 @@ async fn identical_call_loop_across_model_requests_is_refused_then_stopped() -> 
     let test = builder.build(&server).await?;
 
     let command_args = json!({ "command": "echo same check", "login": false }).to_string();
-    let looping_responses = (1..=8)
+    let looping_responses = (1..=11)
         .map(|idx| {
             sse(vec![
                 ev_response_created(&format!("resp-{idx}")),
@@ -1071,9 +1072,7 @@ async fn identical_call_loop_across_model_requests_is_refused_then_stopped() -> 
         unreachable!("wait_for_event returned a non-error event");
     };
     assert!(
-        error
-            .message
-            .contains("8 consecutive identical `shell_command` calls"),
+        error.message.contains("refusing 8 repeated tool calls"),
         "{}",
         error.message
     );
@@ -1081,8 +1080,8 @@ async fn identical_call_loop_across_model_requests_is_refused_then_stopped() -> 
     let requests = mock.requests();
     assert_eq!(
         requests.len(),
-        8,
-        "the turn must stop at the eighth identical call"
+        11,
+        "the turn must stop at the eighth refused repeat"
     );
     for idx in 1..=3 {
         let (output, _) = call_output(&requests[idx], &format!("call-{idx}"));
@@ -1091,7 +1090,7 @@ async fn identical_call_loop_across_model_requests_is_refused_then_stopped() -> 
             "call {idx} should run: {output}"
         );
     }
-    for idx in 4..=7 {
+    for idx in 4..=10 {
         let (output, success) = call_output(&requests[idx], &format!("call-{idx}"));
         assert!(
             output.starts_with("Not run: this exact `shell_command` call"),
