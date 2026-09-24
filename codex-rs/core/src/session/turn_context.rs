@@ -148,6 +148,29 @@ impl MalformedToolCallState {
     }
 }
 
+/// Tracks the current run of consecutive identical direct tool calls across
+/// every model request in a turn. Each sampling request builds a fresh tool
+/// runtime, so a model that re-issues one call per request is only visible at
+/// turn scope.
+#[derive(Debug, Default)]
+pub(crate) struct RepeatedToolCallState {
+    streak: Mutex<Option<(String, u32)>>,
+}
+
+impl RepeatedToolCallState {
+    /// Records a direct tool call and returns how many times in a row this
+    /// exact call has now been made. Any different call resets the streak.
+    async fn record(&self, signature: String) -> u32 {
+        let mut streak = self.streak.lock().await;
+        let count = match streak.as_ref() {
+            Some((last, count)) if *last == signature => count.saturating_add(1),
+            _ => 1,
+        };
+        *streak = Some((signature, count));
+        count
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct TurnEnvironment {
     pub(crate) environment_id: String,
@@ -267,6 +290,7 @@ pub struct TurnContext {
     pub(crate) model_edit_protocol_state: Arc<ModelEditProtocolState>,
     pub(crate) explicit_tool_budget_state: Arc<ExplicitToolBudgetState>,
     pub(crate) malformed_tool_call_state: Arc<MalformedToolCallState>,
+    pub(crate) repeated_tool_call_state: Arc<RepeatedToolCallState>,
     pub(crate) server_model_warning_emitted: AtomicBool,
     pub(crate) provider_cache_pressure_warning_emitted: AtomicBool,
     pub(crate) model_verification_emitted: AtomicBool,
@@ -365,6 +389,10 @@ impl TurnContext {
 
     pub(crate) async fn record_malformed_tool_call(&self, signature: String) -> u8 {
         self.malformed_tool_call_state.record(signature).await
+    }
+
+    pub(crate) async fn record_direct_tool_call(&self, signature: String) -> u32 {
+        self.repeated_tool_call_state.record(signature).await
     }
 
     pub(crate) fn set_explicit_shell_command_budget(&self, limit: u64) {
@@ -513,6 +541,7 @@ impl TurnContext {
             model_edit_protocol_state: Arc::clone(&self.model_edit_protocol_state),
             explicit_tool_budget_state: Arc::clone(&self.explicit_tool_budget_state),
             malformed_tool_call_state: Arc::clone(&self.malformed_tool_call_state),
+            repeated_tool_call_state: Arc::clone(&self.repeated_tool_call_state),
             server_model_warning_emitted: AtomicBool::new(
                 self.server_model_warning_emitted.load(Ordering::Relaxed),
             ),
@@ -815,6 +844,7 @@ impl Session {
             model_edit_protocol_state: Arc::new(ModelEditProtocolState::default()),
             explicit_tool_budget_state: Arc::new(ExplicitToolBudgetState::default()),
             malformed_tool_call_state: Arc::new(MalformedToolCallState::default()),
+            repeated_tool_call_state: Arc::new(RepeatedToolCallState::default()),
             server_model_warning_emitted: AtomicBool::new(false),
             provider_cache_pressure_warning_emitted: AtomicBool::new(false),
             model_verification_emitted: AtomicBool::new(false),
