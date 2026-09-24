@@ -23,6 +23,7 @@ use futures::future::BoxFuture;
 use futures::future::Shared;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU8;
+use std::sync::atomic::AtomicU32;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use tracing::instrument;
@@ -148,26 +149,77 @@ impl MalformedToolCallState {
     }
 }
 
-/// Tracks the current run of consecutive identical direct tool calls across
-/// every model request in a turn. Each sampling request builds a fresh tool
-/// runtime, so a model that re-issues one call per request is only visible at
-/// turn scope.
+/// Tracks repeated direct tool calls across every model request in a turn.
+/// Each sampling request builds a fresh tool runtime, so a model that re-issues
+/// one call per request, or cycles through the same few calls, is only visible
+/// at turn scope.
 #[derive(Debug, Default)]
 pub(crate) struct RepeatedToolCallState {
     streak: Mutex<Option<(String, u32)>>,
+    /// Per call signature: every result identity it has returned this turn,
+    /// and how many times it has returned an already-seen result since the
+    /// turn last learned something new.
+    results: Mutex<HashMap<String, (HashSet<String>, u32)>>,
+    refusals: AtomicU32,
+}
+
+/// How a direct call repeats earlier ones in the same turn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ToolCallRepetition {
+    /// Times in a row this exact call has now been made.
+    pub(crate) consecutive_calls: u32,
+    /// Times this exact call has already returned its latest result.
+    pub(crate) identical_results: u32,
 }
 
 impl RepeatedToolCallState {
-    /// Records a direct tool call and returns how many times in a row this
-    /// exact call has now been made. Any different call resets the streak.
-    async fn record(&self, signature: String) -> u32 {
-        let mut streak = self.streak.lock().await;
-        let count = match streak.as_ref() {
-            Some((last, count)) if *last == signature => count.saturating_add(1),
-            _ => 1,
+    async fn record_call(&self, signature: &str) -> ToolCallRepetition {
+        let consecutive_calls = {
+            let mut streak = self.streak.lock().await;
+            let count = match streak.as_ref() {
+                Some((last, count)) if last == signature => count.saturating_add(1),
+                _ => 1,
+            };
+            *streak = Some((signature.to_string(), count));
+            count
         };
-        *streak = Some((signature, count));
-        count
+        let identical_results = self
+            .results
+            .lock()
+            .await
+            .get(signature)
+            .map_or(0, |(_, count)| *count);
+        ToolCallRepetition {
+            consecutive_calls,
+            identical_results,
+        }
+    }
+
+    /// Records a call's result. A result this call has never returned before
+    /// in the turn is progress (for example the output of a new edit, or a
+    /// test that now reports something new), so every repeat count restarts.
+    /// Results seen before, including ones a model oscillates between by
+    /// toggling an edit back and forth, are not progress.
+    async fn record_result(&self, signature: String, identity: String) {
+        let mut results = self.results.lock().await;
+        if let Some((seen, count)) = results.get_mut(&signature)
+            && seen.contains(&identity)
+        {
+            *count = count.saturating_add(1);
+            return;
+        }
+        for (_, count) in results.values_mut() {
+            *count = 0;
+        }
+        let (seen, count) = results.entry(signature).or_default();
+        seen.insert(identity);
+        *count = 1;
+    }
+
+    fn record_refusal(&self) -> u32 {
+        self.refusals
+            .fetch_add(1, Ordering::AcqRel)
+            .saturating_add(1)
     }
 }
 
@@ -391,8 +443,19 @@ impl TurnContext {
         self.malformed_tool_call_state.record(signature).await
     }
 
-    pub(crate) async fn record_direct_tool_call(&self, signature: String) -> u32 {
-        self.repeated_tool_call_state.record(signature).await
+    pub(crate) async fn record_direct_tool_call(&self, signature: &str) -> ToolCallRepetition {
+        self.repeated_tool_call_state.record_call(signature).await
+    }
+
+    pub(crate) async fn record_direct_tool_result(&self, signature: String, identity: String) {
+        self.repeated_tool_call_state
+            .record_result(signature, identity)
+            .await
+    }
+
+    /// Returns how many repeated calls this turn has refused, including this one.
+    pub(crate) fn record_repeated_tool_call_refusal(&self) -> u32 {
+        self.repeated_tool_call_state.record_refusal()
     }
 
     pub(crate) fn set_explicit_shell_command_budget(&self, limit: u64) {

@@ -35,12 +35,16 @@ use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::ResponseInputItem;
 
 const MAX_IDENTICAL_TOOL_CALLS_PER_TURN: u8 = 3;
-/// Consecutive identical direct calls allowed across the model requests of a
+/// Times in a row one exact direct call may run across the model requests of a
 /// turn before further repeats are refused without running.
 const MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS: u32 = 3;
-/// Consecutive identical direct calls after which the turn stops: the model has
-/// ignored several refusals and is stuck.
-const STOP_TURN_AFTER_CONSECUTIVE_IDENTICAL_TOOL_CALLS: u32 = 8;
+/// Times one exact direct call may return the same result within a turn before
+/// further repeats are refused. Catches loops that cycle through several calls,
+/// which never repeat one call twice in a row.
+const MAX_IDENTICAL_TOOL_RESULTS: u32 = 3;
+/// Refused repeats after which the turn stops: the model has ignored the
+/// refusals and is stuck.
+const STOP_TURN_AFTER_REFUSED_REPEATS: u32 = 8;
 
 struct ToolCallTimingGuard {
     started_at: Instant,
@@ -157,7 +161,7 @@ impl ToolCallRuntime {
         let started = Instant::now();
         let tool_call_counts = Arc::clone(&self.tool_call_counts);
         let tool_signature = tool_call_signature(&call);
-        let guards_consecutive_repeats = matches!(source, ToolCallSource::Direct)
+        let guards_repeats = matches!(source, ToolCallSource::Direct)
             && !tool_runtime
                 .as_ref()
                 .is_some_and(|runtime| runtime.repeated_identical_calls_are_polling());
@@ -196,9 +200,20 @@ impl ToolCallRuntime {
                         dispatch_call.tool_name
                     )));
                 }
-                if guards_consecutive_repeats {
-                    let streak = turn.record_direct_tool_call(tool_signature).await;
-                    consecutive_identical_call_guard(&dispatch_call, streak)?;
+                if guards_repeats {
+                    let repetition = turn.record_direct_tool_call(&tool_signature).await;
+                    if let Some(refusal) = repeated_call_refusal(&dispatch_call, repetition) {
+                        let refusals = turn.record_repeated_tool_call_refusal();
+                        if refusals >= STOP_TURN_AFTER_REFUSED_REPEATS {
+                            return Err(FunctionCallError::Fatal(format!(
+                                "stopped the turn after refusing {refusals} repeated tool calls; \
+                                 the model kept repeating calls whose results could not change \
+                                 (last: `{}`)",
+                                dispatch_call.tool_name
+                            )));
+                        }
+                        return Err(FunctionCallError::RespondToModel(refusal));
+                    }
                 }
                 if let Some(tool_runtime) = tool_runtime
                     && let Some(readiness) = tool_runtime.wait_until_ready(&session)
@@ -229,6 +244,10 @@ impl ToolCallRuntime {
                     )
                     .instrument(dispatch_span.clone())
                     .await;
+                if guards_repeats && let Some(identity) = result_identity(&result) {
+                    turn.record_direct_tool_result(tool_signature, identity)
+                        .await;
+                }
                 match result {
                     Err(FunctionCallError::MalformedToolCall {
                         diagnostic,
@@ -301,27 +320,45 @@ impl ToolCallRuntime {
     }
 }
 
-/// Refuses a direct call that repeats the previous call exactly, once it has
-/// already run `MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS` times in a row, and stops
-/// the turn when the model keeps repeating it after refusals. Re-running the
-/// same command after an edit is unaffected because the edit breaks the run.
-fn consecutive_identical_call_guard(call: &ToolCall, streak: u32) -> Result<(), FunctionCallError> {
-    if streak >= STOP_TURN_AFTER_CONSECUTIVE_IDENTICAL_TOOL_CALLS {
-        return Err(FunctionCallError::Fatal(format!(
-            "stopped the turn after {streak} consecutive identical `{}` calls; the model kept \
-             repeating the same call after it was refused",
-            call.tool_name
-        )));
-    }
-    if streak > MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS {
-        return Err(FunctionCallError::RespondToModel(format!(
+/// Returns the refusal for a direct call that cannot tell the model anything
+/// new: it already ran `MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS` times in a row, or
+/// it already returned the same result `MAX_IDENTICAL_TOOL_RESULTS` times this
+/// turn. Re-running a command after an edit that changes its result is
+/// unaffected.
+fn repeated_call_refusal(
+    call: &ToolCall,
+    repetition: crate::session::turn_context::ToolCallRepetition,
+) -> Option<String> {
+    if repetition.consecutive_calls > MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS {
+        return Some(format!(
             "Not run: this exact `{}` call has already run {MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS} \
              times in a row and its result is in the conversation above. Repeating it will not \
              produce new information. Use that result, or take a different action.",
             call.tool_name
-        )));
+        ));
     }
-    Ok(())
+    if repetition.identical_results >= MAX_IDENTICAL_TOOL_RESULTS {
+        return Some(format!(
+            "Not run: this exact `{}` call has already returned the same result \
+             {MAX_IDENTICAL_TOOL_RESULTS} times in this turn without any new result in \
+             between, so running it again will not produce new information. Use the result in \
+             the conversation above, or take a different action.",
+            call.tool_name
+        ));
+    }
+    None
+}
+
+/// Identity of a dispatched call's result for repeat detection, or `None` when
+/// the outcome carries no model-visible result.
+fn result_identity(result: &Result<AnyToolResult, FunctionCallError>) -> Option<String> {
+    let identity = match result {
+        Ok(result) => result.result.result_identity(&result.payload).to_string(),
+        Err(FunctionCallError::RespondToModel(message)) => format!("error:{message}"),
+        Err(_) => return None,
+    };
+    let digest = Sha256::digest(identity.as_bytes());
+    Some(digest.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 fn tool_call_signature(call: &ToolCall) -> String {
@@ -1126,7 +1163,8 @@ mod tests {
             Vec::new(),
         ));
         let arguments = r#"{"cmd":"python3 check.py"}"#;
-        for idx in 1..STOP_TURN_AFTER_CONSECUTIVE_IDENTICAL_TOOL_CALLS {
+        let refusals_before_stop = STOP_TURN_AFTER_REFUSED_REPEATS - 1;
+        for idx in 1..=(MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS + refusals_before_stop) {
             let response = call_in_new_sampling_runtime(
                 &router,
                 &session,
@@ -1159,8 +1197,139 @@ mod tests {
             panic!("expected a fatal repeated-call stop, got {err:?}");
         };
         assert!(
-            message.contains("8 consecutive identical `exec_command` calls"),
+            message.contains("refusing 8 repeated tool calls"),
             "{message}"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cycles_of_calls_with_unchanged_results_are_refused() -> anyhow::Result<()> {
+        let (session, turn_context) = crate::session::tests::make_session_and_context().await;
+        let (session, turn_context) = (Arc::new(session), Arc::new(turn_context));
+        let tool_name = codex_tools::ToolName::plain("exec_command");
+        let router = Arc::new(ToolRouter::from_parts(
+            ToolRegistry::from_tools([Arc::new(ImmediateHandler {
+                tool_name: tool_name.clone(),
+            }) as Arc<dyn CoreToolRuntime>]),
+            Vec::new(),
+        ));
+        let check_a = r#"{"cmd":"python3 check_a.py"}"#;
+        let check_b = r#"{"cmd":"python3 check_b.py"}"#;
+        let mut idx = 0;
+        let mut call = |arguments: &'static str| {
+            idx += 1;
+            call_in_new_sampling_runtime(
+                &router,
+                &session,
+                &turn_context,
+                &tool_name,
+                format!("call-{idx}"),
+                arguments,
+            )
+        };
+
+        // A, B, A, B, ...: never twice in a row, and results never change. B's
+        // first result was new information, so A's count restarts once; B is
+        // refused on lap four and A on lap five.
+        for _ in 0..MAX_IDENTICAL_TOOL_RESULTS {
+            assert_eq!(output_text(call(check_a).await?).0, Some(true));
+            assert_eq!(output_text(call(check_b).await?).0, Some(true));
+        }
+        assert_eq!(output_text(call(check_a).await?).0, Some(true));
+        for arguments in [check_b, check_a] {
+            let (success, message) = output_text(call(arguments).await?);
+            assert_eq!(success, Some(false));
+            assert!(
+                message.contains("already returned the same result 3 times"),
+                "{message}"
+            );
+        }
+
+        // A call with a new result is progress, so the checks may run again.
+        assert_eq!(
+            output_text(call(r#"{"cmd":"apply fix"}"#).await?).0,
+            Some(true)
+        );
+        assert_eq!(output_text(call(check_a).await?).0, Some(true));
+        Ok(())
+    }
+
+    /// Output that alternates between two states, as when a model toggles an
+    /// edit back and forth and re-runs the same test.
+    struct TogglingHandler {
+        tool_name: codex_tools::ToolName,
+        calls: std::sync::atomic::AtomicUsize,
+    }
+
+    impl ToolExecutor<ToolInvocation> for TogglingHandler {
+        fn tool_name(&self) -> codex_tools::ToolName {
+            self.tool_name.clone()
+        }
+
+        fn spec(&self) -> codex_tools::ToolSpec {
+            ImmediateHandler {
+                tool_name: self.tool_name.clone(),
+            }
+            .spec()
+        }
+
+        fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+            // Each edit flips the state; the test reports the current state.
+            let is_edit = invocation.payload.log_payload().contains("toggle");
+            let state = if is_edit {
+                self.calls.fetch_add(1, Ordering::SeqCst) + 1
+            } else {
+                self.calls.load(Ordering::SeqCst)
+            } % 2;
+            let text = if is_edit {
+                "edited".to_string()
+            } else {
+                format!("state {state}")
+            };
+            Box::pin(async move {
+                Ok(Box::new(FunctionToolOutput::from_text(text, Some(true)))
+                    as Box<dyn crate::tools::context::ToolOutput>)
+            })
+        }
+    }
+
+    impl CoreToolRuntime for TogglingHandler {}
+
+    #[tokio::test]
+    async fn oscillating_results_are_not_progress() -> anyhow::Result<()> {
+        let (session, turn_context) = crate::session::tests::make_session_and_context().await;
+        let (session, turn_context) = (Arc::new(session), Arc::new(turn_context));
+        let tool_name = codex_tools::ToolName::plain("exec_command");
+        let router = Arc::new(ToolRouter::from_parts(
+            ToolRegistry::from_tools([Arc::new(TogglingHandler {
+                tool_name: tool_name.clone(),
+                calls: std::sync::atomic::AtomicUsize::new(0),
+            }) as Arc<dyn CoreToolRuntime>]),
+            Vec::new(),
+        ));
+        let test_run = r#"{"cmd":"python3 -m unittest"}"#;
+        let edit = r#"{"cmd":"toggle the join rename"}"#;
+        let mut outcomes = Vec::new();
+        for idx in 0..16 {
+            let arguments = if idx % 2 == 0 { edit } else { test_run };
+            let response = call_in_new_sampling_runtime(
+                &router,
+                &session,
+                &turn_context,
+                &tool_name,
+                format!("call-{idx}"),
+                arguments,
+            )
+            .await?;
+            outcomes.push(output_text(response).0 == Some(true));
+        }
+        // The first edit/test pairs report states 1 and 0 for the first time;
+        // after that the test only returns results it has already returned.
+        assert!(outcomes[..4].iter().all(|ran| *ran), "{outcomes:?}");
+        assert!(
+            outcomes.iter().any(|ran| !ran),
+            "toggling between two known results must eventually be refused: {outcomes:?}"
         );
         Ok(())
     }
@@ -1176,7 +1345,7 @@ mod tests {
             }) as Arc<dyn CoreToolRuntime>]),
             Vec::new(),
         ));
-        for idx in 0..(STOP_TURN_AFTER_CONSECUTIVE_IDENTICAL_TOOL_CALLS + 2) {
+        for idx in 0..(MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS + STOP_TURN_AFTER_REFUSED_REPEATS + 2) {
             let response = call_in_new_sampling_runtime(
                 &router,
                 &session,
