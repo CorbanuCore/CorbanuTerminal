@@ -4083,10 +4083,12 @@ impl Config {
         let model = if incompatible_explicit_provider.is_some()
             && allow_provider_model_fallback
         {
-            // Leave model selection to the provider-specific ModelsManager. In
-            // particular, Bedrock's catalog default is not represented by the
-            // shared resolve_model_for_provider mapping.
-            None
+            // Use the provider's own default model. Providers without one in
+            // the shared mapping (OpenAI, Bedrock) resolve to None and leave
+            // selection to their provider-specific ModelsManager; anything
+            // else must not fall through to that manager, whose catalogue
+            // default is an OpenAI model the provider cannot serve.
+            resolve_model_for_provider(/*model*/ None, &model_provider_id)
         } else {
             match model {
             // An explicit bare Claude slug on the subscription is sent as its exact

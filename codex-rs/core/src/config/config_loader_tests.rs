@@ -4161,3 +4161,63 @@ prefix_rules = []
         Ok(())
     }
 }
+
+#[tokio::test]
+#[serial_test::serial(home_env)]
+async fn home_dot_codex_is_not_a_project_layer_inside_a_repository() -> std::io::Result<()> {
+    // A home directory that is itself a repository (dotfiles) holds the Codex
+    // CLI's own `~/.codex`; it must not load as this program's project config.
+    let tmp = tempdir()?;
+    let home_dir = tmp.path().join("home");
+    let codex_home = home_dir.join(".corbanu");
+    let workdir = home_dir.join("work");
+    tokio::fs::create_dir_all(home_dir.join(".git")).await?;
+    tokio::fs::create_dir_all(home_dir.join(".codex")).await?;
+    tokio::fs::create_dir_all(&codex_home).await?;
+    tokio::fs::create_dir_all(&workdir).await?;
+    tokio::fs::write(
+        home_dir.join(".codex").join(CONFIG_TOML_FILE),
+        "model = \"gpt-6-astra\"\n",
+    )
+    .await?;
+    make_config_for_test(
+        &codex_home,
+        &home_dir,
+        TrustLevel::Trusted,
+        /*project_root_markers*/ None,
+    )
+    .await?;
+
+    let previous_home = std::env::var_os("HOME");
+    // SAFETY: serialised on `home_env`; restored before returning.
+    unsafe { std::env::set_var("HOME", &home_dir) };
+    let layers = load_config_layers_state(
+        LOCAL_FS.as_ref(),
+        &codex_home,
+        Some(AbsolutePathBuf::from_absolute_path(&workdir)?),
+        &[] as &[(String, TomlValue)],
+        LoaderOverrides::default(),
+        &codex_config::NoopThreadConfigLoader,
+    )
+    .await;
+    // SAFETY: as above.
+    unsafe {
+        match previous_home {
+            Some(home) => std::env::set_var("HOME", home),
+            None => std::env::remove_var("HOME"),
+        }
+    }
+    let layers = layers?;
+
+    assert!(
+        layers
+            .get_layers(
+                ConfigLayerStackOrdering::HighestPrecedenceFirst,
+                /*include_disabled*/ true,
+            )
+            .into_iter()
+            .all(|layer| !matches!(layer.name, ConfigLayerSource::Project { .. }))
+    );
+    assert_eq!(layers.effective_config().get("model"), None);
+    Ok(())
+}

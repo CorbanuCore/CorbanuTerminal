@@ -12464,6 +12464,10 @@ async fn interactive_fallback_recovers_persisted_incompatible_pairs() -> std::io
     for (model, provider) in [
         ("gpt-5.6-sol", CLAUDE_PLAN_PROVIDER_ID),
         ("glm-5.2", OPENAI_PROVIDER_ID),
+        (
+            "gpt-6-astra",
+            codex_model_provider_info::DEEPSEEK_PROVIDER_ID,
+        ),
     ] {
         let cfg = toml::from_str::<ConfigToml>(&format!(
             "model_provider = {provider:?}\nmodel = {model:?}\n"
@@ -12481,7 +12485,12 @@ async fn interactive_fallback_recovers_persisted_incompatible_pairs() -> std::io
         .await?;
 
         assert_eq!(config.model_provider_id, provider);
-        assert_eq!(config.model, None);
+        // The provider's own default; OpenAI keeps None so its models
+        // manager picks the catalogue default.
+        assert_eq!(
+            config.model,
+            codex_model_provider_info::resolve_model_for_provider(None, provider)
+        );
         assert!(config.startup_warnings.iter().any(|warning| {
             warning.contains(model)
                 && warning.contains(provider)
@@ -12505,6 +12514,10 @@ async fn override_provider_with_stale_config_model_recovers_without_opt_in() -> 
     for (stale_model, provider) in [
         ("gpt-5.6-sol", CLAUDE_PLAN_PROVIDER_ID),
         ("glm-5.2", OPENAI_PROVIDER_ID),
+        (
+            "gpt-6-astra",
+            codex_model_provider_info::DEEPSEEK_PROVIDER_ID,
+        ),
     ] {
         let cfg = toml::from_str::<ConfigToml>(&format!("model = {stale_model:?}\n"))
             .expect("config should deserialize");
@@ -12520,7 +12533,12 @@ async fn override_provider_with_stale_config_model_recovers_without_opt_in() -> 
         .await?;
 
         assert_eq!(config.model_provider_id, provider);
-        assert_eq!(config.model, None);
+        // The provider's own default; OpenAI keeps None so its models
+        // manager picks the catalogue default.
+        assert_eq!(
+            config.model,
+            codex_model_provider_info::resolve_model_for_provider(None, provider)
+        );
         assert!(config.startup_warnings.iter().any(|warning| {
             warning.contains(stale_model) && warning.contains("using the provider's default model")
         }));
@@ -12754,5 +12772,30 @@ async fn default_provider_does_not_force_the_api_only_login_path() -> std::io::R
     )
     .await?;
     assert_eq!(openai.forced_login_method, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn incompatible_fallback_uses_non_openai_provider_default() -> std::io::Result<()> {
+    use codex_model_provider_info::DEEPSEEK_DEFAULT_MODEL;
+    use codex_model_provider_info::DEEPSEEK_PROVIDER_ID;
+
+    // A foreign `gpt-*` model next to DeepSeek must resolve to DeepSeek's own
+    // default, never to None: None hands selection to the OpenAI catalogue,
+    // which then pairs an OpenAI model with DeepSeek and blocks the turn.
+    let cfg = toml::from_str::<ConfigToml>("model = \"gpt-6-astra\"\n")
+        .expect("config should deserialize");
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides {
+            model_provider: Some(DEEPSEEK_PROVIDER_ID.to_string()),
+            ..ConfigOverrides::default()
+        },
+        tempdir()?.abs(),
+    )
+    .await?;
+
+    assert_eq!(config.model_provider_id, DEEPSEEK_PROVIDER_ID);
+    assert_eq!(config.model.as_deref(), Some(DEEPSEEK_DEFAULT_MODEL));
     Ok(())
 }
