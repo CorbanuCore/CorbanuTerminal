@@ -2609,6 +2609,7 @@ impl ModelClientSession {
     ) -> Result<ResponseStream> {
         let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
+        let mut transient_rate_limit_retries = 0;
         let mut signed_thinking_history_retry_used = false;
         let mut payload_retry_used = false;
         loop {
@@ -2762,6 +2763,28 @@ impl ModelClientSession {
                          images and retrying once"
                     );
                     payload_retry_used = true;
+                    continue;
+                }
+                Err(err)
+                    if transient_rate_limit_retries < MAX_TRANSIENT_RATE_LIMIT_RETRIES
+                        && is_transient_upstream_rate_limit(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let delay = transient_rate_limit_delay(&err, transient_rate_limit_retries);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    transient_rate_limit_retries += 1;
+                    warn!(
+                        attempt = transient_rate_limit_retries,
+                        delay_ms = delay.as_millis() as u64,
+                        "gateway reported a transient shared upstream rate limit; retrying"
+                    );
+                    tokio::time::sleep(delay).await;
                     continue;
                 }
                 Err(err)
@@ -3096,6 +3119,7 @@ impl ModelClientSession {
             .then(|| uuid::Uuid::new_v4().to_string());
         let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
+        let mut transient_rate_limit_retries = 0;
         loop {
             let provider_request_started_at = Instant::now();
             trace_stream_timing("chat_http_before_client_setup", provider_request_started_at);
@@ -3195,6 +3219,28 @@ impl ModelClientSession {
                     continue;
                 }
                 Err(err)
+                    if transient_rate_limit_retries < MAX_TRANSIENT_RATE_LIMIT_RETRIES
+                        && is_transient_upstream_rate_limit(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let delay = transient_rate_limit_delay(&err, transient_rate_limit_retries);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    transient_rate_limit_retries += 1;
+                    warn!(
+                        attempt = transient_rate_limit_retries,
+                        delay_ms = delay.as_millis() as u64,
+                        "gateway reported a transient shared upstream rate limit; retrying"
+                    );
+                    tokio::time::sleep(delay).await;
+                    continue;
+                }
+                Err(err)
                     if self
                         .client
                         .drop_vercel_vendor_pin_after_policy_exclusion(&err) =>
@@ -3254,6 +3300,7 @@ impl ModelClientSession {
     ) -> Result<ResponseStream> {
         let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
+        let mut transient_rate_limit_retries = 0;
         let mut server_state_retry_used = false;
         let mut legacy_continuation_retry_used = false;
         loop {
@@ -3432,6 +3479,28 @@ impl ModelClientSession {
                         .legacy_synthetic_continuation
                         .store(true, Ordering::Relaxed);
                     legacy_continuation_retry_used = true;
+                    continue;
+                }
+                Err(err)
+                    if transient_rate_limit_retries < MAX_TRANSIENT_RATE_LIMIT_RETRIES
+                        && is_transient_upstream_rate_limit(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let delay = transient_rate_limit_delay(&err, transient_rate_limit_retries);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    transient_rate_limit_retries += 1;
+                    warn!(
+                        attempt = transient_rate_limit_retries,
+                        delay_ms = delay.as_millis() as u64,
+                        "gateway reported a transient shared upstream rate limit; retrying"
+                    );
+                    tokio::time::sleep(delay).await;
                     continue;
                 }
                 Err(err)
@@ -4913,6 +4982,56 @@ fn vercel_gateway_vendor_pin(model: &str) -> Option<&'static str> {
         "zai" => Some("zai"),
         _ => None,
     }
+}
+
+/// Retries allowed for one request when the gateway reports a transient limit
+/// of a shared upstream pool, with exponential backoff from
+/// `TRANSIENT_RATE_LIMIT_BASE_DELAY` (about 30 seconds in total).
+const MAX_TRANSIENT_RATE_LIMIT_RETRIES: u32 = 4;
+const TRANSIENT_RATE_LIMIT_BASE_DELAY: Duration = Duration::from_secs(2);
+const TRANSIENT_RATE_LIMIT_MAX_DELAY: Duration = Duration::from_secs(60);
+
+/// True for a 429 that the gateway marks, in its structured error metadata, as
+/// a temporary limit of a shared upstream provider pool rather than the
+/// caller's own quota. OpenRouter reports these as
+/// `error.metadata.limit_source = "upstream_provider_shared_pool"` and asks the
+/// caller to retry shortly. Other 429s keep the no-retry behavior.
+fn is_transient_upstream_rate_limit(err: &ApiError) -> bool {
+    let ApiError::Transport(TransportError::Http {
+        status,
+        body: Some(body),
+        ..
+    }) = err
+    else {
+        return false;
+    };
+    if *status != StatusCode::TOO_MANY_REQUESTS {
+        return false;
+    }
+    serde_json::from_str::<Value>(body).is_ok_and(|body| {
+        body.pointer("/error/metadata/limit_source")
+            .and_then(Value::as_str)
+            == Some("upstream_provider_shared_pool")
+    })
+}
+
+/// Backoff before retry `attempt` (0-based), honoring a `Retry-After` header in
+/// seconds when the gateway sends one.
+fn transient_rate_limit_delay(err: &ApiError, attempt: u32) -> Duration {
+    let retry_after = match err {
+        ApiError::Transport(TransportError::Http {
+            headers: Some(headers),
+            ..
+        }) => headers
+            .get(http::header::RETRY_AFTER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .map(Duration::from_secs),
+        _ => None,
+    };
+    retry_after
+        .unwrap_or_else(|| TRANSIENT_RATE_LIMIT_BASE_DELAY.saturating_mul(1 << attempt.min(8)))
+        .min(TRANSIENT_RATE_LIMIT_MAX_DELAY)
 }
 
 /// True when the Vercel gateway rejected a request without attempting any
