@@ -753,15 +753,12 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
         request_pages.insert(*request, request_page);
         let number = pages[0].links.len() + 1;
         let label = match (
-            quotes.last(),
+            request_route(quotes),
             codex_state::accounting::DayTotals::from_quotes(quotes.iter()),
         ) {
-            (Some(last), Ok(t)) => format!(
-                "Request {number} · {}/{} · {}",
-                last.attempt.provider,
-                last.attempt.model,
-                plain_cost(&t)
-            ),
+            (Some(route), Ok(t)) => {
+                format!("Request {number} · {route} · {}", plain_cost(&t))
+            }
             _ => format!("Request {number}"),
         };
         pages[0].links.push((label, request_page));
@@ -964,14 +961,28 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
     pages
 }
 
+/// `provider/model` of a request's attempts, or every distinct route when a
+/// retry moved to another one.
+fn request_route(quotes: &[ObservationQuote]) -> Option<String> {
+    let mut routes: Vec<String> = Vec::new();
+    for quote in quotes {
+        let route = format!("{}/{}", quote.attempt.provider, quote.attempt.model);
+        if !routes.contains(&route) {
+            routes.push(route);
+        }
+    }
+    match routes.len() {
+        0 => None,
+        1 => routes.pop(),
+        _ => Some(format!("several routes ({})", routes.join(", "))),
+    }
+}
+
 /// A request page's plain header: what served it and what it cost.
 fn request_summary(request: Uuid, quotes: &[ObservationQuote]) -> Vec<String> {
     let mut lines = vec![format!("Request: {request}")];
-    if let Some(last) = quotes.last() {
-        lines.push(format!(
-            "Provider / model: {} / {}",
-            last.attempt.provider, last.attempt.model
-        ));
+    if let Some(route) = request_route(quotes) {
+        lines.push(format!("Provider / model: {route}"));
     }
     if let Ok(t) = codex_state::accounting::DayTotals::from_quotes(quotes.iter()) {
         lines.push(format!("Tokens: {}", plain_tokens(&t)));
@@ -1006,8 +1017,9 @@ fn plain_cost(t: &codex_state::accounting::DayTotals) -> String {
         Some("no price available (pay per token)".to_string())
     } else {
         Some(format!(
-            "at least {} estimated (pay per token; {unknown} requests unpriced)",
-            money(t.known_usd)
+            "at least {} estimated (pay per token; {unknown} {} unpriced)",
+            money(t.known_usd),
+            if unknown == 1 { "attempt" } else { "attempts" }
         ))
     };
     let plan = (t.plan_attempts > 0).then(|| {

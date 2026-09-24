@@ -49,6 +49,9 @@ pub struct LoaderOverrides {
     pub ignore_managed_requirements: bool,
     pub ignore_user_config: bool,
     pub ignore_user_and_project_exec_policy_rules: bool,
+    /// The user's home directory, whose `.codex` folder is the Codex CLI's
+    /// own home and never a project layer. `None` reads `$HOME`/`$USERPROFILE`.
+    pub user_home_dir: Option<PathBuf>,
     //TODO(gt): Add a macos_ prefix to this field and remove the target_os check.
     #[cfg(target_os = "macos")]
     pub managed_preferences_base64: Option<String>,
@@ -70,6 +73,7 @@ impl LoaderOverrides {
             ignore_managed_requirements: false,
             ignore_user_config: false,
             ignore_user_and_project_exec_policy_rules: false,
+            user_home_dir: None,
             #[cfg(target_os = "macos")]
             managed_preferences_base64: Some(String::new()),
             macos_managed_config_requirements_base64: Some(String::new()),

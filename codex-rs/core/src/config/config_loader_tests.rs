@@ -4163,7 +4163,6 @@ prefix_rules = []
 }
 
 #[tokio::test]
-#[serial_test::serial(home_env)]
 async fn home_dot_codex_is_not_a_project_layer_inside_a_repository() -> std::io::Result<()> {
     // A home directory that is itself a repository (dotfiles) holds the Codex
     // CLI's own `~/.codex`; it must not load as this program's project config.
@@ -4188,26 +4187,31 @@ async fn home_dot_codex_is_not_a_project_layer_inside_a_repository() -> std::io:
     )
     .await?;
 
-    let previous_home = std::env::var_os("HOME");
-    // SAFETY: serialised on `home_env`; restored before returning.
-    unsafe { std::env::set_var("HOME", &home_dir) };
-    let layers = load_config_layers_state(
-        LOCAL_FS.as_ref(),
-        &codex_home,
-        Some(AbsolutePathBuf::from_absolute_path(&workdir)?),
-        &[] as &[(String, TomlValue)],
-        LoaderOverrides::default(),
-        &codex_config::NoopThreadConfigLoader,
-    )
-    .await;
-    // SAFETY: as above.
-    unsafe {
-        match previous_home {
-            Some(home) => std::env::set_var("HOME", home),
-            None => std::env::remove_var("HOME"),
+    let load = |user_home_dir: Option<std::path::PathBuf>| {
+        let codex_home = codex_home.clone();
+        let workdir = workdir.clone();
+        async move {
+            load_config_layers_state(
+                LOCAL_FS.as_ref(),
+                &codex_home,
+                Some(AbsolutePathBuf::from_absolute_path(&workdir)?),
+                &[] as &[(String, TomlValue)],
+                LoaderOverrides {
+                    user_home_dir,
+                    ..LoaderOverrides::default()
+                },
+                &codex_config::NoopThreadConfigLoader,
+            )
+            .await
         }
-    }
-    let layers = layers?;
+    };
+    // Control: the same folder outside the user's home is a project layer.
+    let elsewhere = load(Some(tmp.path().join("someone-else"))).await?;
+    assert_eq!(
+        elsewhere.effective_config().get("model"),
+        Some(&TomlValue::String("gpt-6-astra".to_string()))
+    );
+    let layers = load(Some(home_dir.clone())).await?;
 
     assert!(
         layers

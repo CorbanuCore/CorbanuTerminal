@@ -129,6 +129,7 @@ pub async fn load_config_layers_state(
         cloud_config_bundle,
     } = options.into();
     let active_user_profile = overrides.user_config_profile.clone();
+    let user_home_dir = overrides.user_home_dir.clone();
     let ignore_managed_requirements = overrides.ignore_managed_requirements;
     let ignore_user_config = overrides.ignore_user_config;
     let ignore_user_and_project_exec_policy_rules =
@@ -347,6 +348,7 @@ pub async fn load_config_layers_state(
             &project_trust_context.project_root,
             &project_trust_context,
             codex_home,
+            user_home_dir.as_deref(),
             strict_config,
         )
         .await?;
@@ -1153,15 +1155,19 @@ fn copy_shape_from_original(original: &TomlValue, resolved: &TomlValue) -> TomlV
 
 /// The user's home directory. Its `.codex` folder is the Codex CLI's own
 /// home, never a project config.
-fn user_home_dirs() -> Vec<PathBuf> {
-    ["HOME", "USERPROFILE"]
+fn user_home_dirs(explicit: Option<&Path>) -> Vec<PathBuf> {
+    let homes: Vec<PathBuf> = match explicit {
+        Some(home) => vec![home.to_path_buf()],
+        None => ["HOME", "USERPROFILE"]
+            .into_iter()
+            .filter_map(std::env::var_os)
+            .filter(|home| !home.is_empty())
+            .map(PathBuf::from)
+            .collect(),
+    };
+    homes
         .into_iter()
-        .filter_map(std::env::var_os)
-        .filter(|home| !home.is_empty())
-        .map(|home| {
-            let home = PathBuf::from(home);
-            normalize_path(&home).unwrap_or(home)
-        })
+        .map(|home| normalize_path(&home).unwrap_or(home))
         .collect()
 }
 
@@ -1231,12 +1237,13 @@ async fn load_project_layers(
     project_root: &AbsolutePathBuf,
     trust_context: &ProjectTrustContext,
     codex_home: &Path,
+    user_home_dir: Option<&Path>,
     strict_config: bool,
 ) -> io::Result<LoadedProjectLayers> {
     let codex_home_abs = AbsolutePathBuf::from_absolute_path(codex_home)?;
     let codex_home_normalized =
         normalize_path(codex_home_abs.as_path()).unwrap_or_else(|_| codex_home_abs.to_path_buf());
-    let user_homes = user_home_dirs();
+    let user_homes = user_home_dirs(user_home_dir);
     let mut dirs = cwd
         .ancestors()
         .scan(false, |done, a| {

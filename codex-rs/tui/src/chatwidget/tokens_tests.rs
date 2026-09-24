@@ -1906,10 +1906,39 @@ fn accounting_inspect_first_screen_names_provider_model_and_billing_type() {
         .find(|(label, _)| label.contains("claude-plan/opus"))
         .unwrap();
     let text = &pages[*page].text;
-    assert!(text.contains(&"Provider / model: claude-plan / opus".to_string()));
+    assert!(text.contains(&"Provider / model: claude-plan/opus".to_string()));
     assert!(text.contains(&"Tokens: 140 tokens".to_string()));
     assert!(
         text.iter()
             .any(|s| s.starts_with("Cost: subscription, not billed per token"))
+    );
+}
+
+#[test]
+fn accounting_inspect_plain_wording_counts_attempts_and_names_every_route() {
+    let mut first = quote();
+    first.all_buckets_priced = None;
+    first.known_subtotal = decimal("0.00001");
+    let mut retry = quote();
+    retry.attempt.attempt_id = Uuid::from_u128(9);
+    retry.attempt.model = "other-model".into();
+    retry.all_buckets_priced = None;
+    retry.known_subtotal = decimal("0.00001");
+    let quotes = vec![first, retry];
+    let totals = DayTotals::from_quotes(quotes.iter()).unwrap();
+    assert_eq!(
+        plain_cost(&totals),
+        format!(
+            "at least {} estimated (pay per token; 2 attempts unpriced)",
+            money(decimal("0.00002"))
+        )
+    );
+    assert_eq!(
+        request_route(&quotes).as_deref(),
+        Some("several routes (synthetic/synthetic-model, synthetic/other-model)")
+    );
+    assert_eq!(
+        request_route(&quotes[..1]).as_deref(),
+        Some("synthetic/synthetic-model")
     );
 }
