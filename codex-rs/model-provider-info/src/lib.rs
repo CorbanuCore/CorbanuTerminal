@@ -545,6 +545,21 @@ pub fn claude_plan_translation(model: &str) -> Option<&'static str> {
     }
 }
 
+/// The Anthropic API slug a Claude subscription slug serves: the inverse of
+/// [`claude_plan_translation`]. The subscription row states only a plan rate;
+/// the same model's published API price lives on this API row.
+pub fn claude_plan_api_model(plan_model: &str) -> Option<&'static str> {
+    [
+        ANTHROPIC_DEFAULT_MODEL,
+        ANTHROPIC_LEGACY_OPUS_4_8_MODEL,
+        ANTHROPIC_OPUS_5_5_MODEL,
+        CLAUDE_FABLE_5_1_MODEL,
+        CLAUDE_FABLE_5_MODEL,
+    ]
+    .into_iter()
+    .find(|api| claude_plan_translation(api) == Some(plan_model.trim()))
+}
+
 pub fn resolve_model_for_provider(
     model: Option<String>,
     model_provider_id: &str,

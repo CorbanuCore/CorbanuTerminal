@@ -515,7 +515,12 @@ async fn accounting_anthropic_native_presence_prices_and_two_reopens() -> anyhow
             snapshots[0].source_kind.clone(),
             snapshots[0].rates.write
         ),
-        (attempt.scope, SourceKind::NativeCatalog, None)
+        (
+            attempt.scope,
+            SourceKind::NativeCatalog,
+            // Opus 5's five-minute cache write: 1.25 x $5 input.
+            Some("6.25".to_string().try_into()?)
+        )
     );
     let requests = server.received_requests().await.unwrap();
     assert_eq!(requests.len(), 1);
@@ -1045,10 +1050,12 @@ async fn accounting_anthropic_actual_presence_revisions_and_remote_only_price_un
                         unknown: 0
                     }
                 ],
-                known_usd: if remote_only { "0" } else { "0.000161" }
+                // 7 x $5 + 2 x $0.50 + 4 x $6.25 (cache write) + 5 x $25, per
+                // million: every bucket is priced, so the estimate is complete.
+                known_usd: if remote_only { "0" } else { "0.000186" }
                     .to_string()
                     .try_into()?,
-                unknown_estimates: 1,
+                unknown_estimates: i64::from(remote_only),
                 attempts: 1,
                 ..Default::default()
             }

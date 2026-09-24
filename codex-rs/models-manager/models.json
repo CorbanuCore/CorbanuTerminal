@@ -3211,7 +3211,7 @@
           "kind": "metered",
           "input_milli_usd_per_million_tokens": 10000,
           "output_milli_usd_per_million_tokens": 50000,
-          "cached_input_milli_usd_per_million_tokens": 1000
+          "cached_input_milli_usd_per_million_tokens": 250
         }
       },
       "display_name": "Claude Fable 5.1",

@@ -207,6 +207,13 @@ fn accounting_responses_prices_exact_and_unknown() {
         Some(500),
     ))
     .unwrap();
+    // Opus 5 on an API key: the five-minute cache write at 1.25x input.
+    let source = serde_json::to_vec(&(
+        serde_json::from_slice::<serde_json::Value>(&source).unwrap(),
+        "cache_write_5m",
+        6250,
+    ))
+    .unwrap();
     assert_eq!(
         anthropic.source_reference,
         Uuid::new_v5(&Uuid::NAMESPACE_OID, &source)
@@ -230,7 +237,7 @@ fn accounting_bundled_prices_are_exact_prospective_and_content_identified() {
             noncached: Some(rate(5000).unwrap()),
             read: Some(rate(500).unwrap()),
             output: Some(rate(25000).unwrap()),
-            write: None,
+            write: Some(rate(6250).unwrap()),
         }
     );
     assert_eq!(
@@ -268,9 +275,9 @@ fn accounting_bundled_prices_are_exact_prospective_and_content_identified() {
         fable.rates,
         Rates {
             noncached: Some(rate(10000).unwrap()),
-            read: Some(rate(1000).unwrap()),
+            read: Some(rate(250).unwrap()),
             output: Some(rate(50000).unwrap()),
-            write: None,
+            write: Some(rate(12500).unwrap()),
         }
     );
 }
@@ -403,7 +410,9 @@ fn accounting_plan_projection_states_the_rate_and_only_stated_equivalents() {
     let now = chrono::DateTime::parse_from_rfc3339("2026-09-21T12:00:00Z")
         .unwrap()
         .timestamp_millis();
-    // A burn-only row: the plan rate is stated, and no API price is invented.
+    // A Claude subscription row states its plan rate, and its API equivalent
+    // is the same model's Anthropic API row with the one-hour cache write
+    // (2x input) the subscription route requests.
     let plan = plan_original("claude-opus-5-plan", "claude-plan", scope, now, None)
         .unwrap()
         .remove(0);
@@ -416,9 +425,27 @@ fn accounting_plan_projection_states_the_rate_and_only_stated_equivalents() {
             plan.rates.read,
             plan.rates.write
         ),
-        (None, None, None, None)
+        (
+            Some(rate(5000).unwrap()),
+            Some(rate(25000).unwrap()),
+            Some(rate(500).unwrap()),
+            Some(rate(10000).unwrap())
+        )
     );
     assert_eq!(plan.provider, "claude-plan");
+    let opus_5_5 = plan_original("claude-opus-5-5-plan", "claude-plan", scope, now, None)
+        .unwrap()
+        .remove(0);
+    assert_eq!(
+        (opus_5_5.rates.noncached, opus_5_5.rates.write),
+        (Some(rate(4000).unwrap()), Some(rate(8000).unwrap()))
+    );
+
+    // A burn-only row with no API twin still invents no price.
+    let burn_only = plan_original("glm-5.3", "zai", scope, now, None)
+        .unwrap()
+        .remove(0);
+    assert_eq!(burn_only.rates.noncached, None);
 
     // An auth-dependent row states both: the plan rate that applied and the API
     // rates the same tokens would have cost.
@@ -515,7 +542,8 @@ fn accounting_provider_held_plan_login_takes_the_plan_side() {
             "claude-plan must take the plan side for {auth:?}"
         );
     }
-    // And the plan side of that provider's own rows is burn with no invented price.
+    // And the plan side of that provider's own rows is its burn, with the same
+    // model's published Anthropic API price as the equivalent.
     let plan = super::plan_original(
         "claude-opus-5-plan",
         "claude-plan",
@@ -526,7 +554,7 @@ fn accounting_provider_held_plan_login_takes_the_plan_side() {
     .unwrap()
     .remove(0);
     assert_eq!(plan.plan_burn_millis, Some(1000));
-    assert_eq!(plan.rates.noncached, None);
+    assert_eq!(plan.rates.noncached, Some(super::rate(5000).unwrap()));
 }
 
 /// The wire name is not the catalogue identity, and pricing is a catalogue

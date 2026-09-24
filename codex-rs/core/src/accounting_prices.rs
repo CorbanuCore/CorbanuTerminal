@@ -66,8 +66,12 @@ fn billed(
         output,
         read,
     );
+    let anthropic_write = anthropic_cache_write_milli(provider, input)
+        .filter(|_| provider == codex_model_provider_info::ANTHROPIC_PROVIDER_ID);
     let reference = if free_cache_write {
         serde_json::to_vec(&(v1, "cache_write", 0))?
+    } else if let Some((lifetime, write)) = anthropic_write {
+        serde_json::to_vec(&(v1, lifetime, write))?
     } else {
         serde_json::to_vec(&v1)?
     };
@@ -80,7 +84,11 @@ fn billed(
             noncached: Some(rate(input)?),
             output: Some(rate(output)?),
             read: read.map(rate).transpose()?,
-            write: free_cache_write.then(|| rate(0)).transpose()?,
+            write: if free_cache_write {
+                Some(rate(0)?)
+            } else {
+                anthropic_write.map(|(_, write)| rate(write)).transpose()?
+            },
         },
         reference,
         Basis::Billed,
@@ -115,7 +123,24 @@ pub(super) fn plan_original(
         return Ok(Vec::new());
     };
     let burn = billing.plan_burn_millis_at(accepted_at);
-    let equivalent = billing.api_key_rates_at(accepted_at);
+    let mut equivalent = billing.api_key_rates_at(accepted_at);
+    // A Claude subscription row states only its plan rate. The API price of
+    // the model it serves is the Anthropic API row for that model, which is
+    // the vendor's own published price, not a guess; this route is always
+    // subscription work, so no API-key spend can hide behind it.
+    let mut api_twin = None;
+    if equivalent.is_none()
+        && provider == codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID
+        && let Some(api_model) = codex_model_provider_info::claude_plan_api_model(model)
+        && let Some(api_billing) = billing_for(
+            &catalog.models,
+            api_model,
+            codex_model_provider_info::ANTHROPIC_PROVIDER_ID,
+        )
+    {
+        equivalent = api_billing.api_key_rates_at(accepted_at);
+        api_twin = equivalent.map(|_| api_model);
+    }
     if burn.is_none()
         && (equivalent.is_none() || provider != codex_model_provider_info::OPENAI_PROVIDER_ID)
     {
@@ -124,7 +149,10 @@ pub(super) fn plan_original(
     let input = equivalent.map(|(input, _, _)| input);
     let output = equivalent.map(|(_, output, _)| output);
     let read = equivalent.and_then(|(_, _, read)| read);
-    let reference = serde_json::to_vec(&(
+    let write = api_twin
+        .and(input)
+        .and_then(|input| anthropic_cache_write_milli(provider, input));
+    let v1 = (
         "plan-equivalent-bundled-v1",
         provider,
         model,
@@ -134,7 +162,15 @@ pub(super) fn plan_original(
         input,
         output,
         read,
-    ))?;
+    );
+    // Rows priced by their own catalogue entry keep their v1 identity.
+    let reference = match (api_twin, write) {
+        (Some(api_model), Some((lifetime, write))) => {
+            serde_json::to_vec(&(v1, "api_row", api_model, lifetime, write))?
+        }
+        (Some(api_model), None) => serde_json::to_vec(&(v1, "api_row", api_model))?,
+        (None, _) => serde_json::to_vec(&v1)?,
+    };
     snapshot(
         model,
         provider,
@@ -144,7 +180,7 @@ pub(super) fn plan_original(
             noncached: input.map(rate).transpose()?,
             output: output.map(rate).transpose()?,
             read: read.map(rate).transpose()?,
-            write: None,
+            write: write.map(|(_, write)| rate(write)).transpose()?,
         },
         reference,
         Basis::PlanEquivalent,
@@ -267,6 +303,23 @@ fn responses_project(
         accepted_at,
         "openai-responses-api-key-bundled-v1",
     )
+}
+
+/// Anthropic's published cache-write price, as a multiple of the input price,
+/// for the cache lifetime this client requests on the route: five minutes
+/// (1.25x) on an API key, one hour (2x) on a Claude subscription. Source:
+/// platform.claude.com/docs/en/about-claude/pricing. `None` when the multiple
+/// is not exact in the catalogue's milli-USD unit.
+fn anthropic_cache_write_milli(provider: &str, input: u32) -> Option<(&'static str, u32)> {
+    match provider {
+        codex_model_provider_info::ANTHROPIC_PROVIDER_ID if input.is_multiple_of(4) => {
+            Some(("cache_write_5m", input / 4 * 5))
+        }
+        codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID => {
+            input.checked_mul(2).map(|write| ("cache_write_1h", write))
+        }
+        _ => None,
+    }
 }
 
 fn rate(milli: u32) -> anyhow::Result<Decimal> {
