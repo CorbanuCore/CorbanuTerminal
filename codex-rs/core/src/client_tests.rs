@@ -608,6 +608,56 @@ fn responses_input_normalizes_accidental_assistant_prefill_without_changing_user
         super::ensure_responses_input_ends_with_user_turn(&mut input);
         assert_eq!(input, expected);
     }
+
+    // Tool results after assistant commentary are an ordinary tool continuation, not a prefill.
+    // A synthetic `Continue.` here reads to the model as a user interjection after every tool
+    // result.
+    let call = ResponseItem::FunctionCall {
+        id: None,
+        name: "shell".to_string(),
+        namespace: None,
+        arguments: "{}".to_string(),
+        call_id: "call-1".to_string(),
+        encrypted_function_args: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let output = ResponseItem::FunctionCallOutput {
+        id: None,
+        call_id: "call-1".to_string(),
+        output: FunctionCallOutputPayload::from_text("ok".to_string()),
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let reasoning = ResponseItem::Reasoning {
+        id: None,
+        summary: Vec::new(),
+        content: None,
+        encrypted_content: None,
+        anthropic_content_block: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let tool_continuation = vec![
+        message("user", "Fix the defect."),
+        message("assistant", "I will inspect the repository."),
+        call,
+        output,
+    ];
+    let mut unchanged = tool_continuation.clone();
+    super::ensure_responses_input_ends_with_user_turn(&mut unchanged);
+    assert_eq!(unchanged, tool_continuation);
+    assert!(super::responses_input_latest_message_is_assistant(
+        &tool_continuation
+    ));
+
+    let mut trailing_reasoning = vec![
+        message("user", "Summarize."),
+        message("assistant", "Done."),
+        reasoning,
+    ];
+    super::ensure_responses_input_ends_with_user_turn(&mut trailing_reasoning);
+    assert_eq!(
+        trailing_reasoning.last(),
+        Some(&message("user", "Continue."))
+    );
 }
 
 #[test]
@@ -2581,4 +2631,311 @@ async fn non_chatgpt_codex_endpoints_omit_attestation_generation() {
         None,
     );
     assert_eq!(attestation_calls.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn chat_freeform_tool_wrappers_are_never_strict() {
+    let tool = codex_tools::ToolSpec::Freeform(codex_tools::FreeformTool {
+        name: "exec".to_string(),
+        description: "Run JavaScript.".to_string(),
+        format: codex_tools::FreeformToolFormat {
+            r#type: "grammar".to_string(),
+            syntax: "lark".to_string(),
+            definition: "start: /.+/".to_string(),
+        },
+    });
+
+    for strip_strict in [false, true] {
+        let tools = super::create_tools_json_for_chat_completions(
+            std::slice::from_ref(&tool),
+            strip_strict,
+            /*zai_native_web_search*/ false,
+        )
+        .expect("chat tools");
+        let function = &tools[0]["function"];
+        assert_eq!(function["name"], "exec");
+        assert_eq!(function.get("strict"), None, "strip_strict={strip_strict}");
+        assert_eq!(
+            function["parameters"]["required"],
+            serde_json::json!(["input"])
+        );
+    }
+    assert_eq!(
+        super::freeform_tool_to_anthropic_tool(match &tool {
+            codex_tools::ToolSpec::Freeform(tool) => tool,
+            _ => unreachable!(),
+        })
+        .get("strict"),
+        None
+    );
+}
+
+#[test]
+fn chat_replay_keeps_malformed_tool_calls_and_their_errors_visible() {
+    let call = |arguments: &str, call_id: &str| ResponseItem::FunctionCall {
+        id: None,
+        name: "exec".to_string(),
+        namespace: None,
+        arguments: arguments.to_string(),
+        call_id: call_id.to_string(),
+        encrypted_function_args: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let output = |call_id: &str, text: &str| ResponseItem::FunctionCallOutput {
+        id: None,
+        call_id: call_id.to_string(),
+        output: FunctionCallOutputPayload::from_text(text.to_string()),
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let unescaped_quote = r#"{"input":"load_csv("x,y")"}"#;
+    let truncated_stream = format!(r#"{{"input":"{}"#, "a".repeat(5_000));
+    let mut messages = Vec::new();
+    let mut skipped = std::collections::HashSet::new();
+
+    super::append_chat_messages_for_response_items(
+        vec![
+            call(unescaped_quote, "call-quote"),
+            output("call-quote", "exec arguments must be a JSON object"),
+            call(&truncated_stream, "call-truncated"),
+            output("call-truncated", "exec arguments must be a JSON object"),
+            call(r#"{"input":"text(1)"}"#, "call-ok"),
+            output("call-ok", "1"),
+        ],
+        &mut messages,
+        &mut skipped,
+        ChatReasoningProtocol::Independent,
+    );
+
+    let calls: Vec<_> = messages
+        .iter()
+        .flat_map(|message| message.tool_calls.iter())
+        .map(|call| {
+            let arguments: serde_json::Value =
+                serde_json::from_str(&call.function.arguments).expect("replayed JSON arguments");
+            (call.id.clone(), arguments)
+        })
+        .collect();
+    assert_eq!(calls.len(), 3);
+    assert_eq!(
+        calls[0],
+        (
+            "call-quote".to_string(),
+            serde_json::json!({ "malformed_arguments": unescaped_quote })
+        )
+    );
+    let truncated = calls[1].1["malformed_arguments"]
+        .as_str()
+        .expect("truncated raw arguments");
+    assert!(truncated.starts_with(r#"{"input":"aaa"#));
+    assert!(truncated.ends_with("…[1010 more characters omitted]"));
+    assert_eq!(
+        calls[2],
+        (
+            "call-ok".to_string(),
+            serde_json::json!({ "input": "text(1)" })
+        )
+    );
+
+    let outputs: Vec<_> = messages
+        .iter()
+        .filter(|message| message.role == "tool")
+        .filter_map(|message| message.tool_call_id.clone())
+        .collect();
+    assert_eq!(outputs, vec!["call-quote", "call-truncated", "call-ok"]);
+    assert!(skipped.is_empty());
+}
+
+#[test]
+fn chat_replay_wraps_custom_tool_calls_as_input_functions() {
+    let mut messages = Vec::new();
+    let mut skipped = std::collections::HashSet::new();
+    super::append_chat_messages_for_response_items(
+        vec![ResponseItem::CustomToolCall {
+            id: None,
+            status: None,
+            call_id: "call-patch".to_string(),
+            name: "apply_patch".to_string(),
+            namespace: None,
+            input: "*** Begin Patch\n*** End Patch".to_string(),
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        &mut messages,
+        &mut skipped,
+        ChatReasoningProtocol::Independent,
+    );
+
+    let call = &messages[0].tool_calls[0];
+    assert_eq!(call.function.name, "apply_patch");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&call.function.arguments).expect("JSON"),
+        serde_json::json!({ "input": "*** Begin Patch\n*** End Patch" })
+    );
+}
+
+fn vercel_gateway_error(status: http::StatusCode, body: serde_json::Value) -> ApiError {
+    ApiError::Transport(TransportError::Http {
+        status,
+        url: None,
+        headers: None,
+        body: Some(body.to_string()),
+    })
+}
+
+fn vercel_zdr_exclusion_body() -> serde_json::Value {
+    json!({
+        "error": {
+            "type": "no_zdr_providers_available",
+            "message": "None of the providers considered for zai/glm-5.3 support ZDR"
+        },
+        "providerMetadata": {"gateway": {"routing": {
+            "resolvedProvider": "zai",
+            "totalProviderAttemptCount": 0,
+            "skippedProviderAttempts": [
+                {"credentialType": "system", "provider": "zai", "reason": "zdr_not_supported"}
+            ]
+        }}}
+    })
+}
+
+#[test]
+fn vercel_policy_exclusion_is_read_from_gateway_routing_metadata() {
+    assert!(super::is_vercel_gateway_policy_exclusion(
+        &vercel_gateway_error(http::StatusCode::BAD_REQUEST, vercel_zdr_exclusion_body(),)
+    ));
+
+    let mut attempted = vercel_zdr_exclusion_body();
+    attempted["providerMetadata"]["gateway"]["routing"]["totalProviderAttemptCount"] = json!(1);
+    let mut nothing_skipped = vercel_zdr_exclusion_body();
+    nothing_skipped["providerMetadata"]["gateway"]["routing"]["skippedProviderAttempts"] =
+        json!([]);
+    for (status, body) in [
+        (http::StatusCode::BAD_REQUEST, attempted),
+        (http::StatusCode::BAD_REQUEST, nothing_skipped),
+        (
+            http::StatusCode::BAD_REQUEST,
+            json!({"error": {"message": "bad input"}}),
+        ),
+        (
+            http::StatusCode::TOO_MANY_REQUESTS,
+            vercel_zdr_exclusion_body(),
+        ),
+    ] {
+        assert!(!super::is_vercel_gateway_policy_exclusion(
+            &vercel_gateway_error(status, body)
+        ));
+    }
+}
+
+#[test]
+fn vercel_policy_exclusion_drops_the_zai_pin_for_the_session() {
+    let client = test_model_client_with_provider(
+        ThreadId::new(),
+        SessionSource::Cli,
+        ModelProviderInfo::create_vercel_anthropic_provider(),
+    );
+    let prompt = Prompt {
+        input: vec![ResponseItem::Message {
+            id: None,
+            role: "user".to_string(),
+            content: vec![ContentItem::InputText {
+                text: "Inspect the repository.".to_string(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        ..Default::default()
+    };
+    let mut glm = test_vercel_kimi_model_info();
+    glm.slug = "zai/glm-5.3".to_string();
+    let provider_options = || {
+        client
+            .build_anthropic_messages_request(&prompt, &glm, /*effort*/ None)
+            .expect("Vercel GLM request")
+            .provider_options
+    };
+
+    assert_eq!(
+        provider_options(),
+        Some(json!({"gateway": {"only": ["zai"]}}))
+    );
+    let exclusion =
+        vercel_gateway_error(http::StatusCode::BAD_REQUEST, vercel_zdr_exclusion_body());
+    assert!(
+        client.drop_vercel_vendor_pin_after_policy_exclusion(&exclusion),
+        "the first exclusion retries without the pin"
+    );
+    assert_eq!(provider_options(), None);
+    assert!(
+        !client.drop_vercel_vendor_pin_after_policy_exclusion(&exclusion),
+        "an unpinned request that is still excluded must surface the error"
+    );
+}
+
+#[test]
+fn policy_exclusion_bodies_do_not_drop_pins_off_the_vercel_gateway() {
+    let client = test_model_client(SessionSource::Cli)
+        .for_provider(&ModelProviderInfo::create_zai_provider());
+    assert!(
+        !client.drop_vercel_vendor_pin_after_policy_exclusion(&vercel_gateway_error(
+            http::StatusCode::BAD_REQUEST,
+            vercel_zdr_exclusion_body(),
+        ))
+    );
+}
+
+#[test]
+fn only_shared_pool_rate_limits_are_transient() {
+    let error = |status: http::StatusCode, body: serde_json::Value| {
+        ApiError::Transport(TransportError::Http {
+            status,
+            url: None,
+            headers: None,
+            body: Some(body.to_string()),
+        })
+    };
+    let shared_pool = json!({"error": {"code": 429, "metadata": {
+        "limit_source": "upstream_provider_shared_pool"
+    }}});
+    assert!(super::is_transient_upstream_rate_limit(&error(
+        http::StatusCode::TOO_MANY_REQUESTS,
+        shared_pool.clone()
+    )));
+    assert!(!super::is_transient_upstream_rate_limit(&error(
+        http::StatusCode::BAD_REQUEST,
+        shared_pool
+    )));
+    assert!(!super::is_transient_upstream_rate_limit(&error(
+        http::StatusCode::TOO_MANY_REQUESTS,
+        json!({"error": {"type": "usage_limit_reached", "message": "limit reached"}})
+    )));
+}
+
+#[test]
+fn transient_rate_limit_delay_backs_off_and_honors_retry_after() {
+    let without_header = ApiError::Transport(TransportError::Http {
+        status: http::StatusCode::TOO_MANY_REQUESTS,
+        url: None,
+        headers: None,
+        body: None,
+    });
+    let delays = (0..4)
+        .map(|attempt| super::transient_rate_limit_delay(&without_header, attempt).as_secs())
+        .collect::<Vec<_>>();
+    assert_eq!(delays, vec![2, 4, 8, 16]);
+
+    let mut headers = http::HeaderMap::new();
+    headers.insert(
+        http::header::RETRY_AFTER,
+        http::HeaderValue::from_static("5"),
+    );
+    let with_header = ApiError::Transport(TransportError::Http {
+        status: http::StatusCode::TOO_MANY_REQUESTS,
+        url: None,
+        headers: Some(headers),
+        body: None,
+    });
+    assert_eq!(
+        super::transient_rate_limit_delay(&with_header, 3).as_secs(),
+        5
+    );
 }

@@ -2470,6 +2470,10 @@ async fn drain_in_flight(
     sess: Arc<Session>,
     turn_context: Arc<TurnContext>,
 ) -> CodexResult<()> {
+    // A tool that reports a fatal error (for example the repeated-call or
+    // malformed-call guards) ends the turn once every other in-flight call has
+    // recorded its output.
+    let mut fatal = None;
     while let Some(res) = in_flight.next().await {
         match res {
             Ok(Ok(response_input)) => {
@@ -2483,13 +2487,16 @@ async fn drain_in_flight(
                 )
                 .await;
             }
+            Ok(Err(err)) if matches!(err.details(), CodexErrorDetails::Fatal(_)) => {
+                fatal.get_or_insert(err);
+            }
             Ok(Err(err)) => {
                 error_or_panic(format!("in-flight tool future failed during drain: {err}"));
             }
             Err(err) => error_or_panic(format!("in-flight tool task failed during drain: {err}")),
         }
     }
-    Ok(())
+    fatal.map_or(Ok(()), Err)
 }
 async fn acquire_provider_request_lease(
     sess: &Session,

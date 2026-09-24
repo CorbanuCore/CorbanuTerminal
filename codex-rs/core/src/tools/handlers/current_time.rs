@@ -105,4 +105,8 @@ impl ToolExecutor<ToolInvocation> for CurrentTimeHandler {
     }
 }
 
-impl CoreToolRuntime for CurrentTimeHandler {}
+impl CoreToolRuntime for CurrentTimeHandler {
+    fn repeated_identical_calls_are_polling(&self) -> bool {
+        true
+    }
+}
