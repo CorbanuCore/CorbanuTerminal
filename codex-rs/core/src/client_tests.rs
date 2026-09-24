@@ -3047,3 +3047,60 @@ fn policy_exclusion_bodies_do_not_drop_pins_off_the_vercel_gateway() {
         ))
     );
 }
+
+#[test]
+fn only_shared_pool_rate_limits_are_transient() {
+    let error = |status: http::StatusCode, body: serde_json::Value| {
+        ApiError::Transport(TransportError::Http {
+            status,
+            url: None,
+            headers: None,
+            body: Some(body.to_string()),
+        })
+    };
+    let shared_pool = json!({"error": {"code": 429, "metadata": {
+        "limit_source": "upstream_provider_shared_pool"
+    }}});
+    assert!(super::is_transient_upstream_rate_limit(&error(
+        http::StatusCode::TOO_MANY_REQUESTS,
+        shared_pool.clone()
+    )));
+    assert!(!super::is_transient_upstream_rate_limit(&error(
+        http::StatusCode::BAD_REQUEST,
+        shared_pool
+    )));
+    assert!(!super::is_transient_upstream_rate_limit(&error(
+        http::StatusCode::TOO_MANY_REQUESTS,
+        json!({"error": {"type": "usage_limit_reached", "message": "limit reached"}})
+    )));
+}
+
+#[test]
+fn transient_rate_limit_delay_backs_off_and_honors_retry_after() {
+    let without_header = ApiError::Transport(TransportError::Http {
+        status: http::StatusCode::TOO_MANY_REQUESTS,
+        url: None,
+        headers: None,
+        body: None,
+    });
+    let delays = (0..4)
+        .map(|attempt| super::transient_rate_limit_delay(&without_header, attempt).as_secs())
+        .collect::<Vec<_>>();
+    assert_eq!(delays, vec![2, 4, 8, 16]);
+
+    let mut headers = http::HeaderMap::new();
+    headers.insert(
+        http::header::RETRY_AFTER,
+        http::HeaderValue::from_static("5"),
+    );
+    let with_header = ApiError::Transport(TransportError::Http {
+        status: http::StatusCode::TOO_MANY_REQUESTS,
+        url: None,
+        headers: Some(headers),
+        body: None,
+    });
+    assert_eq!(
+        super::transient_rate_limit_delay(&with_header, 3).as_secs(),
+        5
+    );
+}
