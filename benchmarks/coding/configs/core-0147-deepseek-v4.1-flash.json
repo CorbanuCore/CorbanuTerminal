@@ -14,7 +14,7 @@
     "upstream_key_env": "OPENROUTER_API_KEY",
     "cpus": "4",
     "memory": "8g",
-    "openrouter_provider": "DeepSeek"
+    "openrouter_provider": "Fireworks"
   },
   "agents": [
     {
