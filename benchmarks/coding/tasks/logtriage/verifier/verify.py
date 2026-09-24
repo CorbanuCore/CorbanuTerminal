@@ -46,10 +46,11 @@ class HiddenContractTests(unittest.TestCase):
     def test_diagnostics_are_stable_and_nonfatal(self) -> None:
         parsed = parse_logs(LOGS_COMPLEX)
         codes = [d["code"] for d in parsed["diagnostics"]]
-        self.assertIn("duplicate_log", codes)
-        self.assertIn("malformed_line", codes)
-        self.assertIn("unknown_severity", codes)
-        self.assertIn("missing_field", codes)
+        # The task requires a diagnostic with a stable code but names no codes; do not grade exact names.
+        # Three lines are invalid: malformed, unknown severity, missing message.
+        self.assertGreaterEqual(len(codes), 3)
+        self.assertTrue(all(isinstance(code, str) and code.strip() for code in codes), codes)
+        self.assertEqual(codes, [d["code"] for d in parse_logs(LOGS_COMPLEX)["diagnostics"]])
 
     def test_query_window_is_start_inclusive_end_exclusive(self) -> None:
         rows = query_window(LOGS_COMPLEX, "2026-07-02T10:01:00Z", "2026-07-02T10:02:00Z")

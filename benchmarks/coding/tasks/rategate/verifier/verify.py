@@ -85,9 +85,9 @@ class HiddenContractTests(unittest.TestCase):
         )
         self.assertEqual([d["allowed"] for d in result["decisions"]], [False, False, False])
         codes = [d["code"] for d in result["diagnostics"]]
-        self.assertIn("missing_key", codes)
-        self.assertIn("invalid_cost", codes)
-        self.assertIn("invalid_timestamp", codes)
+        # The task requires a diagnostic with a stable code but names no codes; do not grade exact names.
+        self.assertGreaterEqual(len(codes), 3)
+        self.assertTrue(all(isinstance(code, str) and code.strip() for code in codes), codes)
 
     def test_import_contract_in_subprocess(self) -> None:
         repo = Path(__file__).resolve().parent
