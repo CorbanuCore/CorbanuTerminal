@@ -34,6 +34,10 @@ const DEFAULT_ANTHROPIC_REQUEST_BODY_MAX_BYTES: usize = 30_000_000;
 const DEFAULT_ANTHROPIC_RETRY_BODY_MAX_BYTES: usize = 15_000_000;
 
 const DEFAULT_STREAM_IDLE_TIMEOUT_MS: u64 = 600_000;
+/// Default wait for a streaming response's status and headers. Gateways and
+/// inference servers answer a streaming request with headers before the first
+/// token, so a longer silence is a stalled upstream rather than a slow model.
+const DEFAULT_STREAM_RESPONSE_HEADER_TIMEOUT_MS: u64 = 120_000;
 const DEFAULT_STREAM_ACTIONABLE_TIMEOUT_MS: u64 = 180_000;
 const DEFAULT_STREAM_LONG_FAILURE_RETRY_THRESHOLD_MS: u64 = 60_000;
 const DEFAULT_STREAM_LONG_FAILURE_MAX_RETRIES: u64 = 1;
@@ -1065,6 +1069,7 @@ impl ModelProviderInfo {
             headers,
             retry,
             stream_idle_timeout: self.stream_idle_timeout(),
+            response_header_timeout: self.stream_response_header_timeout(),
         })
     }
 
@@ -1118,6 +1123,17 @@ impl ModelProviderInfo {
         self.stream_idle_timeout_ms
             .map(Duration::from_millis)
             .unwrap_or(Duration::from_millis(DEFAULT_STREAM_IDLE_TIMEOUT_MS))
+    }
+
+    /// Effective wait for a streaming response's status and headers. An explicitly
+    /// configured `stream_idle_timeout_ms` also bounds this wait, so providers that
+    /// legitimately answer slowly keep the silence budget their user chose.
+    pub fn stream_response_header_timeout(&self) -> Duration {
+        self.stream_idle_timeout_ms
+            .map(Duration::from_millis)
+            .unwrap_or(Duration::from_millis(
+                DEFAULT_STREAM_RESPONSE_HEADER_TIMEOUT_MS,
+            ))
     }
 
     /// Effective actionable-silence timeout for streaming responses.

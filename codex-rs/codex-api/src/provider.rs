@@ -47,6 +47,9 @@ pub struct Provider {
     pub headers: HeaderMap,
     pub retry: RetryConfig,
     pub stream_idle_timeout: Duration,
+    /// Longest wait for a streaming response's status and headers. An attempt
+    /// that exceeds it fails as a transport timeout and follows the retry policy.
+    pub response_header_timeout: Duration,
 }
 
 impl Provider {

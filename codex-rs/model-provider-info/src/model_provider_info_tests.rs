@@ -1086,6 +1086,10 @@ fn configured_built_in_provider_can_override_transport_knobs() {
         Duration::from_millis(900_000)
     );
     assert_eq!(
+        openrouter.stream_response_header_timeout(),
+        Duration::from_millis(900_000)
+    );
+    assert_eq!(
         openrouter.stream_actionable_timeout(),
         Duration::from_millis(240_000)
     );
@@ -1726,4 +1730,20 @@ fn zai_glm_5_3_resolves_only_on_the_direct_zai_route() {
         resolve_model_for_provider(Some("glm-5.3".to_string()), AMBIENT_PROVIDER_ID).as_deref(),
         Some(AMBIENT_DEFAULT_MODEL)
     );
+}
+
+#[test]
+fn built_in_providers_bound_the_wait_for_streaming_response_headers() {
+    for (id, provider) in built_in_model_providers(/*openai_base_url*/ None) {
+        assert_eq!(
+            provider.stream_response_header_timeout(),
+            Duration::from_secs(120),
+            "{id} should give up on a silent upstream after two minutes"
+        );
+        let api_provider = provider
+            .to_api_provider(/*auth_mode*/ None)
+            .unwrap_or_else(|err| panic!("{id} should convert to an API provider: {err}"));
+        assert_eq!(api_provider.response_header_timeout, Duration::from_secs(120));
+        assert!(api_provider.response_header_timeout <= api_provider.stream_idle_timeout);
+    }
 }

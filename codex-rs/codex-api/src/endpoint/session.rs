@@ -135,6 +135,7 @@ impl<T: HttpTransport> EndpointSession<T> {
         configure(&mut request);
         let request = request.into_prepared().map_err(TransportError::Build)?;
         let make_request = || request.clone();
+        let header_timeout = self.provider.response_header_timeout;
 
         let stream = run_with_request_telemetry(
             self.provider.retry.to_policy(),
@@ -145,7 +146,12 @@ impl<T: HttpTransport> EndpointSession<T> {
                 let transport = &self.transport;
                 async move {
                     let req = auth.apply_auth(req).await.map_err(TransportError::from)?;
-                    transport.stream(req).await
+                    // The stream idle timeout starts only once headers arrive, so an
+                    // upstream that never answers would otherwise hold the turn open
+                    // indefinitely. Treat that silence as a retryable transport timeout.
+                    tokio::time::timeout(header_timeout, transport.stream(req))
+                        .await
+                        .unwrap_or(Err(TransportError::Timeout))
                 }
             },
         )

@@ -149,6 +149,7 @@ fn provider(name: &str) -> Provider {
             retry_transport: true,
         },
         stream_idle_timeout: Duration::from_millis(10),
+        response_header_timeout: Duration::from_millis(10),
     }
 }
 
@@ -615,5 +616,110 @@ async fn azure_store_sends_ids_and_headers() -> Result<()> {
         .and_then(|id| id.as_str());
     assert_eq!(input_id, Some("msg_1"));
 
+    Ok(())
+}
+
+/// Transport whose first streaming attempt never produces response headers.
+#[derive(Clone, Default)]
+struct SilentFirstAttemptTransport {
+    attempts: Arc<Mutex<i64>>,
+}
+
+impl SilentFirstAttemptTransport {
+    fn attempts(&self) -> i64 {
+        *self
+            .attempts
+            .lock()
+            .expect("silent transport mutex should not be poisoned")
+    }
+}
+
+impl HttpTransport for SilentFirstAttemptTransport {
+    async fn execute(&self, _req: Request) -> Result<Response, TransportError> {
+        Err(TransportError::Build("execute should not run".to_string()))
+    }
+
+    async fn stream(&self, _req: Request) -> Result<StreamResponse, TransportError> {
+        let attempt = {
+            let mut attempts = self
+                .attempts
+                .lock()
+                .expect("silent transport mutex should not be poisoned");
+            *attempts += 1;
+            *attempts
+        };
+        if attempt == 1 {
+            std::future::pending::<()>().await;
+        }
+        let stream = futures::stream::iter(vec![Ok(Bytes::from_static(
+            b"event: message\ndata: {\"id\":\"resp-1\"}\n\n",
+        ))]);
+        Ok(StreamResponse {
+            status: StatusCode::OK,
+            headers: HeaderMap::new(),
+            bytes: Box::pin(stream),
+        })
+    }
+}
+
+fn minimal_responses_request() -> ResponsesApiRequest {
+    ResponsesApiRequest {
+        model: "gpt-test".into(),
+        instructions: "Say hi".into(),
+        previous_response_id: None,
+        input: Vec::new(),
+        tools: Some(empty_tools().into()),
+        tool_choice: "auto".into(),
+        parallel_tool_calls: false,
+        reasoning: None,
+        store: false,
+        stream: true,
+        stream_options: None,
+        include: Vec::new(),
+        service_tier: None,
+        prompt_cache_key: None,
+        text: None,
+        client_metadata: None,
+        thinking_budget: None,
+        emit_usage: None,
+        enable_thinking: None,
+        reasoning_effort: None,
+        provider_options: None,
+    }
+}
+
+#[tokio::test]
+async fn streaming_client_retries_when_response_headers_never_arrive() -> Result<()> {
+    let transport = SilentFirstAttemptTransport::default();
+    let mut provider = provider("openrouter");
+    provider.retry.max_attempts = 2;
+    provider.response_header_timeout = Duration::from_millis(50);
+    let client = ResponsesClient::new(transport.clone(), provider, Arc::new(NoAuth));
+
+    let _stream = client
+        .stream_request(minimal_responses_request(), ResponsesOptions::default())
+        .await?;
+
+    assert_eq!(transport.attempts(), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn silent_upstream_fails_as_timeout_once_retries_are_exhausted() -> Result<()> {
+    let transport = SilentFirstAttemptTransport::default();
+    let mut provider = provider("openrouter");
+    provider.retry.max_attempts = 0;
+    provider.response_header_timeout = Duration::from_millis(50);
+    let client = ResponsesClient::new(transport.clone(), provider, Arc::new(NoAuth));
+
+    let result = client
+        .stream_request(minimal_responses_request(), ResponsesOptions::default())
+        .await;
+
+    assert!(
+        matches!(result, Err(ApiError::Transport(TransportError::Timeout))),
+        "expected a transport timeout"
+    );
+    assert_eq!(transport.attempts(), 1);
     Ok(())
 }
