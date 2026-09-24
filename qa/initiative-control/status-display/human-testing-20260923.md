@@ -1,4 +1,25 @@
-# Human testing — September 23 build
+# Human testing — September 24 build
+
+## Re-test after your September 24 report (about fifteen minutes)
+
+Thank you for the report. Install the new zip (steps 1–3 below replace the old
+copy) and check the two fixes:
+
+1. **Starting with DeepSeek.** Select DeepSeek (`/model`), quit, start again
+   with the step 4 lines, and ask `hello, what can you do?`. It should start
+   on DeepSeek V4.1 Flash and answer, with no switch to an OpenAI model. The
+   cause was your Codex CLI settings (`~/.codex`) being read as if they were
+   settings for this program; they are now ignored.
+2. **`/cost`.** The first screen now shows the estimated total, then one line
+   per provider and model: how many requests, how many tokens, and either an
+   estimated pay-per-token cost or "subscription, not billed per token" with
+   what it would have cost at API prices. Opening a request shows its
+   provider, model, tokens and cost. The technical lines are still there
+   below "Details" for auditing. Is it understandable now?
+
+Not changed yet: image generation only works on an OpenAI sign-in, so with
+DeepSeek the assistant improvises (as you saw). The `/status` permissions wording is also unchanged.
+
 
 For whoever is testing on their own Mac. No programming knowledge is needed.
 Plan on about an hour. You will be typing requests to an AI assistant in the
@@ -8,7 +29,7 @@ Terminal app and checking that it behaves sensibly.
 
 Corbanu Terminal is an AI assistant that runs in the Terminal app. You type a
 request in plain English, and it answers or does work on files in the folder
-you started it in. This build is from integration commit `8c5294084`.
+you started it in. This build is from integration commit `06189e21e`.
 
 It is a test build: signed by Travis, but not yet approved by Apple for general
 distribution, which is why installing needs one extra command (step 3 below).
@@ -16,7 +37,7 @@ distribution, which is why installing needs one extra command (step 3 below).
 ## Installing, about five minutes
 
 You need a Mac with Apple silicon (M1 or later) and the zip file Travis sends
-you, named `corbanu-terminal-8c5294084-cost.zip`, saved in your Downloads folder.
+you, named `corbanu-terminal-06189e21e-cost.zip`, saved in your Downloads folder.
 
 1. Open the **Terminal** app (press Command-Space, type `Terminal`, press
    Return).
@@ -25,7 +46,7 @@ you, named `corbanu-terminal-8c5294084-cost.zip`, saved in your Downloads folder
 
    ```sh
    mkdir -p ~/Applications
-   unzip -o ~/Downloads/corbanu-terminal-8c5294084-cost.zip -d ~/Applications
+   unzip -o ~/Downloads/corbanu-terminal-06189e21e-cost.zip -d ~/Applications
    ```
 
 3. Tell macOS the files came from Travis, not from an unknown website (without
@@ -127,7 +148,7 @@ the `corbanu-test` folder.
 ## For Travis
 
 - The hand-off zip is the package from the canonical package builder
-  (`dev-small` profile) at `8c5294084`, signed with the usual Developer
+  (`dev-small` profile) at `06189e21e`, signed with the usual Developer
   ID and identifiers, with a secure timestamp. It is **not notarized**:
   notarization needs the App Store Connect API key, which lives in the release
   workflow's secrets and not on this Mac. Hence the `xattr` step.
