@@ -1,6 +1,5 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
-assertion_line: 3417
 expression: popup
 ---
   Select Model and Effort
@@ -12,14 +11,14 @@ expression: popup
                                        above 200K prompt tokens.
   2. OpenRouter DeepSeek V4.1 Flash    Model: deepseek/deepseek-v4.1-flash. OpenRouter: DeepSeek V4.1 Flash — $0.15/M input,
                                        $0.6/M output. Provider/time-of-day rates vary; peak prices are higher.
-  3. OpenRouter GLM 5.3 Flash          Model: z-ai/glm-5.3-flash. OpenRouter: GLM 5.3 Flash — $0.15/M input, $0.5/M output.
-  4. OpenRouter Nemotron 3 Ultra Free  Model: nvidia/nemotron-3-ultra-550b-a55b:free. OpenRouter: Nemotron 3 Ultra Free — $0/M
+  3. OpenRouter MiMo V2.6 Pro          Model: xiaomi/mimo-v2.6-pro. OpenRouter: Xiaomi MiMo V2.6 Pro — $0.435/M input, $0.87/M
+                                       output. Provider/time-of-day rates vary; peak prices are higher.
+  4. OpenRouter GLM 5.3 Flash          Model: z-ai/glm-5.3-flash. OpenRouter: GLM 5.3 Flash — $0.15/M input, $0.5/M output.
+  5. OpenRouter Nemotron 3 Ultra Free  Model: nvidia/nemotron-3-ultra-550b-a55b:free. OpenRouter: Nemotron 3 Ultra Free — $0/M
                                        input, $0/M output. Free endpoint; rate limits and provider data-use terms apply.
-  5. OpenRouter MiniMax M3             Model: minimax/minimax-m3. OpenRouter: MiniMax M3 - $0.60/M input, $2.40/M output.
-  6. OpenRouter Gemini 3.5 Flash       Model: google/gemini-3.5-flash. OpenRouter: Gemini 3.5 Flash - $1.50/M input, $9.00/M
+  6. OpenRouter MiniMax M3             Model: minimax/minimax-m3. OpenRouter: MiniMax M3 - $0.60/M input, $2.40/M output.
+  7. OpenRouter Gemini 3.5 Flash       Model: google/gemini-3.5-flash. OpenRouter: Gemini 3.5 Flash - $1.50/M input, $9.00/M
                                        output.
-  7. OpenRouter Tencent Hy3 Free       Model: tencent/hy3:free. OpenRouter: Tencent Hy3 Free - $0/M input, $0/M output.
-  8. OpenRouter Kimi K3                Model: moonshotai/kimi-k3. OpenRouter: Kimi K3 - $3.00/M input, $0.30/M cached input,
-                                       $15.00/M output.
+  8. OpenRouter Tencent Hy3 Free       Model: tencent/hy3:free. OpenRouter: Tencent Hy3 Free - $0/M input, $0/M output.
 
   Use Left/Right to switch providers. Press Enter to confirm or Esc to go back

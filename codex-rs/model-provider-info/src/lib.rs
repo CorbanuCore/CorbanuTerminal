@@ -381,6 +381,7 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
             | OPENROUTER_GROK_4_6_MODEL
             | OPENROUTER_GROK_4_7_MODEL
             | "deepseek/deepseek-v4.1-flash"
+            | "xiaomi/mimo-v2.6-pro"
             | "z-ai/glm-5.3-flash"
             | "nvidia/nemotron-3-ultra-550b-a55b:free"
             | "x-ai/grok-4.5"
