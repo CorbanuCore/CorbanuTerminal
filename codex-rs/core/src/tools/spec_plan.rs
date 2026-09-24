@@ -1303,6 +1303,10 @@ impl ToolExecutor<ToolInvocation> for MultiAgentV1PlainFunctionOverride {
 }
 
 impl CoreToolRuntime for MultiAgentV1PlainFunctionOverride {
+    fn repeated_identical_calls_are_polling(&self) -> bool {
+        self.handler.repeated_identical_calls_are_polling()
+    }
+
     fn matches_kind(&self, payload: &crate::tools::context::ToolPayload) -> bool {
         self.handler.matches_kind(payload)
     }
@@ -1373,6 +1377,10 @@ impl ToolExecutor<ToolInvocation> for MultiAgentV2NamespaceOverride {
 }
 
 impl CoreToolRuntime for MultiAgentV2NamespaceOverride {
+    fn repeated_identical_calls_are_polling(&self) -> bool {
+        self.handler.repeated_identical_calls_are_polling()
+    }
+
     fn wait_until_ready<'a>(&'a self, session: &'a Arc<Session>) -> Option<BoxFuture<'a, ()>> {
         self.handler.wait_until_ready(session)
     }

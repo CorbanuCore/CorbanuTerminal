@@ -70,6 +70,13 @@ pub(crate) trait CoreToolRuntime: ToolExecutor<ToolInvocation> {
         false
     }
 
+    /// Whether calling this tool repeatedly with identical arguments is normal
+    /// use, as for polling a running process or waiting on agents. Such tools
+    /// are exempt from the consecutive identical-call guard.
+    fn repeated_identical_calls_are_polling(&self) -> bool {
+        false
+    }
+
     fn telemetry_tags(&self, _invocation: &ToolInvocation) -> ToolTelemetryTags {
         Vec::new()
     }
@@ -286,6 +293,10 @@ impl ToolExecutor<ToolInvocation> for ExposureOverride {
 }
 
 impl CoreToolRuntime for ExposureOverride {
+    fn repeated_identical_calls_are_polling(&self) -> bool {
+        self.handler.repeated_identical_calls_are_polling()
+    }
+
     fn wait_until_ready<'a>(&'a self, session: &'a Arc<Session>) -> Option<BoxFuture<'a, ()>> {
         self.handler.wait_until_ready(session)
     }
