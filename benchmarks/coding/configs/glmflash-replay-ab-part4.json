@@ -1,0 +1,73 @@
+{
+  "run_dir": "${CORBANU_BENCH_RUNS}/glmflash-replay-ab-part4",
+  "waves": 2,
+  "caps": {
+    "timeout_seconds": 1200,
+    "max_total_runs": 12
+  },
+  "isolation": {
+    "mode": "docker",
+    "images": {
+      "corbanu": "corbanu-bench-corbanu:v0.1.47-glmab",
+      "hermes": "corbanu-bench-hermes:h2026.9.24"
+    },
+    "upstream_key_env": "OPENROUTER_API_KEY",
+    "cpus": "4",
+    "memory": "8g",
+    "openrouter_provider": "Z.AI"
+  },
+  "agents": [
+    {
+      "name": "corbanu-glmflash-replay",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "lane": "corbanu-replay",
+      "agent_args": [
+        "-c",
+        "model_reasoning_effort=\"high\""
+      ]
+    },
+    {
+      "name": "corbanu-glmflash-noreplay",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "lane": "corbanu-noreplay",
+      "agent_args": [
+        "-c",
+        "model_reasoning_effort=\"high\"",
+        "-c",
+        "model_catalog_json=\"/opt/catalogs/glm-flash-noreplay.json\""
+      ]
+    },
+    {
+      "name": "hermes-glmflash",
+      "kind": "hermes",
+      "binary": "hermes",
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "lane": "hermes",
+      "agent_args": [
+        "--reasoning",
+        "high"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "name": "confclerk",
+      "baseline": "../tasks/confclerk/bugged",
+      "prompt": "../tasks/confclerk/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/confclerk/verifier/verify.py"
+    },
+    {
+      "name": "pipeflow",
+      "baseline": "../tasks/pipeflow/bugged",
+      "prompt": "../tasks/pipeflow/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/pipeflow/verifier/verify.py"
+    }
+  ]
+}
