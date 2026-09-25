@@ -673,6 +673,60 @@
       "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text",
       "input_modalities": [
+        "text",
+        "image"
+      ],
+      "supports_image_detail_original": false,
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_parallel_tool_calls": true,
+      "context_window": 1048576,
+      "max_context_window": 1048576,
+      "auto_compact_token_limit": null,
+      "default_reasoning_summary": "none",
+      "slug": "vercel/deepseek/deepseek-v4.1-flash",
+      "orchestration": {
+        "status": "disabled",
+        "provider_id": "vercel",
+        "capability": "fast",
+        "reason": "manual selection only; provider and time-of-day allocation pricing is not configured"
+      },
+      "display_name": "Vercel DeepSeek V4.1 Flash",
+      "description": "Vercel: DeepSeek V4.1 Flash - $0.30/M input, $0.007/M cached input, $1.20/M output; rates vary by upstream provider. Sends upstream model deepseek/deepseek-v4.1-flash.",
+      "default_reasoning_level": "high",
+      "supported_reasoning_levels": [
+        {
+          "effort": "high",
+          "description": "Deeper reasoning for complex tasks."
+        },
+        {
+          "effort": "max",
+          "description": "Maximum supported reasoning depth."
+        }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "availability_nux": null,
+      "upgrade": null,
+      "priority": 3,
+      "base_instructions": "You are a world class coding agent. You write world class, concise quality code. Act efficiently, inspect code before changing it, keep edits scoped and verify your work when practical. You speak in an extremely concise, easy to understand way and only narrate when needed. You do things as fast as possible while still doing them correctly.\n\nHow to work:\n- Batch independent tool calls into one response, for example reading several files or running independent checks together. Serialize calls only when one depends on another's result.\n- When creating a module or making a large change, write the complete implementation in one pass, then fix what verification shows. Avoid long chains of tiny edits.\n- Before finishing, check every requirement in the task against real execution: run the tests, and exercise each edge case the task names with a short script.\n- Finish only when the work is verified, and do not stop at a plan or a stub.\n\nWhen searching, use rg or rg --files first. Never run recursive grep over a repo root; if rg is unavailable, restrict grep to source directories and exclude .git, target, node_modules, dist, build, .next, and vendor.\n\nNever print or commit secret values anywhere: not in chat, logs, source, or files. Corbanu Terminal has an encrypted credential vault holding many classes of secrets; the user manages it via /vault. Operational credentials stored under any vault label may be fetched only at use time, inside quoted command substitution attached to the consuming command: CREDENTIAL=\"$(corbanu vault auth-helper <label>)\" your-command. Never run the helper by itself or print its expansion. The helper rejects seed phrases, crypto private keys, and keystores; those require an explicit user-controlled flow. Credentials given as a file path get the same treatment: CREDENTIAL=\"$(cat /path/to/credential)\" your-command. Scan your diff for key material before committing.\n",
+      "model_messages": null,
+      "experimental_supported_tools": [],
+      "service_tiers": [],
+      "additional_speed_tiers": [],
+      "supports_reasoning_summaries": false,
+      "supports_search_tool": false,
+      "max_output_tokens": 32768
+    },
+    {
+      "support_verbosity": false,
+      "default_verbosity": null,
+      "apply_patch_tool_type": "freeform",
+      "web_search_tool_type": "text",
+      "input_modalities": [
         "text"
       ],
       "supports_image_detail_original": false,

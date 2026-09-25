@@ -2801,3 +2801,22 @@ fn openrouter_deepseek_v4_1_flash_replays_reasoning_and_batches_calls() {
         standard_base_with_work_pattern().trim_end()
     );
 }
+
+/// The Vercel route serves the same model through the Responses API, so it keeps
+/// the batching and work pattern while the gateway carries reasoning state.
+#[test]
+fn vercel_deepseek_v4_1_flash_batches_calls_with_work_pattern() {
+    let model = bundled_model("vercel/deepseek/deepseek-v4.1-flash");
+    assert!(model.supports_parallel_tool_calls);
+    assert_eq!(
+        model.base_instructions.trim_end(),
+        standard_base_with_work_pattern().trim_end()
+    );
+    assert_eq!(
+        model
+            .orchestration
+            .as_ref()
+            .map(ModelOrchestrationMetadata::provider_id),
+        Some("vercel")
+    );
+}

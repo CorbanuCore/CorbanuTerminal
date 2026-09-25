@@ -257,12 +257,16 @@ pub const VERCEL_KIMI_K3_UPSTREAM_MODEL: &str = "moonshotai/kimi-k3";
 /// Provider-qualified catalog identity for Vercel's DeepSeek V4 Pro route.
 pub const VERCEL_DEEPSEEK_V4_PRO_MODEL: &str = "vercel/deepseek/deepseek-v4-pro";
 pub const VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL: &str = "deepseek/deepseek-v4-pro";
+/// Provider-qualified catalog identity for Vercel's DeepSeek V4.1 Flash route.
+pub const VERCEL_DEEPSEEK_V4_1_FLASH_MODEL: &str = "vercel/deepseek/deepseek-v4.1-flash";
+pub const VERCEL_DEEPSEEK_V4_1_FLASH_UPSTREAM_MODEL: &str = "deepseek/deepseek-v4.1-flash";
 pub const VERCEL_API_KEY_ENV_VAR: &str = "AI_GATEWAY_API_KEY";
 
 pub fn vercel_gateway_upstream_model(model: &str) -> &str {
     match model.trim() {
         VERCEL_KIMI_K3_MODEL => VERCEL_KIMI_K3_UPSTREAM_MODEL,
         VERCEL_DEEPSEEK_V4_PRO_MODEL => VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL,
+        VERCEL_DEEPSEEK_V4_1_FLASH_MODEL => VERCEL_DEEPSEEK_V4_1_FLASH_UPSTREAM_MODEL,
         _ => model,
     }
 }
@@ -276,10 +280,12 @@ fn is_vercel_catalog_model(model: &str) -> bool {
             | VERCEL_GLM_5_3_MODEL
             | VERCEL_KIMI_K3_MODEL
             | VERCEL_DEEPSEEK_V4_PRO_MODEL
+            | VERCEL_DEEPSEEK_V4_1_FLASH_MODEL
             // Accept official gateway slugs when users provide an explicit
             // Vercel provider/model pair on the command line.
             | VERCEL_KIMI_K3_UPSTREAM_MODEL
             | VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL
+            | VERCEL_DEEPSEEK_V4_1_FLASH_UPSTREAM_MODEL
     )
 }
 
@@ -407,6 +413,7 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
             | VERCEL_GLM_5_3_MODEL
             | VERCEL_KIMI_K3_MODEL
             | VERCEL_DEEPSEEK_V4_PRO_MODEL
+            | VERCEL_DEEPSEEK_V4_1_FLASH_MODEL
     ) {
         return Some(VERCEL_PROVIDER_ID);
     }
@@ -467,8 +474,10 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
             VERCEL_PROVIDER_ID
         });
     }
-    if matches!(model, VERCEL_KIMI_K3_MODEL | VERCEL_DEEPSEEK_V4_PRO_MODEL)
-        && !VERCEL_FAMILY_PROVIDERS.contains(&provider)
+    if matches!(
+        model,
+        VERCEL_KIMI_K3_MODEL | VERCEL_DEEPSEEK_V4_PRO_MODEL | VERCEL_DEEPSEEK_V4_1_FLASH_MODEL
+    ) && !VERCEL_FAMILY_PROVIDERS.contains(&provider)
     {
         return Some(VERCEL_PROVIDER_ID);
     }

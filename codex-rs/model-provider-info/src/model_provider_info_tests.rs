@@ -1181,8 +1181,10 @@ fn vercel_new_catalog_models_preserve_provider_and_wire_identity() {
         VERCEL_GLM_5_3_MODEL,
         VERCEL_KIMI_K3_MODEL,
         VERCEL_DEEPSEEK_V4_PRO_MODEL,
+        VERCEL_DEEPSEEK_V4_1_FLASH_MODEL,
         VERCEL_KIMI_K3_UPSTREAM_MODEL,
         VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL,
+        VERCEL_DEEPSEEK_V4_1_FLASH_UPSTREAM_MODEL,
     ] {
         assert_eq!(
             resolve_model_for_provider(Some(model.to_string()), VERCEL_PROVIDER_ID).as_deref(),
@@ -1197,6 +1199,10 @@ fn vercel_new_catalog_models_preserve_provider_and_wire_identity() {
     assert_eq!(
         vercel_gateway_upstream_model(VERCEL_DEEPSEEK_V4_PRO_MODEL),
         VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL
+    );
+    assert_eq!(
+        vercel_gateway_upstream_model(VERCEL_DEEPSEEK_V4_1_FLASH_MODEL),
+        VERCEL_DEEPSEEK_V4_1_FLASH_UPSTREAM_MODEL
     );
     assert_eq!(
         vercel_gateway_upstream_model(VERCEL_GLM_5_3_FLASH_MODEL),
@@ -1493,6 +1499,7 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         VERCEL_GLM_5_3_MODEL,
         VERCEL_KIMI_K3_MODEL,
         VERCEL_DEEPSEEK_V4_PRO_MODEL,
+        VERCEL_DEEPSEEK_V4_1_FLASH_MODEL,
     ] {
         assert_eq!(
             corrected_catalog_provider(model, AMBIENT_PROVIDER_ID),
@@ -1610,6 +1617,7 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (VERCEL_GLM_5_3_MODEL, VERCEL_PROVIDER_ID),
         (VERCEL_KIMI_K3_MODEL, VERCEL_PROVIDER_ID),
         (VERCEL_DEEPSEEK_V4_PRO_MODEL, VERCEL_PROVIDER_ID),
+        (VERCEL_DEEPSEEK_V4_1_FLASH_MODEL, VERCEL_PROVIDER_ID),
         (
             CORBANU_API_KIMI_K3_MODEL,
             PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,

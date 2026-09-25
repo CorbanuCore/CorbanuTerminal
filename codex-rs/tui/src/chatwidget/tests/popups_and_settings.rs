@@ -35,6 +35,7 @@ use codex_model_provider_info::KIMI_CODE_K3_MODEL;
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
+use codex_model_provider_info::VERCEL_DEEPSEEK_V4_1_FLASH_MODEL;
 use codex_model_provider_info::VERCEL_DEEPSEEK_V4_PRO_MODEL;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
@@ -4166,6 +4167,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         (VERCEL_GLM_5_3_MODEL, "Vercel GLM 5.3"),
         (VERCEL_KIMI_K3_MODEL, "Vercel Kimi K3"),
         (VERCEL_DEEPSEEK_V4_PRO_MODEL, "Vercel DeepSeek V4 Pro"),
+        (VERCEL_DEEPSEEK_V4_1_FLASH_MODEL, "Vercel DeepSeek V4.1 Flash"),
     ] {
         assert!(
             vercel_popup.contains(model) && vercel_popup.contains(display_name),
