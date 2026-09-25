@@ -705,8 +705,7 @@ async fn accounting_chat_exact_final_endpoint_binding() -> anyhow::Result<()> {
 }
 
 #[test]
-fn accounting_chat_cache_writes_openrouter_absent_is_zero_elsewhere_unknown() -> anyhow::Result<()>
-{
+fn accounting_chat_cache_writes_are_read_only_on_openrouter() -> anyhow::Result<()> {
     use codex_state::accounting::Presence;
     let usage = |write| ChatUsagePatch {
         input_tokens: ChatTokenPresence::Number(8499),
@@ -720,21 +719,25 @@ fn accounting_chat_cache_writes_openrouter_absent_is_zero_elsewhere_unknown() ->
         patch(usage(ChatTokenPresence::Missing), "openrouter")?.write,
         Presence::Number(0.try_into()?)
     );
-    // A reported count is kept, on every route.
-    for provider in ["openrouter", "vercel", "deepseek"] {
-        assert_eq!(
-            patch(usage(ChatTokenPresence::Number(300)), provider)?.write,
-            Presence::Number(300.try_into()?)
-        );
-    }
-    // Elsewhere an absent count stays unknown, and an explicit null stays null.
+    // A reported count is kept there, and an explicit null stays null.
     assert_eq!(
-        patch(usage(ChatTokenPresence::Missing), "vercel")?.write,
-        Presence::Missing
+        patch(usage(ChatTokenPresence::Number(300)), "openrouter")?.write,
+        Presence::Number(300.try_into()?)
     );
     assert_eq!(
         patch(usage(ChatTokenPresence::Null), "openrouter")?.write,
         Presence::Null
     );
+    // Every other route leaves the count unknown, reported or not: DeepSeek
+    // bills written tokens as input, and a disjoint report would fail replay.
+    for provider in ["deepseek", "baseten", "zai", "custom-openrouter"] {
+        for write in [
+            ChatTokenPresence::Missing,
+            ChatTokenPresence::Null,
+            ChatTokenPresence::Number(300),
+        ] {
+            assert_eq!(patch(usage(write), provider)?.write, Presence::Missing);
+        }
+    }
     Ok(())
 }
