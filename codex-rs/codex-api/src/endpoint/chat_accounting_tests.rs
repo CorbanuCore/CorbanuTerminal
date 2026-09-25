@@ -181,7 +181,7 @@ fn chat_accounting_top_level_containers_only() {
     }
     // Billing fields and a cache-write count outside the details object are
     // not usage counters.
-    for value in [json!({}), json!({"cache_write_tokens":5, "cost":7})] {
+    for value in [json!({}), json!({"cache_write_tokens":5})] {
         assert_eq!(
             accounting::decode(&json!({"usage":value}).to_string()),
             Ok(Some(ChatUsagePatch::default()))
@@ -431,5 +431,40 @@ async fn chat_accounting_none_preserves_legacy() {
         )
         .await;
         assert_eq!(format!("{observed:?}"), format!("{:?}", drain(rx).await));
+    }
+}
+
+#[test]
+fn chat_accounting_billed_usd_is_exact_and_never_rejects_usage() {
+    let billed = |usage: Value| {
+        accounting::decode(&json!({"usage":usage}).to_string())
+            .unwrap()
+            .unwrap()
+            .billed_usd
+    };
+    for (cost, want) in [
+        (json!(0.0123312), Some("0.0123312")),
+        (json!(1.23e-5), Some("0.0000123")),
+        (json!(7), Some("7")),
+        (json!(0), Some("0")),
+        (json!(12.5), Some("12.5")),
+        (json!(1e-7), Some("0.0000001")),
+    ] {
+        assert_eq!(billed(json!({"cost":cost})).as_deref(), want, "{cost}");
+    }
+    // A bring-your-own-key response states only the router's fee.
+    assert_eq!(billed(json!({"cost":0.5,"is_byok":true})), None);
+    assert_eq!(
+        billed(json!({"cost":0.5,"is_byok":false})).as_deref(),
+        Some("0.5")
+    );
+    // Unusable figures are dropped, and the token counters still record.
+    for cost in [json!(-1), json!("0.5"), json!(null), json!({"usd":1})] {
+        let patch =
+            accounting::decode(&json!({"usage":{"prompt_tokens":3,"cost":cost}}).to_string())
+                .unwrap()
+                .unwrap();
+        assert_eq!(patch.billed_usd, None, "{cost}");
+        assert_eq!(patch.input_tokens, ChatTokenPresence::Number(3));
     }
 }

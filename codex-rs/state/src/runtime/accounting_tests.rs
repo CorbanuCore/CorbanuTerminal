@@ -350,7 +350,8 @@ fn native_anthropic_partial_input_and_unknown_dialect_remain_distinct() -> anyho
             write: Some(0),
             output: Some(5),
             total: Some(65),
-            reasoning: None
+            reasoning: None,
+            billed_usd: None,
         }
     );
     Ok(())
@@ -392,9 +393,39 @@ fn inclusive_subsets_totals_and_arithmetic_overflow_are_validated() {
             write: Some(4),
             output: Some(2),
             reasoning: Some(2),
-            total: Some(12)
+            total: Some(12),
+            billed_usd: None,
         }
     );
+}
+
+#[test]
+fn billed_usd_replays_latest_and_absent_keeps_exact_bytes() -> anyhow::Result<()> {
+    let first = observation(1, r#"{"input":10,"read":6,"output":2}"#);
+    let billed = observation(2, r#"{"output":3,"billed_usd":"0.0123312"}"#);
+    let later = observation(3, r#"{"output":4}"#);
+    // The latest stated charge stands; a later patch without one keeps it.
+    let usage = replay(Dialect::Inclusive, &[first.clone(), billed.clone(), later])?;
+    assert_eq!(
+        usage.billed_usd,
+        Some(super::pricing::Decimal::try_from("0.0123312".to_string())?)
+    );
+    assert_eq!(usage.output, Some(4));
+    assert_eq!(
+        replay(Dialect::Inclusive, std::slice::from_ref(&first))?.billed_usd,
+        None
+    );
+    // Patches and usage recorded without a charge serialize exactly as before.
+    assert_eq!(
+        serde_json::to_string(&first.patch)?,
+        r#"{"input":10,"read":6,"output":2}"#
+    );
+    assert!(!serde_json::to_string(&replay(Dialect::Inclusive, &[first])?)?.contains("billed"));
+    assert_eq!(
+        serde_json::to_string(&billed.patch)?,
+        r#"{"output":3,"billed_usd":"0.0123312"}"#
+    );
+    Ok(())
 }
 
 #[tokio::test]

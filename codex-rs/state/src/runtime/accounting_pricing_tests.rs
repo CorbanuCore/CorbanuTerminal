@@ -110,7 +110,8 @@ fn inclusive_revisions_replace_and_reasoning_is_not_charged_twice() {
                 write: Some(0),
                 output: Some(2),
                 reasoning: Some(2),
-                total: None
+                total: None,
+                billed_usd: None,
             },
             snapshot: Some(s),
             buckets: [

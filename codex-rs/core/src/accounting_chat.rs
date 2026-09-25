@@ -278,6 +278,13 @@ pub(super) fn patch(
         } else {
             Presence::Missing
         },
+        // OpenRouter states what it charged with every response. Other routes'
+        // `cost` fields have no established meaning here. A figure the exact
+        // decimal type cannot hold is dropped rather than rounded.
+        billed_usd: (provider_id == codex_model_provider_info::OPENROUTER_PROVIDER_ID)
+            .then_some(usage.billed_usd)
+            .flatten()
+            .and_then(|text| codex_state::accounting::Decimal::try_from(text).ok()),
         output: presence(usage.output_tokens)?,
         reasoning: presence(usage.reasoning_tokens)?,
         total: presence(usage.total_tokens)?,

@@ -2026,3 +2026,86 @@ fn accounting_inspect_multi_day_bucket_heading_names_the_whole_bucket() {
         "This conversation, [1970-01-01T00:00:00.000Z, 1970-01-03T00:00:00.000Z) (UTC):"
     );
 }
+
+#[test]
+fn accounting_inspect_states_the_providers_billed_charge() {
+    let InspectionDay::Ready(mut view) = breakdown_packet() else {
+        unreachable!()
+    };
+    // alpha/one states its charge; alpha/two does not.
+    for quote in view.requests.values_mut().flatten() {
+        if quote.attempt.model == "one" {
+            quote.usage.billed_usd = Some(decimal("0.0123312"));
+        }
+    }
+    view.totals = DayTotals::from_quotes(view.requests.values().flatten()).unwrap();
+    let pages = inspection_pages(Ok(InspectionDay::Ready(view)));
+    let root = &pages[0];
+    let billed = money(decimal("0.0123312"));
+    let line = root
+        .text
+        .iter()
+        .find(|s| s.starts_with("• alpha · one"))
+        .unwrap();
+    assert!(
+        line.ends_with(&format!(" Billed by alpha: {billed}.")),
+        "{line}"
+    );
+    let other = root
+        .text
+        .iter()
+        .find(|s| s.starts_with("• alpha · two"))
+        .unwrap();
+    assert!(!other.contains("Billed"), "{other}");
+    // Only one of the day's three pay-per-use attempts stated a charge.
+    let detail = format!(
+        "Billed cost: at least {billed} (1 of 3 attempts stated a charge) — as stated by the provider with each response"
+    );
+    assert!(root.text.contains(&detail), "{:?}", root.text);
+    assert!(
+        !root
+            .text
+            .iter()
+            .any(|s| s == "Billed cost: unavailable — no settlement evidence")
+    );
+    // The request page states it plainly, and no longer claims the
+    // difference is unknowable next to a stated charge.
+    let (_, page) = root
+        .links
+        .iter()
+        .find(|(label, _)| label.starts_with("Request ") && label.contains("alpha · one"))
+        .unwrap();
+    let request = &pages[*page];
+    assert!(
+        request
+            .text
+            .contains(&format!("Billed by provider: {billed}"))
+    );
+    assert!(request.text.contains(&billed_detail(&billed)));
+    assert!(
+        !request
+            .text
+            .iter()
+            .any(|s| s.starts_with("Estimate versus billed difference"))
+    );
+    let attempt = &pages[request.links[0].1];
+    assert_eq!(
+        attempt
+            .text
+            .iter()
+            .filter(|s| s.starts_with("Billed cost:"))
+            .count(),
+        1
+    );
+    // A request that stated nothing keeps the honest unavailable line.
+    let (_, page) = root
+        .links
+        .iter()
+        .find(|(label, _)| label.starts_with("Request ") && label.contains("alpha · two"))
+        .unwrap();
+    assert!(
+        pages[*page]
+            .text
+            .contains(&"Billed cost: unavailable — no settlement evidence".to_string())
+    );
+}

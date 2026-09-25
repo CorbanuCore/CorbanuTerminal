@@ -4,6 +4,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use uuid::Uuid;
 
+use super::pricing::Decimal;
+
 /// Exact nonnegative SQLite integer; serde rejects booleans and floating point.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "i64", into = "i64")]
@@ -59,6 +61,10 @@ pub struct Patch {
     pub reasoning: Presence,
     #[serde(skip_serializing_if = "Presence::is_missing")]
     pub total: Presence,
+    /// The charge the provider stated with the response, in USD. Omitted when
+    /// absent, so every patch recorded without one keeps its exact bytes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub billed_usd: Option<Decimal>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -120,11 +126,16 @@ pub struct Usage {
     pub output: Option<i64>,
     pub reasoning: Option<i64>,
     pub total: Option<i64>,
+    /// The latest charge the provider stated for the attempt. Never derived
+    /// from tokens; omitted when absent so earlier estimates keep their bytes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub billed_usd: Option<Decimal>,
 }
 
 /// Replay cumulative patches in source revision order, validating every prefix.
 pub(super) fn replay(dialect: Dialect, observations: &[Observation]) -> anyhow::Result<Usage> {
     let mut raw = [None; 6];
+    let mut billed_usd = None;
     let mut usage = Usage::default();
     let mut previous = 0;
     for observation in observations {
@@ -135,6 +146,7 @@ pub(super) fn replay(dialect: Dialect, observations: &[Observation]) -> anyhow::
         );
         previous = revision;
         let p = &observation.patch;
+        billed_usd = p.billed_usd.or(billed_usd);
         for (slot, value) in
             raw.iter_mut()
                 .zip([p.input, p.read, p.write, p.output, p.reasoning, p.total])
@@ -193,6 +205,7 @@ pub(super) fn replay(dialect: Dialect, observations: &[Observation]) -> anyhow::
             output,
             reasoning: measured_reasoning,
             total: measured_total,
+            billed_usd,
         };
     }
     Ok(usage)

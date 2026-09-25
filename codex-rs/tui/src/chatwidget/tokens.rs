@@ -592,6 +592,9 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
     } else if q.is_plan() {
         lines.push("Plan rate at dispatch: not stated by the vendor".into());
     }
+    if let Some(billed) = billed_figure(&[q]) {
+        lines.push(billed_detail(&billed));
+    }
     let u = &q.usage;
     for (index, (label, value)) in METRICS
         .iter()
@@ -782,7 +785,11 @@ fn inspection_pages_for(
                 .links
                 .push((format!("Technical details (attempt {})", index + 1), target));
             let mut text = plain_header(&[quote]);
-            text.extend(attempt_text(quote));
+            text.extend(
+                attempt_text(quote)
+                    .into_iter()
+                    .filter(|line| !line.starts_with("Billed cost:")),
+            );
             pages.push(InspectorPage {
                 title: "Attempt, components and original price".into(),
                 text,
@@ -951,8 +958,14 @@ fn inspection_pages_for(
         u.attempts
     ));
     for page in &mut pages {
-        page.text
-            .push("Estimate versus billed difference: unknown — no settlement evidence".into());
+        let stated = page
+            .text
+            .iter()
+            .any(|s| s.starts_with("Billed cost:") && s.ends_with("with each response"));
+        if !stated {
+            page.text
+                .push("Estimate versus billed difference: unknown — no settlement evidence".into());
+        }
         if !page.text.iter().any(|s| s.starts_with("Billed cost:")) {
             page.text
                 .push("Billed cost: unavailable — no settlement evidence".into());
@@ -973,6 +986,15 @@ fn inspection_pages_for(
         || day_heading(ready.utc_day, Utc::now().timestamp() / 86_400),
         |period| format!("This conversation, {period} (UTC):"),
     );
+    let all: Vec<&ObservationQuote> = ready.requests.values().flatten().collect();
+    if let Some(billed) = billed_figure(&all)
+        && let Some(line) = pages[0]
+            .text
+            .iter_mut()
+            .find(|line| line.as_str() == "Billed cost: unavailable — no settlement evidence")
+    {
+        *line = billed_detail(&billed);
+    }
     let overview = plain_overview(heading, ready.requests.values().flatten());
     pages[0].text.splice(0..0, overview);
     // Provider/model groups first, then each request, then the auditing
@@ -1154,6 +1176,33 @@ fn request_count(quotes: &[&ObservationQuote]) -> String {
     )
 }
 
+/// What the provider itself stated it charged for the pay-per-use attempts here,
+/// or None when none stated anything. Plan work is never billed per request.
+fn billed_figure(quotes: &[&ObservationQuote]) -> Option<String> {
+    let per_use: Vec<&&ObservationQuote> = quotes.iter().filter(|q| !q.is_plan()).collect();
+    let mut sum = Decimal::default();
+    let mut reported = 0;
+    for quote in &per_use {
+        if let Some(billed) = quote.usage.billed_usd {
+            sum = sum.add(billed).ok()?;
+            reported += 1;
+        }
+    }
+    match reported {
+        0 => None,
+        n if n == per_use.len() => Some(money(sum)),
+        n => Some(format!(
+            "at least {} ({n} of {} attempts stated a charge)",
+            money(sum),
+            per_use.len()
+        )),
+    }
+}
+
+fn billed_detail(figure: &str) -> String {
+    format!("Billed cost: {figure} — as stated by the provider with each response")
+}
+
 /// A short link label figure: the cost, or that a subscription covered it.
 fn short_cost(quotes: &[&ObservationQuote]) -> String {
     match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
@@ -1195,11 +1244,17 @@ fn plain_header(quotes: &[&ObservationQuote]) -> Vec<String> {
             let (billing, cost) = plain_billing(&t);
             lines.push(format!("Billing: {billing}"));
             lines.push(cost);
+            if let Some(billed) = billed_figure(quotes) {
+                lines.push(format!("Billed by provider: {billed}"));
+            }
             lines.push(format!("Tokens: {}", plain_tokens(&t)));
         }
         Err(_) => lines.push("Cost unavailable".to_string()),
     }
     lines.push("—— Details ——".to_string());
+    if let Some(billed) = billed_figure(quotes) {
+        lines.push(billed_detail(&billed));
+    }
     lines
 }
 
@@ -1239,8 +1294,14 @@ fn plain_overview<'a>(
             match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
                 Ok(t) => {
                     let (billing, cost) = plain_billing(&t);
+                    let billed = billed_figure(quotes).map_or_else(String::new, |billed| {
+                        format!(
+                            " Billed by {}: {billed}.",
+                            provider_name(&quotes[0].attempt.provider)
+                        )
+                    });
                     format!(
-                        "• {route} — {billing}. {}, {}. {cost}.",
+                        "• {route} — {billing}. {}, {}. {cost}.{billed}",
                         request_count(quotes),
                         plain_tokens(&t)
                     )
@@ -1260,8 +1321,10 @@ fn plain_overview<'a>(
                 all.iter().copied().filter(|q| q.is_plan()),
             );
             if let (Ok(per_use), Ok(covered)) = (per_use, covered) {
+                let billed = billed_figure(&all)
+                    .map_or_else(String::new, |billed| format!("; billed: {billed}"));
                 lines.push(format!(
-                    "Pay-per-use total — {}",
+                    "Pay-per-use total — {}{billed}",
                     lower_first(&plain_billing(&per_use).1)
                 ));
                 lines.push(format!(
@@ -1272,8 +1335,12 @@ fn plain_overview<'a>(
         }
     }
     lines.push(
-        "Costs are estimates from published prices; your provider's bill is the final amount."
-            .to_string(),
+        if billed_figure(&all).is_some() {
+            "Estimates use published prices; billed figures are what the provider stated with each response."
+        } else {
+            "Costs are estimates from published prices; your provider's bill is the final amount."
+        }
+        .to_string(),
     );
     lines.push("Select a provider below to see its requests.".to_string());
     lines.push("—— Details ——".to_string());

@@ -741,3 +741,30 @@ fn accounting_chat_cache_writes_are_read_only_on_openrouter() -> anyhow::Result<
     }
     Ok(())
 }
+
+#[test]
+fn accounting_chat_billed_charge_is_recorded_only_from_openrouter() -> anyhow::Result<()> {
+    let usage = |billed: Option<&str>| ChatUsagePatch {
+        input_tokens: ChatTokenPresence::Number(10),
+        billed_usd: billed.map(str::to_string),
+        ..Default::default()
+    };
+    let stated = codex_state::accounting::Decimal::try_from("0.0123312".to_string())?;
+    assert_eq!(
+        patch(usage(Some("0.0123312")), "openrouter")?.billed_usd,
+        Some(stated)
+    );
+    assert_eq!(patch(usage(None), "openrouter")?.billed_usd, None);
+    // Beyond the exact type's 18 decimal places: dropped, never rounded, and
+    // the token counts still record.
+    let fine = patch(usage(Some("0.0000000000000000001")), "openrouter")?;
+    assert_eq!(fine.billed_usd, None);
+    assert_eq!(
+        fine.input,
+        codex_state::accounting::Presence::Number(10.try_into()?)
+    );
+    for provider in ["deepseek", "zai", "custom-openrouter"] {
+        assert_eq!(patch(usage(Some("0.5")), provider)?.billed_usd, None);
+    }
+    Ok(())
+}
