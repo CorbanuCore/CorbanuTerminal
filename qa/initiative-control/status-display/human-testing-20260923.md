@@ -2,6 +2,10 @@
 
 ## Re-test after your September 24 feedback (about ten minutes)
 
+Please use `corbanu-terminal-7136d59eb-cost.zip`. The earlier September 24
+zips (`06189e21e`, `4b7ff9df0`) contained the September 23 program by
+mistake, so your second round tested the old `/cost` screen, not the fixes.
+
 Thank you — both rounds of notes are addressed. Install the new zip (steps 1–3
 below replace the old copy), then in one conversation send a short request on
 each of OpenAI, Claude and DeepSeek (switch with `/model`, Left/Right changes
@@ -24,7 +28,7 @@ permissions wording.
 
 Corbanu Terminal is an AI assistant that runs in the Terminal app. You type a
 request in plain English, and it answers or does work on files in the folder
-you started it in. This build is from integration commit `4b7ff9df0`.
+you started it in. This build is from integration commit `7136d59eb`.
 
 It is a test build: signed by Travis, but not yet approved by Apple for general
 distribution, which is why installing needs one extra command (step 3 below).
@@ -32,7 +36,7 @@ distribution, which is why installing needs one extra command (step 3 below).
 ## Installing, about five minutes
 
 You need a Mac with Apple silicon (M1 or later) and the zip file Travis sends
-you, named `corbanu-terminal-4b7ff9df0-cost.zip`, saved in your Downloads folder.
+you, named `corbanu-terminal-7136d59eb-cost.zip`, saved in your Downloads folder.
 
 1. Open the **Terminal** app (press Command-Space, type `Terminal`, press
    Return).
@@ -41,7 +45,7 @@ you, named `corbanu-terminal-4b7ff9df0-cost.zip`, saved in your Downloads folder
 
    ```sh
    mkdir -p ~/Applications
-   unzip -o ~/Downloads/corbanu-terminal-4b7ff9df0-cost.zip -d ~/Applications
+   unzip -o ~/Downloads/corbanu-terminal-7136d59eb-cost.zip -d ~/Applications
    ```
 
 3. Tell macOS the files came from Travis, not from an unknown website (without
@@ -143,7 +147,7 @@ the `corbanu-test` folder.
 ## For Travis
 
 - The hand-off zip is the package from the canonical package builder
-  (`dev-small` profile) at `4b7ff9df0`, signed with the usual Developer
+  (`dev-small` profile) at `7136d59eb`, signed with the usual Developer
   ID and identifiers, with a secure timestamp. It is **not notarized**:
   notarization needs the App Store Connect API key, which lives in the release
   workflow's secrets and not on this Mac. Hence the `xattr` step.
