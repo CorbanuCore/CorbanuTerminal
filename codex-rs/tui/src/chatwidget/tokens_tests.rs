@@ -587,6 +587,15 @@ fn accounting_inspect_range_week_and_month_merge_exact_attempts() {
             }],
         }));
         assert!(pages[0].text.iter().any(|s| s.contains("$0.000014")));
+        // The merged bucket names its whole span, never a single day.
+        let heading = format!("This conversation, {} (UTC):", interval(start_ms, end_ms));
+        let texts: Vec<&String> = pages.iter().flat_map(|p| &p.text).collect();
+        assert!(texts.contains(&&heading), "{texts:?}");
+        assert!(
+            !texts
+                .iter()
+                .any(|s| s.starts_with("This conversation on ") || s.starts_with("Today (UTC)"))
+        );
         for (title, amount) in [
             ("Root's own attempts", "0.000002"),
             ("Descendant attempts", "0.000012"),
@@ -2000,5 +2009,20 @@ fn accounting_inspect_heading_names_the_inspected_day() {
     assert_eq!(
         day_heading(19_999, 20_000),
         "This conversation on 2024-10-03 (UTC):"
+    );
+}
+
+#[test]
+fn accounting_inspect_multi_day_bucket_heading_names_the_whole_bucket() {
+    let InspectionDay::Ready(view) = packet() else {
+        unreachable!()
+    };
+    let pages = inspection_pages_for(
+        Ok(InspectionDay::Ready(view)),
+        Some(interval(0, 2 * 86_400_000)),
+    );
+    assert_eq!(
+        pages[0].text[0],
+        "This conversation, [1970-01-01T00:00:00.000Z, 1970-01-03T00:00:00.000Z) (UTC):"
     );
 }

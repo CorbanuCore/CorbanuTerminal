@@ -688,6 +688,15 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
 }
 
 fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage> {
+    inspection_pages_for(result, /*period*/ None)
+}
+
+/// `period` names the span a merged multi-day view covers; `None` means the
+/// view is the single UTC day it states.
+fn inspection_pages_for(
+    result: Result<InspectionDay, String>,
+    period: Option<String>,
+) -> Vec<InspectorPage> {
     if let Ok(InspectionDay::Range {
         requested,
         oldest_aggregate_day,
@@ -960,7 +969,11 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
     }
     // Plain first screen: the total stays first, then one line per provider
     // and model, then the auditing detail below a divider.
-    let overview = plain_overview(ready.utc_day, ready.requests.values().flatten());
+    let heading = period.map_or_else(
+        || day_heading(ready.utc_day, Utc::now().timestamp() / 86_400),
+        |period| format!("This conversation, {period} (UTC):"),
+    );
+    let overview = plain_overview(heading, ready.requests.values().flatten());
     pages[0].text.splice(0..0, overview);
     // Provider/model groups first, then each request, then the auditing
     // groups (own/descendant attempts, attribution, unknown parents).
@@ -1205,7 +1218,7 @@ fn day_heading(utc_day: i64, today: i64) -> String {
 /// The first screen: one line per provider and model, stating how it is paid
 /// for before anything else, then the day's totals by billing type.
 fn plain_overview<'a>(
-    utc_day: i64,
+    heading: String,
     quotes: impl IntoIterator<Item = &'a ObservationQuote>,
 ) -> Vec<String> {
     let mut groups: std::collections::BTreeMap<(String, String), Vec<&ObservationQuote>> =
@@ -1219,7 +1232,7 @@ fn plain_overview<'a>(
     if groups.is_empty() {
         return Vec::new();
     }
-    let mut lines = vec![day_heading(utc_day, Utc::now().timestamp() / 86_400)];
+    let mut lines = vec![heading];
     for quotes in groups.values() {
         let route = route_name(quotes[0]);
         lines.push(
@@ -1459,7 +1472,11 @@ fn range_pages(
                     Ok(())
                 })();
                 match recalculate {
-                    Ok(()) => inspection_pages(Ok(InspectionDay::Ready(view))),
+                    // The merged view keeps its first day's `utc_day`;
+                    // the heading names the whole bucket instead.
+                    Ok(()) => {
+                        inspection_pages_for(Ok(InspectionDay::Ready(view)), Some(bounds.clone()))
+                    }
                     Err(_) => inspection_pages(Err(
                         "Bucket total unavailable — arithmetic overflow".into(),
                     )),
