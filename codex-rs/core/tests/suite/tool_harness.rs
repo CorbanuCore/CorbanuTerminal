@@ -1083,15 +1083,15 @@ async fn identical_call_loop_across_model_requests_is_refused_then_stopped() -> 
         11,
         "the turn must stop at the eighth refused repeat"
     );
-    for idx in 1..=3 {
-        let (output, _) = call_output(&requests[idx], &format!("call-{idx}"));
+    for (idx, request) in requests.iter().enumerate().take(4).skip(1) {
+        let (output, _) = call_output(request, &format!("call-{idx}"));
         assert!(
             output.contains("same check"),
             "call {idx} should run: {output}"
         );
     }
-    for idx in 4..=10 {
-        let (output, success) = call_output(&requests[idx], &format!("call-{idx}"));
+    for (idx, request) in requests.iter().enumerate().take(11).skip(4) {
+        let (output, success) = call_output(request, &format!("call-{idx}"));
         assert!(
             output.starts_with("Not run: this exact `shell_command` call"),
             "{output}"

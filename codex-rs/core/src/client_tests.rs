@@ -1830,6 +1830,20 @@ fn test_claude_fable_plan_model_info() -> ModelInfo {
     model
 }
 
+fn count_cache_control_markers(value: &serde_json::Value) -> usize {
+    match value {
+        serde_json::Value::Array(values) => values.iter().map(count_cache_control_markers).sum(),
+        serde_json::Value::Object(object) => {
+            usize::from(object.contains_key("cache_control"))
+                + object
+                    .values()
+                    .map(count_cache_control_markers)
+                    .sum::<usize>()
+        }
+        _ => 0,
+    }
+}
+
 fn test_vercel_model_info() -> ModelInfo {
     serde_json::from_value(json!({
         "slug": VERCEL_DEFAULT_MODEL,
