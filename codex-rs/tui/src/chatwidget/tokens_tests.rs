@@ -1112,7 +1112,7 @@ async fn accounting_inspect_maintenance_with_current_contributions_renders_raw_t
     // cannot complete, so the assertions below pin the disclosure rather than
     // only the pixels.
     insta::assert_snapshot!(text, @"
-    Today (UTC) in this conversation:
+    This conversation on 1970-04-11 (UTC):
     • synthetic · synthetic-model — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
     Costs are estimates from published prices; your provider's bill is the final amount.
     Select a provider below to see its requests.
@@ -1222,7 +1222,7 @@ fn accounting_inspect_coverage_never_claims_run_complete() {
         .join("\n");
     // The plain overview leads; the ledger's own totals open the detail.
     let (overview, details) = text.split_once("—— Details ——\n").unwrap();
-    assert!(overview.starts_with("Today (UTC) in this conversation:"));
+    assert!(overview.starts_with("This conversation on 1970-01-01 (UTC):"));
     assert!(details.starts_with("Estimated token cost for recorded attempts:"));
     for caveat in [
         "Collection coverage: unknown",
@@ -1861,7 +1861,7 @@ fn accounting_inspect_first_screen_names_provider_model_and_billing_type() {
     assert_eq!(
         root.text[..details].to_vec(),
         vec![
-            "Today (UTC) in this conversation:".to_string(),
+            "This conversation on 1970-01-01 (UTC):".to_string(),
             format!(
                 "• Unknown provider · unknown model — Pay per use. 1 request, 140 tokens. Estimated cost: {}.",
                 money(decimal("0.000004"))
@@ -1989,4 +1989,16 @@ fn accounting_inspect_plain_wording_counts_attempts_and_names_every_route() {
     // Real routes read by their display names.
     assert_eq!(model_name("gpt-6-sol"), "GPT-6 Sol");
     assert_eq!(provider_name("deepseek"), "DeepSeek");
+}
+
+#[test]
+fn accounting_inspect_heading_names_the_inspected_day() {
+    assert_eq!(
+        day_heading(20_000, 20_000),
+        "Today (UTC) in this conversation:"
+    );
+    assert_eq!(
+        day_heading(19_999, 20_000),
+        "This conversation on 2024-10-03 (UTC):"
+    );
 }

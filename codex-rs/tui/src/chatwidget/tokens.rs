@@ -960,7 +960,7 @@ fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage>
     }
     // Plain first screen: the total stays first, then one line per provider
     // and model, then the auditing detail below a divider.
-    let overview = plain_overview(ready.requests.values().flatten());
+    let overview = plain_overview(ready.utc_day, ready.requests.values().flatten());
     pages[0].text.splice(0..0, overview);
     // Provider/model groups first, then each request, then the auditing
     // groups (own/descendant attempts, attribution, unknown parents).
@@ -1190,9 +1190,24 @@ fn plain_header(quotes: &[&ObservationQuote]) -> Vec<String> {
     lines
 }
 
+/// "Today (UTC) in this conversation:" for the current UTC day, else the
+/// inspected date: `/usage requests YYYY-MM-DD` opens any past day.
+fn day_heading(utc_day: i64, today: i64) -> String {
+    if utc_day == today {
+        return "Today (UTC) in this conversation:".to_string();
+    }
+    chrono::DateTime::from_timestamp(utc_day * 86_400, 0).map_or_else(
+        || format!("This conversation on UTC day {utc_day}:"),
+        |date| format!("This conversation on {} (UTC):", date.date_naive()),
+    )
+}
+
 /// The first screen: one line per provider and model, stating how it is paid
 /// for before anything else, then the day's totals by billing type.
-fn plain_overview<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -> Vec<String> {
+fn plain_overview<'a>(
+    utc_day: i64,
+    quotes: impl IntoIterator<Item = &'a ObservationQuote>,
+) -> Vec<String> {
     let mut groups: std::collections::BTreeMap<(String, String), Vec<&ObservationQuote>> =
         std::collections::BTreeMap::new();
     for quote in quotes {
@@ -1204,7 +1219,7 @@ fn plain_overview<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) ->
     if groups.is_empty() {
         return Vec::new();
     }
-    let mut lines = vec!["Today (UTC) in this conversation:".to_string()];
+    let mut lines = vec![day_heading(utc_day, Utc::now().timestamp() / 86_400)];
     for quotes in groups.values() {
         let route = route_name(quotes[0]);
         lines.push(
