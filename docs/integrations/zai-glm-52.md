@@ -1,6 +1,11 @@
 # Z.AI GLM 5.2 Integration
 
-Corbanu Terminal also supports direct GLM 5.2 access through the Z.AI coding plan API.
+Corbanu Terminal also supports direct GLM access through Z.AI's pay-as-you-go API, billed per token.
+
+The built-in `zai` provider uses the general API endpoint, not the GLM Coding Plan
+endpoint (`/api/coding/paas/v4`). A Coding Plan subscriber can point a custom provider at
+that endpoint; `/cost` then records tokens without a price, because the bundled rates are
+the per-token API rates.
 
 ## Current Provider
 
@@ -19,7 +24,7 @@ The built-in Z.AI provider is defined in `codex-rs/model-provider-info/src/lib.r
 Auth guidance shown to users:
 
 ```text
-Set ZAI_API_KEY to your Z.AI Plan API key.
+Set ZAI_API_KEY to your Z.AI API key.
 ```
 
 ## Current Model
@@ -30,7 +35,7 @@ The visible Z.AI model is bundled in `codex-rs/models-manager/models.json`:
 | --- | --- |
 | Slug | `glm-5.2` |
 | Display name | `Z.AI GLM 5.2` |
-| Description | `GLM 5.2 through the Z.AI coding plan API.` |
+| Description | `GLM 5.2 through the Z.AI API, billed per token.` |
 | Context window | `1000000` tokens |
 | Default reasoning level | `medium` |
 | Listed in picker | yes |

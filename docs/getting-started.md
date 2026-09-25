@@ -37,7 +37,7 @@ With nothing configured, Corbanu Terminal uses OpenAI with GPT-6 Sol at high rea
 | Direct Claude API         | Anthropic          | `claude-opus-5`, `claude-fable-5-1`, `claude-fable-5`                                                           |
 | Ambient coding plan       | Ambient            | `z-ai/glm-5.2`                                                                                                 |
 | Kimi coding plan          | Kimi Code          | `k3`                                                                                                             |
-| Z.AI coding plan          | Z.AI               | `glm-5.2`                                                                                                        |
+| Z.AI API (pay per use)    | Z.AI               | `glm-5.2`                                                                                                        |
 | Direct DeepSeek Responses | DeepSeek           | `deepseek-flash` (DeepSeek V4.1 Flash); legacy `deepseek-v4-flash`, now served by V4.1 Flash                     |
 | Metered model gateway     | OpenRouter         | `deepseek/deepseek-v4-flash-0731`, `deepseek/deepseek-v4-pro`, `moonshotai/kimi-k3`, and other catalogued routes |
 | Meta API                  | Meta               | `muse-spark-1.1`                                                                                                 |
