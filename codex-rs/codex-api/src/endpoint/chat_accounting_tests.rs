@@ -91,6 +91,7 @@ fn chat_accounting_presence_matrix() {
         ("completion_tokens", None),
         ("total_tokens", None),
         ("cached_tokens", Some("prompt_tokens_details")),
+        ("cache_write_tokens", Some("prompt_tokens_details")),
         ("reasoning_tokens", Some("completion_tokens_details")),
     ] {
         for (value, expected) in [
@@ -112,6 +113,7 @@ fn chat_accounting_presence_matrix() {
                 "completion_tokens" => want.output_tokens = expected,
                 "total_tokens" => want.total_tokens = expected,
                 "cached_tokens" => want.cached_tokens = expected,
+                "cache_write_tokens" => want.cache_write_tokens = expected,
                 "reasoning_tokens" => want.reasoning_tokens = expected,
                 _ => unreachable!(),
             }
@@ -177,16 +179,26 @@ fn chat_accounting_top_level_containers_only() {
     ] {
         assert_eq!(accounting::decode(&value.to_string()), Ok(None));
     }
-    for value in [
-        json!({}),
-        json!({"cache_write_tokens":5, "cost":7}),
-        json!({"prompt_tokens_details":{"cache_write_tokens":8}}),
-    ] {
+    // Billing fields and a cache-write count outside the details object are
+    // not usage counters.
+    for value in [json!({}), json!({"cache_write_tokens":5, "cost":7})] {
         assert_eq!(
             accounting::decode(&json!({"usage":value}).to_string()),
             Ok(Some(ChatUsagePatch::default()))
         );
     }
+    // OpenRouter reports cache writes inside the prompt details.
+    assert_eq!(
+        accounting::decode(
+            &json!({"usage":{"prompt_tokens_details":{"cached_tokens":2,"cache_write_tokens":8}}})
+                .to_string()
+        ),
+        Ok(Some(ChatUsagePatch {
+            cached_tokens: ChatTokenPresence::Number(2),
+            cache_write_tokens: ChatTokenPresence::Number(8),
+            ..Default::default()
+        }))
+    );
     for value in [json!([]), json!(true), json!(5), json!("secret")] {
         assert_eq!(
             accounting::decode(&json!({"usage":value}).to_string()),

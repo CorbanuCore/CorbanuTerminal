@@ -1,4 +1,6 @@
-//! Opt-in raw Chat evidence. No vendor cache-write or billing fields are supported.
+//! Opt-in raw Chat evidence. The cache-write count is read from
+//! `prompt_tokens_details.cache_write_tokens`, where OpenRouter reports it;
+//! no vendor billing fields are supported.
 use crate::error::ApiError;
 use serde_json::Value;
 use std::future::Future;
@@ -13,11 +15,12 @@ pub enum ChatTokenPresence {
     Number(i64),
 }
 
-/// The five supported cumulative counters; absent fields never mean zero.
+/// The six supported cumulative counters; absent fields never mean zero.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ChatUsagePatch {
     pub input_tokens: ChatTokenPresence,
     pub cached_tokens: ChatTokenPresence,
+    pub cache_write_tokens: ChatTokenPresence,
     pub output_tokens: ChatTokenPresence,
     pub reasoning_tokens: ChatTokenPresence,
     pub total_tokens: ChatTokenPresence,
@@ -81,6 +84,7 @@ pub(super) fn decode(data: &str) -> Result<Option<ChatUsagePatch>, InvalidChatUs
     Ok(Some(ChatUsagePatch {
         input_tokens: field(fields.get("prompt_tokens"))?,
         cached_tokens: detail(fields.get("prompt_tokens_details"), "cached_tokens")?,
+        cache_write_tokens: detail(fields.get("prompt_tokens_details"), "cache_write_tokens")?,
         output_tokens: field(fields.get("completion_tokens"))?,
         reasoning_tokens: detail(fields.get("completion_tokens_details"), "reasoning_tokens")?,
         total_tokens: field(fields.get("total_tokens"))?,

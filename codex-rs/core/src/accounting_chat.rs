@@ -242,8 +242,17 @@ pub(super) fn legacy_eligible(
         })
 }
 
+/// The ledger patch for one Chat usage report from `provider_id`.
+///
+/// OpenRouter returns `cache_write_tokens` "only for models with explicit
+/// caching and cache write pricing" (openrouter.ai/docs, usage accounting), so
+/// on that route an absent count is a model with no cache-write charge: its
+/// prompt is exactly cache hits plus misses. Recording it as zero lets the
+/// ledger derive the uncached input, which it otherwise leaves unknown. Every
+/// other route keeps an absent count unknown.
 pub(super) fn patch(
     usage: codex_api::ChatUsagePatch,
+    provider_id: &str,
 ) -> anyhow::Result<codex_state::accounting::Patch> {
     use codex_api::ChatTokenPresence;
     use codex_state::accounting::Presence;
@@ -257,7 +266,14 @@ pub(super) fn patch(
     Ok(codex_state::accounting::Patch {
         input: presence(usage.input_tokens)?,
         read: presence(usage.cached_tokens)?,
-        write: Presence::Missing,
+        write: match usage.cache_write_tokens {
+            ChatTokenPresence::Missing
+                if provider_id == codex_model_provider_info::OPENROUTER_PROVIDER_ID =>
+            {
+                Presence::Number(0.try_into()?)
+            }
+            other => presence(other)?,
+        },
         output: presence(usage.output_tokens)?,
         reasoning: presence(usage.reasoning_tokens)?,
         total: presence(usage.total_tokens)?,
