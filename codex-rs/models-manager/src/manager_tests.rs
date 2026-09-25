@@ -37,8 +37,8 @@ mod model_info_overrides_tests;
 const DEFAULT_HTTP_CLIENT_FACTORY: HttpClientFactory =
     HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault);
 const STANDARD_BASE: &str = include_str!("../../core/src/agent/builtins/standard_base.md");
-const GLM_FLASH_WORK_PATTERN: &str =
-    include_str!("../../core/src/agent/builtins/glm_flash_work_pattern.md");
+const OPEN_MODEL_WORK_PATTERN: &str =
+    include_str!("../../core/src/agent/builtins/open_model_work_pattern.md");
 const STANDARD_BASE_OUTCOME_MARKER: &str = "inspect code before changing it, keep edits scoped";
 const STANDARD_BASE_EVIDENCE_MARKER: &str = "only narrate when needed";
 const OLD_STANDARD_BASE_MARKER: &str = "Narrate as you work";
@@ -2742,6 +2742,23 @@ fn bundled_models_json_contains_direct_deepseek_flash() {
     assert_standard_base(&deepseek.base_instructions);
 }
 
+fn standard_base_with_work_pattern() -> String {
+    let (first, rest) = STANDARD_BASE
+        .split_once("\n\n")
+        .expect("standard base has an opening paragraph");
+    format!("{first}\n\n{}\n\n{rest}", OPEN_MODEL_WORK_PATTERN.trim_end())
+}
+
+fn bundled_model(slug: &str) -> ModelInfo {
+    let response = crate::bundled_models_response()
+        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
+    response
+        .models
+        .into_iter()
+        .find(|model| model.slug == slug)
+        .unwrap_or_else(|| panic!("bundled models.json should include {slug}"))
+}
+
 /// GLM 5.3 Flash worked in long chains of small edits and reasoned about half as
 /// much per step as under Hermes, fully passing 11 of 30 benchmark tasks against
 /// Hermes's 19 of 30. The standard base plus an explicit work pattern (batch
@@ -2749,23 +2766,38 @@ fn bundled_models_json_contains_direct_deepseek_flash() {
 /// passed 13 of 20. Every GLM 5.3 Flash route carries that pattern.
 #[test]
 fn glm_5_3_flash_routes_use_standard_base_with_work_pattern() {
-    let response = crate::bundled_models_response()
-        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
-    let (first, rest) = STANDARD_BASE
-        .split_once("\n\n")
-        .expect("standard base has an opening paragraph");
-    let expected = format!("{first}\n\n{}\n\n{rest}", GLM_FLASH_WORK_PATTERN.trim_end());
-
+    let expected = standard_base_with_work_pattern();
     for slug in ["glm-5.3-flash", "z-ai/glm-5.3-flash", "zai/glm-5.3-flash"] {
-        let model = response
-            .models
-            .iter()
-            .find(|model| model.slug == slug)
-            .unwrap_or_else(|| panic!("bundled models.json should include {slug}"));
         assert_eq!(
-            model.base_instructions.trim_end(),
+            bundled_model(slug).base_instructions.trim_end(),
             expected.trim_end(),
             "{slug}"
         );
     }
+}
+
+/// DeepSeek V4.1 Flash over OpenRouter fully passed 15 of 30 benchmark tasks
+/// against Hermes's 19 of 30. Corbanu dropped its reasoning between tool calls,
+/// which DeepSeek's own harness always replays, and issued one tool call per
+/// request. Replaying reasoning, allowing parallel tool calls and adding the open
+/// model work pattern passed 12 of 20 at about 70% of the cost and half the time.
+#[test]
+fn openrouter_deepseek_v4_1_flash_replays_reasoning_and_batches_calls() {
+    let model = bundled_model("deepseek/deepseek-v4.1-flash");
+    assert_eq!(
+        model.chat_completions.reasoning_protocol,
+        ChatReasoningProtocol::PreservedRequired
+    );
+    assert!(model.supports_parallel_tool_calls);
+    assert!(
+        model
+            .supported_reasoning_levels
+            .iter()
+            .all(|preset| preset.effort.as_str() != "none"),
+        "preserved reasoning cannot offer a no-reasoning level"
+    );
+    assert_eq!(
+        model.base_instructions.trim_end(),
+        standard_base_with_work_pattern().trim_end()
+    );
 }
