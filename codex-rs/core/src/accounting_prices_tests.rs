@@ -441,12 +441,6 @@ fn accounting_plan_projection_states_the_rate_and_only_stated_equivalents() {
         (Some(rate(4000).unwrap()), Some(rate(8000).unwrap()))
     );
 
-    // A burn-only row with no API twin still invents no price.
-    let burn_only = plan_original("glm-5.3", "zai", scope, now, None)
-        .unwrap()
-        .remove(0);
-    assert_eq!(burn_only.rates.noncached, None);
-
     // An auth-dependent row states both: the plan rate that applied and the API
     // rates the same tokens would have cost.
     let both = plan_original("gpt-5.6-luna", "openai", scope, now, Some("default"))
@@ -456,25 +450,6 @@ fn accounting_plan_projection_states_the_rate_and_only_stated_equivalents() {
     assert_eq!(both.rates.noncached, Some(rate(1000).unwrap()));
     assert_eq!(both.rates.output, Some(rate(6000).unwrap()));
     assert_eq!(both.rates.read, Some(rate(100).unwrap()));
-
-    // A scheduled row is resolved at the dispatch instant, not read as a range.
-    let peak = chrono::DateTime::parse_from_rfc3339("2026-09-21T07:00:00Z")
-        .unwrap()
-        .timestamp_millis();
-    assert_eq!(
-        plan_original("glm-5.3", "zai", scope, peak, None)
-            .unwrap()
-            .remove(0)
-            .plan_burn_millis,
-        Some(3000)
-    );
-    assert_eq!(
-        plan_original("glm-5.3", "zai", scope, now, None)
-            .unwrap()
-            .remove(0)
-            .plan_burn_millis,
-        Some(1000)
-    );
 
     // A metered row reached through a subscription: the vendor published API
     // rates and no plan figure, so the equivalent is stated and the plan rate
@@ -494,6 +469,7 @@ fn accounting_plan_projection_states_the_rate_and_only_stated_equivalents() {
     for (model, provider, tier) in [
         ("claude-opus-5", "anthropic", None),
         ("deepseek-flash", "deepseek", None),
+        ("glm-5.3", "zai", None),
         ("claude-opus-5-plan", "anthropic", None),
         ("no-such-model", "claude-plan", None),
         ("gpt-5.6-luna", "openai", Some("priority")),
@@ -701,5 +677,33 @@ fn accounting_deepseek_states_the_rate_in_force_and_a_free_cache_write() -> anyh
 
     let openai = chat_original("gpt-5.6-sol", "openai", scope, 1000)?.remove(0);
     assert_eq!(openai.rates.write, None);
+    Ok(())
+}
+
+/// Z.AI's pay-as-you-go API (docs.z.ai pricing) bills input, cached input and
+/// output per token, with no cache-write charge.
+#[test]
+fn accounting_zai_api_states_published_rates_and_a_free_cache_write() -> anyhow::Result<()> {
+    let scope = Uuid::from_u128(9);
+    let decimal = |text: &str| Decimal::try_from(text.to_owned());
+    let now = chrono::DateTime::parse_from_rfc3339("2026-09-25T08:00:00Z")?.timestamp_millis();
+    for (model, input, read, output) in [
+        ("glm-5.3", "1.4", "0.26", "4.4"),
+        ("glm-5.2", "1.4", "0.26", "4.4"),
+        ("glm-5.3-flash", "0.15", "0.03", "0.5"),
+    ] {
+        let snapshot = original(model, "zai", scope, now, "bundled-models-v1")?.remove(0);
+        assert_eq!(snapshot.basis, Basis::Billed);
+        assert_eq!(
+            snapshot.rates,
+            Rates {
+                noncached: Some(decimal(input)?),
+                read: Some(decimal(read)?),
+                write: Some(Decimal::default()),
+                output: Some(decimal(output)?),
+            },
+            "{model}"
+        );
+    }
     Ok(())
 }

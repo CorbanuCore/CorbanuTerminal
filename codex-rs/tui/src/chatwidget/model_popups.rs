@@ -240,7 +240,7 @@ const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 14] = [
     ModelPickerProviderGroup {
         id: "zai",
         label: "Z.AI",
-        subtitle: "Z.AI coding plan",
+        subtitle: "Z.AI API key",
     },
     ModelPickerProviderGroup {
         id: "deepseek",

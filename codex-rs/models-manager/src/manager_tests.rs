@@ -2140,14 +2140,10 @@ fn bundled_models_json_contains_ambient_and_zai_models() {
             .orchestration
             .as_ref()
             .and_then(ModelOrchestrationMetadata::billing),
-        Some(&ModelBilling::PlanSchedule {
-            off_peak_relative_burn_millis: 1_000,
-            peak_relative_burn_millis: 3_000,
-            peak_start_utc_hour: 6,
-            peak_end_utc_hour: 10,
-            peak_weekdays: Some(codex_protocol::openai_models::WeekdaySet::weekdays_only()),
-            promotional_off_peak_relative_burn_millis: None,
-            promotion_valid_through_utc: None,
+        Some(&ModelBilling::Metered {
+            input_milli_usd_per_million_tokens: 1_400,
+            output_milli_usd_per_million_tokens: 4_400,
+            cached_input_milli_usd_per_million_tokens: Some(260),
         })
     );
     let preset = ModelPreset::from(zai_glm_5_3.clone());

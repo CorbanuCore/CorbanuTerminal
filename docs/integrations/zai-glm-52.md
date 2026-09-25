@@ -10,7 +10,7 @@ The built-in Z.AI provider is defined in `codex-rs/model-provider-info/src/lib.r
 | --- | --- |
 | Provider id | `zai` |
 | Display name | `Z.AI` |
-| Base URL | `https://api.z.ai/api/coding/paas/v4` |
+| Base URL | `https://api.z.ai/api/paas/v4` |
 | API key env var | `ZAI_API_KEY` |
 | Wire API | `chat` |
 | OpenAI auth required | `false` |

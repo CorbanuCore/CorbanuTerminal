@@ -26,13 +26,18 @@
         "reasoning_effort_protocol": "low_high_max_required_default_max"
       },
       "orchestration": {
-        "status": "disabled",
+        "status": "eligible",
         "provider_id": "zai",
         "capability": "fast",
-        "reason": "manual selection only; Coding Plan points and promotional allocation economics are not configured"
+        "billing": {
+          "kind": "metered",
+          "input_milli_usd_per_million_tokens": 150,
+          "output_milli_usd_per_million_tokens": 500,
+          "cached_input_milli_usd_per_million_tokens": 30
+        }
       },
       "display_name": "Z.AI GLM 5.3 Flash",
-      "description": "Native multimodal GLM 5.3 Flash through the Z.AI Coding Plan; mandatory thinking, with low/high/max effort.",
+      "description": "Native multimodal GLM 5.3 Flash through the Z.AI API, billed per token; mandatory thinking, with low/high/max effort.",
       "default_reasoning_level": "max",
       "supported_reasoning_levels": [
         {
@@ -639,24 +644,14 @@
         "provider_id": "zai",
         "capability": "frontier",
         "billing": {
-          "kind": "plan_schedule",
-          "off_peak_relative_burn_millis": 1000,
-          "peak_relative_burn_millis": 3000,
-          "peak_start_utc_hour": 6,
-          "peak_end_utc_hour": 10,
-          "peak_weekdays": {
-            "monday": true,
-            "tuesday": true,
-            "wednesday": true,
-            "thursday": true,
-            "friday": true,
-            "saturday": false,
-            "sunday": false
-          }
+          "kind": "metered",
+          "input_milli_usd_per_million_tokens": 1400,
+          "output_milli_usd_per_million_tokens": 4400,
+          "cached_input_milli_usd_per_million_tokens": 260
         }
       },
       "display_name": "Z.AI GLM 5.3",
-      "description": "GLM 5.3 through the legacy Z.AI Coding Plan: 3x quota during weekday peak hours (06:00-10:00 UTC) and 1x off-peak.",
+      "description": "GLM 5.3 through the Z.AI API, billed per token.",
       "default_reasoning_level": "max",
       "supported_reasoning_levels": [
         {
@@ -1188,17 +1183,14 @@
         "provider_id": "zai",
         "capability": "balanced",
         "billing": {
-          "kind": "plan_schedule",
-          "off_peak_relative_burn_millis": 2000,
-          "peak_relative_burn_millis": 3000,
-          "peak_start_utc_hour": 6,
-          "peak_end_utc_hour": 10,
-          "promotional_off_peak_relative_burn_millis": 1000,
-          "promotion_valid_through_utc": "2026-09-30T23:59:59Z"
+          "kind": "metered",
+          "input_milli_usd_per_million_tokens": 1400,
+          "output_milli_usd_per_million_tokens": 4400,
+          "cached_input_milli_usd_per_million_tokens": 260
         }
       },
       "display_name": "Z.AI GLM 5.2",
-      "description": "GLM 5.2 through the Z.AI Coding Plan: 3x burn during 06:00-10:00 UTC, normally 2x off-peak, with promotional 1x off-peak burn through September 30, 2026.",
+      "description": "GLM 5.2 through the Z.AI API, billed per token.",
       "default_reasoning_level": "medium",
       "supported_reasoning_levels": [
         {
