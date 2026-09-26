@@ -42,6 +42,7 @@ jobs:
             pkg-config \
             tmux
           tmux -V
+      - run: cargo build --locked -p codex-cli --bin corbanu --bin codex
       - name: Run focused tmux tests
         run: |
           started=$SECONDS
