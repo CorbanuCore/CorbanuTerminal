@@ -236,7 +236,9 @@ fn tool_result_with_images(count: usize, width: u32, height: u32) -> Vec<Value> 
 
 #[test]
 fn requests_with_more_than_twenty_images_cap_every_image_at_2000_px() {
-    let mut request = request(tool_result_with_images(21, 2048, 40));
+    let mut request = request(tool_result_with_images(
+        /*count*/ 21, /*width*/ 2048, /*height*/ 40,
+    ));
 
     let report = fit_anthropic_image_dimensions(&mut request);
 
@@ -257,7 +259,8 @@ fn requests_with_more_than_twenty_images_cap_every_image_at_2000_px() {
 
 #[test]
 fn requests_with_twenty_images_keep_images_up_to_8000_px() {
-    let original = tool_result_with_images(20, 2048, 40);
+    let original =
+        tool_result_with_images(/*count*/ 20, /*width*/ 2048, /*height*/ 40);
     let mut request = request(original.clone());
 
     assert_eq!(
@@ -266,7 +269,7 @@ fn requests_with_twenty_images_keep_images_up_to_8000_px() {
     );
     assert_eq!(request.messages, original);
 
-    let mut single = request_with_single_image(8_100, 10);
+    let mut single = request_with_single_image(/*width*/ 8_100, /*height*/ 10);
     assert_eq!(
         fit_anthropic_image_dimensions(&mut single).resized_images,
         1
