@@ -2935,7 +2935,7 @@ fn transient_rate_limit_delay_backs_off_and_honors_retry_after() {
         body: None,
     });
     assert_eq!(
-        super::transient_rate_limit_delay(&with_header, 3).as_secs(),
+        super::transient_rate_limit_delay(&with_header, /*attempt*/ 3).as_secs(),
         5
     );
 }
