@@ -64,6 +64,15 @@ fn billed_usd(fields: &serde_json::Map<String, Value>) -> Option<String> {
     if fields.get("is_byok").and_then(Value::as_bool) == Some(true) {
         return None;
     }
+    // The Corbanu API states its charge as exact decimal text; OpenRouter
+    // states its own as a JSON number in `cost`.
+    if let Some(charge) = fields.get("corbanu_charge_usd") {
+        return match charge {
+            Value::String(text) => plain_decimal(text),
+            Value::Number(number) => plain_decimal(&number.to_string()),
+            _ => None,
+        };
+    }
     match fields.get("cost")? {
         Value::Number(number) => plain_decimal(&number.to_string()),
         _ => None,

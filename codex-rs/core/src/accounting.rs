@@ -821,6 +821,13 @@ impl Sampling {
             read: presence(usage.cache_read_input_tokens)?,
             write: presence(usage.cache_creation_input_tokens)?,
             output: presence(usage.output_tokens)?,
+            // The Corbanu API states what it charged on its Messages route.
+            // No other Anthropic-dialect route carries such a figure.
+            billed_usd: (self.provider
+                == codex_model_provider_info::PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID)
+                .then_some(usage.corbanu_charge_usd)
+                .flatten()
+                .and_then(|text| codex_state::accounting::Decimal::try_from(text).ok()),
             ..Patch::default()
         };
         self.observe_patch(attempt, source, position, patch).await

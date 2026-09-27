@@ -273,3 +273,33 @@ fn stream_usage_says_nothing_when_the_events_did() {
     assert_eq!(super::stream_usage(b"not a stream at all"), None);
     assert_eq!(super::stream_usage(&[0xff, 0xfe]), None);
 }
+
+#[test]
+fn corbanu_stated_charge_is_read_leniently() {
+    let charge = |usage: Value| {
+        decode(&json!({"type": "message_delta", "usage": usage}).to_string())
+            .unwrap()
+            .unwrap()
+    };
+    assert_eq!(
+        charge(json!({"output_tokens": 5, "corbanu_charge_usd": "0.000375"})).corbanu_charge_usd,
+        Some("0.000375".to_string())
+    );
+    assert_eq!(
+        charge(json!({"corbanu_charge_usd": 1.5e-5})).corbanu_charge_usd,
+        Some("0.000015".to_string())
+    );
+    // A malformed charge never costs the token counts it rode with.
+    for bad in [json!("-1"), json!("abc"), json!(null), json!({"usd": 1})] {
+        let usage = charge(json!({"output_tokens": 5, "corbanu_charge_usd": bad}));
+        assert_eq!(usage.corbanu_charge_usd, None);
+        assert_eq!(usage.output_tokens, AnthropicTokenPresence::Number(5));
+    }
+    let start = decode(
+        &json!({"type": "message_start", "message": {"usage": {"input_tokens": 100, "corbanu_charge_usd": "0.0003"}}})
+            .to_string(),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(start.corbanu_charge_usd, Some("0.0003".to_string()));
+}

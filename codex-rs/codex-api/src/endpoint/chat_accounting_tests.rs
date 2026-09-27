@@ -468,3 +468,27 @@ fn chat_accounting_billed_usd_is_exact_and_never_rejects_usage() {
         assert_eq!(patch.input_tokens, ChatTokenPresence::Number(3));
     }
 }
+
+#[test]
+fn corbanu_stated_charge_is_read_before_cost() {
+    let billed = |usage: Value| {
+        decode(&json!({"choices": [], "usage": usage}).to_string())
+            .unwrap()
+            .unwrap()
+            .billed_usd
+    };
+    assert_eq!(
+        billed(
+            json!({"prompt_tokens": 100, "completion_tokens": 5, "corbanu_charge_usd": "0.000018"})
+        ),
+        Some("0.000018".to_string())
+    );
+    assert_eq!(
+        billed(json!({"prompt_tokens": 1, "completion_tokens": 1, "cost": 0.5})),
+        Some("0.5".to_string())
+    );
+    assert_eq!(
+        billed(json!({"prompt_tokens": 1, "completion_tokens": 1, "corbanu_charge_usd": "x"})),
+        None
+    );
+}

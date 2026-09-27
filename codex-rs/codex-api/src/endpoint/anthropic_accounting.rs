@@ -30,6 +30,22 @@ pub struct AnthropicUsagePatch {
     pub cache_read_input_tokens: AnthropicTokenPresence,
     pub cache_creation_input_tokens: AnthropicTokenPresence,
     pub output_tokens: AnthropicTokenPresence,
+    /// The charge the Corbanu API states with the usage it bills, in USD, as
+    /// exact plain decimal text (`usage.corbanu_charge_usd`). Absent when there
+    /// is none or it is not a nonnegative decimal - never a reason to reject
+    /// the usage report.
+    #[serde(deserialize_with = "stated_charge")]
+    pub corbanu_charge_usd: Option<String>,
+}
+
+fn stated_charge<'de, D: serde::Deserializer<'de>>(decoder: D) -> Result<Option<String>, D::Error> {
+    Ok(match Value::deserialize(decoder)? {
+        Value::String(text) => crate::endpoint::chat_completions::accounting::plain_decimal(&text),
+        Value::Number(number) => {
+            crate::endpoint::chat_completions::accounting::plain_decimal(&number.to_string())
+        }
+        _ => None,
+    })
 }
 
 /// Invalid numeric evidence; deliberately contains no provider response data.

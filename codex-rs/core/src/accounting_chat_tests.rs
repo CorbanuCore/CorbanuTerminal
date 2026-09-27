@@ -763,6 +763,12 @@ fn accounting_chat_billed_charge_is_recorded_only_from_openrouter() -> anyhow::R
         fine.input,
         codex_state::accounting::Presence::Number(10.try_into()?)
     );
+    assert_eq!(
+        patch(usage(Some("0.000018")), "pfterminal-plan")?.billed_usd,
+        Some(codex_state::accounting::Decimal::try_from(
+            "0.000018".to_string()
+        )?)
+    );
     for provider in ["deepseek", "zai", "custom-openrouter"] {
         assert_eq!(patch(usage(Some("0.5")), provider)?.billed_usd, None);
     }
