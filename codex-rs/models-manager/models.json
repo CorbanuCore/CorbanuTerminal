@@ -83,15 +83,10 @@
       "default_reasoning_summary": "none",
       "slug": "x-ai/grok-4.7",
       "orchestration": {
-        "status": "eligible",
+        "status": "disabled",
         "provider_id": "openrouter",
         "capability": "frontier",
-        "billing": {
-          "kind": "metered",
-          "input_milli_usd_per_million_tokens": 1600,
-          "output_milli_usd_per_million_tokens": 4800,
-          "cached_input_milli_usd_per_million_tokens": 400
-        }
+        "reason": "manual selection only; long-prompt pricing tiers are not represented in allocation economics"
       },
       "display_name": "OpenRouter Grok 4.7",
       "description": "OpenRouter: Grok 4.7 — $1.60/M input, $4.8/M output. Rates double above 200K prompt tokens.",
