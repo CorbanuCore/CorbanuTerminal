@@ -4178,3 +4178,86 @@ async fn history_dedupes_streamed_and_final_messages_across_turns() {
         "request 3 tail mismatch",
     );
 }
+
+fn shared_pool_rate_limit(limit_source: &str) -> ResponseTemplate {
+    ResponseTemplate::new(429)
+        .insert_header("retry-after", "0")
+        .set_body_json(json!({
+            "error": {
+                "message": "Provider returned error",
+                "code": 429,
+                "metadata": {
+                    "provider_name": "Fireworks",
+                    "limit_source": limit_source,
+                }
+            }
+        }))
+}
+
+fn completed_turn(response_id: &str) -> ResponseTemplate {
+    ResponseTemplate::new(200)
+        .insert_header("content-type", "text/event-stream")
+        .set_body_raw(
+            sse(vec![
+                ev_response_created(response_id),
+                ev_assistant_message(&format!("msg-{response_id}"), "done"),
+                ev_completed(response_id),
+            ]),
+            "text/event-stream",
+        )
+}
+
+/// A gateway 429 that is marked as a temporary limit of a shared upstream pool
+/// is retried with backoff instead of failing the turn on the first response.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transient_shared_pool_rate_limit_is_retried() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let server = MockServer::start().await;
+    let mock = core_test_support::responses::mount_response_sequence(
+        &server,
+        vec![
+            shared_pool_rate_limit("upstream_provider_shared_pool"),
+            shared_pool_rate_limit("upstream_provider_shared_pool"),
+            completed_turn("resp-1"),
+        ],
+    )
+    .await;
+
+    let mut builder = test_codex();
+    let test = builder.build(&server).await?;
+    test.submit_turn("hello").await?;
+
+    assert_eq!(mock.requests().len(), 3);
+    Ok(())
+}
+
+/// Other 429s, such as the caller's own quota, keep failing without a retry.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn other_rate_limits_are_not_retried() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+    let server = MockServer::start().await;
+    let mock = core_test_support::responses::mount_response_sequence(
+        &server,
+        vec![shared_pool_rate_limit("account")],
+    )
+    .await;
+
+    let mut builder = test_codex();
+    let test = builder.build(&server).await?;
+    test.codex
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "hello".into(),
+                text_elements: Vec::new(),
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        })
+        .await?;
+    wait_for_event(&test.codex, |event| matches!(event, EventMsg::Error(_))).await;
+
+    assert_eq!(mock.requests().len(), 1);
+    Ok(())
+}
