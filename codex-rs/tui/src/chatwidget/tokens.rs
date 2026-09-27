@@ -1020,6 +1020,11 @@ fn provider_name(id: &str) -> String {
     if id.trim().is_empty() {
         return "Unknown provider".to_string();
     }
+    // The built-in keeps its legacy brand name as an identity; the product,
+    // and /providers, call it the Corbanu API.
+    if id == codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID {
+        return "Corbanu API".to_string();
+    }
     NAMES
         .get_or_init(|| {
             codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)

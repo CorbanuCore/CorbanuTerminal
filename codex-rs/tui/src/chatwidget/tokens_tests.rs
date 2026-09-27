@@ -2152,3 +2152,9 @@ fn accounting_inspect_leads_with_a_complete_stated_charge() {
     );
     assert!(!line.contains("Estimated cost"), "{line}");
 }
+
+#[test]
+fn accounting_names_the_corbanu_api_as_the_product_does() {
+    assert_eq!(provider_name("pfterminal-plan"), "Corbanu API");
+    assert_eq!(provider_name("pfterminal-plan-anthropic"), "Corbanu API");
+}
