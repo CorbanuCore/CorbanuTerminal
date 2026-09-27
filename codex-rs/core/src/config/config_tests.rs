@@ -12711,6 +12711,23 @@ async fn default_provider_does_not_force_the_api_only_login_path() -> std::io::R
     )
     .await?;
     assert_eq!(chosen.forced_login_method, Some(ForcedLoginMethod::Api));
+    // Implied, not configured: it shapes sign-in but must never remove the
+    // OpenAI login this profile also holds.
+    assert_eq!(chosen.configured_forced_login_method, None);
+    let configured = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            model_provider: Some(codex_model_provider_info::AMBIENT_PROVIDER_ID.to_string()),
+            forced_login_method: Some(ForcedLoginMethod::Chatgpt),
+            ..ConfigToml::default()
+        },
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(
+        configured.configured_forced_login_method,
+        Some(ForcedLoginMethod::Chatgpt)
+    );
 
     // And so does asking for it at runtime rather than in the config file.
     let overridden = Config::load_from_base_config_with_overrides(

@@ -1123,6 +1123,12 @@ pub struct Config {
     /// When set, restricts the login mechanism users may use.
     pub forced_login_method: Option<ForcedLoginMethod>,
 
+    /// The login method the operator configured, without the one implied by
+    /// choosing an API-key provider. Only this may remove stored credentials:
+    /// the implied one shapes sign-in, and choosing OpenRouter must not sign
+    /// the profile out of the OpenAI account it also uses.
+    pub configured_forced_login_method: Option<ForcedLoginMethod>,
+
     /// Explicit or feature-derived web search mode.
     pub web_search_mode: Constrained<WebSearchMode>,
 
@@ -4739,6 +4745,7 @@ impl Config {
             experimental_thread_store: thread_store_config(cfg.experimental_thread_store),
             forced_chatgpt_workspace_id,
             forced_login_method,
+            configured_forced_login_method: cfg.forced_login_method,
             web_search_mode: constrained_web_search_mode.value,
             web_search_config,
             experimental_request_user_input_enabled,
