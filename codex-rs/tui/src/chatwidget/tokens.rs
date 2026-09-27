@@ -1176,8 +1176,6 @@ fn request_count(quotes: &[&ObservationQuote]) -> String {
     )
 }
 
-/// What the provider itself stated it charged for the pay-per-use attempts here,
-/// or None when none stated anything. Plan work is never billed per request.
 /// The charges the provider stated for a group of pay-per-use attempts.
 struct BilledCharge {
     sum: Decimal,
@@ -1219,6 +1217,8 @@ impl BilledCharge {
     }
 }
 
+/// What the provider itself stated it charged for the pay-per-use attempts here,
+/// or None when none stated anything. Plan work is never billed per request.
 fn billed_charge(quotes: &[&ObservationQuote]) -> Option<BilledCharge> {
     let per_use: Vec<&&ObservationQuote> = quotes.iter().filter(|q| !q.is_plan()).collect();
     let mut charge = BilledCharge {
