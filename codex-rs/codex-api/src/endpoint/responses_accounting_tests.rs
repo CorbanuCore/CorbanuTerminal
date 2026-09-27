@@ -333,3 +333,55 @@ async fn responses_accounting_none_preserves_legacy_stream() {
     );
     assert_eq!(format!("{output:?}"), format!("{:?}", drain(legacy).await));
 }
+
+#[test]
+fn vercel_gateway_charge_is_read_with_the_final_usage() {
+    let event = |credential: &str, cost: Value| {
+        json!({
+            "type": "response.completed",
+            "response": {
+                "usage": {"input_tokens": 7091, "output_tokens": 5, "total_tokens": 7096},
+                "provider_metadata": {"gateway": {
+                    "routing": {"modelAttempts": [{"providerAttempts": [
+                        {"provider": "baseten", "credentialType": credential, "success": true}
+                    ]}]},
+                    "cost": "0.00106615",
+                    "gatewayCost": cost
+                }}
+            }
+        })
+        .to_string()
+    };
+    let billed = |data: String| decode(&data).unwrap().unwrap().billed_usd;
+    assert_eq!(
+        billed(event("system", json!("0.00116615"))),
+        Some("0.00116615".to_string())
+    );
+    assert_eq!(
+        billed(event("system", json!(1.5e-5))),
+        Some("0.000015".to_string())
+    );
+    // The caller's own upstream key: that upstream bills, not the gateway.
+    assert_eq!(billed(event("byok", json!("0.00116615"))), None);
+    for bad in [json!("-0.1"), json!("abc"), json!(null), json!(true)] {
+        assert_eq!(billed(event("system", bad)), None);
+    }
+    // No gateway metadata: a plain Responses provider states no charge, and
+    // the token counters stand on their own.
+    let plain = json!({"type": "response.completed", "response": {"usage": {"input_tokens": 3}}});
+    let usage = decode(&plain.to_string()).unwrap().unwrap();
+    assert_eq!(usage.billed_usd, None);
+    assert_eq!(usage.input_tokens, ResponsesTokenPresence::Number(3));
+    // A non-streaming body carries it at the top level.
+    let body = json!({
+        "usage": {"input_tokens": 3},
+        "provider_metadata": {"gateway": {"gatewayCost": "0.25"}}
+    });
+    assert_eq!(
+        body_usage(body.to_string().as_bytes())
+            .unwrap()
+            .unwrap()
+            .billed_usd,
+        Some("0.25".to_string())
+    );
+}

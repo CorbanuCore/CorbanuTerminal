@@ -105,7 +105,7 @@ impl codex_api::ResponsesUsageObserver for ResponseEvidence {
                         attempt,
                         self.source,
                         position,
-                        super::responses::patch(usage)?,
+                        super::responses::patch(usage, &self.sampling.provider)?,
                     )
                     .await
             }

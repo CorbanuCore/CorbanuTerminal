@@ -20,6 +20,13 @@ pub struct ResponsesUsagePatch {
     pub output_tokens: ResponsesTokenPresence,
     pub reasoning_tokens: ResponsesTokenPresence,
     pub total_tokens: ResponsesTokenPresence,
+    /// The charge the Vercel AI Gateway stated for this response, in USD, as
+    /// exact plain decimal text: `provider_metadata.gateway.gatewayCost`, which
+    /// is inference plus the gateway's own surcharges. Absent when there is
+    /// none, when it is not a nonnegative number, and when an upstream attempt
+    /// used the caller's own provider key (that upstream bills separately).
+    /// Never a reason to reject the usage report.
+    pub billed_usd: Option<String>,
 }
 
 /// Invalid evidence, deliberately without provider body or credential data.
@@ -73,7 +80,48 @@ fn patch(value: Option<&Value>) -> Result<Option<ResponsesUsagePatch>, InvalidRe
         output_tokens: field(fields.get("output_tokens"))?,
         reasoning_tokens: detail(fields.get("output_tokens_details"), "reasoning_tokens")?,
         total_tokens: field(fields.get("total_tokens"))?,
+        billed_usd: None,
     }))
+}
+
+/// [`ResponsesUsagePatch::billed_usd`] from a response object.
+fn gateway_billed_usd(response: Option<&Value>) -> Option<String> {
+    let gateway = response?.get("provider_metadata")?.get("gateway")?;
+    let own_key = gateway
+        .pointer("/routing/modelAttempts")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|attempt| attempt.get("providerAttempts")?.as_array())
+        .flatten()
+        .any(|attempt| {
+            attempt
+                .get("credentialType")
+                .and_then(Value::as_str)
+                .is_some_and(|kind| kind != "system")
+        });
+    if own_key {
+        return None;
+    }
+    match gateway.get("gatewayCost")? {
+        Value::String(text) => crate::endpoint::chat_completions::accounting::plain_decimal(text),
+        Value::Number(number) => {
+            crate::endpoint::chat_completions::accounting::plain_decimal(&number.to_string())
+        }
+        _ => None,
+    }
+}
+
+/// Usage with the stated charge of the response object that carries it.
+fn response_patch(
+    response: Option<&Value>,
+) -> Result<Option<ResponsesUsagePatch>, InvalidResponsesUsage> {
+    Ok(
+        patch(response.and_then(|v| v.get("usage")))?.map(|usage| ResponsesUsagePatch {
+            billed_usd: gateway_billed_usd(response),
+            ..usage
+        }),
+    )
 }
 
 /// Numeric usage carried by a non-streaming Responses body, if it carries any.
@@ -83,14 +131,14 @@ fn patch(value: Option<&Value>) -> Result<Option<ResponsesUsagePatch>, InvalidRe
 /// numbers, which the ledger records as unknown rather than as zero.
 pub fn body_usage(body: &[u8]) -> Result<Option<ResponsesUsagePatch>, InvalidResponsesUsage> {
     let value: Value = serde_json::from_slice(body).map_err(|_| InvalidResponsesUsage)?;
-    patch(value.get("usage"))
+    response_patch(Some(&value))
 }
 
 pub(crate) fn decode(data: &str) -> Result<Option<ResponsesUsagePatch>, InvalidResponsesUsage> {
     let value: Value = serde_json::from_str(data).map_err(|_| InvalidResponsesUsage)?;
     match value.get("type").and_then(Value::as_str) {
         Some("response.completed" | "response.failed" | "response.incomplete") => {
-            patch(value.get("response").and_then(|v| v.get("usage")))
+            response_patch(value.get("response"))
         }
         Some("response.usage") => {
             let top = patch(value.get("usage"))?;

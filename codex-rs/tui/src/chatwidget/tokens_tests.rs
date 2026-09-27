@@ -2109,3 +2109,47 @@ fn accounting_inspect_states_the_providers_billed_charge() {
             .contains(&"Billed cost: unavailable — no settlement evidence".to_string())
     );
 }
+
+/// A provider that states every charge but omits a counter the estimate needs
+/// (the Vercel gateway reports no cache writes): the overview gives the charge
+/// alone, and names a refused attempt that reported nothing rather than
+/// calling the charge partial.
+#[test]
+fn accounting_inspect_leads_with_a_complete_stated_charge() {
+    let InspectionDay::Ready(mut view) = breakdown_packet() else {
+        unreachable!()
+    };
+    let mut refused = None;
+    for quote in view.requests.values_mut().flatten() {
+        if quote.attempt.model == "one" {
+            quote.usage.billed_usd = Some(decimal("0.00116615"));
+            quote.all_buckets_priced = None;
+            let mut zero = quote.clone();
+            zero.attempt.attempt_id = Uuid::from_u128(9);
+            zero.attempt.request_id = Uuid::from_u128(109);
+            zero.observations.clear();
+            zero.usage = codex_state::accounting::Usage::default();
+            zero.known_subtotal = decimal("0");
+            refused = Some(zero);
+        }
+    }
+    let refused = refused.unwrap();
+    view.requests
+        .insert(refused.attempt.request_id, vec![refused]);
+    view.totals = DayTotals::from_quotes(view.requests.values().flatten()).unwrap();
+    let pages = inspection_pages(Ok(InspectionDay::Ready(view)));
+    let line = pages[0]
+        .text
+        .iter()
+        .find(|s| s.starts_with("• alpha · one"))
+        .unwrap();
+    assert!(
+        line.ends_with(&format!(
+            " Billed by alpha: {} (1 failed attempt reported no usage).",
+            money(decimal("0.00116615"))
+        )),
+        "{line}"
+    );
+    assert!(!line.contains("Estimated cost"), "{line}");
+    assert!(!line.contains("at least"), "{line}");
+}

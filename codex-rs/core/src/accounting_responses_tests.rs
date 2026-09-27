@@ -351,3 +351,23 @@ async fn accounting_responses_role_overlay_preserves_binding() -> anyhow::Result
     assert_eq!(sampling.scope, scope);
     Ok(())
 }
+
+#[test]
+fn accounting_responses_billed_charge_is_recorded_only_from_vercel() -> anyhow::Result<()> {
+    let usage = |billed: Option<&str>| codex_api::ResponsesUsagePatch {
+        input_tokens: codex_api::ResponsesTokenPresence::Number(10),
+        billed_usd: billed.map(str::to_string),
+        ..Default::default()
+    };
+    assert_eq!(
+        patch(usage(Some("0.00116615")), "vercel")?.billed_usd,
+        Some(codex_state::accounting::Decimal::try_from(
+            "0.00116615".to_string()
+        )?)
+    );
+    assert_eq!(patch(usage(None), "vercel")?.billed_usd, None);
+    for provider in ["openai", "openrouter", "zai", "custom-vercel"] {
+        assert_eq!(patch(usage(Some("0.5")), provider)?.billed_usd, None);
+    }
+    Ok(())
+}

@@ -72,7 +72,7 @@ fn billed_usd(fields: &serde_json::Map<String, Value>) -> Option<String> {
 
 /// A JSON number's text ("0.0123", "1.23e-5", "7") as plain nonnegative decimal
 /// text ("0.0123", "0.0000123", "7"), digit for digit. Anything else is None.
-fn plain_decimal(text: &str) -> Option<String> {
+pub(crate) fn plain_decimal(text: &str) -> Option<String> {
     let (mantissa, exponent) = match text.find(['e', 'E']) {
         Some(at) => (&text[..at], text[at + 1..].parse::<i32>().ok()?),
         None => (text, 0),

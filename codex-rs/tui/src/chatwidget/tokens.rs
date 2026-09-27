@@ -1180,17 +1180,30 @@ fn request_count(quotes: &[&ObservationQuote]) -> String {
 /// or None when none stated anything. Plan work is never billed per request.
 fn billed_figure(quotes: &[&ObservationQuote]) -> Option<String> {
     let per_use: Vec<&&ObservationQuote> = quotes.iter().filter(|q| !q.is_plan()).collect();
+    // An attempt with no usage at all got no usage report: the provider refused
+    // it or the connection failed first. It stated nothing, which is not the
+    // same as leaving a stated charge out.
+    let answered: Vec<&&&ObservationQuote> = per_use
+        .iter()
+        .filter(|q| q.usage != codex_state::accounting::Usage::default())
+        .collect();
+    let silent = per_use.len() - answered.len();
     let mut sum = Decimal::default();
-    let mut reported = 0;
-    for quote in &per_use {
+    let mut stated = 0;
+    for quote in &answered {
         if let Some(billed) = quote.usage.billed_usd {
             sum = sum.add(billed).ok()?;
-            reported += 1;
+            stated += 1;
         }
     }
-    match reported {
+    match stated {
         0 => None,
-        n if n == per_use.len() => Some(money(sum)),
+        n if n == answered.len() && silent == 0 => Some(money(sum)),
+        n if n == answered.len() => Some(format!(
+            "{} ({silent} failed {} reported no usage)",
+            money(sum),
+            if silent == 1 { "attempt" } else { "attempts" }
+        )),
         n => Some(format!(
             "at least {} ({n} of {} attempts stated a charge)",
             money(sum),
@@ -1294,17 +1307,32 @@ fn plain_overview<'a>(
             match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
                 Ok(t) => {
                     let (billing, cost) = plain_billing(&t);
-                    let billed = billed_figure(quotes).map_or_else(String::new, |billed| {
-                        format!(
-                            " Billed by {}: {billed}.",
-                            provider_name(&quotes[0].attempt.provider)
-                        )
-                    });
-                    format!(
-                        "• {route} — {billing}. {}, {}. {cost}.{billed}",
-                        request_count(quotes),
-                        plain_tokens(&t)
-                    )
+                    let provider = provider_name(&quotes[0].attempt.provider);
+                    match billed_figure(quotes) {
+                        // Every request carries the provider's own charge, but
+                        // the published prices cannot reproduce it (the
+                        // provider omits a counter the estimate needs): the
+                        // charge is the figure, and a partial estimate would
+                        // only mislead.
+                        Some(billed)
+                            if !billed.starts_with("at least")
+                                && t.unknown_estimates > t.plan_attempts =>
+                        {
+                            format!(
+                                "• {route} — {billing}. {}, {}. Billed by {provider}: {billed}.",
+                                request_count(quotes),
+                                plain_tokens(&t)
+                            )
+                        }
+                        billed => format!(
+                            "• {route} — {billing}. {}, {}. {cost}.{}",
+                            request_count(quotes),
+                            plain_tokens(&t),
+                            billed.map_or_else(String::new, |billed| format!(
+                                " Billed by {provider}: {billed}."
+                            ))
+                        ),
+                    }
                 }
                 Err(_) => format!("• {route} — cost unavailable."),
             },

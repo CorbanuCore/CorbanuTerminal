@@ -264,6 +264,7 @@ pub(super) fn legacy_eligible(provider: &ModelProviderInfo, auth: Option<&CodexA
 
 pub(super) fn patch(
     usage: codex_api::ResponsesUsagePatch,
+    provider_id: &str,
 ) -> anyhow::Result<codex_state::accounting::Patch> {
     use codex_api::ResponsesTokenPresence;
     use codex_state::accounting::Presence;
@@ -281,7 +282,13 @@ pub(super) fn patch(
         output: presence(usage.output_tokens)?,
         reasoning: presence(usage.reasoning_tokens)?,
         total: presence(usage.total_tokens)?,
-        billed_usd: None,
+        // The Vercel AI Gateway states what it charged with every response.
+        // Other routes carry no such figure. A figure the exact decimal type
+        // cannot hold is dropped rather than rounded.
+        billed_usd: (provider_id == codex_model_provider_info::VERCEL_PROVIDER_ID)
+            .then_some(usage.billed_usd)
+            .flatten()
+            .and_then(|text| codex_state::accounting::Decimal::try_from(text).ok()),
     })
 }
 
