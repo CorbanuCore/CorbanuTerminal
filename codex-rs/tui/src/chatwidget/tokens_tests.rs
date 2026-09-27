@@ -2145,11 +2145,10 @@ fn accounting_inspect_leads_with_a_complete_stated_charge() {
         .unwrap();
     assert!(
         line.ends_with(&format!(
-            " Billed by alpha: {} (1 failed attempt reported no usage).",
+            " Billed by alpha: at least {} (1 failed attempt reported no usage; a refused request is normally not charged).",
             money(decimal("0.00116615"))
         )),
         "{line}"
     );
     assert!(!line.contains("Estimated cost"), "{line}");
-    assert!(!line.contains("at least"), "{line}");
 }

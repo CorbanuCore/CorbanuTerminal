@@ -1178,38 +1178,68 @@ fn request_count(quotes: &[&ObservationQuote]) -> String {
 
 /// What the provider itself stated it charged for the pay-per-use attempts here,
 /// or None when none stated anything. Plan work is never billed per request.
-fn billed_figure(quotes: &[&ObservationQuote]) -> Option<String> {
-    let per_use: Vec<&&ObservationQuote> = quotes.iter().filter(|q| !q.is_plan()).collect();
-    // An attempt with no usage at all got no usage report: the provider refused
-    // it or the connection failed first. It stated nothing, which is not the
-    // same as leaving a stated charge out.
-    let answered: Vec<&&&ObservationQuote> = per_use
-        .iter()
-        .filter(|q| q.usage != codex_state::accounting::Usage::default())
-        .collect();
-    let silent = per_use.len() - answered.len();
-    let mut sum = Decimal::default();
-    let mut stated = 0;
-    for quote in &answered {
-        if let Some(billed) = quote.usage.billed_usd {
-            sum = sum.add(billed).ok()?;
-            stated += 1;
+/// The charges the provider stated for a group of pay-per-use attempts.
+struct BilledCharge {
+    sum: Decimal,
+    /// Attempts whose charge the provider stated.
+    stated: usize,
+    /// Attempts that recorded no usage at all: a refused request, or one that
+    /// failed before any report. Neither stated a charge, and a failed one may
+    /// still have been billed, so a total that excludes them stays "at least".
+    silent: usize,
+    attempts: usize,
+}
+
+impl BilledCharge {
+    /// Every attempt that reported usage also stated its charge.
+    fn answered_all_stated(&self) -> bool {
+        self.stated + self.silent == self.attempts
+    }
+
+    fn text(&self) -> String {
+        let sum = money(self.sum);
+        if self.stated == self.attempts {
+            sum
+        } else if self.answered_all_stated() {
+            format!(
+                "at least {sum} ({} {} reported no usage; a refused request is normally not charged)",
+                self.silent,
+                if self.silent == 1 {
+                    "failed attempt"
+                } else {
+                    "failed attempts"
+                }
+            )
+        } else {
+            format!(
+                "at least {sum} ({} of {} attempts stated a charge)",
+                self.stated, self.attempts
+            )
         }
     }
-    match stated {
-        0 => None,
-        n if n == answered.len() && silent == 0 => Some(money(sum)),
-        n if n == answered.len() => Some(format!(
-            "{} ({silent} failed {} reported no usage)",
-            money(sum),
-            if silent == 1 { "attempt" } else { "attempts" }
-        )),
-        n => Some(format!(
-            "at least {} ({n} of {} attempts stated a charge)",
-            money(sum),
-            per_use.len()
-        )),
+}
+
+fn billed_charge(quotes: &[&ObservationQuote]) -> Option<BilledCharge> {
+    let per_use: Vec<&&ObservationQuote> = quotes.iter().filter(|q| !q.is_plan()).collect();
+    let mut charge = BilledCharge {
+        sum: Decimal::default(),
+        stated: 0,
+        silent: 0,
+        attempts: per_use.len(),
+    };
+    for quote in &per_use {
+        if let Some(billed) = quote.usage.billed_usd {
+            charge.sum = charge.sum.add(billed).ok()?;
+            charge.stated += 1;
+        } else if quote.usage == codex_state::accounting::Usage::default() {
+            charge.silent += 1;
+        }
     }
+    (charge.stated > 0).then_some(charge)
+}
+
+fn billed_figure(quotes: &[&ObservationQuote]) -> Option<String> {
+    billed_charge(quotes).map(|charge| charge.text())
 }
 
 fn billed_detail(figure: &str) -> String {
@@ -1308,20 +1338,21 @@ fn plain_overview<'a>(
                 Ok(t) => {
                     let (billing, cost) = plain_billing(&t);
                     let provider = provider_name(&quotes[0].attempt.provider);
-                    match billed_figure(quotes) {
+                    match billed_charge(quotes) {
                         // Every request carries the provider's own charge, but
                         // the published prices cannot reproduce it (the
                         // provider omits a counter the estimate needs): the
                         // charge is the figure, and a partial estimate would
                         // only mislead.
                         Some(billed)
-                            if !billed.starts_with("at least")
+                            if billed.answered_all_stated()
                                 && t.unknown_estimates > t.plan_attempts =>
                         {
                             format!(
-                                "• {route} — {billing}. {}, {}. Billed by {provider}: {billed}.",
+                                "• {route} — {billing}. {}, {}. Billed by {provider}: {}.",
                                 request_count(quotes),
-                                plain_tokens(&t)
+                                plain_tokens(&t),
+                                billed.text()
                             )
                         }
                         billed => format!(
@@ -1329,7 +1360,8 @@ fn plain_overview<'a>(
                             request_count(quotes),
                             plain_tokens(&t),
                             billed.map_or_else(String::new, |billed| format!(
-                                " Billed by {provider}: {billed}."
+                                " Billed by {provider}: {}.",
+                                billed.text()
                             ))
                         ),
                     }
