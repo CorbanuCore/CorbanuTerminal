@@ -401,7 +401,8 @@ fn unpriced_rows<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -> 
             }
         };
         let row = format!(
-            "{}/{}",
+            "{} ({}/{})",
+            route_name(quote),
             attributed(&quote.attempt.provider),
             attributed(&quote.attempt.model)
         );
@@ -451,25 +452,26 @@ fn estimate(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
         lines.extend(plan(totals));
         return lines;
     }
+    let incomplete = format!(
+        "Full recorded estimate: unavailable ({unknown} of {attempts} billed attempts incomplete)"
+    );
+    // A known part of zero is not a figure worth stating beside an unknown
+    // estimate: "$0.000000 + unknown" reads as a zero-cost claim.
     let mut lines = if unknown == 0 {
         vec![format!(
             "Estimated token cost for recorded attempts: {}",
             money(known)
         )]
+    } else if known == Decimal::default() {
+        vec!["Estimated token cost: unknown".into(), incomplete]
     } else {
-        let mut lines = vec![
+        vec![
             format!(
                 "Known estimated token cost: {} + unknown costs",
                 money(known)
             ),
-            format!(
-                "Full recorded estimate: unavailable ({unknown} of {attempts} billed attempts incomplete)"
-            ),
-        ];
-        if known == Decimal::default() {
-            lines.insert(0, "Estimated token cost: unknown".into());
-        }
-        lines
+            incomplete,
+        ]
     };
     lines.extend(plan(totals));
     lines
@@ -538,6 +540,29 @@ fn rate_scaled(milli_tokens: i64) -> String {
     }
 }
 
+/// The exact known subtotal, or "none" when nothing billed per token was
+/// priced: a bare `0` beside an unknown estimate reads as a zero-cost claim.
+fn known_exact(t: &codex_state::accounting::DayTotals) -> String {
+    if t.attempts > 0 && t.plan_attempts == t.attempts {
+        "none — subscription work is not billed per token".to_string()
+    } else if t.known_usd == Decimal::default() && t.unknown_estimates > t.plan_attempts {
+        "none — no price for these attempts".to_string()
+    } else {
+        exact(t.known_usd)
+    }
+}
+
+/// One token counter across attempts: the known count, and how many attempts
+/// did not report it.
+fn metric_text(m: &codex_state::accounting::Metric) -> String {
+    let attempts = |n: i64| format!("{n} {}", if n == 1 { "attempt" } else { "attempts" });
+    match (m.known, m.unknown) {
+        (known, 0) => grouped(known),
+        (0, unknown) => format!("not reported ({})", attempts(unknown)),
+        (known, unknown) => format!("{} + not reported by {}", grouped(known), attempts(unknown)),
+    }
+}
+
 const METRICS: [&str; 7] = [
     "Input",
     "Noncached input (derived for inclusive input)",
@@ -561,8 +586,8 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
         format!("Opaque scope: {}", a.scope),
         format!("Arithmetic dialect: {:?}", a.dialect),
         format!(
-            "Admission time: {} ms since Unix epoch (UTC)",
-            i64::from(a.dispatched_at_ms)
+            "Admission time: {}",
+            utc_instant(i64::from(a.dispatched_at_ms))
         ),
         format!(
             "Retry predecessor: {}",
@@ -642,7 +667,8 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
     }
     lines.push(format!(
         "Known subtotal exact USD: {}",
-        exact(q.known_subtotal)
+        codex_state::accounting::DayTotals::from_quotes([q])
+            .map_or_else(|_| exact(q.known_subtotal), |t| known_exact(&t))
     ));
     if let Some(s) = &q.snapshot {
         lines.extend([
@@ -653,15 +679,15 @@ fn attempt_text(q: &ObservationQuote) -> Vec<String> {
             ),
             format!("Price currency/unit: {:?} / {:?}", s.currency, s.unit),
             format!(
-                "Price observed/approved: {} / {} ms UTC",
-                i64::from(s.observed_at_ms),
-                i64::from(s.approved_at_ms)
+                "Price observed/approved: {} / {}",
+                utc_instant(i64::from(s.observed_at_ms)),
+                utc_instant(i64::from(s.approved_at_ms))
             ),
             format!(
-                "Price effective interval: [{}, {}) ms UTC",
-                i64::from(s.effective_from_ms),
+                "Price effective interval: [{}, {})",
+                utc_instant(i64::from(s.effective_from_ms)),
                 s.effective_end_ms
-                    .map_or("unbounded".into(), |n| i64::from(n).to_string())
+                    .map_or("unbounded".into(), |n| utc_instant(i64::from(n)))
             ),
         ]);
         for (label, rate) in BUCKETS.iter().zip([
@@ -724,9 +750,9 @@ fn inspection_pages_for(
                 Ok(InspectionDay::NeedsRefresh) => "Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.".into(),
                 Ok(InspectionDay::TooLarge) => "Range too large for this inspector. No total shown.".into(),
                 Ok(InspectionDay::DetailUnavailable { coverage, read_at_ms, compact }) => format!(
-                    "Request detail unavailable for this whole UTC day — {}. No total shown. Store checkpoint: {}; aggregate day floor: {}; oldest recorded day: {:?}; 90-day wall-clock detail cutoff: {:?} ms UTC.",
+                    "Request detail unavailable for this whole UTC day — {}. No total shown. Ledger current to: {}; {}.",
                     if compact { "compacted history lost request/provider attribution" } else { "day touches expired detail or aggregate history" },
-                    coverage.completed_as_of_ms, coverage.aggregate_day_floor, coverage.oldest_recorded_day, read_at_ms.checked_sub(90 * 86_400_000).filter(|n| *n >= 0)),
+                    utc_instant(coverage.completed_as_of_ms), retention(read_at_ms, coverage.aggregate_day_floor, coverage.oldest_recorded_day)),
                 Err(message) => message,
                 Ok(InspectionDay::Ready(_) | InspectionDay::Range { .. }) => unreachable!(),
             });
@@ -745,18 +771,28 @@ fn inspection_pages_for(
         .text
         .extend(unpriced_rows(ready.requests.values().flatten()));
     pages[0].text.extend([
-        format!("UTC admission interval: [{}, {}) ms since Unix epoch", ready.utc_day * 86_400_000, (ready.utc_day + 1) * 86_400_000),
-        format!("Read at: {} ms UTC; store checkpoint: {} ms UTC; maintenance lag: {} ms",
-            ready.read_at_ms, ready.coverage.completed_as_of_ms, ready.read_at_ms - ready.coverage.completed_as_of_ms),
-        format!("90-day wall-clock detail cutoff: {:?}; aggregate day floor at checkpoint: {}; oldest recorded day: {:?}",
-            ready.read_at_ms.checked_sub(90 * 86_400_000).filter(|n| *n >= 0), ready.coverage.aggregate_day_floor, ready.coverage.oldest_recorded_day),
-        format!("Known subtotal exact USD: {}", exact(t.known_usd)),
+        format!(
+            "{DAY_COVERED} {}",
+            interval(ready.utc_day * 86_400_000, (ready.utc_day + 1) * 86_400_000)
+        ),
+        format!(
+            "Read at: {}; ledger current to: {} ({} ms behind)",
+            utc_instant(ready.read_at_ms),
+            utc_instant(ready.coverage.completed_as_of_ms),
+            ready.read_at_ms - ready.coverage.completed_as_of_ms
+        ),
+        format!(
+            "Retention: {}",
+            retention(
+                ready.read_at_ms,
+                ready.coverage.aggregate_day_floor,
+                ready.coverage.oldest_recorded_day
+            )
+        ),
+        format!("Known subtotal exact USD: {}", known_exact(t)),
     ]);
     for (label, m) in METRICS.iter().zip(&t.measured) {
-        pages[0].text.push(format!(
-            "{label}: {} known + unknown in {} attempts",
-            m.known, m.unknown
-        ));
+        pages[0].text.push(format!("{label}: {}", metric_text(m)));
     }
     let context = pages[0].text.clone();
     let mut request_pages = std::collections::BTreeMap::new();
@@ -859,7 +895,7 @@ fn inspection_pages_for(
         text.extend(
             context
                 .iter()
-                .filter(|s| s.starts_with("Read at:") || s.starts_with("UTC admission interval:"))
+                .filter(|s| s.starts_with("Read at:") || s.starts_with(DAY_COVERED))
                 .cloned(),
         );
         match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
@@ -867,7 +903,7 @@ fn inspection_pages_for(
                 text.extend(estimate(&t));
                 text.push(format!("Recorded attempts: {}", t.attempts));
                 if t.attempts > 0 {
-                    text.push(format!("Known estimate exact USD: {}", exact(t.known_usd)));
+                    text.push(format!("Known estimate exact USD: {}", known_exact(&t)));
                 }
             }
             Err(_) => text.push("Estimate unavailable — exact arithmetic overflow".into()),
@@ -892,7 +928,7 @@ fn inspection_pages_for(
                 request_count(&quotes)
             )
         } else {
-            title.clone()
+            format!("{title} ({})", attempt_count(quotes.len()))
         };
         pages[0].links.push((label, target));
         pages.push(InspectorPage {
@@ -904,10 +940,14 @@ fn inspection_pages_for(
         });
     }
     let unknown_page = pages.len();
-    pages[0]
-        .links
-        .push(("Unknown parent population".into(), unknown_page));
     let u = &ready.unknown_parent_totals;
+    pages[0].links.push((
+        format!(
+            "Unknown parent population ({})",
+            attempt_count(usize::try_from(u.attempts).unwrap_or(0))
+        ),
+        unknown_page,
+    ));
     let mut text = vec![
         "Membership in this root is unknown. These attempts are separate from root and descendant totals; they may belong to other runs.".into(),
         format!("Recorded attempts with unresolved ancestry: {}", u.attempts),
@@ -925,7 +965,7 @@ fn inspection_pages_for(
     text.extend(
         context
             .iter()
-            .filter(|s| s.starts_with("Read at:") || s.starts_with("UTC admission interval:"))
+            .filter(|s| s.starts_with("Read at:") || s.starts_with(DAY_COVERED))
             .cloned(),
     );
     text.extend(freshness);
@@ -1100,6 +1140,8 @@ fn grouped(n: i64) -> String {
 
 const COVERED: &str = "Covered by your subscription (not billed per request)";
 const PAY_PER_USE: &str = "Pay per use";
+const NO_PRICE: &str = "Estimated cost: no price available";
+const DAY_COVERED: &str = "Day covered (UTC):";
 
 /// How a set of attempts is paid for, and the one money figure that goes
 /// with it. Subscription work is never stated as money spent: its figure is
@@ -1111,7 +1153,7 @@ fn plain_billing(t: &codex_state::accounting::DayTotals) -> (&'static str, Strin
         if unknown == 0 {
             format!("Estimated cost: {}", money(t.known_usd))
         } else if t.known_usd == Decimal::default() {
-            "Estimated cost: no price available".to_string()
+            NO_PRICE.to_string()
         } else {
             format!(
                 "Estimated cost: at least {} ({unknown} {} had no price)",
@@ -1254,12 +1296,25 @@ fn billed_detail(figure: &str) -> String {
 /// A short link label figure: the cost, or that a subscription covered it.
 fn short_cost(quotes: &[&ObservationQuote]) -> String {
     match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
-        Ok(t) => match plain_billing(&t) {
-            (COVERED, _) => "covered by subscription".to_string(),
-            (_, cost) => cost.replacen("Estimated cost: ", "estimated ", 1),
+        Ok(t) => match (plain_billing(&t), leading_charge(quotes, &t)) {
+            ((COVERED, _), _) => "covered by subscription".to_string(),
+            (_, Some(billed)) => format!("billed {}", billed.text()),
+            ((_, cost), None) if cost == NO_PRICE => "no price available".to_string(),
+            ((_, cost), None) => cost.replacen("Estimated cost: ", "estimated ", 1),
         },
         Err(_) => "cost unavailable".to_string(),
     }
+}
+
+/// The provider's own charge when it is the figure to lead with: every
+/// attempt that reported usage stated one, and published prices cannot
+/// reproduce it.
+fn leading_charge(
+    quotes: &[&ObservationQuote],
+    t: &codex_state::accounting::DayTotals,
+) -> Option<BilledCharge> {
+    billed_charge(quotes)
+        .filter(|billed| billed.answered_all_stated() && t.unknown_estimates > t.plan_attempts)
 }
 
 /// The plain header of a provider, request or attempt page: what served the
@@ -1343,16 +1398,13 @@ fn plain_overview<'a>(
                 Ok(t) => {
                     let (billing, cost) = plain_billing(&t);
                     let provider = provider_name(&quotes[0].attempt.provider);
-                    match billed_charge(quotes) {
+                    match leading_charge(quotes, &t).ok_or_else(|| billed_charge(quotes)) {
                         // Every request carries the provider's own charge, but
                         // the published prices cannot reproduce it (the
                         // provider omits a counter the estimate needs): the
                         // charge is the figure, and a partial estimate would
                         // only mislead.
-                        Some(billed)
-                            if billed.answered_all_stated()
-                                && t.unknown_estimates > t.plan_attempts =>
-                        {
+                        Ok(billed) => {
                             format!(
                                 "• {route} — {billing}. {}, {}. Billed by {provider}: {}.",
                                 request_count(quotes),
@@ -1360,7 +1412,7 @@ fn plain_overview<'a>(
                                 billed.text()
                             )
                         }
-                        billed => format!(
+                        Err(billed) => format!(
                             "• {route} — {billing}. {}, {}. {cost}.{}",
                             request_count(quotes),
                             plain_tokens(&t),
@@ -1412,14 +1464,48 @@ fn plain_overview<'a>(
     lines
 }
 
+/// A UTC instant in milliseconds as RFC 3339, else the raw count.
+fn utc_instant(ms: i64) -> String {
+    chrono::DateTime::from_timestamp_millis(ms).map_or_else(
+        || format!("{ms} ms"),
+        |at| at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+    )
+}
+
+/// A day counted from the Unix epoch as its UTC date, else the raw count.
+fn utc_date(day: i64) -> String {
+    chrono::DateTime::from_timestamp(day.saturating_mul(86_400), 0)
+        .map_or_else(|| format!("day {day}"), |at| at.date_naive().to_string())
+}
+
+/// What the ledger still holds: per-request detail for 90 days of wall-clock
+/// time, daily totals from the aggregate floor on.
+fn retention(
+    read_at_ms: i64,
+    aggregate_day_floor: i64,
+    oldest_recorded_day: Option<i64>,
+) -> String {
+    format!(
+        "request detail kept since {}; daily totals kept since {}; oldest recorded day {}",
+        read_at_ms
+            .checked_sub(90 * 86_400_000)
+            .filter(|n| *n >= 0)
+            .map_or_else(|| "the start".to_string(), utc_instant),
+        utc_date(aggregate_day_floor),
+        oldest_recorded_day.map_or_else(|| "none".to_string(), utc_date)
+    )
+}
+
+fn attempt_count(n: usize) -> String {
+    match n {
+        0 => "none".to_string(),
+        1 => "1 attempt".to_string(),
+        n => format!("{n} attempts"),
+    }
+}
+
 fn interval(start: i64, end: i64) -> String {
-    let utc = |ms: i64| {
-        chrono::DateTime::from_timestamp_millis(ms).map_or_else(
-            || format!("{ms} ms"),
-            |at| at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-        )
-    };
-    format!("[{}, {})", utc(start), utc(end))
+    format!("[{}, {})", utc_instant(start), utc_instant(end))
 }
 
 fn range_pages(
@@ -1435,8 +1521,12 @@ fn range_pages(
             requested.grouping
         ),
         format!(
-            "Oldest retained aggregate day (ledger): {oldest:?}; 90-day drill-down cutoff: {:?} ms UTC (exclusive)",
-            read_at.checked_sub(90 * 86_400_000).filter(|v| *v >= 0)
+            "Retention: request detail kept since {}; oldest daily total kept {}",
+            read_at
+                .checked_sub(90 * 86_400_000)
+                .filter(|v| *v >= 0)
+                .map_or_else(|| "the start".to_string(), utc_instant),
+            oldest.map_or_else(|| "none".to_string(), utc_date)
         ),
         "Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.".into(),
     ];
@@ -1626,9 +1716,7 @@ fn range_pages(
             }]
         };
         for child in &mut children {
-            child
-                .text
-                .retain(|t| !t.starts_with("UTC admission interval:"));
+            child.text.retain(|t| !t.starts_with(DAY_COVERED));
             child.text.splice(0..0, header.clone());
             for text in &mut child.text {
                 *text = text
@@ -1680,10 +1768,17 @@ impl Inspector {
                     .collect::<Vec<_>>()
             })
             .collect();
+        if !page.links.is_empty() {
+            items.push(SelectionItem {
+                name: "—— Open ——".into(),
+                ..Default::default()
+            });
+        }
         for (label, target) in &page.links {
             let page = *target;
             items.push(SelectionItem {
                 name: label.clone(),
+                name_prefix_spans: vec!["→ ".cyan()],
                 actions: vec![Box::new(move |tx| {
                     tx.send(AppEvent::NavigateAccountingInspector { generation, page })
                 })],

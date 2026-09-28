@@ -1,11 +1,18 @@
 use super::*;
-use crate::chatwidget::tests::helpers::{render_bottom_popup, render_bottom_popup_with_height};
+use crate::chatwidget::tests::helpers::render_bottom_popup;
+use crate::chatwidget::tests::helpers::render_bottom_popup_with_height;
 use crate::chatwidget::tests::make_chatwidget_manual;
 use codex_app_server_protocol::AccountTokenUsageSummary;
-use codex_state::accounting::{
-    Attempt, DayTotals, Dialect, Inspection, Metric, RetentionCoverage, Usage,
-};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use codex_state::accounting::Attempt;
+use codex_state::accounting::DayTotals;
+use codex_state::accounting::Dialect;
+use codex_state::accounting::Inspection;
+use codex_state::accounting::Metric;
+use codex_state::accounting::RetentionCoverage;
+use codex_state::accounting::Usage;
+use crossterm::event::KeyCode;
+use crossterm::event::KeyEvent;
+use crossterm::event::KeyModifiers;
 use pretty_assertions::assert_eq;
 
 async fn unavailable_inspector(width: u16, args: &str) -> ChatWidget {
@@ -161,7 +168,7 @@ async fn rendered_hour_bucket_caveat(state: InspectionDay) -> String {
         let screen = render_bottom_popup_with_height(&chat, 150, 16);
         if screen
             .lines()
-            .any(|line| line.trim_start().starts_with("› Hour ["))
+            .any(|line| line.trim_start().starts_with("› → Hour ["))
         {
             chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
             let AppEvent::NavigateAccountingInspector { generation, page } = rx.try_recv().unwrap()
@@ -333,7 +340,7 @@ fn accounting_inspect_range_partial_no_amount_and_explicit_coverage() {
     );
     insta::assert_snapshot!(pages[0].text.join("\n"), @"
     Requested: [1970-01-01T00:00:00.001Z, 1970-01-01T01:00:00.000Z); timezone: UTC; grouping: Hour
-    Oldest retained aggregate day (ledger): Some(0); 90-day drill-down cutoff: Some(0) ms UTC (exclusive)
+    Retention: request detail kept since 1970-01-01T00:00:00.000Z; oldest daily total kept 1970-01-01
     Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.
     Range: Unknown parent population: 0 inspectable attempts, excluded from range total
     Range total unavailable — partial or unavailable buckets excluded; no partial total.
@@ -798,7 +805,6 @@ fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
     };
     insta::assert_snapshot!(estimate(&mixed_unpriced).join("\n"), @"
     Estimated token cost: unknown
-    Known estimated token cost: $0.000000 + unknown costs
     Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
     Subscription capacity: 2 of 3 attempts, not billed per token
     Plan consumption: 140 tokens at the plan rate that applied
@@ -844,7 +850,11 @@ fn accounting_inspect_partial_and_unknown_copy() {
     for label in METRICS {
         assert!(summary.contains(label));
     }
-    assert!(summary.contains("100 known + unknown in 0 attempts"));
+    assert!(summary.contains("Input: 100\n"), "{summary}");
+    assert!(
+        summary.contains("Cache write: not reported (1 attempt)"),
+        "{summary}"
+    );
     assert!(summary.contains("Billed cost: unavailable"));
     assert!(summary.contains("Collection coverage: unknown"));
     assert!(
@@ -858,7 +868,6 @@ fn accounting_inspect_partial_and_unknown_copy() {
 fn accounting_inspect_unpriced_zero_and_missing_rate() {
     insta::assert_snapshot!(estimate(&money_day(Decimal::default(), 1, 1)).join("\n"), @"
     Estimated token cost: unknown
-    Known estimated token cost: $0.000000 + unknown costs
     Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
     ");
     assert_eq!(
@@ -919,7 +928,7 @@ fn accounting_inspect_request_attempt_price_detail() {
         "Model: synthetic-model",
         "Opaque scope:",
         "Price source: ProviderPublished",
-        "Price effective interval: [0, 1000)",
+        "Price effective interval: [1970-01-01T00:00:00.000Z, 1970-01-01T00:00:01.000Z)",
         "Rate unavailable for Cache read",
         "Literal wire/endpoint",
         "Completion/billing status: not recorded",
@@ -1020,7 +1029,8 @@ async fn accounting_inspect_empty_day_after_checkpoint_renders_lag() -> anyhow::
 // Admit synthetic evidence, then model a late raw import and interrupted
 // estimate/contribution persistence without adding a production mutation API.
 async fn maintenance_inspection(mutation: &str) -> anyhow::Result<InspectionDay> {
-    use codex_state::accounting::{AccountingStore, RetainedDay};
+    use codex_state::accounting::AccountingStore;
+    use codex_state::accounting::RetainedDay;
 
     const CHECKPOINT: i64 = 100 * 86_400_000;
     let home = tempfile::tempdir()?;
@@ -1127,22 +1137,21 @@ async fn accounting_inspect_maintenance_with_current_contributions_renders_raw_t
     Select a provider below to see its requests.
     —— Details ——
     Estimated token cost: unknown
-    Known estimated token cost: $0.000000 + unknown costs
     Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
     Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.
     Billed cost: unavailable — no settlement evidence
     Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
-    UTC admission interval: [8640000000, 8726400000) ms since Unix epoch
-    Read at: 8640000000 ms UTC; store checkpoint: 8640000000 ms UTC; maintenance lag: 0 ms
-    90-day wall-clock detail cutoff: Some(864000000); aggregate day floor at checkpoint: 0; oldest recorded day: Some(0)
-    Known subtotal exact USD: 0
-    Input: 0 known + unknown in 1 attempts
-    Noncached input (derived for inclusive input): 0 known + unknown in 1 attempts
-    Cache read: 0 known + unknown in 1 attempts
-    Cache write: 0 known + unknown in 1 attempts
-    Output: 0 known + unknown in 1 attempts
-    Reasoning (subset, not separately billed): 0 known + unknown in 1 attempts
-    Total (not separately billed): 0 known + unknown in 1 attempts
+    Day covered (UTC): [1970-04-11T00:00:00.000Z, 1970-04-12T00:00:00.000Z)
+    Read at: 1970-04-11T00:00:00.000Z; ledger current to: 1970-04-11T00:00:00.000Z (0 ms behind)
+    Retention: request detail kept since 1970-01-11T00:00:00.000Z; daily totals kept since 1970-01-01; oldest recorded day 1970-01-01
+    Known subtotal exact USD: none — no price for these attempts
+    Input: not reported (1 attempt)
+    Noncached input (derived for inclusive input): not reported (1 attempt)
+    Cache read: not reported (1 attempt)
+    Cache write: not reported (1 attempt)
+    Output: not reported (1 attempt)
+    Reasoning (subset, not separately billed): not reported (1 attempt)
+    Total (not separately billed): not reported (1 attempt)
     Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.
     Unknown parent population: 0 attempts, excluded from root total
     Estimate versus billed difference: unknown — no settlement evidence
@@ -1738,7 +1747,7 @@ fn accounting_inspect_names_the_rows_whose_tokens_have_no_price() {
     // The mixed model is named, and named as attempts rather than as the row,
     // because some of its attempts were priced.
     assert!(
-        lines[0].contains("1 on openai/mixed"),
+        lines[0].contains("1 on OpenAI · mixed (openai/mixed)"),
         "the claim counts attempts, not models: {lines:?}"
     );
     assert!(
@@ -1934,7 +1943,7 @@ fn accounting_inspect_first_screen_names_provider_model_and_billing_type() {
     );
     assert_eq!(
         labels.last(),
-        Some(&"Unknown parent population"),
+        Some(&"Unknown parent population (1 attempt)"),
         "{labels:?}"
     );
     let request_one = format!(
@@ -2157,4 +2166,107 @@ fn accounting_inspect_leads_with_a_complete_stated_charge() {
 fn accounting_names_the_corbanu_api_as_the_product_does() {
     assert_eq!(provider_name("pfterminal-plan"), "Corbanu API");
     assert_eq!(provider_name("pfterminal-plan-anthropic"), "Corbanu API");
+}
+
+/// The cost screens read the same for every provider: a pay-per-use route
+/// with a stated charge and no published price (the Corbanu API case), one
+/// with neither, a priced one, and subscription work. No page leaks Rust
+/// debug output or raw epoch counts, and no page states `$0` beside an
+/// unknown estimate.
+#[test]
+fn accounting_inspect_reads_plainly_for_every_provider() {
+    let InspectionDay::Ready(mut view) = packet() else {
+        unreachable!()
+    };
+    view.requests.clear();
+    view.read_at_ms = 20_724 * 86_400_000 + 28_000_000;
+    view.coverage.completed_as_of_ms = view.read_at_ms - 29_669;
+    view.coverage.aggregate_day_floor = 20_360;
+    view.coverage.oldest_recorded_day = Some(20_724);
+    view.utc_day = 20_724;
+    let unpriced = |q: &mut ObservationQuote| {
+        q.buckets = [BucketQuote::MissingRate; 4];
+        q.known_subtotal = Decimal::default();
+        q.all_buckets_priced = None;
+    };
+    for (id, provider, model) in [
+        (1, "pfterminal-plan", "corbanu/glm-5.3-flash"),
+        (2, "deepseek", "deepseek-chat"),
+        (3, "openai", "gpt-6-sol"),
+        (4, "openrouter", "some/unlisted-model"),
+        (5, "claude-plan", "opus"),
+    ] {
+        let mut q = quote();
+        q.attempt.attempt_id = Uuid::from_u128(id);
+        q.attempt.request_id = Uuid::from_u128(100 + id);
+        q.attempt.thread_id = view.owner;
+        q.attempt.provider = provider.into();
+        q.attempt.model = model.into();
+        q.attempt.dispatched_at_ms = (view.read_at_ms - 60_000).try_into().unwrap();
+        match id {
+            1 | 2 => {
+                unpriced(&mut q);
+                q.usage.billed_usd = Some(decimal("0.002246"));
+            }
+            3 => q.all_buckets_priced = Some(q.known_subtotal),
+            4 => unpriced(&mut q),
+            _ => {
+                unpriced(&mut q);
+                q.plan_burn_millis = Some(1000);
+            }
+        }
+        view.requests.insert(q.attempt.request_id, vec![q]);
+    }
+    view.totals = DayTotals::from_quotes(view.requests.values().flatten()).unwrap();
+    view.own_totals = view.totals.clone();
+    let pages = inspection_pages(Ok(InspectionDay::Ready(view)));
+    for page in &pages {
+        for line in page.text.iter().chain(page.links.iter().map(|(l, _)| l)) {
+            for leak in [
+                "Some(",
+                "None",
+                "ms since Unix epoch",
+                "ms UTC",
+                "$0.000000 + unknown",
+                "known + unknown in",
+                "estimated no price",
+            ] {
+                assert!(!line.contains(leak), "`{leak}` on {}: {line}", page.title);
+            }
+            assert_ne!(line, "Known subtotal exact USD: 0", "{}", page.title);
+            assert_ne!(line, "Known estimate exact USD: 0", "{}", page.title);
+        }
+    }
+    let labels: Vec<_> = pages[0].links.iter().map(|(l, _)| l.as_str()).collect();
+    let billed = money(decimal("0.002246"));
+    for route in [
+        "Corbanu API · corbanu/glm-5.3-flash",
+        "DeepSeek · deepseek-chat",
+    ] {
+        assert!(
+            labels.contains(&format!("{route} — billed {billed} (1 request)").as_str()),
+            "{labels:?}"
+        );
+    }
+    assert!(
+        labels.contains(&"OpenRouter · some/unlisted-model — no price available (1 request)")
+            || labels
+                .iter()
+                .any(|l| l.ends_with("some/unlisted-model — no price available (1 request)")),
+        "{labels:?}"
+    );
+    assert!(labels.contains(&"Descendant attempts (none)"), "{labels:?}");
+    assert!(
+        labels.contains(&"Unknown parent population (none)"),
+        "{labels:?}"
+    );
+    let root = pages[0].text.join("\n");
+    assert!(
+        root.contains("Retention: request detail kept since 2026-06-30T"),
+        "{root}"
+    );
+    assert!(
+        root.contains("daily totals kept since 2025-09-29; oldest recorded day 2026-09-28"),
+        "{root}"
+    );
 }
