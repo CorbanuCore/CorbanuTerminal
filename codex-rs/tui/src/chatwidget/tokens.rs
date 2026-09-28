@@ -310,6 +310,9 @@ pub(super) struct Inspector {
     range: Option<InspectionRange>,
     pages: Vec<InspectorPage>,
     page: usize,
+    /// Pages opened before the current one, so Back and Esc return the way
+    /// the user came rather than to a page's fixed parent.
+    history: Vec<usize>,
     alive: Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -531,10 +534,10 @@ fn plan(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
 /// Plan consumption is carried as tokens scaled by a rate in thousandths, so a
 /// 1.0x turn reads back as exactly its own token count.
 fn rate_scaled(milli_tokens: i64) -> String {
-    let whole = milli_tokens / 1000;
+    let whole = grouped(milli_tokens / 1000);
     let fraction = milli_tokens % 1000;
     if fraction == 0 {
-        whole.to_string()
+        whole
     } else {
         format!("{whole}.{fraction:03}")
     }
@@ -1785,7 +1788,8 @@ impl Inspector {
                 ..Default::default()
             });
         }
-        if let Some(page) = page.parent {
+        let back = self.history.last().copied().or(page.parent);
+        if let Some(page) = back {
             items.push(SelectionItem {
                 name: "Back".into(),
                 actions: vec![Box::new(move |tx| {
@@ -1812,7 +1816,7 @@ impl Inspector {
             ..Default::default()
         });
         let alive = self.alive.clone();
-        let parent = page.parent;
+        let parent = back;
         let selected = page.selected.clone();
         SelectionViewParams {
             initial_selected_idx: Some(selected.load(std::sync::atomic::Ordering::Relaxed)),
@@ -1958,6 +1962,7 @@ impl ChatWidget {
                 selected: Arc::default(),
             }],
             page: 0,
+            history: Vec::new(),
             alive: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         };
         let params = inspector.params(self.last_rendered_width.get().unwrap_or(80));
@@ -2014,6 +2019,7 @@ impl ChatWidget {
             }
         }
         view.page = 0;
+        view.history.clear();
         if !self.bottom_pane.replace_selection_view_if_present(
             INSPECTOR_VIEW,
             view.params(self.last_rendered_width.get().unwrap_or(80)),
@@ -2034,6 +2040,13 @@ impl ChatWidget {
         };
         if page >= view.pages.len() {
             return;
+        }
+        // Returning to the page we came from unwinds one step; anything else
+        // is a step forward.
+        if view.history.last() == Some(&page) {
+            view.history.pop();
+        } else if page != view.page {
+            view.history.push(view.page);
         }
         view.page = page;
         if !self.bottom_pane.replace_selection_view_if_present(

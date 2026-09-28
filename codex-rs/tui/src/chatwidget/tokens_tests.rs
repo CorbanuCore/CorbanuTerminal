@@ -957,6 +957,7 @@ async fn accounting_inspect_narrow_and_long_fields() {
             range: None,
             pages: vec![page],
             page: 0,
+            history: Vec::new(),
             alive: Arc::new(std::sync::atomic::AtomicBool::new(true)),
         };
         let params = inspector.params(usize::from(width));
@@ -2269,4 +2270,75 @@ fn accounting_inspect_reads_plainly_for_every_provider() {
         root.contains("daily totals kept since 2025-09-29; oldest recorded day 2026-09-28"),
         "{root}"
     );
+}
+
+/// Back and Esc return the way the user came: a request opened from a
+/// provider's page goes back to that provider, not to the request's fixed
+/// parent (the overview).
+#[tokio::test]
+async fn accounting_inspect_back_returns_the_way_the_user_came() {
+    let (mut chat, mut rx, _ops) = make_chatwidget_manual(None).await;
+    chat.open_accounting_inspector(0);
+    let AppEvent::LoadAccountingInspector {
+        generation,
+        thread,
+        day,
+        ..
+    } = rx.try_recv().unwrap()
+    else {
+        panic!()
+    };
+    chat.finish_accounting_inspector(generation, thread, day, Ok(breakdown_packet()));
+    let pages = &chat.accounting_inspector.as_ref().unwrap().pages;
+    let (_, provider) = pages[0]
+        .links
+        .iter()
+        .find(|(label, _)| label.starts_with("alpha · one"))
+        .cloned()
+        .unwrap();
+    let request = pages[provider].links[0].1;
+    let attempt = pages[request].links[0].1;
+    assert_eq!(pages[request].parent, Some(0));
+
+    for target in [provider, request, attempt] {
+        chat.navigate_accounting_inspector(generation, target);
+    }
+    let back = |chat: &ChatWidget| {
+        let view = chat.accounting_inspector.as_ref().unwrap();
+        (
+            view.page,
+            view.params(80).items.iter().any(|i| i.name == "Back"),
+        )
+    };
+    assert_eq!(back(&chat), (attempt, true));
+    // Each Back (or Esc) sends the page it came from; follow them.
+    for expected in [request, provider, 0] {
+        let view = chat.accounting_inspector.as_ref().unwrap();
+        let target = view
+            .history
+            .last()
+            .copied()
+            .or(view.pages[view.page].parent);
+        chat.navigate_accounting_inspector(generation, target.unwrap());
+        assert_eq!(chat.accounting_inspector.as_ref().unwrap().page, expected);
+    }
+    assert_eq!(
+        back(&chat),
+        (0, false),
+        "the overview has nowhere to go back to"
+    );
+    assert!(
+        chat.accounting_inspector
+            .as_ref()
+            .unwrap()
+            .history
+            .is_empty()
+    );
+}
+
+#[test]
+fn accounting_inspect_plan_consumption_groups_thousands() {
+    assert_eq!(rate_scaled(24_337_000), "24,337");
+    assert_eq!(rate_scaled(1_234_567_500), "1,234,567.500");
+    assert_eq!(rate_scaled(500), "0.500");
 }
