@@ -3360,7 +3360,14 @@ impl App {
                     }
                 }
             }
-            AppEvent::CorbanuApiLoaded { result, deferred } => {
+            AppEvent::CorbanuApiLoaded {
+                result,
+                deferred,
+                capability_lapsed,
+            } => {
+                if capability_lapsed {
+                    self.chat_widget.forget_lapsed_wallet_capability();
+                }
                 if corbanu_api_continuation_is_current(
                     self.active_deferred_provider_setup.as_ref(),
                     deferred.as_ref(),

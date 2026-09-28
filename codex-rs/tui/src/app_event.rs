@@ -1896,6 +1896,8 @@ pub(crate) enum AppEvent {
     CorbanuApiLoaded {
         result: Result<crate::chatwidget::wallet_api::CorbanuApiView, String>,
         deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+        /// The daemon refused the held wallet capability as lapsed.
+        capability_lapsed: bool,
     },
     OpenCorbanuApiTopUp {
         deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
