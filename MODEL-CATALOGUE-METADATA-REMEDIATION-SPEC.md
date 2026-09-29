@@ -1,126 +1,170 @@
 # Model Catalogue Metadata Remediation
 
-**Status:** Proposed fix plan; no catalogue or runtime fix is claimed.
-**Scope:** [#127](https://github.com/CorbanuCore/CorbanuTerminal/issues/127), [#128](https://github.com/CorbanuCore/CorbanuTerminal/issues/128), [#129](https://github.com/CorbanuCore/CorbanuTerminal/issues/129).
-**Pinned sources:** `MAIN=c9f358c0a7ece3338d751ad2c3ecf1e091de2b8b` (verified upstream `main` head on 2026-09-29); `RELEASE=64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39` (open PR #123 head on 2026-09-29). All repository file and field observations below refer to these exact commits. Validation commands record `FIX=$(git rev-parse HEAD)` and inspect that exact implementation commit.
-**Change class:** Routine documentation of proposed bounded fixes. Product basis: [“Shipping MVP — LIVE” at MAIN](https://github.com/CorbanuCore/CorbanuTerminal/blob/c9f358c0a7ece3338d751ad2c3ecf1e091de2b8b/docs/corbanu-product-spec.md), “Multi-provider inference” includes OpenRouter, OpenAI, and DeepSeek. Implementation must follow the repository's change process.
+**Status:** Proposed specification for [#127](https://github.com/CorbanuCore/CorbanuTerminal/issues/127), [#128](https://github.com/CorbanuCore/CorbanuTerminal/issues/128), and [#129](https://github.com/CorbanuCore/CorbanuTerminal/issues/129). This PR adds the specification; implementation follows separately.
 
-PR #123 introduces the Grok and GLM/DeepSeek rows; the six missing output limits already exist on MAIN. If PR #123 changes or is not merged, rebase this plan's implementation against the actual catalogue and rerun the checks. Provider feeds are mutable: record the UTC time, raw response, route, and units used to justify any value.
+## Baseline and validation setup
+
+- **MAIN:** `c9f358c0a7ece3338d751ad2c3ecf1e091de2b8b`, verified upstream main head on 2026-09-29.
+- **RELEASE:** `64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39`, verified head of open [PR #123](https://github.com/CorbanuCore/CorbanuTerminal/pull/123) on 2026-09-29.
+- **Provider evidence:** [immutable 2026-09-25 capture][capture]. Its prices and limits are historical observations; refresh and preserve the source, UTC time, route, and units before implementation.
+- **Change class:** Routine documentation. Product basis: [“Shipping MVP — LIVE” at MAIN][product], “Multi-provider inference.” Classify implementation separately under the repository's change process.
+
+Every source link pins the relevant repository file and fields to MAIN or RELEASE. The Grok, DeepSeek V4.1, and GLM 5.3 Flash OpenRouter rows exist only at RELEASE; the six missing limits also exist at MAIN. Reconcile this plan with the landed catalogue if PR #123 changes.
+
+Run the following setup and each issue's commands in one Bash session, from a clean implementation checkout. `FIX` records the tested commit. The metadata checks cover the recommended resolutions; an alternative decision requires corresponding assertions.
+
+Implementation PRs must add regressions with the `catalogue_issue_127`, `catalogue_issue_128`, and `catalogue_issue_129` prefixes in the indicated suites. These tests are required future work. The runner rejects a filter matching zero tests.
+
+```bash
+set -euo pipefail
+ROOT=$(git rev-parse --show-toplevel)
+cd "$ROOT"
+test -z "$(git status --porcelain)"
+FIX=$(git rev-parse HEAD)
+printf 'Checking implementation commit %s\n' "$FIX"
+run_tests() (
+  cd "$ROOT/codex-rs"
+  listing=$(cargo test -p "$1" --lib "$2" -- --list) || return
+  if ! rg -q ': test$' <<< "$listing"; then
+    printf 'No matching tests: %s\n' "$2" >&2
+    return 1
+  fi
+  cargo test -p "$1" --lib "$2"
+)
+```
+
+The test modules are [manager tests at RELEASE][manager-tests], [client tests at RELEASE][client-tests], and [allocator tests at RELEASE][allocator-tests]. Cargo uses module paths, not their source filenames. Run the pinned [workspace manifest][manifest] with its [Rust toolchain][toolchain], plus Bash, jq 1.6+, curl, and ripgrep.
 
 ## #127 — Grok 4.7 long-prompt pricing
 
-**Decision.** Should `x-ai/grok-4.7` remain eligible for automatic cost-based selection before tier-aware pricing exists? At [RELEASE catalogue](https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/models-manager/models.json), `orchestration.status` is `eligible` and `orchestration.billing` contains flat 1600/4800/400 milli-USD per million input/output/cache-read tokens. At [RELEASE `ModelBilling::Metered`](https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/protocol/src/openai_models.rs) and [RELEASE allocator formatting](https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/core/src/tools/handlers/multi_agents_spec.rs), the cost description cannot express the ≥200,000-prompt-token tier. The [OpenRouter model feed](https://openrouter.ai/api/v1/models) exposes that tier; on 2026-09-29 its base input/output rates were already $2/$6 per million, versus $1.60/$4.80 in the RELEASE row. For the issue's 2026-09-25 capture, 250,000 uncached input + 10,000 output tokens implied $0.448 at the flat rates versus $0.896 at the tier rates (illustrative arithmetic, not a bill).
+**Decision.** Allow automatic cost-based allocation with incomplete pricing, or restrict the route to explicit selection?
 
-**Recommendation.** Set this row's [RELEASE `orchestration.status`](https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/models-manager/models.json) to `disabled` with a tier-pricing reason; keep explicit selection available. Refresh or remove its numerical description when the feed disagrees. This is a bounded mitigation while tier-aware billing and prompt-length accounting are designed and tested. Do not encode a guessed invoice or rely on a user-visible prompt length that excludes serialized system/tool context.
+At the [RELEASE catalogue][catalogue-release], `x-ai/grok-4.7` has `orchestration.status: "eligible"` and flat `orchestration.billing` rates of 1600/4800/400 milli-USD per million input/output/cache-read tokens. [RELEASE billing metadata][billing] and [allocator formatting][allocator] cannot represent the captured provider tier keyed by `min_prompt_tokens: 200000`. The [capture][capture] gives $1.60/$4.80/$0.40 below the tier and $3.20/$9.60/$0.80 for the tier, in USD per million tokens. At 250,000 uncached input + 10,000 output tokens, those schedules imply $0.448 versus $0.896; this is arithmetic, not an invoice.
 
-**Acceptance.**
+**Recommended resolution.** Change the [RELEASE row's orchestration metadata][catalogue-release] to `status: "disabled"`, retain `provider_id: "openrouter"`, give a tier-pricing `reason`, and remove flat `billing` from that metadata. Keep explicit selection available. Refresh or remove numerical prices in its description. This uses the existing explicit-choice policy while avoiding an unqualified allocation estimate.
 
-1. Automatic cost-based selection excludes `x-ai/grok-4.7`; explicit OpenRouter selection still resolves to the same model ID with its existing credentials.
-2. No allocator economics describes the base price as valid for long prompts. A displayed price is either provider-current with its threshold and date or clearly directs users to live pricing.
-3. If tier-aware auto-selection replaces the mitigation, tests cover serialized prompt lengths 199,999, 200,000, and 200,001, both cached and uncached input, output pricing, and the provider's exact threshold semantics.
+**Acceptance criteria.**
 
-**Validation (from the implementation repository root, after the release rows land):**
+1. Automatic cost-based allocation excludes this route. Explicit selection and parent inheritance retain the same model/provider; the advertised allocator entry says explicit-choice only and exposes no flat economics.
+2. Discovery/cache overlays cannot restore automatic eligibility. The selector and saved explicit-ID path still resolve with the existing credentials.
+3. Any displayed prices identify their tier and source date. Re-enabling automatic allocation requires verified threshold semantics and tests at 199,999, 200,000, and 200,001 serialized prompt tokens, covering cached input, uncached input, and output. Count system and tool context.
+
+**Validation.** Add catalogue/overlay and allocator-description regressions for criteria 1–2, then run:
 
 ```bash
-set -euo pipefail
-RELEASE=64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39
-FIX=$(git rev-parse HEAD)
-printf 'Checking implementation commit %s\n' "$FIX"
-git show "$RELEASE:codex-rs/models-manager/models.json" |
-  jq -e '.models[] | select(.slug == "x-ai/grok-4.7") |
-    .orchestration.status == "eligible"'
-jq -e '[.models[] | select(.slug == "x-ai/grok-4.7")] |
-  length == 1 and .[0].visibility == "list" and
-  .[0].orchestration.status == "disabled"' <(git show "$FIX:codex-rs/models-manager/models.json")
-date -u '+Feed checked %Y-%m-%d %H:%M:%S UTC'
-curl -fsSL 'https://openrouter.ai/api/v1/models' |
-  jq -e '.data[] | select(.id == "x-ai/grok-4.7") |
-    {base: .pricing, tiers: .pricing.overrides}'
-cd codex-rs
-cargo test -p codex-models-manager --lib manager_tests
-cargo test -p codex-core --lib multi_agents_spec_tests
+git show "$FIX:codex-rs/models-manager/models.json" |
+  jq -e '[.models[] | select(.slug == "x-ai/grok-4.7")] |
+    length == 1 and .[0].visibility == "list" and
+    (.[0].orchestration | .status == "disabled" and
+      .provider_id == "openrouter" and
+      (.reason | type == "string" and length > 0) and
+      (has("billing") | not))'
+run_tests codex-models-manager 'manager::tests::catalogue_issue_127'
+run_tests codex-core 'tools::handlers::multi_agents_spec::tests::catalogue_issue_127'
 ```
-
-The feed query is a dated observation, not a pass/fail price assertion. In the remediation PR, add regressions in the named suites for exclusion, explicit selection, and advertised economics; review the captured tool description and selector result. The `jq` guard covers the recommended manual-only route.
 
 ## #128 — Six retained IDs without output limits
 
-**Decision.** Does each retained explicit ID require a fixed `max_output_tokens`, a documented backend default/discovery path, or retirement? The [MAIN catalogue](https://github.com/CorbanuCore/CorbanuTerminal/blob/c9f358c0a7ece3338d751ad2c3ecf1e091de2b8b/codex-rs/models-manager/models.json) and [RELEASE catalogue](https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/models-manager/models.json) both omit `max_output_tokens` for `x-ai/grok-4.6`, `openrouter/owl-alpha`, `x-ai/grok-4.5`, `deepseek/deepseek-v4-pro`, `deepseek/deepseek-v4-flash-0731` (OpenRouter), and `gpt-5.5` (OpenAI). At RELEASE all six have `visibility: "hide"` and `orchestration.status: "disabled"`, yet the [RELEASE release notes](https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/qa/release/0.1.44/RELEASE_NOTES.md) promise explicit-ID compatibility. The [RELEASE discovery overlay](https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/models-manager/src/manager.rs) only fills a missing remote output limit from the bundle when one exists; absence alone does not prove an OpenRouter/OpenAI request fails.
+**Decision.** Populate verified output limits, document deliberate backend defaults, or retire an unsupported ID?
 
-**Recommendation.** Decide separately for each of the six IDs: record whether the route is served, its provider/date/source, and the actual request limit. For a served fixed-cap route, store the verified cap; for a deliberately dynamic or omitted limit, document the provider contract and behavior without discovery. If an ID is no longer served, explicitly retire it and correct the compatibility claim. Do not copy a cap from a different model or invent one for a dead route.
+The [MAIN][catalogue-main] and [RELEASE][catalogue-release] catalogues omit `max_output_tokens` for these six IDs:
 
-**Acceptance.**
+| Provider   | IDs                                                                                                                     |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------- |
+| OpenRouter | `x-ai/grok-4.6`, `openrouter/owl-alpha`, `x-ai/grok-4.5`, `deepseek/deepseek-v4-pro`, `deepseek/deepseek-v4-flash-0731` |
+| OpenAI     | `gpt-5.5`                                                                                                               |
 
-1. All six IDs have an explicit, source-backed disposition (verified fixed cap, intentional default/discovery/override, or retirement) and the [RELEASE release-note compatibility claim](https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/qa/release/0.1.44/RELEASE_NOTES.md) matches it.
-2. Tests exercise a saved explicit ID through the OpenRouter or OpenAI request path, with and without discovery metadata. The sent request includes a supported positive limit or deliberately omits it under the documented provider contract; it never silently uses zero or another model's cap. Retired IDs fail with a clear migration path.
-3. Hidden/disabled selection remains intentional for retained legacy routes. A failing request with absent discovery cannot be called compatible.
+At [RELEASE][catalogue-release], all six have `visibility: "hide"` and `orchestration.status: "disabled"`, while the [release notes][release-notes] retain explicit-ID compatibility. The [discovery overlay at RELEASE][overlay] fills a missing remote limit only when the bundle supplies one. The RELEASE [OpenRouter Chat Completions][chat-request] and [OpenAI Responses][responses-request] request types do not serialize an output-token ceiling. Adding catalogue values alone would not cap these requests.
 
-**Validation (from the implementation repository root):**
+**Recommended resolution.** For served IDs, prefer documenting and testing the existing deliberate omission of a request limit, including behavior without discovery. Add a fixed catalogue limit only with a verified source and a clear account of how that metadata is used. For an ID no longer served, record retirement and migration behavior and narrow the compatibility claim. This preserves supported explicit-ID behavior without inventing limits or changing request semantics merely to fill a field.
+
+**Acceptance criteria.**
+
+1. Every listed ID has a disposition with provider, observation date, source, effective output-limit policy, and behavior without discovery. Absence from a feed alone is insufficient evidence of retirement.
+2. For each served ID, test saved-ID resolution with discovery present, absent, and stale, then inspect the serialized OpenRouter/OpenAI request. It deliberately omits the limit or sends the supported positive value specified by its disposition; no zero, unrelated model's cap, or silent model substitution is allowed.
+3. Preserve hidden/disabled selection for retained records. If an ID is retired, verify the reported failure and migration guidance. The [RELEASE compatibility statement][release-notes] must match the tested behavior.
+
+**Validation.** Inventory all six IDs, including removed or duplicate records. Add disposition/overlay tests and actual request-serialization regressions; the inventory is not a completion check.
 
 ```bash
-set -euo pipefail
-MAIN=c9f358c0a7ece3338d751ad2c3ecf1e091de2b8b
-RELEASE=64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39
-FIX=$(git rev-parse HEAD)
-printf 'Checking implementation commit %s\n' "$FIX"
-for SHA in "$MAIN" "$RELEASE"; do
-  git show "$SHA:codex-rs/models-manager/models.json" |
-    jq -r '.models[] | select(.slug | IN("x-ai/grok-4.6",
-      "openrouter/owl-alpha", "x-ai/grok-4.5", "deepseek/deepseek-v4-pro",
-      "deepseek/deepseek-v4-flash-0731", "gpt-5.5")) |
-      [.slug, has("max_output_tokens"), .visibility, .orchestration.status] | @tsv'
-done
-jq -r '.models[] | select(.slug | IN("x-ai/grok-4.6",
-  "openrouter/owl-alpha", "x-ai/grok-4.5", "deepseek/deepseek-v4-pro",
-  "deepseek/deepseek-v4-flash-0731", "gpt-5.5")) |
-  [.slug, (.max_output_tokens // "provider default / discovery / retired"),
-    .visibility, .orchestration.status] | @tsv' <(git show "$FIX:codex-rs/models-manager/models.json")
-cd codex-rs
-cargo test -p codex-models-manager --lib manager_tests
-cargo test -p codex-core --lib client_tests
+git show "$FIX:codex-rs/models-manager/models.json" |
+  jq --argjson ids '["x-ai/grok-4.6","openrouter/owl-alpha","x-ai/grok-4.5",
+    "deepseek/deepseek-v4-pro","deepseek/deepseek-v4-flash-0731","gpt-5.5"]' '
+    .models as $models | $ids[] as $id |
+    [$models[] | select(.slug == $id)] |
+    {slug: $id, rows: length, max_output_tokens: .[0].max_output_tokens,
+     visibility: .[0].visibility, allocation: .[0].orchestration.status}'
+run_tests codex-models-manager 'manager::tests::catalogue_issue_128'
+run_tests codex-core 'client::tests::catalogue_issue_128'
 ```
 
-The printed rows require the per-ID disposition and request-capture tests specified above; a non-null number alone is insufficient. Add those regressions during implementation, including saved IDs with discovery off.
+## #129 — DeepSeek output and GLM context limits
 
-## #129 — DeepSeek output and GLM context scope
+**Decision.** Retain and explain the stored ceilings, or raise them after route validation?
 
-**Decision.** Should application limits be raised to match a feed maximum? At [RELEASE catalogue](https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/models-manager/models.json), `deepseek/deepseek-v4.1-flash.max_output_tokens` is 384,000 and `z-ai/glm-5.3-flash.context_window` / `max_context_window` are 1,048,576. The [OpenRouter model feed](https://openrouter.ai/api/v1/models) and [GLM endpoint feed](https://openrouter.ai/api/v1/models/z-ai/glm-5.3-flash/endpoints) distinguish model-wide maxima from routable endpoint limits. On 2026-09-29 14:33 UTC the model feed reported DeepSeek `top_provider.max_completion_tokens` 943,718 and GLM `context_length` 1,310,720; GLM `top_provider.context_length` was 1,048,575. These mutable observations do not identify the endpoint used for a request. The [DeepSeek endpoint feed](https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash/endpoints) also lists providers with limits below 384,000.
+The [RELEASE catalogue][catalogue-release] and [2026-09-25 provider capture][capture] differ as follows (tokens):
 
-**Recommendation.** Retain the conservative 384,000 output and 1,048,576 context application caps until a selected, pinned endpoint and fallback policy have been validated. Even these caps need route checks: a fallback with a smaller limit must be excluded or the request reduced/rejected explicitly. Raise only when request construction, provider acceptance, and fallback coverage support the new cap; keep this OpenRouter GLM route distinct from the native Z.AI route.
+| Route / catalogue field at RELEASE                           |         Stored | Captured provider comparison                                                     |
+| ------------------------------------------------------------ | -------------: | -------------------------------------------------------------------------------- |
+| `deepseek/deepseek-v4.1-flash.max_output_tokens`             |        384,000 | `top_provider.max_completion_tokens`: 393,216                                    |
+| `z-ai/glm-5.3-flash.context_window` and `max_context_window` | 1,048,576 each | Model-wide `context_length`: 1,310,720; `top_provider.context_length`: 1,048,576 |
 
-**Acceptance.**
+The capture includes GLM endpoints both above and below its stored context ceiling. Provider metadata does not prove which endpoint serves a request. As the [RELEASE OpenRouter request type][chat-request] shows, the DeepSeek output value is catalogue metadata, not an enforced OpenRouter request cap.
 
-1. For each [RELEASE catalogue limit](https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/models-manager/models.json), record source, UTC observation, token units, and whether it is an app cap, model-wide maximum, or endpoint capability; explain any retained lower cap. The user-facing description agrees with the chosen policy.
-2. Test prompt tokens + reserved output tokens at the selected endpoint's context boundary: one below, at, and one above. Do the same for the output cap. A request cannot fall back to an endpoint with smaller applicable limits without safe rejection or reduction.
-3. A higher cap requires a recorded successful request on the intended route and equivalent fallback tests; a feed comparison alone does not qualify it.
+**Recommended resolution.** Retain 384,000 and 1,048,576 as documented catalogue ceilings pending route qualification. Explain the lower values as a conservative application policy, without claiming universal endpoint support or enforced output limits. Raise them only after proving the intended request and fallback behavior. Keep the OpenRouter GLM policy separate from native Z.AI.
 
-**Validation (from the implementation repository root):**
+**Acceptance criteria.**
+
+1. Each [RELEASE catalogue field][catalogue-release] has a dated source, token units, explicit scope (catalogue policy, model-wide maximum, or endpoint capability), and rationale. Document the effective wire limit or provider-default behavior; user-visible capacity claims must agree.
+2. Test total serialized prompt + reserved output at one below, exactly at, and one above the applicable context boundary, plus the same output-limit boundaries. Include discovery overlays and a fallback endpoint with smaller limits. Incompatible requests must be rejected or explicitly reduced; the stored number alone is not proof.
+3. A raised ceiling requires recorded request acceptance on the intended route and equivalent fallback checks. A retained ceiling still needs the documented scope and boundary evidence in criteria 1–2.
+
+**Validation.** The metadata guard checks the recommended retained values. Add regressions proving their scope and request/fallback behavior, then run:
 
 ```bash
-set -euo pipefail
-RELEASE=64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39
-FIX=$(git rev-parse HEAD)
-printf 'Checking implementation commit %s\n' "$FIX"
-git show "$RELEASE:codex-rs/models-manager/models.json" |
-  jq '.models[] | select(.slug == "deepseek/deepseek-v4.1-flash" or
-    .slug == "z-ai/glm-5.3-flash") |
-    {slug, context_window, max_context_window, max_output_tokens}'
-jq -e '[.models[] | select(.slug == "deepseek/deepseek-v4.1-flash" or
-  .slug == "z-ai/glm-5.3-flash")] |
-  length == 2 and all(.[]; .context_window > 0 and
-    .max_context_window > 0 and .max_output_tokens > 0)' \
-  <(git show "$FIX:codex-rs/models-manager/models.json")
-date -u '+Feed checked %Y-%m-%d %H:%M:%S UTC'
+git show "$FIX:codex-rs/models-manager/models.json" |
+  jq -e 'def one($slug):
+    [.models[] | select(.slug == $slug)] |
+    if length == 1 then .[0] else error("missing or duplicate row") end;
+    (one("deepseek/deepseek-v4.1-flash").max_output_tokens == 384000) and
+    (one("z-ai/glm-5.3-flash") |
+      .context_window == 1048576 and .max_context_window == 1048576)'
+run_tests codex-models-manager 'manager::tests::catalogue_issue_129'
+run_tests codex-core 'client::tests::catalogue_issue_129'
+```
+
+## Refresh provider evidence
+
+These are read-only metadata queries for #127 and #129. Preserve the raw responses and UTC capture time in implementation evidence. They do not establish request success or a particular routed endpoint.
+
+```bash
+EVIDENCE=$(mktemp -d)
+date -u '+Feed checked %Y-%m-%d %H:%M:%S UTC' | tee "$EVIDENCE/captured-at.txt"
 curl -fsSL 'https://openrouter.ai/api/v1/models' |
-  jq '.data[] | select(.id == "deepseek/deepseek-v4.1-flash" or
-    .id == "z-ai/glm-5.3-flash") | {id, context_length, top_provider}'
+  tee "$EVIDENCE/models.json" |
+  jq '.data[] | select(.id == "x-ai/grok-4.7" or
+    .id == "deepseek/deepseek-v4.1-flash" or .id == "z-ai/glm-5.3-flash") |
+    {id, pricing, context_length, top_provider}'
 for SLUG in deepseek/deepseek-v4.1-flash z-ai/glm-5.3-flash; do
   curl -fsSL "https://openrouter.ai/api/v1/models/$SLUG/endpoints" |
+    tee "$EVIDENCE/$(basename "$SLUG").endpoints.json" |
     jq '.data.endpoints[] | {provider_name, context_length, max_completion_tokens}'
 done
-cd codex-rs
-cargo test -p codex-models-manager --lib manager_tests
-cargo test -p codex-core --lib client_tests
+printf 'Provider captures: %s\n' "$EVIDENCE"
 ```
 
-Record the feed capture time. The local guard only checks positive caps; the implementation PR must add boundary and fallback regressions and capture the selected route's actual request behavior before claiming the higher capacity works.
+[catalogue-main]: https://github.com/CorbanuCore/CorbanuTerminal/blob/c9f358c0a7ece3338d751ad2c3ecf1e091de2b8b/codex-rs/models-manager/models.json
+[catalogue-release]: https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/models-manager/models.json
+[product]: https://github.com/CorbanuCore/CorbanuTerminal/blob/c9f358c0a7ece3338d751ad2c3ecf1e091de2b8b/docs/corbanu-product-spec.md#shipping-mvp--live
+[billing]: https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/protocol/src/openai_models.rs#L358
+[allocator]: https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/core/src/tools/handlers/multi_agents_spec.rs#L1172
+[overlay]: https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/models-manager/src/manager.rs#L452
+[responses-request]: https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/codex-api/src/common.rs#L336
+[chat-request]: https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/codex-api/src/common.rs#L595
+[release-notes]: https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/qa/release/0.1.44/RELEASE_NOTES.md
+[manager-tests]: https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/models-manager/src/manager.rs#L674
+[client-tests]: https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/core/src/client.rs#L5617
+[allocator-tests]: https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/core/src/tools/handlers/multi_agents_spec.rs#L1343
+[manifest]: https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/Cargo.toml
+[toolchain]: https://github.com/CorbanuCore/CorbanuTerminal/blob/64ffe30dd94f986bf5a9e7ccc5e9f25c958d4c39/codex-rs/rust-toolchain.toml
+[capture]: https://gist.githubusercontent.com/GeorgL0ngGamma/9761521d217f71f4f5f00ccd27b2e2ff/raw/dbe4f24c6f4b53fdbfe04a2251b5388c08bbfd6b/corbanu-pr123-evidence.json
