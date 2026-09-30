@@ -3245,6 +3245,18 @@ fn render_empty_state_line(state: &PickerState) -> Line<'static> {
         return vec!["Loading older sessions…".italic().dim()].into();
     }
 
+    // Sessions are recorded against the folder they started in, so a new
+    // working directory (e.g. an SSH login's home) looks empty even when the
+    // user has plenty of sessions elsewhere.
+    if state.filter_mode == SessionFilterMode::Cwd {
+        return vec![
+            "No sessions in this folder. Press ←/→ to show sessions from all folders."
+                .italic()
+                .dim(),
+        ]
+        .into();
+    }
+
     vec!["No sessions yet".italic().dim()].into()
 }
 
@@ -3661,6 +3673,27 @@ mod tests {
         };
 
         assert!(state.row_matches_filter(&row));
+    }
+
+    #[test]
+    fn empty_cwd_filter_points_to_all_folders() {
+        let loader = page_only_loader(|_| {});
+        let mut state = PickerState::new(
+            FrameRequester::test_dummy(),
+            loader,
+            ProviderFilter::Any,
+            /*show_all*/ false,
+            Some(PathBuf::from("/Users/example")),
+            SessionPickerAction::Resume,
+        );
+        let text = |state: &PickerState| render_empty_state_line(state).to_string();
+
+        assert_eq!(
+            text(&state),
+            "No sessions in this folder. Press ←/→ to show sessions from all folders."
+        );
+        state.filter_mode = SessionFilterMode::All;
+        assert_eq!(text(&state), "No sessions yet");
     }
 
     #[test]
