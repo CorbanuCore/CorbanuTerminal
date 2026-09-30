@@ -37,6 +37,7 @@ codex-app-server-client = { workspace = true }
 codex-app-server-protocol = { workspace = true }
 codex-arg0 = { workspace = true }
 codex-install-context = { workspace = true }
+codex-keyring-store = { workspace = true }
 codex-cloud-config = { workspace = true }
 codex-config = { workspace = true }
 codex-connectors = { workspace = true }
@@ -164,7 +165,6 @@ arboard = { workspace = true }
 [dev-dependencies]
 app_test_support = { workspace = true }
 codex-cli = { workspace = true }
-codex-keyring-store = { workspace = true }
 codex-mcp = { workspace = true }
 core_test_support = { workspace = true }
 codex-utils-cargo-bin = { workspace = true }

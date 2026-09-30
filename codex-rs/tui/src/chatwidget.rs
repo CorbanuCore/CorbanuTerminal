@@ -1824,10 +1824,7 @@ impl ChatWidget {
             .model_catalog
             .current_requires_recovery(&self.config.model_provider_id, self.current_model())
         {
-            self.add_error_message(
-                "The current provider is unavailable or inactive. Choose an active provider and model, or repair it in /providers."
-                    .to_string(),
-            );
+            self.add_error_message(provider_model_policy::current_provider_blocked_message());
             return false;
         }
         if self.blocks_direct_input
