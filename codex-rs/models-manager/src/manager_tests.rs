@@ -722,22 +722,109 @@ async fn remote_overlay_keeps_retired_ambient_model_out_of_picker() {
     );
 }
 
+async fn assert_catalogue_issue_128_saved_ids(manager: &dyn ModelsManager) {
+    let presets = manager
+        .list_models(RefreshStrategy::Offline, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
+    let bundled = load_remote_models_from_file().expect("bundled models");
+    for (slug, provider) in [
+        ("x-ai/grok-4.6", "openrouter"),
+        ("openrouter/owl-alpha", "openrouter"),
+        ("x-ai/grok-4.5", "openrouter"),
+        ("deepseek/deepseek-v4-pro", "openrouter"),
+        ("deepseek/deepseek-v4-flash-0731", "openrouter"),
+        ("gpt-5.5", "openai"),
+    ] {
+        let saved = Some(slug.to_string());
+        let selected = manager
+            .get_default_model(
+                &saved,
+                /*allow_provider_model_fallback*/ false,
+                RefreshStrategy::Offline,
+                DEFAULT_HTTP_CLIENT_FACTORY,
+            )
+            .await;
+        let resolved = manager
+            .get_model_info(&selected, &ModelsManagerConfig::default())
+            .await;
+        let original = bundled.iter().find(|model| model.slug == slug).unwrap();
+        let preset = presets.iter().find(|model| model.model == slug).unwrap();
+        assert_eq!(
+            (
+                selected.as_str(),
+                resolved.slug.as_str(),
+                preset.provider_id.as_deref(),
+                preset.show_in_picker,
+                preset.is_default,
+                &resolved.orchestration,
+                resolved.max_output_tokens,
+                resolved.used_fallback_model_metadata,
+            ),
+            (
+                slug,
+                slug,
+                Some(provider),
+                false,
+                false,
+                &original.orchestration,
+                None,
+                false,
+            ),
+            "saved compatibility contract for {slug}"
+        );
+        assert!(matches!(
+            resolved.orchestration,
+            Some(ModelOrchestrationMetadata::Disabled { .. })
+        ));
+    }
+}
+
 #[tokio::test]
-async fn remote_and_cached_overlays_cannot_resurrect_bundled_hidden_models() {
+async fn catalogue_issue_128_saved_ids_without_discovery() {
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = TestModelsEndpoint::without_refresh(Vec::new());
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint.clone());
+    manager
+        .list_models(
+            RefreshStrategy::OnlineIfUncached,
+            DEFAULT_HTTP_CLIENT_FACTORY,
+        )
+        .await;
+    assert_catalogue_issue_128_saved_ids(&manager).await;
+    assert_eq!(endpoint.fetch_count(), 0);
+    assert!(!codex_home.path().join(MODEL_CACHE_FILE).exists());
+}
+
+#[tokio::test]
+async fn catalogue_issue_128_remote_and_cached_overlays_preserve_saved_ids() {
     let retired = load_remote_models_from_file()
         .expect("bundled models")
         .into_iter()
         .filter(|model| model.visibility == ModelVisibility::Hide)
         .collect::<Vec<_>>();
     assert!(!retired.is_empty());
-    let advertised = retired
+    let mut advertised = retired
         .iter()
         .cloned()
         .map(|mut model| {
             model.visibility = ModelVisibility::List;
+            model.orchestration = Some(ModelOrchestrationMetadata::Eligible {
+                provider_id: "unrelated-provider".to_string(),
+                capability: ModelCapabilityTier::Frontier,
+                billing: ModelBilling::AuthDependent {
+                    plan_relative_burn_millis: 1_000,
+                    api_key_input_milli_usd_per_million_tokens: 1,
+                    api_key_output_milli_usd_per_million_tokens: 1,
+                    api_key_cached_input_milli_usd_per_million_tokens: None,
+                },
+            });
             model
         })
         .collect::<Vec<_>>();
+    // A separate discovered model's output limit must not leak into a saved ID.
+    let mut unrelated = remote_model("unrelated-capped-model", "Unrelated", /*priority*/ 0);
+    unrelated.max_output_tokens = Some(8_192);
+    advertised.push(unrelated);
     let codex_home = tempdir().expect("temp dir");
     let manager = openai_manager_for_tests(
         codex_home.path().to_path_buf(),
@@ -746,8 +833,11 @@ async fn remote_and_cached_overlays_cannot_resurrect_bundled_hidden_models() {
     let online = manager
         .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
         .await;
-    let cached_endpoint = TestModelsEndpoint::new(Vec::new());
-    let cached = openai_manager_for_tests(codex_home.path().to_path_buf(), cached_endpoint.clone())
+    assert_catalogue_issue_128_saved_ids(&manager).await;
+    let cached_endpoint = TestModelsEndpoint::new(vec![Vec::new()]);
+    let cached_manager =
+        openai_manager_for_tests(codex_home.path().to_path_buf(), cached_endpoint.clone());
+    let cached = cached_manager
         .list_models(
             RefreshStrategy::OnlineIfUncached,
             DEFAULT_HTTP_CLIENT_FACTORY,
@@ -755,6 +845,7 @@ async fn remote_and_cached_overlays_cannot_resurrect_bundled_hidden_models() {
         .await;
     assert_eq!(cached, online);
     assert_eq!(cached_endpoint.fetch_count(), 0);
+    assert_catalogue_issue_128_saved_ids(&cached_manager).await;
     for retired_model in retired {
         let preset = online
             .iter()
@@ -767,6 +858,36 @@ async fn remote_and_cached_overlays_cannot_resurrect_bundled_hidden_models() {
         assert_eq!(explicit.slug, retired_model.slug);
         assert!(!explicit.used_fallback_model_metadata);
     }
+
+    // Expire the actual persisted cache, then simulate discovery omitting the
+    // retained IDs. Refetch must still resolve every saved ID from the bundle.
+    cached_manager
+        .cache_manager
+        .as_ref()
+        .unwrap()
+        .manipulate_cache_for_test(|fetched_at| {
+            *fetched_at = Utc::now() - chrono::Duration::hours(1);
+        })
+        .await
+        .expect("expire cache");
+    let refreshed_manager =
+        openai_manager_for_tests(codex_home.path().to_path_buf(), cached_endpoint.clone());
+    refreshed_manager
+        .list_models(
+            RefreshStrategy::OnlineIfUncached,
+            DEFAULT_HTTP_CLIENT_FACTORY,
+        )
+        .await;
+    assert_eq!(cached_endpoint.fetch_count(), 1);
+    assert_catalogue_issue_128_saved_ids(&refreshed_manager).await;
+    assert!(
+        refreshed_manager
+            .get_remote_models()
+            .await
+            .iter()
+            .all(|model| model.slug != "unrelated-capped-model"),
+        "expired discovery records must not survive the empty refresh"
+    );
 }
 
 #[tokio::test]

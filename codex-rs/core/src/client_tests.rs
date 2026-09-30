@@ -1290,6 +1290,123 @@ fn test_model_info() -> ModelInfo {
     .expect("deserialize test model info")
 }
 
+#[tokio::test]
+async fn catalogue_issue_128_saved_id_wire_requests_omit_output_limits() {
+    use codex_models_manager::ModelsManagerConfig;
+    use codex_models_manager::manager::ModelsManager;
+    use codex_models_manager::manager::RefreshStrategy;
+    use codex_models_manager::manager::StaticModelsManager;
+    use codex_protocol::openai_models::ModelOrchestrationMetadata;
+
+    let manager = StaticModelsManager::new(
+        /*auth_manager*/ None,
+        codex_models_manager::bundled_models_response().expect("bundled catalog"),
+    );
+    for (slug, provider_id) in [
+        ("x-ai/grok-4.6", "openrouter"),
+        ("openrouter/owl-alpha", "openrouter"),
+        ("x-ai/grok-4.5", "openrouter"),
+        ("deepseek/deepseek-v4-pro", "openrouter"),
+        ("deepseek/deepseek-v4-flash-0731", "openrouter"),
+        ("gpt-5.5", "openai"),
+    ] {
+        let saved = Some(slug.to_string());
+        let selected = manager
+            .get_default_model(
+                &saved,
+                /*allow_provider_model_fallback*/ false,
+                RefreshStrategy::Offline,
+                HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),
+            )
+            .await;
+        let mut model = manager
+            .get_model_info(&selected, &ModelsManagerConfig::default())
+            .await;
+        assert_eq!(
+            (
+                selected.as_str(),
+                model
+                    .orchestration
+                    .as_ref()
+                    .map(ModelOrchestrationMetadata::provider_id),
+                model.used_fallback_model_metadata,
+            ),
+            (slug, Some(provider_id), false)
+        );
+        let provider = if provider_id == "openai" {
+            ModelProviderInfo::create_openai_provider(/*base_url*/ None)
+        } else {
+            ModelProviderInfo::create_openrouter_provider()
+        };
+        let client = test_model_client(SessionSource::Cli).for_provider(&provider);
+        let prompt = Prompt {
+            base_instructions: BaseInstructions {
+                text: "Compatibility contract fixture".to_string(),
+            },
+            input: vec![ResponseItem::Message {
+                id: None,
+                role: "user".to_string(),
+                content: vec![ContentItem::InputText {
+                    text: "Keep this saved model identity".to_string(),
+                }],
+                phase: None,
+                internal_chat_message_metadata_passthrough: None,
+            }],
+            ..Default::default()
+        };
+        let metadata = test_responses_metadata_for_client(
+            &client,
+            /*turn_id*/ None,
+            format!("{}:0", client.state.thread_id),
+            /*parent_thread_id*/ None,
+            TestCodexResponsesRequestKind::Turn,
+        );
+        let mut baseline = None;
+        // Discovery metadata is not a wire output budget on either route. Even
+        // zero or a positive catalogue limit must not introduce a request cap.
+        for output_metadata in [None, Some(0), Some(8_192)] {
+            model.max_output_tokens = output_metadata;
+            let encoded = if provider_id == "openai" {
+                assert_eq!(provider.wire_api, WireApi::Responses);
+                let api_provider = provider.to_api_provider(/*auth_mode*/ None).unwrap();
+                let request = client
+                    .build_responses_request(
+                        &api_provider,
+                        &prompt,
+                        &model,
+                        /*effort*/ None,
+                        super::ReasoningSummaryConfig::None,
+                        /*service_tier*/ None,
+                        &metadata,
+                    )
+                    .expect("saved OpenAI Responses request");
+                serde_json::to_vec(&request).expect("serialize Responses request")
+            } else {
+                assert_eq!(provider.wire_api, WireApi::Chat);
+                let request = client
+                    .build_chat_completions_request(
+                        &prompt, &model, /*effort*/ None, &metadata,
+                    )
+                    .expect("saved OpenRouter Chat Completions request");
+                serde_json::to_vec(&request).expect("serialize Chat Completions request")
+            };
+            let body: serde_json::Value = serde_json::from_slice(&encoded).expect("request JSON");
+            assert_eq!(body["model"], slug);
+            for field in ["max_tokens", "max_completion_tokens", "max_output_tokens"] {
+                assert!(
+                    body.get(field).is_none(),
+                    "{slug} unexpectedly serialized {field} from {output_metadata:?}"
+                );
+            }
+            if let Some(expected) = &baseline {
+                assert_eq!(&body, expected, "output metadata changed {slug}'s request");
+            } else {
+                baseline = Some(body);
+            }
+        }
+    }
+}
+
 #[test]
 fn corbanu_flash_request_omits_parallel_control_with_function_tools() {
     let model = codex_models_manager::bundled_models_response()
