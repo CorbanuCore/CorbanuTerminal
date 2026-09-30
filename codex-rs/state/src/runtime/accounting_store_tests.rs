@@ -2103,3 +2103,61 @@ async fn inactive_activation_and_installed_native_delete_failures_are_retryable(
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn request_writes_validate_the_whole_ledger_hourly_and_when_retention_is_due()
+-> anyhow::Result<()> {
+    const HOUR: i64 = 3_600_000;
+    const DETAIL: i64 = 90 * 86_400_000;
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let store = AccountingStore::open(&runtime, 0).await?;
+    for attempt in [attempt(1), attempt(2)] {
+        store.admit(attempt.thread_id, &attempt, &[], 0).await?;
+    }
+    let checkpoint = || async {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT completed_as_of_ms FROM draft_accounting_retention_checkpoint",
+        )
+        .fetch_one(runtime.pool.as_ref())
+        .await
+    };
+    let set_payload = |payload: String| {
+        sqlx::query("UPDATE draft_accounting_attempts SET payload = ? WHERE attempt_id = ?")
+            .bind(payload)
+            .bind(Uuid::from_u128(2).to_string())
+            .execute(runtime.pool.as_ref())
+    };
+    let original: String =
+        sqlx::query_scalar("SELECT payload FROM draft_accounting_attempts WHERE attempt_id = ?")
+            .bind(Uuid::from_u128(2).to_string())
+            .fetch_one(runtime.pool.as_ref())
+            .await?;
+
+    // Corruption of another attempt is invisible to later writes in the same hour,
+    // which only advance the checkpoint, but explicit maintenance still rejects it.
+    set_payload("{}".to_owned()).await?;
+    AccountingStore::open(&runtime, HOUR - 1).await?;
+    assert_eq!(checkpoint().await?, HOUR - 1);
+    assert!(store.maintain(HOUR - 1).await.is_err());
+    // The first write of the next hour runs the full sweep and fails visibly.
+    assert!(AccountingStore::open(&runtime, HOUR).await.is_err());
+    assert_eq!(checkpoint().await?, HOUR - 1);
+    set_payload(original).await?;
+    AccountingStore::open(&runtime, HOUR).await?;
+    assert_eq!(checkpoint().await?, HOUR);
+
+    // Detail that aged out before this hour began forces the sweep mid-hour.
+    sqlx::query("UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = ?")
+        .bind(DETAIL + 10)
+        .execute(runtime.pool.as_ref())
+        .await?;
+    AccountingStore::open(&runtime, DETAIL + 20).await?;
+    let raw: i64 = sqlx::query_scalar("SELECT count(*) FROM draft_accounting_attempts")
+        .fetch_one(runtime.pool.as_ref())
+        .await?;
+    assert_eq!((raw, checkpoint().await?), (0, DETAIL + 20));
+    runtime.close().await;
+    Ok(())
+}

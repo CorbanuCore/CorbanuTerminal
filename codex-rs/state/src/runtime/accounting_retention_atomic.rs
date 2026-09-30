@@ -14,11 +14,29 @@ impl Journal<'_> {
         read_retained_on_connection(conn, thread, day, as_of_ms).await
     }
 
+    /// Check one day's exact aggregate after a write without re-reading the whole ledger.
+    pub(in crate::runtime::accounting) async fn check_day_on_connection(
+        conn: &mut SqliteConnection,
+        thread: ThreadId,
+        day: i64,
+        as_of_ms: i64,
+    ) -> anyhow::Result<()> {
+        check_day_on_connection(conn, thread, day, as_of_ms).await
+    }
+
     pub(in crate::runtime::accounting) async fn maintain_native_on_connection(
         conn: &mut SqliteConnection,
         as_of_ms: i64,
     ) -> anyhow::Result<()> {
         maintain_on_connection(conn, as_of_ms).await
+    }
+
+    /// Maintenance on the per-request write path; see `maintain_for_write_on_connection`.
+    pub(in crate::runtime::accounting) async fn maintain_for_write_on_connection(
+        conn: &mut SqliteConnection,
+        as_of_ms: i64,
+    ) -> anyhow::Result<()> {
+        maintain_for_write_on_connection(conn, as_of_ms).await
     }
 
     pub(in crate::runtime::accounting) async fn delete_native_on_connection(
@@ -135,6 +153,111 @@ async fn maintain_on_connection(conn: &mut SqliteConnection, as_of_ms: i64) -> a
     let updated = sqlx::query("UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = ?, admission_active = 1 WHERE singleton = 1")
         .bind(as_of_ms).execute(conn).await?;
     ensure!(updated.rows_affected() == 1, "missing checkpoint update");
+    Ok(())
+}
+
+const FULL_SWEEP_INTERVAL_MS: i64 = 60 * 60 * 1000;
+
+/// Caller holds BEGIN IMMEDIATE. Every request writes here several times, while
+/// the full sweep reads, validates and prices every retained attempt under the
+/// write lock. On a large ledger that holds the lock for seconds and starves the
+/// session's other writers and any other Corbanu process sharing the state DB.
+///
+/// Run the full sweep on the first write of each UTC hour, or whenever anything
+/// aged out before this hour began. Otherwise, the hour's full sweep has already
+/// validated the ledger and applied every earlier expiry, so only the checkpoint
+/// advances. Detail that ages out mid-hour is retired by the next hour's sweep;
+/// inspection reports that span as checkpoint lag in the meantime.
+async fn maintain_for_write_on_connection(
+    conn: &mut SqliteConnection,
+    as_of_ms: i64,
+) -> anyhow::Result<()> {
+    let hour_start = as_of_ms - as_of_ms.rem_euclid(FULL_SWEEP_INTERVAL_MS);
+    if let RetentionFixture::Active(checkpoint) = retention_fixture_on_connection(conn).await?
+        && (hour_start..=as_of_ms).contains(&checkpoint)
+        && !retention_due_on_connection(conn, hour_start).await?
+    {
+        let updated = sqlx::query(
+            "UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = ? WHERE singleton = 1",
+        )
+        .bind(as_of_ms)
+        .execute(conn)
+        .await?;
+        ensure!(updated.rows_affected() == 1, "missing checkpoint update");
+        return Ok(());
+    }
+    maintain_on_connection(conn, as_of_ms).await
+}
+
+/// Whether a full sweep at `as_of_ms` would expire raw detail, a compact day or a tombstone.
+async fn retention_due_on_connection(
+    conn: &mut SqliteConnection,
+    as_of_ms: i64,
+) -> anyhow::Result<bool> {
+    Ok(sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM draft_accounting_attempts
+                WHERE json_extract(payload, '$.dispatched_at_ms') + ? <= ?)
+            OR EXISTS(SELECT 1 FROM draft_accounting_compact_days WHERE utc_day * ? + ? <= ?)
+            OR EXISTS(SELECT 1 FROM draft_accounting_tombstones WHERE expires_at_ms <= ?)",
+    )
+    .bind(DETAIL_MS)
+    .bind(as_of_ms)
+    .bind(DAY_MS)
+    .bind(REPLAY_MS)
+    .bind(as_of_ms)
+    .bind(as_of_ms)
+    .fetch_one(conn)
+    .await?)
+}
+
+/// Caller holds the write transaction and has just maintained retention at `as_of_ms`.
+/// Sums the compact and raw evidence a retained read of this day would, so an
+/// aggregate that overflows exact storage still rejects the write before commit.
+async fn check_day_on_connection(
+    conn: &mut SqliteConnection,
+    thread: ThreadId,
+    day: i64,
+    as_of_ms: i64,
+) -> anyhow::Result<()> {
+    let ((thread_key, _), _) = day_key(thread.to_string(), day, as_of_ms)?;
+    let start = day * DAY_MS;
+    let end = start.checked_add(DAY_MS).context("day end overflow")?;
+    let mut values = CompactValues::from_day_totals(&DayTotals::default())?;
+    let compact: Option<String> = sqlx::query_scalar(
+        "SELECT payload FROM draft_accounting_compact_days WHERE thread_id = ? AND utc_day = ?",
+    )
+    .bind(&thread_key)
+    .bind(day)
+    .fetch_optional(&mut *conn)
+    .await?;
+    if let Some(payload) = compact {
+        values = values.checked_add(&CompactValues::decode(&payload)?)?;
+    }
+    let ids: Vec<String> = sqlx::query_scalar(
+        "SELECT attempt_id FROM draft_accounting_attempts
+            WHERE json_extract(payload, '$.thread_id') = ?
+              AND json_extract(payload, '$.dispatched_at_ms') >= ?
+              AND json_extract(payload, '$.dispatched_at_ms') < ?
+            ORDER BY attempt_id",
+    )
+    .bind(&thread_key)
+    .bind(start)
+    .bind(end)
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut totals = DayTotals::default();
+    for id in ids {
+        let quote = EstimateStore::latest_quote_on_connection(conn, attempt_key(&id)?).await?;
+        ensure!(
+            quote.attempt.thread_id == thread
+                && i64::from(quote.attempt.dispatched_at_ms) / DAY_MS == day,
+            "attempt payload does not match its day"
+        );
+        totals.add(&quote)?;
+    }
+    values
+        .checked_add(&CompactValues::from_day_totals(&totals)?)?
+        .to_day_totals()?;
     Ok(())
 }
 

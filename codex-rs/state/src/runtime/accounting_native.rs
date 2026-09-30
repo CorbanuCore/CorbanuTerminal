@@ -40,7 +40,7 @@ impl Journal<'_> {
         );
         // Validate the resulting raw + compact day before committing any new evidence.
         // Individual quotes can fit while their aggregate overflows exact storage.
-        Self::retained_day_on_connection(
+        Self::check_day_on_connection(
             conn,
             owner,
             i64::from(attempt.dispatched_at_ms) / 86_400_000,
@@ -84,7 +84,7 @@ impl Journal<'_> {
             .fetch_one(&mut *conn)
             .await?;
         ensure!(exists, "native owner missing");
-        Self::maintain_native_on_connection(conn, as_of_ms).await?;
+        Self::maintain_for_write_on_connection(conn, as_of_ms).await?;
         Self::append_on_connection(conn, attempt, batch).await
     }
 }

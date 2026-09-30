@@ -299,7 +299,7 @@ impl<'a> AccountingStore<'a> {
             }
         }
         let store = Self { runtime };
-        store.maintain(as_of_ms).await?;
+        store.maintain_for_write(as_of_ms).await?;
         Ok(store)
     }
 
@@ -364,6 +364,24 @@ impl<'a> AccountingStore<'a> {
         let result = async {
             validate_on_connection(&mut tx).await?;
             Journal::maintain_native_on_connection(&mut tx, as_of_ms).await
+        }
+        .await;
+        match result {
+            Ok(()) => tx.commit().await?,
+            Err(error) => {
+                tx.rollback().await?;
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
+    /// Opening precedes every request write; keep its lock hold short.
+    async fn maintain_for_write(&self, as_of_ms: i64) -> anyhow::Result<()> {
+        let mut tx = self.runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let result = async {
+            validate_on_connection(&mut tx).await?;
+            Journal::maintain_for_write_on_connection(&mut tx, as_of_ms).await
         }
         .await;
         match result {
