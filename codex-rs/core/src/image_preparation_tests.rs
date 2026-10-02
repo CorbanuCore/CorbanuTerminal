@@ -71,6 +71,10 @@ fn preparation_preserves_small_image_bytes_and_replaces_remote_urls() {
 fn detail_policies_apply_the_expected_budgets() {
     for (detail, input_dimensions, expected_dimensions) in [
         (Some(ImageDetail::High), (2048, 2048), (1600, 1600)),
+        // A wide screenshot fits the patch budget but must stay within the
+        // 2000 px Anthropic applies to requests with more than 20 images.
+        (Some(ImageDetail::High), (2400, 1000), (2000, 833)),
+        (None, (2048, 1000), (2000, 977)),
         (Some(ImageDetail::Original), (6401, 100), (6000, 94)),
         (Some(ImageDetail::Original), (3201, 3201), (3200, 3200)),
         (Some(ImageDetail::Auto), (2048, 2048), (1600, 1600)),

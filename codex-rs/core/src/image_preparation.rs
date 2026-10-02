@@ -16,8 +16,11 @@ const UNSUPPORTED_LOW_DETAIL_PLACEHOLDER: &str = "image content omitted because 
 const REMOTE_IMAGE_URL_PLACEHOLDER: &str =
     "image content omitted because remote image URLs are not supported";
 
+/// Anthropic rejects images over 2000 px on either side in requests carrying
+/// more than 20 images, which long agent sessions routinely do. Anthropic
+/// downsamples anything over 1568 px anyway, so this costs no detail.
 const HIGH_DETAIL_LIMITS: PromptImageResizeLimits = PromptImageResizeLimits {
-    max_dimension: 2048,
+    max_dimension: 2_000,
     max_patches: 2_500,
 };
 const ORIGINAL_DETAIL_LIMITS: PromptImageResizeLimits = PromptImageResizeLimits {
