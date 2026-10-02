@@ -3698,20 +3698,45 @@ fn chat_model_supports_vercel_cache_control(model_slug: &str) -> bool {
     model_slug.starts_with("anthropic/") || model_slug.starts_with("minimax/")
 }
 
+/// Rolling conversation breakpoints for explicit prompt caching.
+const CHAT_CACHE_ROLLING_BREAKPOINTS: usize = 2;
+
 fn apply_chat_cache_control(messages: &mut [ChatMessage]) {
     if let Some(system_message) = messages.iter_mut().find(|message| message.role == "system") {
         mark_chat_message_cache_control(system_message);
     }
 
-    let mut marked_user_messages = 0usize;
-    for index in (0..messages.len()).rev() {
-        if messages[index].role == "user" {
-            mark_chat_message_cache_control(&mut messages[index]);
-            marked_user_messages += 1;
-            if marked_user_messages >= 2 {
-                break;
-            }
+    // The breakpoints must follow the newest turn. An agent loop grows the
+    // transcript with assistant tool calls and `tool` results, not new user
+    // messages, so anchoring on user messages froze the cached prefix at the
+    // first request and re-billed every later turn at the uncached rate.
+    let mut marked = 0usize;
+    for message in messages.iter_mut().rev() {
+        if marked >= CHAT_CACHE_ROLLING_BREAKPOINTS {
+            break;
         }
+        if message.role != "system"
+            && chat_message_has_cacheable_text(message)
+            && mark_chat_message_cache_control(message)
+        {
+            marked += 1;
+        }
+    }
+}
+
+/// Anthropic rejects cache breakpoints on empty text blocks, and a
+/// tool-call-only assistant message has no text to mark.
+fn chat_message_has_cacheable_text(message: &ChatMessage) -> bool {
+    match &message.content {
+        Some(ChatMessageContent::Text(text)) => !text.trim().is_empty(),
+        Some(ChatMessageContent::Parts(parts)) => parts.iter().any(|part| {
+            part.kind == "text"
+                && part
+                    .text
+                    .as_deref()
+                    .is_some_and(|text| !text.trim().is_empty())
+        }),
+        None => false,
     }
 }
 
