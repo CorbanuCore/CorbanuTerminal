@@ -13,6 +13,7 @@ use codex_protocol::ThreadId;
 use codex_protocol::error::CodexErr;
 use codex_state::StateRuntime;
 use codex_state::accounting::AccountingStore;
+use codex_state::accounting::AsOf;
 use codex_state::accounting::Attempt;
 use codex_state::accounting::Dialect;
 use codex_state::accounting::Observation;
@@ -714,7 +715,7 @@ impl Sampling {
             .acquire()
             .await
             .map_err(|_| CodexErr::Fatal(FAILURE.into()))?;
-        AccountingStore::open(&runtime, now())
+        AccountingStore::open(&runtime, AsOf::Now)
             .await
             .map_err(|_| CodexErr::Fatal(FAILURE.into()))?;
         Ok(Arc::new(Self {
@@ -775,7 +776,7 @@ impl Sampling {
         })?;
         // The facade borrows its runtime. Reopening validates/maintains through
         // its public contract; never fabricate an attached or Active handle.
-        let store = AccountingStore::open(&self.runtime, now()).await?;
+        let store = AccountingStore::open(&self.runtime, AsOf::Now).await?;
         let dispatched_at = now();
         let attempt = Attempt {
             attempt_id: Uuid::new_v4(),
@@ -804,7 +805,7 @@ impl Sampling {
                 prices::chat_original(model, &self.provider, self.scope, dispatched_at)?
             }
         };
-        store.admit(self.owner, &attempt, &prices, now()).await?;
+        store.admit(self.owner, &attempt, &prices, AsOf::Now).await?;
         *self.previous.lock().map_err(|_| {
             self.reject();
             anyhow::anyhow!(FAILURE)
@@ -858,9 +859,9 @@ impl Sampling {
             sampling: self,
             complete: false,
         };
-        let store = AccountingStore::open(&self.runtime, now()).await?;
+        let store = AccountingStore::open(&self.runtime, AsOf::Now).await?;
         store
-            .observe(self.owner, attempt, &[observation], now())
+            .observe(self.owner, attempt, &[observation], AsOf::Now)
             .await?;
         completion.complete = true;
         Ok(())

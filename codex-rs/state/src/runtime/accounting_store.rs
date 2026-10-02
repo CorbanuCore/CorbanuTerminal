@@ -197,6 +197,34 @@ pub struct AccountingStore<'a> {
     runtime: &'a StateRuntime,
 }
 
+/// The time a write is recorded as of.
+///
+/// Several Corbanu processes can share one home. A time read before waiting for
+/// the write lock can fall behind a checkpoint another process commits during
+/// the wait, and the store rejects backward time. `Now` is read only once the
+/// write lock is held, so it cannot. `At` keeps an explicit time, which tests
+/// and imports need; a backward explicit time is still rejected.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AsOf {
+    At(i64),
+    Now,
+}
+
+impl AsOf {
+    fn sample(self) -> i64 {
+        match self {
+            Self::At(as_of_ms) => as_of_ms,
+            Self::Now => chrono::Utc::now().timestamp_millis(),
+        }
+    }
+}
+
+impl From<i64> for AsOf {
+    fn from(as_of_ms: i64) -> Self {
+        Self::At(as_of_ms)
+    }
+}
+
 impl<'a> AccountingStore<'a> {
     /// Inspect an existing ledger in one read transaction, without installation,
     /// maintenance, repricing or repair. All times are UTC milliseconds/days.
@@ -288,8 +316,11 @@ impl<'a> AccountingStore<'a> {
 
     /// Install only when wholly absent, otherwise validate without schema repair.
     /// Activation is a real complete retention sweep, never a fabricated checkpoint.
-    pub async fn open(runtime: &'a StateRuntime, as_of_ms: i64) -> anyhow::Result<Self> {
-        ensure!(as_of_ms >= 0, "negative accounting time");
+    pub async fn open(runtime: &'a StateRuntime, as_of: impl Into<AsOf>) -> anyhow::Result<Self> {
+        let as_of = as_of.into();
+        if let AsOf::At(as_of_ms) = as_of {
+            ensure!(as_of_ms >= 0, "negative accounting time");
+        }
         let mut tx = runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
         match install_on_connection(&mut tx).await {
             Ok(()) => tx.commit().await?,
@@ -299,7 +330,7 @@ impl<'a> AccountingStore<'a> {
             }
         }
         let store = Self { runtime };
-        store.maintain_for_write(as_of_ms).await?;
+        store.maintain_for_write(as_of).await?;
         Ok(store)
     }
 
@@ -310,9 +341,9 @@ impl<'a> AccountingStore<'a> {
         owner: ThreadId,
         attempt: &Attempt,
         original_prices: &[Snapshot],
-        as_of_ms: i64,
+        as_of: impl Into<AsOf>,
     ) -> anyhow::Result<ObservationQuote> {
-        self.write(owner, attempt, &[], Some(original_prices), as_of_ms)
+        self.write(owner, attempt, &[], Some(original_prices), as_of.into())
             .await
     }
 
@@ -323,9 +354,9 @@ impl<'a> AccountingStore<'a> {
         owner: ThreadId,
         attempt: &Attempt,
         observations: &[Observation],
-        as_of_ms: i64,
+        as_of: impl Into<AsOf>,
     ) -> anyhow::Result<ObservationQuote> {
-        self.write(owner, attempt, observations, None, as_of_ms)
+        self.write(owner, attempt, observations, None, as_of.into())
             .await
     }
 
@@ -335,9 +366,10 @@ impl<'a> AccountingStore<'a> {
         attempt: &Attempt,
         observations: &[Observation],
         original_prices: Option<&[Snapshot]>,
-        as_of_ms: i64,
+        as_of: AsOf,
     ) -> anyhow::Result<ObservationQuote> {
         let mut tx = self.runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let as_of_ms = as_of.sample();
         let result = Journal::store_on_connection(
             &mut tx,
             owner,
@@ -377,8 +409,9 @@ impl<'a> AccountingStore<'a> {
     }
 
     /// Opening precedes every request write; keep its lock hold short.
-    async fn maintain_for_write(&self, as_of_ms: i64) -> anyhow::Result<()> {
+    async fn maintain_for_write(&self, as_of: AsOf) -> anyhow::Result<()> {
         let mut tx = self.runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let as_of_ms = as_of.sample();
         let result = async {
             validate_on_connection(&mut tx).await?;
             Journal::maintain_for_write_on_connection(&mut tx, as_of_ms).await

@@ -2161,3 +2161,40 @@ async fn request_writes_validate_the_whole_ledger_hourly_and_when_retention_is_d
     runtime.close().await;
     Ok(())
 }
+
+#[tokio::test]
+async fn writes_read_their_clock_after_another_process_advanced_the_checkpoint()
+-> anyhow::Result<()> {
+    // Another process committed a checkpoint while this one waited for the write
+    // lock holding a clock reading from before it.
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let committed = chrono::Utc::now().timestamp_millis();
+    let store = AccountingStore::open(&runtime, committed).await?;
+    let stale = committed - 1;
+    marker(
+        AccountingStore::open(&runtime, stale)
+            .await
+            .err()
+            .expect("stale time"),
+        "backward",
+    );
+    // Reading the clock under the lock cannot fall behind a committed checkpoint.
+    let mut a = serde_json::to_value(attempt(1))?;
+    a["dispatched_at_ms"] = json!(committed);
+    let a: Attempt = serde_json::from_value(a)?;
+    AccountingStore::open(&runtime, AsOf::Now).await?;
+    store.admit(a.thread_id, &a, &[], AsOf::Now).await?;
+    store.observe(a.thread_id, &a, &[row(1)], AsOf::Now).await?;
+    let checkpoint: i64 =
+        sqlx::query_scalar("SELECT completed_as_of_ms FROM draft_accounting_retention_checkpoint")
+            .fetch_one(runtime.pool.as_ref())
+            .await?;
+    assert!(
+        checkpoint >= committed,
+        "the checkpoint never moves backward"
+    );
+    runtime.close().await;
+    Ok(())
+}
