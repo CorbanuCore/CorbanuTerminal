@@ -520,7 +520,10 @@ async fn accounting_inspect_single_snapshot_concurrent_writer() -> anyhow::Resul
     let a = attempt(1);
     let store = AccountingStore::open(&runtime, 0).await?;
     store.admit(a.thread_id, &a, &[snapshot()], 0).await?;
-    let before = inspected(&runtime, 0, 0).await?;
+    let mut before = inspection(inspected(&runtime, 0, 0).await?);
+    // The single-owner journal read does not read other conversations.
+    assert_eq!(before.other_conversations.take(), Some(Default::default()));
+    let before = InspectionDay::Ready(before);
     // Establish the same read snapshot as inspect_day before releasing the writer.
     let mut tx = runtime.pool.begin().await?;
     validate_on_connection(&mut tx).await?;
@@ -734,6 +737,65 @@ async fn accounting_inspect_unknown_unavailable_preserves_root() -> anyhow::Resu
         InspectionDay::Ready(expected)
     );
     assert_eq!(rows(&runtime).await?, before);
+    runtime.close().await;
+    Ok(())
+}
+
+// acct-scope-62: an empty or partial root must not read as the whole day. The
+// unrelated root (thread 11) is read beside the tree, never into its totals.
+#[tokio::test]
+async fn accounting_inspect_other_conversations_are_read_beside_the_tree() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    tree_fixture(&runtime).await?;
+    let other = ThreadId::from_string(&Uuid::from_u128(11).to_string())?;
+    let alone = inspection(AccountingStore::inspect_day(&runtime, other, 0, 0).await?);
+    assert_eq!(alone.totals.known_usd, "0.000005".to_owned().try_into()?);
+    let view = inspection(inspected(&runtime, 0, 0).await?);
+    assert_eq!(
+        view.other_conversations,
+        Some(OtherConversations {
+            conversations: 1,
+            unavailable: 0,
+            requests: alone.requests,
+        })
+    );
+    assert_eq!(
+        (view.totals.attempts, view.totals.known_usd),
+        (3, "0.000006".to_owned().try_into()?)
+    );
+
+    // An unreadable other conversation is counted as unread; the root is unchanged.
+    let mut expected = view;
+    expected.other_conversations = Some(OtherConversations {
+        conversations: 1,
+        unavailable: 1,
+        requests: Default::default(),
+    });
+    sqlx::query("DELETE FROM draft_accounting_contributions WHERE attempt_id = ?")
+        .bind(Uuid::from_u128(5).to_string())
+        .execute(runtime.pool.as_ref())
+        .await?;
+    let before = rows(&runtime).await?;
+    assert_eq!(
+        inspected(&runtime, 0, 0).await?,
+        InspectionDay::Ready(expected)
+    );
+    assert_eq!(rows(&runtime).await?, before);
+    runtime.close().await;
+    Ok(())
+}
+
+// Range buckets do not read other conversations, and say so with `None`.
+#[tokio::test]
+async fn accounting_inspect_range_days_do_not_read_other_conversations() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    tree_fixture(&runtime).await?;
+    let mut buckets =
+        range_buckets(range_read(&runtime, 0, 86_400_000, InspectionGrouping::Day, 0).await?);
+    let view = inspection(buckets.remove(0).days.remove(0));
+    assert_eq!((view.totals.attempts, view.other_conversations), (3, None));
     runtime.close().await;
     Ok(())
 }

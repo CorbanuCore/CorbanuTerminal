@@ -349,7 +349,19 @@ async fn accounting_inspect_small_day_on_busy_host() -> anyhow::Result<()> {
     let a = attempt(1, 0)?;
     native(&runtime, a.thread_id).await?;
     unrelated_population(&runtime, 12_001).await?;
-    let view = ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?);
+    let mut view = ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?);
+    // All 600 other conversations are counted even though the work budget
+    // cannot read every one; the unread ones are stated, never zeroed.
+    let others = view
+        .other_conversations
+        .take()
+        .expect("day reads other conversations");
+    assert_eq!(others.conversations, 600);
+    assert!(
+        others.unavailable > 0 && others.unavailable < 600,
+        "{}",
+        others.unavailable
+    );
     assert_eq!(
         view.totals,
         DayTotals::from_quotes(view.requests.values().flatten())?
@@ -388,6 +400,7 @@ async fn accounting_inspect_small_day_on_busy_host() -> anyhow::Result<()> {
     let InspectionDay::Ready(bucket_view) = &buckets[0].days[0] else {
         panic!("{buckets:?}")
     };
+    // Range buckets do not read other conversations.
     assert_eq!(bucket_view, &view);
     // The unrelated attempt's observation cap must not become the owner's cap.
     let mut other = view.requests[&a.request_id][0].clone();
@@ -425,10 +438,14 @@ async fn accounting_inspect_small_day_on_busy_host() -> anyhow::Result<()> {
         .execute(&mut conn)
         .await?;
     sqlx::query("COMMIT").execute(&mut conn).await?;
-    assert_eq!(
-        AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?,
-        InspectionDay::Ready(view)
-    );
+    let mut after = ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?);
+    // An oversized other conversation is at most unread, never this day's failure.
+    let after_others = after
+        .other_conversations
+        .take()
+        .expect("day reads other conversations");
+    assert_eq!(after_others.conversations, others.conversations);
+    assert_eq!(after, view);
     assert_eq!(
         AccountingStore::inspect_day(&runtime, other.attempt.thread_id, 0, 0).await?,
         InspectionDay::TooLarge
@@ -502,8 +519,11 @@ async fn accounting_inspect_work_budget_spans_range_buckets() -> anyhow::Result<
     // Each day and the ordinary three-day grouping must remain Ready.
     let mut days = Vec::new();
     for day in 0..3 {
-        let view = ready(AccountingStore::inspect_day(&runtime, a.thread_id, day, 3 * DAY).await?);
+        let mut view =
+            ready(AccountingStore::inspect_day(&runtime, a.thread_id, day, 3 * DAY).await?);
         assert_eq!(view.totals.attempts, i64::from(day == 0));
+        // Range buckets do not read other conversations; the day view does.
+        assert!(view.other_conversations.take().is_some());
         days.push(InspectionDay::Ready(view));
     }
     let range = AccountingStore::inspect_range(

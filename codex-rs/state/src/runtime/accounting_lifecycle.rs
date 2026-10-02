@@ -595,6 +595,7 @@ impl Journal<'_> {
             unknown_parent_totals: DayTotals::default(),
             unknown_parent_unavailable_threads: 0,
             unknown_parent_requests: BTreeMap::new(),
+            other_conversations: None,
             totals,
             requests,
         }))

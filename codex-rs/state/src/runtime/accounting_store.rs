@@ -28,6 +28,10 @@ pub use super::types::Observation;
 pub use super::types::Patch;
 pub use super::types::Presence;
 pub use super::types::Usage;
+pub use scope::OtherConversations;
+
+#[path = "accounting_scope.rs"]
+mod scope;
 
 /// One UTC day's immutable, recorded-only explanation. No collection coverage claim.
 #[derive(Debug, PartialEq, Eq)]
@@ -45,6 +49,9 @@ pub struct Inspection {
     pub unknown_parent_unavailable_threads: usize,
     pub unknown_parent_requests: std::collections::BTreeMap<uuid::Uuid, Vec<ObservationQuote>>,
     pub requests: std::collections::BTreeMap<uuid::Uuid, Vec<ObservationQuote>>,
+    /// Same-day attempts of other root conversations, outside every total above.
+    /// `None` when this view did not read them (range buckets).
+    pub other_conversations: Option<OtherConversations>,
 }
 
 /// UTC half-open requested interval and calendar-aligned grouping.
@@ -540,6 +547,7 @@ async fn inspect_tree_window(
             packet_bytes += serde_json::to_vec(quote)?.len() + 2048;
         }
     }
+    let mut unrelated = Vec::new();
     for candidate in candidates {
         if !work.visit() {
             return Ok(InspectionDay::TooLarge);
@@ -611,6 +619,9 @@ async fn inspect_tree_window(
         };
         if relation == Some(false) {
             // Unrelated roots cannot consume the selected ancestry/packet budget.
+            // They are read after the tree, outside its total; `cursor` is
+            // their terminal root.
+            unrelated.push((candidate, cursor));
             continue;
         }
         // Source text is parsed and dropped; only retained ancestry strings count.
@@ -675,6 +686,10 @@ async fn inspect_tree_window(
     )?;
     view.unknown_parent_totals =
         DayTotals::from_quotes(view.unknown_parent_requests.values().flatten())?;
+    if window.is_none() {
+        view.other_conversations =
+            Some(scope::other_conversations(conn, unrelated, day, read_at_ms, work).await);
+    }
     Ok(InspectionDay::Ready(view))
 }
 
