@@ -295,6 +295,7 @@ fn packet() -> InspectionDay {
         unknown_parent_unavailable_threads: 0,
         unknown_parent_requests: Default::default(),
         requests: std::collections::BTreeMap::from([(q.attempt.request_id, vec![q])]),
+        other_conversations: Some(Default::default()),
     })
 }
 
@@ -343,6 +344,7 @@ fn accounting_inspect_range_partial_no_amount_and_explicit_coverage() {
     Retention: request detail kept since 1970-01-01T00:00:00.000Z; oldest daily total kept 1970-01-01
     Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.
     Range: Unknown parent population: 0 inspectable attempts, excluded from range total
+    Other conversations are not included in this view; /cost covers only the open conversation.
     Range total unavailable — partial or unavailable buckets excluded; no partial total.
     Effective coverage (requested ∩ aggregate retention ∩ snapshot) for [1970-01-01T00:00:00.000Z, 1970-01-01T01:00:00.000Z): [1970-01-01T00:00:00.001Z, 1970-01-01T01:00:00.000Z)
     ");
@@ -1004,9 +1006,14 @@ async fn accounting_inspect_empty_day_after_checkpoint_renders_lag() -> anyhow::
     assert_eq!(view.totals, DayTotals::default());
     assert!(view.requests.is_empty());
     assert_eq!(view.coverage.completed_as_of_ms, 0);
+    // The empty conversation says so in its scope, and that no other
+    // conversation recorded anything that day either.
     assert_eq!(
-        inspection_pages(Ok(empty))[0].text[0],
-        "No recorded attempts in this day; collection coverage unknown."
+        inspection_pages(Ok(empty))[0].text[..2].to_vec(),
+        vec![
+            "This conversation on 1970-01-01 (UTC): no recorded requests.",
+            "No other conversation recorded requests on this day.",
+        ]
     );
 
     // The next UTC day has no requests and opening the inspector must not maintain it.
@@ -1134,6 +1141,7 @@ async fn accounting_inspect_maintenance_with_current_contributions_renders_raw_t
     insta::assert_snapshot!(text, @"
     This conversation on 1970-04-11 (UTC):
     • synthetic · synthetic-model — Pay per use. 1 request, tokens not reported. Estimated cost: no price available.
+    No other conversation recorded requests on this day.
     Costs are estimates from published prices; your provider's bill is the final amount.
     Select a provider below to see its requests.
     —— Details ——
@@ -1144,7 +1152,7 @@ async fn accounting_inspect_maintenance_with_current_contributions_renders_raw_t
     Logical requests may have attempts on other days; this UTC day is not their complete lifetime.
     Day covered (UTC): [1970-04-11T00:00:00.000Z, 1970-04-12T00:00:00.000Z)
     Read at: 1970-04-11T00:00:00.000Z; ledger current to: 1970-04-11T00:00:00.000Z (0 ms behind)
-    Retention: request detail kept since 1970-01-11T00:00:00.000Z; daily totals kept since 1970-01-01; oldest recorded day 1970-01-01
+    Retention: request detail kept since 1970-01-11T00:00:00.000Z; daily totals kept since 1970-01-01; oldest recorded day in this conversation 1970-01-01
     Known subtotal exact USD: none — no price for these attempts
     Input: not reported (1 attempt)
     Noncached input (derived for inclusive input): not reported (1 attempt)
@@ -1202,9 +1210,9 @@ fn accounting_inspect_availability_state_snapshots() {
     };
     empty.totals = DayTotals::default();
     empty.requests.clear();
-    assert!(
-        inspection_pages(Ok(InspectionDay::Ready(empty)))[0].text[0]
-            .contains("No recorded attempts")
+    assert_eq!(
+        inspection_pages(Ok(InspectionDay::Ready(empty)))[0].text[0],
+        "This conversation on 1970-01-01 (UTC): no recorded requests."
     );
     let InspectionDay::Ready(view) = packet() else {
         unreachable!()
@@ -1905,6 +1913,7 @@ fn accounting_inspect_first_screen_names_provider_model_and_billing_type() {
                 "Subscription work — same work at API prices: {}",
                 money(decimal("0.5"))
             ),
+            "No other conversation recorded requests on this day.".to_string(),
             "Costs are estimates from published prices; your provider's bill is the final amount."
                 .to_string(),
             "Select a provider below to see its requests.".to_string(),
@@ -2267,7 +2276,9 @@ fn accounting_inspect_reads_plainly_for_every_provider() {
         "{root}"
     );
     assert!(
-        root.contains("daily totals kept since 2025-09-29; oldest recorded day 2026-09-28"),
+        root.contains(
+            "daily totals kept since 2025-09-29; oldest recorded day in this conversation 2026-09-28"
+        ),
         "{root}"
     );
 }

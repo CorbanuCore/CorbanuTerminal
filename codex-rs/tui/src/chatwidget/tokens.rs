@@ -14,6 +14,7 @@
 //! `ChatWidget` history insertion.
 
 mod chart;
+mod scope;
 
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -364,38 +365,7 @@ fn exact(value: Decimal) -> String {
 /// operator to fix the wrong thing.
 fn unpriced_rows<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -> Vec<String> {
     let mut rows: Vec<(String, u64)> = Vec::new();
-    for quote in quotes {
-        // Subscription work is not billed per token, so it has no money to be
-        // missing. Its own gap - an API equivalent the catalogue does not
-        // state - is already stated as such beside the plan rate that applied,
-        // and naming it here would assert unstated money next to a line saying
-        // the turn was never billed that way.
-        if quote.is_plan() {
-            continue;
-        }
-        let usage = &quote.usage;
-        // Only tokens that were actually recorded and are not zero count here.
-        // Zero tokens cost nothing whatever the rate, and a bucket priced at
-        // zero because its count was zero says nothing about whether a rate
-        // exists - which is why this reads the counts rather than the bucket
-        // variants alone, and why money is not the test either: a bucket
-        // priced by a real rate of zero states a price, and states no money.
-        let recorded = [usage.noncached, usage.read, usage.write, usage.output]
-            .into_iter()
-            .zip(quote.buckets)
-            .filter(|(count, _)| count.is_some_and(|count| count > 0));
-        let mut priced = false;
-        let mut unpriced = false;
-        for (_, bucket) in recorded {
-            match bucket {
-                BucketQuote::Priced(_) => priced = true,
-                BucketQuote::MissingRate => unpriced = true,
-                BucketQuote::MissingUsage => {}
-            }
-        }
-        if priced || !unpriced {
-            continue;
-        }
+    for quote in quotes.into_iter().filter(|quote| has_no_price(quote)) {
         let attributed = |value: &str| {
             if value.trim().is_empty() {
                 "unknown (attribution absent)".to_string()
@@ -428,9 +398,42 @@ fn unpriced_rows<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -> 
     }
 }
 
+/// An attempt that recorded tokens and has no price for any of them.
+fn has_no_price(quote: &ObservationQuote) -> bool {
+    // Subscription work is not billed per token, so it has no money to be
+    // missing. Its own gap - an API equivalent the catalogue does not state -
+    // is already stated as such beside the plan rate that applied, and naming
+    // it here would assert unstated money next to a line saying the turn was
+    // never billed that way.
+    if quote.is_plan() {
+        return false;
+    }
+    let usage = &quote.usage;
+    // Only tokens that were actually recorded and are not zero count here.
+    // Zero tokens cost nothing whatever the rate, and a bucket priced at zero
+    // because its count was zero says nothing about whether a rate exists -
+    // which is why this reads the counts rather than the bucket variants
+    // alone, and why money is not the test either: a bucket priced by a real
+    // rate of zero states a price, and states no money.
+    let recorded = [usage.noncached, usage.read, usage.write, usage.output]
+        .into_iter()
+        .zip(quote.buckets)
+        .filter(|(count, _)| count.is_some_and(|count| count > 0));
+    let mut priced = false;
+    let mut unpriced = false;
+    for (_, bucket) in recorded {
+        match bucket {
+            BucketQuote::Priced(_) => priced = true,
+            BucketQuote::MissingRate => unpriced = true,
+            BucketQuote::MissingUsage => {}
+        }
+    }
+    unpriced && !priced
+}
+
 fn estimate(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
     if totals.attempts == 0 {
-        return vec!["No recorded attempts in this day; collection coverage unknown.".into()];
+        return vec!["No recorded attempts; collection coverage unknown.".into()];
     }
     // Count the per-token-billed population on its own. A plan attempt has no
     // billed price by construction - `all_buckets_priced` is `Some` only when
@@ -546,7 +549,9 @@ fn rate_scaled(milli_tokens: i64) -> String {
 /// The exact known subtotal, or "none" when nothing billed per token was
 /// priced: a bare `0` beside an unknown estimate reads as a zero-cost claim.
 fn known_exact(t: &codex_state::accounting::DayTotals) -> String {
-    if t.attempts > 0 && t.plan_attempts == t.attempts {
+    if t.attempts == 0 {
+        "none — no recorded attempts in this conversation".to_string()
+    } else if t.plan_attempts == t.attempts {
         "none — subscription work is not billed per token".to_string()
     } else if t.known_usd == Decimal::default() && t.unknown_estimates > t.plan_attempts {
         "none — no price for these attempts".to_string()
@@ -769,7 +774,14 @@ fn inspection_pages_for(
     }
     let freshness = pages[0].text.clone();
     let t = &ready.totals;
-    pages[0].text.splice(0..0, estimate(t));
+    pages[0].text.splice(
+        0..0,
+        if t.attempts == 0 {
+            vec!["No recorded attempts in this conversation or its subagents; collection coverage unknown.".into()]
+        } else {
+            estimate(t)
+        },
+    );
     pages[0]
         .text
         .extend(unpriced_rows(ready.requests.values().flatten()));
@@ -1038,7 +1050,21 @@ fn inspection_pages_for(
     {
         *line = billed_detail(&billed);
     }
-    let overview = plain_overview(heading, ready.requests.values().flatten());
+    let outside = scope::other_conversations_lines(ready.other_conversations.as_ref());
+    let next_step = scope::no_price_next_step(
+        ready.requests.values().flatten().chain(
+            ready
+                .other_conversations
+                .iter()
+                .flat_map(|others| others.requests.values().flatten()),
+        ),
+    );
+    let overview = plain_overview(
+        heading,
+        ready.requests.values().flatten(),
+        outside,
+        next_step,
+    );
     pages[0].text.splice(0..0, overview);
     // Provider/model groups first, then each request, then the auditing
     // groups (own/descendant attempts, attribution, unknown parents).
@@ -1350,6 +1376,7 @@ fn plain_header(quotes: &[&ObservationQuote]) -> Vec<String> {
             let (billing, cost) = plain_billing(&t);
             lines.push(format!("Billing: {billing}"));
             lines.push(cost);
+            lines.extend(scope::no_price_next_step(quotes.iter().copied()));
             if let Some(billed) = billed_figure(quotes) {
                 lines.push(format!("Billed by provider: {billed}"));
             }
@@ -1376,12 +1403,10 @@ fn day_heading(utc_day: i64, today: i64) -> String {
     )
 }
 
-/// The first screen: one line per provider and model, stating how it is paid
-/// for before anything else, then the day's totals by billing type.
-fn plain_overview<'a>(
-    heading: String,
+/// Attempts grouped by provider and model, in a stable order.
+fn by_route<'a>(
     quotes: impl IntoIterator<Item = &'a ObservationQuote>,
-) -> Vec<String> {
+) -> std::collections::BTreeMap<(String, String), Vec<&'a ObservationQuote>> {
     let mut groups: std::collections::BTreeMap<(String, String), Vec<&ObservationQuote>> =
         std::collections::BTreeMap::new();
     for quote in quotes {
@@ -1390,46 +1415,60 @@ fn plain_overview<'a>(
             .or_default()
             .push(quote);
     }
-    if groups.is_empty() {
-        return Vec::new();
+    groups
+}
+
+/// One provider and model on a first screen: how it is paid for, then its
+/// requests, tokens and cost.
+fn route_line(quotes: &[&ObservationQuote]) -> String {
+    let route = route_name(quotes[0]);
+    match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
+        Ok(t) => {
+            let (billing, cost) = plain_billing(&t);
+            let provider = provider_name(&quotes[0].attempt.provider);
+            match leading_charge(quotes, &t).ok_or_else(|| billed_charge(quotes)) {
+                // Every request carries the provider's own charge, but the
+                // published prices cannot reproduce it (the provider omits a
+                // counter the estimate needs): the charge is the figure, and a
+                // partial estimate would only mislead.
+                Ok(billed) => format!(
+                    "• {route} — {billing}. {}, {}. Billed by {provider}: {}.",
+                    request_count(quotes),
+                    plain_tokens(&t),
+                    billed.text()
+                ),
+                Err(billed) => format!(
+                    "• {route} — {billing}. {}, {}. {cost}.{}",
+                    request_count(quotes),
+                    plain_tokens(&t),
+                    billed.map_or_else(String::new, |billed| format!(
+                        " Billed by {provider}: {}.",
+                        billed.text()
+                    ))
+                ),
+            }
+        }
+        Err(_) => format!("• {route} — cost unavailable."),
     }
-    let mut lines = vec![heading];
-    for quotes in groups.values() {
-        let route = route_name(quotes[0]);
-        lines.push(
-            match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
-                Ok(t) => {
-                    let (billing, cost) = plain_billing(&t);
-                    let provider = provider_name(&quotes[0].attempt.provider);
-                    match leading_charge(quotes, &t).ok_or_else(|| billed_charge(quotes)) {
-                        // Every request carries the provider's own charge, but
-                        // the published prices cannot reproduce it (the
-                        // provider omits a counter the estimate needs): the
-                        // charge is the figure, and a partial estimate would
-                        // only mislead.
-                        Ok(billed) => {
-                            format!(
-                                "• {route} — {billing}. {}, {}. Billed by {provider}: {}.",
-                                request_count(quotes),
-                                plain_tokens(&t),
-                                billed.text()
-                            )
-                        }
-                        Err(billed) => format!(
-                            "• {route} — {billing}. {}, {}. {cost}.{}",
-                            request_count(quotes),
-                            plain_tokens(&t),
-                            billed.map_or_else(String::new, |billed| format!(
-                                " Billed by {provider}: {}.",
-                                billed.text()
-                            ))
-                        ),
-                    }
-                }
-                Err(_) => format!("• {route} — cost unavailable."),
-            },
-        );
-    }
+}
+
+/// The first screen: one line per provider and model, stating how it is paid
+/// for before anything else, then the totals by billing type. `outside` says
+/// what this view leaves out; an empty conversation says so in its heading
+/// rather than showing nothing, so it never reads as a zero-cost day.
+fn plain_overview<'a>(
+    heading: String,
+    quotes: impl IntoIterator<Item = &'a ObservationQuote>,
+    outside: Vec<String>,
+    next_step: Option<String>,
+) -> Vec<String> {
+    let groups = by_route(quotes);
+    let mut lines = if groups.is_empty() {
+        vec![format!("{heading} no recorded requests.")]
+    } else {
+        vec![heading]
+    };
+    lines.extend(groups.values().map(|quotes| route_line(quotes)));
     let all: Vec<&ObservationQuote> = groups.values().flatten().copied().collect();
     if let Ok(t) = codex_state::accounting::DayTotals::from_quotes(all.iter().copied()) {
         let billed = t.attempts.saturating_sub(t.plan_attempts);
@@ -1454,6 +1493,8 @@ fn plain_overview<'a>(
             }
         }
     }
+    lines.extend(outside);
+    lines.extend(next_step);
     lines.push(
         if billed_figure(&all).is_some() {
             "Estimates use published prices; billed figures are what the provider stated with each response."
@@ -1462,7 +1503,9 @@ fn plain_overview<'a>(
         }
         .to_string(),
     );
-    lines.push("Select a provider below to see its requests.".to_string());
+    if !all.is_empty() {
+        lines.push("Select a provider below to see its requests.".to_string());
+    }
     lines.push("—— Details ——".to_string());
     lines
 }
@@ -1489,7 +1532,7 @@ fn retention(
     oldest_recorded_day: Option<i64>,
 ) -> String {
     format!(
-        "request detail kept since {}; daily totals kept since {}; oldest recorded day {}",
+        "request detail kept since {}; daily totals kept since {}; oldest recorded day in this conversation {}",
         read_at_ms
             .checked_sub(90 * 86_400_000)
             .filter(|n| *n >= 0)
@@ -1581,6 +1624,9 @@ fn range_pages(
         parent: None,
         selected: Arc::default(),
     }];
+    pages[0]
+        .text
+        .extend(scope::other_conversations_lines(/*others*/ None));
     let complete = buckets
         .iter()
         .all(|b| !b.partial && b.days.iter().all(|d| matches!(d, InspectionDay::Ready(_))));
@@ -1593,7 +1639,8 @@ fn range_pages(
                 _ => None,
             })
             .flat_map(|v| v.requests.values().flatten());
-        let named = unpriced_rows(quotes.clone());
+        let mut named = unpriced_rows(quotes.clone());
+        named.extend(scope::no_price_next_step(quotes.clone()));
         match codex_state::accounting::DayTotals::from_quotes(quotes) {
             Ok(total) => {
                 pages[0].text.extend(estimate(&total));

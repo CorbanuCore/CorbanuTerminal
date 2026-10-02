@@ -1,0 +1,17 @@
+---
+source: tui/src/chatwidget/tokens/scope_tests.rs
+expression: "render_bottom_popup_with_height(&narrow, 40, 60)"
+---
+  Cost — this conversation
+  Requested UTC day: 2026-09-16
+
+  available.
+  • OpenAI · gpt-5.4 — Pay per use.
+  1 request, 110 tokens. Estimated
+  cost: $0.000710.
+  Other conversations on this day,
+  not included above: 3 requests in
+  2 conversations.
+› • local-mock · mock-model —
+
+  ↑↓ scroll · Enter open · Esc back/clos
