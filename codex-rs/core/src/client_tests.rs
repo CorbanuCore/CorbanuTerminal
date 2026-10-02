@@ -2613,7 +2613,7 @@ fn chat_cache_breakpoints_follow_the_newest_tool_turn() {
         chat_message("system", Some("instructions")),
         chat_message("user", Some("environment context")),
         chat_message("user", Some("fix the queue")),
-        chat_message("assistant", None),
+        chat_message("assistant", /*text*/ None),
         chat_message("tool", Some("ls output")),
         chat_message("assistant", Some("")),
         chat_message("tool", Some("test output")),
@@ -2640,7 +2640,7 @@ fn chat_cache_breakpoints_skip_messages_without_text() {
         chat_message("system", Some("instructions")),
         chat_message("user", Some("task")),
         chat_message("tool", Some("result")),
-        chat_message("assistant", None),
+        chat_message("assistant", /*text*/ None),
         chat_message("assistant", Some("   ")),
     ];
 
