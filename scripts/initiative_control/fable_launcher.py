@@ -27,7 +27,7 @@ MODEL, PROVIDER, EFFORT = "claude-opus-5-plan", "claude-plan", "high"
 # a digest index recovered ~10.7 KiB, more than the grant, so the original
 # contract holds.
 #
-# BRIEF_RESERVE is a standing pre-emptive allowance from Travis (2026-09-15):
+# BRIEF_RESERVE is a standing preemptive allowance from Travis (2026-09-15):
 # up to 15 KiB may be drawn on to get unstuck, held in reserve until then.
 # Drawing on it is a deliberate, recorded act, not a default. Set BRIEF_GRANT
 # to the amount actually drawn, never above BRIEF_RESERVE, and record why in

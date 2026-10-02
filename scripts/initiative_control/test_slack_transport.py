@@ -813,7 +813,7 @@ class TransportTests(LiveFixture):
         self.reply = None
         original = copy.deepcopy(self.messages[0])
         for change in (dict(client_msg_id=None), dict(client_msg_id=original["client_msg_id"] + "x"),
-                       dict(app_id="AOTHER"), dict(bot_id="BOTHER"), dict(channel="COTHER"), dict(thread_ts="999.000001")):
+                       dict(app_id="AOTHER"), dict(bot_id="BOTHER"), dict(channel="COTHER"), dict(thread_ts="999.000001")):  # codespell:ignore aother
             with self.subTest(change=change), self.assertRaises(d.Invalid):
                 self.messages[:] = [dict(original, **change)]
                 self.transport.reconcile(request)

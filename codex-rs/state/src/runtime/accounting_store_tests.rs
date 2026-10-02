@@ -664,7 +664,7 @@ async fn accounting_inspect_malformed_source_with_edge_is_unknown() -> anyhow::R
     let path = home();
     let runtime = open(&path).await?;
     tree_fixture(&runtime).await?;
-    // A surviving edge cannot make an unparseable source authoritative.
+    // A surviving edge cannot make an unparsable source authoritative.
     sqlx::query("UPDATE threads SET source = 'malformed' WHERE id = ?")
         .bind(Uuid::from_u128(8).to_string())
         .execute(runtime.pool.as_ref())

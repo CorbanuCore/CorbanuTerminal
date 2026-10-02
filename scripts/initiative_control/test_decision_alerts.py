@@ -11,7 +11,7 @@ import decisions as d
 import decision_alerts as a
 from test_decisions import fixture, revision, NOW
 
-PIN = dict(team="TTEST", channel="CTEST", app="ATEST", bot="BTEST", generation="generation-1", human="UTEST")
+PIN = dict(team="TTEST", channel="CTEST", app="ATEST", bot="BTEST", generation="generation-1", human="UTEST")  # codespell:ignore ttest
 OWNER = dict(agent="agent-fixture", allocation="allocation-1", running=True)
 REMOTE = "https://dashboard.example.test"
 

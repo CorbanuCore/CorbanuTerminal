@@ -14,7 +14,7 @@ from test_decision_alerts import SlackFixture, OWNER, PIN, REMOTE, receipt
 
 
 def envelope(**changes):
-    return dict(dict(event_id="Ev001", team="TTEST", channel="CTEST", user="UTEST", thread_ts="100.000001",
+    return dict(dict(event_id="Ev001", team="TTEST", channel="CTEST", user="UTEST", thread_ts="100.000001",  # codespell:ignore ttest
                      message_ts="101.000001", event_ts="101.000001", kind="message", text="Five testers"), **changes)
 
 
