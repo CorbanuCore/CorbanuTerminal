@@ -249,7 +249,12 @@ pub(crate) async fn attach_scopes(
     client_session: &crate::client::ModelClientSession,
     turn: String,
 ) -> Result<TurnScopes, CodexErr> {
-    let mode = if matches!(accounting, AccountingMode::Provider { .. }) {
+    // An ephemeral session persists no thread, so the ledger has no owner to
+    // attribute its attempts to. Like any unattributable request it is left
+    // uncollected, and the turn still runs, rather than failing every turn.
+    let mode = if session.live_thread().is_none() {
+        AccountingMode::Disabled
+    } else if matches!(accounting, AccountingMode::Provider { .. }) {
         turn_mode(
             accounting,
             provider_id,

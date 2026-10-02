@@ -1230,3 +1230,49 @@ async fn accounting_plan_turn_records_the_identity_the_catalogue_prices() -> any
     stop(&test).await;
     Ok(())
 }
+
+#[tokio::test]
+async fn accounting_ephemeral_session_runs_turns_without_collecting() -> anyhow::Result<()> {
+    use codex_model_provider_info::WireApi;
+
+    let server = MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .respond_with(success(
+            json!({"input_tokens":11,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}),
+            json!({"output_tokens":5}),
+        ))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let mode = AccountingMode::Provider {
+        scope: uuid::Uuid::new_v4(),
+        provider_id: "claude-plan".into(),
+        wire_api: WireApi::Anthropic,
+        approved_endpoint: endpoint.clone(),
+        approved_query: None,
+        pricing: PriceAuthority::Unavailable,
+    };
+    let test = builder(endpoint, mode)
+        .with_config(|config| {
+            config.ephemeral = true;
+            config.model = Some("claude-opus-5-plan".into());
+            config.model_provider_id = "claude-plan".into();
+            config
+                .model_providers
+                .insert("claude-plan".into(), config.model_provider.clone());
+        })
+        .build_with_auto_env(&server)
+        .await?;
+
+    // No persisted thread can own the attempt, so the turn completes uncollected.
+    test.submit_turn("an ephemeral exec turn").await?;
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+    if let Some(db) = test.codex.state_db() {
+        assert_eq!(attempts(&db).await.unwrap_or_default().len(), 0);
+    }
+
+    stop(&test).await;
+    Ok(())
+}
