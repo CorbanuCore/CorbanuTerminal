@@ -1,6 +1,7 @@
 use super::*;
 use pretty_assertions::assert_eq;
-use serde_json::{Value, json};
+use serde_json::Value;
+use serde_json::json;
 
 #[test]
 fn exact_wire_packets_admit_without_rewriting() {

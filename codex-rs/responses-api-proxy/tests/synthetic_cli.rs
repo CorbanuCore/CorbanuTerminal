@@ -1,9 +1,14 @@
 use pretty_assertions::assert_eq;
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::process::{Child, Command, Stdio};
+use std::io::Read;
+use std::io::Write;
+use std::net::TcpListener;
+use std::net::TcpStream;
+use std::process::Child;
+use std::process::Command;
+use std::process::Stdio;
 use std::thread::sleep;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use std::time::Instant;
 
 struct OwnedChild(Child);
 

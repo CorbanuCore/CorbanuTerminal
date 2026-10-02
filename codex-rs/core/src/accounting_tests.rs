@@ -116,10 +116,13 @@ fn accounting_developer_activation_accepts_provider_id_independently_of_dialect(
 #[tokio::test]
 async fn accounting_developer_activation_samples_http_and_installs_inspectable_day()
 -> anyhow::Result<()> {
-    use codex_state::accounting::{AccountingStore, InspectionDay};
+    use codex_state::accounting::AccountingStore;
+    use codex_state::accounting::InspectionDay;
     use futures::StreamExt;
     use serde_json::json;
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::Mock;
+    use wiremock::MockServer;
+    use wiremock::ResponseTemplate;
 
     struct FixtureAuth;
     impl codex_api::AuthProvider for FixtureAuth {

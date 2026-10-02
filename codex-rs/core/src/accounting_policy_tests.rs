@@ -15,7 +15,8 @@ use std::time::Duration;
 #[tokio::test]
 async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
     use codex_login::CodexAuth;
-    use codex_model_provider_info::{ModelProviderInfo, WireApi};
+    use codex_model_provider_info::ModelProviderInfo;
+    use codex_model_provider_info::WireApi;
     let fixture = Fixture::new().await?;
     let api = CodexAuth::from_api_key("synthetic");
     let subscription =
@@ -159,7 +160,8 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
 
 #[test]
 fn accounting_chat_request_overrides_are_unattributable() -> Result<()> {
-    use codex_model_provider_info::{ModelProviderInfo, WireApi};
+    use codex_model_provider_info::ModelProviderInfo;
+    use codex_model_provider_info::WireApi;
     let mut provider = ModelProviderInfo::create_openai_provider(None);
     provider.wire_api = WireApi::Chat;
     for field in ["provider", "provider_options", "plugins"] {
@@ -196,7 +198,8 @@ fn accounting_chat_request_overrides_are_unattributable() -> Result<()> {
 /// collected nothing, so cover both encodings and both answers here.
 #[test]
 fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
-    use codex_http_client::{Request, RequestCompression};
+    use codex_http_client::Request;
+    use codex_http_client::RequestCompression;
     let ordinary = serde_json::json!({"model":"fixture","input":[],"stream":true});
     for compression in [RequestCompression::None, RequestCompression::Zstd] {
         let prepared = Request::new(http::Method::POST, ENDPOINT.into())
@@ -308,7 +311,8 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
 /// and an unpriceable route cannot silently become subscription capacity.
 #[test]
 fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
-    use codex_model_provider_info::{ModelProviderInfo, WireApi};
+    use codex_model_provider_info::ModelProviderInfo;
+    use codex_model_provider_info::WireApi;
     use codex_protocol::auth::AuthMode;
     // Both built-in metered routes, because the Anthropic arm was dead code until
     // the predicate stopped rejecting a provider for declaring its own api-key
@@ -415,7 +419,8 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
 /// from collection on every turn, which is not "available on all providers".
 #[test]
 fn accounting_chat_collects_the_fields_the_client_itself_emits() {
-    use codex_model_provider_info::{ModelProviderInfo, WireApi};
+    use codex_model_provider_info::ModelProviderInfo;
+    use codex_model_provider_info::WireApi;
     let plain = {
         let mut provider = ModelProviderInfo::create_openai_provider(None);
         provider.wire_api = WireApi::Chat;

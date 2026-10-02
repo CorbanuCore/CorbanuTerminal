@@ -1,11 +1,14 @@
 use super::*;
 use crate::synthetic_policy::PACKETS;
 use bytes::Bytes;
-use http_body_util::{BodyExt, Full};
+use http_body_util::BodyExt;
+use http_body_util::Full;
 use pretty_assertions::assert_eq;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
 use tokio::task::JoinHandle;
-use tokio::time::{sleep, timeout};
+use tokio::time::sleep;
+use tokio::time::timeout;
 
 struct Case {
     address: SocketAddr,

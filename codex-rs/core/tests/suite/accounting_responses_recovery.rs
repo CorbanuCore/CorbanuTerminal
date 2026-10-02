@@ -1,13 +1,17 @@
 use super::accounting_responses::support::*;
 use codex_core::config::AccountingMode;
-use codex_protocol::protocol::{EventMsg, Op};
+use codex_protocol::protocol::EventMsg;
+use codex_protocol::protocol::Op;
 use codex_state::accounting::*;
 use core_test_support::responses;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::time::Duration;
-use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::Mock;
+use wiremock::MockServer;
+use wiremock::ResponseTemplate;
+use wiremock::matchers::method;
+use wiremock::matchers::path;
 
 #[tokio::test]
 async fn accounting_responses_native_http_retry_policy() -> anyhow::Result<()> {

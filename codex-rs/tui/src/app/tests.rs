@@ -128,7 +128,9 @@ async fn accounting_inspect_app_real_store_to_view() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn accounting_inspect_range_app_dispatch_preserves_query() -> anyhow::Result<()> {
-    use codex_state::accounting::{InspectionDay, InspectionGrouping, InspectionRange};
+    use codex_state::accounting::InspectionDay;
+    use codex_state::accounting::InspectionGrouping;
+    use codex_state::accounting::InspectionRange;
     let path = tempdir()?;
     let (mut app, mut rx, _ops) = make_test_app_with_channels().await;
     let (_, day) = accounting_fixture(&mut app, path.path()).await?;

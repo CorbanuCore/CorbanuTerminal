@@ -2,13 +2,17 @@
 pub(super) mod support;
 use codex_core::config::AccountingMode;
 use codex_core::config::PriceAuthority;
-use codex_protocol::protocol::{EventMsg, Op};
+use codex_protocol::protocol::EventMsg;
+use codex_protocol::protocol::Op;
 use codex_state::accounting::*;
 use pretty_assertions::assert_eq;
-use serde_json::{Value, json};
+use serde_json::Value;
+use serde_json::json;
 use support::*;
+use wiremock::Mock;
+use wiremock::MockServer;
+use wiremock::ResponseTemplate;
 use wiremock::matchers::method;
-use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[tokio::test]
 async fn accounting_chat_custom_provider_collects_with_real_identity() -> anyhow::Result<()> {

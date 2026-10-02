@@ -6,7 +6,8 @@ use codex_client::StreamResponse;
 use futures::StreamExt;
 use pretty_assertions::assert_eq;
 use serde_json::json;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 use tokio::sync::Semaphore;
 

@@ -15,7 +15,8 @@ async fn accounting_anthropic_redirects_never_send_or_attribute_to_unapproved_en
 -> anyhow::Result<()> {
     use wiremock::Mock;
     use wiremock::ResponseTemplate;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::method;
+    use wiremock::matchers::path;
     for status in [307, 308] {
         for on in [true, false] {
             let approved = MockServer::start().await;

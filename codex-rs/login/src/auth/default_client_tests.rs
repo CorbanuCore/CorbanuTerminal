@@ -10,8 +10,10 @@ use tracing_subscriber::layer::SubscriberExt;
 
 #[tokio::test]
 async fn no_redirect_route_preserves_headers_proxy_and_sandbox_selection() {
+    use wiremock::Mock;
+    use wiremock::MockServer;
+    use wiremock::ResponseTemplate;
     use wiremock::matchers::method;
-    use wiremock::{Mock, MockServer, ResponseTemplate};
     let destination = MockServer::start().await;
     let proxy = MockServer::start().await;
     for server in [&destination, &proxy] {

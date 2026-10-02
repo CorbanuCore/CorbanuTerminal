@@ -24,7 +24,8 @@ use wiremock::matchers::path;
 #[tokio::test]
 async fn accounting_plan_identity_zero_usage_and_provider_switch() -> anyhow::Result<()> {
     use codex_model_provider_info::WireApi;
-    use codex_protocol::protocol::{Op, ThreadSettingsOverrides};
+    use codex_protocol::protocol::Op;
+    use codex_protocol::protocol::ThreadSettingsOverrides;
     for zero in [false, true] {
         let server = MockServer::start().await;
         let next_server = MockServer::start().await;

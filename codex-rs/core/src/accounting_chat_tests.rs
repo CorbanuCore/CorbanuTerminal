@@ -1,12 +1,24 @@
 use super::*;
-use crate::accounting::transport::{AccountingTransport, ResponseEvidence};
-use codex_api::{ChatTokenPresence, ChatUsageObserver, ChatUsagePatch};
-use codex_http_client::{HttpTransport, Request, Response, StreamResponse, TransportError};
+use crate::accounting::transport::AccountingTransport;
+use crate::accounting::transport::ResponseEvidence;
+use codex_api::ChatTokenPresence;
+use codex_api::ChatUsageObserver;
+use codex_api::ChatUsagePatch;
+use codex_http_client::HttpTransport;
+use codex_http_client::Request;
+use codex_http_client::Response;
+use codex_http_client::StreamResponse;
+use codex_http_client::TransportError;
 use codex_protocol::protocol::SessionSource;
-use codex_state::accounting::{Attempt, Observation};
-use codex_state::{SqliteConfig, StateRuntime, ThreadMetadataBuilder};
+use codex_state::SqliteConfig;
+use codex_state::StateRuntime;
+use codex_state::ThreadMetadataBuilder;
+use codex_state::accounting::Attempt;
+use codex_state::accounting::Observation;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use futures::{FutureExt, StreamExt, poll};
+use futures::FutureExt;
+use futures::StreamExt;
+use futures::poll;
 use pretty_assertions::assert_eq;
 use std::sync::atomic::AtomicUsize;
 
@@ -351,12 +363,15 @@ async fn accounting_chat_borrowed_binding_denies_existing_and_future_clones() ->
 #[tokio::test]
 async fn accounting_chat_frame_guard_denies_provider_change_before_client_publication()
 -> anyhow::Result<()> {
-    use crate::memory_stage_one::{
-        StageOneMemoryBinding, StageOneMemoryClient, StageOneMemoryDenial,
-    };
-    use crate::session::session::{Session, SessionSettingsUpdate};
+    use crate::memory_stage_one::StageOneMemoryBinding;
+    use crate::memory_stage_one::StageOneMemoryClient;
+    use crate::memory_stage_one::StageOneMemoryDenial;
+    use crate::session::session::Session;
+    use crate::session::session::SessionSettingsUpdate;
     use codex_security_policy::SecurityLevel;
-    use std::sync::{Mutex, OnceLock, Weak};
+    use std::sync::Mutex;
+    use std::sync::OnceLock;
+    use std::sync::Weak;
 
     type Observation = (bool, Result<(), StageOneMemoryDenial>);
     #[derive(Default)]

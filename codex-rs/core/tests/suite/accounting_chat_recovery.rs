@@ -1,12 +1,16 @@
 use super::accounting_chat::support::*;
 use codex_core::config::AccountingMode;
-use codex_protocol::protocol::{EventMsg, Op};
+use codex_protocol::protocol::EventMsg;
+use codex_protocol::protocol::Op;
 use codex_state::accounting::*;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::time::Duration;
-use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::Mock;
+use wiremock::MockServer;
+use wiremock::ResponseTemplate;
+use wiremock::matchers::method;
+use wiremock::matchers::path;
 
 #[tokio::test]
 async fn accounting_chat_native_http_retry_policy() -> anyhow::Result<()> {
