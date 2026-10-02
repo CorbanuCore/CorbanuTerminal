@@ -805,7 +805,9 @@ impl Sampling {
                 prices::chat_original(model, &self.provider, self.scope, dispatched_at)?
             }
         };
-        store.admit(self.owner, &attempt, &prices, AsOf::Now).await?;
+        store
+            .admit(self.owner, &attempt, &prices, AsOf::Now)
+            .await?;
         *self.previous.lock().map_err(|_| {
             self.reject();
             anyhow::anyhow!(FAILURE)
