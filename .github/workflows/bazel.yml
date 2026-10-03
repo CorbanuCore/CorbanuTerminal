@@ -19,7 +19,7 @@ jobs:
     # See docs/ci.md for the restoration plan.
     # Cold local builds compile V8 transitively and can exceed 90 minutes when
     # remote execution is unavailable.
-    timeout-minutes: 360  # trial-only (#147): measure a full cold run without remote execution
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
@@ -388,7 +388,7 @@ jobs:
         uses: ./.github/actions/check-clean-worktree
 
   clippy:
-    timeout-minutes: 360  # trial-only (#147): measure a full cold run without remote execution
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
@@ -483,7 +483,7 @@ jobs:
         uses: ./.github/actions/check-clean-worktree
 
   verify-release-build:
-    timeout-minutes: 360  # trial-only (#147): measure a full cold run without remote execution
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
