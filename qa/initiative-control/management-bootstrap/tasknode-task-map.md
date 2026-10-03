@@ -12,9 +12,14 @@ against these tasks.
 - Created: 2026-10-03, one `tasknode request create --body-file` per task,
   source title "Corbanu PF-80 breakdown 2026-10-03". Each request was sent once.
   Task Node generated the tasks itself.
-- Task state at 2026-10-03T09:58Z: all five **Proposed**, `canAccept` true,
-  `canSubmitInitialEvidence` false. Corbanu did not accept, refuse or move any
-  of them. Acceptance is an account action for Travis.
+- Task state at 2026-10-03T09:58Z: all five **Proposed**. Travis accepted all
+  five (2026-10-03, "I have accepted the tasks"); at 10:32Z each read
+  **Accepted** with `canSubmitInitialEvidence` true. Corbanu did not accept,
+  refuse or move any of them.
+- Round 3, 2026-10-03 10:45–10:47Z: initial evidence was submitted once for each
+  of the five tasks, and each then read **Verification requested**. Receipts and
+  verification responses are in the
+  [writeback record](tasknode-writeback-live-20261002.md), round 3.
 - Ledger references are the opening words of each bullet in
   [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md).
   Line numbers change when the ledger is edited, so they are not used.
@@ -23,7 +28,7 @@ against these tasks.
 
 | Task | State | Use |
 | --- | --- | --- |
-| `task_789a0f3bd75b41d1eca20cae698f04cf`, Corbanu workstream 3: Task Node integration and beta-test coordination | Rewarded 2026-09-15 (final) | Historical only. Nothing more is submitted against it (A1). Its delivery-control mapping in `control.json` (`PF-80-S01`, `PF-79-S01/S02`) still points here and must be repointed by the manager before any event cites a new task. |
+| `task_789a0f3bd75b41d1eca20cae698f04cf`, Corbanu workstream 3: Task Node integration and beta-test coordination | Rewarded 2026-09-15 (final) | Historical only. Nothing more is submitted against it (A1). `PF-80-S01` was repointed to `task_80628c7…` on 2026-10-03 (round 3). `PF-79-S01/S02` still point here; PF-79 beta work is paused. |
 
 ## New tasks
 
@@ -50,7 +55,12 @@ against these tasks.
   Reward shown: 3.5.
 - Scope: bootstrap deliverable 4. Not claimed: the reply half of the round trip.
 - Commits: `730577f1d` received at `9877c058d` (offline Slack delivery/replies),
-  `92d6eb261` (owned listener quiescence), `08db99fff` (listener interpreter fix).
+  `92d6eb261` (owned listener quiescence), `08db99fff` (records a listener
+  child's startup death; slack-listener-38). **Correction, 2026-10-03:** earlier
+  versions of this map called `08db99fff` the "listener interpreter fix". It
+  contains no interpreter change. The slack_sdk failure was resolved operationally
+  by running the listener under the pinned-requirements venv interpreter, as
+  [slack-requalified-20260917.md](slack-requalified-20260917.md) records.
 - QA: [slack-requalified-20260917.md](slack-requalified-20260917.md); alert
   `owner-recurrence-domain-20260917`, `state: sent`.
 - Ledger: Done "Exact reviewed supervisor c7a1b9690 received92d6eb261", "Offline
@@ -77,8 +87,10 @@ against these tasks.
 - Request: `req_def849619e606fdb1c76d1b1aca64432d579b5b21fc58ac8a0203d1368052eeb`.
   Reward shown: 4.
 - Scope: the writeback pipeline, the vault-backed sender, enrollment, and one live
-  event with a duplicate re-send. **Not done yet: the live event and re-send.**
-  This is the task a first live event should cite once it is accepted.
+  event with a duplicate re-send. **Done 2026-10-03:** event
+  `cc-57beba1c9d8a83e20fef572689d9a6d9d705c6daedb09583e0ce5dcf0152cc13` delivered
+  once, same-key re-send replayed with no network write, server read-back shows one
+  item at revision 1. `control.json` maps `PF-80-S01` to this task.
 - Commits: `2b281975a` received at `c33d47f6c` (native preparation), `7e25982b5`
   received at `486d2fb94` (one-event engine), `d7bf73a52` received at `56295f668`
   (adapter), `177ec93fc` received at `3898eaa65` (reconciliation), `bea83c9c6` (CLI

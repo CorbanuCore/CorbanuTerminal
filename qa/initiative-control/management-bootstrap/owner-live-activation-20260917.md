@@ -76,7 +76,7 @@ Added by the Task Node integration worker for task
   user/501/com.corbanu.initiative-owner` shows `domain = user/501`, `run interval
   = 30 seconds`, `runs = 35024`, `last exit code = 0`. The live `tick.json` reads
   `hold: null`, `firing: interval`, `ticks: 44228`, `consecutive_errors: 0`,
-  last success 29 s before the read. The live config has `manager_enabled: false`.
+  last success under 30 s before the read. The live config has `manager_enabled: false`.
 - Recurrence stays **fixture-only**. `tmux-workers` scope and the manager are not
   armed by this work. Later manager-enable work is recorded separately in
   [owner-manager-enabled-20261002.md](owner-manager-enabled-20261002.md).

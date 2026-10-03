@@ -375,3 +375,51 @@ Worker copies of the report, dry run, both send outputs and the read-back are in
 
 Still OFF: batch posting (`enabled=false`), TUI recording, recurring writeback,
 task stage moves, reward claims.
+
+### Initial evidence, one submission per task
+
+Command: `corbanu tasknode task evidence <task> --body-file <body> --json` (real
+binary, `~/.corbanu` scope; the helper reads the session from its own vault).
+A one-shot wrapper read `task show` first, required `canSubmitInitialEvidence`
+true and no local receipt, and recorded a fixed local submission key
+(SHA-256 of task ID plus body). **Disclosure:** the installed helper sets its own
+per-call `idempotencyKey` (`pfterminal-cli:initial_submission:<pid>:<nanos>`) and
+has no option to fix it. Duplicate protection for evidence is therefore the
+local one-shot guard plus the helper's server-state preflight, tested below. The
+fixed server idempotency key applies to the Campaign Tracker event.
+
+| Task | Submitted (UTC) | Receipt (`offchainLifecycle.eventId`) | Local key (first 16) | Scope |
+| --- | --- | --- | --- | --- |
+| `task_80628c7…` | 10:46:41 | `task_evt_24bfb396-384e-4d89-959e-7859868a0703` | `eba565edf907b658` | live event, replay, read-back, component commits and test counts |
+| `task_9d4fc2d8…` | 10:46:51 | `task_evt_aa2a03ad-6fea-4e66-99b6-f3b655986040` | `06d8293f764ab6e1` | deliverables 1–3 record, ancestry, verbatim counts; 4, 5, writeback, beta excluded |
+| `task_cf2cc91f…` | 10:46:54 | `task_evt_95dd8c2e-1ba3-4b77-a717-bbd0cd4dc825` | `70147484a14e4f78` | install and arm, 13/13 and 39/39, fixture-only; manager not claimed |
+| `task_6d472c45…` | 10:47:01 | `task_evt_1dbdaac9-3d60-4c25-bbe4-ecde5d12050c` | `619c5517811a6291` | `66a5b66840`, ordering, 886/103, seq 3413; manager cycle, worker test, promotion excluded |
+| `task_512bafc2…` | 10:46:48 | `task_evt_739efbcc-04d4-4bd2-9f42-b86dc266534a` | `eaa4c84c75c94e0a` | gate, alert receipt, commits; **reply half stated as NOT PROVEN** |
+
+Every receipt: `ok true`, `phase submitted`, `pfterminalLifecycle.phase
+awaiting_verification`, `completionConfirmed false`. A later `task show` read
+**Verification requested** for all five (`canSubmitInitialEvidence` false,
+`canSubmitVerificationEvidence` true, no `rewardOutcome`).
+
+Duplicate checks, after each task read `canSubmitInitialEvidence` false:
+re-running the wrapper refused locally (exit 3, no network). Re-running the
+helper's `task evidence` with the same body was refused before any POST
+(`task_evidence_mode_mismatch`, exit 1) for all five.
+
+Leak scan: an in-memory comparison of 18 files (live `control.json`, outbox,
+index, enrollment, both send receipts, every worker output) found 0 containing
+the session token or the plan key.
+
+### Correction: `08db99fff` is not an interpreter fix
+
+The verifier for `task_512bafc2…` asked for the pinned-interpreter hunk in
+`08db99fff`. There is none. That merge (of `c28238d87d`, `061cb26034`) makes a
+listener child's startup death leave a durable child-exit record. The listener
+still spawns `[sys.executable, …]` (`decision_manager.py` line 482 at the tip).
+The slack_sdk failure was resolved operationally by running the listener under
+the pinned-requirements venv, per
+[slack-requalified-20260917.md](slack-requalified-20260917.md); the
+`slack-alert.sh` recipe it names is not in the repository. The round 2 task
+request, the task map and the live event text all carried the wrong label. The
+map is corrected; the immutable event (`cc-57beba1c…`) is not edited, and this
+paragraph is its correction.
