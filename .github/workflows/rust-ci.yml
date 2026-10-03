@@ -2,17 +2,17 @@ name: rust-ci
 on:
   workflow_call:
     inputs:
-      linux_heavy:
+      cold_bazel:
         description: >-
-          Run the Linux argument comment lint. Its cold Bazel build takes close
-          to 180 minutes without a remote cache, so blocking PR CI skips it and
-          nightly-ci.yml runs it.
+          Run the Linux and macOS argument comment lint. Their cold Bazel builds
+          take close to 180 minutes without a remote cache, so blocking PR CI
+          skips them and nightly-ci.yml runs them.
         type: boolean
         default: false
   workflow_dispatch:
     inputs:
-      linux_heavy:
-        description: Run the Linux argument comment lint.
+      cold_bazel:
+        description: Run the Linux and macOS argument comment lint.
         type: boolean
         default: true
 
@@ -207,10 +207,10 @@ jobs:
           ARGUMENT_COMMENT_LINT: ${{ needs.changed.outputs.argument_comment_lint }}
           WORKFLOWS: ${{ needs.changed.outputs.workflows }}
           PLATFORM: ${{ matrix.name }}
-          LINUX_HEAVY: ${{ inputs.linux_heavy }}
+          COLD_BAZEL: ${{ inputs.cold_bazel }}
         run: |
-          if [[ "$PLATFORM" == "Linux" && "$LINUX_HEAVY" != "true" ]]; then
-            echo "Linux argument comment lint runs in nightly-ci.yml."
+          if [[ "$PLATFORM" != "Windows" && "$COLD_BAZEL" != "true" ]]; then
+            echo "$PLATFORM argument comment lint runs in nightly-ci.yml."
             echo "run=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi

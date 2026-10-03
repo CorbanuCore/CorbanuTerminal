@@ -6,7 +6,7 @@ name: Bazel
 on:
   workflow_call:
     inputs:
-      linux_heavy:
+      cold_bazel:
         description: >-
           Run the cold Linux Bazel test, clippy and release-verify jobs. Without
           a remote cache they take close to 180 minutes, so blocking PR CI
@@ -15,7 +15,7 @@ on:
         default: false
   workflow_dispatch:
     inputs:
-      linux_heavy:
+      cold_bazel:
         description: Run the cold Linux Bazel test, clippy and release-verify jobs.
         type: boolean
         default: true
@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   test:
-    if: ${{ inputs.linux_heavy }}
+    if: ${{ inputs.cold_bazel }}
     # Non-Linux Bazel coverage is disabled until working runners are available.
     # See docs/ci.md for the restoration plan.
     # Cold local builds compile V8 transitively and can exceed 90 minutes when
@@ -402,7 +402,7 @@ jobs:
         uses: ./.github/actions/check-clean-worktree
 
   clippy:
-    if: ${{ inputs.linux_heavy }}
+    if: ${{ inputs.cold_bazel }}
     timeout-minutes: 180
     strategy:
       fail-fast: false
@@ -498,7 +498,7 @@ jobs:
         uses: ./.github/actions/check-clean-worktree
 
   verify-release-build:
-    if: ${{ inputs.linux_heavy }}
+    if: ${{ inputs.cold_bazel }}
     timeout-minutes: 180
     strategy:
       fail-fast: false
