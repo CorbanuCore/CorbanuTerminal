@@ -34,6 +34,9 @@ jobs:
         with:
           tool: nextest
           version: 0.9.103
+      # Onboarding scenarios launch the wallet daemon from beside the candidate binary.
+      - name: Build the wallet daemon
+        run: cargo build --locked -p codex-wallet-daemon --bin corbanu-walletd
       - name: Install tmux prerequisites
         run: |
           sudo apt-get update -y
