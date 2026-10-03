@@ -696,19 +696,24 @@ SYNTHETIC_KEY = "synthetic-plan-key-9876543210"
 class FakeHelper:
     """Stands in for `corbanu vault auth-helper`; records argv and the home it was given."""
 
-    def __init__(self, session=None, key=SYNTHETIC_KEY, codes=None):
+    def __init__(self, session=None, key=SYNTHETIC_KEY, codes=None, lifecycle=None):
         self.session = session if session is not None else json.dumps(
             {"origin": tasknode.ORIGIN, "account_id": "acct_fixture", "github_username": "fixture",
              "terminal_token": SYNTHETIC_TOKEN, "expires_at": None})
-        self.key, self.codes, self.calls = key, codes or {}, []
+        self.key, self.codes, self.lifecycle, self.calls = key, codes or {}, lifecycle, []
 
     def __call__(self, argv, **kwargs):
         label = argv[-1]
         self.calls.append((argv, kwargs["env"]["CORBANU_HOME"], kwargs["env"]["CODEX_HOME"], kwargs))
-        value = self.session if "/session" in label else self.key
+        if label.endswith("/session-lifecycle") and self.lifecycle is None:
+            # Legacy installations have no marker: the helper's fixed not-found answer.
+            return subprocess.CompletedProcess(
+                argv, 1, b"", f'Error: no credential labeled "{label}"\n'.encode())
+        value = (self.lifecycle if label.endswith("/session-lifecycle")
+                 else self.session if label.endswith("/session") else self.key)
         code = self.codes.get(label, 0)
         return subprocess.CompletedProcess(argv, code, value.encode() if code == 0 else b"",
-                                           None)
+                                           b"Error: synthetic failure\n" if code else b"")
 
 
 class VaultCredentialTests(unittest.TestCase):
@@ -727,24 +732,31 @@ class VaultCredentialTests(unittest.TestCase):
     def test_reads_session_and_key_from_explicit_homes_in_memory(self):
         helper = FakeHelper()
         with patch.dict(os.environ, {"CORBANU_HOME": "/elsewhere", "PFTERMINAL_HOME": "/elsewhere",
-                                     "CODEX_HOME": "/elsewhere"}):
+                                     "CODEX_HOME": "/elsewhere", "CORBANU_DEBUG_HOME": "/elsewhere",
+                                     "PFTERMINAL_DEBUG_HOME": "/elsewhere"}):
             auth = self.resolve(helper, api_key_home=self.key_home)
         self.assertEqual(auth, {"terminal_session": SYNTHETIC_TOKEN, "api_key": SYNTHETIC_KEY})
-        (session_argv, s_home, s_codex, kwargs), (key_argv, k_home, k_codex, _) = helper.calls
-        self.assertEqual(session_argv, [str(self.binary), "vault", "auth-helper", "tasknode/session"])
-        self.assertEqual(key_argv[-1], "provider/pfterminal_plan_api_key")
-        self.assertEqual((s_home, s_codex), (str(self.session_home), str(self.session_home)))
-        self.assertEqual((k_home, k_codex), (str(self.key_home), str(self.key_home)))
-        self.assertNotIn("PFTERMINAL_HOME", kwargs["env"])
-        self.assertEqual((kwargs["stdin"], kwargs["stderr"]), (subprocess.DEVNULL, subprocess.DEVNULL))
+        lifecycle, session, key = helper.calls
+        self.assertEqual(lifecycle[0][-1], "tasknode/session-lifecycle")
+        self.assertEqual(session[0], [str(self.binary), "vault", "auth-helper", "tasknode/session"])
+        self.assertEqual(key[0][-1], "provider/pfterminal_plan_api_key")
+        self.assertEqual(lifecycle[1:3], (str(self.session_home), str(self.session_home)))
+        self.assertEqual(session[1:3], (str(self.session_home), str(self.session_home)))
+        self.assertEqual(key[1:3], (str(self.key_home), str(self.key_home)))
+        for call in helper.calls:
+            for alias in ("PFTERMINAL_HOME", "CORBANU_DEBUG_HOME", "PFTERMINAL_DEBUG_HOME"):
+                self.assertNotIn(alias, call[3]["env"])
+        self.assertEqual((session[3]["stdin"], session[3]["stderr"]), (subprocess.DEVNULL, subprocess.DEVNULL))
+        self.assertEqual(key[3]["stderr"], subprocess.DEVNULL)
         self.assertEqual([p for p in Path(self.tmp.name).rglob("*") if p.is_file()], [])
 
     def test_named_profile_uses_tasknode_session_scope_label(self):
         helper = FakeHelper()
         self.resolve(helper, profile="work")
         digest = tasknode.hashlib.sha256(b"work").hexdigest()[:32]
-        self.assertEqual(helper.calls[0][0][-1], f"tasknode/profiles/{digest}/session")
-        self.assertEqual(helper.calls[1][1], str(self.session_home))
+        self.assertEqual(helper.calls[0][0][-1], f"tasknode/profiles/{digest}/session-lifecycle")
+        self.assertEqual(helper.calls[1][0][-1], f"tasknode/profiles/{digest}/session")
+        self.assertEqual(helper.calls[2][1], str(self.session_home))
         with self.assertRaises(ValueError):
             tasknode.session_label("")
 
@@ -772,6 +784,20 @@ class VaultCredentialTests(unittest.TestCase):
                 self.resolve(helper)
             self.assertNotIn(SYNTHETIC_KEY, str(caught.exception))
             self.assertIn("nothing was sent", str(caught.exception))
+
+    def test_lifecycle_marker_mirrors_rust_and_fails_closed(self):
+        self.assertEqual(self.resolve(FakeHelper(lifecycle='"linked"'))["terminal_session"], SYNTHETIC_TOKEN)
+        for marker in ('"unlinked"', "linked", ""):
+            helper = FakeHelper(lifecycle=marker)
+            with self.subTest(marker=marker), self.assertRaises(ValueError) as caught:
+                self.resolve(helper)
+            self.assertEqual(len(helper.calls), 1, "no session read after a refused marker")
+            self.assertNotIn(SYNTHETIC_TOKEN, str(caught.exception))
+        helper = FakeHelper(lifecycle='"linked"', codes={"tasknode/session-lifecycle": 1})
+        with self.assertRaises(ValueError) as caught:
+            self.resolve(helper)
+        self.assertIn("nothing was sent", str(caught.exception))
+        self.assertEqual(len(helper.calls), 1)
 
     def test_helper_must_be_real_absolute_binary_and_home_must_exist(self):
         wrapper = Path(self.tmp.name) / "corbanu"
@@ -811,7 +837,7 @@ class VaultSendTests(unittest.TestCase):
         self.assertEqual(result["idempotency_key"], self.event_id)
         self.assertEqual(self.transport.call_args.args[2],
                          {"terminal_session": SYNTHETIC_TOKEN, "api_key": SYNTHETIC_KEY})
-        self.assertEqual(len(helper.calls), 2)
+        self.assertEqual(len(helper.calls), 3)
         self.assert_no_secret_on_disk()
         self.assertNotIn(SYNTHETIC_TOKEN, json.dumps(result))
         before = self.snapshot()
@@ -876,6 +902,10 @@ class VaultSendTests(unittest.TestCase):
             self.denied("enroll", "--state", self.state, "--confirm-live", "--corbanu-bin", binary,
                         reason="requires --corbanu-bin and --vault-session-home")
             self.denied("enroll", "--state", self.state, *source, reason="--confirm-live")
+            for broken in ({"tasknode": {}}, {"tasknode": {"workspace_id": "bad id"}}):
+                control.atomic_json(self.state / "control.json", broken)
+                self.denied("enroll", "--state", self.state, "--confirm-live", *source)
+            control.atomic_json(self.state / "control.json", self.config)
             for command in ("flush", "status", "identity-check"):
                 self.denied(command, "--state", self.state, "--confirm-live", *source,
                             reason="only valid for send --live and enroll")

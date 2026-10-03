@@ -147,16 +147,18 @@ def credentials(path):
 
 SESSION_LABEL = "tasknode/session"  # Default-profile label owned by tasknode-session.
 API_KEY_LABEL = "provider/pfterminal_plan_api_key"  # Corbanu plan key stored by the TUI.
-HOME_ALIASES = ("CORBANU_HOME", "PFTERMINAL_HOME", "CODEX_HOME")
+# Debug entrypoints resolve CORBANU_DEBUG_HOME/PFTERMINAL_DEBUG_HOME ahead of CODEX_HOME.
+HOME_ALIASES = ("CORBANU_HOME", "PFTERMINAL_HOME", "CODEX_HOME",
+                "CORBANU_DEBUG_HOME", "PFTERMINAL_DEBUG_HOME")
 
 
-def session_label(profile=None):
+def session_label(profile=None, suffix="session"):
     """Mirror tasknode-session's SessionScope labels; never guess another profile."""
     if profile is None:
-        return SESSION_LABEL
+        return SESSION_LABEL if suffix == "session" else "tasknode/" + suffix
     if not isinstance(profile, str) or not profile:
         raise ValueError("invalid Task Node profile")
-    return f"tasknode/profiles/{hashlib.sha256(profile.encode()).hexdigest()[:32]}/session"
+    return f"tasknode/profiles/{hashlib.sha256(profile.encode()).hexdigest()[:32]}/{suffix}"
 
 
 def vault_helper(binary):
@@ -170,8 +172,12 @@ def vault_helper(binary):
     return path
 
 
-def vault_secret(binary, home, label, runner=None):
-    """One `corbanu vault auth-helper` read held in memory; stderr and output never echoed."""
+def vault_secret(binary, home, label, runner=None, *, optional=False):
+    """One `corbanu vault auth-helper` read held in memory; output never echoed.
+
+    Only an optional read inspects stderr, solely to recognise the helper's fixed
+    not-found message (which carries the label, never a secret); it returns None.
+    """
     runner = runner or subprocess.run
     home = Path(home)
     if not home.is_absolute() or not home.is_dir():
@@ -180,10 +186,14 @@ def vault_secret(binary, home, label, runner=None):
     env.update(CORBANU_HOME=str(home), CODEX_HOME=str(home))
     try:
         result = runner([str(binary), "vault", "auth-helper", label], stdin=subprocess.DEVNULL,
-                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE if optional else subprocess.DEVNULL, env=env,
                         timeout=30, check=False)
     except (OSError, subprocess.TimeoutExpired):
         raise ValueError(f"vault helper failed for {label}; nothing was sent") from None
+    if optional and result.returncode != 0 and isinstance(result.stderr, bytes) and (
+            f'no credential labeled "{label}"'.encode() in result.stderr):
+        return None
     try:
         value = result.stdout.decode("utf-8") if isinstance(result.stdout, bytes) else result.stdout
     except UnicodeError:
@@ -197,6 +207,11 @@ def vault_secret(binary, home, label, runner=None):
 def vault_credentials(binary, session_home, api_key_home=None, profile=None, runner=None):
     """Resolve the Task Node session and plan key at send time. Memory only, no file."""
     binary = vault_helper(binary)
+    # Rust ignores a session whose lifecycle marker says unlinked; absent means legacy.
+    lifecycle = vault_secret(binary, session_home, session_label(profile, "session-lifecycle"),
+                             runner, optional=True)
+    if lifecycle is not None and lifecycle != '"linked"':
+        raise ValueError("vault Task Node session is not linked in this profile; relink in Corbanu")
     raw = vault_secret(binary, session_home, session_label(profile), runner)
     try:
         session = json.loads(raw)
@@ -249,9 +264,12 @@ def enrolled(state, config):
 
 
 def enroll(state, auth, transport=None):
+    """auth is a credential dict or a zero-argument resolver called after local checks."""
     transport = transport or post  # Late-bound like flush, so a patched module transport applies.
     config = read_json(state / "control.json", state)["tasknode"]
     workspace = identifier(config["workspace_id"])
+    if callable(auth):
+        auth = auth()
     status, result = transport("/enrollment", {"workspaceId": workspace, "enabled": True}, auth)
     if not (200 <= status < 300 and result.get("ok") is True):
         raise ValueError(f"Enrollment not verified (HTTP {status}); no credentials logged")
@@ -771,7 +789,7 @@ def cli():
         return
     if not args.confirm_live or not (args.credentials_file or vault):
         parser.error("network writes require --confirm-live and private --credentials-file (enroll may use the vault helper)")
-    auth = credentials(args.credentials_file) if args.credentials_file else vault_credentials(**vault)
+    auth = credentials(args.credentials_file) if args.credentials_file else (lambda: vault_credentials(**vault))
     if args.command == "flush":
         result = flush(args.state, auth)
         print(f"Delivered {result} progress events")
