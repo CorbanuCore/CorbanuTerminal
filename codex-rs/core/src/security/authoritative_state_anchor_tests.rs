@@ -37,18 +37,25 @@ fn pf20_s03_core_adapter_preserves_exact_anchor_and_compare() {
     let anchor = AuthoritativeStateAnchor {
         schema_version: 1,
         revision: 1,
-        owner: AuthoritativeStateOwner::new("a".repeat(64), "controller", 1).unwrap(),
+        owner: AuthoritativeStateOwner::new(
+            "a".repeat(64),
+            "controller",
+            /*owner_generation*/ 1,
+        )
+        .unwrap(),
         state_sha256: "b".repeat(64),
         commit_sha256: "c".repeat(64),
     };
-    adapter.compare_and_store_anchor(None, &anchor).unwrap();
+    adapter
+        .compare_and_store_anchor(/*expected*/ None, &anchor)
+        .unwrap();
     assert_eq!(adapter.load_anchor().unwrap(), Some(anchor.clone()));
     assert_eq!(
         storage.load_policy().unwrap(),
         Some(PolicyCheckpoint::from(&anchor))
     );
     assert_eq!(
-        adapter.compare_and_store_anchor(None, &anchor),
+        adapter.compare_and_store_anchor(/*expected*/ None, &anchor),
         Err(AuthoritativeStateAnchorError::Conflict)
     );
 }
@@ -89,14 +96,23 @@ fn pf20_s03_core_policy_anchor_first_recovery_survives_data_loss() {
         &report,
         &target,
         &probe,
-        2,
+        /*now_unix_seconds*/ 2,
         "controller",
-        1,
+        /*owner_generation*/ 1,
     )
     .unwrap();
-    let owner = AuthoritativeStateOwner::new(&target, "controller", 1).unwrap();
-    let state =
-        AuthoritativeSecurityState::new(1, owner, SecurityLevel::Moderate, 1, 1, 0, false).unwrap();
+    let owner =
+        AuthoritativeStateOwner::new(&target, "controller", /*owner_generation*/ 1).unwrap();
+    let state = AuthoritativeSecurityState::new(
+        /*revision*/ 1,
+        owner,
+        SecurityLevel::Moderate,
+        /*grant_generation*/ 1,
+        /*revocation_generation*/ 1,
+        /*kill_switch_generation*/ 0,
+        /*kill_switch_active*/ false,
+    )
+    .unwrap();
     let root = tempfile::tempdir().unwrap();
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
@@ -107,7 +123,7 @@ fn pf20_s03_core_policy_anchor_first_recovery_survives_data_loss() {
     );
     assert_eq!(
         store
-            .compare_and_activate(0, &state, &authorization)
+            .compare_and_activate(/*expected_revision*/ 0, &state, &authorization)
             .unwrap(),
         state
     );
@@ -120,7 +136,7 @@ fn pf20_s03_core_policy_anchor_first_recovery_survives_data_loss() {
     ));
     assert_eq!(
         store
-            .compare_and_activate(0, &state, &authorization)
+            .compare_and_activate(/*expected_revision*/ 0, &state, &authorization)
             .unwrap(),
         state
     );

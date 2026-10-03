@@ -69,7 +69,9 @@ fn native_child() {
         policy_generation: 1,
         run_generation: 1,
     };
-    client.compare_and_store(None, &checkpoint).unwrap();
+    client
+        .compare_and_store(/*expected*/ None, &checkpoint)
+        .unwrap();
     assert_eq!(client.load(), Ok(Some(checkpoint)));
 }
 
@@ -132,7 +134,7 @@ fn pf20_s03_lost_reply_consumes_capability_without_retry() {
         run_generation: 1,
     };
     assert_eq!(
-        client.compare_and_store(None, &checkpoint),
+        client.compare_and_store(/*expected*/ None, &checkpoint),
         Err(IntegrityRootError::Timeout)
     );
     assert_eq!(client.load(), Err(IntegrityRootError::Unavailable));
@@ -188,7 +190,12 @@ fn pf20_s03_authenticated_definite_conflict_is_not_ambiguous() {
             .unwrap();
     });
     let client = NativeAnchorClient::from_authenticated_stream(client).unwrap();
-    let owner = codex_config::AuthoritativeStateOwner::new("a".repeat(64), "fixture", 1).unwrap();
+    let owner = codex_config::AuthoritativeStateOwner::new(
+        "a".repeat(64),
+        "fixture",
+        /*owner_generation*/ 1,
+    )
+    .unwrap();
     let next = PolicyCheckpoint {
         schema_version: 1,
         revision: 1,
@@ -197,7 +204,7 @@ fn pf20_s03_authenticated_definite_conflict_is_not_ambiguous() {
         commit_sha256: "b".repeat(64),
     };
     assert_eq!(
-        crate::PolicyRootStore::compare_policy(&client, None, &next),
+        crate::PolicyRootStore::compare_policy(&client, /*expected*/ None, &next),
         Err(RootError::Conflict)
     );
     assert_eq!(client.load(), Err(IntegrityRootError::Unavailable));
