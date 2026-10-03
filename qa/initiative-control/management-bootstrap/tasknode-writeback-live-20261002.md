@@ -1,8 +1,11 @@
-# Task Node live writeback, 2026-10-02: identity confirmed, send stopped before any write
+# Task Node live writeback, 2026-10-02/03: enrolled, five tasks requested, send waits for acceptance
 
-Status: **stopped before enrollment or send.** No Task Node write happened. No task
-stage changed, nothing was accepted, and no reward was claimed. Batch posting and
-recurring writeback stay **OFF**.
+Status (round 2, 2026-10-03): **enrolled; no event sent.** The delivery-control
+workspace `corbanu-initiative-control` is enrolled through the vault-backed enroll
+command. Five new PF-80 tasks were requested, and Task Node generated them as
+**Proposed**. No task is accepted, so nothing was sent. No task stage changed,
+nothing was accepted, no reward was claimed, and batch posting, TUI recording and
+recurring writeback stay **OFF**. Round 1 (2026-10-02, below) stopped before any write.
 
 - Class: product initiative, PF-80-S01 (`in_progress`), active plan
   `docs/plans/active/initiative-delivery-control.md`.
@@ -21,6 +24,13 @@ recurring writeback stay **OFF**.
 3. Lifecycle: "The Task Node itself moves task node tasks through their stages. Our
    job is to submit evidence of completion."
 4. First live event: "Yes, of course."
+
+### Follow-up decisions (Travis, 2026-10-03, verbatim)
+
+- A1: "We don't need to submit anything against a task that has been recognized as closed. If we erred in giving that task too much scope, we should create some new tasks that reflect the actual breakdown of our work and submit tasks and evidence against those. We should have a way of mapping this back to our actual work."
+- A2: A reviewed CLI command that reads Travis's Task Node session from the vault at send time; nothing is written to disk.
+- A3: "Our wallet address is 5oUcE2vkXK7ffn7pxJXCawq8UYD62hoadLLr6zGDRDtC, I've put the private key in the vault corresponding to CorbanuAPIKey. … Alternately, just copy the credentials from the RTX box."
+- A4: Enroll `corbanu-initiative-control` through the delivery-control enroll command. No TUI recording.
 
 Manager instructions that came with the decision: never create a new credential;
 never print, copy or log the token; send one real PF-80 progress/evidence event
@@ -161,3 +171,132 @@ To unblock one live event, Travis has to choose one option for each of these:
 Still OFF: batch posting (`tasknode.enabled=false`), TUI Campaign Tracker
 recording, recurring writeback, enrollment, task acceptance and stage moves,
 reward claims and PF-79 beta work.
+
+## Round 2, 2026-10-03: decisions A1–A4 carried out
+
+Worker: Task Node integration worker, Claude Code, round 2. Times 2026-10-03
+09:20–10:10 UTC. All Task Node and vault reads used the real binary
+`.codex-work/integration-build-20260922a/integration-package-dev/bin/corbanu`
+(0.1.48) with `CORBANU_HOME`/`CODEX_HOME` set explicitly.
+
+### A finding about scope probes
+
+`~/.local/bin/corbanu` is a shell wrapper that sources the terminal's
+`activate.sh`, which re-exports `CORBANU_HOME`/`CODEX_HOME` to the terminal work
+home. Any probe made through it reads the terminal home, whatever `CODEX_HOME`
+the caller sets. My first round-2 probes through the wrapper reported "no
+session" in `~/.corbanu` for that reason. With the real binary, `~/.corbanu`
+holds `tasknode/session` (212 bytes, the IridiumMaster session) and no lifecycle
+marker, which means a legacy link. The new sender refuses wrapper scripts for this reason.
+
+### Vault metadata (labels only, read through the TUI `/vault` → View credentials list)
+
+| Home | Labels |
+| --- | --- |
+| `~/.corbanu` | `provider/claude-code-oauth-token`, `tasknode/session` |
+| terminal home `.codex-work/corbanu-terminal/home` | `CorbanuAPI` (manual secret), `RTX-machine`, `neo-vm`, `provider/ai_gateway_api_key`, `provider/ambient_api_key`, `provider/claude-code-oauth-token`, `provider/deepseek_api_key`, `provider/openrouter_api_key`, **`provider/pfterminal_plan_api_key`**, `provider/zai_api_key` |
+| RTX `~/corbanu-rtx/home` | `provider/ai_gateway_api_key`, `provider/claude-code-oauth-token`, `provider/deepseek_api_key`, `provider/openrouter_api_key`, `provider/zai_api_key` |
+
+No vault holds a label `CorbanuAPIKey`. The terminal home's `CorbanuAPI` entry
+matches Travis's description of the wallet private key. **It was not read.** It is
+stored as a *manual secret*, and `vault auth-helper` refuses only the
+private-key, seed-phrase and keystore types. That means any agent can read this
+entry with the helper. **Recommendation:** re-store it as type "crypto private
+key".
+
+### A1: task breakdown
+
+Five requests were created once each with `tasknode request create --body-file`.
+Task Node generated five **Proposed** tasks, and nothing was accepted or refused.
+The full mapping to commits, QA records and ledger entries is in
+[tasknode-task-map.md](tasknode-task-map.md).
+
+| Task | Title (as generated) | Request |
+| --- | --- | --- |
+| `task_9d4fc2d8b21c3fd3ab2bc5ce6b18a188` | Record PF-80-S01 Bootstrap Deliverables With Commit Evidence | `req_6551ea32…` |
+| `task_512bafc249df308083f7acacbc22382e` | Restore the Receipted Slack Alert Path and Send One Owner Alert | `req_6952457b…` |
+| `task_cf2cc91ff71a095a3baa93df1c3d91f8` | Install and Arm the Corbanu Owner Daemon Recurrence | `req_fdfa8a1d…` |
+| `task_80628c7accf770686bdd04fc4cb78bb5` | Ship PF-80-S01 Live Progress Event With Idempotent Re-Send | `req_def84961…` |
+| `task_6d472c45a76bcd6cb5e554eda863a9a1` | Register First Owner-Bridge Allocation and Record QA Evidence | `req_94b6270f…` |
+
+Account counts afterwards: outstanding 8, verification 0, refused 2, rewarded 3.
+
+### A2: vault-backed send and enroll
+
+- Commits `ec88be0a06` (feature) and `b0222784b9` (review fixes) on
+  `integrate/management-workstreams-20260911`.
+- `tasknode.py send --live` and `enroll --confirm-live` accept `--corbanu-bin`,
+  `--vault-session-home`, optional `--vault-api-key-home` and `--tasknode-profile`.
+  After every local gate passes, the sender runs `corbanu vault auth-helper` with
+  every home alias pinned to the given home. It reads the lifecycle marker
+  (refused unless absent or `"linked"`, as in Rust), then the session record
+  (origin and expiry checked), then `provider/pfterminal_plan_api_key`. Values stay
+  in memory and are never logged, echoed or written. Replays and dry runs never
+  read the vault, and a vault failure leaves no durable intent behind.
+- Independent review: `corbanu exec -m claude-opus-5-5-plan`, prompt plus diff only.
+  - Pass 1 on `ec88be0a06`: two P2s (inherited debug-home aliases could redirect
+    a `*-debug` binary; the unlink marker was ignored) and two P3s (enroll read the
+    vault before its local checks; missing tests). All four were fixed in
+    `b0222784b9`, and both P2 fixes were confirmed by mutation.
+  - Pass 2 on `b0222784b9`: **VERDICT: CLEAN**.
+  - Artifacts: `.codex-work/tasknode-round2-review/`.
+- Tests, synthetic values only:
+  - `test_tasknode` 43/43 OK.
+  - `test_control` 41/41 OK.
+  - Full discovery in a clean worktree at `b0222784b9` (fresh venv from
+    `requirements.txt`, disposable HOME, keyring disabled): 897 tests, 866 pass,
+    30 failures and 1 error, all in `test_owner_daemon` worker-lifecycle/handoff
+    cases. The identical 31-case failure set reproduces at the untouched base
+    `4da42a9b10` in the same environment (133 tests, same 31), so it is
+    pre-existing and environmental, not caused by this change. It is retained,
+    not counted as a pass. Outputs: `.codex-work/tasknode-round2-suite2.txt` and
+    `tasknode-round2-base-owner.txt`.
+- **Disclosed incident:** before `enroll`'s transport was late-bound, one new CLI
+  test's patch missed the default `post`. That test reached the production
+  enrollment endpoint once with the synthetic values `synthetic-terminal-token-…`
+  and `synthetic-plan-key-…` and was rejected with HTTP 401. No real credential
+  was involved. The fix is in `ec88be0a06`, and later runs show no network access.
+
+### A3: Corbanu API key
+
+The RTX copy was not needed, and was not possible: the RTX vault has no Corbanu
+key (labels above; `provider/pfterminal_plan_api_key` and the other candidates
+exit 1, not found). This Mac's terminal home already holds
+`provider/pfterminal_plan_api_key`: the helper exits 0 with a 47-character value.
+The sender reads it from that home (`--vault-api-key-home`) instead of copying it,
+so no second copy exists. The server accepted it during enrollment, below. The
+wallet private key was not touched.
+
+### A4: enrollment
+
+Command (clean worktree at `b0222784b9`, venv Python):
+`tasknode.py enroll --state <live state> --confirm-live --corbanu-bin <real binary>
+--vault-session-home ~/.corbanu --vault-api-key-home <terminal home>`.
+
+- Run 2026-10-03T09:58:13Z, exit 0: "Enrollment verified; live event delivery still
+  requires enabled: true".
+- New `state/enrollment.json` (0600, 117 bytes): `workspace_id
+  corbanu-initiative-control`, `verified true`, `verified_at
+  2026-10-03T09:58:15+00:00`.
+- `control.json` is unchanged (SHA-256 `0ee45fb7…6ce1` before and after) with
+  `tasknode.enabled=false`. No outbox or receipts exist.
+
+### Step 5: live send, not run
+
+At 09:58Z all five new tasks are **Proposed** (`canAccept` true,
+`canSubmitInitialEvidence` false), so no new task is assigned. Per the round-2
+instruction I stopped after A1–A4. No event was enqueued or sent, so no send or
+re-send receipt exists.
+
+To send the first event:
+
+1. Travis accepts one task in Task Node, most naturally `task_80628c7…`. Corbanu
+   does not accept tasks.
+2. The manager repoints `control.json` `task_mappings["PF-80-S01"]` from the
+   Rewarded `task_789a0f3…` to that task.
+3. Enqueue one report, then write an owner activation for that exact event.
+4. Run `send --live` with the vault options, then re-send with the same event ID
+   to prove the replay.
+
+Still OFF: batch posting, TUI recording, recurring writeback, task stage moves,
+reward claims.
