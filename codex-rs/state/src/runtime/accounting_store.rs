@@ -241,18 +241,12 @@ impl From<i64> for AsOf {
 /// simply be made again. Any other error is not contention and must not be
 /// retried as if it were.
 pub fn is_contention(error: &anyhow::Error) -> bool {
-    error
-        .chain()
-        .any(|cause| match cause.downcast_ref::<sqlx::Error>() {
-            Some(sqlx::Error::PoolTimedOut) => true,
-            // Primary result code in the low byte: SQLITE_BUSY and its extended
-            // codes. SQLITE_LOCKED is a conflict inside one connection (no shared
-            // cache here), which waiting does not clear.
-            Some(sqlx::Error::Database(database)) => database
-                .code()
-                .and_then(|code| code.parse::<i32>().ok())
-                .is_some_and(|code| code & 0xff == 5),
-            _ => false,
+    crate::runtime::busy_retry::is_busy(error)
+        || error.chain().any(|cause| {
+            matches!(
+                cause.downcast_ref::<sqlx::Error>(),
+                Some(sqlx::Error::PoolTimedOut)
+            )
         })
 }
 

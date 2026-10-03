@@ -2546,6 +2546,7 @@ async fn acquire_provider_request_lease(
     client_session: &ModelClientSession,
     prompt: &Prompt,
     responses_metadata: &CodexResponsesMetadata,
+    cancellation_token: &CancellationToken,
 ) -> CodexResult<Option<ProviderRequestLease>> {
     let preflight_started_at = Instant::now();
     trace_turn_timing("provider_preflight_start", preflight_started_at);
@@ -2617,15 +2618,20 @@ async fn acquire_provider_request_lease(
     trace_turn_timing("provider_preflight_after_warning", preflight_started_at);
     let now_ms = now_unix_timestamp_ms();
     if !provider_request_active_lease_needed(turn_context, &preflight, last_token_usage.as_ref()) {
-        if let Some(block) = state_db
+        // The state DB write waits out another process's lock; an interrupt
+        // must not wait with it.
+        let Ok(cooldown) = state_db
             .check_provider_request_cooldown(&key, &preflight, now_ms)
+            .or_cancel(cancellation_token)
             .await
-            .map_err(|err| {
-                CodexErr::Fatal(format!(
-                    "failed to check provider request throttle state: {err:#}"
-                ))
-            })?
-        {
+        else {
+            return Err(CodexErr::TurnAborted);
+        };
+        if let Some(block) = cooldown.map_err(|err| {
+            CodexErr::Fatal(format!(
+                "failed to check provider request throttle state: {err:#}"
+            ))
+        })? {
             warn!(
                 turn_id = %turn_context.sub_id,
                 provider = %key.provider_id,
@@ -2650,7 +2656,18 @@ async fn acquire_provider_request_lease(
         sess.thread_id,
         turn_context.sub_id
     );
-    let decision = state_db
+    // An interrupt can land after the lease write committed: dropping this guard
+    // then releases whatever this owner holds. Release matches key and owner
+    // only, so the lease's end time is not needed.
+    let provisional_lease = ProviderRequestLeaseGuard::provisional(
+        sess,
+        ProviderRequestLease {
+            key: key.clone(),
+            owner: owner.clone(),
+            lease_until_ms: now_ms,
+        },
+    );
+    let Ok(decision) = state_db
         .try_acquire_provider_request_lease(
             &key,
             &preflight,
@@ -2658,12 +2675,17 @@ async fn acquire_provider_request_lease(
             PROVIDER_REQUEST_LEASE_TTL_MS,
             now_ms,
         )
+        .or_cancel(cancellation_token)
         .await
-        .map_err(|err| {
-            CodexErr::Fatal(format!(
-                "failed to check provider request throttle state: {err:#}"
-            ))
-        })?;
+    else {
+        return Err(CodexErr::TurnAborted);
+    };
+    provisional_lease.disarm();
+    let decision = decision.map_err(|err| {
+        CodexErr::Fatal(format!(
+            "failed to check provider request throttle state: {err:#}"
+        ))
+    })?;
 
     match decision {
         ProviderRequestLeaseDecision::Acquired(lease) => {
@@ -2922,6 +2944,8 @@ struct ProviderRequestLeaseGuard {
     state_db: Option<StateDbHandle>,
     runtime_handle: tokio::runtime::Handle,
     lease: Option<ProviderRequestLease>,
+    /// The lease may never have been written; releasing nothing is expected.
+    provisional: bool,
 }
 
 impl ProviderRequestLeaseGuard {
@@ -2930,7 +2954,19 @@ impl ProviderRequestLeaseGuard {
             state_db: sess.state_db(),
             runtime_handle: sess.services.runtime_handle.clone(),
             lease,
+            provisional: false,
         }
+    }
+
+    fn provisional(sess: &Session, lease: ProviderRequestLease) -> Self {
+        let mut guard = Self::new(sess, Some(lease));
+        guard.provisional = true;
+        guard
+    }
+
+    /// Forget the lease without releasing it.
+    fn disarm(mut self) {
+        self.lease = None;
     }
 
     async fn record_result(&mut self, sess: &Session, result: ProviderRequestResult) {
@@ -2951,11 +2987,18 @@ impl Drop for ProviderRequestLeaseGuard {
         let Some(state_db) = self.state_db.clone() else {
             return;
         };
+        let provisional = self.provisional;
         std::mem::drop(self.runtime_handle.spawn(async move {
             match state_db
                 .release_provider_request_lease(&lease, now_unix_timestamp_ms())
                 .await
             {
+                Ok(0) if provisional => trace!(
+                    provider = %lease.key.provider_id,
+                    model = %lease.key.model,
+                    owner = %lease.owner,
+                    "interrupted before a provider request lease was written"
+                ),
                 Ok(0) => warn!(
                     provider = %lease.key.provider_id,
                     model = %lease.key.model,
@@ -3164,6 +3207,7 @@ async fn try_run_sampling_request(
         client_session,
         prompt,
         responses_metadata,
+        &cancellation_token,
     )
     .await?;
     trace_turn_timing("after_provider_request_lease", try_started_at);
