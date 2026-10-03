@@ -4226,12 +4226,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "codex-secret-broker-service"
+name = "codex-secret-broker-fixture"
 version = "0.1.42"
 dependencies = [
  "codex-keyring-store",
- "codex-protected-state",
  "codex-secret-broker",
+ "codex-secret-broker-service",
  "codex-security-audit",
  "codex-security-policy",
  "codex-utils-absolute-path",
@@ -4244,6 +4244,20 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "signal-hook",
+ "tempfile",
+]
+
+[[package]]
+name = "codex-secret-broker-service"
+version = "0.1.42"
+dependencies = [
+ "codex-protected-state",
+ "codex-secret-broker",
+ "codex-utils-cargo-bin",
+ "codex-vault",
+ "nix 0.30.1",
+ "pretty_assertions",
+ "rustix 1.1.4",
  "tempfile",
 ]
 
