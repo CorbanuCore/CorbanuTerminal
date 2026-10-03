@@ -446,7 +446,7 @@ impl App {
                         crate::config_update::build_model_selection_edits(
                             replacement.model.as_str(),
                             Some(replacement.runtime_provider_id.as_str()),
-                            None::<String>,
+                            /*effort*/ None::<String>,
                         ),
                     )
                     .await

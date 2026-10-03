@@ -125,7 +125,7 @@ fn podman_expanded_drops_require_empty_computed_capabilities() {
 #[cfg(unix)]
 #[test]
 fn launch_uses_engine_native_private_namespaces_and_seccomp_selection() {
-    let (_directory, mut container) = fixture(0);
+    let (_directory, mut container) = fixture(/*failures*/ 0);
     for kind in [EngineKind::Docker, EngineKind::Podman] {
         container.engine.kind = kind;
         let args = container.create_args();
@@ -221,7 +221,7 @@ async fn stopped_owned_service_starts_and_stalled_service_restarts_once() {
 #[cfg(unix)]
 #[tokio::test]
 async fn collision_cannot_restart_or_remove_another_owners_service() {
-    let (directory, mut container) = fixture(1);
+    let (directory, mut container) = fixture(/*failures*/ 1);
     container.create().await.unwrap();
     let mut state = read_fixture(&directory);
     state["container"]["Config"]["Labels"]["org.corbanu.browser.owner"] = json!("other-owner");
@@ -251,7 +251,7 @@ async fn collision_cannot_restart_or_remove_another_owners_service() {
 #[cfg(unix)]
 #[tokio::test]
 async fn cancellation_can_await_cleanup_after_dropping_the_worker_future() {
-    let (directory, mut container) = fixture(0);
+    let (directory, mut container) = fixture(/*failures*/ 0);
     container.create().await.unwrap();
     let mut state = read_fixture(&directory);
     state["stall"] = json!(true);

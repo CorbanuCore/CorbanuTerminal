@@ -957,7 +957,7 @@ async fn multi_agent_v2_selects_child_models_with_different_engine_defaults() {
             (
                 child.model.as_deref(),
                 child.model_provider_id.as_str(),
-                child.multi_agent_version_for_model(None)
+                child.multi_agent_version_for_model(/*model_multi_agent_version*/ None)
             ),
             (Some(model), provider, MultiAgentVersion::V2)
         );

@@ -7,7 +7,11 @@ async fn owner(level: SecurityLevel) -> Arc<Session> {
         .services
         .agent_control
         .clone()
-        .with_effective_security_policy(level, session.thread_id, false)
+        .with_effective_security_policy(
+            level,
+            session.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
         .unwrap();
     Arc::new(session)
 }
@@ -138,7 +142,11 @@ async fn pf_30_s04_inherited_policy_is_not_weakened_by_permissive_worker_configu
         .services
         .agent_control
         .clone()
-        .with_effective_security_policy(SecurityLevel::Permissive, child.thread_id, false)
+        .with_effective_security_policy(
+            SecurityLevel::Permissive,
+            child.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
         .unwrap();
     assert!(matches!(
         client(&Arc::new(child)).await,
@@ -165,7 +173,7 @@ async fn pf_30_s04_kill_switch_denies_an_existing_worker_binding() {
                 PolicyPrincipal::new(PrincipalKind::Human, "fixture-human").unwrap(),
                 RevocationTarget::KillSwitch { active: true },
                 RevocationReason::KillSwitch,
-                1,
+                /*created_at_unix_seconds*/ 1,
             )
             .unwrap(),
         )
@@ -252,7 +260,11 @@ async fn pf_30_s04_websocket_connect_race_denies_before_first_frame() {
         .services
         .agent_control
         .clone()
-        .with_effective_security_policy(SecurityLevel::Permissive, session.thread_id, false)
+        .with_effective_security_policy(
+            SecurityLevel::Permissive,
+            session.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
         .unwrap();
     let owner = Arc::new(session);
     let mut client = client(&owner).await.unwrap();
@@ -338,7 +350,11 @@ async fn pf_30_s04_owner_termination_cancels_pending_http_without_a_retry() {
         .services
         .agent_control
         .clone()
-        .with_effective_security_policy(SecurityLevel::Permissive, session.thread_id, false)
+        .with_effective_security_policy(
+            SecurityLevel::Permissive,
+            session.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
         .unwrap();
     let owner = Arc::new(session);
     let (terminate, terminated) = tokio::sync::oneshot::channel();

@@ -17,12 +17,12 @@ use super::*;
 #[test]
 fn configure_many_preserves_first_fresh_selection_and_returns_to_list() {
     let mut session = ProviderSetupSession::from_statuses(&[]);
-    configure(&mut session, "alpha", true);
+    configure(&mut session, "alpha", /*usable*/ true);
     assert_eq!(
         session.snapshot().first_fresh_runtime,
         Some(runtime_id("alpha"))
     );
-    configure(&mut session, "beta", true);
+    configure(&mut session, "beta", /*usable*/ true);
     assert_eq!(
         session.snapshot(),
         &ProviderSetupSnapshot {
@@ -40,7 +40,7 @@ fn configure_many_preserves_first_fresh_selection_and_returns_to_list() {
 fn existing_usable_current_is_preserved() {
     let mut session =
         ProviderSetupSession::from_statuses(&[status("current", ProviderCurrentState::Current)]);
-    let transition = configure(&mut session, "new", true);
+    let transition = configure(&mut session, "new", /*usable*/ true);
     assert!(
         !transition
             .effects
@@ -58,7 +58,7 @@ fn late_qualified_claude_status_preserves_existing_current_before_new_setup() {
         ProviderCurrentState::Current,
     )]));
 
-    let transition = configure(&mut session, "new", true);
+    let transition = configure(&mut session, "new", /*usable*/ true);
 
     assert!(session.snapshot().preserve_initial_current);
     assert_eq!(session.snapshot().first_fresh_runtime, None);
@@ -208,7 +208,7 @@ fn configured_interactive_provider_offers_existing_selection() {
     let interactive = status("openai", ProviderCurrentState::NotCurrent);
     assert!(super::provider_should_offer_existing_selection(
         &interactive,
-        false,
+        /*has_noninteractive_capability*/ false,
     ));
 }
 
@@ -220,7 +220,7 @@ fn deferred_cancel_continues_with_fallback_or_returns_without_one() {
     ] {
         let mut session = ProviderSetupSession::from_statuses(&[]);
         if with_fallback {
-            configure(&mut session, "alpha", true);
+            configure(&mut session, "alpha", /*usable*/ true);
         }
         session.dispatch(ProviderSetupAction::QueueCorbanu(true));
         session.dispatch(ProviderSetupAction::Done);
@@ -274,7 +274,7 @@ fn wrong_provider_completion_is_stale_and_cannot_mutate_the_session() {
 #[test]
 fn configured_but_unavailable_provider_does_not_become_the_fresh_default() {
     let mut session = ProviderSetupSession::from_statuses(&[]);
-    let unavailable = configure(&mut session, "alpha", false);
+    let unavailable = configure(&mut session, "alpha", /*usable*/ false);
     assert_eq!(session.snapshot().first_fresh_runtime, None);
     assert!(
         !unavailable
@@ -282,7 +282,7 @@ fn configured_but_unavailable_provider_does_not_become_the_fresh_default() {
             .iter()
             .any(|effect| matches!(effect, ProviderSetupEffect::PersistInitialSelection(_)))
     );
-    let usable = configure(&mut session, "beta", true);
+    let usable = configure(&mut session, "beta", /*usable*/ true);
     assert_eq!(
         session.snapshot().first_fresh_runtime,
         Some(runtime_id("beta"))

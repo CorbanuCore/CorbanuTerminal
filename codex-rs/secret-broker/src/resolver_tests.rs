@@ -231,7 +231,7 @@ fn authorization() -> ProtectedModeAuthorization {
         },
         TARGET,
         PROBE,
-        150,
+        /*now_unix_seconds*/ 150,
     )
     .expect("synthetic authorization")
 }
@@ -296,7 +296,7 @@ fn runtime(
 ) -> BrokerRuntime<Arc<FakeBackend>, Arc<FakeAudit>> {
     BrokerRuntime::new(
         instance,
-        BrokerRuntimeConfig::bounded(4, 4).expect("config"),
+        BrokerRuntimeConfig::bounded(/*max_sessions*/ 4, /*max_in_flight*/ 4).expect("config"),
         authorization(),
         backend,
         audit,
@@ -330,11 +330,15 @@ fn pf_27_s04_pf_27_s01_typed_dispatch_is_audited_before_backend_and_resolved() {
     let backend = Arc::new(FakeBackend::default());
     let audit = Arc::new(FakeAudit::default());
     let runtime = runtime(INSTANCE, backend.clone(), audit.clone());
-    let observed_peer = peer(100);
-    let handle = register(&runtime, 1, observed_peer.clone());
+    let observed_peer = peer(/*pid*/ 100);
+    let handle = register(&runtime, /*generation*/ 1, observed_peer.clone());
 
     let receipt = runtime
-        .dispatch(&handle, &observed_peer, &frame(binding(1), 1))
+        .dispatch(
+            &handle,
+            &observed_peer,
+            &frame(binding(/*generation*/ 1), /*sequence*/ 1),
+        )
         .expect("receipt");
 
     assert_eq!(
@@ -360,9 +364,9 @@ fn pf_27_s04_pf_27_s01_replay_wrong_peer_and_binding_are_rejected_before_backend
     let backend = Arc::new(FakeBackend::default());
     let audit = Arc::new(FakeAudit::default());
     let runtime = runtime(INSTANCE, backend.clone(), audit);
-    let observed_peer = peer(100);
-    let handle = register(&runtime, 1, observed_peer.clone());
-    let first = frame(binding(1), 1);
+    let observed_peer = peer(/*pid*/ 100);
+    let handle = register(&runtime, /*generation*/ 1, observed_peer.clone());
+    let first = frame(binding(/*generation*/ 1), /*sequence*/ 1);
     runtime
         .dispatch(&handle, &observed_peer, &first)
         .expect("first");
@@ -371,13 +375,17 @@ fn pf_27_s04_pf_27_s01_replay_wrong_peer_and_binding_are_rejected_before_backend
         Err(BrokerDispatchError::ReplayOrSequenceGap)
     );
     assert_eq!(
-        runtime.dispatch(&handle, &peer(101), &frame(binding(1), 2)),
+        runtime.dispatch(
+            &handle,
+            &peer(/*pid*/ 101),
+            &frame(binding(/*generation*/ 1), /*sequence*/ 2)
+        ),
         Err(BrokerDispatchError::WrongPeer)
     );
-    let mut forged = binding(1);
+    let mut forged = binding(/*generation*/ 1);
     forged.task_id = "task-forged".to_string();
     assert_eq!(
-        runtime.dispatch(&handle, &observed_peer, &frame(forged, 2)),
+        runtime.dispatch(&handle, &observed_peer, &frame(forged, /*sequence*/ 2)),
         Err(BrokerDispatchError::BindingMismatch)
     );
     assert_eq!(backend.calls.load(Ordering::SeqCst), 1);
@@ -388,18 +396,22 @@ fn pf_27_s04_pf_27_s01_same_run_replacement_invalidates_old_and_stale_connection
     let backend = Arc::new(FakeBackend::default());
     let audit = Arc::new(FakeAudit::default());
     let runtime = runtime(INSTANCE, backend.clone(), audit);
-    let old_peer = peer(100);
-    let old = register(&runtime, 1, old_peer.clone());
-    let new_peer = peer(101);
-    let new = register(&runtime, 2, new_peer.clone());
+    let old_peer = peer(/*pid*/ 100);
+    let old = register(&runtime, /*generation*/ 1, old_peer.clone());
+    let new_peer = peer(/*pid*/ 101);
+    let new = register(&runtime, /*generation*/ 2, new_peer.clone());
 
     assert_eq!(
-        runtime.dispatch(&old, &old_peer, &frame(binding(1), 1)),
+        runtime.dispatch(
+            &old,
+            &old_peer,
+            &frame(binding(/*generation*/ 1), /*sequence*/ 1)
+        ),
         Err(BrokerDispatchError::SessionUnavailable)
     );
     assert!(matches!(
         runtime.register_session(
-            binding(1),
+            binding(/*generation*/ 1),
             old_peer,
             BrokerChannelMac::from_secret(KEY),
             vec![
@@ -413,7 +425,11 @@ fn pf_27_s04_pf_27_s01_same_run_replacement_invalidates_old_and_stale_connection
         Err(BrokerDispatchError::StaleRunGeneration)
     ));
     runtime
-        .dispatch(&new, &new_peer, &frame(binding(2), 1))
+        .dispatch(
+            &new,
+            &new_peer,
+            &frame(binding(/*generation*/ 2), /*sequence*/ 1),
+        )
         .expect("new generation");
     assert_eq!(backend.calls.load(Ordering::SeqCst), 1);
 }
@@ -423,16 +439,24 @@ fn pf_27_s04_pf_27_s01_restart_and_cancel_reject_old_handles_without_fallback() 
     let backend = Arc::new(FakeBackend::default());
     let audit = Arc::new(FakeAudit::default());
     let first = runtime(INSTANCE, backend.clone(), audit.clone());
-    let observed_peer = peer(100);
-    let old = register(&first, 1, observed_peer.clone());
+    let observed_peer = peer(/*pid*/ 100);
+    let old = register(&first, /*generation*/ 1, observed_peer.clone());
     let restarted = runtime(OTHER_INSTANCE, backend.clone(), audit);
     assert_eq!(
-        restarted.dispatch(&old, &observed_peer, &frame(binding(1), 1)),
+        restarted.dispatch(
+            &old,
+            &observed_peer,
+            &frame(binding(/*generation*/ 1), /*sequence*/ 1)
+        ),
         Err(BrokerDispatchError::BrokerRestarted)
     );
     first.cancel_session(&old).expect("cancel");
     assert_eq!(
-        first.dispatch(&old, &observed_peer, &frame(binding(1), 1)),
+        first.dispatch(
+            &old,
+            &observed_peer,
+            &frame(binding(/*generation*/ 1), /*sequence*/ 1)
+        ),
         Err(BrokerDispatchError::SessionUnavailable)
     );
     assert_eq!(backend.calls.load(Ordering::SeqCst), 0);
@@ -443,10 +467,10 @@ fn pf_27_s04_pf_27_s01_cross_run_reference_theft_expiry_and_revocation_fail_clos
     let backend = Arc::new(FakeBackend::default());
     let audit = Arc::new(FakeAudit::default());
     let runtime = runtime(INSTANCE, backend.clone(), audit);
-    let observed_peer = peer(100);
+    let observed_peer = peer(/*pid*/ 100);
     let handle = runtime
         .register_session(
-            binding(1),
+            binding(/*generation*/ 1),
             observed_peer.clone(),
             BrokerChannelMac::from_secret(KEY),
             vec![
@@ -459,7 +483,11 @@ fn pf_27_s04_pf_27_s01_cross_run_reference_theft_expiry_and_revocation_fail_clos
         )
         .expect("session");
     assert_eq!(
-        runtime.dispatch(&handle, &observed_peer, &frame(binding(1), 1)),
+        runtime.dispatch(
+            &handle,
+            &observed_peer,
+            &frame(binding(/*generation*/ 1), /*sequence*/ 1)
+        ),
         Err(BrokerDispatchError::CredentialUnavailable)
     );
     let other_reference = CredentialReference::from_sha256_hex(OTHER_REFERENCE).expect("reference");
@@ -470,27 +498,35 @@ fn pf_27_s04_pf_27_s01_cross_run_reference_theft_expiry_and_revocation_fail_clos
         runtime.dispatch(
             &handle,
             &observed_peer,
-            &frame_for(binding(1), 1, operation_for(OTHER_REFERENCE)),
+            &frame_for(
+                binding(/*generation*/ 1),
+                /*sequence*/ 1,
+                operation_for(OTHER_REFERENCE)
+            ),
         ),
         Err(BrokerDispatchError::CredentialUnavailable)
     );
 
     let expiring = runtime
         .register_session(
-            binding(2),
+            binding(/*generation*/ 2),
             observed_peer.clone(),
             BrokerChannelMac::from_secret(KEY),
             vec![
                 BrokerCredentialGrant::expiring(
                     CredentialReference::from_sha256_hex(REFERENCE).expect("reference"),
-                    1,
+                    /*expires_at_unix_seconds*/ 1,
                 )
                 .expect("grant"),
             ],
         )
         .expect("session");
     assert_eq!(
-        runtime.dispatch(&expiring, &observed_peer, &frame(binding(2), 1)),
+        runtime.dispatch(
+            &expiring,
+            &observed_peer,
+            &frame(binding(/*generation*/ 2), /*sequence*/ 1)
+        ),
         Err(BrokerDispatchError::CredentialExpired)
     );
     assert_eq!(backend.calls.load(Ordering::SeqCst), 0);
@@ -502,10 +538,14 @@ fn pf_27_s04_pf_27_s01_audit_failure_blocks_dispatch_and_ambiguous_resolution_is
     let audit = Arc::new(FakeAudit::default());
     audit.fail_reserve.store(true, Ordering::SeqCst);
     let runtime = runtime(INSTANCE, backend.clone(), audit.clone());
-    let observed_peer = peer(100);
-    let handle = register(&runtime, 1, observed_peer.clone());
+    let observed_peer = peer(/*pid*/ 100);
+    let handle = register(&runtime, /*generation*/ 1, observed_peer.clone());
     assert_eq!(
-        runtime.dispatch(&handle, &observed_peer, &frame(binding(1), 1)),
+        runtime.dispatch(
+            &handle,
+            &observed_peer,
+            &frame(binding(/*generation*/ 1), /*sequence*/ 1)
+        ),
         Err(BrokerDispatchError::AuditUnavailable)
     );
     assert_eq!(backend.calls.load(Ordering::SeqCst), 0);
@@ -513,12 +553,20 @@ fn pf_27_s04_pf_27_s01_audit_failure_blocks_dispatch_and_ambiguous_resolution_is
     audit.fail_reserve.store(false, Ordering::SeqCst);
     audit.fail_resolve.store(true, Ordering::SeqCst);
     assert_eq!(
-        runtime.dispatch(&handle, &observed_peer, &frame(binding(1), 2)),
+        runtime.dispatch(
+            &handle,
+            &observed_peer,
+            &frame(binding(/*generation*/ 1), /*sequence*/ 2)
+        ),
         Err(BrokerDispatchError::AuditCommitUnknown)
     );
     assert_eq!(backend.calls.load(Ordering::SeqCst), 1);
     assert_eq!(
-        runtime.dispatch(&handle, &observed_peer, &frame(binding(1), 3)),
+        runtime.dispatch(
+            &handle,
+            &observed_peer,
+            &frame(binding(/*generation*/ 1), /*sequence*/ 3)
+        ),
         Err(BrokerDispatchError::SessionUnavailable)
     );
 }
@@ -543,11 +591,11 @@ fn pf_27_s04_pf_27_s01_unsupported_platform_report_cannot_construct_runtime() {
     assert!(matches!(
         BrokerRuntime::from_platform_report(
             INSTANCE,
-            BrokerRuntimeConfig::bounded(1, 1).expect("config"),
+            BrokerRuntimeConfig::bounded(/*max_sessions*/ 1, /*max_in_flight*/ 1).expect("config"),
             &platform_report(&capabilities),
             TARGET,
             PROBE,
-            150,
+            /*now_unix_seconds*/ 150,
             backend,
             audit,
         ),
@@ -566,11 +614,15 @@ fn pf_27_s04_pf_27_s01_concurrent_revocation_cancels_open_upload_before_effect()
     });
     let audit = Arc::new(FakeAudit::default());
     let runtime = Arc::new(runtime(INSTANCE, backend, audit.clone()));
-    let observed_peer = peer(100);
-    let handle = register(&runtime, 1, observed_peer.clone());
+    let observed_peer = peer(/*pid*/ 100);
+    let handle = register(&runtime, /*generation*/ 1, observed_peer.clone());
     let worker_runtime = runtime.clone();
     let worker = std::thread::spawn(move || {
-        worker_runtime.dispatch(&handle, &observed_peer, &frame(binding(1), 1))
+        worker_runtime.dispatch(
+            &handle,
+            &observed_peer,
+            &frame(binding(/*generation*/ 1), /*sequence*/ 1),
+        )
     });
 
     entered.wait();
@@ -589,27 +641,27 @@ fn pf_27_s04_pf_27_s01_concurrent_revocation_cancels_open_upload_before_effect()
 #[test]
 fn pf_27_s04_pf_27_s01_resource_bounds_fail_without_eviction_or_enumeration() {
     assert_eq!(
-        BrokerRuntimeConfig::bounded(0, 1),
+        BrokerRuntimeConfig::bounded(/*max_sessions*/ 0, /*max_in_flight*/ 1),
         Err(BrokerDispatchError::InvalidConfig)
     );
     let backend = Arc::new(FakeBackend::default());
     let audit = Arc::new(FakeAudit::default());
     let runtime = BrokerRuntime::new(
         INSTANCE,
-        BrokerRuntimeConfig::bounded(1, 1).expect("config"),
+        BrokerRuntimeConfig::bounded(/*max_sessions*/ 1, /*max_in_flight*/ 1).expect("config"),
         authorization(),
         backend,
         audit,
     )
     .expect("runtime");
-    register(&runtime, 1, peer(100));
+    register(&runtime, /*generation*/ 1, peer(/*pid*/ 100));
     assert!(matches!(
         runtime.register_session(
             BrokerBinding {
                 run_id: "run-2".to_string(),
-                ..binding(1)
+                ..binding(/*generation*/ 1)
             },
-            peer(101),
+            peer(/*pid*/ 101),
             BrokerChannelMac::from_secret(KEY),
             vec![
                 BrokerCredentialGrant::expiring(
@@ -627,7 +679,8 @@ fn pf_27_s04_pf_27_s01_resource_bounds_fail_without_eviction_or_enumeration() {
 fn pf_27_s04_pf_27_s01_run_generation_history_is_bounded_without_stale_eviction() {
     let backend = Arc::new(FakeBackend::default());
     let audit = Arc::new(FakeAudit::default());
-    let config = BrokerRuntimeConfig::bounded(1, 1).expect("config");
+    let config =
+        BrokerRuntimeConfig::bounded(/*max_sessions*/ 1, /*max_in_flight*/ 1).expect("config");
     let max_tracked_runs = config.max_tracked_runs;
     let runtime =
         BrokerRuntime::new(INSTANCE, config, authorization(), backend, audit).expect("runtime");
@@ -635,7 +688,7 @@ fn pf_27_s04_pf_27_s01_run_generation_history_is_bounded_without_stale_eviction(
     for index in 0..max_tracked_runs {
         let run_binding = BrokerBinding {
             run_id: format!("run-{index}"),
-            ..binding(1)
+            ..binding(/*generation*/ 1)
         };
         let handle = runtime
             .register_session(
@@ -658,9 +711,9 @@ fn pf_27_s04_pf_27_s01_run_generation_history_is_bounded_without_stale_eviction(
         runtime.register_session(
             BrokerBinding {
                 run_id: "one-run-too-many".to_string(),
-                ..binding(1)
+                ..binding(/*generation*/ 1)
             },
-            peer(999),
+            peer(/*pid*/ 999),
             BrokerChannelMac::from_secret(KEY),
             vec![
                 BrokerCredentialGrant::expiring(

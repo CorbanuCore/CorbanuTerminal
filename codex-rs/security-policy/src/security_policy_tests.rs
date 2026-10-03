@@ -48,7 +48,9 @@ fn request(now_unix_seconds: i64) -> AuthorizationRequest {
             purpose: text("paper-trading-regression"),
             operation: text("order.execute"),
             destination: Some(text("venue:paper")),
-            quantity: Some(QuantitativeLimit::new("USD", 500).expect("valid quantity")),
+            quantity: Some(
+                QuantitativeLimit::new("USD", /*max_units*/ 500).expect("valid quantity"),
+            ),
             grant_id: None,
         },
     )
@@ -75,20 +77,33 @@ fn grant() -> BoundedGrant {
     BoundedGrant::issue(
         human(),
         chain(),
-        scope(1_000),
-        100,
-        200,
+        scope(/*max_units*/ 1_000),
+        /*issued_at_unix_seconds*/ 100,
+        /*expires_at_unix_seconds*/ 200,
         text("grant-nonce-1"),
     )
     .expect("valid grant")
 }
 
 fn grant_with_nonce(nonce: &str) -> BoundedGrant {
-    BoundedGrant::issue(human(), chain(), scope(1_000), 100, 200, text(nonce)).expect("valid grant")
+    BoundedGrant::issue(
+        human(),
+        chain(),
+        scope(/*max_units*/ 1_000),
+        /*issued_at_unix_seconds*/ 100,
+        /*expires_at_unix_seconds*/ 200,
+        text(nonce),
+    )
+    .expect("valid grant")
 }
 
 fn preview() -> ProtectedActionPreview {
-    ProtectedActionPreview::new(request(100), 180, text("preview-nonce-1")).expect("valid preview")
+    ProtectedActionPreview::new(
+        request(/*now_unix_seconds*/ 100),
+        /*expires_at_unix_seconds*/ 180,
+        text("preview-nonce-1"),
+    )
+    .expect("valid preview")
 }
 
 fn queued_grant(
@@ -192,7 +207,7 @@ fn policy_text_and_actor_chains_are_bounded() {
 
 #[test]
 fn authorization_request_digest_is_deterministic_and_mutation_sensitive() {
-    let original = request(100);
+    let original = request(/*now_unix_seconds*/ 100);
     assert_eq!(
         original.digest().expect("digest"),
         original.digest().expect("digest")
@@ -208,7 +223,7 @@ fn authorization_request_digest_is_deterministic_and_mutation_sensitive() {
 
 #[test]
 fn authorization_digest_binds_session_task_purpose_and_operation() {
-    let original = request(100);
+    let original = request(/*now_unix_seconds*/ 100);
     let mut variants = Vec::new();
 
     let mut wrong_session = original.clone();
@@ -235,7 +250,8 @@ fn authorization_digest_binds_session_task_purpose_and_operation() {
 
 #[test]
 fn authorization_requests_fail_closed_without_echoing_protected_values() {
-    let mut serialized = serde_json::to_value(request(100)).expect("serialize request");
+    let mut serialized =
+        serde_json::to_value(request(/*now_unix_seconds*/ 100)).expect("serialize request");
     serialized["resource"]["id"] = serde_json::Value::String("credential-canary".to_string());
 
     for required_field in ["session_id", "task_id", "purpose", "operation"] {
@@ -251,7 +267,7 @@ fn authorization_requests_fail_closed_without_echoing_protected_values() {
         assert!(!error.contains("credential-canary"));
     }
 
-    let mut invalid_time = request(100);
+    let mut invalid_time = request(/*now_unix_seconds*/ 100);
     invalid_time.context.now_unix_seconds = -1;
     assert!(matches!(
         invalid_time.validate(),
@@ -261,7 +277,7 @@ fn authorization_requests_fail_closed_without_echoing_protected_values() {
 
 #[test]
 fn permissive_composition_preserves_every_frozen_surface_decision() {
-    let decision = permissive_decision(&request(100)).expect("decision");
+    let decision = permissive_decision(&request(/*now_unix_seconds*/ 100)).expect("decision");
     let baseline = [
         ("permission-profile", true),
         ("approval-policy", true),
@@ -286,16 +302,28 @@ fn permissive_composition_preserves_every_frozen_surface_decision() {
 #[test]
 fn grant_integrity_expiry_and_exact_scope_are_enforced() {
     let grant = grant();
-    assert!(grant.matches_request(&request(150)).expect("valid grant"));
-    assert!(!grant.matches_request(&request(99)).expect("not issued"));
-    assert!(!grant.matches_request(&request(200)).expect("expired grant"));
+    assert!(
+        grant
+            .matches_request(&request(/*now_unix_seconds*/ 150))
+            .expect("valid grant")
+    );
+    assert!(
+        !grant
+            .matches_request(&request(/*now_unix_seconds*/ 99))
+            .expect("not issued")
+    );
+    assert!(
+        !grant
+            .matches_request(&request(/*now_unix_seconds*/ 200))
+            .expect("expired grant")
+    );
 
-    let mut wrong_actor = request(150);
+    let mut wrong_actor = request(/*now_unix_seconds*/ 150);
     wrong_actor.subject =
         ActorChain::new(vec![human(), agent("agent:other")]).expect("valid wrong actor");
     assert!(!grant.matches_request(&wrong_actor).expect("actor mismatch"));
 
-    let mut wrong_action = request(150);
+    let mut wrong_action = request(/*now_unix_seconds*/ 150);
     wrong_action.action = PolicyAction::Sign;
     assert!(
         !grant
@@ -303,7 +331,7 @@ fn grant_integrity_expiry_and_exact_scope_are_enforced() {
             .expect("action mismatch")
     );
 
-    let mut wrong_resource = request(150);
+    let mut wrong_resource = request(/*now_unix_seconds*/ 150);
     wrong_resource.resource =
         ProtectedResource::new(ResourceKind::FinancialAction, "account:other")
             .expect("valid adjacent resource");
@@ -319,7 +347,7 @@ fn grant_integrity_expiry_and_exact_scope_are_enforced() {
         ("purpose", "portfolio-disclosure"),
         ("operation", "order.cancel"),
     ] {
-        let mut wrong_context = request(150);
+        let mut wrong_context = request(/*now_unix_seconds*/ 150);
         match field {
             "session_id" => wrong_context.context.session_id = text(value),
             "task_id" => wrong_context.context.task_id = text(value),
@@ -335,7 +363,7 @@ fn grant_integrity_expiry_and_exact_scope_are_enforced() {
         );
     }
 
-    let mut wrong_destination = request(150);
+    let mut wrong_destination = request(/*now_unix_seconds*/ 150);
     wrong_destination.context.destination = Some(text("venue:other"));
     assert!(
         !grant
@@ -343,20 +371,21 @@ fn grant_integrity_expiry_and_exact_scope_are_enforced() {
             .expect("scope mismatch")
     );
 
-    let mut excessive_quantity = request(150);
+    let mut excessive_quantity = request(/*now_unix_seconds*/ 150);
     excessive_quantity.context.quantity =
-        Some(QuantitativeLimit::new("USD", 1_001).expect("valid quantity"));
+        Some(QuantitativeLimit::new("USD", /*max_units*/ 1_001).expect("valid quantity"));
     assert!(
         !grant
             .matches_request(&excessive_quantity)
             .expect("limit mismatch")
     );
 
-    let mut wrong_asset = request(150);
-    wrong_asset.context.quantity = Some(QuantitativeLimit::new("BTC", 1).expect("valid quantity"));
+    let mut wrong_asset = request(/*now_unix_seconds*/ 150);
+    wrong_asset.context.quantity =
+        Some(QuantitativeLimit::new("BTC", /*max_units*/ 1).expect("valid quantity"));
     assert!(!grant.matches_request(&wrong_asset).expect("asset mismatch"));
 
-    let mut missing_quantity = request(150);
+    let mut missing_quantity = request(/*now_unix_seconds*/ 150);
     missing_quantity.context.quantity = None;
     assert!(
         !grant
@@ -389,8 +418,8 @@ fn derived_grants_can_only_narrow_scope_chain_and_expiry() {
         &parent,
         child_chain.clone(),
         child_scope,
-        120,
-        180,
+        /*issued_at_unix_seconds*/ 120,
+        /*expires_at_unix_seconds*/ 180,
         text("child-nonce"),
     )
     .expect("narrow child grant");
@@ -410,8 +439,8 @@ fn derived_grants_can_only_narrow_scope_chain_and_expiry() {
             &parent,
             child_chain.clone(),
             broader_scope,
-            120,
-            180,
+            /*issued_at_unix_seconds*/ 120,
+            /*expires_at_unix_seconds*/ 180,
             text("broad-child-nonce"),
         ),
         Err(GrantValidationError::ScopeNotNarrower)
@@ -430,8 +459,8 @@ fn derived_grants_can_only_narrow_scope_chain_and_expiry() {
             &parent,
             child_chain.clone(),
             extra_asset_scope,
-            120,
-            180,
+            /*issued_at_unix_seconds*/ 120,
+            /*expires_at_unix_seconds*/ 180,
             text("extra-asset-child-nonce"),
         ),
         Err(GrantValidationError::ScopeNotNarrower)
@@ -450,8 +479,8 @@ fn derived_grants_can_only_narrow_scope_chain_and_expiry() {
             &parent,
             child_chain.clone(),
             extra_action_scope,
-            120,
-            180,
+            /*issued_at_unix_seconds*/ 120,
+            /*expires_at_unix_seconds*/ 180,
             text("extra-action-child-nonce"),
         ),
         Err(GrantValidationError::ScopeNotNarrower)
@@ -470,8 +499,8 @@ fn derived_grants_can_only_narrow_scope_chain_and_expiry() {
             &parent,
             child_chain.clone(),
             narrow_scope,
-            99,
-            180,
+            /*issued_at_unix_seconds*/ 99,
+            /*expires_at_unix_seconds*/ 180,
             text("pre-parent-child-nonce"),
         ),
         Err(GrantValidationError::IssuedBeforeParent)
@@ -492,8 +521,8 @@ fn derived_grants_can_only_narrow_scope_chain_and_expiry() {
             &parent,
             child_chain,
             adjacent_context_scope,
-            120,
-            180,
+            /*issued_at_unix_seconds*/ 120,
+            /*expires_at_unix_seconds*/ 180,
             text("adjacent-context-child-nonce"),
         ),
         Err(GrantValidationError::ScopeNotNarrower)
@@ -503,42 +532,60 @@ fn derived_grants_can_only_narrow_scope_chain_and_expiry() {
 #[test]
 fn mandate_binds_exact_preview_and_rejects_replay() {
     let preview = preview();
-    let mandate = ProtectedActionMandate::approve(&preview, human(), 110).expect("approve");
-    assert!(mandate.matches_preview(&preview, 120).expect("match"));
+    let mandate =
+        ProtectedActionMandate::approve(&preview, human(), /*approved_at_unix_seconds*/ 110)
+            .expect("approve");
+    assert!(
+        mandate
+            .matches_preview(&preview, /*now_unix_seconds*/ 120)
+            .expect("match")
+    );
 
     let mut mutated = preview.clone();
     mutated.request.context.destination = Some(text("venue:other"));
     assert!(
         !mandate
-            .matches_preview(&mutated, 120)
+            .matches_preview(&mutated, /*now_unix_seconds*/ 120)
             .expect("mutation rejected")
     );
 
     let mut ledger = ReplayLedger::new();
-    ledger.consume(&mandate, &preview, 120).expect("first use");
+    ledger
+        .consume(&mandate, &preview, /*now_unix_seconds*/ 120)
+        .expect("first use");
     assert!(ledger.contains(&mandate.mandate_id));
     assert!(matches!(
-        ledger.consume(&mandate, &preview, 121),
+        ledger.consume(&mandate, &preview, /*now_unix_seconds*/ 121),
         Err(MandateError::Replay)
     ));
 
     assert!(
         !mandate
-            .matches_preview(&preview, 109)
+            .matches_preview(&preview, /*now_unix_seconds*/ 109)
             .expect("pre-approval use rejected")
     );
     assert!(
         !mandate
-            .matches_preview(&preview, 180)
+            .matches_preview(&preview, /*now_unix_seconds*/ 180)
             .expect("stale use rejected")
     );
     assert!(matches!(
-        ActionReceipt::complete(&mandate, &preview, MandateOutcome::Executed, 109),
+        ActionReceipt::complete(
+            &mandate,
+            &preview,
+            MandateOutcome::Executed,
+            /*completed_at_unix_seconds*/ 109
+        ),
         Err(MandateError::PreviewMismatchOrExpired)
     ));
 
-    let receipt = ActionReceipt::complete(&mandate, &preview, MandateOutcome::Executed, 120)
-        .expect("receipt");
+    let receipt = ActionReceipt::complete(
+        &mandate,
+        &preview,
+        MandateOutcome::Executed,
+        /*completed_at_unix_seconds*/ 120,
+    )
+    .expect("receipt");
     receipt.validate().expect("receipt integrity");
     assert_eq!(
         serde_json::to_value(&receipt).expect("serialize receipt"),
@@ -570,7 +617,7 @@ fn credential_use_receipt_is_bound_and_contains_only_secret_free_metadata() {
         text("https://api.openai.com:443"),
         text(&"b".repeat(64)),
         MandateOutcome::Executed,
-        120,
+        /*completed_at_unix_seconds*/ 120,
     )
     .expect("credential receipt");
     receipt.validate().expect("receipt integrity");
@@ -622,7 +669,9 @@ fn credential_use_receipt_is_bound_and_contains_only_secret_free_metadata() {
 #[test]
 fn mandate_rejects_mutation_of_every_bound_preview_dimension() {
     let original = preview();
-    let mandate = ProtectedActionMandate::approve(&original, human(), 110).expect("approve");
+    let mandate =
+        ProtectedActionMandate::approve(&original, human(), /*approved_at_unix_seconds*/ 110)
+            .expect("approve");
     let mut variants = Vec::new();
 
     let mut changed_subject = original.clone();
@@ -666,7 +715,7 @@ fn mandate_rejects_mutation_of_every_bound_preview_dimension() {
 
     let mut changed_quantity = original.clone();
     changed_quantity.request.context.quantity =
-        Some(QuantitativeLimit::new("USD", 501).expect("changed quantity"));
+        Some(QuantitativeLimit::new("USD", /*max_units*/ 501).expect("changed quantity"));
     variants.push(changed_quantity);
 
     let mut changed_grant = original.clone();
@@ -684,7 +733,7 @@ fn mandate_rejects_mutation_of_every_bound_preview_dimension() {
     for variant in variants {
         assert!(
             !mandate
-                .matches_preview(&variant, 120)
+                .matches_preview(&variant, /*now_unix_seconds*/ 120)
                 .expect("mutated preview rejected")
         );
     }
@@ -697,7 +746,7 @@ fn mandate_rejects_mutation_of_every_bound_preview_dimension() {
     assert!(serde_json::from_value::<ProtectedActionMandate>(malformed).is_err());
     assert!(
         !mandate
-            .matches_preview(&original, -1)
+            .matches_preview(&original, /*now_unix_seconds*/ -1)
             .expect("clock failure")
     );
 }
@@ -711,7 +760,7 @@ fn revocation_and_kill_switch_are_idempotent_and_restart_safe() {
             grant_id: grant.grant_id.clone(),
         },
         RevocationReason::HumanRequest,
-        150,
+        /*created_at_unix_seconds*/ 150,
     )
     .expect("revocation");
     let mut state = RevocationState::new();
@@ -722,15 +771,19 @@ fn revocation_and_kill_switch_are_idempotent_and_restart_safe() {
     assert!(state.grant_is_revoked(&grant));
 
     let approved_preview = preview();
-    let mandate =
-        ProtectedActionMandate::approve(&approved_preview, human(), 110).expect("mandate");
+    let mandate = ProtectedActionMandate::approve(
+        &approved_preview,
+        human(),
+        /*approved_at_unix_seconds*/ 110,
+    )
+    .expect("mandate");
     let actor_event = RevocationEvent::new(
         human(),
         RevocationTarget::Actor {
             actor_id: text("agent:root"),
         },
         RevocationReason::RiskSignal,
-        155,
+        /*created_at_unix_seconds*/ 155,
     )
     .expect("actor revocation");
     assert!(state.apply(&actor_event).expect("revoke actor"));
@@ -741,7 +794,7 @@ fn revocation_and_kill_switch_are_idempotent_and_restart_safe() {
         human(),
         RevocationTarget::KillSwitch { active: true },
         RevocationReason::KillSwitch,
-        160,
+        /*created_at_unix_seconds*/ 160,
     )
     .expect("kill switch");
     assert!(state.apply(&kill_switch).expect("activate kill switch"));
@@ -762,14 +815,14 @@ fn revocation_kill_switch_order_converges_and_corrupt_state_fails_closed() {
         human(),
         RevocationTarget::KillSwitch { active: true },
         RevocationReason::KillSwitch,
-        200,
+        /*created_at_unix_seconds*/ 200,
     )
     .expect("enable event");
     let disable = RevocationEvent::new(
         human(),
         RevocationTarget::KillSwitch { active: false },
         RevocationReason::HumanRequest,
-        200,
+        /*created_at_unix_seconds*/ 200,
     )
     .expect("disable event");
     let (earlier, later) = if enable.event_id < disable.event_id {
@@ -871,7 +924,9 @@ fn revocation_dispatch_fence_requires_bound_run_authority_and_generation() {
 #[test]
 fn revocation_dispatch_fence_rechecks_authority_validity_at_every_boundary() {
     let grant = grant();
-    let mandate = ProtectedActionMandate::approve(&preview(), human(), 110).unwrap();
+    let mandate =
+        ProtectedActionMandate::approve(&preview(), human(), /*approved_at_unix_seconds*/ 110)
+            .unwrap();
     let run_id = text("run:validity-window");
     let revocations = RevocationState::new();
 
@@ -968,7 +1023,7 @@ fn revocation_kill_linearizes_before_open_channel_and_upload_writes() {
         human(),
         RevocationTarget::KillSwitch { active: true },
         RevocationReason::KillSwitch,
-        150,
+        /*created_at_unix_seconds*/ 150,
     )
     .unwrap();
     revocations.apply(&kill).unwrap();
@@ -1013,7 +1068,7 @@ fn revocation_targeted_event_fences_victim_without_revoking_sibling() {
             grant_id: victim.grant_id.clone(),
         },
         RevocationReason::HumanRequest,
-        150,
+        /*created_at_unix_seconds*/ 150,
     )
     .unwrap();
     revocations.apply(&event).unwrap();
@@ -1081,7 +1136,7 @@ fn revocation_audit_unavailable_does_not_delay_emergency_restriction() {
         human(),
         RevocationTarget::KillSwitch { active: true },
         RevocationReason::KillSwitch,
-        150,
+        /*created_at_unix_seconds*/ 150,
     )
     .unwrap();
 
@@ -1124,7 +1179,7 @@ fn revocation_audit_unavailable_does_not_delay_emergency_restriction() {
         human(),
         RevocationTarget::KillSwitch { active: false },
         RevocationReason::HumanRequest,
-        151,
+        /*created_at_unix_seconds*/ 151,
     )
     .unwrap();
     assert!(matches!(
@@ -1139,7 +1194,7 @@ fn revocation_audit_unavailable_does_not_delay_emergency_restriction() {
         human(),
         RevocationTarget::KillSwitch { active: true },
         RevocationReason::RiskSignal,
-        149,
+        /*created_at_unix_seconds*/ 149,
     )
     .unwrap();
     assert!(matches!(
@@ -1207,8 +1262,12 @@ fn revocation_preserves_completed_and_unknown_financial_outcomes() {
 #[test]
 fn revocation_mandate_dispatch_uses_the_same_generation_fence() {
     let preview = preview();
-    let mandate = ProtectedActionMandate::approve(&preview, human(), 110).unwrap();
-    let sibling_mandate = ProtectedActionMandate::approve(&preview, human(), 111).unwrap();
+    let mandate =
+        ProtectedActionMandate::approve(&preview, human(), /*approved_at_unix_seconds*/ 110)
+            .unwrap();
+    let sibling_mandate =
+        ProtectedActionMandate::approve(&preview, human(), /*approved_at_unix_seconds*/ 111)
+            .unwrap();
     let run_id = text("run:mandate");
     let sibling_run_id = text("run:mandate-sibling");
     let mut revocations = RevocationState::new();
@@ -1227,7 +1286,7 @@ fn revocation_mandate_dispatch_uses_the_same_generation_fence() {
             mandate_id: mandate.mandate_id.clone(),
         },
         RevocationReason::HumanRequest,
-        150,
+        /*created_at_unix_seconds*/ 150,
     )
     .unwrap();
     revocations.apply(&event).unwrap();
@@ -1261,7 +1320,9 @@ fn revocation_mandate_dispatch_uses_the_same_generation_fence() {
 #[test]
 fn policy_contracts_have_no_arbitrary_payload_or_secret_fields() {
     let preview = preview();
-    let mandate = ProtectedActionMandate::approve(&preview, human(), 110).expect("approve");
+    let mandate =
+        ProtectedActionMandate::approve(&preview, human(), /*approved_at_unix_seconds*/ 110)
+            .expect("approve");
     let serialized = serde_json::to_string(&(grant(), preview, mandate)).expect("serialize");
     for forbidden in ["payload", "credential_value", "private_key", "secret_value"] {
         assert!(

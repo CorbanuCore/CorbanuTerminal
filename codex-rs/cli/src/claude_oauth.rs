@@ -1221,7 +1221,7 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         verify_selected_claude_login_authority_with_profile(
             &selection,
             Some(&matching),
-            None,
+            /*config_dir_override*/ None,
             Some(custom_oauth_url),
         )
         .await
@@ -1286,7 +1286,7 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         let selection = ClaudeAuthSelection::new_at(
             ClaudeAuthSource::EnvironmentToken,
             ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID,
-            10,
+            /*selected_at*/ 10,
         )
         .expect("selection");
         let selected = source_metadata(
@@ -1372,7 +1372,7 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         let legacy = ClaudeAuthSelection::new_at(
             ClaudeAuthSource::EnvironmentToken,
             ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID,
-            10,
+            /*selected_at*/ 10,
         )
         .expect("legacy selection");
         let error = resolve_selected_environment_token(
@@ -1406,18 +1406,25 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
 
     #[test]
     fn explicit_selection_sentinel_without_selection_fails_closed() {
-        ensure_explicit_selection_is_available(true, None)
-            .expect_err("missing explicit selection must fail closed");
-        ensure_explicit_selection_is_available(false, None)
-            .expect("legacy installation may resolve its historical sources");
+        ensure_explicit_selection_is_available(
+            /*explicit_selection_present*/ true, /*selection*/ None,
+        )
+        .expect_err("missing explicit selection must fail closed");
+        ensure_explicit_selection_is_available(
+            /*explicit_selection_present*/ false, /*selection*/ None,
+        )
+        .expect("legacy installation may resolve its historical sources");
 
         let selection = ClaudeAuthSelection::new(
             ClaudeAuthSource::ManagedSubscriptionToken,
             MANAGED_CLAUDE_AUTH_SOURCE_ID,
         )
         .expect("selection");
-        ensure_explicit_selection_is_available(true, Some(&selection))
-            .expect("persisted explicit selection is available");
+        ensure_explicit_selection_is_available(
+            /*explicit_selection_present*/ true,
+            Some(&selection),
+        )
+        .expect("persisted explicit selection is available");
     }
 
     #[test]
@@ -1427,7 +1434,7 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         let metadata = source_metadata(
             ClaudeAuthSource::EnvironmentToken,
             ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID,
-            environment_token_health(&selection, None),
+            environment_token_health(&selection, /*token*/ None),
         );
 
         let error = resolve_selected_claude_auth_source(&selection, &[metadata])
@@ -1444,9 +1451,12 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         let selected_source_id = PlatformCredentialStore::CredentialsFile
             .source_id(work_profile.path())
             .expect("work source id");
-        let selection =
-            ClaudeAuthSelection::new_at(ClaudeAuthSource::ClaudeCodeLogin, selected_source_id, 10)
-                .expect("selection");
+        let selection = ClaudeAuthSelection::new_at(
+            ClaudeAuthSource::ClaudeCodeLogin,
+            selected_source_id,
+            /*selected_at*/ 10,
+        )
+        .expect("selection");
         let discovered = ClaudeAuthSourceMetadata {
             source: ClaudeAuthSource::ClaudeCodeLogin,
             source_id: PlatformCredentialStore::CredentialsFile
@@ -1850,18 +1860,37 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         let config_b = Path::new("/fixture/config-b");
 
         assert_ne!(
-            refresh_lock_path_for_store(config_a, PlatformCredentialStore::CredentialsFile, false),
-            refresh_lock_path_for_store(config_b, PlatformCredentialStore::CredentialsFile, false)
+            refresh_lock_path_for_store(
+                config_a,
+                PlatformCredentialStore::CredentialsFile,
+                /*custom_oauth*/ false
+            ),
+            refresh_lock_path_for_store(
+                config_b,
+                PlatformCredentialStore::CredentialsFile,
+                /*custom_oauth*/ false
+            )
         );
-        let keychain_lock =
-            refresh_lock_path_for_store(config_a, PlatformCredentialStore::MacosKeychain, false);
+        let keychain_lock = refresh_lock_path_for_store(
+            config_a,
+            PlatformCredentialStore::MacosKeychain,
+            /*custom_oauth*/ false,
+        );
         assert_ne!(
             keychain_lock,
-            refresh_lock_path_for_store(config_b, PlatformCredentialStore::MacosKeychain, false,)
+            refresh_lock_path_for_store(
+                config_b,
+                PlatformCredentialStore::MacosKeychain,
+                /*custom_oauth*/ false,
+            )
         );
         assert_ne!(
             keychain_lock,
-            refresh_lock_path_for_store(config_a, PlatformCredentialStore::MacosKeychain, true,)
+            refresh_lock_path_for_store(
+                config_a,
+                PlatformCredentialStore::MacosKeychain,
+                /*custom_oauth*/ true,
+            )
         );
     }
 
@@ -1942,7 +1971,8 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
             "legacy-file-refresh",
             now_ms + 600_000,
         );
-        let missing_security = fake_security_exit(temp_dir.path(), "missing-security", 44);
+        let missing_security =
+            fake_security_exit(temp_dir.path(), "missing-security", /*exit_code*/ 44);
         let source_id = PlatformCredentialStore::CredentialsFile
             .source_id(temp_dir.path())
             .expect("legacy source id");
@@ -1955,7 +1985,8 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         .expect("typed item-not-found permits the selected legacy file");
 
         let present_security = fake_keychain_security(temp_dir.path(), now_ms + 600_000);
-        let denied_security = fake_security_exit(temp_dir.path(), "denied-security", 7);
+        let denied_security =
+            fake_security_exit(temp_dir.path(), "denied-security", /*exit_code*/ 7);
         let unavailable_security = temp_dir.path().join("unavailable-security");
         for security in [
             present_security.as_path(),
@@ -2046,7 +2077,7 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
             &selection,
             Some(&status),
             Some(temp_dir.path()),
-            None,
+            /*custom_oauth_url*/ None,
             Some(&security),
         )
         .await

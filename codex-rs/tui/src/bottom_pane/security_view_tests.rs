@@ -29,17 +29,20 @@ fn security_view_profiles_never_claim_healthy_protection() {
         let view = SecurityView::new(Some(level), RuntimeKeymap::defaults().list);
         insta::assert_snapshot!(
             format!("security_view_{}", profile_name(level).to_lowercase()),
-            snapshot(&view, 80)
+            snapshot(&view, /*width*/ 80)
         );
     }
 }
 
 #[test]
 fn security_view_narrow_and_unknown_state() {
-    let mut view = SecurityView::new(None, RuntimeKeymap::defaults().list);
+    let mut view = SecurityView::new(/*requested*/ None, RuntimeKeymap::defaults().list);
     view.handle_key_event(key(KeyCode::Down));
     view.handle_key_event(key(KeyCode::Enter));
-    insta::assert_snapshot!("security_view_unknown_narrow", snapshot(&view, 40));
+    insta::assert_snapshot!(
+        "security_view_unknown_narrow",
+        snapshot(&view, /*width*/ 40)
+    );
 }
 
 #[test]
@@ -89,7 +92,7 @@ fn security_view_uses_configured_navigation_and_cancellation() {
 
 #[test]
 fn security_view_short_terminal_keeps_escape_visible() {
-    let view = SecurityView::new(None, RuntimeKeymap::defaults().list);
+    let view = SecurityView::new(/*requested*/ None, RuntimeKeymap::defaults().list);
     let area = Rect::new(0, 0, 40, 8);
     let mut buffer = Buffer::empty(area);
     view.render(area, &mut buffer);

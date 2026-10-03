@@ -178,15 +178,21 @@ fn empty_protected_root_is_the_only_legacy_first_install() {
     );
 
     let initial = state(
-        1,
+        /*revision*/ 1,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Moderate,
-        generations(0, 0, 0),
-        false,
+        generations(
+            /*grant*/ 0, /*revocation*/ 0, /*kill_switch*/ 0,
+        ),
+        /*kill_switch_active*/ false,
     );
     store
-        .compare_and_activate(0, &initial, &authorization("credential-owner-a", 1))
+        .compare_and_activate(
+            /*expected_revision*/ 0,
+            &initial,
+            &authorization("credential-owner-a", /*owner_generation*/ 1),
+        )
         .unwrap();
     assert_eq!(
         store.load().unwrap(),
@@ -202,7 +208,7 @@ fn model_supplied_identity_cannot_replace_platform_authorization() {
         PROBE_ID,
         NOW,
         "forged-owner",
-        1,
+        /*owner_generation*/ 1,
     )
     .unwrap_err();
     assert!(matches!(
@@ -217,7 +223,12 @@ fn corrupt_external_anchor_fails_closed_before_record_classification() {
     *anchor.value.lock().unwrap() = Some(AuthoritativeStateAnchor {
         schema_version: 0,
         revision: 1,
-        owner: AuthoritativeStateOwner::new(TARGET_ID, "credential-owner-a", 1).unwrap(),
+        owner: AuthoritativeStateOwner::new(
+            TARGET_ID,
+            "credential-owner-a",
+            /*owner_generation*/ 1,
+        )
+        .unwrap(),
         state_sha256: "0".repeat(64),
         commit_sha256: "0".repeat(64),
     });
@@ -244,33 +255,49 @@ fn protected_persistence_is_an_explicit_platform_blocker() {
 fn compare_and_activate_rejects_stale_revision_and_wrong_owner() {
     let (_root, store) = store();
     let initial = state(
-        1,
+        /*revision*/ 1,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Moderate,
-        generations(0, 0, 0),
-        false,
+        generations(
+            /*grant*/ 0, /*revocation*/ 0, /*kill_switch*/ 0,
+        ),
+        /*kill_switch_active*/ false,
     );
     store
-        .compare_and_activate(0, &initial, &authorization("credential-owner-a", 1))
+        .compare_and_activate(
+            /*expected_revision*/ 0,
+            &initial,
+            &authorization("credential-owner-a", /*owner_generation*/ 1),
+        )
         .unwrap();
     let successor = state(
-        2,
+        /*revision*/ 2,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Aggressive,
-        generations(1, 1, 1),
-        true,
+        generations(
+            /*grant*/ 1, /*revocation*/ 1, /*kill_switch*/ 1,
+        ),
+        /*kill_switch_active*/ true,
     );
     assert!(matches!(
-        store.compare_and_activate(0, &successor, &authorization("credential-owner-a", 1)),
+        store.compare_and_activate(
+            /*expected_revision*/ 0,
+            &successor,
+            &authorization("credential-owner-a", /*owner_generation*/ 1)
+        ),
         Err(AuthoritativeStateStoreError::RevisionConflict {
             expected: 0,
             actual: 1
         })
     ));
     assert!(matches!(
-        store.compare_and_activate(1, &successor, &authorization("other-owner", 1)),
+        store.compare_and_activate(
+            /*expected_revision*/ 1,
+            &successor,
+            &authorization("other-owner", /*owner_generation*/ 1)
+        ),
         Err(AuthoritativeStateStoreError::UnauthorizedOwner)
     ));
 }
@@ -280,24 +307,28 @@ fn compare_and_activate_rejects_stale_revision_and_wrong_owner() {
 fn unanchored_pending_state_is_discarded_only_by_the_authorized_owner() {
     let (root, store) = store();
     let initial = state(
-        1,
+        /*revision*/ 1,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Moderate,
-        generations(0, 0, 0),
-        false,
+        generations(
+            /*grant*/ 0, /*revocation*/ 0, /*kill_switch*/ 0,
+        ),
+        /*kill_switch_active*/ false,
     );
-    let owner_authorization = authorization("credential-owner-a", 1);
+    let owner_authorization = authorization("credential-owner-a", /*owner_generation*/ 1);
     store
-        .compare_and_activate(0, &initial, &owner_authorization)
+        .compare_and_activate(/*expected_revision*/ 0, &initial, &owner_authorization)
         .unwrap();
     let next = state(
-        2,
+        /*revision*/ 2,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Aggressive,
-        generations(1, 1, 1),
-        true,
+        generations(
+            /*grant*/ 1, /*revocation*/ 1, /*kill_switch*/ 1,
+        ),
+        /*kill_switch_active*/ true,
     );
     let path = root.path().join("state-00000000000000000002.json");
     let mut bytes = serde_json::to_vec(&next).unwrap();
@@ -311,19 +342,26 @@ fn unanchored_pending_state_is_discarded_only_by_the_authorized_owner() {
     let mut different = next.clone();
     different.grant_generation = 2;
     assert!(matches!(
-        store.compare_and_activate(1, &different, &owner_authorization),
+        store.compare_and_activate(
+            /*expected_revision*/ 1,
+            &different,
+            &owner_authorization
+        ),
         Err(AuthoritativeStateStoreError::UnanchoredRecords { revision: 2 })
     ));
     assert!(matches!(
-        store.discard_unanchored_suffix(2, &authorization("other-owner", 1)),
+        store.discard_unanchored_suffix(
+            /*revision*/ 2,
+            &authorization("other-owner", /*owner_generation*/ 1)
+        ),
         Err(AuthoritativeStateStoreError::UnauthorizedOwner)
     ));
     store
-        .discard_unanchored_suffix(2, &owner_authorization)
+        .discard_unanchored_suffix(/*revision*/ 2, &owner_authorization)
         .unwrap();
     assert_eq!(
         store
-            .compare_and_activate(1, &next, &owner_authorization)
+            .compare_and_activate(/*expected_revision*/ 1, &next, &owner_authorization)
             .unwrap(),
         next
     );
@@ -333,39 +371,49 @@ fn unanchored_pending_state_is_discarded_only_by_the_authorized_owner() {
 #[test]
 fn mismatched_anchored_pending_is_discardable_and_exact_state_resumes() {
     let (root, store, _anchor) = store_with_anchor();
-    let owner_authorization = authorization("credential-owner-a", 1);
+    let owner_authorization = authorization("credential-owner-a", /*owner_generation*/ 1);
     let initial = state(
-        1,
+        /*revision*/ 1,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Moderate,
-        generations(0, 0, 0),
-        false,
+        generations(
+            /*grant*/ 0, /*revocation*/ 0, /*kill_switch*/ 0,
+        ),
+        /*kill_switch_active*/ false,
     );
     let anchored_next = state(
-        2,
+        /*revision*/ 2,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Aggressive,
-        generations(1, 1, 1),
-        true,
+        generations(
+            /*grant*/ 1, /*revocation*/ 1, /*kill_switch*/ 1,
+        ),
+        /*kill_switch_active*/ true,
     );
     store
-        .compare_and_activate(0, &initial, &owner_authorization)
+        .compare_and_activate(/*expected_revision*/ 0, &initial, &owner_authorization)
         .unwrap();
     store
-        .compare_and_activate(1, &anchored_next, &owner_authorization)
+        .compare_and_activate(
+            /*expected_revision*/ 1,
+            &anchored_next,
+            &owner_authorization,
+        )
         .unwrap();
     for prefix in ["state", "intent", "commit"] {
         fs::remove_file(root.path().join(format!("{prefix}-{:020}.json", 2))).unwrap();
     }
     let attacker_state = state(
-        2,
+        /*revision*/ 2,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Permissive,
-        generations(0, 0, 0),
-        false,
+        generations(
+            /*grant*/ 0, /*revocation*/ 0, /*kill_switch*/ 0,
+        ),
+        /*kill_switch_active*/ false,
     );
     let mut bytes = serde_json::to_vec(&attacker_state).unwrap();
     bytes.push(b'\n');
@@ -376,15 +424,22 @@ fn mismatched_anchored_pending_is_discardable_and_exact_state_resumes() {
         Err(AuthoritativeStateStoreError::AnchorMismatch { revision: 2 })
     ));
     assert!(matches!(
-        store.discard_unanchored_suffix(2, &authorization("other-owner", 1)),
+        store.discard_unanchored_suffix(
+            /*revision*/ 2,
+            &authorization("other-owner", /*owner_generation*/ 1)
+        ),
         Err(AuthoritativeStateStoreError::UnauthorizedOwner)
     ));
     store
-        .discard_unanchored_suffix(2, &owner_authorization)
+        .discard_unanchored_suffix(/*revision*/ 2, &owner_authorization)
         .unwrap();
     assert_eq!(
         store
-            .compare_and_activate(1, &anchored_next, &owner_authorization)
+            .compare_and_activate(
+                /*expected_revision*/ 1,
+                &anchored_next,
+                &owner_authorization
+            )
             .unwrap(),
         anchored_next
     );
@@ -394,29 +449,33 @@ fn mismatched_anchored_pending_is_discardable_and_exact_state_resumes() {
 #[test]
 fn committed_records_ahead_of_anchor_are_discarded_without_touching_anchor_history() {
     let (root, store, anchor) = store_with_anchor();
-    let owner_authorization = authorization("credential-owner-a", 1);
+    let owner_authorization = authorization("credential-owner-a", /*owner_generation*/ 1);
     let initial = state(
-        1,
+        /*revision*/ 1,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Moderate,
-        generations(0, 0, 0),
-        false,
+        generations(
+            /*grant*/ 0, /*revocation*/ 0, /*kill_switch*/ 0,
+        ),
+        /*kill_switch_active*/ false,
     );
     let next = state(
-        2,
+        /*revision*/ 2,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Aggressive,
-        generations(1, 1, 1),
-        true,
+        generations(
+            /*grant*/ 1, /*revocation*/ 1, /*kill_switch*/ 1,
+        ),
+        /*kill_switch_active*/ true,
     );
     store
-        .compare_and_activate(0, &initial, &owner_authorization)
+        .compare_and_activate(/*expected_revision*/ 0, &initial, &owner_authorization)
         .unwrap();
     let anchored_first = anchor.value.lock().unwrap().clone();
     store
-        .compare_and_activate(1, &next, &owner_authorization)
+        .compare_and_activate(/*expected_revision*/ 1, &next, &owner_authorization)
         .unwrap();
     *anchor.value.lock().unwrap() = anchored_first;
 
@@ -425,11 +484,14 @@ fn committed_records_ahead_of_anchor_are_discarded_without_touching_anchor_histo
         Err(AuthoritativeStateStoreError::UnanchoredRecords { revision: 2 })
     ));
     assert!(matches!(
-        store.discard_unanchored_suffix(2, &authorization("other-owner", 1)),
+        store.discard_unanchored_suffix(
+            /*revision*/ 2,
+            &authorization("other-owner", /*owner_generation*/ 1)
+        ),
         Err(AuthoritativeStateStoreError::UnauthorizedOwner)
     ));
     store
-        .discard_unanchored_suffix(2, &owner_authorization)
+        .discard_unanchored_suffix(/*revision*/ 2, &owner_authorization)
         .unwrap();
     for prefix in ["state", "intent", "commit"] {
         assert!(
@@ -454,28 +516,32 @@ fn committed_records_ahead_of_anchor_are_discarded_without_touching_anchor_histo
 #[test]
 fn missing_commit_resumes_without_activating_the_pending_state() {
     let (root, store) = store();
-    let authorization = authorization("credential-owner-a", 1);
+    let authorization = authorization("credential-owner-a", /*owner_generation*/ 1);
     let initial = state(
-        1,
+        /*revision*/ 1,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Moderate,
-        generations(0, 0, 0),
-        false,
+        generations(
+            /*grant*/ 0, /*revocation*/ 0, /*kill_switch*/ 0,
+        ),
+        /*kill_switch_active*/ false,
     );
     let next = state(
-        2,
+        /*revision*/ 2,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Aggressive,
-        generations(1, 1, 1),
-        true,
+        generations(
+            /*grant*/ 1, /*revocation*/ 1, /*kill_switch*/ 1,
+        ),
+        /*kill_switch_active*/ true,
     );
     store
-        .compare_and_activate(0, &initial, &authorization)
+        .compare_and_activate(/*expected_revision*/ 0, &initial, &authorization)
         .unwrap();
     store
-        .compare_and_activate(1, &next, &authorization)
+        .compare_and_activate(/*expected_revision*/ 1, &next, &authorization)
         .unwrap();
     fs::remove_file(root.path().join("commit-00000000000000000002.json")).unwrap();
 
@@ -485,7 +551,7 @@ fn missing_commit_resumes_without_activating_the_pending_state() {
     ));
     assert_eq!(
         store
-            .compare_and_activate(1, &next, &authorization)
+            .compare_and_activate(/*expected_revision*/ 1, &next, &authorization)
             .unwrap(),
         next
     );
@@ -496,15 +562,21 @@ fn missing_commit_resumes_without_activating_the_pending_state() {
 fn overwrite_delete_and_rename_do_not_fall_back_to_permissive() {
     let (root, store) = store();
     let initial = state(
-        1,
+        /*revision*/ 1,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Aggressive,
-        generations(0, 1, 1),
-        true,
+        generations(
+            /*grant*/ 0, /*revocation*/ 1, /*kill_switch*/ 1,
+        ),
+        /*kill_switch_active*/ true,
     );
     store
-        .compare_and_activate(0, &initial, &authorization("credential-owner-a", 1))
+        .compare_and_activate(
+            /*expected_revision*/ 0,
+            &initial,
+            &authorization("credential-owner-a", /*owner_generation*/ 1),
+        )
         .unwrap();
     let state_path = root.path().join("state-00000000000000000001.json");
     fs::write(&state_path, b"{}\n").unwrap();
@@ -526,15 +598,21 @@ fn overwrite_delete_and_rename_do_not_fall_back_to_permissive() {
 fn deleting_all_records_does_not_recreate_a_legacy_first_install() {
     let (root, store) = store();
     let initial = state(
-        1,
+        /*revision*/ 1,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Aggressive,
-        generations(1, 1, 1),
-        true,
+        generations(
+            /*grant*/ 1, /*revocation*/ 1, /*kill_switch*/ 1,
+        ),
+        /*kill_switch_active*/ true,
     );
     store
-        .compare_and_activate(0, &initial, &authorization("credential-owner-a", 1))
+        .compare_and_activate(
+            /*expected_revision*/ 0,
+            &initial,
+            &authorization("credential-owner-a", /*owner_generation*/ 1),
+        )
         .unwrap();
     for entry in fs::read_dir(root.path()).unwrap() {
         fs::remove_file(entry.unwrap().path()).unwrap();
@@ -553,12 +631,12 @@ fn deleting_all_records_does_not_recreate_a_legacy_first_install() {
 #[test]
 fn suffix_truncation_is_rejected_against_the_external_high_water_mark() {
     let (root, store) = store();
-    let authorization = authorization("credential-owner-a", 1);
+    let authorization = authorization("credential-owner-a", /*owner_generation*/ 1);
     for revision in 1..=4 {
         let next = state(
             revision,
             "credential-owner-a",
-            1,
+            /*owner_generation*/ 1,
             if revision >= 3 {
                 SecurityLevel::Aggressive
             } else {
@@ -589,28 +667,32 @@ fn suffix_truncation_is_rejected_against_the_external_high_water_mark() {
 #[test]
 fn clearing_kill_switch_requires_a_new_generation() {
     let (_root, store) = store();
-    let authorization = authorization("credential-owner-a", 1);
+    let authorization = authorization("credential-owner-a", /*owner_generation*/ 1);
     let active = state(
-        1,
+        /*revision*/ 1,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Aggressive,
-        generations(1, 1, 1),
-        true,
+        generations(
+            /*grant*/ 1, /*revocation*/ 1, /*kill_switch*/ 1,
+        ),
+        /*kill_switch_active*/ true,
     );
     store
-        .compare_and_activate(0, &active, &authorization)
+        .compare_and_activate(/*expected_revision*/ 0, &active, &authorization)
         .unwrap();
     let invalid = state(
-        2,
+        /*revision*/ 2,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Aggressive,
-        generations(1, 1, 1),
-        false,
+        generations(
+            /*grant*/ 1, /*revocation*/ 1, /*kill_switch*/ 1,
+        ),
+        /*kill_switch_active*/ false,
     );
     assert!(matches!(
-        store.compare_and_activate(1, &invalid, &authorization),
+        store.compare_and_activate(/*expected_revision*/ 1, &invalid, &authorization),
         Err(AuthoritativeStateStoreError::Validation(
             codex_config::AuthoritativeStateValidationError::KillSwitchClearedWithoutGeneration
         ))
@@ -625,15 +707,21 @@ fn symlink_and_permission_weakening_fail_closed() {
 
     let (root, store) = store();
     let initial = state(
-        1,
+        /*revision*/ 1,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Moderate,
-        generations(0, 0, 0),
-        false,
+        generations(
+            /*grant*/ 0, /*revocation*/ 0, /*kill_switch*/ 0,
+        ),
+        /*kill_switch_active*/ false,
     );
     store
-        .compare_and_activate(0, &initial, &authorization("credential-owner-a", 1))
+        .compare_and_activate(
+            /*expected_revision*/ 0,
+            &initial,
+            &authorization("credential-owner-a", /*owner_generation*/ 1),
+        )
         .unwrap();
     let state_path = root.path().join("state-00000000000000000001.json");
     let replacement = root.path().join("replacement");
@@ -658,30 +746,46 @@ fn symlink_and_permission_weakening_fail_closed() {
 fn owner_rotation_blocks_stale_owner_recovery() {
     let (_root, store) = store();
     let initial = state(
-        1,
+        /*revision*/ 1,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Moderate,
-        generations(1, 1, 0),
-        false,
+        generations(
+            /*grant*/ 1, /*revocation*/ 1, /*kill_switch*/ 0,
+        ),
+        /*kill_switch_active*/ false,
     );
     store
-        .compare_and_activate(0, &initial, &authorization("credential-owner-a", 1))
+        .compare_and_activate(
+            /*expected_revision*/ 0,
+            &initial,
+            &authorization("credential-owner-a", /*owner_generation*/ 1),
+        )
         .unwrap();
     let rotated = state(
-        2,
+        /*revision*/ 2,
         "provenance-owner-b",
-        2,
+        /*owner_generation*/ 2,
         SecurityLevel::Aggressive,
-        generations(2, 2, 1),
-        true,
+        generations(
+            /*grant*/ 2, /*revocation*/ 2, /*kill_switch*/ 1,
+        ),
+        /*kill_switch_active*/ true,
     );
-    let rotated_authorization = authorization("provenance-owner-b", 2);
+    let rotated_authorization = authorization("provenance-owner-b", /*owner_generation*/ 2);
     store
-        .compare_and_activate(1, &rotated, &rotated_authorization)
+        .compare_and_activate(
+            /*expected_revision*/ 1,
+            &rotated,
+            &rotated_authorization,
+        )
         .unwrap();
     assert!(matches!(
-        store.recover_from_revision(2, 1, &rotated_authorization),
+        store.recover_from_revision(
+            /*expected_revision*/ 2,
+            /*snapshot_revision*/ 1,
+            &rotated_authorization
+        ),
         Err(AuthoritativeStateStoreError::Validation(
             codex_config::AuthoritativeStateValidationError::RecoveryOwnerMismatch
         ))
@@ -692,31 +796,41 @@ fn owner_rotation_blocks_stale_owner_recovery() {
 #[test]
 fn recovery_is_forward_only_and_preserves_restrictions() {
     let (_root, store) = store();
-    let authorization = authorization("credential-owner-a", 1);
+    let authorization = authorization("credential-owner-a", /*owner_generation*/ 1);
     let initial = state(
-        1,
+        /*revision*/ 1,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Aggressive,
-        generations(1, 1, 0),
-        false,
+        generations(
+            /*grant*/ 1, /*revocation*/ 1, /*kill_switch*/ 0,
+        ),
+        /*kill_switch_active*/ false,
     );
     let current = state(
-        2,
+        /*revision*/ 2,
         "credential-owner-a",
-        1,
+        /*owner_generation*/ 1,
         SecurityLevel::Moderate,
-        generations(5, 7, 7),
-        true,
+        generations(
+            /*grant*/ 5, /*revocation*/ 7, /*kill_switch*/ 7,
+        ),
+        /*kill_switch_active*/ true,
     );
     store
-        .compare_and_activate(0, &initial, &authorization)
+        .compare_and_activate(/*expected_revision*/ 0, &initial, &authorization)
         .unwrap();
     store
-        .compare_and_activate(1, &current, &authorization)
+        .compare_and_activate(/*expected_revision*/ 1, &current, &authorization)
         .unwrap();
 
-    let recovered = store.recover_from_revision(2, 1, &authorization).unwrap();
+    let recovered = store
+        .recover_from_revision(
+            /*expected_revision*/ 2,
+            /*snapshot_revision*/ 1,
+            &authorization,
+        )
+        .unwrap();
     assert_eq!(
         recovered,
         AuthoritativeSecurityState {

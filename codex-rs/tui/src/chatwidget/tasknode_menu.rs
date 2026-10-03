@@ -699,7 +699,7 @@ impl ChatWidget {
     }
 
     pub(crate) fn open_tasknode_request_list(&mut self) {
-        self.open_tasknode_request_page(None);
+        self.open_tasknode_request_page(/*cursor*/ None);
     }
 
     pub(crate) fn open_tasknode_request_page(&mut self, cursor: Option<String>) {
@@ -3061,7 +3061,7 @@ impl TaskNodeClient {
     }
 
     fn task_requests(&self) -> Result<Value, String> {
-        self.task_request_page(None)
+        self.task_request_page(/*cursor*/ None)
     }
 
     fn task_request_page(&self, cursor: Option<&str>) -> Result<Value, String> {
@@ -3157,7 +3157,7 @@ impl TaskNodeClient {
         &self,
         path: &str,
     ) -> Result<T, TaskNodeClientError> {
-        self.json_request(reqwest::Method::GET, path, None)
+        self.json_request(reqwest::Method::GET, path, /*body*/ None)
     }
 
     fn post_json<T: DeserializeOwned + Send + 'static>(
@@ -3748,7 +3748,8 @@ mod tests {
             chat.bottom_pane
                 .refresh_selection_view_if_active(TASKNODE_MENU_VIEW_ID, params())
         );
-        let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 84);
+        let rendered =
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 84);
         assert!(rendered.contains("Active task requests"));
         assert!(!rendered.contains("Request personal task"));
         assert_eq!(
@@ -3764,16 +3765,17 @@ mod tests {
             crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
         assert!(!chat.tasknode_response_is_current(
             &codex_tasknode_session::SessionScope::for_profile("another-account"),
-            None,
-            None
+            /*identity*/ None,
+            /*view*/ None
         ));
         assert!(!chat.tasknode_response_is_current(
             &tasknode_session_scope(&chat.config),
-            None,
+            /*identity*/ None,
             Some(TASKNODE_REQUESTS_VIEW_ID)
         ));
         chat.open_tasknode_task_request_prompt();
-        let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 84);
+        let rendered =
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 84);
         insta::assert_snapshot!("tasknode_personal_request_recovery_prompt", rendered);
     }
 
@@ -3820,7 +3822,8 @@ mod tests {
                 "Task Node".to_string(),
                 message,
             ));
-        let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 100);
+        let rendered =
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 100);
         insta::assert_snapshot!("tasknode_relink_corbanu_guidance", rendered);
     }
 

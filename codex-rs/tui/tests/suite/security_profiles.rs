@@ -38,7 +38,7 @@ fn tmux_security_profiles_are_observation_only_at_normal_and_narrow_widths() -> 
         let session = tmux.new_session(
             SessionSpec::new(
                 level,
-                TerminalSize::new(width, 48),
+                TerminalSize::new(width, /*rows*/ 48),
                 CommandSpec::new(&binary)
                     .env("CODEX_HOME", home.path())
                     .env("CORBANU_HOME", home.path())
@@ -112,7 +112,7 @@ fn tmux_security_unknown_config_fails_without_permissive_fallback() -> Result<()
     // typed driver can inspect startup rejection and dismiss it with Enter.
     let session = tmux.new_session(SessionSpec::new(
         "security-invalid",
-        TerminalSize::new(80, 24),
+        TerminalSize::new(/*columns*/ 80, /*rows*/ 24),
         CommandSpec::new("sh")
             .env("CODEX_HOME", home.path())
             .env("CORBANU_HOME", home.path())

@@ -42,13 +42,13 @@ fn completed_relink_replaces_nonexpiring_old_token_in_only_selected_profile() {
         promote_active_scoped_to_store(&store, &other, &unaffected).unwrap();
         save_pending_scoped_to_store(&store, &scope, &pending()).unwrap();
         let calls = Cell::new(0);
-        let resolved = resolve_from_store(&store, &scope, None, |_, path| {
+        let resolved = resolve_from_store(&store, &scope, /*requested_origin*/ None, |_, path| {
             calls.set(calls.get() + 1);
             if path.starts_with("/api/auth/terminal/session?") {
-                Ok(response(200, json!({"ok":true,"accountId":"acct_alice","githubUsername":"alice","terminalToken":"replacement"})))
+                Ok(response(/*status*/ 200, json!({"ok":true,"accountId":"acct_alice","githubUsername":"alice","terminalToken":"replacement"})))
             } else {
                 assert_eq!(path, "/api/terminal/tasknode/status");
-                Ok(response(200, json!({"ok":true,"accountId":"acct_alice"})))
+                Ok(response(/*status*/ 200, json!({"ok":true,"accountId":"acct_alice"})))
             }
         }).unwrap();
         assert_eq!(resolved, session("alice", "replacement"));
@@ -69,9 +69,12 @@ fn completed_relink_replaces_nonexpiring_old_token_in_only_selected_profile() {
         );
         // A fresh resolver after restart must use exactly the promoted identity.
         assert_eq!(
-            resolve_from_store(&store, &scope, None, |_, _| panic!(
-                "no pending link to exchange"
-            ))
+            resolve_from_store(
+                &store,
+                &scope,
+                /*requested_origin*/ None,
+                |_, _| panic!("no pending link to exchange")
+            )
             .unwrap(),
             resolved
         );
@@ -87,15 +90,25 @@ fn unfinished_link_preserves_working_authority_and_explains_rejected_authority()
         promote_active_scoped_to_store(&store, &scope, &old).unwrap();
         save_pending_scoped_to_store(&store, &scope, &pending()).unwrap();
         let before = load_scoped_from_store(&store, &scope).unwrap();
-        let result = resolve_from_store(&store, &scope, None, |_, path| {
-            Ok(if path.starts_with("/api/auth/") {
-                response(202, json!({"error":"terminal_auth_pending"}))
-            } else if valid {
-                response(200, json!({"ok":true,"accountId":"acct_alice"}))
-            } else {
-                response(401, json!({"ok":false,"error":"terminal_login_required"}))
-            })
-        });
+        let result =
+            resolve_from_store(&store, &scope, /*requested_origin*/ None, |_, path| {
+                Ok(if path.starts_with("/api/auth/") {
+                    response(
+                        /*status*/ 202,
+                        json!({"error":"terminal_auth_pending"}),
+                    )
+                } else if valid {
+                    response(
+                        /*status*/ 200,
+                        json!({"ok":true,"accountId":"acct_alice"}),
+                    )
+                } else {
+                    response(
+                        /*status*/ 401,
+                        json!({"ok":false,"error":"terminal_login_required"}),
+                    )
+                })
+            });
         if valid {
             assert_eq!(result.unwrap(), old);
         } else {
@@ -108,8 +121,11 @@ fn unfinished_link_preserves_working_authority_and_explains_rejected_authority()
 #[test]
 fn failed_or_mismatched_replacement_never_overwrites_active_session() {
     for validation in [
-        response(401, json!({"ok":false})),
-        response(200, json!({"ok":true,"accountId":"acct_intruder"})),
+        response(/*status*/ 401, json!({"ok":false})),
+        response(
+            /*status*/ 200,
+            json!({"ok":true,"accountId":"acct_intruder"}),
+        ),
     ] {
         let store = MemoryStore::default();
         let scope = SessionScope::for_profile("desk");
@@ -117,10 +133,10 @@ fn failed_or_mismatched_replacement_never_overwrites_active_session() {
         save_pending_scoped_to_store(&store, &scope, &pending()).unwrap();
         let before = load_scoped_from_store(&store, &scope).unwrap();
         assert!(
-            resolve_from_store(&store, &scope, None, |_, path| {
+            resolve_from_store(&store, &scope, /*requested_origin*/ None, |_, path| {
                 Ok(if path.starts_with("/api/auth/") {
                     response(
-                        200,
+                        /*status*/ 200,
                         json!({"accountId":"acct_alice","terminalToken":"unproven"}),
                     )
                 } else {
@@ -141,7 +157,13 @@ fn transport_failure_keeps_active_and_pending_records() {
     save_pending_scoped_to_store(&store, &scope, &pending()).unwrap();
     let before = load_scoped_from_store(&store, &scope).unwrap();
     assert!(
-        resolve_from_store(&store, &scope, None, |_, _| Err("fixture offline".into())).is_err()
+        resolve_from_store(
+            &store,
+            &scope,
+            /*requested_origin*/ None,
+            |_, _| Err("fixture offline".into())
+        )
+        .is_err()
     );
     assert_eq!(load_scoped_from_store(&store, &scope).unwrap(), before);
 }
@@ -154,7 +176,13 @@ fn expired_attempt_clears_only_pending_and_cancel_preserves_existing_account() {
     promote_active_scoped_to_store(&store, &scope, &old).unwrap();
     save_pending_scoped_to_store(&store, &scope, &pending()).unwrap();
     assert_eq!(
-        resolve_from_store(&store, &scope, None, |_, _| Ok(response(404, json!({})))).unwrap(),
+        resolve_from_store(
+            &store,
+            &scope,
+            /*requested_origin*/ None,
+            |_, _| Ok(response(/*status*/ 404, json!({})))
+        )
+        .unwrap(),
         old
     );
     assert_eq!(
@@ -177,9 +205,12 @@ fn another_origin_or_unlinked_profile_never_receives_saved_authority() {
     )
     .unwrap();
     assert!(
-        resolve_from_store(&store, &scope, None, |_, _| panic!(
-            "must not query default account"
-        ))
+        resolve_from_store(
+            &store,
+            &scope,
+            /*requested_origin*/ None,
+            |_, _| panic!("must not query default account")
+        )
         .is_err()
     );
     save_pending_scoped_to_store(&store, &scope, &pending()).unwrap();
@@ -201,7 +232,7 @@ fn authentication_recovery_uses_corbanu_guidance_even_with_obsolete_server_text(
         "Another server message",
     ] {
         let message = response(
-            401,
+            /*status*/ 401,
             json!({"error":"terminal_login_required","message":text}),
         )
         .message();
