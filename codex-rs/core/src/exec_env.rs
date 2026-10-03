@@ -29,7 +29,8 @@ pub(crate) fn inject_tasknode_profile_env(
     });
     env.insert(
         CORBANU_TASKNODE_PROFILE_ENV_VAR.to_string(),
-        serde_json::to_string(&profile).expect("serialize optional Task Node profile"),
+        // Same JSON as serde_json::to_string (`null` or a string) without a fallible path.
+        serde_json::Value::from(profile).to_string(),
     );
     env.insert(
         "CODEX_HOME".to_string(),

@@ -496,10 +496,11 @@ async fn spawn_agent_v2_catalog_respects_provider_policy_with_mixed_model_defaul
     let expected_openai = allowlist
         .as_ref()
         .is_none_or(|ids| ids.iter().any(|id| id == "openai"));
-    let expected_kimi = allowlist.is_none();
+    let expected_ambient = allowlist.is_none();
     let test = test_codex()
         // Reproduce the account catalog's Luna preference without overriding it in
-        // production. The bundled Kimi model has no multi-agent version preference.
+        // production. The bundled Ambient GLM model has no multi-agent version
+        // preference and leads the catalogue, so it stays inside the 32-entry cap.
         .with_model_info_override("gpt-5.6-luna", |model| {
             model.multi_agent_version = Some(MultiAgentVersion::V1);
         })
@@ -532,9 +533,9 @@ async fn spawn_agent_v2_catalog_respects_provider_policy_with_mixed_model_defaul
         (
             description.contains("`openai` / `gpt-5.6-luna`"),
             description.contains("`openai` / `gpt-6-astra`; explicit-choice only;"),
-            description.contains("`kimi-code` / `k3`")
+            description.contains("`ambient` / `z-ai/glm-5.2`")
         ),
-        (expected_openai, expected_openai, expected_kimi),
+        (expected_openai, expected_openai, expected_ambient),
         "provider policy, not engine preference or allocation economics, owns discovery: {description}"
     );
     assert!(

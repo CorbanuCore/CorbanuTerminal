@@ -27,6 +27,13 @@ jobs:
       - name: Verify Bazel clippy flags match Cargo workspace lints
         run: python3 .github/scripts/verify_bazel_clippy_lints.py
 
+      # These ran only inside the Linux Bazel test job, which is now nightly.
+      - name: Check rusty_v8 MODULE.bazel checksums
+        run: python3 .github/scripts/rusty_v8_bazel.py check-module-bazel
+
+      - name: Test GitHub scripts
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+
       - name: Test Codex package builder
         run: python3 -m unittest discover -s scripts/codex_package -p 'test_*.py'
 
