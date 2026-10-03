@@ -13,7 +13,7 @@ fn only_definite_typed_auth_rejections_require_reauthentication() {
         );
     }
     assert!(is_credential_rejection(Some(&CodexErrorInfo::Unauthorized)));
-    assert!(!is_credential_rejection(None));
+    assert!(!is_credential_rejection(/*info*/ None));
     assert!(!is_credential_rejection(Some(
         &CodexErrorInfo::ResponseStreamDisconnected {
             http_status_code: None,
@@ -60,7 +60,7 @@ async fn late_turn_failure_names_original_provider_and_ignores_recovered_attempt
     let warnings: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok())
         .filter_map(|event| match event {
             crate::app_event::AppEvent::InsertHistoryCell(cell) => Some(
-                cell.display_lines(200)
+                cell.display_lines(/*width*/ 200)
                     .into_iter()
                     .map(|line| line.to_string())
                     .collect::<Vec<_>>()
@@ -130,7 +130,9 @@ async fn apps_rejection_marks_openai_not_current_claude_and_r_opens_recovery() {
     ));
     let warning = std::iter::from_fn(|| rx.try_recv().ok())
         .filter_map(|event| match event {
-            crate::app_event::AppEvent::InsertHistoryCell(cell) => Some(cell.display_lines(80)),
+            crate::app_event::AppEvent::InsertHistoryCell(cell) => {
+                Some(cell.display_lines(/*width*/ 80))
+            }
             _ => None,
         })
         .flatten()
@@ -160,11 +162,11 @@ async fn apps_rejection_marks_openai_not_current_claude_and_r_opens_recovery() {
     chat.open_provider_recovery(entry, statuses.get("openai").unwrap());
     insta::assert_snapshot!(
         "openai_reauthentication",
-        super::super::tests::helpers::render_bottom_popup(&chat, 90)
+        super::super::tests::helpers::render_bottom_popup(&chat, /*width*/ 90)
     );
     insta::assert_snapshot!(
         "openai_reauthentication_narrow",
-        super::super::tests::helpers::render_bottom_popup(&chat, 45)
+        super::super::tests::helpers::render_bottom_popup(&chat, /*width*/ 45)
     );
     chat.handle_key_event(crossterm::event::KeyEvent::new(
         crossterm::event::KeyCode::Esc,

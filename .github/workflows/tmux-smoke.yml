@@ -17,7 +17,7 @@ jobs:
   tmux-smoke:
     name: Ubuntu tmux smoke
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: codex-rs
@@ -34,6 +34,9 @@ jobs:
         with:
           tool: nextest
           version: 0.9.103
+      # Onboarding scenarios launch the wallet daemon from beside the candidate binary.
+      - name: Build the wallet daemon
+        run: cargo build --locked -p codex-wallet-daemon --bin corbanu-walletd
       - name: Install tmux prerequisites
         run: |
           sudo apt-get update -y
@@ -42,6 +45,7 @@ jobs:
             pkg-config \
             tmux
           tmux -V
+      - run: cargo build --locked -p codex-cli --bin corbanu --bin codex
       - name: Run focused tmux tests
         run: |
           started=$SECONDS

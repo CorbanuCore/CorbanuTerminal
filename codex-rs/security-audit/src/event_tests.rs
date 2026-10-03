@@ -61,8 +61,14 @@ fn context(policy_generation: u64, run_generation: u64) -> EventContext {
 fn request_event_is_secret_free_and_digest_bound() {
     let request = request("SECRET-canary-not-for-journal");
     let decision = permissive_decision(&request).expect("decision");
-    let event = SecurityEvent::decision(context(3, 7), None, &request, decision, 11)
-        .expect("security event");
+    let event = SecurityEvent::decision(
+        context(/*policy_generation*/ 3, /*run_generation*/ 7),
+        /*causal_parent*/ None,
+        &request,
+        decision,
+        /*occurred_at_unix_seconds*/ 11,
+    )
+    .expect("security event");
 
     let encoded = serde_json::to_string(&event).expect("serialize event");
     assert!(!encoded.contains("SECRET-canary-not-for-journal"));
@@ -77,8 +83,14 @@ fn request_event_is_secret_free_and_digest_bound() {
 fn tampered_event_identity_fails_closed() {
     let request = request("research");
     let decision = permissive_decision(&request).expect("decision");
-    let event = SecurityEvent::decision(context(1, 1), None, &request, decision, 11)
-        .expect("security event");
+    let event = SecurityEvent::decision(
+        context(/*policy_generation*/ 1, /*run_generation*/ 1),
+        /*causal_parent*/ None,
+        &request,
+        decision,
+        /*occurred_at_unix_seconds*/ 11,
+    )
+    .expect("security event");
     let mut value = serde_json::to_value(event).expect("event value");
     value["occurred_at_unix_seconds"] = serde_json::json!(12);
 
@@ -94,30 +106,30 @@ fn reservation_identity_is_stable_and_generation_bound() {
         grant_id: text("grant-1"),
     };
     let first = SecurityEvent::dispatch_intent(
-        context(2, 9),
-        None,
+        context(/*policy_generation*/ 2, /*run_generation*/ 9),
+        /*causal_parent*/ None,
         &request,
         authority.clone(),
         text(secret_deduplication_key),
-        12,
+        /*occurred_at_unix_seconds*/ 12,
     )
     .expect("first intent");
     let duplicate = SecurityEvent::dispatch_intent(
-        context(2, 9),
-        None,
+        context(/*policy_generation*/ 2, /*run_generation*/ 9),
+        /*causal_parent*/ None,
         &request,
         authority.clone(),
         text(secret_deduplication_key),
-        12,
+        /*occurred_at_unix_seconds*/ 12,
     )
     .expect("duplicate intent");
     let next_run = SecurityEvent::dispatch_intent(
-        context(2, 10),
-        None,
+        context(/*policy_generation*/ 2, /*run_generation*/ 10),
+        /*causal_parent*/ None,
         &request,
         authority,
         text(secret_deduplication_key),
-        12,
+        /*occurred_at_unix_seconds*/ 12,
     )
     .expect("next-run intent");
 
@@ -129,7 +141,11 @@ fn reservation_identity_is_stable_and_generation_bound() {
 
 #[test]
 fn zero_run_generation_is_rejected() {
-    let error = EventContext::new(principal(PrincipalKind::Service, "audit-producer"), 0, 0)
-        .expect_err("zero run generation must fail");
+    let error = EventContext::new(
+        principal(PrincipalKind::Service, "audit-producer"),
+        /*policy_generation*/ 0,
+        /*run_generation*/ 0,
+    )
+    .expect_err("zero run generation must fail");
     assert!(matches!(error, SecurityEventError::InvalidRunGeneration));
 }

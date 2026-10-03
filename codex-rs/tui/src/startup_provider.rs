@@ -111,27 +111,27 @@ mod tests {
     #[test]
     fn recovered_install_skips_provider_onboarding_but_not_other_gates() {
         assert!(!should_show_provider_onboarding(
-            false,
-            false,
-            None,
+            /*show_trust_screen*/ false,
+            /*requires_provider_onboarding*/ false,
+            /*forced_login_method*/ None,
             crate::LoginStatus::NotAuthenticated,
         ));
         assert!(should_show_provider_onboarding(
-            true,
-            false,
-            None,
+            /*show_trust_screen*/ true,
+            /*requires_provider_onboarding*/ false,
+            /*forced_login_method*/ None,
             crate::LoginStatus::NotAuthenticated,
         ));
         assert!(should_show_provider_onboarding(
-            false,
-            false,
+            /*show_trust_screen*/ false,
+            /*requires_provider_onboarding*/ false,
             Some(crate::ForcedLoginMethod::Chatgpt),
             crate::LoginStatus::NotAuthenticated,
         ));
         assert!(should_show_provider_onboarding(
-            false,
-            true,
-            None,
+            /*show_trust_screen*/ false,
+            /*requires_provider_onboarding*/ true,
+            /*forced_login_method*/ None,
             crate::LoginStatus::NotAuthenticated,
         ));
     }
@@ -144,7 +144,7 @@ mod tests {
             .build()
             .await
             .unwrap();
-        let cached = resolve(&config, None).await;
+        let cached = resolve(&config, /*openai*/ None).await;
         let expected = cached.current.clone();
 
         let reused = resolve_for_app(&config, Some(cached)).await;
@@ -160,7 +160,7 @@ mod tests {
             .build()
             .await
             .unwrap();
-        let cached = resolve(&config, None).await;
+        let cached = resolve(&config, /*openai*/ None).await;
         config.model_provider_id = "provider-added-during-onboarding".to_string();
 
         let refreshed = resolve_for_app(&config, Some(cached)).await;
@@ -250,7 +250,7 @@ mod tests {
             .model_providers
             .insert("command-provider".into(), provider);
 
-        let resolution = resolve(&config, None).await;
+        let resolution = resolve(&config, /*openai*/ None).await;
 
         assert!(!resolution.requires_provider_onboarding);
         assert!(
@@ -280,7 +280,7 @@ mod tests {
             .await
             .unwrap();
 
-        let resolution = resolve(&config, None).await;
+        let resolution = resolve(&config, /*openai*/ None).await;
 
         assert!(resolution.requires_provider_onboarding);
         assert!(matches!(
@@ -305,7 +305,7 @@ mod tests {
         config.model_provider_id = "removed-custom-provider".into();
         config.model = Some("custom-model".into());
 
-        let resolution = resolve(&config, None).await;
+        let resolution = resolve(&config, /*openai*/ None).await;
 
         assert!(!resolution.requires_provider_onboarding);
         assert!(matches!(
@@ -353,7 +353,7 @@ mod tests {
         )
         .unwrap();
 
-        let resolution = resolve(&config, None).await;
+        let resolution = resolve(&config, /*openai*/ None).await;
 
         assert!(!resolution.requires_provider_onboarding);
         assert!(matches!(
@@ -384,7 +384,7 @@ mod tests {
             config.model_provider.clone(),
         )]);
 
-        let resolution = resolve(&config, None).await;
+        let resolution = resolve(&config, /*openai*/ None).await;
 
         assert!(!resolution.requires_provider_onboarding);
         assert!(matches!(
@@ -414,7 +414,7 @@ mod tests {
             config.model_provider.clone(),
         )]);
 
-        let resolution = resolve(&config, None).await;
+        let resolution = resolve(&config, /*openai*/ None).await;
 
         assert!(!resolution.requires_provider_onboarding);
         assert!(matches!(

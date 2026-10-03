@@ -41,19 +41,19 @@ fn pf_27_s01_digest_bounds_identity_and_read_failures() {
     header[18] = 62;
     header[20] = 1;
     assert_eq!(
-        image_digest(&mut header.as_slice(), 64).unwrap(),
+        image_digest(&mut header.as_slice(), /*limit*/ 64).unwrap(),
         format!("{:x}", Sha256::digest(header))
     );
     for i in [0, 4, 5, 6, 16, 18, 20] {
         let mut bad = header;
         bad[i] = 0;
-        assert!(image_digest(&mut bad.as_slice(), 64).is_err());
+        assert!(image_digest(&mut bad.as_slice(), /*limit*/ 64).is_err());
     }
-    assert!(image_digest(&mut &header[..63], 64).is_err());
-    assert!(image_digest(&mut header.as_slice(), 63).is_err());
+    assert!(image_digest(&mut &header[..63], /*limit*/ 64).is_err());
+    assert!(image_digest(&mut header.as_slice(), /*limit*/ 63).is_err());
     let mut too_big = header.to_vec();
     too_big.push(1);
-    assert!(image_digest(&mut too_big.as_slice(), 64).is_err());
+    assert!(image_digest(&mut too_big.as_slice(), /*limit*/ 64).is_err());
     struct Broken;
     impl Read for Broken {
         fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
@@ -61,12 +61,16 @@ fn pf_27_s01_digest_bounds_identity_and_read_failures() {
         }
     }
     assert_eq!(
-        image_digest(&mut Broken, 64).unwrap_err().to_string(),
+        image_digest(&mut Broken, /*limit*/ 64)
+            .unwrap_err()
+            .to_string(),
         "image header unavailable"
     );
     let mut later = header.as_slice().chain(Broken);
     assert_eq!(
-        image_digest(&mut later, 128).unwrap_err().to_string(),
+        image_digest(&mut later, /*limit*/ 128)
+            .unwrap_err()
+            .to_string(),
         "image read failed"
     );
 }

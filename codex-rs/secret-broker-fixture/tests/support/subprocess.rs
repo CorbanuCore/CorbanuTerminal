@@ -84,9 +84,12 @@ fn frame(key: u8, sequence: u64) -> SignedBrokerFrame {
 
 #[test]
 fn pf_27_s01_subprocess_dispatch_uses_vault_and_settles_journal() {
-    let mut service = ChildService::start(9);
+    let mut service = ChildService::start(/*key*/ 9);
     assert_eq!(
-        service.channel.dispatch(&frame(9, 1)).unwrap(),
+        service
+            .channel
+            .dispatch(&frame(/*key*/ 9, /*sequence*/ 1))
+            .unwrap(),
         TypedOperationReceipt {
             response_status: 204,
             uploaded_bytes: 0,
@@ -103,26 +106,54 @@ fn pf_27_s01_subprocess_dispatch_uses_vault_and_settles_journal() {
 
 #[test]
 fn pf_27_s01_subprocess_death_and_restart_refuse_old_channel_and_key() {
-    let mut old = ChildService::start(9);
-    assert!(old.channel.dispatch(&frame(9, 1)).is_ok());
+    let mut old = ChildService::start(/*key*/ 9);
+    assert!(
+        old.channel
+            .dispatch(&frame(/*key*/ 9, /*sequence*/ 1))
+            .is_ok()
+    );
     old.child.kill().unwrap();
     old.child.wait().unwrap();
-    assert!(old.channel.dispatch(&frame(9, 2)).is_err());
+    assert!(
+        old.channel
+            .dispatch(&frame(/*key*/ 9, /*sequence*/ 2))
+            .is_err()
+    );
     assert_eq!(
-        old.channel.dispatch(&frame(9, 2)),
+        old.channel.dispatch(&frame(/*key*/ 9, /*sequence*/ 2)),
         Err(BrokerDispatchError::SessionUnavailable)
     );
-    let restarted = ChildService::start(8);
-    assert!(restarted.channel.dispatch(&frame(9, 1)).is_err());
-    let fresh = ChildService::start(7);
-    assert!(fresh.channel.dispatch(&frame(7, 1)).is_ok());
+    let restarted = ChildService::start(/*key*/ 8);
+    assert!(
+        restarted
+            .channel
+            .dispatch(&frame(/*key*/ 9, /*sequence*/ 1))
+            .is_err()
+    );
+    let fresh = ChildService::start(/*key*/ 7);
+    assert!(
+        fresh
+            .channel
+            .dispatch(&frame(/*key*/ 7, /*sequence*/ 1))
+            .is_ok()
+    );
 }
 
 #[test]
 fn pf_27_s01_subprocess_replay_denies_without_second_audit_or_secret() {
-    let mut service = ChildService::start(9);
-    assert!(service.channel.dispatch(&frame(9, 1)).is_ok());
-    assert!(service.channel.dispatch(&frame(9, 1)).is_err());
+    let mut service = ChildService::start(/*key*/ 9);
+    assert!(
+        service
+            .channel
+            .dispatch(&frame(/*key*/ 9, /*sequence*/ 1))
+            .is_ok()
+    );
+    assert!(
+        service
+            .channel
+            .dispatch(&frame(/*key*/ 9, /*sequence*/ 1))
+            .is_err()
+    );
     let mut output = String::new();
     service.output.read_to_string(&mut output).unwrap();
     assert_eq!(output, "synthetic-only journal-records=2\n");
@@ -131,7 +162,7 @@ fn pf_27_s01_subprocess_replay_denies_without_second_audit_or_secret() {
 
 #[test]
 fn pf_27_s01_signal_during_partial_read_preserves_absolute_deadline() {
-    let mut service = ChildService::start(9);
+    let mut service = ChildService::start(/*key*/ 9);
     let start = std::time::Instant::now();
     service.wire.write_all(&[0]).unwrap();
     for _ in 0..4 {
@@ -155,8 +186,13 @@ fn pf_27_s01_signal_during_partial_read_preserves_absolute_deadline() {
 
 #[test]
 fn pf_27_s01_subprocess_peer_mismatch_denies_before_audit() {
-    let mut service = ChildService::with_mode(9, "--wrong-peer");
-    assert!(service.channel.dispatch(&frame(9, 1)).is_err());
+    let mut service = ChildService::with_mode(/*key*/ 9, "--wrong-peer");
+    assert!(
+        service
+            .channel
+            .dispatch(&frame(/*key*/ 9, /*sequence*/ 1))
+            .is_err()
+    );
     let mut output = String::new();
     service.output.read_to_string(&mut output).unwrap();
     assert_eq!(output, "synthetic-only journal-records=0\n");

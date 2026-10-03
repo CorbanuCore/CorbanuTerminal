@@ -957,7 +957,7 @@ async fn multi_agent_v2_selects_child_models_with_different_engine_defaults() {
             (
                 child.model.as_deref(),
                 child.model_provider_id.as_str(),
-                child.multi_agent_version_for_model(None)
+                child.multi_agent_version_for_model(/*model_multi_agent_version*/ None)
             ),
             (Some(model), provider, MultiAgentVersion::V2)
         );
@@ -3832,7 +3832,7 @@ async fn spawn_agent_allows_depth_up_to_configured_max_depth() {
         .inherit_child(
             root.thread_id,
             parent.thread_id,
-            "task:test-configured-depth-parent",
+            format!("task:spawn:{}", parent.thread_id),
             turn.config.security_level,
         )
         .expect("direct fixture parent should receive the same policy binding as a live spawn");

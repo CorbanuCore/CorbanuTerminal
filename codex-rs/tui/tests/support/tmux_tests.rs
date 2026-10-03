@@ -12,7 +12,7 @@ fn interrupted_test_process_does_not_orphan_tmux() -> Result<()> {
         let server = TmuxServer::start("watchdog-child")?;
         let session = server.new_session(SessionSpec::new(
             "watchdog",
-            TerminalSize::new(40, 8),
+            TerminalSize::new(/*columns*/ 40, /*rows*/ 8),
             command_for_shell("trap '' HUP TERM; printf 'ready'; while :; do sleep 1; done"),
         ))?;
         session
@@ -73,7 +73,7 @@ fn attachment_hint_targets_only_owned_session_and_preserves_cleanup() -> Result<
     let socket_root = server.socket_root();
     let session = server.new_session(SessionSpec::new(
         "owned",
-        TerminalSize::new(40, 8),
+        TerminalSize::new(/*columns*/ 40, /*rows*/ 8),
         command_for_shell("printf ready; sleep 30"),
     ))?;
     let command = session.attachment_command();

@@ -26,7 +26,9 @@ fn operation() -> BrokerOperation {
 fn pf_27_s04_pf_27_s01_authenticated_frame_round_trip_preserves_only_typed_metadata() {
     let signer = BrokerChannelMac::from_secret(KEY);
     let verifier = BrokerChannelMac::from_secret(KEY);
-    let frame = signer.sign(binding(), 1, operation()).expect("frame");
+    let frame = signer
+        .sign(binding(), /*sequence*/ 1, operation())
+        .expect("frame");
     let verified = verifier.verify(&frame).expect("verified");
 
     assert_eq!(verified.binding, binding());
@@ -41,7 +43,9 @@ fn pf_27_s04_pf_27_s01_authenticated_frame_round_trip_preserves_only_typed_metad
 fn pf_27_s04_pf_27_s01_wrong_key_and_tampering_fail_authentication() {
     let signer = BrokerChannelMac::from_secret(KEY);
     let wrong = BrokerChannelMac::from_secret([8; 32]);
-    let frame = signer.sign(binding(), 1, operation()).expect("frame");
+    let frame = signer
+        .sign(binding(), /*sequence*/ 1, operation())
+        .expect("frame");
     assert_eq!(
         wrong.verify(&frame).err(),
         Some(BrokerFrameError::AuthenticationFailed)
@@ -103,7 +107,7 @@ fn pf_27_s04_pf_27_s01_bounds_and_operation_shape_fail_closed() {
     };
     assert_eq!(
         BrokerChannelMac::from_secret(KEY)
-            .sign(binding(), 1, invalid_operation)
+            .sign(binding(), /*sequence*/ 1, invalid_operation)
             .err(),
         Some(BrokerFrameError::InvalidCredentialReference)
     );
@@ -118,11 +122,11 @@ fn pf_27_s04_pf_27_s01_binding_and_peer_require_canonical_observed_identity() {
         Err(BrokerFrameError::InvalidRunGeneration)
     );
     assert_eq!(
-        ObservedPeer::from_os("worker principal", 1),
+        ObservedPeer::from_os("worker principal", /*process_id*/ 1),
         Err(BrokerFrameError::InvalidIdentity)
     );
     assert_eq!(
-        ObservedPeer::from_os("worker-uid-501", 0),
+        ObservedPeer::from_os("worker-uid-501", /*process_id*/ 0),
         Err(BrokerFrameError::InvalidPeer)
     );
 }
@@ -130,7 +134,9 @@ fn pf_27_s04_pf_27_s01_binding_and_peer_require_canonical_observed_identity() {
 #[test]
 fn pf_27_s04_pf_27_s01_debug_output_is_redacted() {
     let mac = BrokerChannelMac::from_secret(KEY);
-    let frame = mac.sign(binding(), 1, operation()).expect("frame");
+    let frame = mac
+        .sign(binding(), /*sequence*/ 1, operation())
+        .expect("frame");
     assert_eq!(format!("{mac:?}"), "BrokerChannelMac(<redacted>)");
     assert_eq!(format!("{frame:?}"), "SignedBrokerFrame(<authenticated>)");
 }
