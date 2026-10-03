@@ -1,4 +1,4 @@
-"""Bounded offline protocol, auth-file and real-TMUX lifecycle regression tests."""
+"""Bounded offline protocol, vault-auth and real-TMUX lifecycle regression tests."""
 
 import argparse
 import contextlib
@@ -55,8 +55,11 @@ class Fixture:
         self.temp = tempfile.TemporaryDirectory(prefix="cf", dir=short_root)
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.auth = self.root / "auth.json"
-        f.write_json(self.auth, {"CLAUDE_CODE_OAUTH_TOKEN": FAKE_TOKEN})
+        # Synthetic vault home: fake binaries answer the vault helper from this file.
+        self.vault = self.root / "vault"
+        self.vault.mkdir(mode=0o700)
+        self.vault_token_file = self.vault / "fixture-token"
+        f.write_file(self.vault_token_file, FAKE_TOKEN)
         self.brief = self.root / "brief.json"
         f.write_json(self.brief, {"state_revision": 7, "triggers": ["event-1"]})
 
@@ -75,29 +78,61 @@ class Files(Fixture, unittest.TestCase):
                      "Claude subscription token was not saved: fixture"):
             self.assertTrue(f.provider_failure(text))
 
-    def test_auth_contract_and_permissions(self):
-        self.assertEqual(f.auth_token(self.auth), FAKE_TOKEN)
-        self.auth.chmod(0o644)
-        with self.assertRaisesRegex(f.LaunchError, "unsafe_private_file"):
-            f.auth_token(self.auth)
-        self.auth.chmod(0o600)
-        link = self.root / "link"
-        link.symlink_to(self.auth)
-        with self.assertRaisesRegex(f.LaunchError, "symlink_path"):
-            f.auth_token(link)
-        link.unlink()
-        os.link(self.auth, link)
-        with self.assertRaisesRegex(f.LaunchError, "unsafe_private_file"):
-            f.auth_token(self.auth)
+    def helper(self, body):
+        binary = self.root / "helper"
+        if binary.exists():
+            binary.unlink()
+        f.write_file(binary, "#!" + sys.executable + "\nimport json, os, sys, time\n" + body, 0o700)
+        return binary
 
-    def test_auth_rejects_extra_fields_empty_and_controls(self):
-        for value in ({}, {"CLAUDE_CODE_OAUTH_TOKEN": ""},
-                      {"CLAUDE_CODE_OAUTH_TOKEN": FAKE_TOKEN, "HOME": "/tmp"},
-                      {"CLAUDE_CODE_OAUTH_TOKEN": FAKE_TOKEN + "\n"}):
-            with self.subTest(value=list(value)):
-                f.write_json(self.auth, value)
-                with self.assertRaises(f.LaunchError):
-                    f.auth_token(self.auth)
+    def test_vault_token_uses_provider_helper_in_memory(self):
+        seen = self.root / "seen.json"
+        binary = self.helper(
+            "open(" + repr(str(seen)) + ", 'w').write(json.dumps([sys.argv[1:], os.getcwd(), "
+            "{k: os.environ.get(k) for k in ('CODEX_HOME', 'CORBANU_HOME', 'PFTERMINAL_HOME', "
+            "'CLAUDE_CODE_OAUTH_TOKEN', 'OPENAI_API_KEY')}]))\n"
+            "sys.stdout.write(open(os.environ['CODEX_HOME'] + '/fixture-token').read())\n")
+        with patch.dict(os.environ, {"CLAUDE_CODE_OAUTH_TOKEN": "inherited", "OPENAI_API_KEY": "x"}):
+            self.assertEqual(f.vault_token(binary, self.vault), FAKE_TOKEN)
+        argv, cwd, env = json.loads(seen.read_text())
+        self.assertEqual(argv, [f.VAULT_HELPER])
+        self.assertEqual(Path(cwd).resolve(), self.vault.resolve())
+        self.assertEqual(env, {"CODEX_HOME": str(self.vault), "CORBANU_HOME": str(self.vault),
+                               "PFTERMINAL_HOME": str(self.vault), "CLAUDE_CODE_OAUTH_TOKEN": None,
+                               "OPENAI_API_KEY": None})
+        self.assertEqual(sorted(p.name for p in self.vault.iterdir()), ["fixture-token"])
+
+    def test_vault_token_failures_are_fixed_codes_without_output(self):
+        cases = {"sys.stdout.write(" + repr(FAKE_TOKEN) + "); sys.exit(1)\n": "vault_auth_unavailable",
+                 "sys.stdout.write(" + repr(FAKE_TOKEN + "\n") + ")\n": "invalid_vault_auth",
+                 "sys.stdout.write('short')\n": "invalid_vault_auth",
+                 "sys.stdout.write('')\n": "invalid_vault_auth",
+                 "sys.stdout.buffer.write(" + repr(("\u00e9" + FAKE_TOKEN).encode()) + ")\n":
+                     "invalid_vault_auth",
+                 "sys.stdout.write(" + repr(FAKE_TOKEN) + "); time.sleep(5)\n": "vault_auth_unavailable"}
+        for body, code in cases.items():
+            with self.subTest(code=code, body=body[:30]), patch.object(f, "VAULT_TIMEOUT", 1):
+                with self.assertRaises(f.LaunchError) as caught:
+                    f.vault_token(self.helper(body), self.vault)
+                self.assertEqual(str(caught.exception), code)
+                self.assertIsNone(caught.exception.__context__)
+                self.assertNotIn(FAKE_TOKEN, repr(caught.exception))
+        with self.assertRaisesRegex(f.LaunchError, "vault_auth_unavailable"):
+            f.vault_token(self.root / "absent-binary", self.vault)
+
+    def test_vault_home_must_be_owned_real_directory(self):
+        binary = self.helper("sys.stdout.write(" + repr(FAKE_TOKEN) + ")\n")
+        self.vault.chmod(0o770)
+        with self.assertRaisesRegex(f.LaunchError, "unsafe_vault_home"):
+            f.vault_token(binary, self.vault)
+        self.vault.chmod(0o755)
+        self.assertEqual(f.vault_token(binary, self.vault), FAKE_TOKEN)
+        link = self.root / "vault-link"
+        link.symlink_to(self.vault, target_is_directory=True)
+        with self.assertRaisesRegex(f.LaunchError, "symlink_path"):
+            f.vault_token(binary, link)
+        with self.assertRaisesRegex(f.LaunchError, "unsafe_vault_home"):
+            f.vault_token(binary, self.vault_token_file)
 
     def test_fifo_and_symlink_ancestors_denied(self):
         fifo = self.root / "fifo"
@@ -106,8 +141,8 @@ class Files(Fixture, unittest.TestCase):
             f.read_file(fifo, 100)
         directory = self.root / "alias"
         directory.symlink_to(self.root, target_is_directory=True)
-        with self.assertRaises(f.LaunchError):
-            f.auth_token(directory / "auth.json")
+        with self.assertRaisesRegex(f.LaunchError, "symlink_path"):
+            f.vault_home(directory / "vault")
 
     def test_limits_and_duplicate_json(self):
         with self.assertRaisesRegex(f.LaunchError, "invalid_file"):
@@ -174,9 +209,11 @@ class Files(Fixture, unittest.TestCase):
             self.assertEqual(f.redacted('"' + token + '",'), '"[REDACTED]",')
 
     def test_invalid_input_retains_one_redacted_receipt(self):
-        f.write_file(self.auth, FAKE_TOKEN)
-        args = argparse.Namespace(briefing=self.brief, runs_dir=self.root, binary=REFERENCE,
-                                  auth_file=self.auth, timeout=1)
+        # A failing synthetic helper; tests never run a real vault/Keychain lookup.
+        binary = self.root / "failing"
+        f.write_file(binary, "#!/bin/sh\nprintf '%s' " + FAKE_TOKEN + " >&2\nexit 3\n", 0o700)
+        args = argparse.Namespace(briefing=self.brief, runs_dir=self.root, binary=binary,
+                                  auth_vault_home=self.vault, timeout=1)
         output = f.run_launcher(args)
         self.assertEqual(output["status"], "failed")
         self.assertTrue(output["shutdown"]["clean"])
@@ -191,7 +228,7 @@ class Files(Fixture, unittest.TestCase):
 
     def test_help_and_import_have_no_subprocess_or_auth(self):
         with patch.object(f.subprocess, "run", side_effect=AssertionError("launched")), \
-                patch.object(f, "auth_token", side_effect=AssertionError("auth")), \
+                patch.object(f, "vault_token", side_effect=AssertionError("auth")), \
                 contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as exit_:
             f.main(["--help"])
         self.assertEqual(exit_.exception.code, 0)
@@ -296,6 +333,9 @@ class Protocol(unittest.TestCase):
 # It contains no network, provider implementation, or real credentials.
 FAKE = r'''#!INTERPRETER
 import json, os, pathlib, select, subprocess, sys, time, tty, uuid
+if sys.argv[1:] == ["internal-claude-oauth-token"]:
+    sys.stdout.write((pathlib.Path(os.environ["CODEX_HOME"]) / "fixture-token").read_text())
+    sys.exit(0)
 if "--version" in sys.argv:
     print("corbanu offline-fixture")
     sys.exit(0)
@@ -412,7 +452,7 @@ class RealTmux(Fixture, unittest.TestCase):
             "RECORDS", repr(sequence(Path("/packet"))))
         f.write_file(binary, source, 0o700)
         return argparse.Namespace(briefing=self.brief, runs_dir=self.root, binary=binary,
-                                  auth_file=self.auth, timeout=timeout)
+                                  auth_vault_home=self.vault, timeout=timeout)
 
     def assert_stopped(self, receipt):
         self.assertTrue(receipt["shutdown"]["clean"], receipt)
@@ -457,7 +497,8 @@ class RealTmux(Fixture, unittest.TestCase):
     def test_auth_rotation_before_child_is_rejected(self):
         original = f.Tui.start
         def rotate_then_start(tui):
-            f.write_json(self.auth, {"CLAUDE_CODE_OAUTH_TOKEN": FAKE_TOKEN + "-rotated"})
+            self.vault_token_file.unlink()
+            f.write_file(self.vault_token_file, FAKE_TOKEN + "-rotated")
             original(tui)
         with patch.object(f.Tui, "start", rotate_then_start):
             receipt = f.run_launcher(self.make_args())
@@ -580,7 +621,7 @@ class RealTmux(Fixture, unittest.TestCase):
     def test_sigterm_returns_receipt_and_stops_tmux(self):
         args = self.make_args("hang", timeout=20)
         command = [sys.executable, str(Path(f.__file__).resolve())]
-        for key in ("briefing", "runs_dir", "binary", "auth_file", "timeout"):
+        for key in ("briefing", "runs_dir", "binary", "auth_vault_home", "timeout"):
             command.extend(["--" + key.replace("_", "-"), str(getattr(args, key))])
         proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:

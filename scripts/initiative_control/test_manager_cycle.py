@@ -63,7 +63,7 @@ def fixture_launcher(args):
         manifest[field] = f.file_digest(run / name)
     f.write_json(run / "manifest.json", manifest)
     f.write_json(run / "launch.json", {**{key: manifest[key] for key in ("binary", "binary_sha256", "argv")},
-                                       "auth_file": str(args.auth_file), "auth_sha256": f.digest(b"fixture-only")})
+                                       "auth_vault_home": str(args.auth_vault_home), "auth_sha256": f.digest(b"fixture-only")})
     receipt = {"run_id": run.name, "status": "completed", "started_at": started,
                "model": f.MODEL, "provider": f.PROVIDER, "effort": f.EFFORT,
                "session_id": sid, "thread_id": tid, "turn_id": "turn-1", "response_id": "response-1",
@@ -96,7 +96,7 @@ def rewrite_decision(receipt, change):
 
 def invocation(root, launcher=fixture_launcher, **options):
     return m.run_cycle(state=root / "state", runs_dir=root / "runs", binary=root / "binary",
-                       auth_file=root / "ABSENT-auth", owner_context=root / "context.json",
+                       auth_vault_home=root / "ABSENT-vault", owner_context=root / "context.json",
                        launcher=launcher, **options)
 
 
@@ -155,7 +155,7 @@ class CycleTests(unittest.TestCase):
         return fixture_launcher(args)
 
     def cycle(self, launcher=None):
-        with patch.object(f, "auth_token", side_effect=AssertionError("no credentials")):
+        with patch.object(f, "vault_token", side_effect=AssertionError("no credentials")):
             return invocation(self.root, launcher or self.launch)
 
     def pending(self):
@@ -204,7 +204,7 @@ class CycleTests(unittest.TestCase):
                 before = self.c.path.read_bytes()
                 with patch.object(m, "briefing", side_effect=AssertionError), patch.object(f, "run_launcher", side_effect=AssertionError):
                     result = m.run_cycle(state=self.c.directory, runs_dir=None, binary=None,
-                                         auth_file=None, owner_context=None)
+                                         auth_vault_home=None, owner_context=None)
                 self.assertEqual(mode, result["status"])
                 self.assertEqual(before, self.c.path.read_bytes())
                 self.assertEqual([], list((self.root / "runs").iterdir()))
@@ -218,7 +218,7 @@ class CycleTests(unittest.TestCase):
                     self.assertEqual(0, exc.exception.code)
                 else:
                     self.assertEqual(0, m.main(argv))
-        result = m.run_cycle(state=self.root / "absent", runs_dir=None, binary=None, auth_file=None, owner_context=None)
+        result = m.run_cycle(state=self.root / "absent", runs_dir=None, binary=None, auth_vault_home=None, owner_context=None)
         self.assertEqual("owner_hold", result["status"])
         self.assertFalse((self.root / "absent").exists())
         proc = subprocess.run([sys.executable, "-B", "-c", "import manager_cycle"],
@@ -596,7 +596,7 @@ class CycleTests(unittest.TestCase):
                 before = {p.name: p.read_bytes() for p in c.directory.iterdir()}
                 for _ in range(2):
                     result = m.run_cycle(state=c.directory, runs_dir=None, binary=None,
-                                         auth_file=None, owner_context=None, launcher=self.launch)
+                                         auth_vault_home=None, owner_context=None, launcher=self.launch)
                     self.assertEqual(("owner_hold", "preflight", "sqlite_recovery_required"),
                                      (result["status"], result["phase"], result["reason"]))
                     self.assertIsNone(result["manager_run"])
@@ -684,7 +684,7 @@ class CycleTests(unittest.TestCase):
         output = io.StringIO()
         argv = ["--run"]
         for key, value in (("state", "state"), ("runs-dir", "runs"), ("binary", "binary"),
-                           ("auth-file", "ABSENT-auth"), ("owner-context", "context.json")):
+                           ("auth-vault-home", "ABSENT-vault"), ("owner-context", "context.json")):
             argv.extend(["--" + key, str(self.root / value)])
         with contextlib.redirect_stdout(output), patch.object(f, "run_launcher", self.launch):
             self.assertEqual(0, m.main(argv))
@@ -695,7 +695,7 @@ class CycleTests(unittest.TestCase):
         empty = Coordinator(self.root / "uninitialized")
         before = empty.path.read_bytes()
         for directory in (empty.directory, self.root / "runs"):
-            result = m.run_cycle(state=directory, runs_dir=None, binary=None, auth_file=None, owner_context=None)
+            result = m.run_cycle(state=directory, runs_dir=None, binary=None, auth_vault_home=None, owner_context=None)
             self.assertEqual("owner_hold", result["status"])
         self.assertEqual(before, empty.path.read_bytes())
         self.assertFalse((self.root / "runs/coordinator.sqlite3").exists())

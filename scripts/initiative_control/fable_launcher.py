@@ -8,6 +8,7 @@ import json
 import math
 import os
 from pathlib import Path
+import pwd
 import re
 import shlex
 import shutil
@@ -138,13 +139,42 @@ def write_json(path, value):
     write_file(path, json.dumps(value, ensure_ascii=True, indent=2) + "\n")
 
 
-def auth_token(path):
-    value = strict_json(read_file(path, 16384, private=True))
-    require(isinstance(value, dict) and set(value) == {"CLAUDE_CODE_OAUTH_TOKEN"},
-            "invalid_auth_contract")
-    token = value["CLAUDE_CODE_OAUTH_TOKEN"]
-    require(isinstance(token, str) and 16 <= len(token) <= 8192
-            and all(33 <= ord(c) <= 126 for c in token), "invalid_auth_contract")
+# Travis 2026-10-03 (B1): the manager reads its Claude login from the Corbanu vault at
+# use time, never from a file. The managed subscription token is provider-scoped
+# (`vault auth-helper` refuses it by design), so it is resolved through the same
+# command-backed helper the claude-plan provider itself runs. The value stays in
+# memory; only its SHA-256 is recorded so the child can detect rotation.
+VAULT_HELPER = "internal-claude-oauth-token"
+VAULT_TIMEOUT = 30
+
+
+def vault_home(path):
+    path = no_links(path)
+    info = path.stat()
+    require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid()
+            and info.st_mode & 0o022 == 0, "unsafe_vault_home")
+    return path
+
+
+def vault_token(binary, home):
+    """Resolve the Claude login from the vault at `home`; never written or logged."""
+    home = vault_home(home)
+    env = {"PATH": SAFE_PATH, "HOME": pwd.getpwuid(os.getuid()).pw_dir,
+           "CODEX_HOME": str(home), "CORBANU_HOME": str(home), "PFTERMINAL_HOME": str(home),
+           "LANG": "en_US.UTF-8", "LC_ALL": "en_US.UTF-8"}
+    proc = None
+    try:
+        proc = subprocess.run([str(binary), VAULT_HELPER], env=env, cwd=home,
+                              stdin=subprocess.DEVNULL, capture_output=True, timeout=VAULT_TIMEOUT)
+    except (OSError, subprocess.SubprocessError):
+        proc = None  # Exceptions may carry captured output; never let them escape.
+    require(proc is not None and proc.returncode == 0, "vault_auth_unavailable")
+    try:
+        token = proc.stdout.decode("ascii")
+    except UnicodeError:
+        token = ""
+    require(16 <= len(token) <= 8192 and all(33 <= ord(c) <= 126 for c in token),
+            "invalid_vault_auth")
     return token
 
 
@@ -331,8 +361,8 @@ def child(run):
     try:
         params = strict_json(read_file(run / "launch.json", 65536, private=True))
         require(file_digest(Path(params["binary"])) == params["binary_sha256"], "binary_changed")
-        token = auth_token(Path(params["auth_file"]))
-        require(digest(token.encode()) == params["auth_sha256"], "auth_file_changed")
+        token = vault_token(Path(params["binary"]), Path(params["auth_vault_home"]))
+        require(digest(token.encode()) == params["auth_sha256"], "vault_auth_changed")
         env = environment(run)
         env["CLAUDE_CODE_OAUTH_TOKEN"] = token
         if os.getpgrp() != os.getpid():
@@ -561,15 +591,15 @@ def run_launcher(args):
             previous_handlers[sig] = signal.signal(sig, cancelled)
         for directory in ("home", "user", "tmp", "packet", "logs"):
             (run / directory).mkdir(mode=0o700)
-        token = auth_token(args.auth_file)
         brief_raw = read_file(args.briefing, BRIEF_LIMIT)
         brief = strict_json(brief_raw)
         require(isinstance(brief, dict), "invalid_briefing")
         brief_text = json.dumps(brief, ensure_ascii=True, separators=(",", ":"))
-        no_secrets(brief, token, "secret_in_briefing")
         binary = no_links(args.binary)
         require(binary.is_file() and os.access(binary, os.X_OK), "invalid_binary")
         binary_hash = file_digest(binary)
+        token = vault_token(binary, args.auth_vault_home)
+        no_secrets(brief, token, "secret_in_briefing")
         version = subprocess.run([str(binary), "--version"], env=environment(run),
                                  cwd=run / "packet", capture_output=True, text=True, timeout=5)
         require(version.returncode == 0 and len(version.stdout) <= 512, "binary_version_failed")
@@ -584,7 +614,7 @@ def run_launcher(args):
                                                  "--child", str(run)]) + "\n"
         write_file(run / "launch.sh", launch, 0o700)
         write_json(run / "launch.json", {"binary": str(binary), "binary_sha256": binary_hash,
-                                         "auth_file": str(no_links(args.auth_file)),
+                                         "auth_vault_home": str(vault_home(args.auth_vault_home)),
                                          "auth_sha256": digest(token.encode()), "argv": argv})
         manifest = {"run_id": run.name, "started_at": started, "briefing_sha256": digest(brief_raw),
                     "packet_sha256": file_digest(run / "packet/briefing.md"),
@@ -693,7 +723,7 @@ def run_launcher(args):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("briefing", "runs-dir", "binary", "auth-file"):
+    for name in ("briefing", "runs-dir", "binary", "auth-vault-home"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--timeout", type=float, default=300)
     args = parser.parse_args(argv)

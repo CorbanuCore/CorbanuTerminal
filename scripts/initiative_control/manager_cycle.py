@@ -416,7 +416,7 @@ def validate(receipt, attempt, cycle, raw):
     return decision
 
 
-def run_cycle(*, state, runs_dir, binary, auth_file, owner_context, timeout=300,
+def run_cycle(*, state, runs_dir, binary, auth_vault_home, owner_context, timeout=300,
               launcher=None, clock=None):
     """Owner-only callable. All returned actions still need real host claim/tools/ACK."""
     cycle, packet, phase = None, None, "preflight"
@@ -454,7 +454,7 @@ def run_cycle(*, state, runs_dir, binary, auth_file, owner_context, timeout=300,
         phase = "launch"
         receipt = (launcher or f.run_launcher)(argparse.Namespace(
             briefing=cycle / "briefing.json", runs_dir=cycle / "launches", binary=binary,
-            auth_file=Path(auth_file), timeout=launch_timeout))
+            auth_vault_home=Path(auth_vault_home), timeout=launch_timeout))
         phase = "validation"
         f.write_json(cycle / "returned.json", receipt)
         decision = validate(receipt, attempt, cycle, raw)
@@ -499,7 +499,7 @@ def run_cycle(*, state, runs_dir, binary, auth_file, owner_context, timeout=300,
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true", help="explicitly invoke one owner cycle (default OFF)")
-    for name in ("state", "runs-dir", "binary", "auth-file", "owner-context"):
+    for name in ("state", "runs-dir", "binary", "auth-vault-home", "owner-context"):
         parser.add_argument("--" + name, type=Path)
     parser.add_argument("--timeout", type=float, default=300,
                         help="total claim seconds (31..3600, default 300); elapsed prep plus 30s "
@@ -508,8 +508,8 @@ def main(argv=None):
     if not args.run:
         result = {"status": "off", "prepared_actions": []}
     else:
-        if any(getattr(args, key) is None for key in ("state", "runs_dir", "binary", "auth_file", "owner_context")):
-            parser.error("--run requires state, runs-dir, binary, auth-file and owner-context paths")
+        if any(getattr(args, key) is None for key in ("state", "runs_dir", "binary", "auth_vault_home", "owner_context")):
+            parser.error("--run requires state, runs-dir, binary, auth-vault-home and owner-context paths")
         del args.run
         result = run_cycle(**vars(args))
     print(json.dumps(result, ensure_ascii=True))
