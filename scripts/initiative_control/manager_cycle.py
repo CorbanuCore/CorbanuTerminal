@@ -15,11 +15,14 @@ import sqlite3
 import stat
 import time
 
-from coordinator import Coordinator, Rejected, TERMINAL, digest, encoded
+from coordinator import Coordinator, Rejected, TERMINAL, digest, encoded, event_kind
 import fable_launcher as f
 
 # Total claim window includes preparation and acceptance; launcher has its own clock.
 LAUNCH_MARGIN = 30
+# Finished allocations with no accepted action stay live this long, so the
+# manager can still prepare a successor on them before routine compaction.
+COMPACT_FAILED_AFTER = 7 * 86400
 
 DIRECTIVE = (
     "Return bounded action proposals using only exact frozen allocation inputs. "
@@ -47,13 +50,19 @@ DIRECTIVE = (
     "event_batch reports selected and deferred pending events. Only selected events "
     "are supplied and consumed on acceptance; deferred events remain pending for "
     "later fresh cycles. Do not claim the whole queue is reconciled. "
+    "Events are ordered by priority: results awaiting a verdict, stalls, failures and "
+    "owner wake-ups first, then the newest history. event_backlog counts every pending "
+    "event by kind, including the deferred ones still waiting for a later cycle. "
+    "If nothing should be done now, return no_action_reason instead of inventing work. "
     "Compacted terminal actions retain core result, verification, owner_failure "
     "and owner_cancellation previews (at most 400 characters each). These are "
     "partial context, not full originals. Other derived event/action previews "
     "are omitted; exact full bodies are in original_evidence unless explicitly "
     "listed in evidence_omissions. "
-    "consumed_allocations maps a spent allocation id to its frozen original's digest; "
-    "those carry no decision content and their originals remain in the audit table. "
+    "consumed_allocations summarizes spent allocations: their count, the digest of the "
+    "full id-to-original-digest index, and that index entry for any id a supplied "
+    "action names. They carry no decision content and cannot take new actions; "
+    "their originals remain in the audit table. "
     "Preserve approvals, unresolved blockers, review budgets and pause boundaries."
 )
 
@@ -99,6 +108,52 @@ def load_json(path, limit=f.RECORD_LIMIT):
     return f.strict_json(f.read_file(path, limit, private=True))
 
 
+def allocation_of(action):
+    """The allocation an action record names, or None for malformed history."""
+    inputs = action.get("inputs") if isinstance(action, dict) else None
+    key = inputs.get("allocation") if isinstance(inputs, dict) else None
+    return key if isinstance(key, str) else None
+
+
+def compact_finished(coordinator, now=None):
+    """Routine compaction of finished allocations, the briefing-budget method.
+
+    An allocation is compacted when every action on it (live or archived) is
+    terminal and one was accepted, or when it has been finished for
+    COMPACT_FAILED_AFTER. complete_sprint and never-used allocations stay.
+    Revision-checked one at a time; a concurrent change stops the pass.
+    """
+    now = time.time() if now is None else now
+    state = coordinator.snapshot()
+    if not state["enabled"] or state["manager"] is not None:
+        return []
+    actions = {}
+    with coordinator.connection() as db:
+        history = [json.loads(body) for (body,) in db.execute("SELECT body FROM action_history")]
+    for action in history + list(state["actions"].values()):
+        key = allocation_of(action)
+        if key is not None:
+            actions.setdefault(key, []).append(action)
+    compacted = []
+    for key, allocation in sorted(state["allocations"].items()):
+        used = actions.get(key, [])
+        if (allocation["inputs"].get("consumed") is True or "complete_sprint" in allocation["kinds"]
+                or not used or any(a["status"] not in TERMINAL for a in used)):
+            continue
+        finished = max(a.get("updated", a.get("created", 0)) for a in used)
+        if not any(a["status"] == "accepted" for a in used) and now - finished < COMPACT_FAILED_AFTER:
+            continue
+        try:
+            coordinator.compact_allocation(key, coordinator.snapshot()["revision"], {
+                "owner": "routine compaction before a manager cycle",
+                "method": "consumed-allocation stub (briefing-budget-recurrence-20260916.md)",
+                "actions": {a["id"]: a["status"] for a in used}})
+        except Rejected:
+            break
+        compacted.append(key)
+    return compacted
+
+
 def briefing(coordinator, packet, owner_context):
     context = load_json(owner_context, 8192)
     f.require(isinstance(context, dict) and set(context) == {"observed_at", "context"}
@@ -116,6 +171,17 @@ def briefing(coordinator, packet, owner_context):
              "directive": DIRECTIVE, "owner_observation": context,
              "seed_metadata_status": "historical; current durable state is not external live proof",
              "original_evidence": {}, "evidence_omissions": [], "consumed_allocations": {}}
+    kinds = brief.pop("pending_event_kinds", None)
+    if kinds is not None:
+        # Everything not selected is counted by kind and stays pending: nothing is dropped.
+        deferred = dict(kinds)
+        for event in packet["events"]:
+            deferred[event_kind(event["id"])] -= 1
+        brief["event_backlog"] = {
+            "pending": sum(kinds.values()), "selected": len(packet["events"]),
+            "deferred": sum(kinds.values()) - len(packet["events"]),
+            "deferred_by_kind": {k: v for k, v in sorted(deferred.items()) if v},
+            "order": "awaiting verdict, stalls, failures and owner wake-ups first, then newest"}
     # Strip only core-owned previews; arbitrary frozen inputs remain exact.
     outcome_fields = {"result", "verification", "owner_failure", "owner_cancellation"}
     reference_fields = {"dispatch_receipt", "ack_receipt"} | outcome_fields
@@ -202,6 +268,7 @@ def briefing(coordinator, packet, owner_context):
         omit("actions", key, "terminal_history", inputs,
              [inputs, *[action[field] for field in historical_fields if field in action]],
              allocated or None)
+    consumed_index = {}
     for key, allocation in packet["allocations"].items():
         if allocation["inputs"].get("consumed") is True:
             inputs = allocation["inputs"]
@@ -213,11 +280,21 @@ def briefing(coordinator, packet, owner_context):
             # id -> digest index. The frozen originals remain in the audit table
             # and nothing that could inform a decision is dropped.
             if set(inputs) <= {"consumed", "original_digest"}:
-                brief["consumed_allocations"][key] = inputs.get("original_digest", "")
+                consumed_index[key] = inputs.get("original_digest", "")
                 del brief["allocations"][key]
                 continue
             brief["allocations"][key] = {**allocation, "inputs": {"consumed": True}}
             omit("allocations", key, "consumed_allocation", inputs, inputs)
+    # The id -> digest index grows with every finished allocation (247 entries,
+    # 22 KB live) without informing any decision. Keep its count and digest, and
+    # the entries a supplied action names; the full index is the coordinator's
+    # allocation state, recoverable at any time.
+    named = [action.get("allocation", (action.get("inputs") or {}).get("allocation"))
+             for action in brief["actions"].values()]
+    named = {key for key in named if isinstance(key, str)}
+    brief["consumed_allocations"] = {
+        "count": len(consumed_index), "index_digest": digest(consumed_index),
+        "named": {key: consumed_index[key] for key in sorted(named & consumed_index.keys())}}
 
     for action in brief["actions"].values():
         inputs = action.get("inputs")
@@ -454,10 +531,14 @@ def run_cycle(*, state, runs_dir, binary, auth_vault_home, owner_context, timeou
         f.require(type(timeout) in (int, float) and LAUNCH_MARGIN + 1 <= timeout <= 3600
                   and math.isfinite(timeout), "invalid_timeout")
         root = f.private_dir(runs_dir)
-        packet = c.begin_manager(timeout_seconds=timeout)
+        # Routine hygiene first, so finished allocations never accumulate in the briefing.
+        compacted = compact_finished(c)
+        packet = c.begin_manager(timeout_seconds=timeout, priority=True)
         phase = "briefing"
         cycle = root / ("m-" + packet["manager_run"])
         cycle.mkdir(mode=0o700)
+        if compacted:
+            f.write_json(cycle / "compacted.json", compacted)
         f.write_json(cycle / "claim.json", packet)
         packet, raw = fit_briefing(c, packet, owner_context)
         f.write_json(cycle / "selected-claim.json", packet)
@@ -506,7 +587,10 @@ def run_cycle(*, state, runs_dir, binary, auth_vault_home, owner_context, timeou
                   "prepared_actions": [actions[a["id"]] for a in decision["actions"]],
                   "verdicts": [{"action": v["action"], "accepted": v["accepted"],
                                 "status": actions.get(v["action"], {}).get("status")}
-                               for v in decision.get("verdicts", [])]}
+                               for v in decision.get("verdicts", [])],
+                  "event_batch": packet.get("event_batch")}
+        if "no_action_reason" in decision:
+            result["no_action_reason"] = decision["no_action_reason"]
         f.write_json(cycle / "accepted.json", result)
         return result
     except Exception as exc:

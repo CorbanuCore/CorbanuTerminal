@@ -31,6 +31,17 @@ RESERVED = frozenset({"in_progress", "blocked"})
 ACTION_FIELDS = frozenset({"id", "kind", "workstream", "sprint", "rationale", "inputs",
                            "timeout_seconds", "expected_revision"})
 VERDICT_FIELDS = frozenset({"action", "accepted", "reason"})
+# Event ID prefixes a prioritized manager claim reads before newer history:
+# stalls, failures and owner wake-ups, plus returned:<id> while <id> still
+# awaits a verdict.
+PRIORITY_EVENTS = ("stall:", "manager-stall:", "manager-failed:",
+                   "dispatch-reconciled:", "owner-wake:")
+MANAGER_BATCH = 24
+
+
+def event_kind(event_id):
+    """Stable kind for counting: the ID up to its first colon."""
+    return event_id.split(":", 1)[0]
 
 
 def encoded(value, limit=262144):
@@ -252,7 +263,7 @@ class Coordinator:
                     for key, sprint in reserved), "reservation differs from current sprint")
 
     @contextmanager
-    def owner_mutation(self, operation, expected_revision, evidence, **details):
+    def owner_mutation(self, operation, expected_revision, evidence, meaningful=True, **details):
         require(type(expected_revision) is int and isinstance(evidence, dict) and evidence,
                 "owner revision and evidence required")
         audit = {**details, "expected_revision": expected_revision, "evidence": evidence}
@@ -260,7 +271,7 @@ class Coordinator:
             require(state["revision"] == expected_revision, "stale owner revision")
             yield db, state
             self._event(db, {"id": f"{operation}:{expected_revision}",
-                             **details, "evidence": self._reference(db, audit)})
+                             **details, "evidence": self._reference(db, audit)}, meaningful)
 
     @staticmethod
     def _sprint_document(repo, source_path):
@@ -433,6 +444,31 @@ class Coordinator:
             db.execute("INSERT INTO audit(at,operation,body) VALUES(?,?,?)",
                        (self.clock(), "allocation_versions", encoded(change)))
 
+    def compact_allocation(self, allocation_id, expected_revision, evidence):
+        """Replace a finished allocation with its consumed stub (the briefing-budget
+        method): every action on it, live or archived, is terminal. The frozen
+        original stays in the audit table. The event is not meaningful, so routine
+        compaction never wakes a manager."""
+        with self.owner_mutation("owner_compaction", expected_revision, evidence, meaningful=False,
+                                 allocation=allocation_id) as (db, state):
+            prior = state["allocations"].get(allocation_id)
+            require(prior is not None and prior["inputs"].get("consumed") is not True,
+                    "compaction requires a live allocation")
+            require("complete_sprint" not in prior["kinds"], "complete_sprint allocations are not compacted")
+            history = [json.loads(body) for (body,) in db.execute("SELECT body FROM action_history")]
+            actions = [a for a in history + list(state["actions"].values())
+                       if isinstance(a.get("inputs"), dict) and a["inputs"].get("allocation") == allocation_id]
+            require(bool(actions) and all(a["status"] in TERMINAL for a in actions),
+                    "compaction requires finished work")
+            stub = {"sprint": prior["sprint"], "kinds": prior["kinds"], "resources": ["consumed"],
+                    "scope": ["consumed"], "timeout_seconds": prior["timeout_seconds"],
+                    "inputs": {"consumed": True, "original_digest": digest(prior)}}
+            self._allocation(allocation_id, stub, state["sprints"])
+            change = self._reference(db, {"before": prior, "after": stub, "evidence": evidence})
+            state["allocations"][allocation_id] = stub
+            db.execute("INSERT INTO audit(at,operation,body) VALUES(?,?,?)",
+                       (self.clock(), "allocation_versions", encoded(change)))
+
     def set_stream_mode(self, workstream, mode, expected_revision, evidence):
         require(mode in {"enabled", "paused"}, "invalid workstream mode")
         with self.owner_mutation("owner_stream_mode", expected_revision, evidence,
@@ -578,12 +614,29 @@ class Coordinator:
             require(sprint["status"] in RESERVED and not sprint.get("archived"), "sprint not reserved")
             require(self._dependencies(state, action["sprint"]), "unfinished dependency")
 
-    def begin_manager(self, timeout_seconds=600):
+    def begin_manager(self, timeout_seconds=600, priority=False):
+        """Claim up to 24 pending events. FIFO by default; with priority, returned
+        results, stalls, failures and wake-ups first (oldest first), then the newest
+        history. Unclaimed events stay pending and are counted by kind."""
         require(1 <= timeout_seconds <= 3600, "invalid manager timeout")
         with self.mutation("begin_manager", {}) as (db, state):
             require(state["enabled"], "dispatch paused")
             require(state["manager"] is None, "manager cycle already owned")
-            pending = db.execute("SELECT seq,body FROM events WHERE meaningful=1 AND consumed IS NULL ORDER BY seq LIMIT 24").fetchall()
+            if priority:
+                rows = db.execute("SELECT seq,id,body FROM events WHERE meaningful=1 AND consumed IS NULL "
+                                  "ORDER BY seq").fetchall()
+
+                def urgent(event_id):
+                    if event_id.startswith("returned:"):
+                        action = state["actions"].get(event_id[len("returned:"):])
+                        return action is not None and action["status"] == "returned"
+                    return event_id.startswith(PRIORITY_EVENTS)
+                first = [row for row in rows if urgent(row["id"])]
+                rest = [row for row in reversed(rows) if not urgent(row["id"])]
+                pending = (first + rest)[:MANAGER_BATCH]
+            else:
+                pending = db.execute("SELECT seq,id,body FROM events WHERE meaningful=1 AND consumed IS NULL "
+                                     "ORDER BY seq LIMIT ?", (MANAGER_BATCH,)).fetchall()
             require(bool(pending), "no meaningful pending event")
             run = {"id": str(uuid.uuid4()), "revision": state["revision"] + 1,
                    "events": [row["seq"] for row in pending], "deadline": self.clock() + timeout_seconds}
@@ -598,6 +651,11 @@ class Coordinator:
                 key: sorted((a for a in state["actions"].values() if a["workstream"] == key),
                             key=lambda a: a["sequence"])[-3:]
                 for key in state["workstreams"]}
+            if priority:
+                kinds = {}
+                for row in rows:
+                    kinds[event_kind(row["id"])] = kinds.get(event_kind(row["id"]), 0) + 1
+                packet["pending_event_kinds"] = kinds
             # Validate before committing ownership, not while printing afterward.
             encoded(packet, limit=240000)
         return packet
@@ -637,8 +695,14 @@ class Coordinator:
             require(run["deadline"] >= self.clock(), "manager deadline expired")
             require(decision["state_revision"] == run["revision"] == state["revision"], "stale decision")
             actions, verdicts = decision["actions"], decision.get("verdicts", [])
+            idle = decision.get("no_action_reason")
             require(isinstance(actions, list) and isinstance(verdicts, list) and len(actions) <= 24
-                    and len(verdicts) <= 24 and 1 <= len(actions) + len(verdicts), "invalid action count")
+                    and len(verdicts) <= 24 and (1 <= len(actions) + len(verdicts)) == (idle is None),
+                    "invalid action count")
+            # Nothing to do is an explicit, reasoned decision that still consumes the
+            # selected events, never an empty one.
+            require(idle is None or (isinstance(idle, str) and idle.strip()
+                                     and len(idle.encode()) <= 1000), "invalid no-action reason")
             require(bool(launcher_receipt), "verified launcher receipt required")
             require(sum(a["status"] not in TERMINAL for a in state["actions"].values()) + len(actions) <= 48,
                     "pending assignment limit; reconcile existing work first")
@@ -667,6 +731,13 @@ class Coordinator:
                                          "allocation_digest": digest(allocation), "created": self.clock(),
                                          "sequence": [state["revision"], index]}
             self._verdicts(db, state, run_id, verdicts, launcher_receipt)
+            if idle is not None:
+                self._event(db, {"id": "manager-no-action:" + run_id, "reason": idle,
+                                 "evidence": self._reference(db, {
+                                     "kind": "manager_no_action", "manager_run": run_id, "reason": idle,
+                                     "events": run["events"],
+                                     "launcher_receipt_digest": digest(launcher_receipt)})},
+                            meaningful=False)
             for seq in run["events"]:
                 db.execute("UPDATE events SET consumed=? WHERE seq=? AND consumed IS NULL", (run_id, seq))
             state["manager"] = None

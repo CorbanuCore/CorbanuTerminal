@@ -329,6 +329,21 @@ class Protocol(unittest.TestCase):
             with self.subTest(bad=str(bad)[:30]), self.assertRaisesRegex(f.LaunchError, "invalid_verdict"):
                 f.decision(json.dumps({"state_revision": 3, "actions": [], "verdicts": bad}))
 
+    def test_no_action_reason_only_alone_and_bounded(self):
+        value = f.decision(json.dumps({"state_revision": 3, "actions": [], "no_action_reason": "history only"}))
+        self.assertEqual("history only", value["no_action_reason"])
+        verdict = {"action": "first", "accepted": False, "reason": "wrong base"}
+        for extra in ({"verdicts": [verdict]}, {"actions": FINAL["actions"]}):
+            with self.subTest(extra=list(extra)), self.assertRaisesRegex(f.LaunchError, "invalid_no_action"):
+                f.decision(json.dumps({"state_revision": 3, "actions": [], "no_action_reason": "x", **extra}))
+        for reason in ("", "  ", 1, None, "x" * 1001):
+            body = {"state_revision": 3, "actions": [], "no_action_reason": reason}
+            if reason is None:
+                self.assertEqual(body, f.decision(json.dumps(body)))  # null equals absent
+                continue
+            with self.subTest(reason=str(reason)[:5]), self.assertRaisesRegex(f.LaunchError, "invalid_no_action"):
+                f.decision(json.dumps(body))
+
     def test_exactly_one_whole_message_fence_is_unwrapped(self):
         body = json.dumps(FINAL, indent=2)
         for text in ("```json\n" + body + "\n```", "```\n" + body + "\n```",

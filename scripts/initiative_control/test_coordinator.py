@@ -1249,5 +1249,116 @@ class SprintRegistrationTests(unittest.TestCase):
         self.refused("explicit add/replace required", self.payload(replace=1))
 
 
+
+class ManagerLoopCoordinatorTests(unittest.TestCase):
+    """Prioritized claims, explicit no-action decisions and finished-work compaction."""
+    setUp = CoordinatorTests.setUp
+    tearDown = CoordinatorTests.tearDown
+    prepared = CoordinatorTests.prepared
+
+    def returned(self, name):
+        self.prepared(name)
+        claim = self.c.claim(name)["claim"]
+        self.c.dispatched(name, claim, "agent-" + name, {"native": True})
+        self.c.acknowledge(name, "agent-" + name, self.c.snapshot()["actions"][name]["allocation_digest"],
+                           {"ack": True})
+        self.c.returned(name, "agent-" + name, {"summary": "done"})
+
+    def pending(self):
+        with self.c.connection() as db:
+            return [row[0] for row in db.execute(
+                "SELECT id FROM events WHERE meaningful=1 AND consumed IS NULL ORDER BY seq")]
+
+    def test_priority_claim_reads_awaiting_verdicts_and_holds_first_then_newest(self):
+        self.returned("work")
+        for index in range(30):
+            self.c.event({"id": "history-%02d" % index})
+        self.c.event({"id": "stall:old:0", "action": "old", "status": "running"})
+        packet = self.c.begin_manager(priority=True)
+        ids = [event["id"] for event in packet["events"]]
+        self.assertEqual(["returned:work", "stall:old:0"], ids[:2])
+        self.assertEqual(["history-29", "history-28"], ids[2:4])
+        self.assertEqual(24, len(ids))
+        # Every pending event is counted by kind; the unclaimed ones stay pending.
+        self.assertEqual(sum(packet["pending_event_kinds"].values()), packet["pending_event_count"])
+        self.assertEqual(30, sum(v for k, v in packet["pending_event_kinds"].items()
+                                 if k.startswith("history-")))
+        self.assertEqual(1, packet["pending_event_kinds"]["stall"])
+
+    def test_returned_event_of_a_settled_action_is_ordinary_history(self):
+        self.returned("work")
+        self.c.verify("work", {"owner": "fixture"}, True)
+        self.c.event({"id": "newest"})
+        packet = self.c.begin_manager(priority=True)
+        self.assertEqual("newest", packet["events"][0]["id"])
+
+    def test_fifo_claim_is_unchanged_without_priority(self):
+        for index in range(30):
+            self.c.event({"id": "history-%02d" % index})
+        packet = self.c.begin_manager()
+        self.assertEqual(["history-00", "history-01"], [e["id"] for e in packet["events"][:2]])
+        self.assertNotIn("pending_event_kinds", packet)
+
+    def test_no_action_decision_consumes_selected_events_with_a_reason(self):
+        self.c.event({"id": "nothing-to-do"})
+        packet = self.c.begin_manager(priority=True)
+        decision = {"state_revision": packet["state_revision"], "actions": []}
+        with self.assertRaisesRegex(Rejected, "invalid action count"):
+            self.c.accept_decision(packet["manager_run"], decision, {"receipt": True})
+        for reason in ("", " ", 7, "x" * 1001):
+            with self.assertRaises(Rejected):
+                self.c.accept_decision(packet["manager_run"], {**decision, "no_action_reason": reason},
+                                       {"receipt": True})
+        self.c.accept_decision(packet["manager_run"], {**decision, "no_action_reason": "history only"},
+                               {"receipt": True})
+        self.assertEqual([], self.pending())
+        self.assertIsNone(self.c.snapshot()["manager"])
+        with self.c.connection() as db:
+            row = db.execute("SELECT body,meaningful FROM events WHERE id=?",
+                             ("manager-no-action:" + packet["manager_run"],)).fetchone()
+        self.assertEqual(0, row[1])
+        self.assertEqual("history only", json.loads(row[0])["reason"])
+
+    def test_no_action_reason_cannot_accompany_actions_or_verdicts(self):
+        self.returned("work")
+        packet = self.c.begin_manager(priority=True)
+        with self.assertRaisesRegex(Rejected, "invalid action count"):
+            self.c.accept_decision(packet["manager_run"], {
+                "state_revision": packet["state_revision"], "actions": [], "no_action_reason": "none",
+                "verdicts": [{"action": "work", "accepted": True, "reason": "ok"}]}, {"receipt": True})
+
+    def test_compaction_requires_finished_work_and_is_not_meaningful(self):
+        allocation = self.c.snapshot()["allocations"]["bootstrap"]
+        with self.assertRaisesRegex(Rejected, "finished work"):
+            self.c.compact_allocation("bootstrap", self.c.snapshot()["revision"], {"owner": "fixture"})
+        self.returned("work")
+        with self.assertRaisesRegex(Rejected, "finished work"):
+            self.c.compact_allocation("bootstrap", self.c.snapshot()["revision"], {"owner": "fixture"})
+        self.c.verify("work", {"owner": "fixture"}, True)
+        before = self.pending()
+        with self.assertRaisesRegex(Rejected, "stale owner revision"):
+            self.c.compact_allocation("bootstrap", 1, {"owner": "fixture"})
+        self.c.compact_allocation("bootstrap", self.c.snapshot()["revision"], {"owner": "fixture"})
+        stub = self.c.snapshot()["allocations"]["bootstrap"]
+        self.assertEqual({"consumed": True, "original_digest": digest(allocation)}, stub["inputs"])
+        self.assertEqual((["consumed"], ["consumed"]), (stub["scope"], stub["resources"]))
+        self.assertEqual(before, self.pending())  # no wake for routine hygiene
+        with self.c.connection() as db:
+            versions = [json.loads(r[0]) for r in db.execute(
+                "SELECT body FROM audit WHERE operation='allocation_versions'")]
+        self.assertEqual(allocation, self.c.read_evidence(versions[-1]["evidence_digest"])["before"])
+        with self.assertRaisesRegex(Rejected, "live allocation"):
+            self.c.compact_allocation("bootstrap", self.c.snapshot()["revision"], {"owner": "fixture"})
+
+    def test_archived_unfinished_history_blocks_compaction(self):
+        self.returned("work")
+        self.c.verify("work", {"owner": "fixture"}, True)
+        with self.c.connection() as db:
+            db.execute("INSERT INTO action_history(id,body) VALUES(?,?)", ("ghost", json.dumps(
+                {"id": "ghost", "status": "running", "inputs": {"allocation": "bootstrap"}})))
+        with self.assertRaisesRegex(Rejected, "finished work"):
+            self.c.compact_allocation("bootstrap", self.c.snapshot()["revision"], {"owner": "fixture"})
+
+
 if __name__ == "__main__":
     unittest.main()

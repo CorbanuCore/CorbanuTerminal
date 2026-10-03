@@ -14,12 +14,18 @@ import uuid
 
 import fable_launcher as f
 from coordinator import TERMINAL, Rejected, digest, encoded
+import manager_cycle
 from manager_cycle import ExistingCoordinator
 
 WORKER_KINDS = frozenset({"implement", "revise", "review", "design", "functional_test",
                           "evidence_review", "repair", "reconcile"})
 # Seconds for an idle worker to exit after /quit once its RETURN is recorded.
 CLOSE_TIMEOUT = 20
+# Automatic manager cycles (the manager lane): settings recorded in config.
+MANAGER_SETTINGS = frozenset({"binary", "binary_sha256", "auth_vault_home", "runs_dir",
+                              "timeout_seconds", "min_interval_seconds", "daily_cap"})
+MANAGER_STATE, MANAGER_LOG = "manager-auto.json", "manager-cycles.jsonl"
+IN_FLIGHT = frozenset({"dispatching", "dispatch_uncertain", "dispatched", "running"})
 
 
 class DispatchDeferred(Exception):
@@ -58,11 +64,13 @@ def load(path):
 
 def configuration(path):
     value = load(path)
-    f.require(set(value) - {"transport"} == {"coordinator", "worktrees", "package_digest", "manager_enabled"},
-              "invalid_config")
+    f.require(set(value) - {"transport", "manager_cycle"} ==
+              {"coordinator", "worktrees", "package_digest", "manager_enabled"}, "invalid_config")
     if "transport" in value:
         from owner_tmux import validate
         validate(value["transport"])
+    if "manager_cycle" in value:
+        manager_settings(value["manager_cycle"])
     f.require(type(value["manager_enabled"]) is bool and isinstance(value["worktrees"], list)
               and bool(value["worktrees"]), "invalid_config")
     coordinator = ExistingCoordinator(value["coordinator"])
@@ -73,6 +81,40 @@ def configuration(path):
         f.require(Path(path).is_absolute() and f.no_links(path).is_dir(), "missing_worktree")
     f.require(value["package_digest"] == package_digest(), "package_drift")
     return value
+
+
+def manager_settings(value):
+    """Structural checks; the binary pin is verified at use, before each cycle."""
+    f.require(type(value) is dict and set(value) == MANAGER_SETTINGS, "invalid_manager_cycle")
+    for key in ("binary", "auth_vault_home", "runs_dir"):
+        f.require(isinstance(value[key], str) and Path(value[key]).is_absolute(), "invalid_manager_cycle")
+    f.require(isinstance(value["binary_sha256"], str) and len(value["binary_sha256"]) == 64,
+              "invalid_manager_cycle")
+    for key, low, high in (("timeout_seconds", manager_cycle.LAUNCH_MARGIN + 1, 3600),
+                           ("min_interval_seconds", 60, 86400), ("daily_cap", 1, 288)):
+        f.require(type(value[key]) is int and low <= value[key] <= high, "invalid_manager_cycle")
+    binary = f.no_links(value["binary"])
+    f.require(binary.is_file() and os.access(binary, os.X_OK), "invalid_manager_cycle")
+    f.vault_home(value["auth_vault_home"])
+    f.private_dir(value["runs_dir"])
+    return value
+
+
+def disposable_worktree(path):
+    """A linked Git worktree with a detached HEAD: created for one piece of work.
+
+    An integration worktree has a branch checked out (HEAD is a ref), and a main
+    checkout has a .git directory; neither is disposable. Reads files only.
+    """
+    try:
+        marker = f.no_links(Path(path) / ".git")
+        f.require(marker.is_file(), "not_linked_worktree")
+        text = f.read_file(marker, 4096).decode()
+        f.require(text.startswith("gitdir: ") and text.count("\n") <= 1, "not_linked_worktree")
+        head = f.read_file(Path(text[len("gitdir: "):].strip()) / "HEAD", 4096).decode().strip()
+        return len(head) in (40, 64) and all(c in "0123456789abcdef" for c in head)
+    except (f.LaunchError, OSError, UnicodeError, ValueError):
+        return False
 
 
 def artifact(root, relative, value):
@@ -240,7 +282,8 @@ def coordinator_activation_impact(root, dispatcher=None):
         future_default_owner=coordinator.dispatch_owner(snapshot, default_action),
         default_route="An admitted owner tick in tmux-workers scope routes unassigned, prepared, "
         "unclaimed worker-kind actions from a manager run whose frozen worktree is configured "
-        "to owner through an audited handoff; every other new action stays hand.",
+        "and disposable (a detached linked worktree, never a branch checkout such as the main "
+        "integration worktree) to owner through an audited handoff; every other new action stays hand.",
         future_default_covered=future_covered,
         manager_covered=coordinator.watchdog_covers(snapshot, None, dispatcher),
         counted_actions="unreported overdue dispatching/dispatched/running actions",
@@ -1044,8 +1087,9 @@ class Kernel:
 
         Only actions with no explicit owner (the hand default), prepared and
         unclaimed, of a worker kind, created by a manager run, with a valid frozen
-        worker runtime in a configured worktree. Explicit hand assignments, claims
-        and everything outside that scope stay hand. One audited coordinator handoff.
+        worker runtime in a configured, disposable worktree (detached linked
+        worktree; never an integration branch checkout). Explicit hand assignments,
+        claims and everything outside that scope stay hand. One audited handoff.
         """
         from owner_tmux import worker_runtime
         if (self.dispatcher != "owner" or "dispatch_control" not in snapshot
@@ -1068,7 +1112,8 @@ class Kernel:
                 worktree = worker_runtime(action["inputs"])["worktree"]
             except (f.LaunchError, KeyError, TypeError, ValueError):
                 continue
-            if worktree not in self.config["worktrees"] or reserved & set(action["resources"]):
+            if (worktree not in self.config["worktrees"] or not disposable_worktree(worktree)
+                    or reserved & set(action["resources"])):
                 continue
             # Route only what the claim gate would admit now; contention, a paused or
             # unreserved sprint or a stale allocation leaves it hand, not held.
@@ -1259,6 +1304,199 @@ class Kernel:
                 self.db = None
 
 
+def append_log(path, record):
+    """Append-only private audit log: one JSON line per record, fsynced."""
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    try:
+        info = os.fstat(fd)
+        f.require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid()
+                  and stat.S_IMODE(info.st_mode) == 0o600 and info.st_nlink == 1, "unsafe_file")
+        os.write(fd, (encoded(record) + "\n").encode())
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def manager_status(schedule_root):
+    path = schedule_root / MANAGER_STATE
+    if not os.path.lexists(path):
+        return {"day": None, "day_count": 0, "cycles": 0, "last_started_at": None,
+                "last_cycle": None, "capped_day": None}
+    return load(path)
+
+
+def idle_allocations(state):
+    """Retry candidates when no work is queued: live allocations whose actions all
+    finished without an accepted result. Fresh allocations announce themselves
+    with their own event; accepted ones are compacted."""
+    if any(a["status"] == "prepared" or (a["status"] in IN_FLIGHT and a.get("dispatch_owner") == "owner")
+           for a in state["actions"].values()):
+        return []
+    used = {}
+    for action in state["actions"].values():
+        used.setdefault(manager_cycle.allocation_of(action), []).append(action)
+    return sorted([key, digest(allocation), sorted([a["id"], a["status"]] for a in used[key])]
+                  for key, allocation in state["allocations"].items()
+                  if allocation["inputs"].get("consumed") is not True
+                  and "complete_sprint" not in allocation["kinds"] and used.get(key)
+                  and all(a["status"] in TERMINAL - {"accepted"} for a in used[key]))
+
+
+def manager_context(cycle, meta, state, triggers, holds, status, settings, compacted):
+    awaiting = sorted(a["id"] for a in state["actions"].values() if a["status"] == "returned")
+    context = {
+        "source": "armed owner, automatic manager cycle; no person started this cycle",
+        "cycle": cycle, "owner_generation": meta["control_generation"], "triggers": triggers,
+        "awaiting_verdict": awaiting[:24], "awaiting_verdict_total": len(awaiting),
+        "owner_holds": [{"action": h["action_id"], "reason": h["reason_code"]} for h in holds[:16]],
+        "owner_holds_total": len(holds),
+        "prepared_queued": sum(a["status"] == "prepared" for a in state["actions"].values()),
+        "cycles_today": status["day_count"], "daily_cap": settings["daily_cap"],
+        "compacted_allocations": compacted[:16],
+        "guidance": "Give a verdict for each returned result first. Prepare work only from live "
+                    "allocations. If nothing should be done now, return no_action_reason."}
+    value = {"observed_at": f.now(), "context": context}
+    try:
+        encoded(value, limit=8192)
+    except Rejected:
+        context.update(owner_holds=[], compacted_allocations=[], awaiting_verdict=awaiting[:8])
+    return value
+
+
+def manager_lane(config_path, schedule_root, clock=time.time, runner=None):
+    """One pass of the scheduled manager lane: start at most one manager cycle.
+
+    Runs only while the owner is armed (OFF and a paused or owned coordinator skip
+    without effect). A cycle starts when there is work for it: pending meaningful
+    events, results awaiting a verdict or, with nothing queued, finished work that
+    failed (the last two through one deduplicated owner wake event). Rate limits:
+    one in flight (this schedule's tick lock and the coordinator's manager claim),
+    min_interval_seconds between starts and daily_cap starts per UTC day. Every
+    start and outcome is appended to the audit log. A failed cycle returns HOLD,
+    which the schedule latches: no retry until evidence-backed --recover.
+    """
+    config = load(config_path)
+    settings = config.get("manager_cycle")
+    if not config.get("manager_enabled") or settings is None:
+        return {"state": "OFF", "lane": "manager", "reason_off": "manager_cycle_not_configured"}
+    with activation_store(config_path) as (root, db, meta):
+        kernel = Kernel(config_path)
+        kernel.db = db
+        try:
+            meta = kernel.admit()
+        except f.LaunchError as exc:
+            if str(exc) != "owner_off":
+                raise
+            return {"state": "OFF", "lane": "manager", "reason_off": "owner_off"}
+        holds = unresolved_holds(db)
+    manager_settings(settings)
+    c = ExistingCoordinator(root)
+    state = c.snapshot()
+    if not state["enabled"] or state["manager"] is not None:
+        return {"state": "PAUSED" if not state["enabled"] else "OWNED", "lane": "manager"}
+    log = schedule_root / MANAGER_LOG
+    status = manager_status(schedule_root)
+    now = clock()
+    day = time.strftime("%Y-%m-%d", time.gmtime(now))
+    if status["day"] != day:
+        status.update(day=day, day_count=0)
+    if status["day_count"] >= settings["daily_cap"]:
+        if status["capped_day"] != day:
+            status["capped_day"] = day
+            f.write_json(schedule_root / MANAGER_STATE, status)
+            append_log(log, {"event": "daily_cap_reached", "at": now, "day": day,
+                             "daily_cap": settings["daily_cap"]})
+        return {"state": "CAPPED", "lane": "manager", "day_count": status["day_count"]}
+    if status["last_started_at"] is not None and now - status["last_started_at"] < settings["min_interval_seconds"]:
+        return {"state": "WAITING", "lane": "manager",
+                "seconds": round(settings["min_interval_seconds"] - (now - status["last_started_at"]), 1)}
+    compacted = manager_cycle.compact_finished(c, now)
+    if compacted:
+        append_log(log, {"event": "compacted", "at": now, "allocations": compacted})
+    state = c.snapshot()
+    triggers = ["pending_events"] if c.readiness() == "ready" else []
+    if not triggers:
+        awaiting = sorted(a["id"] for a in state["actions"].values() if a["status"] == "returned")
+        wake = ({"kind": "awaiting_verdict", "actions": awaiting} if awaiting else
+                {"kind": "no_prepared_work", "allocations": idle_allocations(state)})
+        if awaiting or wake["allocations"]:
+            # One wake per distinct situation: an unchanged one is a duplicate event ID.
+            event = {"id": "owner-wake:" + wake["kind"] + ":" + digest(wake)[:24], **wake}
+            if c.event(event):
+                triggers = [wake["kind"]]
+                append_log(log, {"event": "wake", "at": now, "wake": event["id"]})
+    if not triggers:
+        return {"state": "IDLE", "lane": "manager"}
+    binary = f.no_links(settings["binary"])
+    f.require(f.file_digest(binary) == settings["binary_sha256"], "manager_binary_pin_mismatch")
+    cycle = str(uuid.uuid4())
+    directory = schedule_root / "cycles" / cycle
+    context = manager_context(cycle, meta, state, triggers, holds, status, settings, compacted)
+    artifact(schedule_root, "cycles/" + cycle + "/owner-context.json", context)
+    status.update(last_started_at=now, last_cycle=cycle, day_count=status["day_count"] + 1,
+                  cycles=status["cycles"] + 1)
+    f.write_json(schedule_root / MANAGER_STATE, status)
+    append_log(log, {"event": "cycle_started", "at": now, "cycle": cycle, "triggers": triggers,
+                     "generation": meta["control_generation"], "day_count": status["day_count"],
+                     "daily_cap": settings["daily_cap"]})
+    result = (runner or manager_cycle.run_cycle)(
+        state=root, runs_dir=Path(settings["runs_dir"]), binary=binary,
+        auth_vault_home=Path(settings["auth_vault_home"]), owner_context=directory / "owner-context.json",
+        timeout=settings["timeout_seconds"])
+    artifact(schedule_root, "cycles/" + cycle + "/result.json", result)
+    record = {"event": "cycle_finished", "at": clock(), "cycle": cycle, "status": result["status"],
+              "manager_run": result.get("manager_run"),
+              "prepared": [a["id"] for a in result.get("prepared_actions", [])],
+              "verdicts": result.get("verdicts", []), "event_batch": result.get("event_batch")}
+    for key in ("phase", "reason", "no_action_reason"):
+        if key in result:
+            record[key] = result[key]
+    append_log(log, record)
+    if result["status"] in {"accepted", "empty", "paused", "owned"}:
+        return {"state": "CYCLE", "lane": "manager", "cycle": cycle, "status": result["status"],
+                "manager_run": result.get("manager_run"), "prepared": record["prepared"],
+                "verdicts": record["verdicts"]}
+    reconciled = None
+    if result.get("phase") == "briefing" and result.get("manager_run"):
+        # Refused before any launch: release the coordinator so worker dispatch
+        # continues. The lane still holds; a model or launch failure keeps the claim.
+        c.fail_manager(result["manager_run"], "owner_auto_cycle_" + str(result.get("reason")) +
+                       "; no inference launched")
+        reconciled = result["manager_run"]
+    append_log(log, {"event": "hold", "at": clock(), "cycle": cycle, "reason": "manager_cycle_failed",
+                     "refusal": result.get("reason"), "released_manager_run": reconciled})
+    return {"state": "HOLD", "lane": "manager", "reason": "manager_cycle_failed", "cycle": cycle,
+            "refusal": result.get("reason"), "phase": result.get("phase"),
+            "released_manager_run": reconciled}
+
+
+def reconcile_manager_lane(config_path):
+    """Recovery for a held manager lane: release a coordinator manager claim left by
+    an automatic cycle only when its launcher is proven stopped (recorded process
+    gone, TMUX socket absent or refusing). Never relaunches or accepts anything."""
+    config = load(config_path)
+    settings = config.get("manager_cycle")
+    f.require(settings is not None, "manager_cycle_not_configured")
+    c = ExistingCoordinator(config["coordinator"])
+    run = c.snapshot()["manager"]
+    if run is None:
+        return {"manager_run": None}
+    cycle = f.no_links(Path(settings["runs_dir"]) / ("m-" + run["id"]))
+    f.require(cycle.is_dir(), "manager_run_not_automatic")
+    launches = sorted(p for p in (cycle / "launches").iterdir()) if (cycle / "launches").is_dir() else []
+    table = f.processes()
+    checked = []
+    for launch in launches:
+        proc = (f.strict_json(f.read_file(launch / "process.json", 4096, private=True))
+                if (launch / "process.json").exists() else {})
+        alive = proc.get("pid") in table and table[proc["pid"]][3] == proc.get("started")
+        sock = socket_state(launch / "tmux.sock")
+        f.require(not alive and sock in ("absent", "stale"), "manager_launcher_running")
+        checked.append({"launch": launch.name, "pid": proc.get("pid"), "socket": sock})
+    c.fail_manager(run["id"], "owner_auto_cycle_recovered")
+    return {"manager_run": run["id"], "launches": checked}
+
+
 def schedule_pins(python, runtime, config, expected_python):
     f.require(Path(python).is_absolute() and Path(runtime).is_absolute()
               and Path(config).is_absolute(), "absolute_paths_required")
@@ -1380,16 +1618,31 @@ def scheduled_tick(root, recover=None):
     with locked(root / "tick.lock"):
         receipt = load(root / "installation.json")
         f.require(receipt["phase"] == "installed", "schedule_not_installed")
+        lane = receipt.get("lane", "owner")
+        f.require(lane in {"owner", "manager"}, "invalid_lane")
         status = load(root / "tick.json")
         if recover is not None:
             f.require(isinstance(recover, str) and 0 < len(recover.strip()) <= 1000, "recovery_evidence_required")
+            reconciliation = None
+            if lane == "manager":
+                # Release a manager claim the interrupted or failed cycle left, only
+                # with its launcher proven stopped; otherwise recovery refuses.
+                reconciliation = reconcile_manager_lane(Path(receipt["pins"]["config"]))
+                append_log(root / MANAGER_LOG, {"event": "recovered", "at": time.time(),
+                                                "evidence": recover, "previous_hold": status["hold"],
+                                                "reconciliation": reconciliation})
             artifact(root, "recovery/" + str(uuid.uuid4()) + ".json",
-                     {"at": time.time(), "evidence": recover, "previous": status})
+                     {"at": time.time(), "evidence": recover, "previous": status,
+                      **({"reconciliation": reconciliation} if lane == "manager" else {})})
             status.update(hold=None, started_at=None, completed_at=None,
                           last_success=None, previous_success=None)
             f.write_json(root / "tick.json", status)
             return {"state": "RECOVERED"}
         if status["started_at"] is not None and status["completed_at"] is None:
+            if lane == "manager" and not status["hold"]:
+                append_log(root / MANAGER_LOG, {"event": "hold", "at": time.time(),
+                                                "reason": "interrupted_tick",
+                                                "interrupted_started_at": status["started_at"]})
             status["hold"] = status["hold"] or "interrupted_tick"
         if status["hold"]:
             status["skipped"] += 1
@@ -1403,7 +1656,8 @@ def scheduled_tick(root, recover=None):
             pins = receipt["pins"]
             f.require(schedule_pins(Path(pins["python"]), Path(pins["runtime"]),
                                     Path(pins["config"]), pins["python_sha256"]) == pins, "schedule_pin_drift")
-            result = Kernel(Path(pins["config"])).tick()
+            result = (manager_lane(Path(pins["config"]), root) if lane == "manager"
+                      else Kernel(Path(pins["config"])).tick())
         except BlockingIOError:
             result = {"state": "BUSY", "dispatcher": "owner"}
         except (f.LaunchError, Rejected) as exc:
@@ -1411,7 +1665,15 @@ def scheduled_tick(root, recover=None):
         except Exception as exc:
             result = {"state": "ERROR", "reason": type(exc).__name__}
         status["completed_at"] = time.time()
-        if result.get("reason") == "owner_run_refused":
+        if lane == "manager" and result["state"] in {"HOLD", "ERROR"}:
+            # Fail closed: any manager-lane failure latches until --recover.
+            status.update(hold=result.get("reason") or "manager_lane_error",
+                          first_refusal=status.get("first_refusal") or time.time(),
+                          last_refusal=time.time(), refusal=result.get("refusal", result.get("reason")))
+            if result.get("reason") != "manager_cycle_failed":
+                append_log(root / MANAGER_LOG, {"event": "hold", "at": time.time(),
+                                                "reason": status["hold"], "refusal": status["refusal"]})
+        elif result.get("reason") == "owner_run_refused":
             status.update(hold="owner_run_refused", first_refusal=status.get("first_refusal") or time.time(),
                           last_refusal=time.time(), refusal=result.get("refusal"))
         elif result["state"] == "BUSY":

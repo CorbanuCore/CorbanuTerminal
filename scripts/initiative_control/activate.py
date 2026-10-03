@@ -184,13 +184,21 @@ def owner_activation(args):
         raw = plistlib.dumps(job)
         expected = dict(label=label, domain=domain, pins=pins, plist_sha256=hashlib.sha256(raw).hexdigest(),
                         interval=args.interval, publish_state=str(args.publish_state))
+        lane = getattr(args, "lane", "owner")
+        f.require(lane in ("owner", "manager"), "invalid_lane")
+        if lane == "manager":
+            # The manager lane runs automatic manager cycles from the same runtime and
+            # config; it needs the login keychain, so it is a GUI-domain job.
+            f.require(domain.startswith("gui/") and label != "com.corbanu.initiative-owner",
+                      "manager_lane_requires_gui_label")
+            expected["lane"] = "manager"
         if previous:
             previous = dict(previous, domain=owner.installation_domain(previous))
             if getattr(args, "repin", False):
                 f.require(previous["phase"] == "uninstalled" and presence == "absent",
                           "repin_requires_uninstalled")
-                f.require(all(previous[key] == expected[key] for key in
-                              ("label", "domain", "interval", "publish_state")), "installation_conflict")
+                f.require(all(previous.get(key) == expected.get(key) for key in
+                              ("label", "domain", "interval", "publish_state", "lane")), "installation_conflict")
                 with owner.activation_store(args.config) as (_, _, meta):
                     f.require(meta["requested_mode"] == "off"
                               and meta["config_digest"] == owner.digest(owner.load(args.config))
@@ -232,6 +240,7 @@ if __name__ == "__main__" and "--owner" in sys.argv:
     parser.add_argument("--runtime", type=Path)
     parser.add_argument("--config", type=Path)
     parser.add_argument("--interval", type=int, default=30)
+    parser.add_argument("--lane", choices=("owner", "manager"), default="owner")
     owner_activation(parser.parse_args())
 elif __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)

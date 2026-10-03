@@ -30,7 +30,8 @@ def fixture_launcher(args):
     decision = {"state_revision": revision, "actions": [{
         "id": "proposal-" + str(revision), "kind": "repair", "workstream": "delivery",
         "sprint": "PF80", "rationale": "Qualify the allocated bootstrap operation.",
-        "inputs": {"allocation": "bootstrap", **brief["allocations"]["bootstrap"]["inputs"]},
+        "inputs": {"allocation": "bootstrap",
+                   **brief["allocations"].get("bootstrap", {"inputs": {}})["inputs"]},
         "timeout_seconds": 60, "expected_revision": revision}]}
     final = json.dumps(decision)
     sid, tid = str(uuid.uuid4()), str(uuid.uuid4())
@@ -221,6 +222,40 @@ class CycleTests(unittest.TestCase):
         self.assertEqual("accepted", result["status"], result)
         self.assertEqual([{"action": key, "accepted": True, "status": "accepted"}], result["verdicts"])
         self.assertEqual([], result["prepared_actions"])
+
+    def test_no_action_decision_end_to_end_consumes_the_batch(self):
+        def idle(args):
+            receipt = self.launch(args)
+            rewrite_decision(receipt, lambda d: d.update(actions=[], no_action_reason="history only"))
+            f.write_json(Path(receipt["artifacts"]["receipt"]), receipt)
+            return receipt
+        result = self.cycle(idle)
+        self.assertEqual("accepted", result["status"], result)
+        self.assertEqual(("history only", [], []),
+                         (result["no_action_reason"], result["prepared_actions"], result["verdicts"]))
+        self.assertFalse(self.pending())
+        self.assertIsNone(self.c.snapshot()["manager"])
+
+    def test_cycle_compacts_finished_allocations_before_claiming(self):
+        key = self.cycle()["prepared_actions"][0]["id"]
+        self.c.event({"id": "event-2"})
+        claim = self.c.claim(key)
+        self.c.dispatched(key, claim["claim"], "agent-1", {"native": "fixture"})
+        self.c.acknowledge(key, "agent-1", claim["allocation_digest"], {"ack": "fixture"})
+        self.c.returned(key, "agent-1", {"returned": "RETURN\nfixture"})
+        self.c.verify(key, {"owner": "fixture"}, True)
+        def idle(args):
+            receipt = self.launch(args)
+            rewrite_decision(receipt, lambda d: d.update(actions=[], no_action_reason="done"))
+            f.write_json(Path(receipt["artifacts"]["receipt"]), receipt)
+            return receipt
+        result = self.cycle(idle)
+        self.assertEqual("accepted", result["status"], result)
+        self.assertEqual(["bootstrap"], m.load_json(Path(result["artifacts"]) / "compacted.json"))
+        self.assertIs(True, self.c.snapshot()["allocations"]["bootstrap"]["inputs"]["consumed"])
+        brief = m.load_json(Path(result["artifacts"]) / "briefing.json")
+        self.assertEqual(1, brief["consumed_allocations"]["count"])
+        self.assertNotIn("bootstrap", brief["allocations"])
 
     def test_success_prepares_without_dispatch_and_preserves_full_brief(self):
         result = self.cycle()
@@ -459,16 +494,15 @@ class CycleTests(unittest.TestCase):
 
     def test_oversized_original_holds_before_launch(self):
         self.c.event({"id": "large", "text": "é" * 20000})
-        # The earlier small event can progress, but the oversized event cannot be
-        # skipped or consumed on the next cycle even if later events would fit.
-        self.assertEqual("accepted", self.cycle()["status"])
-        self.c.event({"id": "later-small"})
+        # Claimed newest first, the oversized event leads the batch. It is never
+        # skipped, truncated or consumed, even though the older event would fit:
+        # the cycle holds before any launch.
         result = self.cycle()
         self.assertEqual("owner_hold", result["status"])
         self.assertIsNotNone(self.c.snapshot()["manager"])
         self.assertEqual("briefing_size_hold", result["reason"])
-        self.assertEqual(1, self.calls)
-        self.assertEqual(["large", "later-small"], [row[0] for row in self.pending()])
+        self.assertEqual(0, self.calls)
+        self.assertEqual({"event-1", "large"}, {row[0] for row in self.pending()})
         self.assertTrue((Path(result["artifacts"]) / "claim.json").exists())
 
     def test_byte_bounded_batches_consume_only_selected_events_after_restart(self):
@@ -494,8 +528,9 @@ class CycleTests(unittest.TestCase):
         self.assertEqual(1, self.calls)
         self.c = Coordinator(self.c.directory)
         with self.c.connection() as db:
-            self.assertEqual([e["id"] for e in original["events"][count:]],
-                             [row[0] for row in self.pending()])
+            # Priority claim order is newest first; the deferred remainder stays pending.
+            self.assertEqual(sorted(e["id"] for e in original["events"][count:]),
+                             sorted(row[0] for row in self.pending()))
             rows = {json.loads(r[0])["id"]: json.loads(r[0]) for r in db.execute("SELECT body FROM events")}
             for event in originals:
                 self.assertEqual(event, rows[event["id"]])
@@ -505,6 +540,8 @@ class CycleTests(unittest.TestCase):
 
     def test_stale_during_batch_fit_never_restricts_or_launches(self):
         self.c.event({"id": "oversized", "text": "x" * 90000})
+        # Claimed newest first: the small newer event fits alone, then state changes.
+        self.c.event({"id": "newer"})
         original = m.briefing
         def changed(*args):
             result = original(*args)
@@ -514,8 +551,8 @@ class CycleTests(unittest.TestCase):
             result = self.cycle()
         self.assertEqual("owner_hold", result["status"])
         self.assertEqual(0, self.calls)
-        self.assertEqual(2, len(self.c.snapshot()["manager"]["events"]))
-        self.assertEqual(3, len(self.pending()))
+        self.assertEqual(3, len(self.c.snapshot()["manager"]["events"]))
+        self.assertEqual(4, len(self.pending()))
 
     def test_context_must_be_private_bounded_and_dated(self):
         path = self.root / "context.json"

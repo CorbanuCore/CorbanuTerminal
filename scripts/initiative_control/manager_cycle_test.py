@@ -237,14 +237,19 @@ class BriefingSizeTests(unittest.TestCase):
             stub["inputs"] = {"consumed": True, "original_digest": "%064x" % index}
             stubs[key] = stub
         packet["allocations"].update(stubs)
+        packet["actions"]["named"] = {"id": "named", "workstream": "delivery", "status": "accepted",
+                                      "sequence": [0, 0], "inputs": {"allocation": "spent-03"}}
         brief = self.brief(packet)
+        index = {key: stub["inputs"]["original_digest"] for key, stub in stubs.items()}
         for key in stubs:
             self.assertNotIn(key, brief["allocations"])
-            self.assertEqual("%064x" % int(key.split("-")[1]), brief["consumed_allocations"][key])
             self.assertFalse([e for e in brief["evidence_omissions"] if e["id"] == key])
-        # The index is dramatically cheaper than repeating the placeholder object.
-        self.assertLess(len(encoded(brief["consumed_allocations"]).encode()),
-                        len(encoded(stubs).encode()) // 2)
+        # Counted and recoverable, never silently dropped: the count, the digest of
+        # the full id -> original digest index, and every entry a supplied action names.
+        self.assertEqual({"count": 20, "index_digest": digest(index),
+                          "named": {"spent-03": "%064x" % 3}}, brief["consumed_allocations"])
+        # The summary does not grow with history.
+        self.assertLess(len(encoded(brief["consumed_allocations"]).encode()), 300)
         # Live allocations are untouched.
         self.assertIn("bootstrap", brief["allocations"])
 
@@ -256,7 +261,7 @@ class BriefingSizeTests(unittest.TestCase):
         allocation["inputs"] = {"consumed": True, "original_digest": "a" * 64, "task": "x" * 500}
         brief = self.brief(packet)
         self.assertEqual({"consumed": True}, brief["allocations"]["bootstrap"]["inputs"])
-        self.assertNotIn("bootstrap", brief["consumed_allocations"])
+        self.assertEqual(0, brief["consumed_allocations"]["count"])
         self.assertTrue([e for e in brief["evidence_omissions"] if e["id"] == "bootstrap"])
 
     def test_consumed_requires_boolean_true_and_omits_only_unneeded_references(self):
@@ -527,6 +532,124 @@ class BriefingSizeTests(unittest.TestCase):
         brief = self.brief(self.packet([self.action(size=10)]))
         self.assertEqual([], [e for e in brief["evidence_omissions"]
                               if e["id"] == "evidence_budget"])
+
+
+
+class BoundedBriefingTests(unittest.TestCase):
+    """Round 7: the briefing is bounded and prioritized; nothing is silently dropped."""
+    setUp = BriefingSizeTests.setUp
+    ref = BriefingSizeTests.ref
+
+    def history(self, consumed=250, events=40):
+        allocation = self.c.snapshot()["allocations"]["bootstrap"]
+        with self.c.mutation("fixture", {}) as (_, state):
+            for index in range(consumed):
+                state["allocations"]["spent-%03d" % index] = dict(
+                    allocation, resources=["consumed"], scope=["consumed"],
+                    inputs={"consumed": True, "original_digest": "%064x" % index})
+        for index in range(events):
+            self.c.event({"id": "owner_allocation:%d" % index, "allocation": "spent-%03d" % index,
+                          "evidence": self.ref({"note": "h" * 300, "index": index})})
+
+    def test_live_shaped_history_fits_with_a_full_event_batch(self):
+        # Round 6 live shape: ~250 consumed allocations, ~85 pending events. The old
+        # briefing selected 6 events; the bounded one carries a full batch.
+        self.history(consumed=250, events=85)
+        packet = self.c.begin_manager(priority=True)
+        candidate, raw = m.fit_briefing(self.c, packet, self.context)
+        brief = json.loads(raw)
+        self.assertLessEqual(len(raw), f.BRIEF_LIMIT)
+        self.assertEqual(24, brief["event_batch"]["selected"])
+        self.assertEqual(250, brief["consumed_allocations"]["count"])
+        backlog = brief["event_backlog"]
+        self.assertEqual((86, 24, 62), (backlog["pending"], backlog["selected"], backlog["deferred"]))
+        self.assertEqual(62, sum(backlog["deferred_by_kind"].values()))
+        # Newest first: the newest history event leads, the oldest stays pending.
+        self.assertEqual("owner_allocation:84", brief["events"][0]["id"])
+
+    def test_deferred_events_are_counted_and_consumed_by_later_cycles(self):
+        self.history(consumed=0, events=50)
+        seen = set()
+        for _ in range(3):
+            packet = self.c.begin_manager(priority=True)
+            candidate, raw = m.fit_briefing(self.c, packet, self.context)
+            brief = json.loads(raw)
+            ids = [e["id"] for e in brief["events"]]
+            self.assertFalse(seen & set(ids))
+            seen.update(ids)
+            self.assertEqual(brief["event_backlog"]["pending"] - len(ids), brief["event_backlog"]["deferred"])
+            self.c.accept_decision(packet["manager_run"], {
+                "state_revision": candidate["state_revision"], "actions": [],
+                "no_action_reason": "history"}, {"fixture": True})
+        self.assertEqual(51, len(seen))
+        with self.c.connection() as db:
+            self.assertFalse(db.execute("SELECT 1 FROM events WHERE meaningful=1 AND consumed IS NULL").fetchone())
+
+    def test_backlog_counts_every_kind_left_out_of_a_restricted_batch(self):
+        for index in range(6):
+            self.c.event({"id": "bulk:%d" % index, "text": "e" * 15000})
+        packet = self.c.begin_manager(priority=True)
+        candidate, raw = m.fit_briefing(self.c, packet, self.context)
+        brief = json.loads(raw)
+        selected = brief["event_batch"]["selected"]
+        self.assertTrue(1 <= selected < 7)
+        self.assertEqual(7 - selected, sum(brief["event_backlog"]["deferred_by_kind"].values()))
+        self.assertEqual(7 - selected, brief["event_backlog"]["deferred"])
+
+
+class CompactionPolicyTests(unittest.TestCase):
+    setUp = BriefingSizeTests.setUp
+
+    def finished(self, key, status, updated, kinds=("repair",)):
+        allocation = dict(self.c.snapshot()["allocations"]["bootstrap"], kinds=list(kinds),
+                          resources=[key])
+        if "complete_sprint" in kinds:
+            allocation["inputs"] = dict(allocation["inputs"], receiving_action="r", receiving_commit="a" * 40,
+                                        mandatory_gates=["g"])
+        self.c.put_allocation(key, allocation, False, self.c.snapshot()["revision"], {"fixture": True})
+        if status is None:
+            return
+        with self.c.mutation("fixture", {}) as (_, state):
+            state["actions"]["act-" + key] = {"id": "act-" + key, "workstream": "delivery",
+                                              "status": status, "sequence": [0, 0], "updated": updated,
+                                              "inputs": {"allocation": key}}
+
+    def test_policy_compacts_accepted_and_stale_failures_only(self):
+        now = 10 * 86400
+        self.finished("accepted-one", "accepted", now)
+        self.finished("fresh-failure", "failed", now - 60)
+        self.finished("old-failure", "failed", now - m.COMPACT_FAILED_AFTER - 1)
+        self.finished("still-running", "running", now)
+        self.finished("never-used", None, now)
+        self.finished("lifecycle", "accepted", now, kinds=("complete_sprint",))
+        self.assertEqual(["accepted-one", "old-failure"], m.compact_finished(self.c, now))
+        allocations = self.c.snapshot()["allocations"]
+        for key in ("accepted-one", "old-failure"):
+            self.assertIs(True, allocations[key]["inputs"]["consumed"])
+        for key in ("fresh-failure", "still-running", "never-used", "lifecycle", "bootstrap"):
+            self.assertNotIn("consumed", allocations[key]["inputs"])
+        self.assertEqual([], m.compact_finished(self.c, now))
+
+    def test_policy_waits_while_paused_or_a_manager_owns_the_cycle(self):
+        self.finished("accepted-one", "accepted", 0)
+        self.c.set_enabled(False, {"fixture": True})
+        self.assertEqual([], m.compact_finished(self.c, 1))
+        self.c.set_enabled(True, {"fixture": True})
+        self.c.begin_manager()
+        self.assertEqual([], m.compact_finished(self.c, 1))
+
+    def test_a_concurrent_change_stops_the_pass_without_partial_effect(self):
+        self.finished("a", "accepted", 0)
+        self.finished("b", "accepted", 0)
+        real = self.c.compact_allocation
+        calls = []
+        def stale(key, revision, evidence):
+            calls.append(key)
+            return real(key, revision - 1, evidence)
+        with patch.object(self.c, "compact_allocation", stale):
+            self.assertEqual([], m.compact_finished(self.c, 1))
+        self.assertEqual(["a"], calls)
+        self.assertEqual(["a", "b"], m.compact_finished(self.c, 1))
 
 
 if __name__ == "__main__":

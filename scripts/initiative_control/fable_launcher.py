@@ -44,13 +44,15 @@ INSTRUCTIONS = (
     "You are a bounded management decision maker. Use only the supplied JSON briefing. "
     "Do not use tools, read other files, edit code, launch workers, or take external actions. "
     "Return exactly one JSON object, without prose: state_revision (integer), actions (list), "
-    "and optionally verdicts (list). "
+    "and optionally verdicts (list) or no_action_reason (string). "
     "Every action needs stable id, kind, workstream, sprint, rationale (strings), inputs "
     "(object), timeout_seconds (positive integer), expected_revision (integer). "
     "These are proposals for the coordinator to validate, never executed actions. "
     "For an action whose status is returned, you may add a verdict: action (its id), "
     "accepted (boolean) and reason (short string). Accept only when its returned result "
     "satisfies its frozen assignment; otherwise reject. Actions may be empty only with a verdict."
+    " If nothing should be done now, return actions [] with no_action_reason, a short reason, "
+    "and no verdicts."
 )
 
 
@@ -242,6 +244,9 @@ def decision(text):
         isinstance(v, dict) and set(v) == {"action", "accepted", "reason"}
         and isinstance(v["action"], str) and type(v["accepted"]) is bool
         and isinstance(v["reason"], str) for v in verdicts), "invalid_verdict")
+    idle = value.get("no_action_reason")
+    require(idle is None or (isinstance(idle, str) and idle.strip() and len(idle.encode()) <= 1000
+                             and not value["actions"] and not verdicts), "invalid_no_action")
     ids = set()
     for action in value["actions"]:
         require(isinstance(action, dict), "invalid_action")
