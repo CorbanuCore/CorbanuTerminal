@@ -6,6 +6,7 @@ use super::super::read_attempt;
 use super::super::read_patches;
 use super::*;
 use sqlx::SqliteConnection;
+use std::collections::HashMap;
 
 impl Serialize for Decimal {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -78,24 +79,166 @@ impl<'a> EstimateStore<'a> {
         conn: &mut SqliteConnection,
         id: Uuid,
     ) -> anyhow::Result<ObservationQuote> {
+        // One authority read, one binding and one snapshot read serve every
+        // version: they cannot change inside the caller's transaction, and
+        // re-reading them per version made each quote cost several times the
+        // validation it performs. Every version is still verified in full.
         let (attempt, observations) = authority(conn, id).await?;
         let binding = binding(conn, id).await?;
-        let versions: Vec<String> = sqlx::query_scalar(
-            "SELECT evidence FROM draft_accounting_estimates WHERE attempt_id = ? ORDER BY evidence",
+        let versions: Vec<(String, String)> = sqlx::query_as(
+            "SELECT evidence, payload FROM draft_accounting_estimates WHERE attempt_id = ? ORDER BY evidence",
         )
         .bind(id.to_string())
         .fetch_all(&mut *conn)
         .await?;
+        let current = serde_json::to_string(&observations)?;
+        let mut snapshot = None;
+        let mut recorded = None;
         // A stale or absent latest estimate must not conceal corrupt older evidence.
-        for evidence in versions {
-            Self::read_on_connection(conn, id, &evidence)
-                .await?
-                .context("missing retained estimate")?;
+        for (evidence, payload) in versions {
+            let bound = binding.as_ref().context("missing binding")?;
+            let quote = verify_recorded(
+                conn,
+                &attempt,
+                &observations,
+                bound,
+                &mut snapshot,
+                &evidence,
+                &payload,
+            )
+            .await?;
+            if evidence == current {
+                recorded = Some(quote);
+            }
         }
-        match binding {
-            Some(binding) => recorded_or_current(conn, &attempt, &observations, binding).await,
-            None => quote_observations(&attempt, &observations, &[]),
+        match (recorded, binding) {
+            (Some(quote), _) => Ok(quote),
+            (None, Some(binding)) => {
+                let snapshot = bound_snapshot(conn, &binding, &mut snapshot).await?;
+                quote_under_snapshot(PRICING_RULES, &attempt, &observations, snapshot)
+            }
+            (None, None) => quote_observations(&attempt, &observations, &[]),
         }
+    }
+
+    /// The quotes of `thread`'s attempts dispatched in `[start, end)`, for the
+    /// post-write aggregate bound.
+    ///
+    /// Each is exactly what `latest_quote_on_connection` returns for an intact
+    /// ledger: the recorded estimate's rules for the current evidence, otherwise
+    /// today's rules, under the bound snapshot. It reads the day in four
+    /// statements instead of re-verifying every attempt's stored history, which
+    /// held the write lock for O(attempts that day) - 1.4 s per write on a busy
+    /// thread. Explicit maintenance, the hourly validation and reads still verify
+    /// that history in full.
+    async fn day_quotes_on_connection(
+        conn: &mut SqliteConnection,
+        thread: &str,
+        start: i64,
+        end: i64,
+    ) -> anyhow::Result<Vec<ObservationQuote>> {
+        let attempts: Vec<(String, String)> = sqlx::query_as(
+            "SELECT attempt_id, payload FROM draft_accounting_attempts
+                WHERE json_extract(payload, '$.thread_id') = ?
+                  AND json_extract(payload, '$.dispatched_at_ms') >= ?
+                  AND json_extract(payload, '$.dispatched_at_ms') < ?
+                ORDER BY attempt_id",
+        )
+        .bind(thread)
+        .bind(start)
+        .bind(end)
+        .fetch_all(&mut *conn)
+        .await?;
+        // One scan finds the day; the rest are primary-key lookups.
+        let ids = serde_json::to_string(
+            &attempts
+                .iter()
+                .map(|(id, _)| id.as_str())
+                .collect::<Vec<_>>(),
+        )?;
+        let observations: Vec<(String, String)> = sqlx::query_as(
+            "SELECT attempt_id, payload FROM draft_accounting_observations
+                WHERE attempt_id IN (SELECT value FROM json_each(?))
+                ORDER BY attempt_id, revision",
+        )
+        .bind(&ids)
+        .fetch_all(&mut *conn)
+        .await?;
+        let bindings: Vec<(String, Option<String>)> = sqlx::query_as(
+            "SELECT attempt_id, snapshot_id FROM draft_accounting_price_bindings
+                WHERE attempt_id IN (SELECT value FROM json_each(?))",
+        )
+        .bind(&ids)
+        .fetch_all(&mut *conn)
+        .await?;
+        // The rules field alone, with its JSON type; see `recorded_rules`.
+        let estimates: Vec<(String, String, Option<String>, Option<i64>)> = sqlx::query_as(
+            "SELECT attempt_id, evidence, json_type(payload, '$.pricing_rules'),
+                    CASE json_type(payload, '$.pricing_rules')
+                        WHEN 'integer' THEN json_extract(payload, '$.pricing_rules') END
+                FROM draft_accounting_estimates
+                WHERE attempt_id IN (SELECT value FROM json_each(?))",
+        )
+        .bind(&ids)
+        .fetch_all(&mut *conn)
+        .await?;
+        let mut patches: HashMap<String, Vec<Observation>> = HashMap::new();
+        for (id, payload) in observations {
+            patches
+                .entry(id)
+                .or_default()
+                .push(serde_json::from_str(&payload)?);
+        }
+        let bindings: HashMap<String, Option<String>> = bindings.into_iter().collect();
+        // As `recorded_rules`: absent means version 1, otherwise an integer above 1.
+        let mut recorded: HashMap<String, HashMap<String, u16>> = HashMap::new();
+        for (id, evidence, kind, value) in estimates {
+            let rules = match (kind.as_deref(), value) {
+                (None, _) => 1,
+                (Some("integer"), Some(rules)) if rules > 1 => u16::try_from(rules)?,
+                _ => anyhow::bail!("noncanonical pricing rules"),
+            };
+            recorded.entry(id).or_default().insert(evidence, rules);
+        }
+        let mut snapshots: HashMap<String, Snapshot> = HashMap::new();
+        let mut quotes = Vec::with_capacity(attempts.len());
+        for (id, payload) in attempts {
+            let attempt: Attempt = serde_json::from_str(&payload)?;
+            attempt.validate()?;
+            ensure!(
+                attempt.attempt_id.to_string() == id,
+                "attempt identity mismatch"
+            );
+            let observations = patches.remove(&id).unwrap_or_default();
+            let versions = recorded.remove(&id).unwrap_or_default();
+            let quote = match bindings.get(&id) {
+                None => {
+                    ensure!(versions.is_empty(), "missing binding");
+                    quote_observations(&attempt, &observations, &[])?
+                }
+                Some(binding) => {
+                    let rules = versions
+                        .get(&serde_json::to_string(&observations)?)
+                        .copied()
+                        .unwrap_or(PRICING_RULES);
+                    let snapshot = match binding {
+                        Some(snapshot_id) => {
+                            if !snapshots.contains_key(snapshot_id) {
+                                let snapshot = read_snapshot(conn, snapshot_id)
+                                    .await?
+                                    .context("missing snapshot")?;
+                                snapshots.insert(snapshot_id.clone(), snapshot);
+                            }
+                            snapshots.get(snapshot_id)
+                        }
+                        None => None,
+                    };
+                    quote_under_snapshot(rules, &attempt, &observations, snapshot)?
+                }
+            };
+            quotes.push(quote);
+        }
+        Ok(quotes)
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
@@ -234,8 +377,75 @@ async fn bound_quote(
         ),
         None => None,
     };
-    let quote = quote_observations_under(rules, attempt, observations, snapshot.as_slice())?;
-    ensure!(quote.snapshot == snapshot, "ineligible bound snapshot");
+    quote_under_snapshot(rules, attempt, observations, snapshot.as_ref())
+}
+
+/// `read_on_connection`'s checks for one stored version, given the attempt's
+/// authority and binding already read in the same transaction.
+async fn verify_recorded(
+    conn: &mut SqliteConnection,
+    attempt: &Attempt,
+    retained: &[Observation],
+    binding: &Option<String>,
+    snapshot: &mut Option<Option<Snapshot>>,
+    evidence: &str,
+    payload: &str,
+) -> anyhow::Result<ObservationQuote> {
+    let observations: Vec<Observation> = serde_json::from_str(evidence)?;
+    ensure!(
+        serde_json::to_string(&observations)? == evidence,
+        "noncanonical evidence"
+    );
+    for observation in &observations {
+        let index = retained
+            .binary_search_by_key(&i64::from(observation.revision), |r| i64::from(r.revision))
+            .map_err(|_| anyhow::anyhow!("missing retained observation"))?;
+        ensure!(
+            retained[index] == *observation,
+            "changed retained observation"
+        );
+    }
+    let rules = recorded_rules(payload)?;
+    let snapshot = bound_snapshot(conn, binding, snapshot).await?;
+    let quote = quote_under_snapshot(rules, attempt, &observations, snapshot)?;
+    // Do not deserialize quote decimals through the stricter rate parser.
+    ensure!(
+        serde_json::to_string(&quote)? == payload,
+        "corrupt estimate payload"
+    );
+    Ok(quote)
+}
+
+/// The snapshot a binding names, read and validated once per caller.
+async fn bound_snapshot<'s>(
+    conn: &mut SqliteConnection,
+    binding: &Option<String>,
+    cache: &'s mut Option<Option<Snapshot>>,
+) -> anyhow::Result<Option<&'s Snapshot>> {
+    if cache.is_none() {
+        *cache = Some(match binding {
+            Some(id) => Some(read_snapshot(conn, id).await?.context("missing snapshot")?),
+            None => None,
+        });
+    }
+    Ok(cache.as_ref().and_then(Option::as_ref))
+}
+
+fn quote_under_snapshot(
+    rules: u16,
+    attempt: &Attempt,
+    observations: &[Observation],
+    snapshot: Option<&Snapshot>,
+) -> anyhow::Result<ObservationQuote> {
+    let candidates: &[Snapshot] = match snapshot {
+        Some(snapshot) => std::slice::from_ref(snapshot),
+        None => &[],
+    };
+    let quote = quote_observations_under(rules, attempt, observations, candidates)?;
+    ensure!(
+        quote.snapshot.as_ref() == snapshot,
+        "ineligible bound snapshot"
+    );
     Ok(quote)
 }
 

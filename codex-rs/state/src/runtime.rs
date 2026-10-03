@@ -106,6 +106,10 @@ pub struct StateRuntime {
     memories: MemoryStore,
     thread_updated_at_millis: Arc<AtomicI64>,
     thread_recency_at_millis: Arc<AtomicI64>,
+    /// When this process last completed the accounting ledger's whole-ledger
+    /// validation (`i64::MIN` if never). It stands for the rest of that UTC hour,
+    /// so a write retried after contention does not validate again.
+    accounting_validated_at_millis: Arc<AtomicI64>,
 }
 
 impl StateRuntime {
@@ -270,6 +274,7 @@ impl StateRuntime {
             default_provider,
             thread_updated_at_millis: Arc::new(AtomicI64::new(thread_updated_at_millis)),
             thread_recency_at_millis: Arc::new(AtomicI64::new(thread_recency_at_millis)),
+            accounting_validated_at_millis: Arc::new(AtomicI64::new(i64::MIN)),
         });
         if let Err(err) = runtime.run_logs_startup_maintenance().await {
             warn!(

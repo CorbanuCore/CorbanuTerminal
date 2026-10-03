@@ -13,6 +13,7 @@ impl Journal<'_> {
         batch: &[Observation],
         original_prices: Option<&[super::pricing::Snapshot]>,
         as_of_ms: i64,
+        validated_at_ms: Option<i64>,
     ) -> anyhow::Result<super::pricing::ObservationQuote> {
         super::store::validate_on_connection(conn).await?;
         if original_prices.is_none() {
@@ -24,7 +25,15 @@ impl Journal<'_> {
             .await?;
             ensure!(bound, "attempt not admitted");
         }
-        Self::append_native_on_connection(conn, owner, attempt, batch, as_of_ms).await?;
+        Self::append_validated_on_connection(
+            conn,
+            owner,
+            attempt,
+            batch,
+            as_of_ms,
+            validated_at_ms,
+        )
+        .await?;
         let quote = Self::persist_price_on_connection(
             conn,
             attempt.attempt_id,
@@ -77,6 +86,19 @@ impl Journal<'_> {
         batch: &[Observation],
         as_of_ms: i64,
     ) -> anyhow::Result<()> {
+        Self::append_validated_on_connection(conn, owner, attempt, batch, as_of_ms, None).await
+    }
+
+    /// As `append_native_on_connection`, after this hour's validation ran on a
+    /// read snapshot at `validated_at_ms`, if it did.
+    async fn append_validated_on_connection(
+        conn: &mut SqliteConnection,
+        owner: ThreadId,
+        attempt: &Attempt,
+        batch: &[Observation],
+        as_of_ms: i64,
+        validated_at_ms: Option<i64>,
+    ) -> anyhow::Result<()> {
         require_active(conn).await?;
         ensure!(owner == attempt.thread_id, "native owner mismatch");
         let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM threads WHERE id = ?)")
@@ -84,7 +106,7 @@ impl Journal<'_> {
             .fetch_one(&mut *conn)
             .await?;
         ensure!(exists, "native owner missing");
-        Self::maintain_for_write_on_connection(conn, as_of_ms).await?;
+        Self::maintain_for_write_on_connection(conn, as_of_ms, validated_at_ms).await?;
         Self::append_on_connection(conn, attempt, batch).await
     }
 }

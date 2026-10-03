@@ -232,6 +232,30 @@ impl From<i64> for AsOf {
     }
 }
 
+/// Whether `error` is lock contention on the state database: another
+/// connection - usually another Corbanu process - held it past the busy timeout,
+/// or no pooled connection came free in time.
+///
+/// Each store call is made of whole transactions that roll back on failure and
+/// are idempotent for the same arguments, so after contention the same call can
+/// simply be made again. Any other error is not contention and must not be
+/// retried as if it were.
+pub fn is_contention(error: &anyhow::Error) -> bool {
+    error
+        .chain()
+        .any(|cause| match cause.downcast_ref::<sqlx::Error>() {
+            Some(sqlx::Error::PoolTimedOut) => true,
+            // Primary result code in the low byte: SQLITE_BUSY and its extended
+            // codes. SQLITE_LOCKED is a conflict inside one connection (no shared
+            // cache here), which waiting does not clear.
+            Some(sqlx::Error::Database(database)) => database
+                .code()
+                .and_then(|code| code.parse::<i32>().ok())
+                .is_some_and(|code| code & 0xff == 5),
+            _ => false,
+        })
+}
+
 impl<'a> AccountingStore<'a> {
     /// Inspect an existing ledger in one read transaction, without installation,
     /// maintenance, repricing or repair. All times are UTC milliseconds/days.
@@ -375,6 +399,7 @@ impl<'a> AccountingStore<'a> {
         original_prices: Option<&[Snapshot]>,
         as_of: AsOf,
     ) -> anyhow::Result<ObservationQuote> {
+        let validated_at_ms = self.validate_hour(as_of).await?;
         let mut tx = self.runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
         let as_of_ms = as_of.sample();
         let result = Journal::store_on_connection(
@@ -384,6 +409,7 @@ impl<'a> AccountingStore<'a> {
             observations,
             original_prices,
             as_of_ms,
+            validated_at_ms,
         )
         .await;
         match result {
@@ -396,6 +422,32 @@ impl<'a> AccountingStore<'a> {
                 Err(error)
             }
         }
+    }
+
+    /// The hour's whole-ledger validation, on a read snapshot that holds no lock
+    /// another writer waits on. Returns when it was done this hour, if it was, so
+    /// the write transaction only has to advance the checkpoint. Done at most once
+    /// per process per hour; a sweep with expiries to apply still runs whole
+    /// under the write lock.
+    async fn validate_hour(&self, as_of: AsOf) -> anyhow::Result<Option<i64>> {
+        let cached = &self.runtime.accounting_validated_at_millis;
+        let mut tx = self.runtime.pool.begin().await?;
+        let result = async {
+            // The schema read opens the snapshot before the clock is read, so the
+            // snapshot's checkpoint can never be later than this reading.
+            validate_on_connection(&mut tx).await?;
+            let as_of_ms = as_of.sample();
+            let previous = cached.load(std::sync::atomic::Ordering::Acquire);
+            let validated =
+                Journal::validate_hour_on_connection(&mut tx, as_of_ms, previous).await?;
+            if let Some(at) = validated {
+                cached.store(at, std::sync::atomic::Ordering::Release);
+            }
+            anyhow::Ok(validated)
+        }
+        .await;
+        tx.rollback().await?;
+        result
     }
 
     pub async fn maintain(&self, as_of_ms: i64) -> anyhow::Result<()> {
@@ -416,12 +468,18 @@ impl<'a> AccountingStore<'a> {
     }
 
     /// Opening precedes every request write; keep its lock hold short.
+    ///
+    /// The hour's whole-ledger validation runs first on a read snapshot, which
+    /// holds no lock another writer waits on; the write transaction then only
+    /// advances the checkpoint. A sweep with expiries to apply still runs whole
+    /// under the write lock.
     async fn maintain_for_write(&self, as_of: AsOf) -> anyhow::Result<()> {
+        let validated_at_ms = self.validate_hour(as_of).await?;
         let mut tx = self.runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
         let as_of_ms = as_of.sample();
         let result = async {
             validate_on_connection(&mut tx).await?;
-            Journal::maintain_for_write_on_connection(&mut tx, as_of_ms).await
+            Journal::maintain_for_write_on_connection(&mut tx, as_of_ms, validated_at_ms).await
         }
         .await;
         match result {

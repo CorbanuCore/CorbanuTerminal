@@ -35,8 +35,18 @@ impl Journal<'_> {
     pub(in crate::runtime::accounting) async fn maintain_for_write_on_connection(
         conn: &mut SqliteConnection,
         as_of_ms: i64,
+        validated_at_ms: Option<i64>,
     ) -> anyhow::Result<()> {
-        maintain_for_write_on_connection(conn, as_of_ms).await
+        maintain_for_write_on_connection(conn, as_of_ms, validated_at_ms).await
+    }
+
+    /// See `validate_hour_on_connection`.
+    pub(in crate::runtime::accounting) async fn validate_hour_on_connection(
+        conn: &mut SqliteConnection,
+        as_of_ms: i64,
+        previous_validation_ms: i64,
+    ) -> anyhow::Result<Option<i64>> {
+        validate_hour_on_connection(conn, as_of_ms, previous_validation_ms).await
     }
 
     pub(in crate::runtime::accounting) async fn delete_native_on_connection(
@@ -171,11 +181,14 @@ const FULL_SWEEP_INTERVAL_MS: i64 = 60 * 60 * 1000;
 async fn maintain_for_write_on_connection(
     conn: &mut SqliteConnection,
     as_of_ms: i64,
+    validated_at_ms: Option<i64>,
 ) -> anyhow::Result<()> {
     let hour_start = as_of_ms - as_of_ms.rem_euclid(FULL_SWEEP_INTERVAL_MS);
     if let RetentionFixture::Active(checkpoint) = retention_fixture_on_connection(conn).await?
-        && (hour_start..=as_of_ms).contains(&checkpoint)
-        && !retention_due_on_connection(conn, hour_start).await?
+        && checkpoint <= as_of_ms
+        && ((checkpoint >= hour_start && !retention_due_on_connection(conn, hour_start).await?)
+            || (validated_at_ms.is_some_and(|at| (hour_start..=as_of_ms).contains(&at))
+                && !retention_due_on_connection(conn, as_of_ms).await?))
     {
         let updated = sqlx::query(
             "UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = ? WHERE singleton = 1",
@@ -187,6 +200,42 @@ async fn maintain_for_write_on_connection(
         return Ok(());
     }
     maintain_on_connection(conn, as_of_ms).await
+}
+
+/// Caller holds a READ transaction. When the next write at `as_of_ms` would run
+/// the hour's full sweep only to validate - nothing has aged out - run that
+/// validation here and return when it ran; `maintain_for_write_on_connection`
+/// then only advances the checkpoint. A validation this process already
+/// completed this hour (`previous_validation_ms`) stands, so a write retried
+/// after contention does not repeat it.
+///
+/// The sweep reads, validates and prices every retained attempt. Under the write
+/// lock that took 10-17 s on a real 7,000-attempt ledger, and every other writer
+/// sharing the state DB - other Corbanu processes included - waited past SQLite's
+/// busy timeout and failed. A read snapshot blocks no writer. Corruption still
+/// fails this write visibly; anything committed after the snapshot is checked by
+/// its own write and by the next hour's validation.
+async fn validate_hour_on_connection(
+    conn: &mut SqliteConnection,
+    as_of_ms: i64,
+    previous_validation_ms: i64,
+) -> anyhow::Result<Option<i64>> {
+    let hour_start = as_of_ms - as_of_ms.rem_euclid(FULL_SWEEP_INTERVAL_MS);
+    if (hour_start..=as_of_ms).contains(&previous_validation_ms) {
+        return Ok(Some(previous_validation_ms));
+    }
+    let RetentionFixture::Active(checkpoint) = retention_fixture_on_connection(conn).await? else {
+        return Ok(None);
+    };
+    // Already maintained this hour, or the sweep has work to apply under the lock.
+    if checkpoint > as_of_ms
+        || checkpoint >= hour_start
+        || retention_due_on_connection(conn, as_of_ms).await?
+    {
+        return Ok(None);
+    }
+    prepare_on_connection(conn, as_of_ms).await?;
+    Ok(Some(as_of_ms))
 }
 
 /// Whether a full sweep at `as_of_ms` would expire raw detail, a compact day or a tombstone.
@@ -233,21 +282,8 @@ async fn check_day_on_connection(
     if let Some(payload) = compact {
         values = values.checked_add(&CompactValues::decode(&payload)?)?;
     }
-    let ids: Vec<String> = sqlx::query_scalar(
-        "SELECT attempt_id FROM draft_accounting_attempts
-            WHERE json_extract(payload, '$.thread_id') = ?
-              AND json_extract(payload, '$.dispatched_at_ms') >= ?
-              AND json_extract(payload, '$.dispatched_at_ms') < ?
-            ORDER BY attempt_id",
-    )
-    .bind(&thread_key)
-    .bind(start)
-    .bind(end)
-    .fetch_all(&mut *conn)
-    .await?;
     let mut totals = DayTotals::default();
-    for id in ids {
-        let quote = EstimateStore::latest_quote_on_connection(conn, attempt_key(&id)?).await?;
+    for quote in EstimateStore::day_quotes_on_connection(conn, &thread_key, start, end).await? {
         ensure!(
             quote.attempt.thread_id == thread
                 && i64::from(quote.attempt.dispatched_at_ms) / DAY_MS == day,

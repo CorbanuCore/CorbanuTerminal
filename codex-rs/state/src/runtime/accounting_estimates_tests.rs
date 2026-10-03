@@ -555,3 +555,81 @@ async fn estimates_from_newer_rules_are_named_and_current_ones_stand() -> anyhow
     runtime.close().await;
     Ok(())
 }
+
+/// The post-write day bound reads each attempt's quote in bulk. It must state
+/// exactly what the fully verified read does: the recorded estimate under the
+/// rules it was recorded with, today's rules for unrecorded evidence, and an
+/// unpriced quote for an attempt with no binding.
+#[tokio::test]
+async fn day_quotes_match_the_verified_latest_quote() -> anyhow::Result<()> {
+    let home = home();
+    let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
+    let store = EstimateStore::create_for_tests(&runtime).await?;
+    let first = attempt();
+    let mut second = serde_json::to_value(attempt())?;
+    second["attempt_id"] = json!(Uuid::from_u128(21));
+    second["request_id"] = json!(Uuid::from_u128(22));
+    let second: Attempt = serde_json::from_value(second)?;
+    let mut unbound = serde_json::to_value(attempt())?;
+    unbound["attempt_id"] = json!(Uuid::from_u128(31));
+    unbound["request_id"] = json!(Uuid::from_u128(32));
+    let unbound: Attempt = serde_json::from_value(unbound)?;
+    let mut unpriced = serde_json::to_value(attempt())?;
+    unpriced["attempt_id"] = json!(Uuid::from_u128(41));
+    unpriced["request_id"] = json!(Uuid::from_u128(42));
+    let unpriced: Attempt = serde_json::from_value(unpriced)?;
+    // Revisions double as source sequences, which are unique across attempts.
+    for (a, revision) in [(&first, 1), (&second, 3), (&unbound, 5), (&unpriced, 7)] {
+        store
+            .journal
+            .append_observation(a, &[row(revision, json!({"input":50,"read":10}))])
+            .await?;
+    }
+    // First and second share one snapshot; unpriced is bound to none.
+    for a in [&first, &second] {
+        store
+            .persist_current(a.attempt_id, &[snapshot("3")])
+            .await?;
+    }
+    store.persist_current(unpriced.attempt_id, &[]).await?;
+    // First: recorded under version 1 of the pricing rules.
+    let (attempt, rows) = {
+        let mut tx = runtime.pool.begin().await?;
+        let authority = authority(&mut tx, first.attempt_id).await?;
+        tx.commit().await?;
+        authority
+    };
+    let version_one = quote_observations_under(1, &attempt, &rows, &[snapshot("3")])?;
+    sqlx::query("UPDATE draft_accounting_estimates SET payload = ? WHERE attempt_id = ?")
+        .bind(serde_json::to_string(&version_one)?)
+        .bind(first.attempt_id.to_string())
+        .execute(runtime.pool.as_ref())
+        .await?;
+    // Second: newer evidence than its recorded estimate.
+    store
+        .journal
+        .append_observation(&second, &[row(4, json!({"input":70,"read":10}))])
+        .await?;
+
+    let mut tx = runtime.pool.begin().await?;
+    let mut expected = Vec::new();
+    for a in [&first, &second, &unbound, &unpriced] {
+        expected.push(EstimateStore::latest_quote_on_connection(&mut tx, a.attempt_id).await?);
+    }
+    let day = EstimateStore::day_quotes_on_connection(
+        &mut tx,
+        &first.thread_id.to_string(),
+        0,
+        86_400_000,
+    )
+    .await?;
+    assert_eq!(binding(&mut tx, unpriced.attempt_id).await?, Some(None));
+    tx.commit().await?;
+    assert_eq!(expected[0].pricing_rules, 1);
+    assert_eq!(expected[1].pricing_rules, PRICING_RULES);
+    assert_eq!(expected[2].snapshot, None);
+    assert_eq!(expected[3].snapshot, None);
+    assert_eq!(day, expected);
+    runtime.close().await;
+    Ok(())
+}

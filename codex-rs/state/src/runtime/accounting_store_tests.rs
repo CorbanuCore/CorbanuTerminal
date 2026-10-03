@@ -1563,7 +1563,8 @@ async fn store_commit_failure_is_not_admission_and_rolls_back_complete_state() -
         .execute(&mut *tx)
         .await?;
     let a = attempt(1);
-    Journal::store_on_connection(&mut tx, a.thread_id, &a, &[], Some(&[snapshot()]), 1).await?;
+    Journal::store_on_connection(&mut tx, a.thread_id, &a, &[], Some(&[snapshot()]), 1, None)
+        .await?;
     let error = tx.commit().await.unwrap_err();
     assert_eq!(
         error
@@ -1936,8 +1937,16 @@ async fn price_bound_admission_and_native_delete_contend_in_both_orders_with_sna
                     1
                 );
             } else {
-                Journal::store_on_connection(&mut tx, a.thread_id, &a, &[], Some(&[snapshot()]), 1)
-                    .await?;
+                Journal::store_on_connection(
+                    &mut tx,
+                    a.thread_id,
+                    &a,
+                    &[],
+                    Some(&[snapshot()]),
+                    1,
+                    None,
+                )
+                .await?;
             }
             held_tx.send(()).unwrap();
             release_rx.await?;
@@ -2220,6 +2229,127 @@ async fn request_writes_validate_the_whole_ledger_hourly_and_when_retention_is_d
         .fetch_one(runtime.pool.as_ref())
         .await?;
     assert_eq!((raw, checkpoint().await?), (0, DETAIL + 20));
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_hours_validation_reads_a_snapshot_while_another_process_writes() -> anyhow::Result<()>
+{
+    const HOUR: i64 = 3_600_000;
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let store = AccountingStore::open(&runtime, 0).await?;
+    for attempt in [attempt(1), attempt(2)] {
+        store.admit(attempt.thread_id, &attempt, &[], 0).await?;
+    }
+    let checkpoint = || async {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT completed_as_of_ms FROM draft_accounting_retention_checkpoint",
+        )
+        .fetch_one(runtime.pool.as_ref())
+        .await
+    };
+    // Another process holds the write lock for the whole validation, which the
+    // full sweep used to run under that same lock for seconds.
+    let other = peer(&runtime).await?;
+    let held = other.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let mut read = runtime.pool.begin().await?;
+    validate_on_connection(&mut read).await?;
+    assert_eq!(
+        Journal::validate_hour_on_connection(&mut read, HOUR, i64::MIN).await?,
+        Some(HOUR)
+    );
+    // A validation already done this hour stands; none is needed in the hour
+    // the checkpoint is already in.
+    assert_eq!(
+        Journal::validate_hour_on_connection(&mut read, HOUR + 5, HOUR).await?,
+        Some(HOUR)
+    );
+    assert_eq!(
+        Journal::validate_hour_on_connection(&mut read, 1, i64::MIN).await?,
+        None
+    );
+    read.rollback().await?;
+    held.rollback().await?;
+
+    // The write lock is then needed only to advance the checkpoint. Corruption
+    // committed after the validated snapshot waits for the next hour, exactly as
+    // corruption committed after any sweep in the hour does.
+    sqlx::query("UPDATE draft_accounting_attempts SET payload = '{}' WHERE attempt_id = ?")
+        .bind(Uuid::from_u128(2).to_string())
+        .execute(runtime.pool.as_ref())
+        .await?;
+    let mut tx = runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
+    Journal::maintain_for_write_on_connection(&mut tx, HOUR + 1, Some(HOUR)).await?;
+    tx.commit().await?;
+    assert_eq!(checkpoint().await?, HOUR + 1);
+
+    // A validation from an earlier hour, or none, still means the full sweep.
+    for validated in [Some(HOUR + 1), None] {
+        let mut tx = runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let error = Journal::maintain_for_write_on_connection(&mut tx, 2 * HOUR, validated)
+            .await
+            .expect_err("the full sweep sees the corrupt attempt");
+        tx.rollback().await?;
+        assert!(!is_contention(&error), "{error:#}");
+    }
+    assert_eq!(checkpoint().await?, HOUR + 1);
+    // So does the public write path: its own snapshot validation fails visibly.
+    assert!(AccountingStore::open(&runtime, 2 * HOUR).await.is_err());
+    assert_eq!(checkpoint().await?, HOUR + 1);
+
+    // Once detail has aged out the sweep has work to apply, so there is no
+    // snapshot shortcut, and a validation from before it became due is refused.
+    const DETAIL: i64 = 90 * 86_400_000;
+    let mut read = runtime.pool.begin().await?;
+    assert_eq!(
+        Journal::validate_hour_on_connection(&mut read, DETAIL + 20, i64::MIN).await?,
+        None
+    );
+    read.rollback().await?;
+    let mut tx = runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
+    assert!(
+        Journal::maintain_for_write_on_connection(&mut tx, DETAIL + 20, Some(DETAIL + 10))
+            .await
+            .is_err(),
+        "the full sweep ran and met the corrupt attempt"
+    );
+    tx.rollback().await?;
+    assert_eq!(checkpoint().await?, HOUR + 1);
+    runtime.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn contention_is_named_and_nothing_else_is() -> anyhow::Result<()> {
+    let path = home();
+    let runtime = open(&path).await?;
+    seed(&runtime).await?;
+    let other = peer(&runtime).await?;
+    let held = runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
+    let busy = anyhow::Error::from(
+        other
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .expect_err("the lock is held"),
+    );
+    held.rollback().await?;
+    assert!(is_contention(&busy), "{busy:#}");
+    assert!(is_contention(&busy.context("accounting admit")));
+    assert!(is_contention(&anyhow::Error::from(
+        sqlx::Error::PoolTimedOut
+    )));
+    let constraint = anyhow::Error::from(
+        sqlx::query("INSERT INTO threads (id) VALUES (NULL)")
+            .execute(runtime.pool.as_ref())
+            .await
+            .expect_err("constraint"),
+    );
+    assert!(!is_contention(&constraint), "{constraint:#}");
+    assert!(!is_contention(&anyhow::anyhow!("future dispatch")));
     runtime.close().await;
     Ok(())
 }

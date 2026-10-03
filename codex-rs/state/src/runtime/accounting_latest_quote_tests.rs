@@ -4,6 +4,8 @@ use serde_json::Value;
 use serde_json::json;
 use sqlx::Connection;
 
+const DAY_MS: i64 = 86_400_000;
+
 fn attempt() -> Attempt {
     serde_json::from_value(json!({
         "attempt_id":"00000000-0000-0000-0000-000000000001",
@@ -67,6 +69,22 @@ async fn unchanged_quote(conn: &mut SqliteConnection, id: Uuid) -> anyhow::Resul
         .fetch_one(&mut *conn)
         .await?;
     let quote = EstimateStore::latest_quote_on_connection(conn, id).await?;
+    // The post-write day bound reads the same quote without re-verifying history.
+    let day = i64::from(quote.attempt.dispatched_at_ms) / DAY_MS;
+    let day_quotes = EstimateStore::day_quotes_on_connection(
+        conn,
+        &quote.attempt.thread_id.to_string(),
+        day * DAY_MS,
+        (day + 1) * DAY_MS,
+    )
+    .await?;
+    assert_eq!(
+        day_quotes
+            .iter()
+            .filter(|quote| quote.attempt.attempt_id == id)
+            .collect::<Vec<_>>(),
+        vec![&quote]
+    );
     assert_eq!(dump(conn).await?, before);
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT total_changes()")
