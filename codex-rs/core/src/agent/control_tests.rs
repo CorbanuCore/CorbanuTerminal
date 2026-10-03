@@ -122,7 +122,7 @@ fn cold_resumed_subagent_initializes_a_fail_closed_security_policy() {
     let thread_id = ThreadId::new();
     let session_id = SessionId::new();
     let control = AgentControl::default()
-        .with_session_id(session_id, 1)
+        .with_session_id(session_id, /*max_threads*/ 1)
         .with_effective_security_policy(
             SecurityLevel::Moderate,
             thread_id,
@@ -136,7 +136,10 @@ fn cold_resumed_subagent_initializes_a_fail_closed_security_policy() {
         .expect("resumed subagent snapshot");
     assert_eq!(snapshot.level, SecurityLevel::Aggressive);
     assert!(snapshot.kill_switch_active);
-    assert!(!snapshot.compose_existing_decision(true, true));
+    assert!(
+        !snapshot
+            .compose_existing_decision(/*existing_allow*/ true, /*profile_allows*/ true)
+    );
     assert_eq!(
         snapshot
             .actor_chain
@@ -151,7 +154,7 @@ fn resumed_root_preserves_its_policy_and_unbound_auxiliary_still_inherits() {
     let root_thread_id = ThreadId::new();
     let auxiliary_thread_id = ThreadId::new();
     let control = AgentControl::default()
-        .with_session_id(SessionId::new(), 2)
+        .with_session_id(SessionId::new(), /*max_threads*/ 2)
         .with_effective_security_policy(
             SecurityLevel::Moderate,
             root_thread_id,

@@ -14453,7 +14453,9 @@ async fn provider_manager_open_preserves_lazy_command_authorization_without_shar
         reused.resolve_provider("command").unwrap().availability,
         codex_provider_auth::ProviderAvailabilityState::Ready
     );
-    let fallback = super::provider_management_status::provider_manager_status_host(&config, None);
+    let fallback = super::provider_management_status::provider_manager_status_host(
+        &config, /*shared*/ None,
+    );
     assert_eq!(
         fallback.resolve_provider("command").unwrap().availability,
         codex_provider_auth::ProviderAvailabilityState::Ready
@@ -14471,7 +14473,7 @@ fn provider_manager_claude_intent_uses_typed_status_and_recovery_source() {
     use codex_provider_auth::claude_account_flow::ClaudeUnauthorizedRecoverySource as Source;
 
     let catalog = codex_provider_auth::ProviderCatalog::from_runtime_providers(
-        &codex_model_provider_info::built_in_model_providers(None),
+        &codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None),
     );
     let provider_id = catalog
         .get(codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID)
@@ -14807,7 +14809,8 @@ fn embedded_provider_key_save_is_visible_to_one_bulk_status_refresh() -> Result<
             .await?;
         config.model_provider_id = provider_id.into();
         config.model_provider = provider.clone();
-        config.model_providers = codex_model_provider_info::built_in_model_providers(None);
+        config.model_providers =
+            codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None);
         config.model_providers.insert(provider_id.into(), provider);
 
         let app_server = crate::start_embedded_app_server_for_picker(&config).await?;

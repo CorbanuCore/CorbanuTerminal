@@ -446,7 +446,7 @@ mod tests {
     fn claude_plan_cache_tracks_the_persisted_selection_revision() {
         let claude_plan = ModelProviderInfo::create_claude_plan_provider();
         assert_eq!(
-            external_bearer_cache_policy(None, &claude_plan),
+            external_bearer_cache_policy(/*auth_manager*/ None, &claude_plan),
             ExternalBearerCachePolicy::FreshPerRequest
         );
 

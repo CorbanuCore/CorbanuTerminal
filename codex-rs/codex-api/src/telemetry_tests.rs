@@ -28,7 +28,7 @@ async fn corbanu_retry_rotates_only_confirmed_released_attempts() {
                                 retry_transport: true,
                             },
                         },
-                        None,
+                        /*telemetry*/ None,
                         || {
                             let mut request = Request::new(
                                 Method::POST,

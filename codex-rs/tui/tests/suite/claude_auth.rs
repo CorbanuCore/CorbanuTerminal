@@ -77,7 +77,7 @@ fn tmux_first_run_anthropic_account_selects_claude_login_after_success() -> Resu
     wait_claude_configured(pane)?;
     pane.send_key(TmuxKey::Escape)?;
     let viewport = pane.capture_viewport()?;
-    let scrollback = pane.capture_scrollback_tail(2_000)?;
+    let scrollback = pane.capture_scrollback_tail(/*lines*/ 2_000)?;
     exit_tui(pane)?;
     session.wait_for_exit(READY_TIMEOUT)?;
 
@@ -122,7 +122,7 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
         codex_home.path(),
         &log_dir,
         &fake,
-        None,
+        /*login_fixture*/ None,
         /*provide_openai_fixture*/ true,
     ))?;
     let pane = session.primary_pane();
@@ -161,7 +161,7 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
     wait_claude_configured(pane)?;
     pane.send_key(TmuxKey::Escape)?;
     let first_viewport = pane.capture_viewport()?;
-    let first_scrollback = pane.capture_scrollback_tail(2_000)?;
+    let first_scrollback = pane.capture_scrollback_tail(/*lines*/ 2_000)?;
     assert_claude_model_catalog(pane)?;
     exit_tui(pane)?;
     session.wait_for_exit(READY_TIMEOUT)?;
@@ -173,7 +173,7 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
         codex_home.path(),
         &log_dir,
         &fake,
-        None,
+        /*login_fixture*/ None,
         /*provide_openai_fixture*/ true,
     ))?;
     let resumed_pane = resumed.primary_pane();
@@ -181,7 +181,7 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
     open_providers(resumed_pane)?;
     wait_claude_configured(resumed_pane)?;
     let resumed_viewport = resumed_pane.capture_viewport()?;
-    let resumed_scrollback = resumed_pane.capture_scrollback_tail(2_000)?;
+    let resumed_scrollback = resumed_pane.capture_scrollback_tail(/*lines*/ 2_000)?;
     resumed_pane.send_key(TmuxKey::Escape)?;
     assert_claude_model_catalog(resumed_pane)?;
     exit_tui(resumed_pane)?;

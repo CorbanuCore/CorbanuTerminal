@@ -31,8 +31,12 @@ use crate::openai_account_flow::stale;
 impl ProviderAuthController {
     pub(crate) fn openai_account(&mut self, action: OpenAiAccountAction) -> Reduction {
         match action {
-            OpenAiAccountAction::Start(start) => self.start_openai_account(start, false),
-            OpenAiAccountAction::Reauthenticate(start) => self.start_openai_account(start, true),
+            OpenAiAccountAction::Start(start) => {
+                self.start_openai_account(start, /*reauthenticate*/ false)
+            }
+            OpenAiAccountAction::Reauthenticate(start) => {
+                self.start_openai_account(start, /*reauthenticate*/ true)
+            }
             OpenAiAccountAction::Cancel => self.cancel_openai_account(),
             OpenAiAccountAction::Retry => self.retry_openai_account(),
             OpenAiAccountAction::StartFinished { attempt_id, result } => {
@@ -239,7 +243,7 @@ impl ProviderAuthController {
             OpenAiAccountStartResult::TransportLost => self.unknown_openai(
                 flow,
                 attempt_id,
-                None,
+                /*login_id*/ None,
                 OpenAiAccountOutcomeUnknownReason::StartTransportLost,
             ),
         }

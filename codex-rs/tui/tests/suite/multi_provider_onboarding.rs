@@ -142,7 +142,7 @@ async fn corbanu_env_alias_restart(index: usize) -> Result<()> {
         let session = tmux.new_session(
             SessionSpec::new(
                 "env-alias",
-                TerminalSize::new(160, 50),
+                TerminalSize::new(/*columns*/ 160, /*rows*/ 50),
                 command
                     .arg("-c")
                     .arg("analytics.enabled=false")
@@ -430,7 +430,7 @@ async fn tmux_fresh_wallet_api_key_success_activates_without_restart() -> Result
     pane.send_secret_literal(&passphrase)?;
     pane.send_key(TmuxKey::Enter)?;
     pane.wait_stable_contains("Create API key", READY_TIMEOUT)?;
-    let before_key_creation = pane.capture_scrollback_tail(4_000)?;
+    let before_key_creation = pane.capture_scrollback_tail(/*lines*/ 4_000)?;
     ensure!(
         !before_key_creation.contains("inactive or unavailable"),
         "deferred Corbanu setup attempted model selection before key creation:\n{before_key_creation}"
@@ -449,7 +449,7 @@ async fn tmux_fresh_wallet_api_key_success_activates_without_restart() -> Result
         ],
     )
     .await?;
-    let scrollback = pane.capture_scrollback_tail(4_000)?;
+    let scrollback = pane.capture_scrollback_tail(/*lines*/ 4_000)?;
     ensure!(
         !scrollback.contains("inactive or unavailable"),
         "newly stored Corbanu API key was not activated in the current process:\n{config}\nredacted terminal scrollback:\n{scrollback}"
@@ -795,7 +795,7 @@ fn exit_tui(pane: &TmuxPane<'_>) -> Result<()> {
 fn session_spec(name: &str, binary: &Path, repo_root: &Path, home: &Path) -> SessionSpec {
     SessionSpec::new(
         name,
-        TerminalSize::new(140, 44),
+        TerminalSize::new(/*columns*/ 140, /*rows*/ 44),
         CommandSpec::new(binary)
             .env("CODEX_HOME", home)
             .env("CORBANU_HOME", home)
@@ -824,7 +824,7 @@ fn session_spec_with_gateway(
 ) -> SessionSpec {
     SessionSpec::new(
         name,
-        TerminalSize::new(140, 44),
+        TerminalSize::new(/*columns*/ 140, /*rows*/ 44),
         CommandSpec::new(binary)
             .env("CODEX_HOME", home)
             .env("CORBANU_HOME", home)
@@ -1186,7 +1186,7 @@ async fn capture_success_evidence(
     canaries: &[&str],
 ) -> Result<()> {
     let viewport = pane.capture_viewport()?;
-    let scrollback = pane.capture_scrollback_tail(4_000)?;
+    let scrollback = pane.capture_scrollback_tail(/*lines*/ 4_000)?;
     let directory = PathBuf::from("target/tmux-artifacts").join(format!("pf53-{scenario}"));
     fs::create_dir_all(&directory)?;
     fs::write(directory.join("viewport.txt"), &viewport)?;

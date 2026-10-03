@@ -325,7 +325,7 @@ animations = false
     // This disposable fixture has only two eligible synthetic routes. Keep
     // unrelated built-in providers out of its replacement/model menus.
     let catalog = codex_provider_auth::ProviderCatalog::from_runtime_providers(
-        &codex_model_provider_info::built_in_model_providers(None),
+        &codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None),
     );
     let mut eligibility = codex_provider_auth::ProviderEligibility::default();
     for entry in catalog.entries() {
@@ -346,7 +346,7 @@ animations = false
         "memory-a".into(),
     )
     .await?;
-    db.mark_backfill_complete(None).await?;
+    db.mark_backfill_complete(/*last_watermark*/ None).await?;
     let source = ThreadId::new();
     let timestamp = chrono::Utc::now() - chrono::Duration::hours(2);
     let rollout = home.path().join(format!("rollout-{source}.jsonl"));
@@ -376,7 +376,7 @@ animations = false
     let spec = |name| {
         SessionSpec::new(
             name,
-            TerminalSize::new(140, 44),
+            TerminalSize::new(/*columns*/ 140, /*rows*/ 44),
             CommandSpec::new("env")
                 .arg("-i")
                 .arg("PATH=/usr/bin:/bin")
@@ -414,7 +414,7 @@ animations = false
         let canaries = routes.iter().filter(|r| r["kind"] == "memory").count();
         let outputs = db
             .memories()
-            .list_stage1_outputs_for_global(100)
+            .list_stage1_outputs_for_global(/*n*/ 100)
             .await?
             .iter()
             .filter(|o| o.thread_id == source)

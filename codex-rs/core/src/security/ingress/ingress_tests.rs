@@ -26,7 +26,7 @@ pub(crate) fn screen_binding(source: SourceBinding, text: &str) -> ScreenedConte
         session
             .ingest(
                 SegmentEnvelope::new(&target, index as u32, payload.to_vec()),
-                1,
+                /*elapsed_ms*/ 1,
             )
             .unwrap();
     }
@@ -35,10 +35,10 @@ pub(crate) fn screen_binding(source: SourceBinding, text: &str) -> ScreenedConte
             target,
             VerdictKind::Allow,
             identity,
-            1,
+            /*issued_at_ms*/ 1,
         )),
-        2,
-        2,
+        /*now_ms*/ 2,
+        /*elapsed_ms*/ 2,
     ) {
         ScreeningDecision::Release(screened) => *screened,
         result => panic!("unexpected fixture verdict: {result:?}"),
@@ -53,7 +53,7 @@ pub(crate) fn screening_fixture(
     let digest = ContentDigest::of(text.as_bytes());
     let transformation = TransformationBinding::new(
         ContractId::new("fixture").unwrap(),
-        1,
+        /*pipeline_version*/ 1,
         digest,
         digest,
         digest,
@@ -71,7 +71,12 @@ pub(crate) fn screening_fixture(
         digest,
     )
     .unwrap();
-    let threshold = ThresholdIdentity::new(ContractId::new("fixture").unwrap(), 1, digest).unwrap();
+    let threshold = ThresholdIdentity::new(
+        ContractId::new("fixture").unwrap(),
+        /*profile_version*/ 1,
+        digest,
+    )
+    .unwrap();
     let identity = VerdictIdentity::new(model, threshold);
     let session = ScreeningSession::new(
         target.clone(),
@@ -235,9 +240,20 @@ fn pf_30_s01_host_notice_requires_live_controller_confirmation() {
         },
     )
     .unwrap();
-    let notice =
-        HostAuthorizationNotice::from_human_confirmation(&controller, request.clone(), 1).unwrap();
+    let notice = HostAuthorizationNotice::from_human_confirmation(
+        &controller,
+        request.clone(),
+        /*now_unix_seconds*/ 1,
+    )
+    .unwrap();
     assert!(notice.body().contains("has not been applied"));
     assert_eq!(view.snapshot_for_agent(thread).unwrap(), snapshot);
-    assert!(HostAuthorizationNotice::from_human_confirmation(&controller, request, -1).is_err());
+    assert!(
+        HostAuthorizationNotice::from_human_confirmation(
+            &controller,
+            request,
+            /*now_unix_seconds*/ -1
+        )
+        .is_err()
+    );
 }
