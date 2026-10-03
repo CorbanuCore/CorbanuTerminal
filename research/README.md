@@ -37,6 +37,16 @@ is the umbrella plan for the completed
 the planned release-matrix adoption increment. These are Routine
 execution records, not product sprints or release artifacts.
 
+## Experimental planner
+
+[`experimental-planner/experimentalPlanner.html`](experimental-planner/experimentalPlanner.html)
+proposes a LangGraph workflow service with a Danus-inspired evidence and dependency
+ledger, using GPU kernel optimization as its first experiment domain. It includes
+architecture diagrams, data models, admission and recovery algorithms, checker
+qualification, measurement policy, and twelve phased sprint packages. This is an
+internal research/design artifact; its implementation sprints and GPU qualification
+remain proposed, and it does not authorize or report completed product work.
+
 ## Research tools
 
 [`tools/diarize_recording.py`](tools/diarize_recording.py) produced the working
