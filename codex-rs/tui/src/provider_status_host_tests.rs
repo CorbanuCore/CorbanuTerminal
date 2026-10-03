@@ -71,7 +71,8 @@ async fn correlated_corbanu_metadata_resolves_without_credential_reread() {
         .build()
         .await
         .unwrap();
-    config.model_providers = codex_model_provider_info::built_in_model_providers(None);
+    config.model_providers =
+        codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None);
     let host = ProviderStatusHost::from_config(
         &config,
         ProviderAccountMetadata {
@@ -155,7 +156,8 @@ async fn local_and_no_auth_custom_providers_are_ready_without_enrollment() {
         .build()
         .await
         .unwrap();
-    config.model_providers = codex_model_provider_info::built_in_model_providers(None);
+    config.model_providers =
+        codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None);
     config.model_providers.insert(
         "no-auth-custom".into(),
         ModelProviderInfo {

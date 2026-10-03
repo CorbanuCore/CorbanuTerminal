@@ -72,7 +72,7 @@ fn request(label: &str, scope: &str, revocations: &RevocationState) -> Credentia
         scope,
         revocations,
         CredentialHttpMethod::Post,
-        CredentialDestination::https("api.openai.com", 443).expect("destination"),
+        CredentialDestination::https("api.openai.com", /*port*/ 443).expect("destination"),
         "/v1/responses",
     )
 }
@@ -118,8 +118,8 @@ fn request_for(
             BTreeMap::new(),
         )
         .expect("grant scope"),
-        90,
-        200,
+        /*issued_at_unix_seconds*/ 90,
+        /*expires_at_unix_seconds*/ 200,
         text("scoped-vault-grant"),
     )
     .expect("grant");
@@ -130,10 +130,10 @@ fn request_for(
         method,
         destination,
         path,
-        100,
-        180,
+        /*issued_at_unix_seconds*/ 100,
+        /*expires_at_unix_seconds*/ 180,
         revocations,
-        None,
+        /*triggering_receipt*/ None,
     )
     .expect("request")
 }
@@ -172,11 +172,16 @@ fn scoped_resolution_exposes_secret_only_inside_redacted_callback() {
     let mut callback_ran = false;
 
     vault
-        .with_scoped_credential(&credential, 110, &revocations, |secret| {
-            assert_eq!(secret, SECRET);
-            callback_ran = true;
-            Ok(())
-        })
+        .with_scoped_credential(
+            &credential,
+            /*now_unix_seconds*/ 110,
+            &revocations,
+            |secret| {
+                assert_eq!(secret, SECRET);
+                callback_ran = true;
+                Ok(())
+            },
+        )
         .expect("scoped resolution");
 
     assert!(callback_ran);
@@ -207,20 +212,30 @@ fn callback_error_cancellation_and_panic_are_contained_and_secret_free() {
         ),
     ] {
         let error = vault
-            .with_scoped_credential(&credential, 110, &revocations, |secret| {
-                assert_eq!(secret, SECRET);
-                Err(callback_result)
-            })
+            .with_scoped_credential(
+                &credential,
+                /*now_unix_seconds*/ 110,
+                &revocations,
+                |secret| {
+                    assert_eq!(secret, SECRET);
+                    Err(callback_result)
+                },
+            )
             .expect_err("callback must fail");
         assert_eq!(error, expected);
         assert!(!format!("{error:?} {error}").contains(SECRET));
     }
 
     let panic_error = vault
-        .with_scoped_credential(&credential, 110, &revocations, |secret| {
-            assert_eq!(secret, SECRET);
-            panic!("callback panic containing {secret}")
-        })
+        .with_scoped_credential(
+            &credential,
+            /*now_unix_seconds*/ 110,
+            &revocations,
+            |secret| {
+                assert_eq!(secret, SECRET);
+                panic!("callback panic containing {secret}")
+            },
+        )
         .expect_err("panic must be contained");
     assert_eq!(panic_error, ScopedCredentialError::CallbackPanicked);
     assert!(!format!("{panic_error:?} {panic_error}").contains(SECRET));
@@ -248,7 +263,12 @@ fn missing_deleted_and_ineligible_credentials_fail_closed() {
     );
     assert_eq!(
         vault
-            .with_scoped_credential(&credential, 110, &revocations, |_| Ok(()),)
+            .with_scoped_credential(
+                &credential,
+                /*now_unix_seconds*/ 110,
+                &revocations,
+                |_| Ok(()),
+            )
             .expect_err("missing credential"),
         ScopedCredentialError::NotFound
     );
@@ -265,7 +285,12 @@ fn missing_deleted_and_ineligible_credentials_fail_closed() {
         .expect("add ineligible credential");
     assert_eq!(
         vault
-            .with_scoped_credential(&credential, 110, &revocations, |_| Ok(()),)
+            .with_scoped_credential(
+                &credential,
+                /*now_unix_seconds*/ 110,
+                &revocations,
+                |_| Ok(()),
+            )
             .expect_err("ineligible type"),
         ScopedCredentialError::CredentialTypeDenied
     );
@@ -273,7 +298,12 @@ fn missing_deleted_and_ineligible_credentials_fail_closed() {
     vault.delete(LABEL).expect("delete credential");
     assert_eq!(
         vault
-            .with_scoped_credential(&credential, 110, &revocations, |_| Ok(()),)
+            .with_scoped_credential(
+                &credential,
+                /*now_unix_seconds*/ 110,
+                &revocations,
+                |_| Ok(()),
+            )
             .expect_err("deleted credential"),
         ScopedCredentialError::NotFound
     );
@@ -294,10 +324,15 @@ fn managed_claude_token_is_denied_before_the_scoped_callback_runs() {
     let mut callback_ran = false;
 
     let error = vault
-        .with_scoped_credential(&credential, 110, &revocations, |_| {
-            callback_ran = true;
-            Ok(())
-        })
+        .with_scoped_credential(
+            &credential,
+            /*now_unix_seconds*/ 110,
+            &revocations,
+            |_| {
+                callback_ran = true;
+                Ok(())
+            },
+        )
         .expect_err("managed token must be denied to generic capabilities");
 
     assert_eq!(error, ScopedCredentialError::CredentialTypeDenied);
@@ -314,7 +349,12 @@ fn expired_and_revoked_authority_is_revalidated_before_decryption() {
 
     assert_eq!(
         vault
-            .with_scoped_credential(&credential, 180, &initial_revocations, |_| Ok(()),)
+            .with_scoped_credential(
+                &credential,
+                /*now_unix_seconds*/ 180,
+                &initial_revocations,
+                |_| Ok(()),
+            )
             .expect_err("expired capability"),
         ScopedCredentialError::Expired
     );
@@ -326,14 +366,19 @@ fn expired_and_revoked_authority_is_revalidated_before_decryption() {
                 human(),
                 RevocationTarget::Grant { grant_id },
                 RevocationReason::HumanRequest,
-                110,
+                /*created_at_unix_seconds*/ 110,
             )
             .expect("revocation event"),
         )
         .expect("apply revocation");
     assert_eq!(
         vault
-            .with_scoped_credential(&credential, 111, &revoked, |_| Ok(()),)
+            .with_scoped_credential(
+                &credential,
+                /*now_unix_seconds*/ 111,
+                &revoked,
+                |_| Ok(()),
+            )
             .expect_err("revoked capability"),
         ScopedCredentialError::Revoked
     );
@@ -451,7 +496,7 @@ fn broker_authorization() -> ProtectedModeAuthorization {
         },
         "c".repeat(64).as_str(),
         "b".repeat(64).as_str(),
-        110,
+        /*now_unix_seconds*/ 110,
     )
     .expect("authorization")
 }
@@ -475,7 +520,7 @@ fn pf_27_s04_vault_backend_resolves_only_inside_typed_broker_dispatch() {
     .expect("backend");
     let runtime = BrokerRuntime::new(
         "d".repeat(64),
-        BrokerRuntimeConfig::bounded(1, 1).expect("config"),
+        BrokerRuntimeConfig::bounded(/*max_sessions*/ 1, /*max_in_flight*/ 1).expect("config"),
         broker_authorization(),
         backend,
         TestAudit,
@@ -489,7 +534,7 @@ fn pf_27_s04_vault_backend_resolves_only_inside_typed_broker_dispatch() {
         run_id: "run-1".to_string(),
         run_generation: 1,
     };
-    let peer = ObservedPeer::from_os("worker-uid-501", 42).expect("peer");
+    let peer = ObservedPeer::from_os("worker-uid-501", /*process_id*/ 42).expect("peer");
     let handle = runtime
         .register_session(
             binding.clone(),
@@ -503,7 +548,7 @@ fn pf_27_s04_vault_backend_resolves_only_inside_typed_broker_dispatch() {
     let frame = BrokerChannelMac::from_secret([9; 32])
         .sign(
             binding,
-            1,
+            /*sequence*/ 1,
             BrokerOperation::OpenAiResponses {
                 credential: broker_reference,
                 request: OpenAiResponsesOperation::new("/v1/responses").expect("operation"),
@@ -541,7 +586,7 @@ fn assert_broker_operation_outside_authority_is_denied(
 
     let runtime = BrokerRuntime::new(
         "e".repeat(64),
-        BrokerRuntimeConfig::bounded(1, 1).expect("config"),
+        BrokerRuntimeConfig::bounded(/*max_sessions*/ 1, /*max_in_flight*/ 1).expect("config"),
         broker_authorization(),
         backend,
         TestAudit,
@@ -555,7 +600,7 @@ fn assert_broker_operation_outside_authority_is_denied(
         run_id: "run-authority-test".to_string(),
         run_generation: 1,
     };
-    let peer = ObservedPeer::from_os("worker-uid-501", 43).expect("peer");
+    let peer = ObservedPeer::from_os("worker-uid-501", /*process_id*/ 43).expect("peer");
     let handle = runtime
         .register_session(
             binding.clone(),
@@ -569,7 +614,7 @@ fn assert_broker_operation_outside_authority_is_denied(
     let frame = BrokerChannelMac::from_secret([8; 32])
         .sign(
             binding,
-            1,
+            /*sequence*/ 1,
             BrokerOperation::OpenAiResponses {
                 credential: broker_reference,
                 request: OpenAiResponsesOperation::new(operation_path).expect("operation"),
@@ -592,7 +637,7 @@ fn pf_27_s04_vault_backend_enforces_authorized_method_destination_and_path() {
             SCOPE,
             &revocations,
             CredentialHttpMethod::Get,
-            CredentialDestination::https("api.openai.com", 443).expect("destination"),
+            CredentialDestination::https("api.openai.com", /*port*/ 443).expect("destination"),
             "/v1/responses",
         ),
         "/v1/responses",
@@ -603,7 +648,7 @@ fn pf_27_s04_vault_backend_enforces_authorized_method_destination_and_path() {
             SCOPE,
             &revocations,
             CredentialHttpMethod::Post,
-            CredentialDestination::https("api.anthropic.com", 443).expect("destination"),
+            CredentialDestination::https("api.anthropic.com", /*port*/ 443).expect("destination"),
             "/v1/responses",
         ),
         "/v1/responses",
@@ -614,7 +659,7 @@ fn pf_27_s04_vault_backend_enforces_authorized_method_destination_and_path() {
             SCOPE,
             &revocations,
             CredentialHttpMethod::Post,
-            CredentialDestination::https("api.openai.com", 443).expect("destination"),
+            CredentialDestination::https("api.openai.com", /*port*/ 443).expect("destination"),
             "/v1/chat/completions",
         ),
         "/v1/responses",

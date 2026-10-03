@@ -44,7 +44,7 @@ fn unicode_boundary_item() -> ResponseItem {
 fn pf_30_s01_native_unicode_segments_reassemble_once_and_keep_wire_bytes_stable() {
     let item = unicode_boundary_item();
     let mut ingress = NativeIngress::default();
-    ingress.observe(std::slice::from_ref(&item), 1);
+    ingress.observe(std::slice::from_ref(&item), /*retrieved_at_unix_ms*/ 1);
     let candidate = ingress.screening_candidate(&item).unwrap();
     let segments: Vec<_> = candidate.segments().map(<[u8]>::to_vec).collect();
     assert!(segments.len() > 1);
@@ -63,7 +63,10 @@ fn pf_30_s01_native_unicode_segments_reassemble_once_and_keep_wire_bytes_stable(
     // Arrival order may vary; authenticated indices must recover original order.
     for (index, bytes) in segments.into_iter().enumerate().rev() {
         session
-            .ingest(SegmentEnvelope::new(&target, index as u32, bytes), 1)
+            .ingest(
+                SegmentEnvelope::new(&target, index as u32, bytes),
+                /*elapsed_ms*/ 1,
+            )
             .unwrap();
         assert!(ingress.project(std::slice::from_ref(&item)).is_err());
     }
@@ -72,17 +75,20 @@ fn pf_30_s01_native_unicode_segments_reassemble_once_and_keep_wire_bytes_stable(
             target,
             VerdictKind::Allow,
             identity,
-            1,
+            /*issued_at_ms*/ 1,
         )),
-        2,
-        2,
+        /*now_ms*/ 2,
+        /*elapsed_ms*/ 2,
     ) else {
         panic!("complete synthetic fixture must release");
     };
     ingress.admit_screened(&item, *screened).unwrap();
     let projected = ingress.project(std::slice::from_ref(&item)).unwrap();
     let before = serde_json::to_vec(&projected).unwrap();
-    ingress.observe(std::slice::from_ref(&item), 99);
+    ingress.observe(
+        std::slice::from_ref(&item),
+        /*retrieved_at_unix_ms*/ 99,
+    );
     assert_eq!(
         serde_json::to_vec(&ingress.project(std::slice::from_ref(&item)).unwrap()).unwrap(),
         before
@@ -112,7 +118,7 @@ fn pf_30_s01_native_partial_duplicate_reordered_and_cross_source_segments_never_
     ] {
         let item = message(format!("{}{}", "a".repeat(600), "b".repeat(300)));
         let mut ingress = NativeIngress::default();
-        ingress.observe(std::slice::from_ref(&item), 1);
+        ingress.observe(std::slice::from_ref(&item), /*retrieved_at_unix_ms*/ 1);
         let candidate = ingress.screening_candidate(&item).unwrap();
         let (mut session, target, identity) = screening_fixture(
             candidate.source(),
@@ -138,7 +144,7 @@ fn pf_30_s01_native_partial_duplicate_reordered_and_cross_source_segments_never_
             }
             "cross-source" => {
                 let mut other = NativeIngress::default();
-                other.observe(std::slice::from_ref(&item), 1);
+                other.observe(std::slice::from_ref(&item), /*retrieved_at_unix_ms*/ 1);
                 let other = other.screening_candidate(&item).unwrap();
                 let (_, other_target, _) =
                     screening_fixture(other.source(), other.normalized(), other.segment_count());
@@ -150,7 +156,7 @@ fn pf_30_s01_native_partial_duplicate_reordered_and_cross_source_segments_never_
             _ => unreachable!(),
         }
         for segment in segments {
-            let _ = session.ingest(segment, 1);
+            let _ = session.ingest(segment, /*elapsed_ms*/ 1);
         }
         assert!(
             matches!(
@@ -159,10 +165,10 @@ fn pf_30_s01_native_partial_duplicate_reordered_and_cross_source_segments_never_
                         target,
                         VerdictKind::Allow,
                         identity,
-                        1
+                        /*issued_at_ms*/ 1
                     )),
-                    2,
-                    2,
+                    /*now_ms*/ 2,
+                    /*elapsed_ms*/ 2,
                 ),
                 ScreeningDecision::Withhold(_)
             ),
@@ -179,10 +185,14 @@ fn pf_30_s01_native_partial_duplicate_reordered_and_cross_source_segments_never_
 fn pf_30_s01_complete_screened_bytes_cannot_substitute_another_segment_contract() {
     let item = message("a".repeat(700));
     let mut ingress = NativeIngress::default();
-    ingress.observe(std::slice::from_ref(&item), 1);
+    ingress.observe(std::slice::from_ref(&item), /*retrieved_at_unix_ms*/ 1);
     let candidate = ingress.screening_candidate(&item).unwrap();
     assert!(candidate.segment_count() > 1);
-    let (_, target, identity) = screening_fixture(candidate.source(), candidate.normalized(), 1);
+    let (_, target, identity) = screening_fixture(
+        candidate.source(),
+        candidate.normalized(),
+        /*segment_count*/ 1,
+    );
     let mut session = ScreeningSession::new(
         target.clone(),
         ScreeningBudget {
@@ -197,8 +207,12 @@ fn pf_30_s01_complete_screened_bytes_cannot_substitute_another_segment_contract(
     .unwrap();
     session
         .ingest(
-            SegmentEnvelope::new(&target, 0, candidate.normalized().as_bytes().to_vec()),
-            1,
+            SegmentEnvelope::new(
+                &target,
+                /*index*/ 0,
+                candidate.normalized().as_bytes().to_vec(),
+            ),
+            /*elapsed_ms*/ 1,
         )
         .unwrap();
     let ScreeningDecision::Release(screened) = session.finish(
@@ -206,10 +220,10 @@ fn pf_30_s01_complete_screened_bytes_cannot_substitute_another_segment_contract(
             target,
             VerdictKind::Allow,
             identity,
-            1,
+            /*issued_at_ms*/ 1,
         )),
-        2,
-        2,
+        /*now_ms*/ 2,
+        /*elapsed_ms*/ 2,
     ) else {
         panic!("synthetic alternate contract");
     };
@@ -269,7 +283,7 @@ fn pf_30_s01_one_admitted_source_cannot_cover_missing_or_new_native_variants() {
     ingress.register_call("new-producer", SourceKind::Plugin);
     ingress.observe(
         &[good.clone(), unknown_tool.clone(), ResponseItem::Other],
-        1,
+        /*retrieved_at_unix_ms*/ 1,
     );
     let candidate = ingress.screening_candidate(&good).unwrap();
     ingress

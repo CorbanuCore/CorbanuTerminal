@@ -30,7 +30,12 @@ impl ProviderAuthController {
         }
         match result {
             ClaudeManagedTokenResult::Stored => {
-                self.reconcile_claude(flow, ClaudeAccountMethod::ManagedToken, attempt_id, None)
+                self.reconcile_claude(
+                    flow,
+                    ClaudeAccountMethod::ManagedToken,
+                    attempt_id,
+                    /*process_id*/ None,
+                )
             }
             ClaudeManagedTokenResult::Invalid => self.fail_claude(
                 flow,
@@ -89,7 +94,12 @@ impl ProviderAuthController {
         let flow = flow.clone();
         match result {
             ClaudeExistingLoginResult::Selected => {
-                self.reconcile_claude(flow, ClaudeAccountMethod::ClaudeCodeLogin, attempt_id, None)
+                self.reconcile_claude(
+                    flow,
+                    ClaudeAccountMethod::ClaudeCodeLogin,
+                    attempt_id,
+                    /*process_id*/ None,
+                )
             }
             ClaudeExistingLoginResult::LoginRequired => self.start_claude_process(flow, attempt_id),
             ClaudeExistingLoginResult::Unavailable => self.fail_claude(

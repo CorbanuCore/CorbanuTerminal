@@ -312,7 +312,7 @@ impl ProtectedRuntime {
         drop(revocations);
         let (permit, _) = journal.reserve_dispatch(
             self.event_context()?,
-            None,
+            /*causal_parent*/ None,
             request,
             identity,
             deduplication_key,

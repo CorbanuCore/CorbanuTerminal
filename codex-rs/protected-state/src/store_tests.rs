@@ -11,7 +11,7 @@ use std::process::Command;
 fn owner() -> JournalOwner {
     JournalOwner::new(
         PolicyPrincipal::new(PrincipalKind::Service, "test-controller").unwrap(),
-        1,
+        /*owner_generation*/ 1,
         BoundedText::new("test-key").unwrap(),
     )
     .unwrap()
@@ -51,19 +51,19 @@ fn pf20_s03_enrollment_cas_restart_and_wrong_namespace() {
     let (temp, root) = fixture();
     assert_eq!(IntegrityRootStore::load(&root), Ok(None));
     assert_eq!(root.load_policy(), Err(RootError::Invalid));
-    let first = checkpoint(1);
-    root.compare_and_store(None, &first).unwrap();
+    let first = checkpoint(/*sequence*/ 1);
+    root.compare_and_store(/*expected*/ None, &first).unwrap();
     assert_eq!(
-        root.compare_and_store(None, &checkpoint(2)),
+        root.compare_and_store(/*expected*/ None, &checkpoint(/*sequence*/ 2)),
         Err(IntegrityRootError::Conflict)
     );
     let mut wrong = first.clone();
     wrong.record_sha256 = "b".repeat(64);
     assert_eq!(
-        root.compare_and_store(Some(&wrong), &checkpoint(2)),
+        root.compare_and_store(Some(&wrong), &checkpoint(/*sequence*/ 2)),
         Err(IntegrityRootError::Conflict)
     );
-    root.compare_and_store(Some(&first), &checkpoint(2))
+    root.compare_and_store(Some(&first), &checkpoint(/*sequence*/ 2))
         .unwrap();
     assert_eq!(
         ControllerRoot::open(&temp.path().join("registry"), &temp.path().join("storage"))
@@ -75,7 +75,7 @@ fn pf20_s03_enrollment_cas_restart_and_wrong_namespace() {
         ControllerRoot::open(&temp.path().join("registry"), &temp.path().join("storage")).unwrap();
     assert_eq!(
         IntegrityRootStore::load(&restarted),
-        Ok(Some(checkpoint(2)))
+        Ok(Some(checkpoint(/*sequence*/ 2)))
     );
     assert_eq!(
         ControllerRoot::enroll(
@@ -91,28 +91,28 @@ fn pf20_s03_enrollment_cas_restart_and_wrong_namespace() {
 #[test]
 fn pf20_s03_foreign_binding_generation_and_sequence_never_commit() {
     let (_temp, root) = fixture();
-    let first = checkpoint(1);
-    root.compare_and_store(None, &first).unwrap();
-    let mut wrong = checkpoint(2);
+    let first = checkpoint(/*sequence*/ 1);
+    root.compare_and_store(/*expected*/ None, &first).unwrap();
+    let mut wrong = checkpoint(/*sequence*/ 2);
     wrong.owner_generation = 2;
     assert_eq!(
         root.compare_and_store(Some(&first), &wrong),
         Err(IntegrityRootError::Invalid)
     );
-    wrong = checkpoint(2);
+    wrong = checkpoint(/*sequence*/ 2);
     wrong.integrity_key_id = BoundedText::new("foreign").unwrap();
     assert_eq!(
         root.compare_and_store(Some(&first), &wrong),
         Err(IntegrityRootError::Invalid)
     );
-    wrong = checkpoint(2);
+    wrong = checkpoint(/*sequence*/ 2);
     wrong.run_generation = 0;
     assert_eq!(
         root.compare_and_store(Some(&first), &wrong),
         Err(IntegrityRootError::Invalid)
     );
     assert_eq!(
-        root.compare_and_store(Some(&first), &checkpoint(3)),
+        root.compare_and_store(Some(&first), &checkpoint(/*sequence*/ 3)),
         Err(IntegrityRootError::Invalid)
     );
     assert_eq!(IntegrityRootStore::load(&root), Ok(Some(first)));
@@ -136,16 +136,16 @@ fn pf20_s03_open_directory_permission_drift_latches_unavailable() {
 fn pf20_s03_successor_overflow_and_generation_regression_deny() {
     let binding = Enrollment::journal(&owner()).0;
     let old = Checkpoint::Journal(checkpoint(u64::MAX));
-    let next = Checkpoint::Journal(checkpoint(1));
+    let next = Checkpoint::Journal(checkpoint(/*sequence*/ 1));
     assert_eq!(
         next.validate_successor(Some(&old), &binding),
         Err(RootError::Invalid)
     );
-    let mut old = checkpoint(1);
+    let mut old = checkpoint(/*sequence*/ 1);
     old.policy_generation = 3;
     old.run_generation = 4;
     for (policy, run) in [(2, 4), (3, 3)] {
-        let mut next = checkpoint(2);
+        let mut next = checkpoint(/*sequence*/ 2);
         next.policy_generation = policy;
         next.run_generation = run;
         assert_eq!(
@@ -244,7 +244,8 @@ fn pf20_s03_policy_anchor_retains_exact_existing_payload() {
         fs::create_dir(dir).unwrap();
         fs::set_permissions(dir, fs::Permissions::from_mode(0o700)).unwrap();
     }
-    let owner = AuthoritativeStateOwner::new("1".repeat(64), "controller", 1).unwrap();
+    let owner =
+        AuthoritativeStateOwner::new("1".repeat(64), "controller", /*owner_generation*/ 1).unwrap();
     let root = ControllerRoot::enroll(
         &policy_registry,
         &policy_storage,
@@ -263,7 +264,7 @@ fn pf20_s03_policy_anchor_retains_exact_existing_payload() {
         state_sha256: "a".repeat(64),
         commit_sha256: "b".repeat(64),
     };
-    root.compare_policy(None, &value).unwrap();
+    root.compare_policy(/*expected*/ None, &value).unwrap();
     assert_eq!(root.load_policy(), Ok(Some(value.clone())));
     drop(root);
     assert_eq!(
@@ -303,7 +304,8 @@ fn pf20_s03_data_rollback_rejected_by_real_pf41_journal() {
     use codex_utils_absolute_path::AbsolutePathBuf;
     use std::sync::Arc;
     let (temp, root) = fixture();
-    root.compare_and_store(None, &checkpoint(1)).unwrap();
+    root.compare_and_store(/*expected*/ None, &checkpoint(/*sequence*/ 1))
+        .unwrap();
     // An empty restored data directory cannot overrule the intact controller's
     // sequence-one root. This is real journal recovery, not a mocked consumer.
     let journal_path =
@@ -314,7 +316,11 @@ fn pf20_s03_data_rollback_rejected_by_real_pf41_journal() {
         Arc::new(root),
         JournalConfig::default(),
     );
-    let report = journal.recover(1, 1, &RevocationState::default());
+    let report = journal.recover(
+        /*expected_policy_generation*/ 1,
+        /*expected_run_generation*/ 1,
+        &RevocationState::default(),
+    );
     assert!(matches!(
         report.state,
         codex_security_audit::RecoveryState::Blocked(_)
@@ -338,7 +344,10 @@ fn pf20_s03_every_failed_durability_boundary_withholds_and_latches() {
         } else {
             IntegrityRootError::Unavailable
         };
-        assert_eq!(root.compare_and_store(None, &checkpoint(1)), Err(error));
+        assert_eq!(
+            root.compare_and_store(/*expected*/ None, &checkpoint(/*sequence*/ 1)),
+            Err(error)
+        );
         assert_eq!(
             IntegrityRootStore::load(&root),
             Err(IntegrityRootError::Unavailable)
@@ -355,7 +364,7 @@ fn pf20_s03_every_failed_durability_boundary_withholds_and_latches() {
             // qualification: the kernel still retains the rename here.
             Fault::DirectorySync | Fault::AfterDurable => assert_eq!(
                 IntegrityRootStore::load(&reopened.unwrap()),
-                Ok(Some(checkpoint(1)))
+                Ok(Some(checkpoint(/*sequence*/ 1)))
             ),
         }
     }

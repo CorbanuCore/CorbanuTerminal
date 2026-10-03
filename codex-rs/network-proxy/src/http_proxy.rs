@@ -806,7 +806,11 @@ async fn http_plain_proxy(
     }
 
     if app_state.scoped_credential_route_matches_host(&host) {
-        return Ok(json_blocked(&host, REASON_POLICY_DENIED, None));
+        return Ok(json_blocked(
+            &host,
+            REASON_POLICY_DENIED,
+            /*details*/ None,
+        ));
     }
 
     if let Err(err) =

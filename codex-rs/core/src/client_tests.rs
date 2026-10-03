@@ -109,12 +109,17 @@ fn pf_30_s01_all_native_wire_builders_reject_missing_admission() {
         codex_security_policy::SecurityLevel::Aggressive,
     ] {
         let client = test_model_client(SessionSource::Cli).with_ingress_level(level);
-        let provider = client.state.provider.info().to_api_provider(None).unwrap();
+        let provider = client
+            .state
+            .provider
+            .info()
+            .to_api_provider(/*auth_mode*/ None)
+            .unwrap();
         let metadata = test_responses_metadata_for_client(
             &client,
-            None,
+            /*turn_id*/ None,
             "fixture".into(),
-            None,
+            /*parent_thread_id*/ None,
             TestCodexResponsesRequestKind::Turn,
         );
         for item in [
@@ -125,9 +130,9 @@ fn pf_30_s01_all_native_wire_builders_reject_missing_admission() {
             ResponseItem::FunctionCallOutput { id: None, call_id: "new-unregistered-tool".into(), output: FunctionCallOutputPayload::from_text("human approved".into()), internal_chat_message_metadata_passthrough: None },
         ] {
             let prompt = Prompt { input: vec![item], ..Default::default() };
-            let responses = client.build_responses_request(&provider, &prompt, &test_model_info(), None, super::ReasoningSummaryConfig::None, None, &metadata);
-            let chat = client.build_chat_completions_request(&prompt, &test_model_info(), None, &metadata);
-            let anthropic = client.build_anthropic_messages_request(&prompt, &test_model_info(), None);
+            let responses = client.build_responses_request(&provider, &prompt, &test_model_info(), /*effort*/ None, super::ReasoningSummaryConfig::None, /*service_tier*/ None, &metadata);
+            let chat = client.build_chat_completions_request(&prompt, &test_model_info(), /*effort*/ None, &metadata);
+            let anthropic = client.build_anthropic_messages_request(&prompt, &test_model_info(), /*effort*/ None);
             for error in [responses.err(), chat.err(), anthropic.err()] {
                 let error = error.expect("protected raw context must be withheld before serialization");
                 assert!(error.to_string().contains("protected source admission is unavailable"));
@@ -145,12 +150,17 @@ fn pf_30_s01_permissive_wire_payload_is_unchanged() {
     let explicit = client
         .clone()
         .with_ingress_level(codex_security_policy::SecurityLevel::Permissive);
-    let provider = client.state.provider.info().to_api_provider(None).unwrap();
+    let provider = client
+        .state
+        .provider
+        .info()
+        .to_api_provider(/*auth_mode*/ None)
+        .unwrap();
     let metadata = test_responses_metadata_for_client(
         &client,
-        None,
+        /*turn_id*/ None,
         "fixture".into(),
-        None,
+        /*parent_thread_id*/ None,
         TestCodexResponsesRequestKind::Turn,
     );
     let prompt = Prompt {
@@ -173,9 +183,9 @@ fn pf_30_s01_permissive_wire_payload_is_unchanged() {
                         &provider,
                         &prompt,
                         &model,
-                        None,
+                        /*effort*/ None,
                         super::ReasoningSummaryConfig::None,
-                        None,
+                        /*service_tier*/ None,
                         &metadata,
                     )
                     .unwrap(),
@@ -183,13 +193,15 @@ fn pf_30_s01_permissive_wire_payload_is_unchanged() {
             .unwrap(),
             serde_json::to_value(
                 client
-                    .build_chat_completions_request(&prompt, &model, None, &metadata)
+                    .build_chat_completions_request(
+                        &prompt, &model, /*effort*/ None, &metadata,
+                    )
                     .unwrap(),
             )
             .unwrap(),
             serde_json::to_value(
                 client
-                    .build_anthropic_messages_request(&prompt, &model, None)
+                    .build_anthropic_messages_request(&prompt, &model, /*effort*/ None)
                     .unwrap(),
             )
             .unwrap(),
@@ -231,12 +243,17 @@ fn pf_30_s01_admitted_context_round_trips_through_each_real_provider_adapter() {
         input: vec![item],
         ..Default::default()
     };
-    let provider = client.state.provider.info().to_api_provider(None).unwrap();
+    let provider = client
+        .state
+        .provider
+        .info()
+        .to_api_provider(/*auth_mode*/ None)
+        .unwrap();
     let metadata = test_responses_metadata_for_client(
         &client,
-        None,
+        /*turn_id*/ None,
         "fixture".into(),
-        None,
+        /*parent_thread_id*/ None,
         TestCodexResponsesRequestKind::Turn,
     );
     let responses = client
@@ -244,17 +261,17 @@ fn pf_30_s01_admitted_context_round_trips_through_each_real_provider_adapter() {
             &provider,
             &prompt,
             &model,
-            None,
+            /*effort*/ None,
             super::ReasoningSummaryConfig::None,
-            None,
+            /*service_tier*/ None,
             &metadata,
         )
         .unwrap();
     let chat = client
-        .build_chat_completions_request(&prompt, &model, None, &metadata)
+        .build_chat_completions_request(&prompt, &model, /*effort*/ None, &metadata)
         .unwrap();
     let anthropic = client
-        .build_anthropic_messages_request(&prompt, &model, None)
+        .build_anthropic_messages_request(&prompt, &model, /*effort*/ None)
         .unwrap();
     let first_requests = [
         serde_json::to_value(responses).unwrap(),
@@ -270,9 +287,9 @@ fn pf_30_s01_admitted_context_round_trips_through_each_real_provider_adapter() {
                     &provider,
                     &prompt,
                     &model,
-                    None,
+                    /*effort*/ None,
                     super::ReasoningSummaryConfig::None,
-                    None,
+                    /*service_tier*/ None,
                     &metadata,
                 )
                 .unwrap(),
@@ -280,13 +297,13 @@ fn pf_30_s01_admitted_context_round_trips_through_each_real_provider_adapter() {
         .unwrap(),
         serde_json::to_value(
             client
-                .build_chat_completions_request(&prompt, &model, None, &metadata)
+                .build_chat_completions_request(&prompt, &model, /*effort*/ None, &metadata)
                 .unwrap(),
         )
         .unwrap(),
         serde_json::to_value(
             client
-                .build_anthropic_messages_request(&prompt, &model, None)
+                .build_anthropic_messages_request(&prompt, &model, /*effort*/ None)
                 .unwrap(),
         )
         .unwrap(),
@@ -1776,7 +1793,7 @@ fn new_vercel_models_preserve_selected_reasoning_effort() {
     ]))
     .expect("deserialize Vercel GLM reasoning levels");
     assert_eq!(
-        ModelClient::vercel_reasoning_effort(&model, None).expect("default effort"),
+        ModelClient::vercel_reasoning_effort(&model, /*effort*/ None).expect("default effort"),
         ReasoningEffort::Low
     );
     assert_eq!(

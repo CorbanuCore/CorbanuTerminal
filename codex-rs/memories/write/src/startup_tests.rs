@@ -722,7 +722,7 @@ async fn pf_30_s04_protected_worker_denies_canary_and_consumes_finite_retry() ->
         assert!(server.received_requests().await.unwrap().is_empty());
         assert!(
             db.memories()
-                .list_stage1_outputs_for_global(10)
+                .list_stage1_outputs_for_global(/*n*/ 10)
                 .await?
                 .is_empty()
         );
@@ -771,7 +771,7 @@ async fn pf_30_s04_worker_eof_never_persists_partial_json() -> anyhow::Result<()
     assert_eq!(response.requests().len(), 1);
     assert!(
         db.memories()
-            .list_stage1_outputs_for_global(10)
+            .list_stage1_outputs_for_global(/*n*/ 10)
             .await?
             .is_empty()
     );

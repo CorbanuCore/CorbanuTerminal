@@ -86,7 +86,7 @@ async fn run_case(case: Case) -> Result<()> {
         Case::Resume => run_resume(&fixture, &tmux).await,
         Case::ExactReplacement => run_exact_replacement(&fixture, &tmux).await,
         _ => {
-            let session = tmux.new_session(fixture.session("pf55-case", false))?;
+            let session = tmux.new_session(fixture.session("pf55-case", /*resume*/ false))?;
             let pane = session.primary_pane();
             wait_chat_ready(pane)?;
             run_open_case(case, &fixture, pane).await?;
@@ -230,7 +230,7 @@ async fn run_open_case(case: Case, fixture: &Fixture, pane: &TmuxPane<'_>) -> Re
 }
 
 async fn run_fresh(fixture: &Fixture, tmux: &TmuxServer) -> Result<()> {
-    let first = tmux.new_session(fixture.session("pf55-fresh", false))?;
+    let first = tmux.new_session(fixture.session("pf55-fresh", /*resume*/ false))?;
     let pane = first.primary_pane();
     pane.wait_stable_contains("Choose a provider account", READY_TIMEOUT)?;
     configure_onboarding_key(pane, "Provider: PF55 A PF55_A_API_KEY", &fixture.a_key)?;
@@ -241,7 +241,7 @@ async fn run_fresh(fixture: &Fixture, tmux: &TmuxServer) -> Result<()> {
     exit_tui(pane)?;
     first.wait_for_exit(READY_TIMEOUT)?;
 
-    let second = tmux.new_session(fixture.session("pf55-fresh-restart", false))?;
+    let second = tmux.new_session(fixture.session("pf55-fresh-restart", /*resume*/ false))?;
     let pane = second.primary_pane();
     wait_chat_ready(pane)?;
     submit_and_wait(pane, "first success request", "PF55 response")?;
@@ -257,7 +257,7 @@ async fn run_managed_restart(fixture: &Fixture, tmux: &TmuxServer) -> Result<()>
         .into_iter()
         .enumerate()
     {
-        let session = tmux.new_session(fixture.session(name, false))?;
+        let session = tmux.new_session(fixture.session(name, /*resume*/ false))?;
         let pane = session.primary_pane();
         wait_chat_ready(pane)?;
         inspect_provider(pane, "PF55 Managed", "Enabled · configured · current")?;
@@ -273,14 +273,14 @@ async fn run_managed_restart(fixture: &Fixture, tmux: &TmuxServer) -> Result<()>
 }
 
 async fn run_resume(fixture: &Fixture, tmux: &TmuxServer) -> Result<()> {
-    let first = tmux.new_session(fixture.session("pf55-resume-source", false))?;
+    let first = tmux.new_session(fixture.session("pf55-resume-source", /*resume*/ false))?;
     let pane = first.primary_pane();
     wait_chat_ready(pane)?;
     submit_and_wait(pane, "resume source request", "PF55 response")?;
     exit_tui(pane)?;
     first.wait_for_exit(READY_TIMEOUT)?;
 
-    let resumed = tmux.new_session(fixture.session("pf55-resumed", true))?;
+    let resumed = tmux.new_session(fixture.session("pf55-resumed", /*resume*/ true))?;
     let pane = resumed.primary_pane();
     wait_chat_ready(pane)?;
     submit_and_wait(pane, "resumed exact request", "PF55 response")?;
@@ -293,7 +293,7 @@ async fn run_resume(fixture: &Fixture, tmux: &TmuxServer) -> Result<()> {
 }
 
 async fn run_exact_replacement(fixture: &Fixture, tmux: &TmuxServer) -> Result<()> {
-    let first = tmux.new_session(fixture.session("pf55-replace", false))?;
+    let first = tmux.new_session(fixture.session("pf55-replace", /*resume*/ false))?;
     let pane = first.primary_pane();
     wait_chat_ready(pane)?;
     open_manager(pane)?;
@@ -308,7 +308,7 @@ async fn run_exact_replacement(fixture: &Fixture, tmux: &TmuxServer) -> Result<(
     exit_tui(pane)?;
     first.wait_for_exit(READY_TIMEOUT)?;
 
-    let second = tmux.new_session(fixture.session("pf55-replace-restart", false))?;
+    let second = tmux.new_session(fixture.session("pf55-replace-restart", /*resume*/ false))?;
     let pane = second.primary_pane();
     wait_chat_ready(pane)?;
     submit_and_wait(pane, "replacement request", "PF55 response")?;
@@ -405,7 +405,12 @@ impl Fixture {
         if resume {
             command = command.arg("resume").arg("--last");
         }
-        SessionSpec::new(name, TerminalSize::new(140, 44), command).current_dir(&self.repo_root)
+        SessionSpec::new(
+            name,
+            TerminalSize::new(/*columns*/ 140, /*rows*/ 44),
+            command,
+        )
+        .current_dir(&self.repo_root)
     }
 }
 
@@ -631,7 +636,7 @@ fn register_evidence(tmux: &TmuxServer, home: &Path, binary: &Path) -> Result<()
 
 fn capture(fixture: &Fixture, pane: &TmuxPane<'_>) -> Result<()> {
     let viewport = pane.capture_viewport()?;
-    let scrollback = pane.capture_scrollback_tail(4_000)?;
+    let scrollback = pane.capture_scrollback_tail(/*lines*/ 4_000)?;
     let directory =
         PathBuf::from("target/tmux-artifacts").join(format!("pf55-{}", fixture.scenario));
     fs::create_dir_all(&directory)?;

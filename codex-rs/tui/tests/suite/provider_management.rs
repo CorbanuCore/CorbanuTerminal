@@ -68,7 +68,7 @@ async fn tmux_astra_selection_cancel_restart_and_request() -> Result<()> {
     for restart in [false, true] {
         let session = tmux.new_session(SessionSpec::new(
             "astra-selector",
-            TerminalSize::new(140, 44),
+            TerminalSize::new(/*columns*/ 140, /*rows*/ 44),
             CommandSpec::new(&fixture.binary)
                 .env("CODEX_HOME", fixture.home.path())
                 .env("CORBANU_HOME", fixture.home.path())
@@ -200,7 +200,7 @@ async fn tmux_ambient_model_picker_offers_only_glm() -> Result<()> {
     let tmux = fixture.tmux()?;
     let session = tmux.new_session(SessionSpec::new(
         "ambient-glm-only",
-        TerminalSize::new(140, 44),
+        TerminalSize::new(/*columns*/ 140, /*rows*/ 44),
         CommandSpec::new(&fixture.binary)
             .env("CODEX_HOME", fixture.home.path())
             .env("CORBANU_HOME", fixture.home.path())
@@ -919,7 +919,7 @@ fn session_spec(
 ) -> SessionSpec {
     SessionSpec::new(
         name,
-        TerminalSize::new(140, 44),
+        TerminalSize::new(/*columns*/ 140, /*rows*/ 44),
         CommandSpec::new(binary)
             .env("CODEX_HOME", home)
             .env("CORBANU_HOME", home)
@@ -1121,7 +1121,7 @@ fn capture_success(
     canaries: &[&str],
 ) -> Result<()> {
     let viewport = pane.capture_viewport()?;
-    let scrollback = pane.capture_scrollback_tail(4_000)?;
+    let scrollback = pane.capture_scrollback_tail(/*lines*/ 4_000)?;
     let directory = PathBuf::from("target/tmux-artifacts").join(format!("pf54-{scenario}"));
     fs::create_dir_all(&directory)?;
     fs::write(directory.join("viewport.txt"), &viewport)?;
