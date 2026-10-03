@@ -188,7 +188,7 @@ async fn accounting_responses_ws_native_ws_prefix_then_http_fallback() -> anyhow
         .send(vec![event("response.usage", usage(Some(0)))])
         .await?;
     let db = test.codex.state_db().unwrap();
-    wait_observations(&db, 1).await?;
+    wait_turn_observations(&db, 1).await?;
     drop(first);
     let http = gate.next().await?;
     assert!(http.http);

@@ -282,6 +282,24 @@ pub fn with_prewarm(
 ///
 /// An observation's `source` identifies the evidence, not the attempt, so the
 /// two are joined through the store's own attempt column.
+/// Wait until the turn's own observations - not the startup prewarm's - reach
+/// `count`. Counting the prewarm's let a wait for the turn's first usage return
+/// before that usage was committed, whenever the prewarm's write landed first.
+pub async fn wait_turn_observations(
+    db: &codex_state::StateRuntime,
+    count: usize,
+) -> anyhow::Result<()> {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if turn_observations(db).await?.len() >= count {
+                return anyhow::Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await?
+}
+
 pub async fn turn_observations(
     db: &codex_state::StateRuntime,
 ) -> anyhow::Result<Vec<codex_state::accounting::Observation>> {
