@@ -59,3 +59,24 @@ tonight's install grants it.
 was exercised twice tonight, on the external-volume installation and on the
 local probe, before the final install. Both removals verified absence in both
 domains afterwards.
+
+## Addendum, 2026-10-03: counts, arming receipt and current state
+
+Added by the Task Node integration worker for task
+`task_cf2cc91ff71a095a3baa93df1c3d91f8`. The text above is unchanged.
+
+- Qualification: increment D functional qualification reached **13 of 13 cases
+  and 39 of 39 variants** against candidate `6f3c2d705`, recorded in commit
+  `cab24b2cbc` (PF-80-S01 ledger). The fixes are `c782a340f` and `6f3c2d705`;
+  the launchd guard is `93f60eee8`.
+- Arming receipt: [owner-armed-20260917.md](owner-armed-20260917.md). Armed at
+  generation 1, scope `fixture-only`, decision `owner-recurrence-domain-20260917`
+  revision 3; `hold: null`, `firing: interval`, `health` `watchdog / ok`.
+- Read-only observation, 2026-10-03T10:38Z: `launchctl print
+  user/501/com.corbanu.initiative-owner` shows `domain = user/501`, `run interval
+  = 30 seconds`, `runs = 35024`, `last exit code = 0`. The live `tick.json` reads
+  `hold: null`, `firing: interval`, `ticks: 44228`, `consecutive_errors: 0`,
+  last success 29 s before the read. The live config has `manager_enabled: false`.
+- Recurrence stays **fixture-only**. `tmux-workers` scope and the manager are not
+  armed by this work. Later manager-enable work is recorded separately in
+  [owner-manager-enabled-20261002.md](owner-manager-enabled-20261002.md).

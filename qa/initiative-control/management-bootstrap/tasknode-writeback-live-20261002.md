@@ -1,11 +1,12 @@
-# Task Node live writeback, 2026-10-02/03: enrolled, five tasks requested, send waits for acceptance
+# Task Node live writeback, 2026-10-02/03: enrolled, first live event delivered once
 
-Status (round 2, 2026-10-03): **enrolled; no event sent.** The delivery-control
-workspace `corbanu-initiative-control` is enrolled through the vault-backed enroll
-command. Five new PF-80 tasks were requested, and Task Node generated them as
-**Proposed**. No task is accepted, so nothing was sent. No task stage changed,
-nothing was accepted, no reward was claimed, and batch posting, TUI recording and
-recurring writeback stay **OFF**. Round 1 (2026-10-02, below) stopped before any write.
+Status (round 3, 2026-10-03): **one live event delivered; the same-key re-send
+made no second write.** Travis accepted the five PF-80 tasks. `PF-80-S01` now maps
+to `task_80628c7…`, and event `cc-57beba1c…52cc13` reached the server once
+(revision 1, one item for the account). Evidence submissions are recorded in the
+round 3 section below. No task stage was moved and no reward was claimed. Batch
+posting, TUI recording and recurring writeback stay **OFF**. Round 1 (2026-10-02)
+stopped before any write; round 2 enrolled the workspace and requested the tasks.
 
 - Class: product initiative, PF-80-S01 (`in_progress`), active plan
   `docs/plans/active/initiative-delivery-control.md`.
@@ -300,3 +301,77 @@ To send the first event:
 
 Still OFF: batch posting, TUI recording, recurring writeback, task stage moves,
 reward claims.
+
+## Round 3, 2026-10-03: tasks accepted, mapping repointed, first live event sent
+
+Worker: Task Node integration worker, Claude Code, round 3. Times 2026-10-03
+10:30–11:00 UTC. Travis, 2026-10-03: "I have accepted the tasks." Reads used the
+real binary (0.1.48) with `CORBANU_HOME`/`CODEX_HOME` = `~/.corbanu`, profile `null`.
+`tasknode status` confirmed account `acct_oauth_73e1ab2f9f7cd01d3ee6230e`, GitHub
+`IridiumMaster`; counts outstanding 8, verification 0, refused 2, rewarded 3.
+
+### Task state, read-only, 10:32Z
+
+All five tasks read **Accepted** (`statusKey accepted`, `canSubmitInitialEvidence`
+true, `canSubmitVerificationEvidence` false). Corbanu did not accept, refuse,
+cancel or move any of them.
+
+### Mapping repoint (reviewed edit)
+
+No CLI command edits `task_mappings`; earlier repoints (PF-76-S01, 2026-09-16)
+were direct edits of the live `control.json`. This one is a single-line byte
+replacement, checked by parsing before and after:
+
+- Backup: `state/control.json.bak-20261003` (byte copy of the previous file).
+- `PF-80-S01`: `task_789a0f3bd75b41d1eca20cae698f04cf` (Rewarded) →
+  `task_80628c7accf770686bdd04fc4cb78bb5` (Accepted). Every other key and byte
+  is unchanged (`diff` shows one line).
+- SHA-256 `0ee45fb7…6ce1` → `7c10ef45d52869149155deb10788fd994737113f3b0449f5559182a12859784a`.
+- `tasknode.enabled` stays `false`. `PF-79-S01`/`PF-79-S02` still point at the
+  Rewarded parent; PF-79 beta work is paused, so they were left alone.
+- No timer runs `tick.py` on this Mac, so the new mapping does not enqueue
+  anything by itself.
+
+### Live event and same-key re-send
+
+Source: `scripts/initiative_control` exported from `577526daab` (`git archive`),
+`test_tasknode` 43/43 OK on that export. Python: the delivery-control venv (3.14.4).
+
+1. `enqueue` of one run report (`run_id tasknode-round3-20261003`, status
+   `working`, commit `577526daab36f31055ba3cd678dc4cc503d22d62`) → event
+   `cc-57beba1c9d8a83e20fef572689d9a6d9d705c6daedb09583e0ce5dcf0152cc13`,
+   `taskIds ["task_80628c7accf770686bdd04fc4cb78bb5"]`, workspace
+   `corbanu-initiative-control`.
+2. `send --dry-run`: blockers only `posting_disabled` and
+   `live_authority_entitlement_owner_and_target_lifecycle_unverified` (the two
+   the live sender allows), local enrollment true, request digest
+   `fffede1f1ae07f0d2a29c23484eeff64e2e7da754398b3c82c47b1fbb37682ce`.
+3. Owner activation (0600, private, not committed): owner
+   `travis-decision-tasknode-writeback-20261002`, bound to that event ID, digest,
+   workspace, task and origin, 30-minute expiry. Gates set from evidence: identity
+   (status read above), entitlement and enrollment (server-verified enrollment,
+   round 2), target lifecycle (task Accepted with evidence actions), payload review
+   (content checked against the ledger: no secrets, paths, URLs or completion claim).
+4. `send --live` with `--corbanu-bin <real binary> --vault-session-home ~/.corbanu
+   --vault-api-key-home <terminal home>`, 10:40:52Z, exit 0:
+   `http_status 200`, `outcome delivered`, `network_writes true`, response
+   `ok true`, `event_id_matches true`, `deleted false`,
+   `idempotency_key` = the event ID.
+5. Same command again, same event ID and key, exit 0: the stored receipt came
+   back with `replayed true`, `network_writes false`, same `created_at`
+   `2026-10-03T10:40:52+00:00`. No vault read and no POST happen on this path.
+6. Server read-back, `GET …/campaign-tracker/activity` (session from the same
+   reviewed vault reader, held in memory, nothing printed): by event ID **1 item**;
+   whole account **1 item**, the same ID, `revision 1`, `receivedAt
+   2026-10-03T10:40:52.246Z`, `handleAtExecution iridiumeagle`, `taskIds
+   [task_80628c7…]`. **No duplicate exists on the server.**
+
+Receipts, `state/send-receipts/` (0600, retained, not committed):
+`<id>.intent.json` SHA-256 `05ed028be4a7a83ef75bc627a9a3a0dba44fb5ab4527bc156ea9f412876311f1`,
+`<id>.result.json` SHA-256 `00fad5d6b4f019a9cf5f2608a1c3b7c409bba69d28e928bc48fd253864eef6d3`.
+`tasknode.py status`: the one outbox record reads `delivered`, 0 attempts, no error.
+Worker copies of the report, dry run, both send outputs and the read-back are in
+`.codex-work/tasknode-round3/`.
+
+Still OFF: batch posting (`enabled=false`), TUI recording, recurring writeback,
+task stage moves, reward claims.
