@@ -1277,7 +1277,9 @@ class ManagerLoopCoordinatorTests(unittest.TestCase):
         packet = self.c.begin_manager(priority=True)
         ids = [event["id"] for event in packet["events"]]
         self.assertEqual(["returned:work", "stall:old:0"], ids[:2])
-        self.assertEqual(["history-29", "history-28"], ids[2:4])
+        # Two aging slots keep the oldest history moving, then the newest first.
+        self.assertEqual(["history-00", "history-01", "history-29", "history-28"], ids[2:6])
+        self.assertEqual(["history-02", "history-03"], packet["oldest_unclaimed"][:2])
         self.assertEqual(24, len(ids))
         # Every pending event is counted by kind; the unclaimed ones stay pending.
         self.assertEqual(sum(packet["pending_event_kinds"].values()), packet["pending_event_count"])
@@ -1288,9 +1290,21 @@ class ManagerLoopCoordinatorTests(unittest.TestCase):
     def test_returned_event_of_a_settled_action_is_ordinary_history(self):
         self.returned("work")
         self.c.verify("work", {"owner": "fixture"}, True)
-        self.c.event({"id": "newest"})
+        for name in ("a", "b", "c", "newest"):
+            self.c.event({"id": name})
         packet = self.c.begin_manager(priority=True)
-        self.assertEqual("newest", packet["events"][0]["id"])
+        # Not urgent: as one of the two oldest it takes an aging slot; were it urgent,
+        # "a" would have taken the second aging slot instead of coming last.
+        self.assertEqual(["returned:work", "verified:work", "newest", "c", "b", "a"],
+                         [e["id"] for e in packet["events"]])
+
+    def test_supplied_run_id_must_be_a_uuid(self):
+        self.c.event({"id": "work"})
+        for bad in ("x", 7, "../m"):
+            with self.assertRaises((Rejected, ValueError, AttributeError, TypeError)):
+                self.c.begin_manager(priority=True, run_id=bad)
+        run = "0f9e3c1a-8a52-4c62-9d1e-2b3f4a5b6c7d"
+        self.assertEqual(run, self.c.begin_manager(priority=True, run_id=run)["manager_run"])
 
     def test_fifo_claim_is_unchanged_without_priority(self):
         for index in range(30):

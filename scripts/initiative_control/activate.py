@@ -194,6 +194,8 @@ def owner_activation(args):
             expected["lane"] = "manager"
         if previous:
             previous = dict(previous, domain=owner.installation_domain(previous))
+            # A schedule root keeps its lane: never reinstall a manager lane as an owner lane.
+            f.require(previous.get("lane", "owner") == lane, "installation_lane_conflict")
             if getattr(args, "repin", False):
                 f.require(previous["phase"] == "uninstalled" and presence == "absent",
                           "repin_requires_uninstalled")

@@ -37,6 +37,9 @@ VERDICT_FIELDS = frozenset({"action", "accepted", "reason"})
 PRIORITY_EVENTS = ("stall:", "manager-stall:", "manager-failed:",
                    "dispatch-reconciled:", "owner-wake:")
 MANAGER_BATCH = 24
+# Oldest pending events taken right after the urgent ones in a prioritized claim,
+# so a steady stream of newer events can never starve the backlog.
+MANAGER_AGING = 2
 
 
 def event_kind(event_id):
@@ -614,11 +617,15 @@ class Coordinator:
             require(sprint["status"] in RESERVED and not sprint.get("archived"), "sprint not reserved")
             require(self._dependencies(state, action["sprint"]), "unfinished dependency")
 
-    def begin_manager(self, timeout_seconds=600, priority=False):
+    def begin_manager(self, timeout_seconds=600, priority=False, run_id=None):
         """Claim up to 24 pending events. FIFO by default; with priority, returned
-        results, stalls, failures and wake-ups first (oldest first), then the newest
-        history. Unclaimed events stay pending and are counted by kind."""
+        results, stalls, failures and wake-ups first (oldest first), then the two
+        oldest others (aging: the backlog always progresses), then the newest.
+        Unclaimed events stay pending and are counted by kind. A caller may supply
+        the run ID so its artifacts exist before the claim does."""
         require(1 <= timeout_seconds <= 3600, "invalid manager timeout")
+        require(run_id is None or (isinstance(run_id, str) and str(uuid.UUID(run_id)) == run_id),
+                "invalid manager run ID")
         with self.mutation("begin_manager", {}) as (db, state):
             require(state["enabled"], "dispatch paused")
             require(state["manager"] is None, "manager cycle already owned")
@@ -632,13 +639,14 @@ class Coordinator:
                         return action is not None and action["status"] == "returned"
                     return event_id.startswith(PRIORITY_EVENTS)
                 first = [row for row in rows if urgent(row["id"])]
-                rest = [row for row in reversed(rows) if not urgent(row["id"])]
-                pending = (first + rest)[:MANAGER_BATCH]
+                rest = [row for row in rows if not urgent(row["id"])]
+                aging, rest = rest[:MANAGER_AGING], rest[MANAGER_AGING:]
+                pending = (first + aging + rest[::-1])[:MANAGER_BATCH]
             else:
                 pending = db.execute("SELECT seq,id,body FROM events WHERE meaningful=1 AND consumed IS NULL "
                                      "ORDER BY seq LIMIT ?", (MANAGER_BATCH,)).fetchall()
             require(bool(pending), "no meaningful pending event")
-            run = {"id": str(uuid.uuid4()), "revision": state["revision"] + 1,
+            run = {"id": run_id or str(uuid.uuid4()), "revision": state["revision"] + 1,
                    "events": [row["seq"] for row in pending], "deadline": self.clock() + timeout_seconds}
             state["manager"] = run
             packet = {"state_revision": run["revision"], "manager_run": run["id"],
@@ -656,6 +664,8 @@ class Coordinator:
                 for row in rows:
                     kinds[event_kind(row["id"])] = kinds.get(event_kind(row["id"]), 0) + 1
                 packet["pending_event_kinds"] = kinds
+                claimed = {row["seq"] for row in pending}
+                packet["oldest_unclaimed"] = [row["id"] for row in rows if row["seq"] not in claimed][:16]
             # Validate before committing ownership, not while printing afterward.
             encoded(packet, limit=240000)
         return packet

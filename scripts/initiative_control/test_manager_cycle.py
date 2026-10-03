@@ -9,6 +9,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 import uuid
@@ -249,7 +250,13 @@ class CycleTests(unittest.TestCase):
             rewrite_decision(receipt, lambda d: d.update(actions=[], no_action_reason="done"))
             f.write_json(Path(receipt["artifacts"]["receipt"]), receipt)
             return receipt
-        result = self.cycle(idle)
+        later = time.time() + m.COMPACT_ACCEPTED_AFTER + 60  # past the follow-up grace
+        with self.c.mutation("fixture", {}) as (_, state):
+            # The seed allocation also carries a lifecycle kind (integrate): it is
+            # compacted only once its sprint is completed.
+            state["sprints"]["PF80"]["status"] = "completed"
+        with patch.object(f, "vault_token", side_effect=AssertionError("no credentials")):
+            result = invocation(self.root, idle, clock=lambda: later)
         self.assertEqual("accepted", result["status"], result)
         self.assertEqual(["bootstrap"], m.load_json(Path(result["artifacts"]) / "compacted.json"))
         self.assertIs(True, self.c.snapshot()["allocations"]["bootstrap"]["inputs"]["consumed"])
@@ -494,15 +501,17 @@ class CycleTests(unittest.TestCase):
 
     def test_oversized_original_holds_before_launch(self):
         self.c.event({"id": "large", "text": "é" * 20000})
-        # Claimed newest first, the oversized event leads the batch. It is never
-        # skipped, truncated or consumed, even though the older event would fit:
-        # the cycle holds before any launch.
+        # The earlier small event can progress, but the oversized event cannot be
+        # skipped or consumed on the next cycle even if later events would fit:
+        # the prioritized claim's aging slots take the oldest events first.
+        self.assertEqual("accepted", self.cycle()["status"])
+        self.c.event({"id": "later-small"})
         result = self.cycle()
         self.assertEqual("owner_hold", result["status"])
         self.assertIsNotNone(self.c.snapshot()["manager"])
         self.assertEqual("briefing_size_hold", result["reason"])
-        self.assertEqual(0, self.calls)
-        self.assertEqual({"event-1", "large"}, {row[0] for row in self.pending()})
+        self.assertEqual(1, self.calls)
+        self.assertEqual(["large", "later-small"], [row[0] for row in self.pending()])
         self.assertTrue((Path(result["artifacts"]) / "claim.json").exists())
 
     def test_byte_bounded_batches_consume_only_selected_events_after_restart(self):

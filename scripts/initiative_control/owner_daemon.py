@@ -21,10 +21,15 @@ WORKER_KINDS = frozenset({"implement", "revise", "review", "design", "functional
                           "evidence_review", "repair", "reconcile"})
 # Seconds for an idle worker to exit after /quit once its RETURN is recorded.
 CLOSE_TIMEOUT = 20
-# Automatic manager cycles (the manager lane): settings recorded in config.
+# Automatic manager cycles (the manager lane): settings recorded in config. Its
+# runs_dir must be dedicated to automatic cycles: recovery and release treat a
+# manager claim whose cycle directory is there as the lane's own.
 MANAGER_SETTINGS = frozenset({"binary", "binary_sha256", "auth_vault_home", "runs_dir",
                               "timeout_seconds", "min_interval_seconds", "daily_cap"})
 MANAGER_STATE, MANAGER_LOG = "manager-auto.json", "manager-cycles.jsonl"
+# An unchanged wake situation (a result still awaiting a verdict, nothing queued)
+# is raised again at most once per window, never in a loop.
+WAKE_REPEAT_SECONDS = 12 * 3600
 IN_FLIGHT = frozenset({"dispatching", "dispatch_uncertain", "dispatched", "running"})
 
 
@@ -100,8 +105,8 @@ def manager_settings(value):
     return value
 
 
-def disposable_worktree(path):
-    """A linked Git worktree with a detached HEAD: created for one piece of work.
+def disposable_head(path):
+    """The detached HEAD commit of a linked Git worktree, else None.
 
     An integration worktree has a branch checked out (HEAD is a ref), and a main
     checkout has a .git directory; neither is disposable. Reads files only.
@@ -112,9 +117,28 @@ def disposable_worktree(path):
         text = f.read_file(marker, 4096).decode()
         f.require(text.startswith("gitdir: ") and text.count("\n") <= 1, "not_linked_worktree")
         head = f.read_file(Path(text[len("gitdir: "):].strip()) / "HEAD", 4096).decode().strip()
-        return len(head) in (40, 64) and all(c in "0123456789abcdef" for c in head)
+        return head if len(head) in (40, 64) and all(c in "0123456789abcdef" for c in head) else None
     except (f.LaunchError, OSError, UnicodeError, ValueError):
-        return False
+        return None
+
+
+def disposable_worktree(path, base_commit=None):
+    """A disposable worktree created for one piece of work: a linked worktree whose
+    detached HEAD is the work's frozen base commit (when one is given)."""
+    head = disposable_head(path)
+    return head is not None and (base_commit is None or head == base_commit)
+
+
+def adoptable_worktree(config, inputs):
+    """Default routing (and its claim-time re-check) runs an action only in a
+    configured worktree created for it: detached at the allocation's frozen
+    base_commit. A branch checkout, such as the main integration worktree, or
+    any worktree whose HEAD moved stays on the hand lane."""
+    from owner_tmux import worker_runtime
+    worktree = worker_runtime(inputs)["worktree"]
+    base = inputs.get("base_commit")
+    return (worktree in config["worktrees"] and isinstance(base, str)
+            and disposable_worktree(worktree, base))
 
 
 def artifact(root, relative, value):
@@ -996,6 +1020,11 @@ class Kernel:
         f.require(action["kind"] in WORKER_KINDS, "unsupported_worker_kind")
         runtime = worker_runtime(action["inputs"])
         f.require(runtime["worktree"] in self.config["worktrees"], "unallocated_worktree")
+        if (self.dispatcher == "owner" and action["status"] == "prepared"
+                and (self.root / "routes" / (digest(["route", action["id"]]) + ".json")).exists()
+                and not self.db.execute("SELECT 1 FROM operations WHERE action_id=?", (action["id"],)).fetchone()):
+            # Default-routed: the worktree must still be the one created for it.
+            f.require(adoptable_worktree(self.config, action["inputs"]), "worktree_not_disposable")
         # Freeze the same action assignment used by NativeOwner, including scope.
         assignment = encoded({k: action[k] for k in
                               ("kind", "workstream", "sprint", "scope", "inputs", "timeout_seconds")})
@@ -1091,7 +1120,6 @@ class Kernel:
         worktree; never an integration branch checkout). Explicit hand assignments,
         claims and everything outside that scope stay hand. One audited handoff.
         """
-        from owner_tmux import worker_runtime
         if (self.dispatcher != "owner" or "dispatch_control" not in snapshot
                 or not snapshot["enabled"] or snapshot["manager"] is not None):
             return snapshot
@@ -1109,11 +1137,11 @@ class Kernel:
                                        (digest(["tmux", action["id"], "claim"]),)).fetchone()):
                 continue
             try:
-                worktree = worker_runtime(action["inputs"])["worktree"]
+                if not adoptable_worktree(self.config, action["inputs"]):
+                    continue
             except (f.LaunchError, KeyError, TypeError, ValueError):
                 continue
-            if (worktree not in self.config["worktrees"] or not disposable_worktree(worktree)
-                    or reserved & set(action["resources"])):
+            if reserved & set(action["resources"]):
                 continue
             # Route only what the claim gate would admit now; contention, a paused or
             # unreserved sprint or a stale allocation leaves it hand, not held.
@@ -1142,7 +1170,11 @@ class Kernel:
             self.c._handoff(selected, snapshot["revision"], evidence)
         except Rejected:
             # A concurrent coordinator change; nothing was routed. Retry next tick.
-            pass
+            return self.c.snapshot()
+        for key in selected:
+            # Marks the action as default-routed: its worktree is re-checked at claim.
+            artifact(self.root, "routes/" + digest(["route", key]) + ".json",
+                     {"action": key, "evidence": evidence})
         return self.c.snapshot()
 
     def workers(self, adapter):
@@ -1326,20 +1358,20 @@ def manager_status(schedule_root):
 
 
 def idle_allocations(state):
-    """Retry candidates when no work is queued: live allocations whose actions all
-    finished without an accepted result. Fresh allocations announce themselves
-    with their own event; accepted ones are compacted."""
+    """Candidates when no work is queued: live allocations never used, or whose
+    actions all finished without an accepted result (a retry may be due).
+    Allocations with accepted work are done and are compacted later."""
     if any(a["status"] == "prepared" or (a["status"] in IN_FLIGHT and a.get("dispatch_owner") == "owner")
            for a in state["actions"].values()):
         return []
     used = {}
     for action in state["actions"].values():
         used.setdefault(manager_cycle.allocation_of(action), []).append(action)
-    return sorted([key, digest(allocation), sorted([a["id"], a["status"]] for a in used[key])]
+    return sorted([key, digest(allocation), sorted([a["id"], a["status"]] for a in used.get(key, []))]
                   for key, allocation in state["allocations"].items()
                   if allocation["inputs"].get("consumed") is not True
-                  and "complete_sprint" not in allocation["kinds"] and used.get(key)
-                  and all(a["status"] in TERMINAL - {"accepted"} for a in used[key]))
+                  and "complete_sprint" not in allocation["kinds"]
+                  and all(a["status"] in TERMINAL - {"accepted"} for a in used.get(key, [])))
 
 
 def manager_context(cycle, meta, state, triggers, holds, status, settings, compacted):
@@ -1420,8 +1452,10 @@ def manager_lane(config_path, schedule_root, clock=time.time, runner=None):
         wake = ({"kind": "awaiting_verdict", "actions": awaiting} if awaiting else
                 {"kind": "no_prepared_work", "allocations": idle_allocations(state)})
         if awaiting or wake["allocations"]:
-            # One wake per distinct situation: an unchanged one is a duplicate event ID.
-            event = {"id": "owner-wake:" + wake["kind"] + ":" + digest(wake)[:24], **wake}
+            # One wake per distinct situation and repeat window: an unchanged one is a
+            # duplicate event ID until the window turns.
+            event = {"id": "owner-wake:" + wake["kind"] + ":" + digest(wake)[:24] + ":"
+                     + str(int(now // WAKE_REPEAT_SECONDS)), **wake}
             if c.event(event):
                 triggers = [wake["kind"]]
                 append_log(log, {"event": "wake", "at": now, "wake": event["id"]})
@@ -1439,10 +1473,12 @@ def manager_lane(config_path, schedule_root, clock=time.time, runner=None):
     append_log(log, {"event": "cycle_started", "at": now, "cycle": cycle, "triggers": triggers,
                      "generation": meta["control_generation"], "day_count": status["day_count"],
                      "daily_cap": settings["daily_cap"]})
+    generation = meta["control_generation"]
     result = (runner or manager_cycle.run_cycle)(
         state=root, runs_dir=Path(settings["runs_dir"]), binary=binary,
         auth_vault_home=Path(settings["auth_vault_home"]), owner_context=directory / "owner-context.json",
-        timeout=settings["timeout_seconds"])
+        timeout=settings["timeout_seconds"],
+        acceptance_gate=lambda: admitted_generation(config_path, generation))
     artifact(schedule_root, "cycles/" + cycle + "/result.json", result)
     record = {"event": "cycle_finished", "at": clock(), "cycle": cycle, "status": result["status"],
               "manager_run": result.get("manager_run"),
@@ -1456,45 +1492,91 @@ def manager_lane(config_path, schedule_root, clock=time.time, runner=None):
         return {"state": "CYCLE", "lane": "manager", "cycle": cycle, "status": result["status"],
                 "manager_run": result.get("manager_run"), "prepared": record["prepared"],
                 "verdicts": record["verdicts"]}
-    reconciled = None
-    if result.get("phase") == "briefing" and result.get("manager_run"):
-        # Refused before any launch: release the coordinator so worker dispatch
-        # continues. The lane still holds; a model or launch failure keeps the claim.
-        c.fail_manager(result["manager_run"], "owner_auto_cycle_" + str(result.get("reason")) +
-                       "; no inference launched")
-        reconciled = result["manager_run"]
+    reconciled, release_refusal = None, None
+    try:
+        # The cycle returned, so its launcher already ran its own shutdown. Release
+        # the coordinator claim only with that proven (no recorded or path-matching
+        # process alive, sockets dead), so worker dispatch continues while the lane
+        # holds. Otherwise the claim stays for evidence-backed --recover.
+        released = release_manager_claim(c, settings, "owner_auto_cycle_failed: " + str(result.get("reason")),
+                                         result.get("manager_run"))
+        reconciled = released["manager_run"]
+    except (f.LaunchError, Rejected, OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+        release_refusal = str(exc) if isinstance(exc, (f.LaunchError, Rejected)) else type(exc).__name__
     append_log(log, {"event": "hold", "at": clock(), "cycle": cycle, "reason": "manager_cycle_failed",
-                     "refusal": result.get("reason"), "released_manager_run": reconciled})
+                     "refusal": result.get("reason"), "released_manager_run": reconciled,
+                     "release_refusal": release_refusal})
     return {"state": "HOLD", "lane": "manager", "reason": "manager_cycle_failed", "cycle": cycle,
             "refusal": result.get("reason"), "phase": result.get("phase"),
             "released_manager_run": reconciled}
 
 
-def reconcile_manager_lane(config_path):
-    """Recovery for a held manager lane: release a coordinator manager claim left by
-    an automatic cycle only when its launcher is proven stopped (recorded process
-    gone, TMUX socket absent or refusing). Never relaunches or accepts anything."""
-    config = load(config_path)
-    settings = config.get("manager_cycle")
-    f.require(settings is not None, "manager_cycle_not_configured")
-    c = ExistingCoordinator(config["coordinator"])
-    run = c.snapshot()["manager"]
-    if run is None:
-        return {"manager_run": None}
-    cycle = f.no_links(Path(settings["runs_dir"]) / ("m-" + run["id"]))
-    f.require(cycle.is_dir(), "manager_run_not_automatic")
+def admitted_generation(config_path, generation, wait=15.0):
+    """Acceptance gate for an automatic cycle: the owner is still armed at the
+    generation that started it. Read-only (no owner lock, so a running owner tick
+    never blocks it); a briefly busy database is retried for up to `wait` seconds."""
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            with activation_store(config_path, readonly=True) as (_, db, _meta):
+                kernel = Kernel(config_path)
+                kernel.db = db
+                meta = kernel.admit()
+            f.require(meta["control_generation"] == generation, "owner_generation_changed")
+            return meta
+        except (sqlite3.OperationalError, f.LaunchError) as exc:
+            busy = isinstance(exc, sqlite3.OperationalError) or str(exc) in {
+                "preview_database_busy", "preview_read_budget_exceeded"}
+            if not busy or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.5)
+
+
+def launchers_stopped(cycle):
+    """Proof that every launcher of a manager cycle directory is gone: its recorded
+    process (if any) is not alive, no process names its launch directory and its
+    TMUX socket is absent or refusing. Missing evidence is never proof by itself."""
     launches = sorted(p for p in (cycle / "launches").iterdir()) if (cycle / "launches").is_dir() else []
     table = f.processes()
+    listing = subprocess.run(["/bin/ps", "-axo", "pid=,command="], capture_output=True, text=True,
+                             timeout=5, env={"PATH": f.SAFE_PATH})
+    f.require(listing.returncode == 0, "process_inspection_failed")
     checked = []
     for launch in launches:
         proc = (f.strict_json(f.read_file(launch / "process.json", 4096, private=True))
                 if (launch / "process.json").exists() else {})
-        alive = proc.get("pid") in table and table[proc["pid"]][3] == proc.get("started")
+        recorded = proc.get("pid") in table and table[proc["pid"]][3] == proc.get("started")
+        named = sorted(int(line.split(None, 1)[0]) for line in listing.stdout.splitlines()
+                       if str(launch) in line and int(line.split(None, 1)[0]) != os.getpid())
         sock = socket_state(launch / "tmux.sock")
-        f.require(not alive and sock in ("absent", "stale"), "manager_launcher_running")
-        checked.append({"launch": launch.name, "pid": proc.get("pid"), "socket": sock})
-    c.fail_manager(run["id"], "owner_auto_cycle_recovered")
+        f.require(not recorded and not named and sock in ("absent", "stale"), "manager_launcher_running")
+        checked.append({"launch": launch.name, "pid": proc.get("pid"),
+                        "process_record": bool(proc), "socket": sock})
+    return checked
+
+
+def release_manager_claim(c, settings, reason, expected=None):
+    """Release the coordinator's manager claim of an automatic cycle (one whose
+    directory is in the lane's dedicated runs_dir) once its launchers are proven
+    stopped. Never relaunches or accepts anything."""
+    run = c.snapshot()["manager"]
+    if run is None:
+        return {"manager_run": None}
+    f.require(expected in (None, run["id"]), "manager_run_changed")
+    cycle = f.no_links(Path(settings["runs_dir"]) / ("m-" + run["id"]))
+    f.require(cycle.is_dir(), "manager_run_not_automatic")
+    checked = launchers_stopped(cycle)
+    c.fail_manager(run["id"], reason)
     return {"manager_run": run["id"], "launches": checked}
+
+
+def reconcile_manager_lane(config_path):
+    """Recovery for a held manager lane (crash or failed cycle)."""
+    config = load(config_path)
+    settings = config.get("manager_cycle")
+    f.require(settings is not None, "manager_cycle_not_configured")
+    return release_manager_claim(ExistingCoordinator(config["coordinator"]), settings,
+                                 "owner_auto_cycle_recovered")
 
 
 def schedule_pins(python, runtime, config, expected_python):
@@ -1609,8 +1691,9 @@ def publication_preflight(publish_state):
 
 def publish_schedule(root):
     receipt = load(root / "installation.json")
-    f.write_json(f.private_dir(receipt["publish_state"]) / "owner-recurrence.json",
-                 observe_schedule(root))
+    # The manager lane publishes its own file, never over the owner lane's.
+    name = "manager-recurrence.json" if receipt.get("lane") == "manager" else "owner-recurrence.json"
+    f.write_json(f.private_dir(receipt["publish_state"]) / name, observe_schedule(root))
 
 
 def scheduled_tick(root, recover=None):
@@ -1624,7 +1707,8 @@ def scheduled_tick(root, recover=None):
         if recover is not None:
             f.require(isinstance(recover, str) and 0 < len(recover.strip()) <= 1000, "recovery_evidence_required")
             reconciliation = None
-            if lane == "manager":
+            if lane == "manager" and (status["hold"] or (status["started_at"] is not None
+                                                         and status["completed_at"] is None)):
                 # Release a manager claim the interrupted or failed cycle left, only
                 # with its launcher proven stopped; otherwise recovery refuses.
                 reconciliation = reconcile_manager_lane(Path(receipt["pins"]["config"]))

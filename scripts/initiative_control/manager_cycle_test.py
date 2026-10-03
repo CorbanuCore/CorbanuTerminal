@@ -564,8 +564,10 @@ class BoundedBriefingTests(unittest.TestCase):
         backlog = brief["event_backlog"]
         self.assertEqual((86, 24, 62), (backlog["pending"], backlog["selected"], backlog["deferred"]))
         self.assertEqual(62, sum(backlog["deferred_by_kind"].values()))
-        # Newest first: the newest history event leads, the oldest stays pending.
-        self.assertEqual("owner_allocation:84", brief["events"][0]["id"])
+        # Aging slots take the two oldest, then the newest history leads.
+        self.assertEqual(["tick", "owner_allocation:0", "owner_allocation:84"],
+                         [e["id"] for e in brief["events"][:3]])
+        self.assertEqual(["owner_allocation:1", "owner_allocation:2"], backlog["oldest_unclaimed"][:2])
 
     def test_deferred_events_are_counted_and_consumed_by_later_cycles(self):
         self.history(consumed=0, events=50)
@@ -614,29 +616,41 @@ class CompactionPolicyTests(unittest.TestCase):
                                               "status": status, "sequence": [0, 0], "updated": updated,
                                               "inputs": {"allocation": key}}
 
-    def test_policy_compacts_accepted_and_stale_failures_only(self):
+    def test_policy_compacts_only_finished_work_past_its_grace(self):
         now = 10 * 86400
-        self.finished("accepted-one", "accepted", now)
-        self.finished("fresh-failure", "failed", now - 60)
+        self.finished("accepted-old", "accepted", now - m.COMPACT_ACCEPTED_AFTER - 1)
+        self.finished("accepted-fresh", "accepted", now - 60)
+        self.finished("fresh-failure", "failed", now - m.COMPACT_ACCEPTED_AFTER - 1)
         self.finished("old-failure", "failed", now - m.COMPACT_FAILED_AFTER - 1)
-        self.finished("still-running", "running", now)
-        self.finished("never-used", None, now)
-        self.finished("lifecycle", "accepted", now, kinds=("complete_sprint",))
-        self.assertEqual(["accepted-one", "old-failure"], m.compact_finished(self.c, now))
+        self.finished("still-running", "running", 0)
+        self.finished("never-used", None, 0)
+        self.finished("lifecycle", "accepted", 0, kinds=("complete_sprint",))
+        # complete_sprint and activate_successor re-check the receiving/successor
+        # action's allocation digest: lifecycle allocations of an unfinished sprint stay.
+        self.finished("integration", "accepted", 0, kinds=("integrate",))
+        self.finished("successor", "accepted", 0, kinds=("prepare_successor",))
+        self.assertEqual(["accepted-old", "old-failure"], m.compact_finished(self.c, now))
         allocations = self.c.snapshot()["allocations"]
-        for key in ("accepted-one", "old-failure"):
+        for key in ("accepted-old", "old-failure"):
             self.assertIs(True, allocations[key]["inputs"]["consumed"])
-        for key in ("fresh-failure", "still-running", "never-used", "lifecycle", "bootstrap"):
+        for key in ("accepted-fresh", "fresh-failure", "still-running", "never-used", "lifecycle",
+                    "integration", "successor", "bootstrap"):
             self.assertNotIn("consumed", allocations[key]["inputs"])
         self.assertEqual([], m.compact_finished(self.c, now))
+        # Once the sprint is completed its lifecycle proofs are spent.
+        with self.c.mutation("fixture", {}) as (_, state):
+            state["sprints"]["PF80"]["status"] = "completed"
+        self.assertEqual(["accepted-fresh", "fresh-failure", "integration", "successor"],
+                         m.compact_finished(self.c, now))
 
     def test_policy_waits_while_paused_or_a_manager_owns_the_cycle(self):
         self.finished("accepted-one", "accepted", 0)
+        self.assertEqual([], m.compact_finished(self.c, 60))
         self.c.set_enabled(False, {"fixture": True})
-        self.assertEqual([], m.compact_finished(self.c, 1))
+        self.assertEqual([], m.compact_finished(self.c, 2 * 86400))
         self.c.set_enabled(True, {"fixture": True})
         self.c.begin_manager()
-        self.assertEqual([], m.compact_finished(self.c, 1))
+        self.assertEqual([], m.compact_finished(self.c, 2 * 86400))
 
     def test_a_concurrent_change_stops_the_pass_without_partial_effect(self):
         self.finished("a", "accepted", 0)
@@ -647,9 +661,9 @@ class CompactionPolicyTests(unittest.TestCase):
             calls.append(key)
             return real(key, revision - 1, evidence)
         with patch.object(self.c, "compact_allocation", stale):
-            self.assertEqual([], m.compact_finished(self.c, 1))
+            self.assertEqual([], m.compact_finished(self.c, 2 * 86400))
         self.assertEqual(["a"], calls)
-        self.assertEqual(["a", "b"], m.compact_finished(self.c, 1))
+        self.assertEqual(["a", "b"], m.compact_finished(self.c, 2 * 86400))
 
 
 if __name__ == "__main__":

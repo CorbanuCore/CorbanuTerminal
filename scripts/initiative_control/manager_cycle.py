@@ -14,15 +14,21 @@ from pathlib import Path
 import sqlite3
 import stat
 import time
+import uuid
 
 from coordinator import Coordinator, Rejected, TERMINAL, digest, encoded, event_kind
 import fable_launcher as f
 
 # Total claim window includes preparation and acceptance; launcher has its own clock.
 LAUNCH_MARGIN = 30
-# Finished allocations with no accepted action stay live this long, so the
-# manager can still prepare a successor on them before routine compaction.
+# Routine compaction grace: a finished allocation stays live this long after its
+# last action finished, so the manager can still prepare a follow-up (another
+# kind, a retry) on it. Lifecycle kinds stay live until their sprint completes,
+# because complete_sprint/activate_successor re-check the allocation digest.
+COMPACT_ACCEPTED_AFTER = 86400
 COMPACT_FAILED_AFTER = 7 * 86400
+LIFECYCLE_KINDS = frozenset({"integrate", "verify_integration", "prepare_successor",
+                             "complete_sprint", "activate_successor"})
 
 DIRECTIVE = (
     "Return bounded action proposals using only exact frozen allocation inputs. "
@@ -118,9 +124,11 @@ def allocation_of(action):
 def compact_finished(coordinator, now=None):
     """Routine compaction of finished allocations, the briefing-budget method.
 
-    An allocation is compacted when every action on it (live or archived) is
-    terminal and one was accepted, or when it has been finished for
-    COMPACT_FAILED_AFTER. complete_sprint and never-used allocations stay.
+    Candidates: every action on the allocation (live or archived) is terminal.
+    Compacted when its sprint is completed, or, for allocations without lifecycle
+    kinds, once it has been finished for COMPACT_ACCEPTED_AFTER (an action was
+    accepted) or COMPACT_FAILED_AFTER (none was). complete_sprint, lifecycle
+    allocations of unfinished sprints and never-used allocations stay live.
     Revision-checked one at a time; a concurrent change stops the pass.
     """
     now = time.time() if now is None else now
@@ -141,7 +149,11 @@ def compact_finished(coordinator, now=None):
                 or not used or any(a["status"] not in TERMINAL for a in used)):
             continue
         finished = max(a.get("updated", a.get("created", 0)) for a in used)
-        if not any(a["status"] == "accepted" for a in used) and now - finished < COMPACT_FAILED_AFTER:
+        grace = (COMPACT_ACCEPTED_AFTER if any(a["status"] == "accepted" for a in used)
+                 else COMPACT_FAILED_AFTER)
+        sprint = state["sprints"].get(allocation["sprint"], {})
+        if sprint.get("status") != "completed" and (set(allocation["kinds"]) & LIFECYCLE_KINDS
+                                                    or now - finished < grace):
             continue
         try:
             coordinator.compact_allocation(key, coordinator.snapshot()["revision"], {
@@ -181,6 +193,7 @@ def briefing(coordinator, packet, owner_context):
             "pending": sum(kinds.values()), "selected": len(packet["events"]),
             "deferred": sum(kinds.values()) - len(packet["events"]),
             "deferred_by_kind": {k: v for k, v in sorted(deferred.items()) if v},
+            "oldest_unclaimed": brief.pop("oldest_unclaimed", []),
             "order": "awaiting verdict, stalls, failures and owner wake-ups first, then newest"}
     # Strip only core-owned previews; arbitrary frozen inputs remain exact.
     outcome_fields = {"result", "verification", "owner_failure", "owner_cancellation"}
@@ -413,7 +426,8 @@ def timestamp(value):
 def fit_briefing(coordinator, packet, context):
     """Size locally, restrict once, launch once. Never drop an event out of order.
 
-    Prefer the largest FIFO prefix whose briefing still carries the result body of
+    The claim is ordered (FIFO, or prioritized by begin_manager); only a prefix of
+    it is ever kept. Prefer the largest prefix whose briefing still carries the result body of
     every returned action awaiting a verdict; otherwise the largest prefix that fits.
     Deferred events stay pending for later cycles.
     """
@@ -444,7 +458,7 @@ def fit_briefing(coordinator, packet, context):
     count, candidate, raw = chosen
     if count != total:
         revision = coordinator.restrict_manager_events(packet["manager_run"], count,
-            packet["state_revision"], {"reason": "largest fitting FIFO prefix before inference",
+            packet["state_revision"], {"reason": "largest fitting prefix of the ordered claim before inference",
                                         "bytes": len(raw), "event_batch": candidate["event_batch"]})
         f.require(revision == candidate["state_revision"], "batch_revision_mismatch")
     return candidate, raw
@@ -520,7 +534,7 @@ def validate(receipt, attempt, cycle, raw):
 
 
 def run_cycle(*, state, runs_dir, binary, auth_vault_home, owner_context, timeout=300,
-              launcher=None, clock=None):
+              launcher=None, clock=None, acceptance_gate=None):
     """Owner-only callable. All returned actions still need real host claim/tools/ACK."""
     cycle, packet, phase = None, None, "preflight"
     try:
@@ -532,11 +546,14 @@ def run_cycle(*, state, runs_dir, binary, auth_vault_home, owner_context, timeou
                   and math.isfinite(timeout), "invalid_timeout")
         root = f.private_dir(runs_dir)
         # Routine hygiene first, so finished allocations never accumulate in the briefing.
-        compacted = compact_finished(c)
-        packet = c.begin_manager(timeout_seconds=timeout, priority=True)
-        phase = "briefing"
-        cycle = root / ("m-" + packet["manager_run"])
+        compacted = compact_finished(c, c.clock())
+        # The cycle directory exists before the claim, so a crash at any later point
+        # leaves a claim that recovery can attribute to this runs directory.
+        run_id = str(uuid.uuid4())
+        cycle = root / ("m-" + run_id)
         cycle.mkdir(mode=0o700)
+        packet = c.begin_manager(timeout_seconds=timeout, priority=True, run_id=run_id)
+        phase = "briefing"
         if compacted:
             f.write_json(cycle / "compacted.json", compacted)
         f.write_json(cycle / "claim.json", packet)
@@ -579,6 +596,10 @@ def run_cycle(*, state, runs_dir, binary, auth_vault_home, owner_context, timeou
                  "session_id": receipt["session_id"], "turn_id": receipt["turn_id"]}
         f.write_json(cycle / "validated.json", proof)
         phase = "acceptance"
+        if acceptance_gate is not None:
+            # The caller's authority is re-checked at the last moment (e.g. the owner
+            # disarmed mid-cycle): a refusal holds before anything is committed.
+            acceptance_gate()
         c.accept_decision(packet["manager_run"], decision, proof)
         # SQLite is the acceptance authority even if the process dies before output.
         actions = c.snapshot()["actions"]

@@ -7,6 +7,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -1013,9 +1014,11 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.fake.start()
         self.addCleanup(self.fake.stop)
 
-    def prepared(self, key="one", kind="repair", cycle_inputs=None, **runtime_changes):
+    def prepared(self, key="one", kind="repair", cycle_inputs=None, base_commit=None, **runtime_changes):
         allocation = seed()[2]["bootstrap"]
         allocation["kinds"] = [kind]
+        if base_commit is not None:
+            allocation["inputs"]["base_commit"] = base_commit
         if kind == "complete_sprint":
             allocation["inputs"].update(receiving_action="fixture-receiver", receiving_commit="a" * 40,
                                         mandatory_gates=["fixture-gate"])
@@ -1735,8 +1738,11 @@ class HandoffTests(unittest.TestCase):
     sql = OwnerDaemonTests.sql
     arm = OwnerDaemonTests.arm
     child = OwnerDaemonTests.child
-    prepared = WorkerLifecycleTests.prepared
     tick = WorkerLifecycleTests.tick
+
+    def prepared(self, key="one", kind="repair", cycle_inputs=None, base_commit="d" * 40, **changes):
+        # Default routing needs the frozen base commit the disposable worktree is at.
+        return WorkerLifecycleTests.prepared(self, key, kind, cycle_inputs, base_commit, **changes)
 
     def configure(self):
         # Default routing adopts only disposable worktrees; the fixture's is one.
@@ -1749,15 +1755,18 @@ class HandoffTests(unittest.TestCase):
         plain.mkdir()
         main = self.root / "main-checkout"
         (main / ".git").mkdir(parents=True)
-        self.config["worktrees"] += [str(branch), str(plain), str(main)]
+        moved = linked_worktree(self.root / "rebasing", "e" * 40)  # detached, other commit
+        self.config["worktrees"] += [str(branch), str(plain), str(main), str(moved)]
         self.configure()
         self.prepared("first")
         self.transfer({"first": "hand"})
-        for key, path in (("branch", branch), ("plain", plain), ("main", main), ("disposable", self.root)):
+        for key, path in (("branch", branch), ("plain", plain), ("main", main), ("moved", moved),
+                          ("disposable", self.root)):
             self.prepared(key, worktree=str(path))
+        self.prepared("unbased", worktree=str(self.root), base_commit=None)
         self.assertEqual({"disposable": "returned"}, self.tick()["actions"])
         current = self.c.snapshot()
-        for key in ("branch", "plain", "main"):
+        for key in ("branch", "plain", "main", "moved", "unbased"):
             # Aimed at a branch checkout (such as the main integration worktree), a
             # plain directory or a main checkout: it stays on the hand lane, unheld.
             self.assertNotIn("dispatch_owner", current["actions"][key], key)
@@ -1768,8 +1777,26 @@ class HandoffTests(unittest.TestCase):
         self.assertFalse(owner.disposable_worktree(branch))
         self.assertFalse(owner.disposable_worktree(plain))
         self.assertFalse(owner.disposable_worktree(main))
+        self.assertFalse(owner.disposable_worktree(moved, "d" * 40))
         (branch.parent / "integration.gitdir" / "HEAD").write_text("not-a-commit\n")
         self.assertFalse(owner.disposable_worktree(branch))
+
+    def test_default_routed_worktree_is_rechecked_at_claim(self):
+        self.configure()
+        self.prepared("first")
+        self.transfer({"first": "hand"})
+        self.prepared("later")
+        real = owner.Kernel.worker_action
+        def moved(kernel, adapter, action):
+            # Between routing and claim the worktree is switched to a branch.
+            (Path(str(self.root) + ".gitdir") / "HEAD").write_text("ref: refs/heads/topic\n")
+            return real(kernel, adapter, action)
+        with patch.object(owner.Kernel, "worker_action", moved):
+            self.assertEqual({"later": "HOLD"}, self.tick()["actions"])
+        self.assertEqual("owner", self.c.snapshot()["actions"]["later"]["dispatch_owner"])
+        self.assertEqual("prepared", self.c.snapshot()["actions"]["later"]["status"])
+        self.assertEqual([("worktree_not_disposable",)], self.sql("SELECT reason_code FROM holds"))
+        self.assertEqual([], FakeWorker.events)
 
     def transfer(self, choices, revision=None):
         state = self.c.snapshot()
@@ -2817,10 +2844,12 @@ import manager_cycle
 import owner_daemon as owner
 
 def crash(**kwargs):
+    import uuid
     c = owner.ExistingCoordinator(kwargs["state"])
-    packet = c.begin_manager(priority=True)
-    launch = Path(kwargs["runs_dir"]) / ("m-" + packet["manager_run"]) / "launches" / "f-crash"
+    run = str(uuid.uuid4())
+    launch = Path(kwargs["runs_dir"]) / ("m-" + run) / "launches" / "f-crash"
     launch.mkdir(mode=0o700, parents=True)
+    c.begin_manager(priority=True, run_id=run)
     f.write_json(launch / "process.json", {"pid": os.getpid(), "pgid": os.getpgrp(),
                                            "started": f.processes()[os.getpid()][3]})
     os._exit(9)  # mid-cycle crash: no result, no completed tick
@@ -2852,6 +2881,11 @@ class ManagerLaneTests(unittest.TestCase):
         self.authority.update(config_digest=digest(self.config))
         if arm:
             self.arm()
+        # The seed's never-used allocation would be an idle-wake candidate; keep it
+        # as a template and retire it so each test controls its own triggers.
+        self.template = dict(self.c.snapshot()["allocations"]["bootstrap"])
+        with self.c.mutation("fixture", {}) as (_, state):
+            state["allocations"]["bootstrap"] = dict(self.template, inputs={"consumed": True})
         self.schedule = Path(self.tmp.name) / "mschedule"
         self.schedule.mkdir(mode=0o700, exist_ok=True)
         self.clock, self.calls = 1_000_000.0, []
@@ -2870,20 +2904,41 @@ class ManagerLaneTests(unittest.TestCase):
         return {"status": "accepted", "manager_run": packet["manager_run"], "prepared_actions": [],
                 "verdicts": [], "no_action_reason": "fixture"}
 
-    def failing(self, phase):
+    def failing(self, phase, launcher="dead"):
+        """run_cycle's shape: the cycle directory exists before the claim; a launch
+        leaves launches/f-*/process.json (a live or a finished process)."""
         def runner(**kwargs):
+            import uuid
             self.calls.append(kwargs)
-            packet = owner.ExistingCoordinator(kwargs["state"]).begin_manager(priority=True)
+            assert callable(kwargs["acceptance_gate"])
+            run = str(uuid.uuid4())
+            cycle = Path(kwargs["runs_dir"]) / ("m-" + run)
+            cycle.mkdir(mode=0o700)
+            owner.ExistingCoordinator(kwargs["state"]).begin_manager(priority=True, run_id=run)
+            if phase != "briefing":
+                self.launch_record(cycle, launcher)
             return {"status": "owner_hold", "phase": phase, "reason": "invalid_json",
-                    "manager_run": packet["manager_run"], "prepared_actions": []}
+                    "manager_run": run, "prepared_actions": []}
         return runner
+
+    def launch_record(self, cycle, launcher):
+        launch = cycle / "launches" / "f-fixture1"
+        launch.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if launcher == "live":
+            identity = {"pid": os.getpid(), "pgid": os.getpgrp(), "started": f.processes()[os.getpid()][3]}
+        else:
+            done = subprocess.run(["/usr/bin/true"])
+            identity = {"pid": 2 ** 22 + 7, "pgid": 2 ** 22 + 7, "started": "finished process " + str(done.returncode)}
+        if launcher != "none":
+            f.write_json(launch / "process.json", identity)
+        return launch
 
     def log(self):
         path = self.schedule / owner.MANAGER_LOG
         return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
     def returned(self, key, accepted=None):
-        allocation = dict(self.c.snapshot()["allocations"]["bootstrap"], resources=[key])
+        allocation = dict(self.template, resources=[key], kinds=["repair"])
         self.c.put_allocation(key, allocation, False, self.c.snapshot()["revision"], {"fixture": True})
         packet = self.c.begin_manager()
         self.c.accept_decision(packet["manager_run"], {"state_revision": packet["state_revision"], "actions": [{
@@ -2926,6 +2981,7 @@ class ManagerLaneTests(unittest.TestCase):
     def test_paused_owned_and_idle_start_nothing(self):
         self.manager()
         self.assertEqual("IDLE", self.lane()["state"])
+        self.assertEqual([], self.log())
         self.c.event({"id": "work"})
         self.c.set_enabled(False, {"fixture": True})
         self.assertEqual("PAUSED", self.lane()["state"])
@@ -2986,6 +3042,24 @@ class ManagerLaneTests(unittest.TestCase):
         self.assertEqual("IDLE", self.lane()["state"])
         self.assertEqual(2, len(self.calls))
         self.assertEqual(1, [r["event"] for r in self.log()].count("wake"))
+        # Still unanswered after the repeat window: one reminder, then quiet again.
+        self.clock += owner.WAKE_REPEAT_SECONDS
+        self.assertEqual("CYCLE", self.lane()["state"])
+        self.clock += 120
+        self.assertEqual("IDLE", self.lane()["state"])
+        self.assertEqual(2, [r["event"] for r in self.log()].count("wake"))
+
+    def test_unused_allocation_with_nothing_queued_wakes_once(self):
+        self.manager()
+        allocation = dict(self.template, resources=["fresh"])
+        self.c.put_allocation("fresh", allocation, False, self.c.snapshot()["revision"], {"fixture": True})
+        self.assertEqual("CYCLE", self.lane()["state"])  # its owner_allocation event
+        self.clock += 120
+        self.assertEqual("CYCLE", self.lane()["state"])
+        self.assertEqual(["no_prepared_work"],
+                         owner.load(self.calls[-1]["owner_context"])["context"]["triggers"])
+        self.clock += 120
+        self.assertEqual("IDLE", self.lane()["state"])
 
     def test_finished_failed_work_with_nothing_queued_wakes_once(self):
         self.manager()
@@ -3005,29 +3079,72 @@ class ManagerLaneTests(unittest.TestCase):
     def test_accepted_work_is_compacted_by_the_lane_without_waking(self):
         self.manager()
         self.returned("work", accepted=True)
+        self.clock = time.time()
         self.assertEqual("CYCLE", self.lane()["state"])
         self.clock += 120
+        self.assertEqual("IDLE", self.lane()["state"])
+        self.assertNotIn("consumed", self.c.snapshot()["allocations"]["work"]["inputs"])  # grace
+        self.clock += owner.manager_cycle.COMPACT_ACCEPTED_AFTER
         self.assertEqual("IDLE", self.lane()["state"])
         self.assertIs(True, self.c.snapshot()["allocations"]["work"]["inputs"]["consumed"])
         self.assertIn("compacted", [r["event"] for r in self.log()])
 
-    def test_failed_cycle_holds_and_releases_only_an_unlaunched_claim(self):
+    def test_failed_cycle_holds_and_releases_the_claim_only_with_launchers_proven_stopped(self):
         self.manager()
-        self.c.event({"id": "work"})
-        result = self.lane(self.failing("briefing"))
-        self.assertEqual(("HOLD", "manager_cycle_failed", "invalid_json"),
-                         (result["state"], result["reason"], result["refusal"]))
-        self.assertIsNone(self.c.snapshot()["manager"])
-        with self.c.connection() as db:
-            reason = json.loads(db.execute("SELECT body FROM events WHERE id=?", (
-                "manager-failed:" + result["released_manager_run"],)).fetchone()[0])["reason"]
-        self.assertIn("no inference launched", reason)
-        self.clock += 120
-        result = self.lane(self.failing("launch"))
+        for phase, launcher in (("briefing", None), ("validation", "dead")):
+            self.c.event({"id": "work-" + phase})
+            result = self.lane(self.failing(phase, launcher))
+            self.assertEqual(("HOLD", "manager_cycle_failed", "invalid_json"),
+                             (result["state"], result["reason"], result["refusal"]))
+            self.assertIsNone(self.c.snapshot()["manager"])
+            with self.c.connection() as db:
+                reason = json.loads(db.execute("SELECT body FROM events WHERE id=?", (
+                    "manager-failed:" + result["released_manager_run"],)).fetchone()[0])["reason"]
+            self.assertIn("owner_auto_cycle_failed", reason)
+            self.clock += 120
+        result = self.lane(self.failing("launch", "live"))
         self.assertEqual("HOLD", result["state"])
         self.assertIsNone(result["released_manager_run"])
         self.assertIsNotNone(self.c.snapshot()["manager"])
-        self.assertEqual(["hold", "hold"], [r["event"] for r in self.log() if r["event"] == "hold"])
+        self.assertEqual("manager_launcher_running", self.log()[-1]["release_refusal"])
+
+    def test_missing_launcher_record_is_not_proof_of_a_stopped_launcher(self):
+        self.manager()
+        self.c.event({"id": "work"})
+        result = self.lane(self.failing("launch", "none"))
+        run = self.c.snapshot()["manager"]
+        self.assertIsNone(run)  # no record, no process naming it, socket absent: stopped
+        self.c.event({"id": "more"})
+        self.clock += 120
+        holder = []
+        def runner(**kwargs):
+            result = self.failing("launch", "none")(**kwargs)
+            launch = Path(kwargs["runs_dir"]) / ("m-" + result["manager_run"]) / "launches" / "f-fixture1"
+            holder.append(subprocess.Popen(["/bin/sh", "-c", "sleep 30; : " + str(launch)]))
+            time.sleep(0.2)
+            return result
+        try:
+            result = self.lane(runner)
+        finally:
+            for process in holder:
+                process.kill()
+                process.wait()
+        self.assertEqual("HOLD", result["state"])
+        self.assertIsNotNone(self.c.snapshot()["manager"])
+        self.assertEqual("manager_launcher_running", self.log()[-1]["release_refusal"])
+
+    def test_disarm_during_a_cycle_refuses_acceptance(self):
+        self.manager()
+        self.c.event({"id": "work"})
+        gates = []
+        def runner(**kwargs):
+            gates.append(kwargs["acceptance_gate"])
+            owner.disarm_owner(self.config_path, 1)
+            with self.assertRaisesRegex(f.LaunchError, "owner_off"):
+                kwargs["acceptance_gate"]()
+            return self.failing("acceptance", "dead")(**kwargs)
+        self.assertEqual("HOLD", self.lane(runner)["state"])
+        self.assertEqual(1, len(gates))
 
     def scheduled(self):
         import activate
@@ -3054,23 +3171,19 @@ class ManagerLaneTests(unittest.TestCase):
         self.manager()
         root = self.scheduled()
         self.c.event({"id": "work"})
-        with patch.object(owner.manager_cycle, "run_cycle", self.failing("launch")):
+        with patch.object(owner.manager_cycle, "run_cycle", self.failing("launch", "live")):
             self.assertEqual("HOLD", owner.scheduled_tick(root)["state"])
             self.c.event({"id": "more-work"})
             self.assertEqual(("HOLD", "manager_cycle_failed"),
                              tuple(owner.scheduled_tick(root)[k] for k in ("state", "reason")))
         self.assertEqual(1, len(self.calls))
         run = self.c.snapshot()["manager"]["id"]
-        # A launcher that is still alive blocks recovery; nothing changes.
-        launch = self.runs / ("m-" + run) / "launches" / "f-live"
-        launch.mkdir(mode=0o700, parents=True)
-        f.write_json(launch / "process.json", {"pid": os.getpid(), "pgid": os.getpgrp(),
-                                               "started": f.processes()[os.getpid()][3]})
+        # The launcher recorded for the failed cycle is still alive: recovery refuses.
         with self.assertRaisesRegex(f.LaunchError, "manager_launcher_running"):
             owner.scheduled_tick(root, recover="fixture: launcher stopped")
         self.assertEqual("manager_cycle_failed", owner.load(root / "tick.json")["hold"])
         self.assertEqual(run, self.c.snapshot()["manager"]["id"])
-        (launch / "process.json").unlink()
+        self.launch_record(self.runs / ("m-" + run), "dead")
         self.assertEqual("RECOVERED", owner.scheduled_tick(root, recover="fixture: launcher stopped")["state"])
         self.assertIsNone(self.c.snapshot()["manager"])
         self.assertEqual("recovered", self.log()[-1]["event"])
@@ -3117,6 +3230,33 @@ class ManagerLaneTests(unittest.TestCase):
         with self.c.connection() as db:
             self.assertIsNotNone(db.execute("SELECT consumed FROM events WHERE id=?",
                                             ("manager-failed:" + run,)).fetchone()[0])
+
+    def test_recover_without_a_hold_never_touches_the_coordinator(self):
+        self.manager()
+        root = self.scheduled()
+        self.c.event({"id": "work"})
+        run = self.c.begin_manager()["manager_run"]  # e.g. a manual cycle in progress
+        self.assertEqual("RECOVERED", owner.scheduled_tick(root, recover="fixture: no hold")["state"])
+        self.assertEqual(run, self.c.snapshot()["manager"]["id"])
+
+    def test_lanes_publish_separately_and_keep_their_lane(self):
+        import activate
+        self.manager()
+        root = self.scheduled()
+        owner.publish_schedule(root)
+        self.assertTrue((self.root / "manager-recurrence.json").exists())
+        self.assertFalse((self.root / "owner-recurrence.json").exists())
+        args = self.installation.__func__  # noqa: F841 (documentation)
+        receipt = owner.load(root / "installation.json")
+        f.write_json(root / "installation.json", dict(receipt, phase="uninstalled"))
+        from argparse import Namespace
+        again = Namespace(owner="install", root=root, label=receipt["label"], python=Path(receipt["pins"]["python"]),
+                          python_sha256=receipt["pins"]["python_sha256"], runtime=Path(receipt["pins"]["runtime"]),
+                          config=self.config_path, interval=2, publish_state=self.root, confirm_live=False,
+                          lane="owner")
+        service, command, _ = self.install(again)
+        with service, command, self.assertRaisesRegex(f.LaunchError, "installation_lane_conflict"):
+            activate.owner_activation(again)
 
     def test_binary_pin_mismatch_latches(self):
         self.manager(binary_sha256="0" * 64)
