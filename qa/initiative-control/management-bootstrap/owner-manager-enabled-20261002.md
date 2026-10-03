@@ -1,8 +1,9 @@
-# Owner manager enable, 2026-10-02/03: promoted to tmux-workers (generation 3), first action held
+# Owner manager enable, 2026-10-02/03: loop on at generation 5, first manager action returned
 
-**Current state (round 4, 2026-10-03T12:21Z):** armed, generation 3, scope `tmux-workers`,
-`manager_enabled: true`, ticking on the interval. Its first action, `owner-first-check-01-r2`, is
-held with `wrong_ack` (see round 4). Rounds 1-3 below are the history.
+**Current state (round 5, 2026-10-03T13:17Z):** armed, generation 5, scope `tmux-workers`,
+`manager_enabled: true`, package `03aefd15…2a46`, no unresolved holds. The manager-prepared action
+`owner-first-check-01-r3` ran ACK → START → RETURN on the live loop and is `returned` in the
+coordinator (see round 5). Rounds 1-4 below are the history.
 
 Authority: `owner-manager-enable-20261002`, revision 1. Travis (owner), 2026-10-02,
 answered **yes** to "Should I turn the dashboard manager on (let it dispatch work
@@ -491,3 +492,156 @@ Every run was restored to the same digests. Each run's corrections file and revi
 Not republished. The wrapper `initiative-control.oGQGyA/sync-source.sh` exports from this worktree,
 which still has the other session's four uncommitted files in `scripts/initiative_control/`.
 Publishing from a clean clone would change the declared receiving checkout, so it was skipped.
+
+## Round 5, 2026-10-03: ACK check fixed, hold resolved, requalified, restaged to generation 5, live action returned
+
+Brief: "Travis wants the loop on and working. Make the loop actually process work." Evidence:
+`.codex-work/owner-manager-enable-20261002/round5/` (`qual/` for the VM run, `live/` for the owner).
+
+**Outcome:** armed, **generation 5**, `tmux-workers`, `manager_enabled: true`, config digest
+`38ea62a4…c63b`, package `03aefd15…2a46`, `unresolved_holds: []`. The manager prepared
+`owner-first-check-01-r3`; the owner claimed it and took it through ACK, START and RETURN with no
+holds; the coordinator shows it `returned` (not yet verified by the manager).
+
+### Code (commits `54e6a90229`, `841548849e`, `491046fe4d`; pushed fast-forward from `3c8736914f`)
+
+- **ACK check** (`owner_tmux.provenance`, worker path only): accepts the exact ACK line with
+  surrounding ASCII whitespace (space, tab, CR, LF), or an empty final when the turn's correlated
+  assistant messages (after this turn's `user_message`, before its completion) carry the line.
+  Every non-empty assistant message in the turn must be that exact line. A wrong action id,
+  allocation digest, model or effort, interior whitespace, a prefix or fence, extra lines, other
+  messages, `\x0b`/NBSP padding and out-of-turn messages are refused with `wrong_ack`. The bridge
+  payload ACK stays byte-exact. The receipt keeps `ack_line` exact and records `ack_received` raw.
+- **Hold resolution** (`owner_daemon.py --resolve-hold <request.json> --config …`): under both owner
+  locks; requires the exact set of unresolved reasons, the recorded claim and allocation digest
+  (coordinator and journal), an owner-owned action in a reconcilable or terminal status, all its
+  operations `held`, and a stopped worker. An attempted launch needs the run directory and a full
+  recorded process identity matching the journal; no recorded process may be alive; the socket must
+  be absent or refuse connections. It fails the claim through `reconcile_dispatch` (never resumes or
+  relaunches), marks operations `resolved` (the owner lane skips them; reconfigure accepts them),
+  writes `resolution_evidence_digest` and `resolved_at` on every hold row and keeps the evidence
+  document as a private artifact. Rows are never deleted; a recurrence opens a new hold row.
+- **Tests:** `AckTokenTests` (observed newline/non-final shape accepted; wrong action, digest, model,
+  effort and extra content refused; byte-exact without `ack_token`; out-of-turn messages) and two
+  TMUX tests (newline non-final ACK permits START; newline wrong-effort ACK holds). Resolve tests:
+  exact reasons/claim/evidence, listening vs stale socket, live owned pid, missing or mismatched
+  identity, non-held operations, missing run directory, hand-owned action, CLI receipt, never
+  resumed by a tick, recurrence, OFF reconfigure held vs resolved. Full `scripts/initiative_control`
+  discovery at `491046fe4d` in a clean worktree (fresh venv, disposable HOME and aliases,
+  `CORBANU_TEST_NO_NATIVE_KEYRING=1`): **906 OK**. Two earlier full runs were stopped when the
+  code changed; their partial logs are kept.
+- **Code review** (`claude-opus-5-5-plan`): first pass CHANGES REQUIRED (session `01a101c3`: the
+  stopped-worker check passed when `process.json` and the socket were deleted); fixed in
+  `841548849e`; second pass **APPROVE** (session `01a101c8`). Remaining non-blocking notes: a failed
+  inspection can overwrite the journal's process identity with nulls; holds from a worker that dies
+  before its identity is recorded cannot be resolved (fails closed); the owner's second `ack_line`
+  check is now redundant.
+- The runbook line "No hold-resolution command is implemented" in `owner-handoff-80-promotion.md`
+  now points to `--resolve-hold`.
+
+### Hold resolution on the live owner
+
+1. `Worker.close()` refused to act: inspection failed with `host_changed`, because
+   `kern.boottime` had moved from usec 617366 (recorded at launch) to 555270. I stopped the worker
+   through its own socket only: `/quit` (pane exit status 0), then `kill-server` on
+   `w-ylg59fqs/s`; pids 72775/72776 gone, socket stale (`live/held-worker-stop.txt`).
+2. Disarmed generation 3 (now OFF, generation 4) and uninstalled the schedule with the installed
+   runtime, so no old-package tick could re-hold the claim (`live/disarm-uninstall.txt`; a first
+   attempt split the path at its space and ran nothing).
+3. `--resolve-hold` from the candidate: `wrong_ack` and `operation_held` resolved,
+   `resolution_evidence_digest` `5c7bbe062d0210e59825163ad46054d3f427b3e00efa06acab6825ec1f99da7a`,
+   `resolved_at` 1791032927.80; action `dispatch_uncertain` → `failed`; coordinator 2925 → 2926;
+   the four operations `held` → `resolved`; 0 unresolved holds (`live/resolve-*.json`).
+
+### Qualification (PF-83 VM, `qual/`, run `5cca15`)
+
+Round 4 run 3 repeated step for step with package `03aefd15…2a46` (binary unchanged `7b8c77a6…d77c`):
+
+- **Fence and hold:** same fence, hosts, credential and share handling as run 3.
+  - Before, during and after digests are as in round 4.
+  - The anchor, `/etc/hosts`, credentials, neo2's home and the 9,910-entry manifest were restored
+    identical (inode, mtime, digest), and the share was remounted.
+  - Post-restore probes: 421/301/403, as before.
+- **Zero direct connections:**
+  - en0 has 63 packets: local only, with zero public addresses and zero guest SYNs.
+  - pflog has 76 blocked provider SYNs, all in probe windows (one is the 7th retransmit of the
+    parent probe's own flow, just past the window's host-clock end). None fall in either control.
+- **Controls:**
+  - Positive control C returned, with 3/3 broker joins.
+  - The broker-down control N failed closed (`runtime_failure` hold).
+- **Main lifecycle:** 13 ticks, no holds, 23/23 broker joins; real_ack, real_start, real_return 1.
+  - **The ACK turn reproduced round 4's failing shape:** a commentary ACK plus `\n` and an empty
+    final. The new check accepted it and START/RETURN followed.
+- **Independent review** (`claude-opus-5-5-plan`, session `01a101da-123b-79d1-8ef3-64e69aa9b236`,
+  evidence and procedure only): **VERDICT: QUALIFIED**, all four fields, counts 1/1/1.
+  - Section-4 corrections are in `qual/review-notes.md`: "HOME clean" is top-level only; the N
+    window's zero public packets is an en0 statement (pflog shows blocked Tailscale relay SYNs); the
+    pre-auth refusal record has count 2; and a 50-packet block-counter gap falls before the capture
+    started.
+  - Hardening is still not applied: the z23 share is still in UTM; `~/Library`,
+    `/private/var/folders/<agent>` and `/private/tmp/codex-browser-use` are not held; the port-22
+    rule is not narrowed.
+
+### Manager action, preflight and restage
+
+- **Allocation:** `owner-first-check-01` replaced through `prepare_worker` (openai, `--yolo`, the
+  round-2 authority). The worktree moved to the disposable
+  `/Volumes/CorbanuDrive/Corbanu/worktrees/owner-action-r5-20261003` at `491046fe4d`; revision
+  2926 → 2927.
+- **Manager cycles:**
+  - Attempt 1 (`a66cad97`): the decision was correct but wrapped in a ```json fence. The launcher
+    refused it (`invalid_json`) and prepared nothing; reconciled with `fail_manager`.
+  - Attempt 2 (`5f3a43b4`): accepted. It prepared `owner-first-check-01-r3`, allocation
+    `c90f5511…1156`.
+- **Preflight:** all five items PASS (`live/item5-preflight-result.json`, 0.9 s after the audit,
+  revision 2933 unchanged).
+  - **Disclosed adaptation** (`live/restage_preflight.py`): the documented gate assumes an armed
+    fixture-only start. Items 1, 3 and 4 and item 2's function run unchanged; item 2 sees the
+    replacement worktree list. Item 5 is an OFF-restage variant: the schedule is uninstalled, the
+    coordinator already partitioned, the transport unchanged, the owner OFF with no holds, and
+    operations applied or resolved.
+- **Restage recipe** (`live/restage-recipe.py`, adapted from round 4's): exit 0.
+  - Effect-boundary preflight, runtime copy, reconfigure (worktrees + disposable worktree, new
+    package), handoff of r3 hand → owner, repin, OFF tick (`owner_off`), arm **generation 5**,
+    schedule `--recover`.
+  - Watchdog summary unchanged before, before arm and after.
+  - Transcript: `live/restage-transcript.jsonl`; evidence `schedule/restage-r5-1791033139852227000`.
+
+### Live receipts (`live/live-operations-r3.txt`, `live/live-rollout-r3-summary.txt`)
+
+| Step | Time (UTC) | Receipt |
+| --- | --- | --- |
+| claim / prepare / launch | 13:12:55 / :57 / 13:13:00 | applied, generation 5; worker `w-n1g91psg` in the disposable worktree |
+| prompt | 13:13:42 | applied |
+| **ACK** | 13:14:27 | final message exactly `ACK owner-first-check-01-r3 c90f5511… gpt-6-astra high`; dispatched :29, acknowledged :31 |
+| **START** | 13:14:34 | applied; turn 2 user `START`; `working` 13:15:27 |
+| **RETURN** | 13:15:29 / :32 | `return_observed`, `returned` applied; coordinator `returned`, result evidence `26a5efe2…f96f` |
+
+- The worker's RETURN: `git rev-parse HEAD` = `491046fe4d…`; `git status --short | wc -l` = 0;
+  `docs/sprints/check.py` exit 0 ("current 115; archived 127"); `check_portable_skills.py` exit 0.
+  The disposable worktree is still clean.
+- **Ticks:** `ACTIVE` with `unresolved_holds: []` on every tick (`live/live-tick-outcomes.txt`); r2
+  reports `resolved`.
+- After RETURN, the idle worker was closed cleanly through its own socket
+  (`live/r3-worker-close.json`: clean, not forced).
+
+### Dashboard
+
+Not republished. `initiative-control.oGQGyA/sync-source.sh` exports this worktree's working tree,
+which still has the other session's four uncommitted files in `scripts/initiative_control/`.
+
+### Still open
+
+1. **Boot-identity drift:** `owner_tmux.boot_id()` compares `kern.boottime` including usec. It moved
+   62 ms during round 4's held run, so any worker whose run spans such a shift holds with
+   `host_changed`, and `Worker.close()` refuses it. The manual stop through the run's own socket
+   works, and `--resolve-hold` then accepts the stale socket. A fix (compare seconds, or the
+   recorded process start) changes the package and needs requalification.
+2. **Manager output fence:** 1 of 2 cycles this round failed `invalid_json` because the decision
+   came in a code fence. It is reconcilable, but each failure costs a manager cycle.
+3. **Owner routing:** new actions still default to `hand`. Each owner action needs an explicit
+   handoff, as r3 got in the restage. The owner does not close a worker after RETURN.
+4. `owner-first-check-01-r3` is `returned`; manager verification (accept or reject) is pending.
+5. VM hardening (above), `slack-receiver-02` (legacy hand claim, still running/stalled), and the code
+   review's non-blocking notes.
+
