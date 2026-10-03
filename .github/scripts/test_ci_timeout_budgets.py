@@ -47,26 +47,32 @@ class NightlyHeavyJobsTest(unittest.TestCase):
             with self.subTest(job=job):
                 self.assertRegex(
                     bazel,
-                    rf"(?m)^  {re.escape(job)}:\n    if: \$\{{\{{ inputs\.linux_heavy \}}\}}$",
+                    rf"(?m)^  {re.escape(job)}:\n    if: \$\{{\{{ inputs\.cold_bazel \}}\}}$",
                 )
 
     def test_blocking_ci_leaves_heavy_jobs_off(self) -> None:
-        self.assertNotIn("linux_heavy", self.workflow("blocking-ci.yml"))
+        self.assertNotIn("cold_bazel", self.workflow("blocking-ci.yml"))
 
     def test_nightly_runs_heavy_jobs(self) -> None:
         nightly = self.workflow("nightly-ci.yml")
         self.assertIn("schedule:", nightly)
-        for workflow in ("bazel.yml", "rust-ci.yml"):
+        for workflow in ("bazel.yml", "rust-ci.yml", "sdk.yml"):
             with self.subTest(workflow=workflow):
                 self.assertRegex(
                     nightly,
                     rf"(?m)^    uses: \./\.github/workflows/{re.escape(workflow)}\n"
-                    rf"    with:\n      linux_heavy: true$",
+                    rf"    with:\n      cold_bazel: true$",
                 )
 
-    def test_linux_argument_lint_is_gated(self) -> None:
+    def test_slow_argument_lint_platforms_are_gated(self) -> None:
         rust_ci = self.workflow("rust-ci.yml")
-        self.assertIn('if [[ "$PLATFORM" == "Linux" && "$LINUX_HEAVY" != "true" ]]', rust_ci)
+        self.assertIn('if [[ "$PLATFORM" != "Windows" && "$COLD_BAZEL" != "true" ]]', rust_ci)
+
+    def test_sdk_bazel_job_is_gated(self) -> None:
+        self.assertRegex(
+            self.workflow("sdk.yml"),
+            r"(?m)^  sdks:\n    if: \$\{\{ inputs\.cold_bazel \}\}$",
+        )
 
 
 if __name__ == "__main__":

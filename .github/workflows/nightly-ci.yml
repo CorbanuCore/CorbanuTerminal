@@ -1,7 +1,7 @@
 name: nightly-ci
 
-# Cold Linux Bazel jobs (test, clippy, release verify, argument comment lint)
-# take close to their 180-minute limit without a remote cache, so they run here
+# Cold Bazel jobs (Linux test, clippy and release verify; Linux and macOS
+# argument comment lint; the SDK build) take close to their 180-minute limit without a remote cache, so they run here
 # once a day instead of blocking every PR. Failures here do not block merges;
 # check this workflow before cutting a release.
 on:
@@ -18,14 +18,21 @@ jobs:
     name: Bazel
     uses: ./.github/workflows/bazel.yml
     with:
-      linux_heavy: true
+      cold_bazel: true
     secrets: inherit
 
   rust-ci:
     name: rust-ci
     uses: ./.github/workflows/rust-ci.yml
     with:
-      linux_heavy: true
+      cold_bazel: true
+    secrets: inherit
+
+  sdk:
+    name: sdk
+    uses: ./.github/workflows/sdk.yml
+    with:
+      cold_bazel: true
     secrets: inherit
 
   results:
@@ -34,6 +41,7 @@ jobs:
     needs:
       - bazel
       - rust-ci
+      - sdk
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
