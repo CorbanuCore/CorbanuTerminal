@@ -16,6 +16,8 @@ against these tasks.
   five (2026-10-03, "I have accepted the tasks"); at 10:32Z each read
   **Accepted** with `canSubmitInitialEvidence` true. Corbanu did not accept,
   refuse or move any of them.
+- 2026-10-03 10:52Z: all five read **Rewarded** (16.3 PFT total: 3a 2.5, 3b 2.8,
+  3c 4, 3d 4, 3e 3).
 - Round 3, 2026-10-03 10:45–10:47Z: initial evidence was submitted once for each
   of the five tasks, and each then read **Verification requested**. Receipts and
   verification responses are in the
@@ -120,6 +122,21 @@ against these tasks.
   PASS" (886 OK discovery, 103 OK owner QA, revision 2911 → 2912, audit seq 3413).
 - Ledger: none yet. The manager records the owner-enable rounds outside the
   PF-80-S01 Done list.
+
+## Network task (not PF-80)
+
+### `task_f4bec7ef5c4454dacbe0f7494ed35f16`: Find and Fix One Reproducible Bug in PostfiatL1V2
+
+- Reward shown: 100. Travis accepted it 2026-10-03 (Accepted at 10:32Z).
+- Work: `account_tx` reported `truncated: true` when results exactly filled the
+  limit (scan and index paths, `crates/node/src/block_finality.rs`).
+- PR: https://github.com/postfiatorg/postfiatl1v2/pull/55 (IridiumMaster fork,
+  branch `fix/account-tx-exact-limit-truncation`, commit `b7a54b95`, base
+  `ce25aaa8`). Ready for review 2026-10-03 14:20Z. Regression test fails before,
+  passes after; full `postfiat-node` suite passes on Linux.
+- Evidence: not submitted. Payment needs the PR **merged** by a postfiatorg
+  maintainer (IridiumMaster has read access only); submit the PR URL after merge.
+- Worker record: `.codex-work/workers-20261002/l1v2-bug.result.md`.
 
 ## Rules for evidence against these tasks
 
