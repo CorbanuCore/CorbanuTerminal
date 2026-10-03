@@ -71,7 +71,11 @@ impl ProviderManagementSession {
                         ..
                     } if *expected == provider_id => *preserve_inactive,
                     _ => {
-                        return self.transition(/*applied*/ false, effects, persistence_result);
+                        return self.transition(
+                            /*applied*/ false,
+                            effects,
+                            persistence_result,
+                        );
                     }
                 };
                 if preserve_inactive {
