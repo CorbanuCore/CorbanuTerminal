@@ -343,7 +343,10 @@ Read the printed exact `python`, `runtime` and `config` paths into shell variabl
 At the cutover, inspect `coordinator.dispatch_control.revision/at` and every
 `coordinator.ownership` row: selected prepared work is owner-owned; existing
 hand claims keep their exact claim and allocation digest. Unassigned future
-actions default to hand. Both hand and daemon command paths use this same config.
+actions default to hand. Since round 6 of `owner-manager-enabled-20261002.md`, an armed
+owner tick routes unassigned, prepared, unclaimed, gate-admissible worker actions from a
+manager run in a configured worktree to owner (audited handoff, `armed_scope_default_route`);
+everything else stays hand. Both hand and daemon command paths use this same config.
 Inspect `coordinator.watchdog_coverage.excluded_actions`: their stall detection
 belongs to the manager. Check top-level `unresolved_holds`, including
 `excluded_from_owner_lane`; an excluded hold remains unresolved and blocks

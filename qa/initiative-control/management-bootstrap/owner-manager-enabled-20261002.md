@@ -1,9 +1,10 @@
-# Owner manager enable, 2026-10-02/03: loop on at generation 5, first manager action returned
+# Owner manager enable, 2026-10-02/03: hands-off loop at generation 9
 
-**Current state (round 5, 2026-10-03T13:17Z):** armed, generation 5, scope `tmux-workers`,
-`manager_enabled: true`, package `03aefd15…2a46`, no unresolved holds. The manager-prepared action
-`owner-first-check-01-r3` ran ACK → START → RETURN on the live loop and is `returned` in the
-coordinator (see round 5). Rounds 1-4 below are the history.
+**Current state (round 6, 2026-10-03T15:08Z):** armed, generation 9, scope `tmux-workers`,
+`manager_enabled: true`, package `abe1ae15…f305`, config `b7274ba2…8123`, no unresolved holds.
+Two manager-prepared actions went manager → owner (routed by default) → ACK/START/RETURN → worker
+closed by the owner → manager verdict (accepted), with no manual handoff and no holds (see round 6).
+Rounds 1-5 below are the history.
 
 Authority: `owner-manager-enable-20261002`, revision 1. Travis (owner), 2026-10-02,
 answered **yes** to "Should I turn the dashboard manager on (let it dispatch work
@@ -645,3 +646,179 @@ which still has the other session's four uncommitted files in `scripts/initiativ
 5. VM hardening (above), `slack-receiver-02` (legacy hand claim, still running/stalled), and the code
    review's non-blocking notes.
 
+## Round 6, 2026-10-03: boot identity, fenced JSON, close after RETURN, default routing, manager verdicts; generation 9; hands-off loop
+
+Brief: "Travis wants this to be an automatic loop: work should flow manager → owner → worker → back
+without hand steps or manual hold clearing." Evidence: `.codex-work/owner-manager-enable-20261002/round6/`
+(`qual/` attempt 3, `qual-1-e1b29b6e/` and `qual-2-53689742/` attempts 1-2, `live/`, `code-review*/`).
+
+**Outcome:** armed, **generation 9**, package `abe1ae15b2cdac13d8e9c08bf036ede221878bb030e72c2997ef2a147ddcf305`,
+`unresolved_holds: []`, ticking on its interval. Generation 7 (package `53689742…4706`) carried the
+hands-off run; generation 9 adds only the verdict-aware briefing choice in `manager_cycle.py`.
+
+### Code (pushed fast-forward `e477859183` → `7e844abfbd`)
+
+| Commit | Change |
+| --- | --- |
+| `55b5d1076d` | All five items below, with tests |
+| `ef7601c047` | Review 01a101f9 fixes (prior-generation return, routing of hand-touched work, close on pause, accepting verdict needs the result body) |
+| `bc473d5c59` | Review 01a10202 fixes (post-RETURN holds resolvable, proven-stopped close, route only gate-admissible work, handoff evidence chain) |
+| `07c7df70e9` | A `ps` timeout during the stop proof falls back to the real close |
+| `fbfb166d78` | Briefing reads returned results first and evicts them last |
+| `da4e4e468c` | Test only |
+| `7e844abfbd` | `fit_briefing` picks the largest event prefix that still carries every returned result awaiting a verdict |
+
+1. **Boot identity** (`owner_tmux.boot_id`): macOS now uses `kern.bootsessionuuid`
+   (`bootsession:<uuid>`), fixed for a boot session; `kern.boottime` is re-derived from the wall
+   clock and moved 62 ms in round 4. Linux keeps `/proc/sys/kernel/random/boot_id`. The owner's
+   `boots.host_boot_id` uses the same function. Tests: jittered `kern.boottime` keeps the identity;
+   a new session UUID changes it; a real-tmux worker under jitter inspects and closes cleanly; a
+   changed boot id yields `host_changed` and `Worker.close` sends nothing. Workers recorded in the
+   old format would fail closed (`host_changed`); none were running at the restage.
+2. **Manager JSON fences** (`fable_launcher.decision`): exactly one whole-message ```` ```json ````
+   or ```` ``` ```` block (surrounding whitespace only) is unwrapped; prose before/after, two blocks,
+   another language tag, CRLF fences, unterminated fences and non-object content stay `invalid_json`.
+   Tests at unit and full-cycle level. The live verdict cycle `a48f4abd` answered in a fence and
+   was accepted.
+3. **Close after RETURN** (`owner_daemon.Kernel.close_worker`): after the coordinator records RETURN
+   the owner journals a `close` operation and runs `Worker.close` on the worker's own socket
+   (`/quit`, then `kill-session`); the receipt is the audit record and the process row becomes
+   `closed`. An already-stopped worker (recorded processes dead, socket absent or refusing) gets
+   that proof instead of keys. An unclean close holds `worker_close_unclean`; an uncertain close is
+   never retried; a pause or manager-owned cycle defers it; a restart between RETURN and close
+   finishes it next tick. A prior generation's return is history only if its close applied or the
+   worker is proven stopped, otherwise it still holds `prior_activation`/`effect_uncertain`.
+   `--resolve-hold` now settles post-RETURN holds (status `returned`/`accepted` with a receipted
+   RETURN) without touching the coordinator. Real-tmux tests: idle worker closed through its socket;
+   killed pane closed.
+4. **Routing.** Found: `Coordinator.dispatch_owner` returns `action.get("dispatch_owner", "hand")`
+   once `dispatch_control` exists, and `_handoff` stores `default: "hand"` (commit `08f42237c6`,
+   `owner-handoff-80.md`). The recorded reasons are about existing work: "Existing coordinators
+   retain their old contract until explicit cutover", and the owner watchdog must not mutate hand
+   claims ("prevents the scheduled owner from changing an external hand claim to
+   dispatch_uncertain", `owner-cutover-85.md`). No recorded safety reason requires new
+   manager-prepared work to start as hand, so the coordinator default is unchanged and the armed
+   owner routes instead (`Kernel.route_defaults`, owner dispatcher only): unassigned, `prepared`,
+   unclaimed, worker-kind actions from a manager run whose frozen worktree is in the owner's
+   configured `worktrees`, never touched by the hand lane (no journal rows, no hold), and admissible
+   by the claim gate now (allocation digest, sprint executable, resources free, one per resource
+   set). One revision-checked `_handoff` per tick with evidence `armed_scope_default_route`
+   (generation, activation, config and package digests, previous `dispatch_control`). Everything
+   else stays hand; a concurrent revision change routes nothing that tick. Activation status shows
+   `watchdog_coverage.default_route`. Note: the configured `worktrees` include the main integration
+   worktree, so manager actions targeting it are also in scope.
+5. **Manager verdicts** (`Coordinator.accept_decision`): a decision may carry `verdicts`
+   (`action`, `accepted`, `reason`) for actions in status `returned`; same transition and evidence
+   shape as `verify()`, with a non-meaningful `verified:` event so the manager does not wake itself.
+   Invalid verdicts reject the whole decision; actions may be empty only with a verdict. `run_cycle`
+   refuses an accepting verdict whose result body was not in the briefing
+   (`verdict_without_result_evidence`). The manager's instructions name the field.
+6. **Briefing for verdicts** (found live, see below): returned results are read first and evicted
+   last, and `fit_briefing` picks the largest FIFO event prefix whose briefing keeps all of them
+   (deferred events stay pending), else the largest prefix that fits.
+
+**Tests:** full `scripts/initiative_control` discovery in clean worktrees (fresh venv, disposable HOME
+and aliases, `CORBANU_TEST_NO_NATIVE_KEYRING=1`): `07c7df70e9` **930 OK**, `fbfb166d78` **930 OK**,
+`7e844abfbd` **930 OK**. `55b5d1076d` had 1 expected failure (a real-tmux test now sees `closed`),
+fixed; runs at `ef7601c047` and `bc473d5c59` were stopped when the code changed. Discovery's
+`test_*.py` pattern does not match `manager_cycle_test.py`; it ran separately at `7e844abfbd`: 24 OK.
+
+**Code reviews** (`claude-opus-5-5-plan`, high effort, read-only, code and records only):
+`01a101f9` CHANGES REQUIRED → `01a10202` CHANGES REQUIRED → `01a10209` **APPROVE** (all five items);
+`01a1021e` **APPROVE** (`fbfb166d78`; noted the live briefing has almost no room); `01a1023c`
+**APPROVE** (`7e844abfbd`). Non-blocking notes kept: a crash between `c.returned` and its receipt
+leaves an unresolvable `effect_uncertain` (pre-existing); a routed action can still hold if its
+gate fails between routing and claim (race); the fallback when results cannot all fit is
+all-or-nothing; the restriction audit reason text is unchanged.
+
+**Review budget:** this track used 5 code reviews and 3 qualification evidence reviews this round,
+above the default five. The extra passes removed real blockers (two CHANGES REQUIRED rounds; one
+requalification per package change). The integrator should record the extension.
+
+### Qualification (PF-83 VM, three attempts, each round 5 repeated step for step)
+
+Each attempt: same fence, hosts, credential and share handling; exact restore (anchor and
+`/etc/hosts` back to `58954a3f…`/`6be8ce8e…` with original inode and mtime, three credentials
+identical in owner/mode/size/inode/mtime/digest, 9,910-entry manifest identical, neo2's home 0755,
+share remounted, guest `/private/tmp` cleaned); post-restore probes 301/421/403. Zero en0 public
+packets and zero guest SYNs; 76 blocked provider SYNs, all from the probes or the worker's own probe
+steps; none from C or N. Positive control C returned; broker-down N failed closed
+(`runtime_failure`). C and M were **closed by the owner itself** after RETURN (clean receipts).
+
+| Attempt | Package | M ticks / joins | ACK shape | Review |
+| --- | --- | --- | --- | --- |
+| 1 `ec703d` | `e1b29b6e…4db0` (`07c7df70e9`) | 12 / 23 | C: commentary + `\n` + empty final, accepted | `01a10218` QUALIFIED |
+| 2 `f4e5c6` | `53689742…4706` (`fbfb166d78`) | 13 / 24 | M: commentary + `\n` + empty final, accepted | `01a1022a` QUALIFIED |
+| 3 `9116df` | `abe1ae15…f305` (`7e844abfbd`) | 12 / 23 | exact final | `01a10248` QUALIFIED |
+
+Corrections the reviewers found are in each `review-notes.md` (unchanged evidence files). Attempts
+2 and 3: control C overlapped the end of the seal egress probe (I issued both at once); the provider
+SYNs in the overlap are the probe's last two pinned curls (attempt 3: 10, not the 12 the evidence
+says). Hardening still not applied: z23 share still configured in UTM; `~/.ssh`, `~/Library`, `~/bin`
+not held; port-22 pass rule not narrowed; no interface or anchor-table inventory.
+
+### r3 verdict through the normal path
+
+Manager run `eaca7fec` (candidate `07c7df70e9`, owner still at generation 5) returned
+`verdicts: [owner-first-check-01-r3, accepted false]`: "Result body is withheld under
+evidence_budget … cannot accept unverified." The briefing was at its 64 KiB limit (3 events
+selected, 9 bodies dropped). r3 is `failed`. That exposed item 6.
+
+### Live run (generation 7, then generation 9)
+
+1. **Restage to 7:** disarm generation 5 first refused `BlockingIOError` (a tick held the lock);
+   uninstall, then disarm → OFF generation 6. Preflight items 1-5 PASS (`live/restage_preflight.py`,
+   disclosed variant: item 2 checks the two new allocations instead of a prepared action, because
+   this package routes actions prepared after arming; item 5 is round 5's OFF variant). The recipe
+   (`live/restage-recipe.py`, no selected handoff) reconfigured (two disposable worktrees added),
+   repinned, then stopped at its OFF-tick assertion: the uninstall had booted out a tick in flight,
+   latching `interrupted_tick`. `live/restage-continue.py` recovered it with evidence, ran the OFF
+   tick (`owner_off`), armed **generation 7** and recovered the `owner_off` latch.
+2. **Allocations** (`prepare_worker`, openai, `--yolo`, round-2 authority): `owner-loop-r6-a`
+   (read-only check) and `owner-loop-r6-b` (one uncommitted docs note), worktrees
+   `owner-loop-r6-{a,b}-20261003` at `da4e4e468c`.
+3. **Manager `d22519f8`** (14:37:30Z) prepared `owner-loop-r6-a-01` and `owner-loop-r6-b-01`.
+
+| Step (UTC) | a-01 | b-01 |
+| --- | --- | --- |
+| routed to owner (one handoff, rev 2947) | 14:37:37 | 14:37:37 |
+| claim / launch | 14:37:39 / :43 | 14:37:47 / :51 |
+| prompt | 14:38:35 | 14:38:45 |
+| **ACK** (exact final line) | 14:39:30 | 14:39:49 |
+| **START** | 14:39:36 | 14:39:56 |
+| working / **RETURN** recorded | 14:40:52 / 14:40:57 | 14:41:23 / 14:41:27 |
+| **worker closed** (own socket, clean, pane exit 0, server gone) | 14:41:00 | 14:41:30 |
+| **manager verdict** `a48f4abd` (14:49:16) | accepted | accepted |
+
+   - Every tick `ACTIVE`, `unresolved_holds: []` (`live/live-tick-outcomes.txt`).
+   - RETURNs: a-01 HEAD `da4e4e468c…`, 0 changes, `docs/sprints/check.py` and
+     `check_portable_skills.py` exit 0; b-01 created only `owner-loop-r6-note.md` (HEAD, `26`).
+   - Before the verdict, the briefing still could not carry both results (dry run on a copy:
+     largest fitting prefix kept neither). I compacted `owner-first-check-01` and
+     `acct-coverage-123` (all actions terminal) to consumed stubs (the documented
+     `briefing-budget-recurrence-20260916.md` mechanism) and ran the verdict cycle from candidate
+     `7e844abfbd`, which chose 2 events and kept both results. The manager's reasons cite the
+     returned contents.
+4. **Restage to 9:** after a completed tick, uninstall then disarm → OFF generation 8 (no latch this
+   time); preflight 1-5 PASS (`live/restage_preflight_gen9.py`: item 2 checks that no owner work is
+   pending and both hands-off actions carry accepting manager verdicts); recipe exit 0; **generation
+   9** armed and ticking (`live/activation-status-final.json`).
+
+### Dashboard
+
+Not republished. `initiative-control.oGQGyA/sync-source.sh` exports this worktree's working tree,
+which still has the other session's four uncommitted files in `scripts/initiative_control/`.
+
+### Still open
+
+1. **Manager cycles are not automated.** The owner routes, runs, returns and closes by itself; a
+   manager cycle (`manager_cycle.py --run`) still has to be started to prepare work and to give
+   verdicts. The owner's `manager_enabled` only labels the fixture tick.
+2. **Briefing budget.** The live briefing sits at 64 KiB: `consumed_allocations` (245 entries,
+   ~22 KB) and `actions` (~20 KB) dominate, 85 events are pending, and a cycle takes 2-4 events.
+   Item 6 makes verdicts work at small batches; the base size needs a structural fix and routine
+   compaction.
+3. Review non-blocking notes (routing/claim race, all-or-nothing fallback, restriction reason
+   text); the hardening list above; `slack-receiver-02`; the round-5 notes.
+4. Disposable worktrees `owner-action-r5-20261003` and `owner-loop-r6-{a,b}-20261003` are in the
+   owner config; b keeps its uncommitted note.
