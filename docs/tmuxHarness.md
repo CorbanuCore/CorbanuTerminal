@@ -20,17 +20,17 @@ discovered.
 
 ## Harness map
 
-| Path | Responsibility |
-| --- | --- |
-| `codex-rs/tui/tests/all.rs` | Single integration-test binary containing the support and scenario modules |
-| `codex-rs/tui/tests/support/tmux.rs` | Private tmux server, sessions, panes, input, capture, stable waits, and cleanup |
-| `codex-rs/tui/tests/support/tmux_command.rs` | Typed command construction and secret-bearing environment redaction |
-| `codex-rs/tui/tests/support/tmux_artifacts.rs` | Lazy failure bundles and bounded registered attachments |
-| `codex-rs/tui/tests/support/tmux_process.rs` | Pane/server process ownership and bounded teardown |
-| `codex-rs/tui/tests/support/tmux_layout.rs` | Typed horizontal and vertical splits |
-| `codex-rs/tui/tests/support/tmux_control.rs` | Optional bounded tmux control-mode client for multi-pane event workflows |
-| `codex-rs/tui/tests/suite/` | Product and rendering scenarios |
-| `.github/workflows/tmux-smoke.yml` | Required Ubuntu focused smoke lane and failure-artifact upload |
+| Path                                           | Responsibility                                                                  |
+| ---------------------------------------------- | ------------------------------------------------------------------------------- |
+| `codex-rs/tui/tests/all.rs`                    | Single integration-test binary containing the support and scenario modules      |
+| `codex-rs/tui/tests/support/tmux.rs`           | Private tmux server, sessions, panes, input, capture, stable waits, and cleanup |
+| `codex-rs/tui/tests/support/tmux_command.rs`   | Typed command construction and secret-bearing environment redaction             |
+| `codex-rs/tui/tests/support/tmux_artifacts.rs` | Lazy failure bundles and bounded registered attachments                         |
+| `codex-rs/tui/tests/support/tmux_process.rs`   | Pane/server process ownership and bounded teardown                              |
+| `codex-rs/tui/tests/support/tmux_layout.rs`    | Typed horizontal and vertical splits                                            |
+| `codex-rs/tui/tests/support/tmux_control.rs`   | Optional bounded tmux control-mode client for multi-pane event workflows        |
+| `codex-rs/tui/tests/suite/`                    | Product and rendering scenarios                                                 |
+| `.github/workflows/tmux-smoke.yml`             | Required Ubuntu focused smoke lane and failure-artifact upload                  |
 
 Each `TmuxServer` uses a unique `tmux -L` socket under a temporary directory.
 It never targets the developer's default tmux server. Sessions and panes are
@@ -273,14 +273,14 @@ pgrep -af 'codex-tui-test-' || true
 
 Common failures:
 
-| Symptom | Check |
-| --- | --- |
-| Scenario silently skipped | Set `CORBANU_TMUX_REQUIRED=1` and confirm `tmux -V` |
-| Candidate unavailable | Build `codex-cli --bin codex` or the required TUI binary |
-| Enter appears to do nothing | Wait for the complete literal input to render before `send_key` |
-| Stable wait times out | Inspect the last viewport, scrollback, pane metadata, and trace attachment |
-| Mocked turn never completes | Verify the mock supplies every expected Responses request, including the post-tool completion |
-| Nextest reports a leak | Check recorded pane/server PIDs and rerun the one selector with `--retries 0` before attributing it to tmux |
+| Symptom                                    | Check                                                                                                        |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| Scenario silently skipped                  | Set `CORBANU_TMUX_REQUIRED=1` and confirm `tmux -V`                                                          |
+| Candidate unavailable                      | Build `codex-cli --bin codex` or the required TUI binary                                                     |
+| Enter appears to do nothing                | Wait for the complete literal input to render before `send_key`                                              |
+| Stable wait times out                      | Inspect the last viewport, scrollback, pane metadata, and trace attachment                                   |
+| Mocked turn never completes                | Verify the mock supplies every expected Responses request, including the post-tool completion                |
+| Nextest reports a leak                     | Check recorded pane/server PIDs and rerun the one selector with `--retries 0` before attributing it to tmux  |
 | Failure bundle contains sensitive material | Stop, remove the artifact from circulation, and fix fixture/attachment/redaction boundaries before rerunning |
 
 ## Local tmux scrollback
