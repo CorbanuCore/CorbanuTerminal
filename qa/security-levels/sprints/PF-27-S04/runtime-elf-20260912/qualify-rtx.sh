@@ -28,12 +28,12 @@ run() {
 }
 git rev-parse HEAD HEAD:codex-rs > "$evidence/source.txt"
 sha256sum "$PF27_ELF_STATIC" "$PF27_ELF_GNU" "$PF27_ELF_INTERPRETER" > "$evidence/artifacts.sha256"
-run fix just fix -p codex-secret-broker-service --features synthetic-fixture
+run fix just fix -p codex-secret-broker-service -p codex-secret-broker-fixture
 run fmt just fmt
-run lint just clippy -p codex-secret-broker-service --features synthetic-fixture --no-deps
+run lint just clippy -p codex-secret-broker-service -p codex-secret-broker-fixture --no-deps
 run default just test -p codex-secret-broker-service --retries 0 --test-threads 4
-run synthetic just test -p codex-secret-broker-service --features synthetic-fixture --retries 0 --test-threads 4
-run artifacts just test -p codex-secret-broker-service --features synthetic-fixture --run-ignored only -E 'test(pf_27_s01_elf_profile_frozen_artifacts_as_data)' --retries 0
+run synthetic just test -p codex-secret-broker-service -p codex-secret-broker-fixture --retries 0 --test-threads 4
+run artifacts just test -p codex-secret-broker-service -p codex-secret-broker-fixture --run-ignored only -E 'test(pf_27_s01_elf_profile_frozen_artifacts_as_data)' --retries 0
 run affected just test -p codex-protected-state -p codex-secret-broker -p codex-vault -p codex-network-proxy --retries 0 --test-threads 4
 git diff --stat > "$evidence/post-format-stat.txt"
 printf 'COMPLETE\n'

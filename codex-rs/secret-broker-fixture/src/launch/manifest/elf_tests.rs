@@ -11,25 +11,25 @@ pub(crate) fn fixture() -> Vec<u8> {
     b[16] = 3;
     b[18] = 62;
     b[20] = 1;
-    put(&mut b, 24, 512);
-    put(&mut b, 32, 64);
+    put(&mut b, /*offset*/ 24, /*value*/ 512);
+    put(&mut b, /*offset*/ 32, /*value*/ 64);
     b[52] = 64;
     b[54] = 56;
     b[56] = 2;
     b[64] = 1;
     b[68] = 5;
-    put(&mut b, 96, 1024);
-    put(&mut b, 104, 1024);
-    put(&mut b, 112, 4096);
+    put(&mut b, /*offset*/ 96, /*value*/ 1024);
+    put(&mut b, /*offset*/ 104, /*value*/ 1024);
+    put(&mut b, /*offset*/ 112, /*value*/ 4096);
     b[120] = 2;
     b[124] = 6;
-    put(&mut b, 128, 384);
-    put(&mut b, 136, 384);
-    put(&mut b, 152, 32);
-    put(&mut b, 160, 32);
-    put(&mut b, 168, 8);
-    put(&mut b, 384, 0x6ffffffb);
-    put(&mut b, 392, 0x08000001);
+    put(&mut b, /*offset*/ 128, /*value*/ 384);
+    put(&mut b, /*offset*/ 136, /*value*/ 384);
+    put(&mut b, /*offset*/ 152, /*value*/ 32);
+    put(&mut b, /*offset*/ 160, /*value*/ 32);
+    put(&mut b, /*offset*/ 168, /*value*/ 8);
+    put(&mut b, /*offset*/ 384, /*value*/ 0x6ffffffb);
+    put(&mut b, /*offset*/ 392, /*value*/ 0x08000001);
     b
 }
 fn parse(b: Vec<u8>) -> io::Result<()> {
@@ -109,7 +109,7 @@ fn pf_27_s01_elf_profile_program_ranges_and_mapping_denials() {
         assert!(parse(b).is_err());
     }
     let mut b = fixture();
-    put(&mut b, 96, 512); // Entry in BSS, not file-backed.
+    put(&mut b, /*offset*/ 96, /*value*/ 512); // Entry in BSS, not file-backed.
     assert!(parse(b).is_err());
 }
 
@@ -119,32 +119,32 @@ fn pf_27_s01_elf_profile_dynamic_vocabulary_and_termination() {
         1, 15, 29, 0x7fffffff, 0x7ffffffd, 0x6ffffefc, 0x6ffffefb, 0xdead,
     ] {
         let mut b = fixture();
-        put(&mut b, 152, 48);
-        put(&mut b, 160, 48);
-        put(&mut b, 400, 4);
+        put(&mut b, /*offset*/ 152, /*value*/ 48);
+        put(&mut b, /*offset*/ 160, /*value*/ 48);
+        put(&mut b, /*offset*/ 400, /*value*/ 4);
         assert!(parse(b.clone()).is_ok());
-        put(&mut b, 400, tag);
+        put(&mut b, /*offset*/ 400, tag);
         assert!(parse(b).is_err(), "external or unknown tag {tag}");
     }
     for value in [0, 1, 0x08000000, 0x08000003] {
         let mut b = fixture();
-        put(&mut b, 392, value);
+        put(&mut b, /*offset*/ 392, value);
         assert!(parse(b).is_err());
     }
     let mut b = fixture();
-    put(&mut b, 152, 48);
-    put(&mut b, 160, 48);
-    put(&mut b, 400, 4);
-    put(&mut b, 408, 0x08000001);
+    put(&mut b, /*offset*/ 152, /*value*/ 48);
+    put(&mut b, /*offset*/ 160, /*value*/ 48);
+    put(&mut b, /*offset*/ 400, /*value*/ 4);
+    put(&mut b, /*offset*/ 408, /*value*/ 0x08000001);
     assert!(parse(b.clone()).is_ok());
-    put(&mut b, 400, 0x6ffffffb);
-    put(&mut b, 408, 0x08000001);
+    put(&mut b, /*offset*/ 400, /*value*/ 0x6ffffffb);
+    put(&mut b, /*offset*/ 408, /*value*/ 0x08000001);
     assert!(parse(b).is_err());
     let mut b = fixture();
-    put(&mut b, 400, 4); // Supported tag but no room for DT_NULL.
+    put(&mut b, /*offset*/ 400, /*value*/ 4); // Supported tag but no room for DT_NULL.
     assert!(parse(b).is_err());
     let mut b = fixture();
-    put(&mut b, 408, 1);
+    put(&mut b, /*offset*/ 408, /*value*/ 1);
     assert!(parse(b).is_err());
     for (tag, value) in [
         (4, 0),
@@ -167,25 +167,25 @@ fn pf_27_s01_elf_profile_dynamic_vocabulary_and_termination() {
         (0x6ffffff9, 0),
     ] {
         let mut b = fixture();
-        put(&mut b, 152, 48);
-        put(&mut b, 160, 48);
-        put(&mut b, 400, tag);
-        put(&mut b, 408, value);
+        put(&mut b, /*offset*/ 152, /*value*/ 48);
+        put(&mut b, /*offset*/ 160, /*value*/ 48);
+        put(&mut b, /*offset*/ 400, tag);
+        put(&mut b, /*offset*/ 408, value);
         assert!(parse(b).is_ok(), "supported tag {tag}");
     }
     for tag in [9, 11, 21, 30] {
         let mut b = fixture();
-        put(&mut b, 152, 48);
-        put(&mut b, 160, 48);
-        put(&mut b, 400, tag);
-        put(&mut b, 408, 99);
+        put(&mut b, /*offset*/ 152, /*value*/ 48);
+        put(&mut b, /*offset*/ 160, /*value*/ 48);
+        put(&mut b, /*offset*/ 400, tag);
+        put(&mut b, /*offset*/ 408, /*value*/ 99);
         assert!(parse(b).is_err());
     }
     let mut b = fixture();
-    put(&mut b, 152, 48);
-    put(&mut b, 160, 48);
+    put(&mut b, /*offset*/ 152, /*value*/ 48);
+    put(&mut b, /*offset*/ 160, /*value*/ 48);
     assert!(parse(b.clone()).is_ok()); // Zero-only trailer permitted.
-    put(&mut b, 416, 1);
+    put(&mut b, /*offset*/ 416, /*value*/ 1);
     assert!(parse(b).is_err()); // Never active trailer tags.
 }
 
@@ -215,7 +215,7 @@ fn pf_27_s01_elf_profile_io_failures_are_sanitized() {
                 cursor: Cursor::new(fixture()),
                 fail_at,
             },
-            1024,
+            /*size*/ 1024,
         )
         .unwrap_err();
         assert_eq!(err.to_string(), "ELF read failed");

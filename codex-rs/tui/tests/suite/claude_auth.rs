@@ -214,7 +214,15 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
 // Real key-driven coverage of the provider-manager -> model-picker boundary.
 // Credential configuration alone did not previously refresh picker eligibility.
 fn assert_claude_model_catalog(pane: &TmuxPane) -> Result<()> {
+    // The caller's Escape may still be closing the provider manager; typing into
+    // it selects a provider instead of opening the model picker.
+    pane.wait_stable_until("provider manager closed", READY_TIMEOUT, |text| {
+        !text.contains("Configure providers and control")
+            && !text.contains("Press enter to confirm or esc to go back")
+    })?;
+    pane.wait_stable_contains("Corbanu Terminal · TPS:", READY_TIMEOUT)?;
     pane.send_literal("/model")?;
+    pane.wait_stable_contains("/model", Duration::from_secs(10))?;
     pane.send_key(TmuxKey::Enter)?;
     pane.wait_stable_contains("Select Model", READY_TIMEOUT)?;
     for _ in 0..16 {

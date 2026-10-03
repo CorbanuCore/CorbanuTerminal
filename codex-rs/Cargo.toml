@@ -49,6 +49,7 @@ members = [
     "secrets",
     "secret-broker",
     "secret-broker-service",
+    "secret-broker-fixture",
     "exec",
     "file-system",
     "exec-server-protocol",

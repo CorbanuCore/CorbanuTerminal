@@ -2033,7 +2033,6 @@ dependencies = [
  "futures",
  "http 1.4.0",
  "pretty_assertions",
- "regex-lite",
  "schemars 0.8.22",
  "serde",
  "serde_json",
@@ -2512,7 +2511,6 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
- "sha2 0.10.9",
  "sqlx",
  "supports-color 3.0.2",
  "sys-locale",
@@ -3771,7 +3769,6 @@ dependencies = [
  "codex-otel",
  "codex-protocol",
  "codex-rollout",
- "codex-rollout-trace",
  "codex-secrets",
  "codex-state",
  "codex-terminal-detection",
@@ -4229,12 +4226,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "codex-secret-broker-service"
+name = "codex-secret-broker-fixture"
 version = "0.1.42"
 dependencies = [
  "codex-keyring-store",
- "codex-protected-state",
  "codex-secret-broker",
+ "codex-secret-broker-service",
  "codex-security-audit",
  "codex-security-policy",
  "codex-utils-absolute-path",
@@ -4247,6 +4244,20 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "signal-hook",
+ "tempfile",
+]
+
+[[package]]
+name = "codex-secret-broker-service"
+version = "0.1.42"
+dependencies = [
+ "codex-protected-state",
+ "codex-secret-broker",
+ "codex-utils-cargo-bin",
+ "codex-vault",
+ "nix 0.30.1",
+ "pretty_assertions",
+ "rustix 1.1.4",
  "tempfile",
 ]
 
