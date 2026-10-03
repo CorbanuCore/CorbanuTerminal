@@ -1,6 +1,6 @@
 """Default-OFF one-tick owner; admitted, journaled TMUX worker lifecycle."""
 import argparse
-from contextlib import closing, contextmanager, nullcontext
+from contextlib import ExitStack, closing, contextmanager, nullcontext
 import fcntl
 import os
 from pathlib import Path
@@ -105,6 +105,9 @@ def manager_settings(value):
     return value
 
 
+IN_PROGRESS_MARKERS = ("rebase-merge", "rebase-apply", "BISECT_LOG", "MERGE_HEAD", "CHERRY_PICK_HEAD")
+
+
 def disposable_head(path):
     """The detached HEAD commit of a linked Git worktree, else None.
 
@@ -116,7 +119,11 @@ def disposable_head(path):
         f.require(marker.is_file(), "not_linked_worktree")
         text = f.read_file(marker, 4096).decode()
         f.require(text.startswith("gitdir: ") and text.count("\n") <= 1, "not_linked_worktree")
-        head = f.read_file(Path(text[len("gitdir: "):].strip()) / "HEAD", 4096).decode().strip()
+        gitdir = Path(text[len("gitdir: "):].strip())
+        # A worktree detached by a rebase, bisect, merge or cherry-pick in progress
+        # is somebody's branch work, not a disposable checkout.
+        f.require(not any(os.path.lexists(gitdir / name) for name in IN_PROGRESS_MARKERS), "worktree_busy")
+        head = f.read_file(gitdir / "HEAD", 4096).decode().strip()
         return head if len(head) in (40, 64) and all(c in "0123456789abcdef" for c in head) else None
     except (f.LaunchError, OSError, UnicodeError, ValueError):
         return None
@@ -1160,6 +1167,10 @@ class Kernel:
         if not selected:
             return snapshot
         meta = self.admit()
+        for key in selected:
+            # Marks the action as default-routed before the handoff commits, so the
+            # claim always re-checks its worktree (a marker for a refused handoff is inert).
+            artifact(self.root, "routes/" + digest(["route", key]) + ".json", {"action": key})
         evidence = {"kind": "armed_scope_default_route", "actions": sorted(selected),
                     "generation": meta["control_generation"],
                     "activation_digest": meta["activation_digest"],
@@ -1170,11 +1181,7 @@ class Kernel:
             self.c._handoff(selected, snapshot["revision"], evidence)
         except Rejected:
             # A concurrent coordinator change; nothing was routed. Retry next tick.
-            return self.c.snapshot()
-        for key in selected:
-            # Marks the action as default-routed: its worktree is re-checked at claim.
-            artifact(self.root, "routes/" + digest(["route", key]) + ".json",
-                     {"action": key, "evidence": evidence})
+            pass
         return self.c.snapshot()
 
     def workers(self, adapter):
@@ -1478,7 +1485,7 @@ def manager_lane(config_path, schedule_root, clock=time.time, runner=None):
         state=root, runs_dir=Path(settings["runs_dir"]), binary=binary,
         auth_vault_home=Path(settings["auth_vault_home"]), owner_context=directory / "owner-context.json",
         timeout=settings["timeout_seconds"],
-        acceptance_gate=lambda: admitted_generation(config_path, generation))
+        acceptance_gate=lambda: acceptance_gate(config_path, generation))
     artifact(schedule_root, "cycles/" + cycle + "/result.json", result)
     record = {"event": "cycle_finished", "at": clock(), "cycle": cycle, "status": result["status"],
               "manager_run": result.get("manager_run"),
@@ -1511,11 +1518,12 @@ def manager_lane(config_path, schedule_root, clock=time.time, runner=None):
             "released_manager_run": reconciled}
 
 
-def admitted_generation(config_path, generation, wait=15.0):
-    """Acceptance gate for an automatic cycle: the owner is still armed at the
-    generation that started it. Read-only (no owner lock, so a running owner tick
-    never blocks it); a briefly busy database is retried for up to `wait` seconds."""
-    deadline = time.monotonic() + wait
+ACCEPTANCE_WAIT = 25.0
+
+
+def admitted_generation(config_path, generation, deadline):
+    """The owner is still armed at `generation`. A read-only snapshot (no owner
+    lock); a busy database or a transient commit journal is retried until deadline."""
     while True:
         try:
             with activation_store(config_path, readonly=True) as (_, db, _meta):
@@ -1526,10 +1534,29 @@ def admitted_generation(config_path, generation, wait=15.0):
             return meta
         except (sqlite3.OperationalError, f.LaunchError) as exc:
             busy = isinstance(exc, sqlite3.OperationalError) or str(exc) in {
-                "preview_database_busy", "preview_read_budget_exceeded"}
+                "preview_database_busy", "preview_read_budget_exceeded", "owner_recovery_required"}
             if not busy or time.monotonic() >= deadline:
                 raise
-            time.sleep(0.5)
+            time.sleep(0.25)
+
+
+@contextmanager
+def acceptance_gate(config_path, generation, wait=None):
+    """Held around an automatic cycle's acceptance: the owner's admission lock
+    (as an owner tick holds it, so disarm cannot commit in between) and a fresh
+    check that the owner is still armed at the generation that started the cycle.
+    A running owner tick is waited out for up to ACCEPTANCE_WAIT seconds."""
+    deadline = time.monotonic() + (ACCEPTANCE_WAIT if wait is None else wait)
+    root = f.private_dir(load(config_path)["coordinator"])
+    with ExitStack() as stack:
+        while True:
+            try:
+                stack.enter_context(locked(root / "owner-admission.lock"))
+                break
+            except BlockingIOError:
+                f.require(time.monotonic() < deadline, "owner_admission_busy")
+                time.sleep(0.5)
+        yield admitted_generation(config_path, generation, deadline)
 
 
 def launchers_stopped(cycle):

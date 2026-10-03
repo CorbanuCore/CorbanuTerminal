@@ -5,7 +5,7 @@ The injected launcher is a trusted adapter, never an input from model/event JSON
 """
 
 import argparse
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime
 import json
 import math
@@ -596,11 +596,11 @@ def run_cycle(*, state, runs_dir, binary, auth_vault_home, owner_context, timeou
                  "session_id": receipt["session_id"], "turn_id": receipt["turn_id"]}
         f.write_json(cycle / "validated.json", proof)
         phase = "acceptance"
-        if acceptance_gate is not None:
-            # The caller's authority is re-checked at the last moment (e.g. the owner
-            # disarmed mid-cycle): a refusal holds before anything is committed.
-            acceptance_gate()
-        c.accept_decision(packet["manager_run"], decision, proof)
+        # The caller's authority is re-checked at the last moment and held across the
+        # commit (e.g. the owner disarmed mid-cycle): a refusal holds before anything
+        # is committed.
+        with acceptance_gate() if acceptance_gate is not None else nullcontext():
+            c.accept_decision(packet["manager_run"], decision, proof)
         # SQLite is the acceptance authority even if the process dies before output.
         actions = c.snapshot()["actions"]
         result = {"status": "accepted", "manager_run": packet["manager_run"],

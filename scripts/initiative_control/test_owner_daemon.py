@@ -1778,6 +1778,12 @@ class HandoffTests(unittest.TestCase):
         self.assertFalse(owner.disposable_worktree(plain))
         self.assertFalse(owner.disposable_worktree(main))
         self.assertFalse(owner.disposable_worktree(moved, "d" * 40))
+        for marker in owner.IN_PROGRESS_MARKERS:  # e.g. a rebase stopped at the base commit
+            path = Path(str(self.root) + ".gitdir") / marker
+            path.mkdir()
+            self.assertFalse(owner.disposable_worktree(self.root, "d" * 40), marker)
+            path.rmdir()
+        self.assertTrue(owner.disposable_worktree(self.root, "d" * 40))
         (branch.parent / "integration.gitdir" / "HEAD").write_text("not-a-commit\n")
         self.assertFalse(owner.disposable_worktree(branch))
 
@@ -3139,12 +3145,41 @@ class ManagerLaneTests(unittest.TestCase):
         gates = []
         def runner(**kwargs):
             gates.append(kwargs["acceptance_gate"])
+            with kwargs["acceptance_gate"]() as meta:  # still armed: the gate admits
+                self.assertEqual(1, meta["control_generation"])
             owner.disarm_owner(self.config_path, 1)
             with self.assertRaisesRegex(f.LaunchError, "owner_off"):
-                kwargs["acceptance_gate"]()
+                with kwargs["acceptance_gate"]():
+                    self.fail("gate admitted a disarmed owner")
             return self.failing("acceptance", "dead")(**kwargs)
         self.assertEqual("HOLD", self.lane(runner)["state"])
         self.assertEqual(1, len(gates))
+
+    def test_acceptance_gate_holds_the_admission_lock_and_waits_out_a_tick(self):
+        self.manager()
+        with owner.acceptance_gate(self.config_path, 1) as meta:
+            self.assertEqual(1, meta["control_generation"])
+            # Disarm needs both owner locks; it cannot commit inside the gate.
+            with self.assertRaises(BlockingIOError):
+                owner.disarm_owner(self.config_path, 1)
+        with owner.locked(self.root / "owner-admission.lock"):
+            with self.assertRaisesRegex(f.LaunchError, "owner_admission_busy"):
+                with owner.acceptance_gate(self.config_path, 1, wait=0.6):
+                    self.fail("entered while a tick held the admission lock")
+        with self.assertRaisesRegex(f.LaunchError, "owner_generation_changed"):
+            with owner.acceptance_gate(self.config_path, 2):
+                self.fail("entered at another generation")
+        # A commit journal that comes and goes (an owner commit) is retried, not a refusal.
+        journal = self.root / "owner.sqlite3-journal"
+        journal.write_bytes(b"")
+        import threading
+        timer = threading.Timer(0.6, journal.unlink)
+        timer.start()
+        try:
+            with owner.acceptance_gate(self.config_path, 1, wait=5) as meta:
+                self.assertFalse(journal.exists())
+        finally:
+            timer.join()
 
     def scheduled(self):
         import activate

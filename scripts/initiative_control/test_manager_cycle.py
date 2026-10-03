@@ -224,6 +224,30 @@ class CycleTests(unittest.TestCase):
         self.assertEqual([{"action": key, "accepted": True, "status": "accepted"}], result["verdicts"])
         self.assertEqual([], result["prepared_actions"])
 
+    def test_acceptance_gate_wraps_the_commit_and_a_refusal_commits_nothing(self):
+        from contextlib import contextmanager
+        seen = []
+        @contextmanager
+        def gate():
+            seen.append(self.c.snapshot()["manager"] is not None)
+            yield
+            seen.append(self.c.snapshot()["manager"] is None)
+        with patch.object(f, "vault_token", side_effect=AssertionError("no credentials")):
+            result = invocation(self.root, self.launch, acceptance_gate=gate)
+        self.assertEqual("accepted", result["status"], result)
+        self.assertEqual([True, True], seen)  # entered before the commit, left after it
+        self.c.event({"id": "event-2"})
+        @contextmanager
+        def refusing():
+            raise f.LaunchError("owner_off")
+            yield
+        with patch.object(f, "vault_token", side_effect=AssertionError("no credentials")):
+            result = invocation(self.root, self.launch, acceptance_gate=refusing)
+        self.assertEqual(("owner_hold", "acceptance", "owner_off"),
+                         (result["status"], result["phase"], result["reason"]), result)
+        self.assertIsNotNone(self.c.snapshot()["manager"])
+        self.assertEqual([("event-2",)], [tuple(row) for row in self.pending()])
+
     def test_no_action_decision_end_to_end_consumes_the_batch(self):
         def idle(args):
             receipt = self.launch(args)
