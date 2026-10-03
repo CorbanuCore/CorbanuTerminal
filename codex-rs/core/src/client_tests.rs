@@ -291,10 +291,20 @@ fn pf_30_s01_admitted_context_round_trips_through_each_real_provider_adapter() {
         )
         .unwrap(),
     ];
-    assert_eq!(
-        serde_json::to_vec(&first_requests).unwrap(),
-        serde_json::to_vec(&repeated_requests).unwrap()
-    );
+    // `client_metadata` is a HashMap, so with serde_json's `preserve_order`
+    // (unified into every crate under Bazel) its serialized key order varies
+    // between builds. Compare whole requests structurally and keep the
+    // byte-for-byte check on the model input.
+    assert_eq!(first_requests, repeated_requests);
+    for (first, repeated) in first_requests.iter().zip(&repeated_requests) {
+        for key in ["input", "messages", "system"] {
+            assert_eq!(
+                serde_json::to_vec(&first[key]).unwrap(),
+                serde_json::to_vec(&repeated[key]).unwrap(),
+                "{key} must be byte-identical across repeated builds"
+            );
+        }
+    }
     for value in first_requests {
         let wire = serde_json::to_string(&value).unwrap();
         assert!(wire.contains("untrusted"));
