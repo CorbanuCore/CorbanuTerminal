@@ -3832,7 +3832,7 @@ async fn spawn_agent_allows_depth_up_to_configured_max_depth() {
         .inherit_child(
             root.thread_id,
             parent.thread_id,
-            "task:test-configured-depth-parent",
+            format!("task:spawn:{}", parent.thread_id),
             turn.config.security_level,
         )
         .expect("direct fixture parent should receive the same policy binding as a live spawn");
