@@ -47,7 +47,7 @@ jobs:
     # execution. A cold local Bazel build can exceed ten minutes before the SDK
     # tests begin. Cold builds now compile V8 transitively and can exceed 90
     # minutes, so keep enough headroom for the build and SDK process matrix.
-    timeout-minutes: 180
+    timeout-minutes: 360  # trial-only (#147): measure a full cold run without remote execution
     environment:
       name: bazel
       deployment: false
