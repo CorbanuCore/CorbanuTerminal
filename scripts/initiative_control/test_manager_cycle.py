@@ -168,6 +168,26 @@ class CycleTests(unittest.TestCase):
         self.assertTrue(self.pending())
         self.assertEqual({}, self.c.snapshot()["actions"])
 
+    def fenced_launcher(self, wrap):
+        def launch(args):
+            receipt = self.launch(args)
+            run = Path(receipt["artifacts"]["run_dir"])
+            final = wrap("```json\n" + json.dumps(receipt["decision"], indent=2) + "\n```")
+            f.write_file(run / "final.txt", final)
+            path, records = f.rollout(run)
+            records[-1]["payload"]["last_agent_message"] = final
+            f.write_file(path, "".join(json.dumps(r) + "\n" for r in records))
+            return receipt
+        return launch
+
+    def test_one_whole_message_fence_is_accepted_and_prose_around_it_is_not(self):
+        result = self.cycle(self.fenced_launcher(lambda text: text + "\n"))
+        self.assertEqual("accepted", result["status"], result)
+        self.assertEqual("prepared", result["prepared_actions"][0]["status"])
+        self.c.event({"id": "event-2"})
+        result = self.cycle(self.fenced_launcher(lambda text: "Decision:\n" + text))
+        self.assertEqual(("owner_hold", "invalid_json"), (result["status"], result.get("reason")), result)
+
     def test_success_prepares_without_dispatch_and_preserves_full_brief(self):
         result = self.cycle()
         self.assertEqual("accepted", result["status"], result)

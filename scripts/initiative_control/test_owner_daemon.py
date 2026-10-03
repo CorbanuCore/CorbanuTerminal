@@ -970,6 +970,11 @@ class FakeWorker(tmux.Worker):
     def start(self):
         return self.effect("start")
 
+    def close(self, timeout=3):
+        self.effect("close")
+        clean = self.modes.get(self.binding["action_id"]) != "close-unclean"
+        return {"clean": clean, "forced": False, "timeout": timeout, "server_shutdown": None}
+
     def inspect(self, deadline=None):
         action = self.binding["action_id"]
         mode = self.modes.get(action)
@@ -1036,15 +1041,17 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.configure()
         self.prepared()
         self.assertEqual("returned", self.tick()["actions"]["one"])
-        self.assertEqual([("one", "launch"), ("one", "prompt"), ("one", "start")], FakeWorker.events)
+        self.assertEqual([("one", "launch"), ("one", "prompt"), ("one", "start"), ("one", "close")],
+                         FakeWorker.events)
         self.assertEqual("returned", self.c.snapshot()["actions"]["one"]["status"])
         revision = self.c.snapshot()["revision"]
         self.assertEqual("returned", self.tick()["actions"]["one"])
         self.assertEqual(revision, self.c.snapshot()["revision"])
-        self.assertEqual(3, len(FakeWorker.events))
+        self.assertEqual(4, len(FakeWorker.events))
         effects = dict(self.sql("SELECT effect,phase FROM operations"))
         self.assertEqual({"claim", "prepare", "launch", "prompt", "ack", "dispatched",
-                          "acknowledged", "start", "working", "return_observed", "returned"}, set(effects))
+                          "acknowledged", "start", "working", "return_observed", "returned",
+                          "close"}, set(effects))
         self.assertEqual({"applied"}, set(effects.values()))
         self.assertEqual([("work-turn",)], self.sql("SELECT active_turn_id FROM processes"))
 
@@ -1065,7 +1072,8 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.assertEqual(action["allocation_digest"], current["allocation_digest"])
         self.assertEqual([("gpt-6-astra", "openai", "high", str(self.root))],
                          self.sql("SELECT model,provider,effort,worktree FROM processes"))
-        self.assertEqual([("one", "launch"), ("one", "prompt"), ("one", "start")], FakeWorker.events)
+        self.assertEqual([("one", "launch"), ("one", "prompt"), ("one", "start"), ("one", "close")],
+                         FakeWorker.events)
 
     def test_unbridged_or_conflicting_cycle_is_not_claimed(self):
         self.configure()
@@ -1097,7 +1105,8 @@ class WorkerLifecycleTests(unittest.TestCase):
             self.assertEqual(untouched, {key: current[key] for key in untouched})
             self.assertEqual([("one",)], self.sql("SELECT DISTINCT action_id FROM operations"))
             self.assertEqual([], self.sql("SELECT * FROM holds"))
-        self.assertEqual([("one", "launch"), ("one", "prompt"), ("one", "start")], FakeWorker.events)
+        self.assertEqual([("one", "launch"), ("one", "prompt"), ("one", "start"), ("one", "close")],
+                         FakeWorker.events)
 
     def test_wrong_ack_is_hard_hold_and_never_retried(self):
         self.configure()
@@ -1362,6 +1371,61 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.assertNotIn(("bad-policy", "launch"), FakeWorker.events)
         self.assertNotIn(("bad-worktree", "launch"), FakeWorker.events)
 
+    def test_return_then_close_through_journal_with_audit_record(self):
+        self.configure()
+        self.prepared()
+        self.assertEqual("returned", self.tick()["actions"]["one"])
+        rows = self.sql("SELECT effect,receipt_artifact FROM operations ORDER BY created_at, rowid")
+        self.assertEqual(["returned", "close"], [row[0] for row in rows][-2:])
+        receipt = owner.load(self.root / rows[-1][1])
+        self.assertEqual({"clean": True, "forced": False, "timeout": owner.CLOSE_TIMEOUT,
+                          "server_shutdown": None}, receipt["result"])
+        self.assertEqual([("closed",)], self.sql("SELECT terminal_status FROM processes"))
+        self.assertEqual("returned", self.c.snapshot()["actions"]["one"]["status"])
+        # Idempotent: a later tick neither closes again nor changes the coordinator.
+        revision = self.c.snapshot()["revision"]
+        self.assertEqual("returned", self.tick()["actions"]["one"])
+        self.assertEqual(1, FakeWorker.events.count(("one", "close")))
+        self.assertEqual(revision, self.c.snapshot()["revision"])
+
+    def test_restart_between_return_and_close_closes_on_next_tick(self):
+        self.configure()
+        self.prepared()
+        with patch.object(owner.Kernel, "close_worker", lambda *args: None):
+            self.assertEqual("returned", self.tick()["actions"]["one"])
+        self.assertNotIn(("one", "close"), FakeWorker.events)
+        self.assertEqual("returned", self.tick()["actions"]["one"])
+        self.assertEqual(1, FakeWorker.events.count(("one", "close")))
+        self.assertEqual([("applied",)], self.sql("SELECT phase FROM operations WHERE effect='close'"))
+        self.assertEqual([], self.sql("SELECT * FROM holds"))
+
+    def test_unclean_or_uncertain_close_holds_and_is_never_retried(self):
+        self.configure()
+        self.prepared("unclean")
+        FakeWorker.modes["unclean"] = "close-unclean"
+        self.assertEqual("HOLD", self.tick()["actions"]["unclean"])
+        self.assertEqual([("worker_close_unclean",)], self.sql("SELECT reason_code FROM holds"))
+        self.assertEqual([("close_unclean",)], self.sql("SELECT terminal_status FROM processes"))
+        self.assertEqual("returned", self.c.snapshot()["actions"]["unclean"]["status"])
+        self.prepared("crash")
+        FakeWorker.fail = ("crash", "close")
+        self.assertEqual("HOLD", self.tick()["actions"]["crash"])
+        FakeWorker.fail = None
+        self.assertEqual("HOLD", self.tick()["actions"]["crash"])
+        self.assertEqual(1, FakeWorker.events.count(("crash", "close")))
+        self.assertEqual(1, FakeWorker.events.count(("unclean", "close")))
+
+    def test_prior_generation_return_is_history_not_closed_or_held(self):
+        self.configure()
+        self.prepared()
+        with patch.object(owner.Kernel, "close_worker", lambda *args: None):
+            self.assertEqual("returned", self.tick()["actions"]["one"])
+        self.authority["generation"] = 2
+        self.arm()
+        self.assertEqual("returned", self.tick()["actions"]["one"])
+        self.assertNotIn(("one", "close"), FakeWorker.events)
+        self.assertEqual([], self.sql("SELECT * FROM holds"))
+
     def test_prior_activation_holds_inflight_worker(self):
         self.configure()
         self.prepared()
@@ -1470,7 +1534,7 @@ class WorkerLifecycleTests(unittest.TestCase):
                     else:
                         self.c.set_enabled(True, {"fixture": True})
                     self.assertEqual("returned", self.tick()["actions"][key])
-                    self.assertEqual([(key, name) for name in ("launch", "prompt", "start")],
+                    self.assertEqual([(key, name) for name in ("launch", "prompt", "start", "close")],
                                      [e for e in FakeWorker.events if e[0] == key])
                     self.assertEqual([("applied",)], self.sql(
                         "SELECT DISTINCT phase FROM operations WHERE action_id=?", (key,)))
@@ -1548,7 +1612,7 @@ class HandoffTests(unittest.TestCase):
                            for key, side in choices.items()})
         return owner.handoff(self.config_path, request)
 
-    def test_partition_is_atomic_and_defaults_new_actions_to_hand(self):
+    def test_partition_is_atomic_and_routes_in_scope_new_actions_to_owner(self):
         self.configure()
         self.prepared("owned")
         self.prepared("manual")
@@ -1561,18 +1625,71 @@ class HandoffTests(unittest.TestCase):
         receipt = self.transfer({"owned": "owner", "manual": "hand"})
         self.assertEqual(before["revision"] + 1, receipt["control"]["revision"])
         self.prepared("later")
+        self.prepared("outside", kind="integrate")
         with self.assertRaisesRegex(owner.Rejected, "wrong dispatch owner"):
             self.c.claim("owned")
-        self.assertEqual({"owned": "returned"}, self.tick()["actions"])
+        # Unassigned (default-hand) actions read as hand until an armed owner tick
+        # routes the in-scope manager-prepared worker action, with an audit record.
+        self.assertEqual("hand", self.c.dispatch_owner(self.c.snapshot(),
+                                                       self.c.snapshot()["actions"]["later"]))
+        self.assertEqual({"owned": "returned", "later": "returned"}, self.tick()["actions"])
         self.assertEqual("prepared", self.c.snapshot()["actions"]["manual"]["status"])
-        self.assertEqual("prepared", self.c.snapshot()["actions"]["later"]["status"])
-        self.assertEqual({"manual": "returned", "later": "returned"},
+        self.assertEqual("prepared", self.c.snapshot()["actions"]["outside"]["status"])
+        control = self.c.snapshot()["dispatch_control"]
+        evidence = self.c.read_evidence(control["evidence"]["evidence_digest"])
+        self.assertEqual(("armed_scope_default_route", ["later"], 1),
+                         (evidence["kind"], evidence["actions"], evidence["generation"]))
+        self.assertEqual({"manual": "returned"},
                          owner.Kernel(self.config_path, dispatcher="hand").tick()["actions"])
         self.assertEqual([], self.sql("SELECT * FROM holds"))
         observed = owner.activation_status(self.config_path)["coordinator"]["ownership"]
         self.assertEqual("owner", observed["owned"]["owner"])
         self.assertEqual("hand", observed["manual"]["owner"])
-        self.assertEqual("hand", observed["later"]["owner"])
+        self.assertEqual("owner", observed["later"]["owner"])
+        self.assertEqual("hand", observed["outside"]["owner"])
+
+    def test_default_route_keeps_out_of_scope_and_hand_work_hand(self):
+        self.configure()
+        other = self.root / "other-worktree"
+        other.mkdir()
+        self.prepared("first")
+        self.transfer({"first": "hand"})
+        self.prepared("unconfigured", worktree=str(other))
+        self.prepared("claimed")
+        self.c.claim("claimed")
+        self.prepared("unbridged", cycle_inputs=dict(model="m", reasoning_effort="high",
+                                                     worktree=str(self.root)))
+        self.prepared("waiting", kind="wait")
+        before = self.c.snapshot()
+        # The hand dispatcher never routes.
+        owner.Kernel(self.config_path, dispatcher="hand").tick()
+        self.assertNotIn("dispatch_owner", self.c.snapshot()["actions"]["unconfigured"])
+        # A paused coordinator routes nothing either.
+        self.c.set_enabled(False, {"fixture": True})
+        self.tick()
+        self.assertNotIn("dispatch_owner", self.c.snapshot()["actions"]["unconfigured"])
+        self.c.set_enabled(True, {"fixture": True})
+        self.tick()
+        current = self.c.snapshot()
+        for key in ("unconfigured", "claimed", "unbridged", "waiting"):
+            self.assertEqual("hand", self.c.dispatch_owner(current, current["actions"][key]), key)
+            self.assertNotIn("dispatch_owner", current["actions"][key])
+        self.assertEqual("hand", current["actions"]["first"]["dispatch_owner"])
+        self.assertEqual(before["dispatch_control"], current["dispatch_control"])
+
+    def test_default_route_skips_a_concurrent_revision_without_effect(self):
+        self.configure()
+        self.prepared("first")
+        self.transfer({"first": "hand"})
+        self.prepared("later")
+        real = owner.ExistingCoordinator._handoff
+        def stale(coordinator, assignments, expected_revision, evidence):
+            return real(coordinator, assignments, expected_revision - 1, evidence)
+        with patch.object(owner.ExistingCoordinator, "_handoff", stale):
+            self.assertEqual({}, self.tick()["actions"])
+        self.assertNotIn("dispatch_owner", self.c.snapshot()["actions"]["later"])
+        self.assertEqual({"later": "returned"}, self.tick()["actions"])
+        self.assertEqual("owner", self.c.snapshot()["actions"]["later"]["dispatch_owner"])
 
     def test_legacy_hand_claim_is_not_launched_held_or_watchdog_mutated(self):
         self.configure()
@@ -1605,7 +1722,8 @@ class HandoffTests(unittest.TestCase):
         FakeWorker.modes.clear()
         self.assertEqual("returned", self.tick()["actions"]["work"])
         self.assertEqual(claim, self.c.snapshot()["actions"]["work"]["claim"])
-        self.assertEqual([("work", "launch"), ("work", "prompt"), ("work", "start")], FakeWorker.events)
+        self.assertEqual([("work", "launch"), ("work", "prompt"), ("work", "start"), ("work", "close")],
+                         FakeWorker.events)
 
     def test_cutover_refuses_while_delivery_lock_held_and_preserves_claim(self):
         self.configure()

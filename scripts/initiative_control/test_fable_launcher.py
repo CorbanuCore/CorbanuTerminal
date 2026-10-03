@@ -309,11 +309,36 @@ class Protocol(unittest.TestCase):
                 f.evidence(records, Path("/packet"))
 
     def test_framing_never_extracts_json_substrings(self):
+        block = "```json\n" + json.dumps(FINAL) + "\n```"
         for text in ("Here is the answer: " + json.dumps(FINAL),
-                     "```json\n" + json.dumps(FINAL) + "\n```", "[]", "null",
-                     json.dumps(FINAL) + json.dumps(FINAL), "x" * (f.FINAL_LIMIT + 1)):
+                     "Here is the answer:\n" + block, block + "\nDone.", block + "\n" + block,
+                     "```python\n" + json.dumps(FINAL) + "\n```", "```json " + json.dumps(FINAL) + "\n```",
+                     "```json\n" + json.dumps(FINAL), "```json\n" + json.dumps(FINAL) + "\n```\n```",
+                     "```json\n" + json.dumps(FINAL) + "\nextra\n```", "```json\n[]\n```",
+                     "``json\n" + json.dumps(FINAL) + "\n``", "```json\r\n" + json.dumps(FINAL) + "\r\n```",
+                     "[]", "null", json.dumps(FINAL) + json.dumps(FINAL), "x" * (f.FINAL_LIMIT + 1)):
             with self.subTest(text=text[:20]), self.assertRaises(f.LaunchError):
                 f.decision(text)
+
+    def test_optional_verdicts_are_shape_checked(self):
+        verdict = {"action": "first", "accepted": False, "reason": "wrong base"}
+        value = f.decision(json.dumps({"state_revision": 3, "actions": [], "verdicts": [verdict]}))
+        self.assertEqual([verdict], value["verdicts"])
+        for bad in ({}, [{**verdict, "accepted": 0}], [{**verdict, "note": "x"}],
+                    [{"action": 1, "accepted": True, "reason": "x"}], [verdict] * 101):
+            with self.subTest(bad=str(bad)[:30]), self.assertRaisesRegex(f.LaunchError, "invalid_verdict"):
+                f.decision(json.dumps({"state_revision": 3, "actions": [], "verdicts": bad}))
+
+    def test_exactly_one_whole_message_fence_is_unwrapped(self):
+        body = json.dumps(FINAL, indent=2)
+        for text in ("```json\n" + body + "\n```", "```\n" + body + "\n```",
+                     "\n```json\n" + body + "\n```\n"):
+            with self.subTest(text=text[:12]):
+                self.assertEqual(FINAL, f.decision(text))
+        candidate = copy.deepcopy(FINAL)
+        candidate["actions"] *= 2
+        with self.assertRaisesRegex(f.LaunchError, "duplicate_action_id"):
+            f.decision("```json\n" + json.dumps(candidate) + "\n```")
 
     def test_action_shape_and_unique_ids(self):
         self.assertEqual(f.decision(json.dumps({"state_revision": 0, "actions": []}))["actions"], [])

@@ -16,10 +16,20 @@ import decisions as d
 import decision_alerts as a
 
 
+def sysctl(name):
+    return subprocess.check_output(["/usr/sbin/sysctl", "-n", name], timeout=2).decode().strip()
+
+
 def boot_id():
-    return subprocess.check_output(["/usr/sbin/sysctl", "-n", "kern.boottime"],
-                                   timeout=2).decode().strip() if sys.platform == "darwin" else Path(
-                                       "/proc/sys/kernel/random/boot_id").read_text().strip()
+    """Identity of this host boot that changes only on a real reboot.
+
+    macOS kern.boottime is re-derived from the wall clock and moves by sub-second
+    amounts under clock adjustment (62 ms observed), so it is not an identity.
+    kern.bootsessionuuid is fixed for the boot session. Linux boot_id likewise.
+    """
+    if sys.platform == "darwin":
+        return "bootsession:" + str(uuid.UUID(sysctl("kern.bootsessionuuid")))
+    return str(uuid.UUID(Path("/proc/sys/kernel/random/boot_id").read_text().strip()))
 
 
 def processes(pids=None):

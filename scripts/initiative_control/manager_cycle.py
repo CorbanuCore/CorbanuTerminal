@@ -469,7 +469,10 @@ def run_cycle(*, state, runs_dir, binary, auth_vault_home, owner_context, timeou
         actions = c.snapshot()["actions"]
         result = {"status": "accepted", "manager_run": packet["manager_run"],
                   "artifacts": str(cycle),
-                  "prepared_actions": [actions[a["id"]] for a in decision["actions"]]}
+                  "prepared_actions": [actions[a["id"]] for a in decision["actions"]],
+                  "verdicts": [{"action": v["action"], "accepted": v["accepted"],
+                                "status": actions.get(v["action"], {}).get("status")}
+                               for v in decision.get("verdicts", [])]}
         f.write_json(cycle / "accepted.json", result)
         return result
     except Exception as exc:

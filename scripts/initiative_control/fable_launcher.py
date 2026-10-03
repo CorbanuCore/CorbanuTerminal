@@ -43,10 +43,14 @@ SECRET = re.compile(r"(?<![A-Za-z0-9_-])sk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}"
 INSTRUCTIONS = (
     "You are a bounded management decision maker. Use only the supplied JSON briefing. "
     "Do not use tools, read other files, edit code, launch workers, or take external actions. "
-    "Return exactly one JSON object, without prose: state_revision (integer), actions (list). "
+    "Return exactly one JSON object, without prose: state_revision (integer), actions (list), "
+    "and optionally verdicts (list). "
     "Every action needs stable id, kind, workstream, sprint, rationale (strings), inputs "
     "(object), timeout_seconds (positive integer), expected_revision (integer). "
-    "These are proposals for the coordinator to validate, never executed actions."
+    "These are proposals for the coordinator to validate, never executed actions. "
+    "For an action whose status is returned, you may add a verdict: action (its id), "
+    "accepted (boolean) and reason (short string). Accept only when its returned result "
+    "satisfies its frozen assignment; otherwise reject. Actions may be empty only with a verdict."
 )
 
 
@@ -220,12 +224,24 @@ def read_only_context(p):
                 "wrong_filesystem_permissions")
 
 
+# A manager final may arrive as one Markdown code block that holds the whole
+# object (1 of 2 live cycles). Unwrap only that whole-message form; never search
+# prose for JSON or choose among several blocks.
+FENCED_FINAL = re.compile(r"```(?:json)?\n(.*)\n```", re.S)
+
+
 def decision(text):
     require(isinstance(text, str) and len(text.encode()) <= FINAL_LIMIT, "invalid_final")
-    value = strict_json(text)
+    fenced = FENCED_FINAL.fullmatch(text.strip())
+    value = strict_json(fenced.group(1) if fenced else text)
     require(isinstance(value, dict) and type(value.get("state_revision")) is int
             and isinstance(value.get("actions"), list), "invalid_decision")
     require(len(value["actions"]) <= 100, "action_limit")
+    verdicts = value.get("verdicts", [])
+    require(isinstance(verdicts, list) and len(verdicts) <= 100 and all(
+        isinstance(v, dict) and set(v) == {"action", "accepted", "reason"}
+        and isinstance(v["action"], str) and type(v["accepted"]) is bool
+        and isinstance(v["reason"], str) for v in verdicts), "invalid_verdict")
     ids = set()
     for action in value["actions"]:
         require(isinstance(action, dict), "invalid_action")

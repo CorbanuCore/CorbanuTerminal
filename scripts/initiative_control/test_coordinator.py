@@ -142,6 +142,66 @@ class CoordinatorTests(unittest.TestCase):
         self.assertEqual("accepted", self.c.snapshot()["actions"]["first"]["status"])
         self.assertEqual("in_progress", self.c.snapshot()["sprints"]["PF80"]["status"])
 
+    def returned_action(self, name):
+        self.prepared(name)
+        claim = self.c.claim(name)
+        self.c.dispatched(name, claim["claim"], "agent-" + name, {"native": "dispatch"})
+        self.c.acknowledge(name, "agent-" + name, claim["allocation_digest"], {"ack": True})
+        self.c.returned(name, "agent-" + name, {"returned": "RETURN\nchecks pass"})
+
+    def manager_decision(self, verdicts, actions=()):
+        packet = self.c.begin_manager()
+        self.c.accept_decision(packet["manager_run"], {
+            "state_revision": packet["state_revision"], "actions": list(actions),
+            "verdicts": verdicts}, {"artifact": "verified-test-manager.json"})
+        return packet
+
+    def test_manager_verdict_accepts_or_rejects_returned_work_without_waking_itself(self):
+        self.returned_action("first")
+        packet = self.manager_decision([{"action": "first", "accepted": True, "reason": "checks pass"}])
+        action = self.c.snapshot()["actions"]["first"]
+        self.assertEqual("accepted", action["status"])
+        evidence = self.c.read_evidence(action["verification"]["evidence_digest"])
+        self.assertEqual(("manager_verdict", packet["manager_run"], True, "checks pass"),
+                         (evidence["kind"], evidence["manager_run"], evidence["accepted"], evidence["reason"]))
+        self.assertEqual(action["result"]["evidence_digest"], evidence["result_digest"])
+        self.assertIsNone(self.c.snapshot()["manager"])
+        with self.c.connection() as db:
+            row = db.execute("SELECT meaningful, consumed FROM events WHERE id='verified:first'").fetchone()
+            self.assertEqual((0, None), tuple(row))
+            self.assertEqual(0, db.execute("SELECT COUNT(*) FROM events WHERE meaningful=1 "
+                                           "AND consumed IS NULL").fetchone()[0])
+        self.clock += 1
+        self.returned_action("second")
+        self.manager_decision([{"action": "second", "accepted": False, "reason": "wrong base"}])
+        self.assertEqual("failed", self.c.snapshot()["actions"]["second"]["status"])
+
+    def test_invalid_verdicts_reject_the_whole_decision(self):
+        self.returned_action("first")
+        self.prepared("pending")
+        self.c.event({"id": "review-now"})
+        good = {"action": "first", "accepted": True, "reason": "ok"}
+        for verdicts, error in (
+                ([], "invalid action count"),
+                ([{**good, "accepted": "yes"}], "invalid verdict"),
+                ([{**good, "reason": " "}], "invalid verdict"),
+                ([{**good, "reason": "x" * 1001}], "invalid verdict"),
+                ([{**good, "extra": 1}], "invalid verdict"),
+                ([good, good], "duplicate verdict"),
+                ([{**good, "action": "pending"}], "verdict requires returned action"),
+                ([{**good, "action": "missing"}], "verdict requires returned action"),
+                ("first", "invalid action count"),
+                ([good] * 25, "invalid action count")):
+            before = self.c.snapshot()
+            packet = self.c.begin_manager()
+            with self.subTest(error=error), self.assertRaisesRegex(Rejected, error):
+                self.c.accept_decision(packet["manager_run"], {
+                    "state_revision": packet["state_revision"], "actions": [],
+                    "verdicts": verdicts}, {"proof": True})
+            self.assertEqual("returned", self.c.snapshot()["actions"]["first"]["status"])
+            self.c.fail_manager(packet["manager_run"], "fixture")
+            self.assertEqual(before["actions"], self.c.snapshot()["actions"])
+
     def test_uncertain_dispatch_never_retries_after_restart(self):
         self.prepared()
         self.c.claim("first")

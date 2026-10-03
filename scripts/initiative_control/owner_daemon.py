@@ -13,11 +13,13 @@ import time
 import uuid
 
 import fable_launcher as f
-from coordinator import Rejected, digest, encoded
+from coordinator import TERMINAL, Rejected, digest, encoded
 from manager_cycle import ExistingCoordinator
 
 WORKER_KINDS = frozenset({"implement", "revise", "review", "design", "functional_test",
                           "evidence_review", "repair", "reconcile"})
+# Seconds for an idle worker to exit after /quit once its RETURN is recorded.
+CLOSE_TIMEOUT = 20
 
 
 class DispatchDeferred(Exception):
@@ -236,6 +238,9 @@ def coordinator_activation_impact(root, dispatcher=None):
     coverage = dict(
         dispatcher=dispatcher, covered_actions=covered, excluded_actions=excluded,
         future_default_owner=coordinator.dispatch_owner(snapshot, default_action),
+        default_route="An admitted owner tick in tmux-workers scope routes unassigned, prepared, "
+        "unclaimed worker-kind actions from a manager run whose frozen worktree is configured "
+        "to owner through an audited handoff; every other new action stays hand.",
         future_default_covered=future_covered,
         manager_covered=coordinator.watchdog_covers(snapshot, None, dispatcher),
         counted_actions="unreported overdue dispatching/dispatched/running actions",
@@ -857,8 +862,18 @@ class Kernel:
         f.require("deadline" not in current or time.time() < current["deadline"], "lease_expired")
         return meta
 
-    def step(self, action, effect, request, perform):
+    def close_gate(self, action):
+        """Closing needs only an admitted owner and the coordinator's recorded RETURN."""
+        self.admit()
+        state = self.c.snapshot()
+        current = state["actions"][action["id"]]
+        self.c._dispatcher(state, current, self.dispatcher)
+        f.require(current.get("claim") == action.get("claim") and current.get("result")
+                  and current["status"] in {"returned"} | TERMINAL, "close_requires_recorded_return")
+
+    def step(self, action, effect, request, perform, gate=None):
         """Receipts permit continuation; a missing effect receipt never permits retry."""
+        gate = gate or self.worker_gate
         op_id = digest(["tmux", action["id"], effect])
         meta = self.admit()
         row = self.db.execute("SELECT * FROM operations WHERE op_id=?", (op_id,)).fetchone()
@@ -876,7 +891,7 @@ class Kernel:
                       and row["receipt_digest"] in (None, digest(receipt)), "receipt_drift")
         else:
             f.require(not (self.root / relative).exists(), "unexpected_deferred_receipt")
-            self.worker_gate(action)
+            gate(action)
             relative = artifact(self.root, "runs/" + op_id + "/request.json", request)
             now = time.time()
             self.db.execute("INSERT OR REPLACE INTO operations VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -886,7 +901,7 @@ class Kernel:
                              relative, "intent", None, None, None, now, now))
             self.db.commit()
             try:
-                self.worker_gate(action)
+                gate(action)
             except DispatchDeferred:
                 # Only this pre-effect gate proves no effect occurred. A crash
                 # before this commit still leaves an uncertain intent, never a retry.
@@ -986,12 +1001,74 @@ class Kernel:
         result = self.step(action, "return_observed", request, lambda: state)
         self.step(action, "returned", request,
                   lambda: self.c.returned(action["id"], agent, result, dispatcher=self.dispatcher))
+        self.close_worker(action, worker, request)
         return "returned"
+
+    def close_worker(self, action, worker, request):
+        """After the coordinator records RETURN, close the idle worker through its own
+        socket only (Worker.close: /quit, then kill-session on that socket). The
+        journaled receipt is the audit record; an unclean close holds the action."""
+        receipt = self.step(action, "close", request, lambda: worker.close(timeout=CLOSE_TIMEOUT),
+                            gate=self.close_gate)
+        self.db.execute("UPDATE processes SET terminal_status=? WHERE op_id=?",
+                        ("closed" if receipt["clean"] else "close_unclean",
+                         digest(["tmux", action["id"], "launch"])))
+        self.db.commit()
+        f.require(receipt["clean"] is True, "worker_close_unclean")
+
+    def close_returned(self, action, rows):
+        """Finish a close that a restart separated from its recorded RETURN."""
+        from owner_tmux import Worker
+        launch = next(row for row in rows if row["effect"] == "launch")
+        request = load(self.root / launch["request_artifact"])
+        f.require(digest(request) == launch["request_digest"], "request_drift")
+        worker = Worker(request["run"])
+        f.require(worker.binding == request["binding"], "worker_binding_drift")
+        self.close_worker(action, worker, request)
+
+    def route_defaults(self, snapshot):
+        """Route new manager-prepared worker actions inside the armed scope to the owner.
+
+        Only actions with no explicit owner (the hand default), prepared and
+        unclaimed, of a worker kind, created by a manager run, with a valid frozen
+        worker runtime in a configured worktree. Explicit hand assignments, claims
+        and everything outside that scope stay hand. One audited coordinator handoff.
+        """
+        from owner_tmux import worker_runtime
+        if (self.dispatcher != "owner" or "dispatch_control" not in snapshot
+                or not snapshot["enabled"] or snapshot["manager"] is not None):
+            return snapshot
+        selected = {}
+        for action in snapshot["actions"].values():
+            if ("dispatch_owner" in action or action["status"] != "prepared" or action.get("claim")
+                    or action["kind"] not in WORKER_KINDS or not action.get("manager_run")):
+                continue
+            try:
+                worktree = worker_runtime(action["inputs"])["worktree"]
+            except (f.LaunchError, KeyError, TypeError, ValueError):
+                continue
+            if worktree in self.config["worktrees"]:
+                selected[action["id"]] = {"from": "hand", "to": "owner", "claim": None,
+                                          "allocation_digest": action["allocation_digest"],
+                                          "status": "prepared"}
+        if not selected:
+            return snapshot
+        meta = self.admit()
+        evidence = {"kind": "armed_scope_default_route", "actions": sorted(selected),
+                    "generation": meta["control_generation"],
+                    "activation_digest": meta["activation_digest"],
+                    "config_digest": meta["config_digest"], "package_digest": meta["package_digest"]}
+        try:
+            self.c._handoff(selected, snapshot["revision"], evidence)
+        except Rejected:
+            # A concurrent coordinator change; nothing was routed. Retry next tick.
+            pass
+        return self.c.snapshot()
 
     def workers(self, adapter):
         """One bounded pass. An operation failure holds only its owning action."""
         outcomes = {}
-        snapshot = self.c.snapshot()
+        snapshot = self.route_defaults(self.c.snapshot())
         for action in snapshot["actions"].values():
             if (self.c.dispatch_owner(snapshot, action) not in (None, self.dispatcher)
                     or action["kind"] not in WORKER_KINDS):
@@ -1008,17 +1085,26 @@ class Kernel:
             try:
                 f.require(not self.db.execute("SELECT 1 FROM holds WHERE op_id=? AND resolved_at IS NULL",
                           (digest(["tmux", action["id"], "claim"]),)).fetchone(), "operation_held")
+                f.require(all(row["phase"] != "held" for row in rows), "operation_held")
+                if any(row["effect"] == "returned" and row["phase"] == "applied" for row in rows):
+                    # RETURN is recorded; the only remaining effect is closing the
+                    # worker. A prior generation's returned claim is history: never
+                    # act on it (or hold it) under the current activation.
+                    meta = self.admit()
+                    current = all((row["config_generation"], row["authority_digest"]) ==
+                                  (meta["control_generation"], meta["activation_digest"]) for row in rows)
+                    if current and not any(row["effect"] == "close" and row["phase"] == "applied"
+                                           for row in rows):
+                        self.close_returned(action, rows)
+                    outcomes[action["id"]] = "returned"
+                    continue
                 for row in rows:
-                    f.require(row["phase"] != "held", "operation_held")
                     f.require((row["config_generation"], row["authority_digest"]) ==
                               (self.admit()["control_generation"], self.admit()["activation_digest"]),
                               "prior_activation")
                     f.require(row["phase"] != "intent" or
                               (self.root / ("runs/" + row["op_id"] + "/receipt.json")).exists(),
                               "effect_uncertain")
-                if any(row["effect"] == "returned" and row["phase"] == "applied" for row in rows):
-                    outcomes[action["id"]] = "returned"
-                    continue
                 if self.c.readiness() in {"paused", "owned"}:
                     if rows and time.time() >= action.get("deadline", float("inf")):
                         self.db.execute("UPDATE processes SET terminal_status='lease_expired' WHERE op_id=?",
@@ -1091,8 +1177,8 @@ class Kernel:
                     meta = self.admit()
                     boot = self.boot = str(uuid.uuid4())
                     self.started = time.monotonic()
-                    host = subprocess.check_output(
-                        ["/usr/sbin/sysctl", "-n", "kern.boottime"], timeout=2).decode().strip() if sys.platform == "darwin" else Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+                    from owner_tmux import boot_id
+                    host = boot_id()
                     start = subprocess.check_output(
                         ["/bin/ps", "-o", "lstart=", "-p", str(os.getpid())], timeout=2).decode().strip()
                     self.db.execute("INSERT INTO boots VALUES(?,?,?,?,?,?,?,?,?)",

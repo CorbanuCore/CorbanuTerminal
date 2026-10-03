@@ -239,6 +239,28 @@ class AckTokenTests(unittest.TestCase):
             t.provenance(rows, self.binding, [self.PROMPT], self.ACK, ack_token=True)
 
 
+class BootIdentityTests(unittest.TestCase):
+    """Round 5 held a worker on a 62 ms kern.boottime move; a reboot must still hold."""
+
+    def sysctl(self, session, boottime):
+        values = {"kern.bootsessionuuid": session,
+                  "kern.boottime": "{ sec = 1789937981, usec = %d } Sun Sep 20 13:59:41 2026" % boottime}
+        return patch.object(t, "sysctl", side_effect=lambda name: values[name])
+
+    def test_boot_time_jitter_keeps_identity_and_reboot_changes_it(self):
+        session = "C6E43851-2B80-4E2B-9D23-315C75E7784B"
+        with patch.object(t.sys, "platform", "darwin"):
+            with self.sysctl(session, 617366):
+                before = t.boot_id()
+            with self.sysctl(session, 555270):
+                self.assertEqual(before, t.boot_id())
+            self.assertEqual("bootsession:" + session.lower(), before)
+            with self.sysctl(str(uuid.uuid4()).upper(), 617366):
+                self.assertNotEqual(before, t.boot_id())
+            with self.sysctl("", 617366), self.assertRaises(ValueError):
+                t.boot_id()
+
+
 class TmuxTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="ot-", dir=Path("/tmp").resolve())
@@ -1031,6 +1053,35 @@ class TmuxTests(unittest.TestCase):
         self.assertEqual("unknown", states[0]["liveness"])
         self.assertGreaterEqual(len(states), 2)
         self.assertTrue(receipt["clean"], receipt)
+
+    def test_boot_time_jitter_is_inspectable_and_closes_cleanly(self):
+        self.launch()
+        recorded = self.worker.meta["boot_id"]
+        real = t.sysctl
+        def jittered(name):
+            # A clock adjustment moves kern.boottime; the boot session is unchanged.
+            return "{ sec = 1, usec = 2 } Thu Jan  1 00:00:01 1970" if name == "kern.boottime" else real(name)
+        with patch.object(t, "sysctl", side_effect=jittered):
+            self.assertEqual(recorded, t.boot_id())
+            state = self.worker.inspect()
+            self.assertTrue(state["identity_valid"], state)
+            self.assertEqual("alive", state["liveness"])
+            receipt = self.worker.close(timeout=3)
+        self.assertTrue(receipt["clean"], receipt)
+        self.assertTrue((self.worker.run / "quit-intent.json").exists())
+        self.assertNotEqual(0, receipt["server_shutdown"]["probe_returncode"])
+
+    def test_reboot_holds_host_changed_and_close_refuses(self):
+        self.launch()
+        with patch.object(t, "boot_id", return_value="bootsession:" + str(uuid.uuid4())):
+            state = self.worker.inspect()
+            self.assertFalse(state["identity_valid"])
+            self.assertEqual("host_changed", state["evidence_reason"])
+            receipt = self.worker.close(timeout=0.2)
+        self.assertFalse(receipt["clean"])
+        self.assertIsNone(receipt["server_shutdown"])
+        self.assertFalse((self.worker.run / "quit-intent.json").exists())
+        self.assertEqual("alive", self.worker.inspect()["liveness"])
 
     def test_close_reobserves_unknown_and_stale_survivor_until_clean(self):
         self.launch()

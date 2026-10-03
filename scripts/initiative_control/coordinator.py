@@ -30,6 +30,7 @@ TERMINAL = frozenset({"accepted", "failed", "cancelled"})
 RESERVED = frozenset({"in_progress", "blocked"})
 ACTION_FIELDS = frozenset({"id", "kind", "workstream", "sprint", "rationale", "inputs",
                            "timeout_seconds", "expected_revision"})
+VERDICT_FIELDS = frozenset({"action", "accepted", "reason"})
 
 
 def encoded(value, limit=262144):
@@ -635,8 +636,9 @@ class Coordinator:
             require(state["enabled"] and run and run["id"] == run_id, "wrong/paused manager")
             require(run["deadline"] >= self.clock(), "manager deadline expired")
             require(decision["state_revision"] == run["revision"] == state["revision"], "stale decision")
-            actions = decision["actions"]
-            require(isinstance(actions, list) and 1 <= len(actions) <= 24, "invalid action count")
+            actions, verdicts = decision["actions"], decision.get("verdicts", [])
+            require(isinstance(actions, list) and isinstance(verdicts, list) and len(actions) <= 24
+                    and len(verdicts) <= 24 and 1 <= len(actions) + len(verdicts), "invalid action count")
             require(bool(launcher_receipt), "verified launcher receipt required")
             require(sum(a["status"] not in TERMINAL for a in state["actions"].values()) + len(actions) <= 48,
                     "pending assignment limit; reconcile existing work first")
@@ -664,9 +666,38 @@ class Coordinator:
                                          "resources": allocation["resources"], "scope": allocation["scope"],
                                          "allocation_digest": digest(allocation), "created": self.clock(),
                                          "sequence": [state["revision"], index]}
+            self._verdicts(db, state, run_id, verdicts, launcher_receipt)
             for seq in run["events"]:
                 db.execute("UPDATE events SET consumed=? WHERE seq=? AND consumed IS NULL", (run_id, seq))
             state["manager"] = None
+
+    def _verdicts(self, db, state, run_id, verdicts, launcher_receipt):
+        """Manager accepts or rejects returned work; evidence is the returned result.
+
+        Same transition as verify(). The verified event is not meaningful: the
+        manager that issued it must not be woken again by its own verdict.
+        """
+        seen = set()
+        for verdict in verdicts:
+            require(isinstance(verdict, dict) and set(verdict) == VERDICT_FIELDS
+                    and type(verdict["accepted"]) is bool and isinstance(verdict["action"], str)
+                    and isinstance(verdict["reason"], str) and verdict["reason"].strip()
+                    and len(verdict["reason"].encode()) <= 1000, "invalid verdict")
+            key = verdict["action"]
+            require(key not in seen, "duplicate verdict")
+            seen.add(key)
+            action = state["actions"].get(key)
+            require(action is not None and action["status"] == "returned"
+                    and isinstance(action.get("result"), dict), "verdict requires returned action")
+            reference = self._reference(db, {
+                "kind": "manager_verdict", "manager_run": run_id, "action": key,
+                "accepted": verdict["accepted"], "reason": verdict["reason"],
+                "result_digest": action["result"]["evidence_digest"],
+                "launcher_receipt_digest": digest(launcher_receipt)})
+            action.update(status="accepted" if verdict["accepted"] else "failed",
+                          verification=reference, updated=self.clock())
+            self._event(db, {"id": "verified:" + key, "accepted": verdict["accepted"],
+                             "evidence": reference}, meaningful=False)
 
     def record_wait(self, action_id, expected_revision, evidence):
         """Owner records a passive wait, not worker completion or resolved blockage."""
