@@ -24,7 +24,7 @@ before restart; concurrent refresh by another profile owner is not coordinated.
 See owner-brokerauth-118-source-facts.md for the pinned client source contract.
 
 A fsynced "turn" admission/refusal record precedes successful response bytes.
-Admission requires upstream x-request-id and response.id; model and effort are
+Admission requires upstream x-request-id (else x-oai-request-id) and response.id; model and effort are
 upstream-resolved, with client declarations and comparisons recorded separately.
 Each admission requires a matching "turn_end": "relay_completed" or "truncated".
 Admission alone is UNFINISHED evidence, never success. A process crash or journal
@@ -88,6 +88,7 @@ import uuid
 
 
 SYNTHETIC_BEARER = "corbanu-qualification-only"
+REQUEST_ID_HEADERS = ("x-request-id", "x-oai-request-id")
 PATHS = {"/v1/responses", "/v1/responses/compact"}
 MAX_BODY = 32 * 1024 * 1024
 MAX_PREFIX = 1024 * 1024
@@ -740,10 +741,16 @@ class Handler(BaseHTTPRequestHandler):
                     headers["Authorization"] = "Bearer " + credential
                 upstream, response = post_with_deadline(url, path, raw, headers, response_deadline)
                 record.update(upstream_status=response.status, upstream_headers_at=timestamp(),
-                              upstream_request_id=None)
-                request_id = identifier(response.getheader("x-request-id"))
-                if request_id and safe(request_id):
-                    record["upstream_request_id"] = request_id
+                              upstream_request_id=None, upstream_request_id_header=None)
+                # Same precedence as the pinned client (response-debug-context/src/lib.rs):
+                # x-request-id, else x-oai-request-id (the ChatGPT Codex backend sends only
+                # the latter). Only the upstream response's own header ever counts.
+                for header in REQUEST_ID_HEADERS:
+                    request_id = identifier(response.getheader(header))
+                    if request_id and safe(request_id):
+                        record.update(upstream_request_id=request_id,
+                                      upstream_request_id_header=header)
+                        break
                 if response.status == 401 and subscription is not None and attempt:
                     self.server.exhaust_subscription(subscription, response_deadline)
                 if response.status != 401 or subscription is None:
@@ -761,6 +768,18 @@ class Handler(BaseHTTPRequestHandler):
             if response.getheader("Content-Encoding", "identity") != "identity":
                 raise Refusal("upstream_encoding_refused", 502)
             content_type = response.getheader("Content-Type", "").split(";")[0].strip()
+            # Media type only (no parameters), bounded, for refusal diagnosis.
+            record["upstream_content_type"] = identifier(content_type) or (
+                "unrecognized" if content_type else None)
+            # The ChatGPT Codex backend streams SSE without a Content-Type header. Only a
+            # streaming /v1/responses request may take the SSE path then; the SSE parser
+            # still requires a valid first event with an upstream response id.
+            sse_inferred = (not content_type and self.path == "/v1/responses"
+                            and body.get("stream") is True)
+            if sse_inferred:
+                # Relay and forward it exactly as a declared event stream.
+                record["upstream_content_type"] = "absent_inferred_sse"
+                content_type = "text/event-stream"
             if content_type == "text/event-stream":
                 deadline = response.deadline_reader
                 deadline.reset()  # Switch from full-response to per-event budget.

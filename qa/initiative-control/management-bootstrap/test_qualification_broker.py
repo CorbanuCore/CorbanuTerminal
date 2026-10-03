@@ -73,8 +73,11 @@ class FakeUpstream(BaseHTTPRequestHandler):
             first = event("response.created", response={})
             payload = first + tail
         self.server.payloads.append(payload)
-        self.send_header("Content-Type", content_type)
-        if self.server.mode != "no_request_id":
+        if self.server.mode != "no_content_type":
+            self.send_header("Content-Type", content_type)
+        if self.server.mode == "oai_request_id":
+            self.send_header("X-Oai-Request-Id", request_id)
+        elif self.server.mode != "no_request_id":
             self.send_header("X-Request-Id", request_id)
         self.send_header("x-codex-turn-state", "fixture-sticky-state")
         self.send_header("Transfer-Encoding", "chunked")
@@ -564,6 +567,32 @@ class BrokerTests(unittest.TestCase):
         self.assertEqual(row["upstream_status"], 401)
         self.assertEqual(row["upstream_request_id"], "req_upstream_1")
         self.assertIsNone(row["upstream_response_id"])
+
+    def test_oai_request_id_header_is_the_upstream_fallback(self):
+        self.up.mode = "oai_request_id"
+        response, _ = self.request(headers={"x-request-id": "forged_request",
+                                            "x-oai-request-id": "forged_oai_request"})
+        self.assertEqual(response.status, 200)
+        response.read()
+        turn = [r for r in self.records() if r.get("kind") == "turn"][-1]
+        self.assertEqual(turn["upstream_request_id"], "req_upstream_1")
+        self.assertEqual(turn["upstream_request_id_header"], "x-oai-request-id")
+
+    def test_absent_content_type_is_sse_only_for_streaming_responses(self):
+        self.up.mode = "no_content_type"
+        response, _ = self.request()
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.getheader("Content-Type"), "text/event-stream")
+        self.assertIn(b"response.completed", response.read())
+        turn = [r for r in self.records() if r.get("kind") == "turn"][-1]
+        self.assertEqual(turn["upstream_content_type"], "absent_inferred_sse")
+        self.assertTrue(turn["upstream_response_id"])
+        self.assertEqual(self.records()[-1]["outcome"], "relay_completed")
+        unary = self.body()
+        unary["stream"] = False
+        response, _ = self.request(unary)
+        self.assertEqual(response.status, 502)
+        self.assertEqual(json.loads(response.read()), {"error": "upstream_content_type_refused"})
 
     def test_missing_upstream_ids_never_use_client_inventions(self):
         for mode, code in (("no_request_id", "upstream_request_id_missing"),
