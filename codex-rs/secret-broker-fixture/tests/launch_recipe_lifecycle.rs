@@ -1,8 +1,8 @@
-#![cfg(all(target_os = "linux", feature = "synthetic-fixture"))]
+#![cfg(target_os = "linux")]
 #![forbid(unsafe_code)]
 #![allow(clippy::unwrap_used)]
-use codex_secret_broker_service::SyntheticChildRole;
-use codex_secret_broker_service::SyntheticLaunchRecipe;
+use codex_secret_broker_fixture::SyntheticChildRole;
+use codex_secret_broker_fixture::SyntheticLaunchRecipe;
 use pretty_assertions::assert_eq;
 use std::os::unix::fs::PermissionsExt;
 

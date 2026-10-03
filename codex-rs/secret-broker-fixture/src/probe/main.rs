@@ -20,7 +20,7 @@ fn main() {
             Some(
                 fields
                     .map_err(|_| std::io::Error::other("invalid preparation"))
-                    .and_then(|v| codex_secret_broker_service::SyntheticChildIdentity::parse(&v))
+                    .and_then(|v| codex_secret_broker_fixture::SyntheticChildIdentity::parse(&v))
                     .and_then(|identity| prepare::prepare(&identity)),
             )
         } else {
