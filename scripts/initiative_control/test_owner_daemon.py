@@ -1443,6 +1443,57 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.assertEqual([("closed", "close")], [e for e in FakeWorker.events if e[1] == "close"])
         self.assertEqual([("closed",)], self.sql("SELECT action_id FROM operations WHERE effect='close'"))
 
+    def dead_identity(self, run):
+        f.write_json(run / "process.json", dict(pid=12345, start="synthetic", server=12346,
+                                                server_start="synthetic"))
+
+    def test_proven_stopped_worker_gets_proof_not_keys(self):
+        self.configure()
+        run = self.returned_without_close()
+        self.dead_identity(run)  # e.g. a reboot between RETURN and close
+        self.assertEqual("returned", self.tick()["actions"]["one"])
+        self.assertNotIn(("one", "close"), FakeWorker.events)
+        receipt = owner.load(self.root / self.sql(
+            "SELECT receipt_artifact FROM operations WHERE effect='close'")[0][0])["result"]
+        self.assertTrue(receipt["clean"])
+        self.assertEqual([], receipt["already_stopped"][0]["alive"])
+        self.assertEqual([("closed",)], self.sql("SELECT terminal_status FROM processes"))
+
+    def test_post_return_holds_resolve_without_changing_the_verdict(self):
+        self.configure()
+        self.prepared()
+        FakeWorker.modes["one"] = "close-unclean"
+        self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        packet = self.c.begin_manager()
+        self.c.accept_decision(packet["manager_run"], {
+            "state_revision": packet["state_revision"], "actions": [],
+            "verdicts": [{"action": "one", "accepted": True, "reason": "fixture ok"}]}, {"fixture": True})
+        action = self.c.snapshot()["actions"]["one"]
+        request = dict(action_id="one", claim=action["claim"], allocation_digest=action["allocation_digest"],
+                       reason_codes=["worker_close_unclean"], evidence="survivor stopped by its owner")
+        run = Path(self.sql("SELECT private_run_root FROM processes")[0][0])
+        with self.assertRaisesRegex(f.LaunchError, "resolution_requires_process_identity"):
+            owner.resolve_hold(self.config_path, request)
+        self.dead_identity(run)
+        result = owner.resolve_hold(self.config_path, request)
+        self.assertEqual(("RESOLVED", "accepted", "accepted"),
+                         (result["state"], result["action_status_before"], result["action_status_after"]))
+        self.assertEqual(action, self.c.snapshot()["actions"]["one"])
+        self.assertEqual({"resolved"}, {row[0] for row in self.sql("SELECT phase FROM operations")})
+        result = self.tick()
+        self.assertEqual(("ACTIVE", "resolved"), (result["state"], result["actions"]["one"]))
+        # A prepared (never returned) action still cannot use the post-return path.
+        self.prepared("two")
+        FakeWorker.modes["two"] = "wrong-ack"
+        self.assertEqual("HOLD", self.tick()["actions"]["two"])
+        two = self.c.snapshot()["actions"]["two"]
+        self.dead_identity(Path(self.sql("SELECT private_run_root FROM processes WHERE op_id=?",
+                                         (digest(["tmux", "two", "launch"]),))[0][0]))
+        result = owner.resolve_hold(self.config_path, dict(
+            action_id="two", claim=two["claim"], allocation_digest=two["allocation_digest"],
+            reason_codes=["wrong_ack"], evidence="stopped"))
+        self.assertEqual("failed", result["action_status_after"])
+
     def test_prior_generation_uncertain_close_still_holds(self):
         self.configure()
         self.prepared()
@@ -1768,6 +1819,33 @@ class HandoffTests(unittest.TestCase):
         self.assertNotIn("dispatch_owner", current["touched"])
         self.assertNotIn("dispatch_owner", current["unowned_run"])
         self.assertEqual([("fixture_gate_refusal",)], self.sql("SELECT reason_code FROM holds"))
+
+    def test_default_route_admits_only_what_the_claim_gate_would_admit(self):
+        self.configure()
+        self.prepared("first")
+        self.transfer({"first": "hand"})
+        self.prepared("a")
+        self.prepared("b")
+        with self.c.mutation("fixture", {}) as (_, state):
+            state["actions"]["b"]["resources"] = ["a"]  # same resource as a
+        FakeWorker.modes["a"] = "working"
+        result = self.tick()
+        self.assertEqual(("ACTIVE", {"a": "working"}), (result["state"], result["actions"]))
+        self.assertNotIn("dispatch_owner", self.c.snapshot()["actions"]["b"])
+        FakeWorker.modes.clear()
+        self.assertEqual({"a": "returned"}, self.tick()["actions"])
+        # Returned is not terminal: b still contends, so it stays hand and unheld.
+        self.assertNotIn("dispatch_owner", self.c.snapshot()["actions"]["b"])
+        packet = self.c.begin_manager()
+        self.c.accept_decision(packet["manager_run"], {
+            "state_revision": packet["state_revision"], "actions": [],
+            "verdicts": [{"action": "a", "accepted": True, "reason": "fixture ok"}]}, {"fixture": True})
+        self.assertEqual({"a": "returned", "b": "returned"}, self.tick()["actions"])
+        self.assertEqual([], self.sql("SELECT * FROM holds"))
+        control = self.c.snapshot()["dispatch_control"]
+        evidence = self.c.read_evidence(control["evidence"]["evidence_digest"])
+        chain = self.c.read_evidence(evidence["previous_dispatch_control"]["evidence"]["evidence_digest"])
+        self.assertEqual(["a"], chain["actions"])
 
     def test_default_route_skips_a_concurrent_revision_without_effect(self):
         self.configure()

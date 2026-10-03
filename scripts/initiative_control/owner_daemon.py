@@ -664,7 +664,12 @@ def resolve_hold(config_path, request):
         f.require(action.get("claim") == request["claim"]
                   and action["allocation_digest"] == request["allocation_digest"], "resolution_claim_mismatch")
         before = action["status"]
-        f.require(before in RESOLVABLE | {"failed", "cancelled"}, "resolution_requires_reconcilable_action")
+        # After a recorded RETURN only the close can hold; settle it without touching
+        # the coordinator's returned/verdict state.
+        returned = any(r["effect"] == "returned" and r["receipt_digest"] for r in rows)
+        f.require(before in RESOLVABLE | {"failed", "cancelled"}
+                  or (returned and before in {"returned", "accepted"}),
+                  "resolution_requires_reconcilable_action")
         workers = stopped_worker(root, db, action_id)
         document = dict(request=request, holds=holds, operations=rows, workers=workers,
                         generation=meta["control_generation"], requested_mode=meta["requested_mode"],
@@ -1009,10 +1014,15 @@ class Kernel:
 
     def close_worker(self, action, worker, request):
         """After the coordinator records RETURN, close the idle worker through its own
-        socket only (Worker.close: /quit, then kill-session on that socket). The
-        journaled receipt is the audit record; an unclean close holds the action."""
-        receipt = self.step(action, "close", request, lambda: worker.close(timeout=CLOSE_TIMEOUT),
-                            gate=self.close_gate)
+        socket only (Worker.close: /quit, then kill-session on that socket). A worker
+        already proven stopped (e.g. after a reboot) gets that proof instead of keys.
+        The journaled receipt is the audit record; an unclean close holds the action."""
+        def close():
+            try:
+                return {"clean": True, "already_stopped": stopped_worker(self.root, self.db, action["id"])}
+            except (f.LaunchError, OSError, KeyError, TypeError, ValueError):
+                return worker.close(timeout=CLOSE_TIMEOUT)
+        receipt = self.step(action, "close", request, close, gate=self.close_gate)
         self.db.execute("UPDATE processes SET terminal_status=? WHERE op_id=?",
                         ("closed" if receipt["clean"] else "close_unclean",
                          digest(["tmux", action["id"], "launch"])))
@@ -1041,8 +1051,11 @@ class Kernel:
         if (self.dispatcher != "owner" or "dispatch_control" not in snapshot
                 or not snapshot["enabled"] or snapshot["manager"] is not None):
             return snapshot
-        selected = {}
+        selected, reserved = {}, set()
         for action in snapshot["actions"].values():
+            if action.get("dispatch_owner") == "owner" and action["status"] == "prepared":
+                reserved.update(action["resources"])
+        for action in sorted(snapshot["actions"].values(), key=lambda a: a["sequence"]):
             if ("dispatch_owner" in action or action["status"] != "prepared" or action.get("claim")
                     or action["kind"] not in WORKER_KINDS or not action.get("manager_run")):
                 continue
@@ -1055,17 +1068,31 @@ class Kernel:
                 worktree = worker_runtime(action["inputs"])["worktree"]
             except (f.LaunchError, KeyError, TypeError, ValueError):
                 continue
-            if worktree in self.config["worktrees"]:
-                selected[action["id"]] = {"from": "hand", "to": "owner", "claim": None,
-                                          "allocation_digest": action["allocation_digest"],
-                                          "status": "prepared"}
+            if worktree not in self.config["worktrees"] or reserved & set(action["resources"]):
+                continue
+            # Route only what the claim gate would admit now; contention, a paused or
+            # unreserved sprint or a stale allocation leaves it hand, not held.
+            try:
+                f.require(action["allocation_digest"] ==
+                          digest(snapshot["allocations"].get(action["inputs"]["allocation"])),
+                          "allocation_drift")
+                self.c._executable(snapshot, action)
+                self.c._resources_available(snapshot, action)
+            except (f.LaunchError, Rejected, KeyError):
+                continue
+            reserved.update(action["resources"])
+            selected[action["id"]] = {"from": "hand", "to": "owner", "claim": None,
+                                      "allocation_digest": action["allocation_digest"],
+                                      "status": "prepared"}
         if not selected:
             return snapshot
         meta = self.admit()
         evidence = {"kind": "armed_scope_default_route", "actions": sorted(selected),
                     "generation": meta["control_generation"],
                     "activation_digest": meta["activation_digest"],
-                    "config_digest": meta["config_digest"], "package_digest": meta["package_digest"]}
+                    "config_digest": meta["config_digest"], "package_digest": meta["package_digest"],
+                    # Keep the chain back to the cutover record this handoff replaces.
+                    "previous_dispatch_control": snapshot["dispatch_control"]}
         try:
             self.c._handoff(selected, snapshot["revision"], evidence)
         except Rejected:
