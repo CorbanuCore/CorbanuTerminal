@@ -42,7 +42,8 @@ execution records, not product sprints or release artifacts.
 [`experimental-planner/experimentalPlanner.html`](experimental-planner/experimentalPlanner.html)
 proposes a LangGraph workflow service with a Danus-inspired evidence and dependency
 ledger, using GPU kernel optimization as its first experiment domain. It includes
-architecture diagrams, data models, admission and recovery algorithms, checker
+architecture diagrams, versioned worker contracts and reviewed decomposition inspired
+by Choir, data models, admission and recovery algorithms, checker
 qualification, measurement policy, and twelve phased sprint packages. This is an
 internal research/design artifact; its implementation sprints and GPU qualification
 remain proposed, and it does not authorize or report completed product work.
