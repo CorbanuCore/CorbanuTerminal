@@ -270,6 +270,14 @@ def briefing(coordinator, packet, owner_context):
             for item in value:
                 collect(item)
 
+    # A returned action awaits the manager's verdict, and accepting it needs its
+    # result body (run_cycle refuses verdict_without_result_evidence). Read those
+    # bodies first and evict them last, so accumulated history cannot crowd them out.
+    awaiting = [action["result"] for action in packet["actions"].values()
+                if action["status"] == "returned" and isinstance(action.get("result"), dict)
+                and "evidence_digest" in action["result"]]
+    collect(awaiting)
+    preferred = {reference["evidence_digest"] for reference in awaiting} & set(originals)
     # Scan exact retained sources, not the omission metadata or compact references.
     collect({key: value for key, value in packet.items()
              if key not in {"actions", "allocations", "last_three_actions"}})
@@ -310,11 +318,11 @@ def briefing(coordinator, packet, owner_context):
         try:
             return render()
         except Rejected:
-            optional = sorted((len(encoded(body).encode()), key)
+            optional = sorted((key not in preferred, len(encoded(body).encode()), key)
                               for key, body in originals.items() if key not in mandatory)
             if not optional:
                 raise
-            key = optional[-1][1]
+            key = optional[-1][2]
             del originals[key]
             dropped.add(key)
 

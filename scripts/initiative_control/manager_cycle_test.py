@@ -469,6 +469,19 @@ class BriefingSizeTests(unittest.TestCase):
                 self.assertTrue(absent)
                 self.assertEqual(absent, absent & reported)
 
+    def test_returned_result_awaiting_a_verdict_survives_budget_pressure(self):
+        actions = self.live_actions(6, 900, 4000)
+        returned = dict(actions[0], id="returned-0", status="returned", sequence=[9, 0],
+                        result=self.ref({"kind": "result", "text": "RETURN " + "r" * 3000}))
+        actions.append(returned)
+        raw = m.briefing(self.c, self.packet(actions, recent=actions[-3:]), self.context)
+        brief = json.loads(raw)
+        self.assertLessEqual(len(raw), f.BRIEF_LIMIT)
+        budget = next(e for e in brief["evidence_omissions"] if e["id"] == "evidence_budget")
+        self.assertTrue(budget["evidence_digests"])
+        self.assertIn(returned["result"]["evidence_digest"], brief["original_evidence"])
+        self.assertNotIn(returned["result"]["evidence_digest"], budget["evidence_digests"])
+
     def test_no_budget_omission_when_everything_fits(self):
         brief = self.brief(self.packet([self.action(size=10)]))
         self.assertEqual([], [e for e in brief["evidence_omissions"]
