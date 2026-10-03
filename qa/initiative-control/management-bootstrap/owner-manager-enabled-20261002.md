@@ -1,4 +1,8 @@
-# Owner manager enable, 2026-10-02: stopped by the promotion gate, still armed fixture-only
+# Owner manager enable, 2026-10-02/03: promoted to tmux-workers (generation 3), first action held
+
+**Current state (round 4, 2026-10-03T12:21Z):** armed, generation 3, scope `tmux-workers`,
+`manager_enabled: true`, ticking on the interval. Its first action, `owner-first-check-01-r2`, is
+held with `wrong_ack` (see round 4). Rounds 1-3 below are the history.
 
 Authority: `owner-manager-enable-20261002`, revision 1. Travis (owner), 2026-10-02,
 answered **yes** to "Should I turn the dashboard manager on (let it dispatch work
@@ -326,3 +330,164 @@ Candidate `36b6ef77e5`, action `owner-first-check-01-r2`: items 1, 2, 3 and 5 PA
 UNMET (`isolated_transport_profile_and_probe_evidence_required`). The promotion recipe was not
 started, and the dashboard was not republished; republishing would again export the other
 session's uncommitted files.
+
+## Round 4, 2026-10-03: qualified on the third run, promoted to generation 3, first action held
+
+Travis's decisions (2026-10-03), verbatim:
+
+1. "Yes": block the VM's direct OpenAI access during the isolated worker test. Temporarily remove the OpenAI
+   addresses from the PF-83 guest's pinned egress (/etc/pf.anchors/corbanu.pf83 `inference` table and the matching
+   /etc/hosts entries) using the `neo-vm` admin login from the vault at use time. Run the test, then restore both
+   files byte-for-byte and reload pf. Record digests before, during and after. Z.AI entries must also be absent
+   during the test if they would let the worker bypass the broker. Prove zero direct connections.
+2. "Yes": the manager may keep using `corbanu internal-claude-oauth-token` for its Claude login.
+
+**Outcome:** item 4 qualified on the third isolated run (independent review **QUALIFIED**). The
+preflight passed all five items. The promotion recipe ran to completion: the owner is **armed,
+generation 3, `tmux-workers`, `manager_enabled: true`**, ticking on the interval with no tick-level
+hold. Its first real action then **held** (`wrong_ack`), so "no holds" is not met (see the end of
+this section). Evidence: `.codex-work/owner-manager-enable-20261002/round4/`.
+
+### Round-3 write-up corrections
+
+`round3/item4/qualification-evidence-corrections.md` corrects the round-3 evidence file without
+changing it: the full kept `Y0k1xE` contents, the broker-down control's two public flows, which
+file shows which ENOENT, how the worker server and tcpdump were stopped, the real capture window
+and drop count, the failed first initializer attempt, and where the owner operations came from.
+
+### Egress fence and restore (the same in all three runs)
+
+- As root through `neo2`, with the vault `neo-vm` login at use time, the anchor and `/etc/hosts` were
+  moved into a root-only hold (same filesystem, so inode and mtime are kept). Test copies were then
+  installed: the anchor with the `inference` macro and its 443 pass rule commented out, and
+  `/etc/hosts` without its six provider lines (chatgpt.com ×2, auth.openai.com, api.openai.com,
+  api.z.ai ×2). The anchor was reloaded, pf states to the eight addresses were killed, and the DNS
+  cache was flushed. Z.AI was removed too, because a `--yolo` worker could call any reachable
+  endpoint.
+
+| File | Before | During | After restore |
+| --- | --- | --- | --- |
+| `corbanu.pf83` | `58954a3f…975d`, 3035 B, inode 2387569, mtime 1790982939 | `b4432fbb…7ac6`, 3220 B | identical to before |
+| `/etc/hosts` | `6be8ce8e…cba5`, 369 B, inode 17599, mtime 1790982939 | `c7dd0e2e…e2da`, 213 B | identical to before |
+| `/etc/pf.conf` | `fb9fe39d…b53b` | unchanged | unchanged |
+
+- After each restore, the anchor table again holds exactly the eight pinned addresses. The probe
+  results, as agent:
+
+| Endpoint | Before the fence | During the fence | After restore |
+| --- | --- | --- | --- |
+| api.openai.com | 421 | no DNS; pinned address times out | 421 |
+| api.z.ai | 301 | no DNS; pinned address times out | 301 |
+| chatgpt.com | 403 | no DNS; pinned address times out | 403 |
+| github.com, example.com | do not resolve | do not resolve | still do not resolve |
+
+  PF-83 reruns work as before.
+- Credentials (`.pf83-auth/auth.json` `db552572…f256`, `zai_api_key` `4ac7ce27…d9f7`, qual probe
+  `auth.json` `ec7ab237…eff2`) were held root-only for every run. Owner, mode, size, inode, mtime
+  and SHA-256 were identical after each restore. The VirtioFS share was remounted each time.
+
+### Runs
+
+| Run | What changed | Result | Review |
+| --- | --- | --- | --- |
+| 1 (`d23da0`) | Fence plus credential hold. | Attempt A held `wrong_ack` (the ACK came with a trailing newline). Attempt B ran ACK → START → RETURN, with 17/17 broker joins. Zero public packets. | **NOT QUALIFIED**: the controls used `corbanu exec`, not the adapter; prior artifacts were only named; the probes had no positive control; several write-up errors. |
+| 2 (`fcfd9a`) | Adapter-level controls. Prior PF-83/qual artifacts held. neo2's home set to 0700. Host-only IPC and broker secret canaries. | Lifecycle 24/24 joins. The share **could be remounted by agent** (UTM maps it to host `/Volumes/FASTDRIVE2/z23`, writable). `~/.corbanu` was unexamined. | **NOT QUALIFIED**: the share, `~/.corbanu`, the `~` probes, and the case expectation weakened after the probe. |
+| 3 (`6ef76a`) | `~/.corbanu` also held. The share device stayed mounted by root inside the hold, so agent's `mount_virtiofs` fails "Resource busy". Absolute-path probes; CONNECT sent with the bearer. | Adapter positive control: 3/3 joins. Adapter broker-down control: failed closed (`runtime_failure` hold). Lifecycle: 13 ticks, 23/23 joins. | **QUALIFIED** |
+
+Every run was restored to the same digests. Each run's corrections file and review are kept in `round4/item4/`.
+
+### Item 4 evidence (run 3)
+
+- **Pins:** binary `7b8c77a6…d77c` (codesign ok); 33/33 runtime files byte-identical to
+  `577526daab`; package `146e64e9…eb04c` on host and guest; broker `05935e97…476e`; system config
+  `f4db2b3d…b8a0` unchanged.
+- **Zero direct connections:**
+  - The en0 capture (11:40:32-11:50:13Z, everything except established SSH with the host, every
+    SYN kept, 0 dropped) has 39 packets, all ARP, router advertisements, mDNS, or host SYNs to
+    guest port 22. **No public address appears, and the guest originated no SYN.**
+  - pflog shows 76 blocked SYNs to provider addresses, all inside deliberate probe windows. None
+    falls in the adapter controls or in the lifecycle outside the worker's own two probe commands.
+- **Lifecycle:** 13 ticks, 11:44:49-11:48:29Z, no holds, all owner operations `applied`.
+  - The ACK turn's final line is exactly the expected line.
+  - The START turn ran 21 tool calls; its first line is `RETURN`.
+  - **real_ack 1, real_start 1, real_return 1.**
+- **Probes:** run from both the worker's child shell and the parent shell, against host targets
+  confirmed present first.
+  - The host checkout and its `qa/` are absent, and a symlink to them dangles.
+  - The source search finds only the toy repo `.git`.
+  - Prior artifacts are absent; neo2's home and `/private/var/root` return EACCES.
+  - The share remount is refused.
+  - The host canary times out, and the host-only IPC socket is absent.
+  - Direct provider addresses fail: no DNS, and pinned addresses time out.
+  - With the synthetic bearer, the broker refuses `/v1/models`, the `file://` URL and CONNECT.
+  - The secret canary value appears nowhere.
+- **Independent review:** `claude-opus-5-5-plan`, session `01a1019e-d234-77e0-adab-f7724df76f6f`,
+  given only the evidence and the procedure. **VERDICT: QUALIFIED**, with all four fields supported
+  and counts 1/1/1.
+  - Disclosed limits:
+    - The share is blocked by a root-held mount, not removed in UTM.
+    - Fence and capture are in-guest.
+    - There is no separate case designer or blind executor.
+    - There is no explicit spend record for the host subscription.
+  - Hardening follow-ups:
+    - Remove the z23 share in UTM.
+    - Hold `~/Library`, `/private/var/folders/<agent>` and `/private/tmp/codex-browser-use`.
+    - Restrict the anchor's port-22 rule.
+
+### Preflight and promotion
+
+- **Item 5 audit:** run at 12:15:06Z on coordinator revision 2922. No hand-worker TMUX server and
+  no coordinator or publisher callers; the Task Node session had finished. The preflight then ran
+  1.4 s later on candidate `888d6dd1ad` (clean `git archive`, not the dirty worktree) with action
+  `owner-first-check-01-r2`. **All five items passed.**
+- **Promotion recipe** (`round4/promotion-recipe.py`, `owner-handoff-80-promotion.md` with one
+  disclosed change):
+  - The change binds `manager_enabled: true` in the replacement config and recomputes only the
+    activation's config digest, as round 1 required. The stored plan was left unchanged, so the
+    effect-boundary comparison still checks it.
+  - It exited 0. Disarm (generation 2), uninstall, runtime copy, reconfigure and handoff (revision
+    2923) followed, then repin, the OFF tick, arm and recover.
+  - Watchdog lines before and after:
+    - BEFORE: `covered=0, excluded=0; … new default actions=covered`
+    - BEFORE ARM and AFTER: `covered=0, excluded=0; … new default actions=excluded; hand stall
+      detection=manager responsibility`
+  - Transcript: `round4/promotion-transcript.jsonl`. Evidence:
+    `schedule/promotion-80-1791029717562719000`.
+- **State afterwards:**
+  - `--activation-status`: `armed`, generation **3** (next 4), scope `tmux-workers`, config digest
+    `8dcf657d…9ead` (with `manager_enabled: true` and the transport), package `146e64e9…eb04c`,
+    `recovery_required: false`.
+  - `owner-first-check-01-r2` is owner-owned; every other open action is hand-owned (the default).
+- **Ticks:** interval firing since 12:15:50Z. At 12:21Z the count was 44,428, with
+  `hold: null`, 0 consecutive errors, and launchd runs 11 (last exit 0).
+
+### First live action held: `wrong_ack`
+
+- **What happened:** the owner claimed `owner-first-check-01-r2` and launched worker `w-ylg59fqs`.
+  At 12:17Z it held the action with `wrong_ack`, followed by `operation_held`. The worker replied
+  with the correct ACK line, but sent it as a commentary message ending in `\n` and then an empty
+  final answer. `owner_tmux.provenance` requires the completed turn's final message to equal the ACK
+  exactly, so it refused and never sent START.
+- **Frequency:** the same behavior from gpt-6-astra caused round-4 attempt A. It has happened on 2
+  of 7 real first turns this round.
+- **Current state:**
+  - Coordinator revision 2924; the action is `dispatching`; the owner reports `state: HOLD` for it.
+  - `unresolved_holds` lists `wrong_ack` and `operation_held`.
+  - The worker's TMUX server (`~/.local/state/corbanu-owner-runs/w-ylg59fqs/s`) is still up and
+    idle; no START was sent.
+  - The 1,800 s action timeout will make the watchdog report it as a stall.
+- **Why it was left this way:** the owner is armed and fail-closed. A hold-resolution command is
+  not implemented. Disarming would revoke both dispatch lanes and consume generation 4 without
+  clearing the hold. Unresolved holds also block any later reconfigure.
+- **Needed:**
+  - A decision on the ACK check: either accept a single trailing newline, or prompt the worker to
+    answer in the final message. Either one changes `owner_tmux.py`, which changes the package
+    digest and requires re-qualification.
+  - A supported way to resolve this hold.
+- **To revoke admission now:** `owner_daemon.py --disarm --config … --generation 3`.
+
+### Dashboard
+
+Not republished. The wrapper `initiative-control.oGQGyA/sync-source.sh` exports from this worktree,
+which still has the other session's four uncommitted files in `scripts/initiative_control/`.
+Publishing from a clean clone would change the declared receiving checkout, so it was skipped.
