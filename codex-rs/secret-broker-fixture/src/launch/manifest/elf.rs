@@ -59,35 +59,35 @@ fn overlaps(a: u64, a_size: u64, b: u64, b_size: u64) -> io::Result<bool> {
 
 pub(super) fn inspect(input: &mut (impl Read + Seek), size: u64) -> io::Result<()> {
     require((64..=IMAGE_LIMIT).contains(&size))?;
-    let h = read::<64>(input, 0)?;
+    let h = read::<64>(input, /*offset*/ 0)?;
     require(
         &h[..7] == b"\x7fELF\x02\x01\x01"
             && matches!(h[7], 0 | 3)
             && h[8..16] == [0; 8]
-            && u16_at(&h, 16) == 3
-            && u16_at(&h, 18) == 62
-            && u32_at(&h, 20) == 1
-            && u32_at(&h, 48) == 0
-            && u16_at(&h, 52) == 64
-            && u16_at(&h, 54) == 56,
+            && u16_at(&h, /*at*/ 16) == 3
+            && u16_at(&h, /*at*/ 18) == 62
+            && u32_at(&h, /*at*/ 20) == 1
+            && u32_at(&h, /*at*/ 48) == 0
+            && u16_at(&h, /*at*/ 52) == 64
+            && u16_at(&h, /*at*/ 54) == 56,
     )?;
-    let count = u64::from(u16_at(&h, 56));
-    let table = u64_at(&h, 32);
+    let count = u64::from(u16_at(&h, /*at*/ 56));
+    let table = u64_at(&h, /*at*/ 32);
     require((1..=128).contains(&count) && table >= 64 && end(table, count * 56)? <= size)?;
     let mut loads: Vec<Segment> = Vec::new();
     let mut singletons = BTreeSet::new();
     let mut dynamic = None;
     for n in 0..count {
         let p = read::<56>(input, table + n * 56)?;
-        let kind = u32_at(&p, 0);
+        let kind = u32_at(&p, /*at*/ 0);
         let segment = Segment {
-            flags: u32_at(&p, 4),
-            offset: u64_at(&p, 8),
-            address: u64_at(&p, 16),
-            size: u64_at(&p, 32),
-            memory: u64_at(&p, 40),
+            flags: u32_at(&p, /*at*/ 4),
+            offset: u64_at(&p, /*at*/ 8),
+            address: u64_at(&p, /*at*/ 16),
+            size: u64_at(&p, /*at*/ 32),
+            memory: u64_at(&p, /*at*/ 40),
         };
-        let alignment = u64_at(&p, 48);
+        let alignment = u64_at(&p, /*at*/ 48);
         require(segment.size <= segment.memory && end(segment.offset, segment.size)? <= size)?;
         end(segment.address, segment.memory)?;
         require(
@@ -121,7 +121,7 @@ pub(super) fn inspect(input: &mut (impl Read + Seek), size: u64) -> io::Result<(
             _ => {}
         }
     }
-    let entry = u64_at(&h, 24);
+    let entry = u64_at(&h, /*at*/ 24);
     require(
         loads
             .iter()
@@ -145,8 +145,8 @@ pub(super) fn inspect(input: &mut (impl Read + Seek), size: u64) -> io::Result<(
     let mut pie = false;
     for n in 0..d.size / 16 {
         let b = read::<16>(input, d.offset + n * 16)?;
-        let tag = u64_at(&b, 0);
-        let value = u64_at(&b, 8);
+        let tag = u64_at(&b, /*at*/ 0);
+        let value = u64_at(&b, /*at*/ 8);
         if terminated || tag == 0 {
             require(tag == 0 && value == 0)?; // Zero-only padding, never active tags.
             terminated = true;
