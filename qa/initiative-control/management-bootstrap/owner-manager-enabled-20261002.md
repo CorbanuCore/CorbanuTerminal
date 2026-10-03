@@ -210,3 +210,119 @@ round 1: the export includes the working-tree bytes of the four uncommitted file
 is within 300 s of expiry and never writes the rotation back. A refresh during the run
 would leave `~/.codex/auth.json` holding a used refresh token. Start the run only after the
 host's own client has refreshed the file recently.
+
+## Round 3, 2026-10-03: items 1, 2, 3 and 5 pass; item 4 blocked on guest egress, not promoted
+
+Travis's decisions, 2026-10-03:
+
+- **B1:** the manager reads its Claude login from the vault, not from a file.
+- **B2:** reuse the PF-83 test VM "macOS 3" (`agent@192.168.64.3`, pf83 key, pinned known_hosts).
+- **B3:** "These VMs are expensive and annoying to create. Just programmatically erase data as
+  needed to support fresh tests."
+
+**Outcome: not promoted.** The preflight rerun passed items 1, 2, 3 and 5 and refused item 4.
+The independent review found the guest can still reach the public OpenAI endpoints, and closing
+that needs a guest egress change this round was told not to make. The owner is unchanged:
+**armed, generation 1, `fixture-only`**, config digest `cd07b20b…d6f5`, no recovery required;
+44,193 ticks, `hold: null`, 0 consecutive errors. Evidence:
+`.codex-work/owner-manager-enable-20261002/round3/`.
+
+### B1: vault-backed manager login (commit `edc60bfb02`)
+
+- `fable_launcher` / `manager_cycle` take `--auth-vault-home` instead of `--auth-file`. The
+  launcher and its TMUX child each resolve the Claude login at use time and keep it in memory;
+  only its SHA-256 is recorded, so a rotation before exec is refused (`vault_auth_changed`).
+- `corbanu vault auth-helper` refuses the managed label `provider/claude-code-oauth-token` by
+  design ("can only be used by its provider integration"). The launcher therefore runs the
+  claude-plan provider's own command-backed helper (`corbanu internal-claude-oauth-token`) with
+  the vault home. The /providers screen shows the managed vault credential is the current Claude
+  source. If Travis wants the generic auth-helper instead, a copy under an operational label is
+  needed.
+- Tests: focused 69 OK; full `scripts/initiative_control` discovery **887 OK** in a clean
+  worktree at the commit (fresh venv, disposable HOME and aliases,
+  `CORBANU_TEST_NO_NATIVE_KEYRING=1`). The first full attempt had 7 errors because `TMPDIR=/tmp`
+  is a symlink that the decision fixtures reject; the attempt is kept, not counted.
+- `fable_launcher.py` and `manager_cycle.py` are package modules, so the candidate package digest
+  is now `146e64e9…eb04c` (was `8021fc53…2065`). The commit reached the remote with the Task Node
+  session's push (`aa273695db`).
+
+### Item 2: PASS
+
+- Real manager cycles on the live coordinator with the vault login (Opus via claude-plan):
+  - A1: run `206e06c8`, action `owner-first-check-01`.
+  - Replacement: `prepare_worker` with `replace: true`, base commit set to `edc60bfb02`,
+    revision 2918 → 2919. This cancelled A1 with `owner_cancellation`.
+  - A2: run `d9a192f6`, prepared action **`owner-first-check-01-r2`**, allocation digest
+    `7c990e19…3b98`.
+- One earlier attempt was refused before launch (`tmux_socket_path_too_long`). It was
+  reconciled with `fail_manager` and used no inference.
+- A2 is still prepared in the live coordinator for the owner handoff. No hand dispatcher should
+  claim it.
+
+### Item 4: UNMET — real run completed, mediated_inference not supported
+
+- **Guest cleanup:**
+  - Deleted 21 `~/pf83-cases-*` folders and `pf83-cases-29.Y0k1xE/cases.uPHy00`. Their evidence
+    is sealed on the host.
+  - Kept the `Y0k1xE` package, manifest, packet and runtime.
+  - Free space went from 532,192 KiB to 9,428,532 KiB (+8.5 GiB).
+- **Credential isolation:**
+  - As root through `neo2` (vault `neo-vm` at use time; password through askpass and sudo stdin,
+    never written), moved these into a root-only directory: `/Users/agent/.pf83-auth` and a
+    52-byte `~/qual/probe/home/auth.json` of unknown origin.
+  - A UTM VirtioFS share of host `/Volumes/FASTDRIVE2/z23` (personal files, no Corbanu source)
+    was also unmounted for the run.
+  - Afterwards everything was restored with identical inode, owner, mode, size, mtime and
+    SHA-256: `db552572…f256`, `4ac7ce27…d9f7`, `ec7ab237…eff2`. The share was remounted.
+- **Run:**
+  - Setup:
+    - Binary `7b8c77a6…d77c` plus its `codex-code-mode-host` (`61a15c4c…b711`).
+    - Package `146e64e9…` (same digest on host and guest).
+    - Broker in subscription mode, reverse tunnel, and the pre-existing system config
+      `f4db2b3d…`.
+  - Owner lifecycle: a fresh guest fixture owner (step-8 initializer) ran real ticks:
+    ACK → START → RETURN in 7 ticks with no holds.
+  - Result: `real_ack`, `real_start` and `real_return` = 1. All 11 rollout response IDs join
+    broker `relay_completed` records (gpt-6-astra, high). Both the worker's child shell and the
+    parent shell ran negative probes against the host checkout, a host canary, GitHub and broker
+    routes. The broker-down control failed closed.
+- **Broker defects (fixed in `36b6ef77e5`, 64 broker tests OK):** on its first live use the
+  ChatGPT Codex backend sent `x-oai-request-id` instead of `x-request-id`, and streamed SSE with
+  no Content-Type. The failed attempts (journals 2–5) are kept.
+- **Deployment finding:** the live transport binary directory lacked `codex-code-mode-host`, so
+  every worker shell call would have failed closed. The signed helper from the same build is now
+  installed there.
+- **Blocking finding:** the guest packet filter passes 443 to the pinned OpenAI and Z.AI
+  addresses.
+  - The capture shows two short TLS connections to chatgpt.com at every client start, including
+    the worker launch and the broker-down control. None carried inference or credentials.
+  - `api.openai.com` answers 401.
+- **Independent review** (`claude-opus-5-5-plan`, session `01a10141…`, evidence plus procedure
+  only):
+  - Verdict: **NOT QUALIFIED**.
+  - `isolated_transport`, `isolated_profile` and `negative_access_probes` are supported, with
+    gaps.
+  - `mediated_inference` is not supported, because public-endpoint bypass is not denied.
+  - Counts verified at 1/1/1. Credential restore exact.
+  - It also flagged evidence-record inaccuracies, listed in its review file. The recorded
+    qualification sets `mediated_inference: false`.
+- **Needed:** authorization for an egress fence (outside the guest, or the guest pf pinhole
+  removed during the test) that drops everything except the SSH tunnel. Then repeat the
+  broker-down control and one owner lifecycle with zero public flows, followed by a fresh review.
+
+### Item 5: PASS
+
+- **Quiet state:**
+  - The coordinator's hand-worker TMUX server was not running.
+  - No coordinator or publisher callers were running.
+  - The facility-control job was identified as unrelated.
+  - The owner launchd job was idle.
+- **Preflight:** ran 1.7 s after the observation. Before and after: job runs counter 34,989
+  (unchanged), no PID, coordinator snapshot unchanged at revision 2922.
+
+### Preflight rerun (exit 2)
+
+Candidate `36b6ef77e5`, action `owner-first-check-01-r2`: items 1, 2, 3 and 5 PASS; item 4
+UNMET (`isolated_transport_profile_and_probe_evidence_required`). The promotion recipe was not
+started, and the dashboard was not republished; republishing would again export the other
+session's uncommitted files.
