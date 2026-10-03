@@ -185,6 +185,23 @@ dependencies, product decisions, human acceptance or external-action permissions
 Scope-break and convergence rules remain. Workers request routine extensions
 from the integrator rather than blocking on a new human review-spend decision.
 
+### Model for adversarial functional cases
+
+User-authorized process amendment, October 2, 2026. Functional cases that ask
+the product to run boundary probes (permission, sandbox and security cases such
+as PF-83 F01-F11) run the product under test on GLM 5.2 (`-m glm-5.2 -c
+model_provider="zai"`). GPT-5.6-Sol refused PF-83 F05-F11 outright as a
+cybersecurity request. GLM 5.2 attempted F01, F02 and F05-F11 in the sealed
+guest (increment-33), with one intermittent refusal recorded in F05.
+
+- Record every model refusal verbatim as a result. A retry must resubmit the
+  frozen case wording unchanged; a changed prompt is a separate, labelled
+  attempt, never the case's verdict.
+- Another model needs a recorded reason, and a refusal count from the same
+  cases, before it replaces GLM 5.2.
+- Credentials reach an isolated guest only through the owner-approved path for
+  that guest; never print or log them.
+
 Use [the workflow and artifact templates](qa/code-blind-functional/README.md)
 and its handoff checker. The checker validates traceability, not the truth of
 screenshots, independent context or declared results; the evidence-check agent
