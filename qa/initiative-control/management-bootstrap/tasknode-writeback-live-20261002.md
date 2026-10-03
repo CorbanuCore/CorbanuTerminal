@@ -3,8 +3,9 @@
 Status (round 3, 2026-10-03): **one live event delivered; the same-key re-send
 made no second write.** Travis accepted the five PF-80 tasks. `PF-80-S01` now maps
 to `task_80628c7…`, and event `cc-57beba1c…52cc13` reached the server once
-(revision 1, one item for the account). Evidence submissions are recorded in the
-round 3 section below. No task stage was moved and no reward was claimed. Batch
+(revision 1, one item for the account). Evidence and verification responses went
+to all five tasks; at 10:53Z two were Rewarded by Task Node and three were
+Awaiting review (round 3 section below). No task stage was moved and no reward was claimed. Batch
 posting, TUI recording and recurring writeback stay **OFF**. Round 1 (2026-10-02)
 stopped before any write; round 2 enrolled the workspace and requested the tasks.
 
@@ -423,3 +424,22 @@ the pinned-requirements venv, per
 request, the task map and the live event text all carried the wrong label. The
 map is corrected; the immutable event (`cc-57beba1c…`) is not edited, and this
 paragraph is its correction.
+
+### Verification requests and responses
+
+Each task's verifier asked for one more artifact. Each was answered once with
+`corbanu tasknode verification respond <task> --body-file <body> --json`, behind
+the same one-shot guard (`canSubmitVerificationEvidence` true, no local receipt).
+
+| Task | Verifier asked for | Answer | Receipt (`eventId`) | State, 10:53Z |
+| --- | --- | --- | --- | --- |
+| `task_80628c7…` | raw server read-back JSON | raw 1,822-byte body, 1 item, revision 1; credential check negative; label correction noted | `task_evt_60c4f843-f897-4d3f-878a-6993b0996bb8` | **Rewarded** (4 PFT in `rewards list`) |
+| `task_9d4fc2d8…` | `git show --stat 84e3709f…`, mapping rows, exclusion line | pasted verbatim; disclosed that the commit touches three files | `task_evt_af280fc1-371b-4e1e-bcec-f3892cdeed6d` | **Rewarded** (2.5 PFT) |
+| `task_cf2cc91f…` | fresh raw `launchctl print` and `tick.json` | pasted at 10:48:21Z: runs 35043, exit 0, 30 s, hold null, ticks 44247 | `task_evt_12659d32-6e46-4ade-be07-3b6e596187dd` | Awaiting review |
+| `task_6d472c45…` | commit URL and stored allocation record | URL plus read-only coordinator rows: seq 3413 (rev 2911, bridge/openai/--yolo) and the later replacement seq 3421 | `task_evt_c04aa24a-dc00-4551-970f-82464c18d7aa` | Awaiting review |
+| `task_512bafc2…` | pinned-interpreter hunk in `08db99fff` | **Partial**: no such hunk; pasted the startup-death hunks, the unchanged tip line 482 and the operational fix | `task_evt_64d02c2f-7564-47a7-adc0-e86bafb4bda8` | Awaiting review |
+
+Every response receipt: `ok true`, `pfterminalLifecycle.phase awaiting_reward`,
+`completionConfirmed false`. The two Rewarded states were set by Task Node; Corbanu
+moved no stage and claimed nothing. Response bodies and raw read-back, launchctl,
+tick and coordinator outputs are in `.codex-work/tasknode-round3/` (not committed).
