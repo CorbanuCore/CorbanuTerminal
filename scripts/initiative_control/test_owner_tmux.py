@@ -149,6 +149,91 @@ class WorkerInputTests(unittest.TestCase):
             t.freeze_worker_inputs({}, provider="openai", policy="--yolo")
 
 
+class AckTokenTests(unittest.TestCase):
+    """Worker ACK line: surrounding whitespace and a non-final message only."""
+    DIGEST = "7c990e19" + "8" * 56
+    ACK = "ACK owner-first-check-01-r2 " + DIGEST + " gpt-6-astra high"
+    PROMPT = "Action ID: owner-first-check-01-r2.\nFirst reply with exactly this line"
+
+    def setUp(self):
+        self.binding = dict(worktree="/tmp/w", provider="openai", model="gpt-6-astra",
+                            effort="high", approval="never", sandbox="danger-full-access")
+
+    def records(self, final, messages=(), turn="ack-turn"):
+        rows = [record("session_meta", id=str(uuid.uuid4()), session_id=str(uuid.uuid4()),
+                       cwd="/tmp/w", source="cli", model_provider="openai"),
+                record("event_msg", type="task_started", turn_id=turn),
+                record("turn_context", turn_id=turn, cwd="/tmp/w", model="gpt-6-astra",
+                       model_provider="openai", effort="high", approval_policy="never",
+                       sandbox_policy={"type": "danger-full-access"}),
+                record("event_msg", type="user_message", message=self.PROMPT)]
+        rows += [record("event_msg", type="agent_message", message=m,
+                        phase="final_answer" if i == len(messages) - 1 else "commentary")
+                 for i, m in enumerate(messages)]
+        rows += [record("event_msg", type="model_response_completed", turn_id=turn,
+                        model="gpt-6-astra", model_provider_id="openai", response_id="resp-1"),
+                 record("event_msg", type="task_complete", turn_id=turn, last_agent_message=final)]
+        return rows
+
+    def check(self, final, messages=(), ack_token=True):
+        return t.provenance(self.records(final, messages), self.binding, [self.PROMPT],
+                            self.ACK, ack_token=ack_token)
+
+    def test_observed_newline_and_nonfinal_ack_are_accepted_as_the_exact_line(self):
+        accepted = [
+            # Round-4 live shape: commentary ACK + "\n", empty final_answer.
+            (self.ACK + "\n", [self.ACK + "\n", ""]),
+            (self.ACK + "\n", []),
+            ("\n  " + self.ACK + " \r\n", []),
+            ("", [self.ACK + "\n", ""]),
+            ("", ["\n" + self.ACK, "  "]),
+            (self.ACK, ["unrelated commentary"]),  # exact final: unchanged behavior
+        ]
+        for final, messages in accepted:
+            with self.subTest(final=final, messages=messages):
+                result = self.check(final, messages)
+                self.assertTrue(result["ack"])
+                self.assertEqual(self.ACK, result["ack_line"])
+                self.assertEqual(final != self.ACK, "ack_received" in result)
+
+    def test_wrong_identity_fields_and_extra_content_are_still_refused(self):
+        wrong = {
+            "action": self.ACK.replace("owner-first-check-01-r2", "owner-first-check-01"),
+            "digest": self.ACK.replace(self.DIGEST, "0" * 64),
+            "model": self.ACK.replace("gpt-6-astra", "gpt-6"),
+            "effort": self.ACK.replace(" high", " xhigh"),
+            "interior-space": self.ACK.replace(" gpt", "  gpt"),
+            "prefix": "Sure. " + self.ACK,
+            "fenced": "`" + self.ACK + "`",
+        }
+        for name, line in wrong.items():
+            for final, messages in ((line + "\n", []), ("", [line + "\n", ""]),
+                                    (line, [line])):
+                with self.subTest(name=name, final=final, messages=messages):
+                    with self.assertRaisesRegex(f.LaunchError, "wrong_ack"):
+                        self.check(final, messages)
+        for final, messages in (("", []), ("", ["", "\n"]), (self.ACK + "\nextra", []),
+                                ("", ["Sure.", self.ACK]), (self.ACK + "\n", [self.ACK, "other"]),
+                                ("other", [self.ACK]), ("\x0b" + self.ACK, []),
+                                ("\u00a0" + self.ACK, [])):
+            with self.subTest(final=final, messages=messages):
+                with self.assertRaisesRegex(f.LaunchError, "wrong_ack"):
+                    self.check(final, messages)
+
+    def test_byte_exact_contract_unchanged_without_ack_token(self):
+        self.assertTrue(self.check(self.ACK, ack_token=False)["ack"])
+        for final, messages in ((self.ACK + "\n", []), ("", [self.ACK])):
+            with self.assertRaisesRegex(f.LaunchError, "wrong_ack"):
+                self.check(final, messages, ack_token=False)
+
+    def test_uncorrelated_assistant_messages_do_not_count(self):
+        rows = self.records("", [self.ACK])
+        # Move the ACK message before the user submission: not this turn's reply.
+        rows.insert(3, rows.pop(4))
+        with self.assertRaisesRegex(f.LaunchError, "wrong_ack"):
+            t.provenance(rows, self.binding, [self.PROMPT], self.ACK, ack_token=True)
+
+
 class TmuxTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="ot-", dir=Path("/tmp").resolve())
@@ -651,6 +736,35 @@ class TmuxTests(unittest.TestCase):
         self.assertTrue(receipt["clean"], receipt)
         self.assertFalse(receipt["forced"])
         self.assertNotEqual(0, self.worker.tmux("list-sessions", check=False).returncode)
+
+    def test_newline_terminated_nonfinal_ack_permits_start(self):
+        self.launch()
+        self.worker.prompt()
+        ack = self.worker.meta["ack"]
+        self.turn(self.worker.meta["prompt"], ack + "\n", "ack-turn")
+        self.records.insert(-2, record("event_msg", type="agent_message", message=ack + "\n",
+                                       phase="commentary"))
+        self.records.insert(-2, record("event_msg", type="agent_message", message="",
+                                       phase="final_answer"))
+        self.write_records()
+        state = self.worker.inspect()
+        self.assertTrue(state["identity_valid"], state)
+        self.assertEqual(ack, state["ack_line"])
+        self.assertEqual(ack + "\n", state["ack_received"])
+        self.worker.start()
+        self.assertTrue((self.worker.run / "start-intent.json").exists())
+
+    def test_newline_terminated_wrong_effort_ack_holds(self):
+        self.launch()
+        self.worker.prompt()
+        self.turn(self.worker.meta["prompt"], self.worker.meta["ack"].replace(" high", " low") + "\n",
+                  "ack-turn")
+        state = self.worker.inspect()
+        self.assertFalse(state["identity_valid"])
+        self.assertEqual("wrong_ack", state["evidence_reason"])
+        with self.assertRaises(f.LaunchError):
+            self.worker.start()
+        self.assertFalse((self.worker.run / "start-intent.json").exists())
 
     def test_daemon_records_durable_return_after_pane_is_killed(self):
         from coordinator import digest

@@ -94,11 +94,32 @@ def freeze_worker_inputs(inputs, *, provider, policy):
     return result
 
 
-def provenance(records, binding, prompts, ack):
-    """Only correlated completed rollout turns count; pane echoes never authorize."""
+ACK_SPACE = " \t\r\n"
+
+
+def token_ack(final, messages, ack):
+    """The worker ACK token line, tolerating only surrounding ASCII whitespace.
+
+    The completed final message must be the token line or empty; an empty final
+    is accepted only when the turn's completed assistant messages carried it.
+    Every non-empty assistant message in the turn must be that exact line.
+    """
+    if "\n" in ack or not all(isinstance(m, str) for m in messages):
+        return False
+    lines = [m.strip(ACK_SPACE) for m in messages if m.strip(ACK_SPACE)]
+    tail = final.strip(ACK_SPACE)
+    return (tail == ack or (tail == "" and bool(lines))) and all(m == ack for m in lines)
+
+
+def provenance(records, binding, prompts, ack, *, ack_token=False):
+    """Only correlated completed rollout turns count; pane echoes never authorize.
+
+    ack_token selects the worker ACK-line contract (see token_ack); otherwise,
+    as for bridge payload ACKs, the final message must equal ack byte-for-byte.
+    """
     result = {"session_id": None, "thread_id": None, "ack": False, "returned": None,
               "submitted": False, "turn_id": None}
-    active, context, response, user, completed = None, False, None, None, []
+    active, context, response, user, completed, messages = None, False, None, None, [], []
     for record in records:
         kind, p = record["type"], record["payload"]
         event = p.get("type")
@@ -125,11 +146,14 @@ def provenance(records, binding, prompts, ack):
             active = p.get("turn_id") if active is None else None
             f.require(active and active not in completed and len(completed) < len(prompts),
                       "unexpected_turn")
-            context, response, user = False, None, None
+            context, response, user, messages = False, None, None, []
         elif event == "user_message":
             f.require(active and user is None and p.get("message") == prompts[len(completed)],
                       "wrong_submission")
             user = p["message"]
+        elif event == "agent_message":
+            if active and user is not None:
+                messages.append(p.get("message"))
         elif event == "model_response_completed":
             f.require(active == p.get("turn_id") and context and user is not None
                       and p.get("model") == binding["model"]
@@ -143,8 +167,10 @@ def provenance(records, binding, prompts, ack):
                       and user is not None and isinstance(final, str)
                       and len(final.encode()) <= f.FINAL_LIMIT, "uncorrelated_completion")
             if not completed:
-                f.require(final == ack, "wrong_ack")
-                result.update(ack=True, ack_line=final)
+                f.require(final == ack or (ack_token and token_ack(final, messages, ack)), "wrong_ack")
+                result.update(ack=True, ack_line=ack)
+                if final != ack:
+                    result["ack_received"] = final
             else:
                 f.require(re.match(r"\ARETURN(?:\n|$)", final) is not None, "wrong_return")
                 result["returned"] = final
@@ -522,7 +548,7 @@ class Worker:
                 prompts = [self.meta["prompt"]] if (self.run / "prompt-intent.json").exists() else []
                 if (self.run / "start-intent.json").exists():
                     prompts.append("START")
-                state.update(provenance(records, self.binding, prompts, self.meta["ack"]),
+                state.update(provenance(records, self.binding, prompts, self.meta["ack"], ack_token=True),
                              rollout=str(paths[0]), rollout_digest=f.digest(raw))
             state["stalled"] = state["liveness"] == "alive" and deadline is not None and time.time() >= deadline
         except (f.LaunchError, OSError, ValueError, KeyError, TypeError, IndexError,

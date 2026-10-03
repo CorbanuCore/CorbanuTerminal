@@ -1110,6 +1110,100 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.assertEqual("HOLD", self.tick()["actions"]["one"])
         self.assertNotIn(("one", "start"), FakeWorker.events)
 
+    def held_wrong_ack(self):
+        self.configure()
+        self.prepared()
+        FakeWorker.modes["one"] = "wrong-ack"
+        self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        FakeWorker.modes.clear()
+        self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        action = self.c.snapshot()["actions"]["one"]
+        run = Path(self.sql("SELECT private_run_root FROM processes")[0][0])
+        request = dict(action_id="one", claim=action["claim"], allocation_digest=action["allocation_digest"],
+                       reason_codes=["wrong_ack", "operation_held"], evidence="worker stopped with /quit")
+        return request, run
+
+    def test_resolve_hold_requires_exact_reasons_claim_evidence_and_stopped_worker(self):
+        request, run = self.held_wrong_ack()
+        holds = self.sql("SELECT * FROM holds ORDER BY hold_id")
+        refusals = [(dict(request, reason_codes=["wrong_ack"]), "hold_reasons_mismatch"),
+                    (dict(request, claim="other"), "resolution_claim_mismatch"),
+                    (dict(request, allocation_digest="0" * 64), "resolution_claim_mismatch"),
+                    (dict(request, evidence="  "), "resolution_evidence_required"),
+                    (dict(request, action_id="missing"), "no_unresolved_hold"),
+                    (dict(request, extra=True), "invalid_resolution")]
+        for value, reason in refusals:
+            with self.subTest(reason=reason):
+                with self.assertRaisesRegex(f.LaunchError, reason):
+                    owner.resolve_hold(self.config_path, value)
+        # A live socket or a live recorded process is not a stopped worker.
+        f.write_file(run / "s", "")
+        with self.assertRaisesRegex(f.LaunchError, "resolution_requires_stopped_worker"):
+            owner.resolve_hold(self.config_path, request)
+        (run / "s").unlink()
+        me = os.getpid()
+        start = tmux.processes([me])[me][3]
+        f.write_json(run / "process.json", dict(pid=me, start=start, server=None))
+        with self.assertRaisesRegex(f.LaunchError, "resolution_requires_stopped_worker"):
+            owner.resolve_hold(self.config_path, request)
+        f.write_json(run / "process.json", dict(pid=me, start="Thu Jan  1 00:00:00 1970", server=None))
+        self.assertEqual(holds, self.sql("SELECT * FROM holds ORDER BY hold_id"))
+        self.assertEqual("dispatching", self.c.snapshot()["actions"]["one"]["status"])
+        self.assertEqual({"held"}, {r[0] for r in self.sql("SELECT phase FROM operations")})
+
+    def test_resolve_hold_records_evidence_fails_claim_and_is_never_resumed(self):
+        request, _ = self.held_wrong_ack()
+        path = self.root / "resolution.json"
+        f.write_json(path, request)
+        result = self.child(None, "--resolve-hold", str(path), "--config", str(self.config_path))
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        receipt = json.loads(result.stdout)
+        self.assertEqual(("RESOLVED", "dispatching", "failed"), (
+            receipt["state"], receipt["action_status_before"], receipt["action_status_after"]))
+        document = owner.load(self.root / receipt["artifact"])
+        self.assertEqual(receipt["resolution_evidence_digest"], digest(document))
+        self.assertEqual(request, document["request"])
+        rows = self.sql("SELECT reason_code,resolution_evidence_digest,resolved_at FROM holds")
+        self.assertEqual({"wrong_ack", "operation_held"}, {r[0] for r in rows})
+        self.assertTrue(all(r[1] == digest(document) and r[2] for r in rows))
+        self.assertEqual({"resolved"}, {r[0] for r in self.sql("SELECT phase FROM operations")})
+        action = self.c.snapshot()["actions"]["one"]
+        self.assertEqual("failed", action["status"])
+        self.assertIn("owner_failure", action)
+        self.assertEqual([], owner.activation_status(self.config_path)["unresolved_holds"])
+        events = list(FakeWorker.events)
+        tick = self.tick()
+        self.assertEqual(("ACTIVE", "resolved"), (tick["state"], tick["actions"]["one"]))
+        self.assertEqual(events, FakeWorker.events)
+        with self.assertRaisesRegex(f.LaunchError, "no_unresolved_hold"):
+            owner.resolve_hold(self.config_path, request)
+        # A recurrence opens a new row; the resolved row is kept unchanged.
+        kernel = owner.Kernel(self.config_path)
+        kernel.db = sqlite3.connect(self.root / "owner.sqlite3")
+        kernel.db.row_factory = sqlite3.Row
+        op_id = digest(["tmux", "one", "claim"])
+        kernel.hold(op_id, "wrong_ack")
+        kernel.db.close()
+        after = self.sql("SELECT reason_code,resolution_evidence_digest,resolved_at FROM holds")
+        self.assertEqual(3, len(after))
+        self.assertTrue(set(rows) <= set(after))
+        self.assertEqual([("wrong_ack",)], self.sql("SELECT reason_code FROM holds WHERE resolved_at IS NULL"))
+
+    def test_off_reconfigure_refuses_held_and_accepts_resolved_action(self):
+        request, _ = self.held_wrong_ack()
+        replacement = self.root / "replacement.json"
+        f.write_json(replacement, self.config)
+        f.write_file(self.root / "installation.lock", b"")
+        f.write_json(self.root / "installation.json",
+                     dict(phase="uninstalled", label="com.corbanu.initiative-owner.test",
+                          domain=f"user/{os.getuid()}", pins=dict(config=str(self.config_path))))
+        owner.disarm_owner(self.config_path, 1)
+        with patch.object(owner, "service", return_value=("absent", "")):
+            with self.assertRaisesRegex(f.LaunchError, "reconfigure_requires_settled_operations"):
+                owner.reconfigure_owner(self.config_path, replacement, self.root)
+            owner.resolve_hold(self.config_path, request)
+            self.assertEqual("OFF", owner.reconfigure_owner(self.config_path, replacement, self.root)["state"])
+
     def test_missing_ack_waits_then_holds_at_fixed_lease(self):
         self.configure()
         self.prepared()

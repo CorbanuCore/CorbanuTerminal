@@ -348,7 +348,11 @@ Inspect `coordinator.watchdog_coverage.excluded_actions`: their stall detection
 belongs to the manager. Check top-level `unresolved_holds`, including
 `excluded_from_owner_lane`; an excluded hold remains unresolved and blocks
 reconfiguration. Moving ownership or running schedule `--recover` does not
-resolve it. No hold-resolution command is implemented; do not edit SQLite to
+resolve it. Resolve a hold only with `owner_daemon.py --resolve-hold <request.json>
+--config "$OWNER80_CONFIG"` after stopping the worker on its own recorded socket
+(round 5, `owner-manager-enabled-20261002.md`). It requires the exact unresolved
+reasons, claim and allocation digest, fails the claim instead of resuming it, and
+records `resolution_evidence_digest` and `resolved_at`. Do not edit SQLite to
 manufacture resolution or describe disarm as a complete scope rollback.
 
 During minutes 0–1, expect the first interval tick, a new owner boot and selected

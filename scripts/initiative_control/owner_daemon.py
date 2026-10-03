@@ -554,6 +554,98 @@ def handoff(config_path, request):
                     coordinator=str(root), assignments=request["assignments"])
 
 
+RESOLVABLE = frozenset({"dispatching", "dispatch_uncertain", "dispatched", "running"})
+
+
+def stopped_worker(root, db, action_id):
+    """Evidence that no recorded worker process or private TMUX socket remains."""
+    from owner_tmux import processes
+    runs = {row["private_run_root"] for row in db.execute(
+        "SELECT private_run_root FROM processes WHERE op_id=?", (digest(["tmux", action_id, "launch"]),))}
+    row = db.execute("SELECT receipt_artifact FROM operations WHERE op_id=?",
+                     (digest(["tmux", action_id, "prepare"]),)).fetchone()
+    if row and row["receipt_artifact"]:
+        runs.add(load(root / row["receipt_artifact"])["result"])
+    result = []
+    for run in sorted(r for r in runs if r):
+        run = Path(run)
+        pids = {}
+        if (run / "process.json").exists():
+            proc = f.strict_json(f.read_file(run / "process.json", 4096, private=True))
+            pids.update({str(proc[k]): proc[s] for k, s in (("pid", "start"), ("server", "server_start"))
+                         if proc.get(k) is not None})
+        if (run / "owned.json").exists():
+            pids.update(f.strict_json(f.read_file(run / "owned.json", 65536, private=True)))
+        table = processes([int(pid) for pid in pids]) if pids else {}
+        alive = sorted(int(pid) for pid, start in pids.items() if int(pid) in table
+                       and table[int(pid)][3] == start and not table[int(pid)][2].startswith("Z"))
+        socket = os.path.lexists(run / "s")
+        f.require(not alive and not socket, "resolution_requires_stopped_worker")
+        result.append(dict(run=str(run), checked_pids=sorted(int(pid) for pid in pids),
+                           alive=alive, socket_present=socket))
+    return result
+
+
+def resolve_hold(config_path, request):
+    """Resolve one action's unresolved holds with recorded evidence; never delete rows.
+
+    Holds the same locks as arm/disarm, so no tick runs concurrently. Requires
+    the exact unresolved reasons, the recorded claim/allocation and a stopped
+    worker. A live owner claim is reconciled to failed (never resumed or
+    relaunched); operations keep their history and move held -> resolved,
+    which the owner lane skips. Each hold row records resolution_evidence_digest
+    and resolved_at; the evidence document is kept as a private artifact.
+    """
+    f.require(type(request) is dict and set(request) ==
+              {"action_id", "claim", "allocation_digest", "reason_codes", "evidence"}, "invalid_resolution")
+    f.require(isinstance(request["evidence"], str) and 0 < len(request["evidence"].strip()) <= 4000,
+              "resolution_evidence_required")
+    f.require(isinstance(request["reason_codes"], list)
+              and all(isinstance(r, str) for r in request["reason_codes"]), "invalid_resolution")
+    action_id = request["action_id"]
+    with activation_store(config_path) as (root, db, meta):
+        op_id = digest(["tmux", action_id, "claim"])
+        holds = [dict(h) for h in db.execute(
+            "SELECT * FROM holds WHERE op_id=? AND resolved_at IS NULL ORDER BY hold_id", (op_id,))]
+        f.require(bool(holds), "no_unresolved_hold")
+        f.require(sorted(request["reason_codes"]) == sorted(h["reason_code"] for h in holds),
+                  "hold_reasons_mismatch")
+        rows = [dict(r) for r in db.execute(
+            "SELECT op_id,effect,phase,hold_reason,receipt_digest FROM operations "
+            "WHERE domain='tmux' AND action_id=? ORDER BY op_id", (action_id,))]
+        f.require(bool(rows) and all(r["phase"] == "held" for r in rows),
+                  "resolution_requires_held_operations")
+        workers = stopped_worker(root, db, action_id)
+        coordinator = ExistingCoordinator(root)
+        state = coordinator.snapshot()
+        action = state["actions"].get(action_id)
+        f.require(action is not None and coordinator.dispatch_owner(state, action) in (None, "owner"),
+                  "resolution_requires_owner_action")
+        f.require(action.get("claim") == request["claim"]
+                  and action["allocation_digest"] == request["allocation_digest"], "resolution_claim_mismatch")
+        before = action["status"]
+        f.require(before in RESOLVABLE | {"failed", "cancelled"}, "resolution_requires_reconcilable_action")
+        document = dict(request=request, holds=holds, operations=rows, workers=workers,
+                        generation=meta["control_generation"], requested_mode=meta["requested_mode"],
+                        coordinator_revision=state["revision"], action_status_before=before, at=time.time())
+        document["coordinator_evidence"] = dict(kind="owner_hold_resolution",
+                                                pre_resolution_digest=digest(document))
+        if before in RESOLVABLE:
+            coordinator.reconcile_dispatch(action_id, document["coordinator_evidence"], dispatcher="owner")
+        after = coordinator.snapshot()["actions"][action_id]["status"]
+        document["action_status_after"] = after
+        relative = artifact(root, "runs/" + op_id + "/resolutions/" + digest(document) + ".json", document)
+        now = time.time()
+        db.execute("UPDATE holds SET resolution_evidence_digest=?,resolved_at=? "
+                   "WHERE op_id=? AND resolved_at IS NULL", (digest(document), now, op_id))
+        db.execute("UPDATE operations SET phase='resolved',updated_at=? WHERE domain='tmux' AND action_id=?",
+                   (now, action_id))
+        db.commit()
+        return dict(state="RESOLVED", action_id=action_id, resolved=[h["reason_code"] for h in holds],
+                    resolution_evidence_digest=digest(document), artifact=relative,
+                    action_status_before=before, action_status_after=after)
+
+
 @contextmanager
 def uninstalled_schedule(config_path, schedule_root):
     """Serialize with install/repin and bind the inspected receipt to this config."""
@@ -580,7 +672,7 @@ def reconfigure_owner(config_path, replacement, schedule_root=None):
         f.require(meta["requested_mode"] == "off", "reconfigure_requires_off")
         config = configuration(replacement)
         f.require(config["coordinator"] == str(root), "coordinator_change_forbidden")
-        f.require(not db.execute("SELECT 1 FROM operations WHERE phase != 'applied'").fetchone()
+        f.require(not db.execute("SELECT 1 FROM operations WHERE phase NOT IN ('applied','resolved')").fetchone()
                   and not db.execute("SELECT 1 FROM holds WHERE resolved_at IS NULL").fetchone(),
                   "reconfigure_requires_settled_operations")
         state = ExistingCoordinator(root).snapshot()
@@ -650,9 +742,13 @@ class Kernel:
         now = time.time()
         artifact(self.root, "runs/" + (op_id or "global") + "/holds/" + str(uuid.uuid4()) + ".json",
                  {"reason": reason, "op_id": op_id, "observed_at": now})
+        # A recurrence after resolution opens a new row; resolved rows stay as history.
+        prior = self.db.execute("SELECT COUNT(*) FROM holds WHERE op_id IS ? AND reason_code=? "
+                                "AND resolved_at IS NOT NULL", (op_id, reason)).fetchone()[0]
         self.db.execute("INSERT INTO holds VALUES(?,?,?,?,?,?,?,NULL,NULL) "
                         "ON CONFLICT(hold_id) DO UPDATE SET last_seen=excluded.last_seen",
-                        (digest([op_id, reason]), "operation" if op_id else "global",
+                        (digest([op_id, reason] + ([prior] if prior else [])),
+                         "operation" if op_id else "global",
                          op_id, reason, now, now, digest({"reason": reason})))
         if op_id:
             self.db.execute("UPDATE operations SET phase='held',hold_reason=?,updated_at=? WHERE op_id=?",
@@ -866,6 +962,10 @@ class Kernel:
                 continue
             rows = self.db.execute("SELECT * FROM operations WHERE domain='tmux' AND action_id=?",
                                    (action["id"],)).fetchall()
+            if rows and all(row["phase"] == "resolved" for row in rows):
+                # resolve_hold settled this claim; never resume or relaunch it.
+                outcomes[action["id"]] = "resolved"
+                continue
             if not rows and action["status"] not in {"prepared", "dispatching", "dispatch_uncertain",
                                                      "dispatched", "running"}:
                 continue
@@ -1170,6 +1270,8 @@ def main(argv=None):
     commands.add_argument("--run", action="store_true")
     commands.add_argument("--hand-run", action="store_true", help="one hand-owned TMUX pass using the shared journal")
     commands.add_argument("--handoff", type=Path, help="revision-bound ownership partition/transfer JSON")
+    commands.add_argument("--resolve-hold", type=Path,
+                          help="evidence-bound resolution JSON for one action's holds; worker must be stopped")
     commands.add_argument("--reconfigure", type=Path,
                           help="OFF-only config/package repin; requires --schedule with an uninstalled receipt")
     commands.add_argument("--arm", action="store_true",
@@ -1191,7 +1293,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.dry_run and not args.arm:
         parser.error("--dry-run requires --arm")
-    if args.handoff or args.reconfigure or args.hand_run:
+    if args.handoff or args.resolve_hold or args.reconfigure or args.hand_run:
         if (args.config is None or (args.schedule is not None and not args.reconfigure)
                 or (args.reconfigure and args.schedule is None)
                 or args.recover is not None or args.observe or args.publish_state
@@ -1201,6 +1303,8 @@ def main(argv=None):
         try:
             if args.handoff:
                 result = handoff(args.config, load(args.handoff))
+            elif args.resolve_hold:
+                result = resolve_hold(args.config, load(args.resolve_hold))
             elif args.reconfigure:
                 result = reconfigure_owner(args.config, args.reconfigure, args.schedule)
             else:
