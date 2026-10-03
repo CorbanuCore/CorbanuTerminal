@@ -6,7 +6,9 @@ use pretty_assertions::assert_eq;
 fn pf_27_s01_recipe_rejects_collisions_and_sentinel_ids() {
     let base = [(101, 201), (102, 202), (103, 203)];
     let path = PathBuf::from("/fixture/probe");
-    assert!(SyntheticLaunchRecipe::new(PathBuf::from("relative"), base, 204).is_err());
+    assert!(
+        SyntheticLaunchRecipe::new(PathBuf::from("relative"), base, /*anchor_gid*/ 204).is_err()
+    );
     for anchor in [0, u32::MAX, 201, 202, 203] {
         assert!(SyntheticLaunchRecipe::new(path.clone(), base, anchor).is_err());
     }
@@ -14,12 +16,12 @@ fn pf_27_s01_recipe_rejects_collisions_and_sentinel_ids() {
         for value in [0, u32::MAX, base[(index + 1) % 3].0] {
             let mut ids = base;
             ids[index].0 = value;
-            assert!(SyntheticLaunchRecipe::new(path.clone(), ids, 204).is_err());
+            assert!(SyntheticLaunchRecipe::new(path.clone(), ids, /*anchor_gid*/ 204).is_err());
         }
         for value in [0, u32::MAX, base[(index + 1) % 3].1] {
             let mut ids = base;
             ids[index].1 = value;
-            assert!(SyntheticLaunchRecipe::new(path.clone(), ids, 204).is_err());
+            assert!(SyntheticLaunchRecipe::new(path.clone(), ids, /*anchor_gid*/ 204).is_err());
         }
     }
 }

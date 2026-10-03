@@ -25,7 +25,7 @@ fn pf_27_s01_recipe_transports_exact_args_with_null_stdio_and_no_home() {
     let recipe = SyntheticLaunchRecipe::new(
         executable.clone(),
         [(101, 201), (102, 202), (103, 203)],
-        204,
+        /*anchor_gid*/ 204,
     )
     .unwrap();
     for (role, name, uid, gid, anchor) in [

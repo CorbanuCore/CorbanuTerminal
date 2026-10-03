@@ -150,8 +150,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             authorization.context.destination.clone(),
             BTreeMap::new(),
         )?,
-        90,
-        200,
+        /*issued_at_unix_seconds*/ 90,
+        /*expires_at_unix_seconds*/ 200,
         text("fixture-grant")?,
     )?;
     let revocations = RevocationState::new();
@@ -163,12 +163,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             "openai.responses.create",
         )?,
         CredentialHttpMethod::Post,
-        CredentialDestination::https("api.openai.com", 443)?,
+        CredentialDestination::https("api.openai.com", /*port*/ 443)?,
         "/v1/responses",
-        100,
-        180,
+        /*issued_at_unix_seconds*/ 100,
+        /*expires_at_unix_seconds*/ 180,
         &revocations,
-        None,
+        /*triggering_receipt*/ None,
     )?;
     let reference = codex_secret_broker::CredentialReference::from_sha256_hex("a".repeat(64))?;
     let credential = VaultCredentialRef::from_authorized(
@@ -188,12 +188,22 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let root = Arc::new(VolatileFixtureRoot::default());
     let mut journal = ReferenceJournal::new(
         AbsolutePathBuf::from_absolute_path_checked(directory.path().join("journal"))?,
-        JournalOwner::new(producer.clone(), 1, text("volatile-fixture-root")?)?,
+        JournalOwner::new(
+            producer.clone(),
+            /*owner_generation*/ 1,
+            text("volatile-fixture-root")?,
+        )?,
         root.clone(),
         JournalConfig::default(),
     );
     if !matches!(
-        journal.recover(1, 1, &revocations).state,
+        journal
+            .recover(
+                /*expected_policy_generation*/ 1,
+                /*expected_run_generation*/ 1,
+                &revocations
+            )
+            .state,
         RecoveryState::Empty | RecoveryState::Ready
     ) {
         return Err("synthetic journal recovery denied".into());
@@ -211,7 +221,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             },
             operation,
         },
-        EventContext::new(producer, 1, 1)?,
+        EventContext::new(
+            producer, /*policy_generation*/ 1, /*run_generation*/ 1,
+        )?,
         FixtureClock,
     )?;
     let backend = VaultBrokerBackend::with_clock(
@@ -247,7 +259,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         },
         &target,
         &probe,
-        150,
+        /*now_unix_seconds*/ 150,
     )
     .map_err(|_| "synthetic platform fixture invalid")?;
     let service = BrokerService::new(
