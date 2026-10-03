@@ -202,6 +202,12 @@ and renders the bundle locally, rechecks branch/revision/content/configuration
 after upload, then verifies the exact server publication. It never pulls, resets
 or rebases an active checkout. Accepted upstream work and intentional source
 moves must be reconciled by the manager and recorded in the same handoff.
+With a fourth argument `committed` (`export.py --committed`), the export reads
+the declared files from the HEAD commit's objects instead of the working copy, so
+another session's uncommitted or untracked files in a shared checkout are never
+published. Declared files that are not committed fail the export. The banner
+then labels the source "(committed)". Without the argument, working-copy bytes,
+including uncommitted edits, are exported as before.
 
 The banner names checkout/branch/commit/content digest. Source older than 20
 minutes is stale even if the server renders it again; worker notes have their own

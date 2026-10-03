@@ -1,6 +1,8 @@
 import hashlib
 import json
+import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -9,6 +11,26 @@ import control
 import export
 import sync_check
 from test_control import run
+
+
+def git(repo, *args):
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+    return subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                           "-c", "commit.gpgsign=false", *args], check=True, capture_output=True, text=True, env=env).stdout
+
+
+def committed_repo(root):
+    repo = root / "repo"
+    files = {"docs/plans/plan.md": "committed plan\r\n", "docs/plans/check.py": "", "docs/sprints/s.md": "sprint",
+             "docs/sprints/check.py": "", "scripts/initiative_control/tool.py": "committed tool",
+             "codex-rs/features/src/lib.rs": "", "docs/corbanu-product-spec.md": "spec"}
+    for relative, text in files.items():
+        (repo / relative).parent.mkdir(parents=True, exist_ok=True)
+        (repo / relative).write_bytes(text.encode())
+    git(root, "init", "-q", "-b", "manager", str(repo))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "base")
+    return repo
 
 
 class StatusSourceTests(unittest.TestCase):
@@ -98,6 +120,54 @@ class StatusSourceTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     export.export(repo, state, root / "bundle", "manager")
             self.assertEqual(json.loads((state / "source.json").read_text())["collected_at"], "last-good")
+
+    def test_committed_export_excludes_uncommitted_checkout_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo, state = committed_repo(root), root / "state"
+            control.atomic_json(state / "control.json", {"human_tests": []})
+            # Another session's edits in a shared checkout: modified, untracked and new script files.
+            (repo / "scripts/initiative_control/tool.py").write_text("uncommitted tool")
+            (repo / "scripts/initiative_control/new.js").write_text("untracked")
+            (repo / "docs/plans/draft.md").write_text("untracked draft")
+            worktree = export.export(repo, state, None, "manager")
+            self.assertIn("docs/plans/draft.md", worktree["files"])
+            manifest = export.export(repo, state, root / "bundle", "manager", committed=True)
+            commit = git(repo, "rev-parse", "HEAD").strip()
+            self.assertEqual((manifest["commit"], manifest["mode"]), (commit, "committed"))
+            self.assertIn("uncommitted checkout changes are excluded", manifest["note"])
+            self.assertEqual(sorted(manifest["files"]), sorted(
+                ["codex-rs/features/src/lib.rs", "docs/corbanu-product-spec.md", "docs/plans/check.py", "docs/plans/plan.md",
+                 "docs/sprints/check.py", "docs/sprints/s.md", "scripts/initiative_control/tool.py"]))
+            self.assertEqual((root / "bundle/source/scripts/initiative_control/tool.py").read_text(), "committed tool")
+            # Hashes use read_file's universal-newline text, so the renderer's revalidation agrees.
+            bundle = root / "bundle/source"
+            for relative, expected in manifest["files"].items():
+                self.assertEqual(hashlib.sha256(control.read_file(bundle / relative, bundle).encode()).hexdigest(), expected)
+            export.verify_source(repo, manifest, "manager", {"human_tests": []})
+            (repo / "docs/plans/plan.md").write_text("edited again")
+            export.verify_source(repo, manifest, "manager", {"human_tests": []})
+            with self.assertRaisesRegex(ValueError, "not committed"):
+                export.verify_source(repo, manifest, "manager", {"human_tests": [{"path": "docs/plans/draft.md"}]})
+            git(repo, "add", "docs/plans/draft.md")
+            git(repo, "commit", "-q", "-m", "next")
+            with self.assertRaisesRegex(ValueError, "revision changed"):
+                export.verify_source(repo, manifest, "manager", {"human_tests": []})
+
+    def test_committed_export_rejects_missing_or_non_regular_declared_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = committed_repo(root)
+            commit = git(repo, "rev-parse", "HEAD").strip()
+            (repo / "qa").mkdir()
+            (repo / "qa/ref.md").write_text("reference")
+            with self.assertRaisesRegex(ValueError, "not committed: qa/ref.md"):
+                export.committed_files(repo, commit, {"human_tests": [], "reference_documents": ["qa/ref.md"]})
+            os.symlink("plan.md", repo / "docs/plans/link.md")
+            git(repo, "add", "-A")
+            git(repo, "commit", "-q", "-m", "link")
+            with self.assertRaisesRegex(ValueError, "regular committed file"):
+                export.committed_files(repo, git(repo, "rev-parse", "HEAD").strip(), {"human_tests": []})
 
     def test_postflight_rejects_stale_publication_and_failure_keeps_last_good(self):
         with tempfile.TemporaryDirectory() as tmp:
