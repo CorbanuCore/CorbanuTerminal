@@ -637,7 +637,9 @@ row_13() {
   capture "jargon-notice" >/dev/null
   screens+=("$LAST_CAPTURE_PATH")
   printf '%s\n' "${screens[@]}" >"$ARTIFACT_ROOT/$CURRENT_SESSION/jargon-screens.txt"
-  if rg -ni '\b(whip|holder|target|review)\b' "${screens[@]}" \
+  # The composer's rotating placeholder ("› Run /review on my current changes")
+  # is not product copy under test, so composer lines are excluded.
+  if rg -ni '\b(whip|holder|target|review)\b' "${screens[@]}" | rg -v ':[0-9]+:› ' \
     >"$ARTIFACT_ROOT/$CURRENT_SESSION/jargon-lint.txt"; then
     fail 13 "product jargon appeared in guided flow, status, details, or notices"
   fi
