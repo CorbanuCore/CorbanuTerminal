@@ -1626,19 +1626,33 @@ async fn store_rejections_preserve_clock_native_rows_and_original_binding() -> a
         "snapshot conflict",
     );
     marker(
+        store.admit(a.thread_id, &a, &[], -1).await.unwrap_err(),
+        "negative",
+    );
+    assert_eq!(rows(&runtime).await?, before);
+    // Retention applies what is due in its own short transactions before the
+    // write's, so a write rejected once detail expired leaves that expiry - and
+    // nothing of its own: the checkpoint stays until a write completes.
+    marker(
         store
             .admit(a.thread_id, &a, &[], 90 * 86_400_000)
             .await
             .unwrap_err(),
         "compact-only late import",
     );
-    marker(
-        store.admit(a.thread_id, &a, &[], -1).await.unwrap_err(),
-        "negative",
+    let after = rows(&runtime).await?;
+    let counts: Vec<usize> = after[..9].iter().map(Vec::len).collect();
+    // Attempt detail is gone, its price kept by the compact day it folded into,
+    // and a tombstone guards its replay window.
+    assert_eq!(counts, [0, 0, 1, 0, 0, 0, 1, 1, 1]);
+    assert_eq!(after[2], before[2]);
+    assert_eq!(
+        after[9..],
+        before[9..],
+        "checkpoint and native rows unchanged"
     );
-    assert_eq!(rows(&runtime).await?, before);
     runtime.close().await;
-    reopens(&path, &before).await
+    reopens(&path, &after).await
 }
 
 async fn peer(runtime: &StateRuntime) -> anyhow::Result<StateRuntime> {
@@ -2300,24 +2314,32 @@ async fn the_hours_validation_reads_a_snapshot_while_another_process_writes() ->
     assert!(AccountingStore::open(&runtime, 2 * HOUR).await.is_err());
     assert_eq!(checkpoint().await?, HOUR + 1);
 
-    // Once detail has aged out the sweep has work to apply, so there is no
-    // snapshot shortcut, and a validation from before it became due is refused.
+    // Once detail has aged out there is work to apply. The snapshot validation
+    // still runs first and meets the corruption before any expiry is applied;
+    // without a validation this hour the write still runs the full sweep.
     const DETAIL: i64 = 90 * 86_400_000;
     let mut read = runtime.pool.begin().await?;
-    assert_eq!(
-        Journal::validate_hour_on_connection(&mut read, DETAIL + 20, i64::MIN).await?,
-        None
+    assert!(
+        Journal::validate_hour_on_connection(&mut read, DETAIL + 20, i64::MIN)
+            .await
+            .is_err(),
+        "the validation met the corrupt attempt"
     );
     read.rollback().await?;
     let mut tx = runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
     assert!(
-        Journal::maintain_for_write_on_connection(&mut tx, DETAIL + 20, Some(DETAIL + 10))
+        Journal::maintain_for_write_on_connection(&mut tx, DETAIL + 20, None)
             .await
             .is_err(),
         "the full sweep ran and met the corrupt attempt"
     );
     tx.rollback().await?;
+    assert!(AccountingStore::open(&runtime, DETAIL + 20).await.is_err());
     assert_eq!(checkpoint().await?, HOUR + 1);
+    let raw: i64 = sqlx::query_scalar("SELECT count(*) FROM draft_accounting_attempts")
+        .fetch_one(runtime.pool.as_ref())
+        .await?;
+    assert_eq!(raw, 2, "nothing expired past a failed validation");
     runtime.close().await;
     Ok(())
 }
@@ -2387,6 +2409,178 @@ async fn writes_read_their_clock_after_another_process_advanced_the_checkpoint()
         checkpoint >= committed,
         "the checkpoint never moves backward"
     );
+    runtime.close().await;
+    Ok(())
+}
+
+const DAY: i64 = 86_400_000;
+const DETAIL: i64 = 90 * DAY;
+const STEP: i64 = DAY / 10;
+
+/// `count` attempts, one every `STEP` from day 0, all written at `DETAIL - 1`,
+/// just before the first of them reaches the detail horizon. Each has its own
+/// price snapshot, as real attempts mostly do.
+async fn aging_ledger(runtime: &StateRuntime, count: u128) -> anyhow::Result<()> {
+    seed(runtime).await?;
+    AccountingStore::open(runtime, DETAIL - 1).await?;
+    // One transaction, as the request path writes each: a commit per attempt
+    // made the fixture most of the test's run time.
+    let mut tx = runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
+    for id in 1..=count {
+        let mut a = serde_json::to_value(attempt(id))?;
+        a["request_id"] = json!(Uuid::from_u128(id + 1_000_000));
+        a["dispatched_at_ms"] = json!((id as i64 - 1) * STEP);
+        let a: Attempt = serde_json::from_value(a)?;
+        let mut price = serde_json::to_value(snapshot())?;
+        price["id"] = json!(Uuid::from_u128(id + 2_000_000));
+        let price: Snapshot = serde_json::from_value(price)?;
+        Journal::store_on_connection(
+            &mut tx,
+            a.thread_id,
+            &a,
+            &[],
+            Some(&[price]),
+            DETAIL - 1,
+            Some(DETAIL - 1),
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn accounting_rows(runtime: &StateRuntime) -> anyhow::Result<Vec<Vec<String>>> {
+    let mut rows = rows(runtime).await?;
+    rows.truncate(10);
+    Ok(rows)
+}
+
+/// Day 90: the first write after records start expiring retires them in short
+/// batches. Another process writing all the while gets in between batches -
+/// it sees the ledger part-way through the expiry, which the full sweep's one
+/// transaction never let it - and never waits a second.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn expiry_at_the_detail_horizon_never_holds_up_another_writer() -> anyhow::Result<()> {
+    const ATTEMPTS: i64 = 600;
+    let path = home();
+    let runtime = open(&path).await?;
+    aging_ledger(&runtime, ATTEMPTS as u128).await?;
+    // Another process with SQLite's usual busy timeout.
+    let other = crate::sqlite::open_pool_for_testing(
+        sqlx::sqlite::SqlitePoolOptions::new().max_connections(1),
+        sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(runtime.sqlite().state_db_path())
+            .busy_timeout(std::time::Duration::from_secs(5)),
+    )
+    .await?;
+    let done = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let writer = tokio::spawn({
+        let done = done.clone();
+        async move {
+            let mut writes = Vec::new();
+            while !done.load(std::sync::atomic::Ordering::Acquire) {
+                let started = std::time::Instant::now();
+                let mut tx = other.begin_with("BEGIN IMMEDIATE").await?;
+                let raw: i64 = sqlx::query_scalar("SELECT count(*) FROM draft_accounting_attempts")
+                    .fetch_one(&mut *tx)
+                    .await?;
+                sqlx::query("UPDATE thread_dynamic_tools SET description = ?")
+                    .bind(writes.len().to_string())
+                    .execute(&mut *tx)
+                    .await?;
+                tx.commit().await?;
+                writes.push((started.elapsed(), raw));
+                // Pace the writes as a busy session would.
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            anyhow::Ok(writes)
+        }
+    });
+    // Half the ledger is past the horizon.
+    let due = ATTEMPTS / 2 + 1;
+    let now = DETAIL + (due - 1) * STEP;
+    let started = std::time::Instant::now();
+    AccountingStore::open(&runtime, now).await?;
+    let expiry = started.elapsed();
+    done.store(true, std::sync::atomic::Ordering::Release);
+    let writes = writer.await??;
+    let longest = writes
+        .iter()
+        .map(|(wait, _)| *wait)
+        .max()
+        .unwrap_or_default();
+    let midway: std::collections::BTreeSet<i64> = writes
+        .iter()
+        .map(|(_, raw)| *raw)
+        .filter(|raw| (ATTEMPTS - due + 1..ATTEMPTS).contains(raw))
+        .collect();
+    assert!(
+        longest < std::time::Duration::from_secs(1),
+        "another writer waited {longest:?} during a {expiry:?} expiry"
+    );
+    assert!(
+        midway.len() > 1,
+        "the writer got in between batches only at {midway:?} ({} writes in {expiry:?})",
+        writes.len()
+    );
+    let raw: i64 = sqlx::query_scalar("SELECT count(*) FROM draft_accounting_attempts")
+        .fetch_one(runtime.pool.as_ref())
+        .await?;
+    let checkpoint: i64 =
+        sqlx::query_scalar("SELECT completed_as_of_ms FROM draft_accounting_retention_checkpoint")
+            .fetch_one(runtime.pool.as_ref())
+            .await?;
+    assert_eq!((raw, checkpoint), (ATTEMPTS - due, now));
+    runtime.close().await;
+    Ok(())
+}
+
+/// A process that dies mid-expiry keeps every batch it committed; the next one
+/// carries on and ends exactly where the full sweep would have.
+#[tokio::test]
+async fn expiry_interrupted_mid_sweep_resumes_to_the_full_sweeps_result() -> anyhow::Result<()> {
+    // 121 of 150 attempts are due: several batches.
+    let now = DETAIL + 120 * STEP;
+    let (path, full_path) = (home(), home());
+    let full = open(&full_path).await?;
+    aging_ledger(&full, 150).await?;
+    AccountingStore::open(&full, DETAIL - 1)
+        .await?
+        .maintain(now)
+        .await?;
+    let expected = accounting_rows(&full).await?;
+    full.close().await;
+
+    let runtime = open(&path).await?;
+    aging_ledger(&runtime, 150).await?;
+    let before = accounting_rows(&runtime).await?;
+    // The hour's validation, then two committed batches and one cut short.
+    let mut read = runtime.pool.begin().await?;
+    assert_eq!(
+        Journal::validate_hour_on_connection(&mut read, now, i64::MIN).await?,
+        Some(now)
+    );
+    read.rollback().await?;
+    for commit in [true, true, false] {
+        let mut tx = runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
+        assert!(Journal::expire_for_write_on_connection(&mut tx, now, Some(now)).await?);
+        if commit {
+            tx.commit().await?;
+        }
+    }
+    let interrupted = accounting_rows(&runtime).await?;
+    assert_ne!(interrupted, before);
+    assert_ne!(interrupted, expected);
+    assert_eq!(
+        interrupted[9], before[9],
+        "the checkpoint waits for the sweep"
+    );
+    runtime.close().await;
+
+    let runtime = open(&path).await?;
+    assert_eq!(accounting_rows(&runtime).await?, interrupted);
+    AccountingStore::open(&runtime, now).await?;
+    assert_eq!(accounting_rows(&runtime).await?, expected);
     runtime.close().await;
     Ok(())
 }

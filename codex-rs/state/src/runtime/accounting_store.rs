@@ -232,6 +232,11 @@ impl From<i64> for AsOf {
     }
 }
 
+/// Bounds on how long the write lock is left free between expiry batches; see
+/// `expire_due`.
+const EXPIRY_YIELD_MIN: std::time::Duration = std::time::Duration::from_millis(10);
+const EXPIRY_YIELD_MAX: std::time::Duration = std::time::Duration::from_millis(100);
+
 /// Whether `error` is lock contention on the state database: another
 /// connection - usually another Corbanu process - held it past the busy timeout,
 /// or no pooled connection came free in time.
@@ -393,7 +398,7 @@ impl<'a> AccountingStore<'a> {
         original_prices: Option<&[Snapshot]>,
         as_of: AsOf,
     ) -> anyhow::Result<ObservationQuote> {
-        let validated_at_ms = self.validate_hour(as_of).await?;
+        let validated_at_ms = self.prepare_write(as_of).await?;
         let mut tx = self.runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
         let as_of_ms = as_of.sample();
         let result = Journal::store_on_connection(
@@ -420,9 +425,9 @@ impl<'a> AccountingStore<'a> {
 
     /// The hour's whole-ledger validation, on a read snapshot that holds no lock
     /// another writer waits on. Returns when it was done this hour, if it was, so
-    /// the write transaction only has to advance the checkpoint. Done at most once
-    /// per process per hour; a sweep with expiries to apply still runs whole
-    /// under the write lock.
+    /// the writes only have to apply what is due, in short batches
+    /// (`expire_due`), and advance the checkpoint. Done at most once per process
+    /// per hour.
     async fn validate_hour(&self, as_of: AsOf) -> anyhow::Result<Option<i64>> {
         let cached = &self.runtime.accounting_validated_at_millis;
         let mut tx = self.runtime.pool.begin().await?;
@@ -442,6 +447,81 @@ impl<'a> AccountingStore<'a> {
         .await;
         tx.rollback().await?;
         result
+    }
+
+    /// Everything ahead of a write's own transaction: the hour's validation on a
+    /// read snapshot, then retiring what is due in short batches. Repeated if
+    /// the UTC hour turned meanwhile, since the write would otherwise find its
+    /// validation (or the checkpoint) in the hour before and run the full sweep
+    /// under the lock. That remains possible, rarely, if the hour turns while
+    /// the write waits for the lock after this returns.
+    async fn prepare_write(&self, as_of: AsOf) -> anyhow::Result<Option<i64>> {
+        let hour = |as_of: AsOf| as_of.sample().div_euclid(Journal::VALIDATION_INTERVAL_MS);
+        loop {
+            let started = hour(as_of);
+            let validated_at_ms = self.validate_hour(as_of).await?;
+            self.expire_due(as_of, validated_at_ms).await?;
+            if hour(as_of) == started {
+                return Ok(validated_at_ms);
+            }
+        }
+    }
+
+    /// Retire what retention has due, a bounded batch per short write
+    /// transaction, releasing the lock between batches so that other writers -
+    /// other Corbanu processes included - are never held up for longer than one
+    /// batch. Each batch commits whole, so a crash keeps every batch before it
+    /// and the next write carries on. Does nothing unless the ledger was
+    /// validated this hour; the write then runs the full sweep.
+    async fn expire_due(&self, as_of: AsOf, validated_at_ms: Option<i64>) -> anyhow::Result<()> {
+        // Most writes have nothing due: find that out without the write lock.
+        let mut tx = self.runtime.pool.begin().await?;
+        let due = async {
+            validate_on_connection(&mut tx).await?;
+            Journal::expiry_due_for_write_on_connection(&mut tx, as_of.sample(), validated_at_ms)
+                .await
+        }
+        .await;
+        tx.rollback().await?;
+        if !due? {
+            return Ok(());
+        }
+        loop {
+            let mut tx = self.runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
+            let held = std::time::Instant::now();
+            let as_of_ms = as_of.sample();
+            let result = async {
+                validate_on_connection(&mut tx).await?;
+                Journal::expire_for_write_on_connection(&mut tx, as_of_ms, validated_at_ms).await
+            }
+            .await;
+            match result {
+                Ok(true) => tx.commit().await?,
+                Ok(false) => {
+                    tx.commit().await?;
+                    return Ok(());
+                }
+                Err(error) => {
+                    tx.rollback().await?;
+                    return Err(error);
+                }
+            }
+            // SQLite does not queue writers: a waiting one polls, at most 100 ms
+            // apart. Leaving the lock free for as long as the batch held it lets
+            // a waiter in within a few batches, at half the expiry's pace. The
+            // jitter keeps the cycle from dividing the waiter's 100 ms evenly
+            // and its polls from landing in the batches every time.
+            let jitter = std::time::Duration::from_millis(u64::from(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .subsec_micros()
+                    % 50_000
+                    / 1_000,
+            ));
+            let pause = held.elapsed().clamp(EXPIRY_YIELD_MIN, EXPIRY_YIELD_MAX) + jitter;
+            tokio::time::sleep(pause).await;
+        }
     }
 
     pub async fn maintain(&self, as_of_ms: i64) -> anyhow::Result<()> {
@@ -464,11 +544,11 @@ impl<'a> AccountingStore<'a> {
     /// Opening precedes every request write; keep its lock hold short.
     ///
     /// The hour's whole-ledger validation runs first on a read snapshot, which
-    /// holds no lock another writer waits on; the write transaction then only
-    /// advances the checkpoint. A sweep with expiries to apply still runs whole
-    /// under the write lock.
+    /// holds no lock another writer waits on; expiries are then applied in short
+    /// batches, and the write transaction retires at most one more batch and
+    /// advances the checkpoint (see `maintain_for_write_on_connection`).
     async fn maintain_for_write(&self, as_of: AsOf) -> anyhow::Result<()> {
-        let validated_at_ms = self.validate_hour(as_of).await?;
+        let validated_at_ms = self.prepare_write(as_of).await?;
         let mut tx = self.runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
         let as_of_ms = as_of.sample();
         let result = async {
