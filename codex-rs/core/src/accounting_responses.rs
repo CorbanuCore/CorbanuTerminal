@@ -1,6 +1,7 @@
 //! Sampling-local lazy bootstrap shared by admitted Responses transports.
 use super::FAILURE;
 use super::Sampling;
+use super::failure;
 use crate::config::AccountingMode;
 use crate::session::session::Session;
 use codex_login::CodexAuth;
@@ -30,7 +31,7 @@ pub(crate) fn read(slot: &Slot) -> Result<Option<Arc<DeferredResponsesSampling>>
         if let Some(value) = poison.into_inner().take() {
             value.reject();
         }
-        CodexErr::Fatal(FAILURE.into())
+        CodexErr::Fatal(failure("read sampling slot", "slot lock poisoned").into())
     })
 }
 
@@ -40,7 +41,9 @@ impl Scope {
         slot: Slot,
         value: Option<Arc<DeferredResponsesSampling>>,
     ) -> Result<Self, CodexErr> {
-        *slot.lock().map_err(|_| CodexErr::Fatal(FAILURE.into()))? = value;
+        *slot.lock().map_err(|_| {
+            CodexErr::Fatal(failure("attach sampling", "slot lock poisoned").into())
+        })? = value;
         Ok(Self(slot))
     }
 }
@@ -78,8 +81,15 @@ impl DeferredResponsesSampling {
         })
     }
 
+    #[track_caller]
     pub(crate) fn reject(&self) {
-        self.failed.store(true, Ordering::Release);
+        if !self.failed.swap(true, Ordering::AcqRel) {
+            tracing::warn!(
+                target: "codex_core::accounting",
+                at = %std::panic::Location::caller(),
+                "accounting sampling closed; later requests in this turn stop"
+            );
+        }
         if let Some(sampling) = self.sampling.get() {
             sampling.reject();
         }
@@ -171,7 +181,9 @@ impl DeferredResponsesSampling {
         }) = &self.mode
         else {
             self.reject();
-            return Err(CodexErr::Fatal(FAILURE.into()));
+            return Err(CodexErr::Fatal(
+                failure("resolve sampling", "turn mode does not match this wire").into(),
+            ));
         };
         let pinned = super::pinned_route(
             approved_endpoint,
@@ -180,7 +192,13 @@ impl DeferredResponsesSampling {
         );
         if super::canonical_route(endpoint) != super::canonical_route(&pinned) {
             self.reject();
-            return Err(CodexErr::Fatal(FAILURE.into()));
+            return Err(CodexErr::Fatal(
+                failure(
+                    "resolve sampling",
+                    "request route differs from the approved route",
+                )
+                .into(),
+            ));
         }
         let mode = if let AccountingMode::Provider { provider_id, .. } = &self.mode {
             super::turn_mode(
@@ -200,7 +218,9 @@ impl DeferredResponsesSampling {
             && super::pricing_for(&mode) != existing.pricing
         {
             self.reject();
-            return Err(CodexErr::Fatal(FAILURE.into()));
+            return Err(CodexErr::Fatal(
+                failure("resolve sampling", "turn economics changed mid-sampling").into(),
+            ));
         }
         let result = self
             .sampling
@@ -209,11 +229,12 @@ impl DeferredResponsesSampling {
                 self.session
                     .try_ensure_rollout_materialized()
                     .await
-                    .map_err(|_| CodexErr::Fatal(FAILURE.into()))?;
-                let runtime = self
-                    .session
-                    .state_db()
-                    .ok_or_else(|| CodexErr::Fatal(FAILURE.into()))?;
+                    .map_err(|error| {
+                        CodexErr::Fatal(failure("materialize rollout", error).into())
+                    })?;
+                let runtime = self.session.state_db().ok_or_else(|| {
+                    CodexErr::Fatal(failure("open sampling", "no state database").into())
+                })?;
                 let sampling = Sampling::start_request(
                     runtime,
                     self.session.thread_id,
@@ -232,7 +253,9 @@ impl DeferredResponsesSampling {
                 self.check()?;
                 Ok(Some(Arc::clone(sampling)))
             }
-            Err(_) => {
+            Err(error) => {
+                // `start_request` logged its own cause; this records the outcome.
+                tracing::debug!(target: "codex_core::accounting", %error, "sampling did not open");
                 self.reject();
                 Err(CodexErr::Fatal(FAILURE.into()))
             }

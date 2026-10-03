@@ -171,11 +171,20 @@ impl ExtensionAccounting {
         )
         .await
         else {
+            // `start_request` logged its cause.
             return false;
         };
         let route = crate::accounting::pinned_route(&request.endpoint, None, &request.path);
-        let Ok(attempt) = sampling.admit_with_tier(&request.model, &route, None).await else {
-            return false;
+        let attempt = match sampling.admit_with_tier(&request.model, &route, None).await {
+            Ok(attempt) => attempt,
+            Err(error) => {
+                tracing::warn!(
+                    target: "codex_core::accounting",
+                    cause = %format_args!("{error:#}"),
+                    "accounting: extension request not recorded"
+                );
+                return false;
+            }
         };
         let evidence = ResponseEvidence::admitted(sampling, attempt);
         // The numbers are read from the provider's own response body with the

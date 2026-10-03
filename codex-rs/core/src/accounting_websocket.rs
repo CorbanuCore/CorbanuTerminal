@@ -1,6 +1,6 @@
 //! Nonsecret established-route provenance and sampling-only pump admission.
-use super::FAILURE;
 use super::Sampling;
+use super::failure;
 use super::responses::DeferredResponsesSampling;
 use codex_api::ApiError;
 use codex_api::ResponsesUsageObserver;
@@ -72,7 +72,13 @@ impl Provenance {
             || cached.is_some_and(|old| old != self)
         {
             deferred.reject();
-            return Err(CodexErr::Fatal(FAILURE.into()));
+            return Err(CodexErr::Fatal(
+                failure(
+                    "websocket admission",
+                    "connection route or provenance differs from the approved one",
+                )
+                .into(),
+            ));
         }
         Ok(true)
     }
@@ -83,21 +89,42 @@ pub(super) fn endpoint(base: &str, query: Option<&str>) -> Result<String, CodexE
     // client's own `websocket_url_for_path` carries them, so a pin built without
     // them can never match and the turn would be rejected outright.
     let raw = super::pinned_route(base, query, "responses");
-    let mut url = url::Url::parse(&raw).map_err(|_| CodexErr::Fatal(FAILURE.into()))?;
+    let mut url = url::Url::parse(&raw).map_err(|error| {
+        CodexErr::Fatal(
+            failure(
+                "websocket endpoint",
+                format_args!("approved endpoint: {error}"),
+            )
+            .into(),
+        )
+    })?;
     if !url.username().is_empty()
         || url.password().is_some()
         || url.fragment().is_some()
         || !matches!(url.scheme(), "http" | "https")
         || url.as_str() != raw
     {
-        return Err(CodexErr::Fatal(FAILURE.into()));
+        return Err(CodexErr::Fatal(
+            failure(
+                "websocket endpoint",
+                "approved endpoint has an unsupported shape",
+            )
+            .into(),
+        ));
     }
     if url.query().is_some() && query.is_none() {
-        return Err(CodexErr::Fatal(FAILURE.into()));
+        return Err(CodexErr::Fatal(
+            failure(
+                "websocket endpoint",
+                "unconfigured query on the approved endpoint",
+            )
+            .into(),
+        ));
     }
     let scheme = if url.scheme() == "https" { "wss" } else { "ws" };
-    url.set_scheme(scheme)
-        .map_err(|_| CodexErr::Fatal(FAILURE.into()))?;
+    url.set_scheme(scheme).map_err(|_| {
+        CodexErr::Fatal(failure("websocket endpoint", "cannot switch to a websocket scheme").into())
+    })?;
     Ok(url.to_string())
 }
 
@@ -133,7 +160,9 @@ impl ResponsesWebsocketAdmission for Admission {
                 && binding.check_stream().is_err()
             {
                 self.sampling.reject();
-                return Err(ApiError::Stream(FAILURE.into()));
+                return Err(ApiError::Stream(
+                    failure("websocket check", "memory binding stream check failed").into(),
+                ));
             }
             Ok(())
         })
@@ -156,7 +185,7 @@ impl ResponsesWebsocketAdmission for Admission {
                             .map(super::canonical_route)
                             .as_deref()
                             == Some(super::canonical_route(&self.expected).as_str()),
-                    FAILURE
+                    "websocket connection is not the admitted route"
                 );
                 self.sampling
                     .admit_with_tier(&model, &self.sampling.endpoint, tier.as_deref())
@@ -168,9 +197,11 @@ impl ResponsesWebsocketAdmission for Admission {
                     self.sampling.clone(),
                     attempt,
                 ) as Arc<dyn ResponsesUsageObserver>),
-                Err(_) => {
+                Err(error) => {
                     self.sampling.reject();
-                    Err(ApiError::Stream(FAILURE.into()))
+                    Err(ApiError::Stream(
+                        failure("admit attempt", format_args!("{error:#}")).into(),
+                    ))
                 }
             }
         })

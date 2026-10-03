@@ -812,3 +812,87 @@ async fn accounting_scope_drop_clears_cancelled_sampling_and_observation_failure
     assert_eq!(sends.load(Ordering::SeqCst), 1);
     Ok(())
 }
+
+/// Another Corbanu process sharing the state DB can hold its write lock past
+/// SQLite's 5 s busy timeout - an hourly ledger sweep did, for 10-17 s. That
+/// used to fail the admission or observation and end the turn with the
+/// accounting failure. A contended write wrote nothing, so it waits and retries;
+/// the request is sent only after its admission is durable.
+#[tokio::test]
+#[tracing_test::traced_test]
+async fn accounting_waits_out_another_process_holding_the_state_db_past_its_busy_timeout()
+-> anyhow::Result<()> {
+    const HELD: std::time::Duration = std::time::Duration::from_millis(5_600);
+    let fixture = Fixture::new().await?;
+    let sends = Arc::new(AtomicUsize::new(0));
+    let evidence = ResponseEvidence::new(fixture.sampling.clone());
+    let transport = AccountingTransport::new(
+        Probe {
+            sends: sends.clone(),
+            fail_first: false,
+        },
+        Some(evidence.clone()),
+        "claude-opus-5".into(),
+    );
+
+    let mut conn = fixture.connection().await?;
+    let held = conn.begin_with("BEGIN IMMEDIATE").await?;
+    let admission = tokio::spawn(async move { transport.stream(request()).await.map(drop) });
+    tokio::time::sleep(HELD).await;
+    assert!(!admission.is_finished());
+    assert_eq!(sends.load(Ordering::SeqCst), 0);
+    held.commit().await?;
+    admission.await??;
+    assert_eq!(
+        (
+            fixture.attempts().await?.len(),
+            sends.load(Ordering::SeqCst)
+        ),
+        (1, 1)
+    );
+
+    let held = conn.begin_with("BEGIN IMMEDIATE").await?;
+    let observing = {
+        let evidence = evidence.clone();
+        tokio::spawn(async move { evidence.observe(1, Ok(usage(7))).await })
+    };
+    tokio::time::sleep(HELD).await;
+    assert!(!observing.is_finished());
+    held.commit().await?;
+    observing.await??;
+    let rows: Vec<String> = sqlx::query_scalar(
+        "SELECT json_extract(payload, '$.patch') FROM draft_accounting_observations",
+    )
+    .fetch_all(&mut conn)
+    .await?;
+    assert_eq!(rows, vec![r#"{"input":7}"#]);
+    assert!(fixture.sampling.check().is_ok());
+    // It waited by retrying, not by one long busy wait.
+    assert!(logs_contain("state DB busy; retrying"));
+    assert!(logs_contain("succeeded after state DB contention"));
+    Ok(())
+}
+
+/// The user sees one fixed message; the log records which step failed and why.
+#[tokio::test]
+#[tracing_test::traced_test]
+async fn accounting_failure_logs_its_step_and_cause() -> anyhow::Result<()> {
+    let fixture = Fixture::new().await?;
+    sqlx::query("CREATE TRIGGER reject_admission BEFORE INSERT ON draft_accounting_attempts BEGIN SELECT RAISE(ABORT, 'fixture-admission'); END")
+        .execute(&mut fixture.connection().await?).await?;
+    let transport = AccountingTransport::new(
+        Probe {
+            sends: Arc::new(AtomicUsize::new(0)),
+            fail_first: false,
+        },
+        Some(ResponseEvidence::new(fixture.sampling.clone())),
+        "claude-opus-5".into(),
+    );
+    assert!(transport.stream(request()).await.is_err());
+    assert!(logs_contain("admit attempt"));
+    assert!(logs_contain("fixture-admission"));
+    assert!(logs_contain(crate::accounting::FAILURE));
+    // Not contention, so it was not retried.
+    assert!(!logs_contain("retrying"));
+    Ok(())
+}

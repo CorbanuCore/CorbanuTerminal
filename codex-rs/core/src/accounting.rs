@@ -271,10 +271,10 @@ pub(crate) async fn attach_scopes(
         session
             .try_ensure_rollout_materialized()
             .await
-            .map_err(|_| CodexErr::Fatal(FAILURE.into()))?;
+            .map_err(|error| CodexErr::Fatal(failure("materialize rollout", error).into()))?;
         let runtime = session
             .state_db()
-            .ok_or_else(|| CodexErr::Fatal(FAILURE.into()))?;
+            .ok_or_else(|| CodexErr::Fatal(failure("open sampling", "no state database").into()))?;
         Some(Sampling::start(runtime, session.thread_id, turn.clone(), &mode).await?)
     } else {
         None
@@ -487,6 +487,98 @@ pub(crate) fn collects(
 
 pub(crate) const FAILURE: &str =
     "Native Anthropic accounting failed; request stopped without a repair send";
+
+/// Where accounting diagnostics go. Exec prints errors on this target to stderr
+/// and the TUI keeps them in its log database.
+const LOG_TARGET: &str = "codex_core::accounting";
+
+/// Record why a request is being stopped on accounting grounds, and return the
+/// one message the user sees.
+///
+/// Every such path reports only `FAILURE`, so without this the cause - a busy
+/// state database, a route mismatch, a ledger validation error - is lost. `step`
+/// names where it happened; `cause` is the underlying error chain. Neither ever
+/// carries prompt content or credentials.
+pub(crate) fn failure(step: &'static str, cause: impl std::fmt::Display) -> &'static str {
+    tracing::error!(target: LOG_TARGET, step, cause = %cause, "{FAILURE}");
+    FAILURE
+}
+
+/// How long one accounting operation - opening a sampling, an admission or an
+/// observation, each with every store call it makes - waits out contention on
+/// the shared state DB before the request fails closed.
+///
+/// The state DB is shared by every Corbanu process on a home: the TUI, `exec`
+/// workers, owner-loop workers. Another process's write can hold its lock for
+/// seconds, and SQLite gives up after its 5 s busy timeout, which used to end the
+/// turn on the spot. A contended write wrote nothing, so it is simply retried.
+const CONTENTION_BUDGET: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// Run one idempotent store call, retrying while the state DB is contended and
+/// `deadline` - shared by every call of one operation - has not passed.
+///
+/// Only contention is retried (`is_contention`); any other error returns at
+/// once, with `step` in its chain. The caller keeps its fail-closed handling for
+/// whatever finally comes back.
+async fn store_call<T, F, Fut>(
+    step: &'static str,
+    deadline: std::time::Instant,
+    mut call: F,
+) -> anyhow::Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = anyhow::Result<T>>,
+{
+    use std::time::Duration;
+    let started = std::time::Instant::now();
+    let mut delay = Duration::from_millis(50);
+    let mut retries = 0_u32;
+    loop {
+        match call().await {
+            Ok(value) => {
+                if retries > 0 {
+                    tracing::info!(
+                        target: LOG_TARGET,
+                        step,
+                        retries,
+                        waited_ms = started.elapsed().as_millis() as u64,
+                        "accounting write succeeded after state DB contention"
+                    );
+                }
+                return Ok(value);
+            }
+            Err(error)
+                if codex_state::accounting::is_contention(&error)
+                    && std::time::Instant::now() + delay < deadline =>
+            {
+                retries += 1;
+                tracing::warn!(
+                    target: LOG_TARGET,
+                    step,
+                    retries,
+                    waited_ms = started.elapsed().as_millis() as u64,
+                    cause = %format_args!("{error:#}"),
+                    "accounting: state DB busy; retrying"
+                );
+                // Spread retries so contending processes do not wake together.
+                let jitter = Duration::from_millis(u64::from(Uuid::new_v4().as_u128() as u8) % 50);
+                tokio::time::sleep(delay + jitter).await;
+                delay = (delay * 2).min(Duration::from_secs(2));
+            }
+            Err(error) => {
+                let error = error.context(step);
+                return Err(if retries > 0 {
+                    error.context(format!(
+                        "after {retries} contended retries over {} ms",
+                        started.elapsed().as_millis()
+                    ))
+                } else {
+                    error
+                });
+            }
+        }
+    }
+}
 pub(crate) type Slot = Arc<Mutex<Option<Arc<Sampling>>>>;
 
 // The facade accepts explicit as-of values. Serialize this process's collector
@@ -502,7 +594,9 @@ pub(crate) fn read_slot(slot: &Slot) -> Result<Option<Arc<Sampling>>, CodexErr> 
             if let Some(stale) = poison.into_inner().take() {
                 stale.reject();
             }
-            Err(CodexErr::Fatal(FAILURE.into()))
+            Err(CodexErr::Fatal(
+                failure("read sampling slot", "slot lock poisoned").into(),
+            ))
         }
     }
 }
@@ -521,7 +615,9 @@ impl SamplingScope {
                     if let Some(incoming) = sampling {
                         incoming.reject();
                     }
-                    return Err(CodexErr::Fatal(FAILURE.into()));
+                    return Err(CodexErr::Fatal(
+                        failure("attach sampling", "slot lock poisoned").into(),
+                    ));
                 }
             }
         }
@@ -600,6 +696,10 @@ struct Completion<'a> {
 impl Drop for Completion<'_> {
     fn drop(&mut self) {
         if !self.complete {
+            tracing::warn!(
+                target: LOG_TARGET,
+                "accounting write did not complete; closing this sampling"
+            );
             self.sampling.reject();
         }
     }
@@ -699,25 +799,45 @@ impl Sampling {
                 Dialect::Inclusive,
                 "chat/completions",
             ),
-            AccountingMode::Disabled => return Err(CodexErr::Fatal(FAILURE.into())),
+            AccountingMode::Disabled => {
+                return Err(CodexErr::Fatal(
+                    failure("open sampling", "accounting is disabled for this turn").into(),
+                ));
+            }
         };
-        let endpoint =
-            url::Url::parse(approved_endpoint).map_err(|_| CodexErr::Fatal(FAILURE.into()))?;
+        // Never log the endpoint itself: it is configuration, and may carry
+        // material that does not belong in a log.
+        let endpoint = url::Url::parse(approved_endpoint).map_err(|error| {
+            CodexErr::Fatal(
+                failure("open sampling", format_args!("approved endpoint: {error}")).into(),
+            )
+        })?;
         if !endpoint.username().is_empty()
             || endpoint.password().is_some()
             || endpoint.query().is_some()
             || endpoint.fragment().is_some()
             || !matches!(endpoint.scheme(), "http" | "https")
         {
-            return Err(CodexErr::Fatal(FAILURE.into()));
+            return Err(CodexErr::Fatal(
+                failure(
+                    "open sampling",
+                    "approved endpoint has an unsupported shape",
+                )
+                .into(),
+            ));
         }
         let _write = WRITES
             .acquire()
             .await
-            .map_err(|_| CodexErr::Fatal(FAILURE.into()))?;
-        AccountingStore::open(&runtime, AsOf::Now)
-            .await
-            .map_err(|_| CodexErr::Fatal(FAILURE.into()))?;
+            .map_err(|error| CodexErr::Fatal(failure("open sampling", error).into()))?;
+        let deadline = std::time::Instant::now() + CONTENTION_BUDGET;
+        store_call("open accounting store", deadline, || {
+            AccountingStore::open(&runtime, AsOf::Now)
+        })
+        .await
+        .map_err(|error| {
+            CodexErr::Fatal(failure("open sampling", format_args!("{error:#}")).into())
+        })?;
         Ok(Arc::new(Self {
             runtime,
             owner,
@@ -745,8 +865,17 @@ impl Sampling {
         }
     }
 
+    /// Close this sampling: every later request on it stops with `FAILURE`.
+    /// The first close is logged with its caller, so a later stop has a cause.
+    #[track_caller]
     pub(crate) fn reject(&self) {
-        self.failed.store(true, Ordering::Release);
+        if !self.failed.swap(true, Ordering::AcqRel) {
+            tracing::warn!(
+                target: LOG_TARGET,
+                at = %std::panic::Location::caller(),
+                "accounting sampling closed; later requests in this turn stop"
+            );
+        }
     }
 
     async fn admit(&self, model: &str, endpoint: &str) -> anyhow::Result<Attempt> {
@@ -772,11 +901,16 @@ impl Sampling {
         };
         let previous = *self.previous.lock().map_err(|_| {
             self.reject();
-            anyhow::anyhow!(FAILURE)
+            anyhow::anyhow!("previous-attempt lock poisoned")
         })?;
         // The facade borrows its runtime. Reopening validates/maintains through
         // its public contract; never fabricate an attached or Active handle.
-        let store = AccountingStore::open(&self.runtime, AsOf::Now).await?;
+        let deadline = std::time::Instant::now() + CONTENTION_BUDGET;
+        let store = store_call("open accounting store", deadline, || {
+            AccountingStore::open(&self.runtime, AsOf::Now)
+        })
+        .await?;
+        // Read once: a contended retry re-sends this same, idempotent admission.
         let dispatched_at = now();
         let attempt = Attempt {
             attempt_id: Uuid::new_v4(),
@@ -805,12 +939,13 @@ impl Sampling {
                 prices::chat_original(model, &self.provider, self.scope, dispatched_at)?
             }
         };
-        store
-            .admit(self.owner, &attempt, &prices, AsOf::Now)
-            .await?;
+        store_call("admit attempt", deadline, || {
+            store.admit(self.owner, &attempt, &prices, AsOf::Now)
+        })
+        .await?;
         *self.previous.lock().map_err(|_| {
             self.reject();
-            anyhow::anyhow!(FAILURE)
+            anyhow::anyhow!("previous-attempt lock poisoned")
         })? = Some(attempt.attempt_id);
         completion.complete = true;
         Ok(attempt)
@@ -861,10 +996,20 @@ impl Sampling {
             sampling: self,
             complete: false,
         };
-        let store = AccountingStore::open(&self.runtime, AsOf::Now).await?;
-        store
-            .observe(self.owner, attempt, &[observation], AsOf::Now)
-            .await?;
+        let deadline = std::time::Instant::now() + CONTENTION_BUDGET;
+        let store = store_call("open accounting store", deadline, || {
+            AccountingStore::open(&self.runtime, AsOf::Now)
+        })
+        .await?;
+        store_call("observe usage", deadline, || {
+            store.observe(
+                self.owner,
+                attempt,
+                std::slice::from_ref(&observation),
+                AsOf::Now,
+            )
+        })
+        .await?;
         completion.complete = true;
         Ok(())
     }

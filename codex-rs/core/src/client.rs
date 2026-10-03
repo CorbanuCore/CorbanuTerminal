@@ -3923,7 +3923,13 @@ impl ModelClientSession {
                 let cached = if self.websocket_session.connection.is_some() {
                     Some(self.websocket_session.provenance.as_ref().ok_or_else(|| {
                         deferred.reject();
-                        CodexErr::Fatal(crate::accounting::FAILURE.into())
+                        CodexErr::Fatal(
+                            crate::accounting::failure(
+                                "websocket admission",
+                                "open connection has no recorded provenance",
+                            )
+                            .into(),
+                        )
                     })?)
                 } else {
                     None
@@ -3975,7 +3981,13 @@ impl ModelClientSession {
                     if let Some(deferred) = &deferred {
                         deferred.reject();
                     }
-                    return Err(CodexErr::Fatal(crate::accounting::FAILURE.into()));
+                    return Err(CodexErr::Fatal(
+                        crate::accounting::failure(
+                            "websocket connect",
+                            format_args!("provider redirected the connection ({status})"),
+                        )
+                        .into(),
+                    ));
                 }
                 Err(ApiError::Transport(TransportError::Http { status, .. }))
                     if status == StatusCode::UPGRADE_REQUIRED =>
@@ -4066,11 +4078,23 @@ impl ModelClientSession {
                     let established =
                         self.websocket_session.provenance.clone().ok_or_else(|| {
                             deferred.reject();
-                            CodexErr::Fatal(crate::accounting::FAILURE.into())
+                            CodexErr::Fatal(
+                                crate::accounting::failure(
+                                    "websocket admission",
+                                    "connection has no recorded provenance",
+                                )
+                                .into(),
+                            )
                         })?;
                     let expected = deferred.websocket_endpoint()?.ok_or_else(|| {
                         deferred.reject();
-                        CodexErr::Fatal(crate::accounting::FAILURE.into())
+                        CodexErr::Fatal(
+                            crate::accounting::failure(
+                                "websocket admission",
+                                "turn has no approved websocket endpoint",
+                            )
+                            .into(),
+                        )
                     })?;
                     Some(crate::accounting::websocket::Admission::new(
                         sampling,

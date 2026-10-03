@@ -1,6 +1,7 @@
 //! Per-physical-send intent under endpoint retries, with response-local evidence.
 use super::FAILURE;
 use super::Sampling;
+use super::failure;
 use codex_api::AnthropicUsageObserver;
 use codex_api::AnthropicUsagePatch;
 use codex_api::ApiError;
@@ -77,11 +78,14 @@ impl AnthropicUsageObserver for ResponseEvidence {
                         .observe(attempt, self.source, position, usage)
                         .await
                 }
-                _ => Err(anyhow::anyhow!("invalid or unbound accounting evidence")),
+                (None, _) => Err(anyhow::anyhow!(
+                    "usage arrived before its attempt was admitted"
+                )),
+                (_, Err(_)) => Err(anyhow::anyhow!("provider usage failed validation")),
             };
-            result.map_err(|_| {
+            result.map_err(|error| {
                 self.sampling.reject();
-                ApiError::Stream(FAILURE.into())
+                ApiError::Stream(failure("observe usage", format_args!("{error:#}")).into())
             })
         })
     }
@@ -98,8 +102,11 @@ impl codex_api::ResponsesUsageObserver for ResponseEvidence {
                 return Ok(());
             }
             let result = async {
-                let attempt = self.attempt.get().ok_or_else(|| anyhow::anyhow!(FAILURE))?;
-                let usage = usage.map_err(|_| anyhow::anyhow!(FAILURE))?;
+                let attempt = self.attempt.get().ok_or_else(|| {
+                    anyhow::anyhow!("usage arrived before its attempt was admitted")
+                })?;
+                let usage =
+                    usage.map_err(|_| anyhow::anyhow!("provider usage failed validation"))?;
                 self.sampling
                     .observe_patch(
                         attempt,
@@ -110,9 +117,9 @@ impl codex_api::ResponsesUsageObserver for ResponseEvidence {
                     .await
             }
             .await;
-            result.map_err(|_| {
+            result.map_err(|error| {
                 self.sampling.reject();
-                ApiError::Stream(FAILURE.into())
+                ApiError::Stream(failure("observe usage", format_args!("{error:#}")).into())
             })
         })
     }
@@ -129,8 +136,11 @@ impl codex_api::ChatUsageObserver for ResponseEvidence {
                 return Ok(());
             }
             let result = async {
-                let attempt = self.attempt.get().ok_or_else(|| anyhow::anyhow!(FAILURE))?;
-                let usage = usage.map_err(|_| anyhow::anyhow!(FAILURE))?;
+                let attempt = self.attempt.get().ok_or_else(|| {
+                    anyhow::anyhow!("usage arrived before its attempt was admitted")
+                })?;
+                let usage =
+                    usage.map_err(|_| anyhow::anyhow!("provider usage failed validation"))?;
                 self.sampling
                     .observe_patch(
                         attempt,
@@ -141,9 +151,9 @@ impl codex_api::ChatUsageObserver for ResponseEvidence {
                     .await
             }
             .await;
-            result.map_err(|_| {
+            result.map_err(|error| {
                 self.sampling.reject();
-                ApiError::Stream(FAILURE.into())
+                ApiError::Stream(failure("observe usage", format_args!("{error:#}")).into())
             })
         })
     }
@@ -278,7 +288,9 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
         };
         if evidence.attempt.get().is_some() {
             evidence.sampling.reject();
-            return Err(TransportError::Build(FAILURE.into()));
+            return Err(TransportError::Build(
+                failure("admit attempt", "a second send on one admitted response").into(),
+            ));
         }
         if let Some(reason) = request_refusal(
             &request,
@@ -297,24 +309,31 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
             .sampling
             .admit_with_tier(&self.model, &request.url, self.tier.as_deref())
             .await
-            .map_err(|_| {
+            .map_err(|error| {
                 evidence.sampling.reject();
-                TransportError::Build(FAILURE.into())
+                TransportError::Build(failure("admit attempt", format_args!("{error:#}")).into())
             })?;
         let response = match self.inner.execute(request).await {
             Err(TransportError::Http { status, .. }) if status.is_redirection() => {
                 evidence.sampling.reject();
-                return Err(TransportError::Build(FAILURE.into()));
+                return Err(TransportError::Build(
+                    failure(
+                        "send",
+                        format_args!("provider redirected the request ({status})"),
+                    )
+                    .into(),
+                ));
             }
             result => result?,
         };
         evidence.attempt.set(attempt).map_err(|_| {
             evidence.sampling.reject();
-            TransportError::Build(FAILURE.into())
+            TransportError::Build(failure("bind attempt", "response already bound").into())
         })?;
         // One body, one observation: revisions are positive, and this response
         // has exactly one.
         if let Ok(Some(usage)) = codex_api::responses_body_usage(&response.body) {
+            // The observer has already logged its cause.
             codex_api::ResponsesUsageObserver::observe(evidence.as_ref(), 1, Ok(usage))
                 .await
                 .map_err(|_| TransportError::Build(FAILURE.into()))?;
@@ -328,7 +347,9 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
         };
         if evidence.attempt.get().is_some() {
             evidence.sampling.reject();
-            return Err(TransportError::Build(FAILURE.into()));
+            return Err(TransportError::Build(
+                failure("admit attempt", "a second send on one admitted response").into(),
+            ));
         }
         // A body that can re-route the serving provider must not be attributed to
         // the selected one, but it also must not kill the user's turn: Chat
@@ -361,20 +382,26 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
                     .admit_with_tier(&self.model, &request.url, self.tier.as_deref())
                     .await
             };
-        let attempt = admission.map_err(|_| {
+        let attempt = admission.map_err(|error| {
             evidence.sampling.reject();
-            TransportError::Build(FAILURE.into())
+            TransportError::Build(failure("admit attempt", format_args!("{error:#}")).into())
         })?;
         let response = match self.inner.stream(request).await {
             Err(TransportError::Http { status, .. }) if status.is_redirection() => {
                 evidence.sampling.reject();
-                return Err(TransportError::Build(FAILURE.into()));
+                return Err(TransportError::Build(
+                    failure(
+                        "send",
+                        format_args!("provider redirected the request ({status})"),
+                    )
+                    .into(),
+                ));
             }
             result => result?,
         };
         evidence.attempt.set(attempt).map_err(|_| {
             evidence.sampling.reject();
-            TransportError::Build(FAILURE.into())
+            TransportError::Build(failure("bind attempt", "response already bound").into())
         })?;
         Ok(response)
     }
