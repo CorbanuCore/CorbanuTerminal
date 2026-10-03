@@ -8,6 +8,9 @@ Prepared lifecycle proposals use complete_sprint (with gates) or activate_succes
 (with separate activation_authority evidence). They atomically return a durable
 owner_effect reference and accept the action only when the SQLite transition occurs.
 archive_sprint records owner-confirmed archival separately; it does not move files.
+prepare_worker is the manager's worker-allocation preparation: it binds the worker
+runtime through owner_tmux.freeze_worker_inputs with explicit provider and --yolo
+authority before put_allocation registers it.
 This interface must never be exposed as a Slack/web arbitrary-command endpoint.
 """
 
@@ -17,6 +20,7 @@ import sqlite3
 import sys
 
 from coordinator import Coordinator, Rejected, encoded
+import manager_preparation
 
 
 OPERATIONS = {
@@ -25,7 +29,7 @@ OPERATIONS = {
     "returned", "verify", "reconcile_dispatch", "watchdog",
     "read_evidence",
     "record_wait",
-    "put_allocation", "set_stream_mode", "complete_sprint", "archive_sprint", "activate_successor",
+    "put_allocation", "prepare_worker", "set_stream_mode", "complete_sprint", "archive_sprint", "activate_successor",
 }
 
 
@@ -33,7 +37,10 @@ def execute(directory, operation, payload):
     if operation not in OPERATIONS or not isinstance(payload, dict):
         raise Rejected("unknown operation or non-object input")
     coordinator = Coordinator(directory)
-    result = getattr(coordinator, operation)(**payload)
+    if operation == "prepare_worker":
+        result = manager_preparation.prepare_worker(coordinator, **payload)
+    else:
+        result = getattr(coordinator, operation)(**payload)
     return {"operation": operation, "result": result, "revision": coordinator.snapshot()["revision"]}
 
 
