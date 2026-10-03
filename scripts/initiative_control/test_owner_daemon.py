@@ -1459,6 +1459,14 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.assertEqual([], receipt["already_stopped"][0]["alive"])
         self.assertEqual([("closed",)], self.sql("SELECT terminal_status FROM processes"))
 
+    def test_unprovable_stop_falls_back_to_a_real_close(self):
+        self.configure()
+        self.dead_identity(self.returned_without_close())
+        with patch.object(tmux, "processes", side_effect=subprocess.TimeoutExpired("ps", 3)):
+            self.assertEqual("returned", self.tick()["actions"]["one"])
+        self.assertEqual(1, FakeWorker.events.count(("one", "close")))
+        self.assertEqual([], self.sql("SELECT * FROM holds"))
+
     def test_post_return_holds_resolve_without_changing_the_verdict(self):
         self.configure()
         self.prepared()

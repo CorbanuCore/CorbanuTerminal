@@ -1020,7 +1020,7 @@ class Kernel:
         def close():
             try:
                 return {"clean": True, "already_stopped": stopped_worker(self.root, self.db, action["id"])}
-            except (f.LaunchError, OSError, KeyError, TypeError, ValueError):
+            except (f.LaunchError, OSError, KeyError, TypeError, ValueError, subprocess.SubprocessError):
                 return worker.close(timeout=CLOSE_TIMEOUT)
         receipt = self.step(action, "close", request, close, gate=self.close_gate)
         self.db.execute("UPDATE processes SET terminal_status=? WHERE op_id=?",
