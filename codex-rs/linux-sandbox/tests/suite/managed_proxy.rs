@@ -223,7 +223,11 @@ async fn managed_proxy_mode_routes_through_bridge_and_blocks_direct_egress() {
         format!("http://127.0.0.1:{proxy_port}"),
     );
 
-    let sandbox_helper_dir = std::path::Path::new(env!("CARGO_BIN_EXE_codex-linux-sandbox"))
+    // Bazel exposes the helper through a runfiles symlink; grant the directory
+    // that holds the real executable, which is what the sandbox re-executes.
+    let sandbox_helper = std::fs::canonicalize(env!("CARGO_BIN_EXE_codex-linux-sandbox"))
+        .expect("sandbox helper should resolve");
+    let sandbox_helper_dir = sandbox_helper
         .parent()
         .expect("sandbox helper should have a parent");
     let file_system_sandbox_policy =

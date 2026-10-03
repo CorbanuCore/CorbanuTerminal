@@ -724,7 +724,10 @@ fn symlink_and_permission_weakening_fail_closed() {
         )
         .unwrap();
     let state_path = root.path().join("state-00000000000000000001.json");
-    let replacement = root.path().join("replacement");
+    // Keep the symlink target outside the store so the symlink is the only
+    // abnormal entry; readdir order would otherwise decide which error wins.
+    let outside = tempfile::tempdir().expect("symlink target directory");
+    let replacement = outside.path().join("replacement");
     write_private(&replacement, b"{}\n");
     fs::remove_file(&state_path).unwrap();
     symlink(&replacement, &state_path).unwrap();

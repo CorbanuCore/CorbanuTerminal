@@ -65,6 +65,7 @@ pub use auth::logout_all_credentials;
 pub use auth::logout_with_revoke;
 pub use auth::logout_with_revoke_all_credentials;
 pub use auth::oauth_client_id;
+pub use auth::openai_auth_metadata_from_config;
 pub use auth::provider_api_key_from_auth_storage;
 pub use auth::provider_api_key_id_from_vault_label;
 pub use auth::provider_api_key_metadata_from_auth_storage;

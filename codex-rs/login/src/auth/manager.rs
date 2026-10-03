@@ -1290,6 +1290,17 @@ pub fn provider_api_key_from_auth_storage(
     legacy_provider_key(codex_home, provider_key_id)
 }
 
+/// Classify the configured OpenAI credential without exposing its secret or
+/// handing callers a long-lived [`AuthManager`].
+pub async fn openai_auth_metadata_from_config(
+    config: &impl AuthManagerConfig,
+    enable_codex_api_key_env: bool,
+) -> OpenAiAuthMetadata {
+    AuthManager::shared_from_config(config, enable_codex_api_key_env)
+        .await
+        .openai_auth_metadata()
+}
+
 /// Inspect provider-key storage without revealing or decrypting the credential.
 pub fn provider_api_key_metadata_from_auth_storage(
     codex_home: &Path,

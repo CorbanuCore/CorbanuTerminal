@@ -705,6 +705,16 @@ impl TestCodexBuilder {
             }
         };
 
+        // Tests often destructure `TestCodex { codex, .. }`, which would delete
+        // CODEX_HOME while the live session still reads per-turn state (the
+        // provider request ledger) from it. Keep the directory until the test's
+        // runtime shuts down instead.
+        let home_guard = Arc::clone(&home);
+        tokio::spawn(async move {
+            let _home_guard = home_guard;
+            std::future::pending::<()>().await;
+        });
+
         Ok(TestCodex {
             home,
             cwd,
