@@ -7,6 +7,7 @@ use std::sync::atomic::Ordering;
 use anyhow::Context;
 use anyhow::Result;
 use app_test_support::ChatGptAuthFixture;
+use app_test_support::MockResponsesConfig;
 use app_test_support::TestAppServer;
 use app_test_support::create_final_assistant_message_sse_response;
 use app_test_support::to_response;
@@ -114,11 +115,16 @@ async fn git_attribution_follows_authenticated_workspace_policy() -> Result<()> 
         .await;
 
     let codex_home = TempDir::new()?;
-    write_mock_responses_config_toml_with_chatgpt_base_url(
-        codex_home.path(),
-        &server.uri(),
-        &format!("{}/backend-api", server.uri()),
-    )?;
+    // Corbanu trims superseded contextual developer sections for non-OpenAI
+    // providers (`retain_latest_contextual_developer_fragments`); the OpenAI
+    // provider keeps the append-only history whose sections this test counts.
+    MockResponsesConfig::new(&server.uri())
+        .with_builtin_model_provider("openai")
+        .with_root_config(&format!(
+            "openai_base_url = \"{uri}/v1\"\nchatgpt_base_url = \"{uri}/backend-api\"",
+            uri = server.uri()
+        ))
+        .write(codex_home.path())?;
     write_chatgpt_auth(
         codex_home.path(),
         ChatGptAuthFixture::new("chatgpt-token")
