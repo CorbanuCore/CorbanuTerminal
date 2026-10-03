@@ -1119,6 +1119,9 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.assertEqual("HOLD", self.tick()["actions"]["one"])
         action = self.c.snapshot()["actions"]["one"]
         run = Path(self.sql("SELECT private_run_root FROM processes")[0][0])
+        # The fake launcher records no identity; give it a dead one (synthetic start times).
+        f.write_json(run / "process.json", dict(pid=12345, start="synthetic", server=12346,
+                                                server_start="synthetic"))
         request = dict(action_id="one", claim=action["claim"], allocation_digest=action["allocation_digest"],
                        reason_codes=["wrong_ack", "operation_held"], evidence="worker stopped with /quit")
         return request, run
@@ -1136,17 +1139,42 @@ class WorkerLifecycleTests(unittest.TestCase):
             with self.subTest(reason=reason):
                 with self.assertRaisesRegex(f.LaunchError, reason):
                     owner.resolve_hold(self.config_path, value)
-        # A live socket or a live recorded process is not a stopped worker.
-        f.write_file(run / "s", "")
+        # A listening socket or a live recorded process is not a stopped worker.
+        import socket
+        listener = socket.socket(socket.AF_UNIX)
+        listener.bind(str(run / "s"))
+        listener.listen(1)
         with self.assertRaisesRegex(f.LaunchError, "resolution_requires_stopped_worker"):
             owner.resolve_hold(self.config_path, request)
-        (run / "s").unlink()
+        listener.close()  # Leaves a stale socket file: no listener, connection refused.
+        self.assertEqual("stale", owner.socket_state(run / "s"))
         me = os.getpid()
         start = tmux.processes([me])[me][3]
-        f.write_json(run / "process.json", dict(pid=me, start=start, server=None))
+        identity = owner.load(run / "process.json")
+        f.write_json(run / "owned.json", {str(me): start})
         with self.assertRaisesRegex(f.LaunchError, "resolution_requires_stopped_worker"):
             owner.resolve_hold(self.config_path, request)
-        f.write_json(run / "process.json", dict(pid=me, start="Thu Jan  1 00:00:00 1970", server=None))
+        (run / "owned.json").unlink()
+        # Missing or mismatched identity evidence fails closed.
+        (run / "process.json").unlink()
+        with self.assertRaisesRegex(f.LaunchError, "resolution_requires_process_identity"):
+            owner.resolve_hold(self.config_path, request)
+        f.write_json(run / "process.json", dict(identity, server_start=None))
+        with self.assertRaisesRegex(f.LaunchError, "resolution_requires_process_identity"):
+            owner.resolve_hold(self.config_path, request)
+        f.write_json(run / "process.json", dict(identity, pid=54321))
+        with self.assertRaisesRegex(f.LaunchError, "resolution_process_identity_mismatch"):
+            owner.resolve_hold(self.config_path, request)
+        f.write_json(run / "process.json", identity)
+        self.sql("UPDATE operations SET phase='applied' WHERE effect='launch'")
+        with self.assertRaisesRegex(f.LaunchError, "resolution_requires_held_operations"):
+            owner.resolve_hold(self.config_path, request)
+        self.sql("UPDATE operations SET phase='held' WHERE effect='launch'")
+        moved = run.with_name(run.name + "-moved")
+        run.rename(moved)
+        with self.assertRaisesRegex(f.LaunchError, "resolution_requires_run_record"):
+            owner.resolve_hold(self.config_path, request)
+        moved.rename(run)
         self.assertEqual(holds, self.sql("SELECT * FROM holds ORDER BY hold_id"))
         self.assertEqual("dispatching", self.c.snapshot()["actions"]["one"]["status"])
         self.assertEqual({"held"}, {r[0] for r in self.sql("SELECT phase FROM operations")})
@@ -1602,6 +1630,12 @@ class HandoffTests(unittest.TestCase):
         status = owner.activation_status(self.config_path)
         self.assertEqual("wrong_ack", status["unresolved_holds"][0]["reason_code"])
         self.assertTrue(status["unresolved_holds"][0]["excluded_from_owner_lane"])
+        action = self.c.snapshot()["actions"]["manual"]
+        with self.assertRaisesRegex(f.LaunchError, "resolution_requires_owner_action"):
+            owner.resolve_hold(self.config_path, dict(
+                action_id="manual", claim=action["claim"], allocation_digest=action["allocation_digest"],
+                reason_codes=["wrong_ack"], evidence="hand-owned"))
+        self.assertEqual([("wrong_ack",)], self.sql("SELECT reason_code FROM holds WHERE resolved_at IS NULL"))
 
     def test_hand_cannot_ack_or_return_owner_claim(self):
         self.configure()

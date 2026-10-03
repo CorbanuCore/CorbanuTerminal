@@ -232,6 +232,17 @@ class AckTokenTests(unittest.TestCase):
         rows.insert(3, rows.pop(4))
         with self.assertRaisesRegex(f.LaunchError, "wrong_ack"):
             t.provenance(rows, self.binding, [self.PROMPT], self.ACK, ack_token=True)
+        # An ACK from an earlier, different turn does not carry into this one.
+        early = [r for r in self.records("", [self.ACK], turn="other-turn") if r["type"] != "session_meta"]
+        rows = self.records("", [])
+        stale = [r for r in early if r["payload"].get("type") in ("task_started", "agent_message")]
+        with self.assertRaises(f.LaunchError):
+            t.provenance(rows[:1] + stale + rows[1:], self.binding, [self.PROMPT], self.ACK, ack_token=True)
+        # A message after completion is ignored; the ACK turn has already been judged.
+        rows = self.records("", [])
+        rows.append(record("event_msg", type="agent_message", message=self.ACK))
+        with self.assertRaisesRegex(f.LaunchError, "wrong_ack"):
+            t.provenance(rows, self.binding, [self.PROMPT], self.ACK, ack_token=True)
 
 
 class TmuxTests(unittest.TestCase):

@@ -4,6 +4,7 @@ from contextlib import closing, contextmanager, nullcontext
 import fcntl
 import os
 from pathlib import Path
+import socket
 import sqlite3
 import stat
 import subprocess
@@ -557,32 +558,64 @@ def handoff(config_path, request):
 RESOLVABLE = frozenset({"dispatching", "dispatch_uncertain", "dispatched", "running"})
 
 
+def socket_state(path):
+    """absent, stale (no listener: connection refused) or listening; unknown fails closed."""
+    if not os.path.lexists(path):
+        return "absent"
+    probe = socket.socket(socket.AF_UNIX)
+    probe.settimeout(1)
+    try:
+        probe.connect(str(path))
+        return "listening"
+    except ConnectionRefusedError:
+        return "stale"
+    except OSError:
+        return "unknown"
+    finally:
+        probe.close()
+
+
 def stopped_worker(root, db, action_id):
-    """Evidence that no recorded worker process or private TMUX socket remains."""
+    """Evidence that the recorded worker processes are gone and its TMUX socket is dead.
+
+    Fails closed: an attempted launch requires its run directory and recorded
+    process identity, cross-checked against the journal's process row.
+    """
     from owner_tmux import processes
-    runs = {row["private_run_root"] for row in db.execute(
-        "SELECT private_run_root FROM processes WHERE op_id=?", (digest(["tmux", action_id, "launch"]),))}
-    row = db.execute("SELECT receipt_artifact FROM operations WHERE op_id=?",
-                     (digest(["tmux", action_id, "prepare"]),)).fetchone()
-    if row and row["receipt_artifact"]:
-        runs.add(load(root / row["receipt_artifact"])["result"])
+    launch_id = digest(["tmux", action_id, "launch"])
+    launched = db.execute("SELECT 1 FROM operations WHERE op_id=?", (launch_id,)).fetchone() is not None
+    rows = {row["private_run_root"]: row for row in db.execute(
+        "SELECT actual_pid,process_start,private_run_root FROM processes WHERE op_id=?", (launch_id,))}
+    prepare = db.execute("SELECT receipt_artifact FROM operations WHERE op_id=?",
+                         (digest(["tmux", action_id, "prepare"]),)).fetchone()
+    runs = set(rows)
+    if prepare and prepare["receipt_artifact"]:
+        runs.add(load(root / prepare["receipt_artifact"])["result"])
+    f.require(not launched or (rows and len(runs) == 1), "resolution_requires_process_identity")
     result = []
-    for run in sorted(r for r in runs if r):
-        run = Path(run)
+    for run in sorted(runs):
+        f.require(isinstance(run, str) and Path(run).is_absolute() and Path(run).is_dir(),
+                  "resolution_requires_run_record")
+        run = f.private_dir(run)
         pids = {}
-        if (run / "process.json").exists():
+        if launched:
+            f.require((run / "process.json").exists(), "resolution_requires_process_identity")
             proc = f.strict_json(f.read_file(run / "process.json", 4096, private=True))
-            pids.update({str(proc[k]): proc[s] for k, s in (("pid", "start"), ("server", "server_start"))
-                         if proc.get(k) is not None})
+            f.require(all(proc.get(k) is not None for k in ("pid", "start", "server", "server_start")),
+                      "resolution_requires_process_identity")
+            row = rows[str(run)]
+            f.require(row["actual_pid"] in (None, proc["pid"])
+                      and row["process_start"] in (None, proc["start"]), "resolution_process_identity_mismatch")
+            pids = {str(proc["pid"]): proc["start"], str(proc["server"]): proc["server_start"]}
         if (run / "owned.json").exists():
             pids.update(f.strict_json(f.read_file(run / "owned.json", 65536, private=True)))
         table = processes([int(pid) for pid in pids]) if pids else {}
         alive = sorted(int(pid) for pid, start in pids.items() if int(pid) in table
                        and table[int(pid)][3] == start and not table[int(pid)][2].startswith("Z"))
-        socket = os.path.lexists(run / "s")
-        f.require(not alive and not socket, "resolution_requires_stopped_worker")
+        sock = socket_state(run / "s")
+        f.require(not alive and sock in ("absent", "stale"), "resolution_requires_stopped_worker")
         result.append(dict(run=str(run), checked_pids=sorted(int(pid) for pid in pids),
-                           alive=alive, socket_present=socket))
+                           alive=alive, socket=sock))
     return result
 
 
@@ -611,11 +644,13 @@ def resolve_hold(config_path, request):
         f.require(sorted(request["reason_codes"]) == sorted(h["reason_code"] for h in holds),
                   "hold_reasons_mismatch")
         rows = [dict(r) for r in db.execute(
-            "SELECT op_id,effect,phase,hold_reason,receipt_digest FROM operations "
+            "SELECT op_id,effect,phase,hold_reason,receipt_digest,claim,allocation_digest FROM operations "
             "WHERE domain='tmux' AND action_id=? ORDER BY op_id", (action_id,))]
         f.require(bool(rows) and all(r["phase"] == "held" for r in rows),
                   "resolution_requires_held_operations")
-        workers = stopped_worker(root, db, action_id)
+        f.require(all(r["claim"] in (None, request["claim"])
+                      and r["allocation_digest"] == request["allocation_digest"] for r in rows),
+                  "resolution_claim_mismatch")
         coordinator = ExistingCoordinator(root)
         state = coordinator.snapshot()
         action = state["actions"].get(action_id)
@@ -625,6 +660,7 @@ def resolve_hold(config_path, request):
                   and action["allocation_digest"] == request["allocation_digest"], "resolution_claim_mismatch")
         before = action["status"]
         f.require(before in RESOLVABLE | {"failed", "cancelled"}, "resolution_requires_reconcilable_action")
+        workers = stopped_worker(root, db, action_id)
         document = dict(request=request, holds=holds, operations=rows, workers=workers,
                         generation=meta["control_generation"], requested_mode=meta["requested_mode"],
                         coordinator_revision=state["revision"], action_status_before=before, at=time.time())
