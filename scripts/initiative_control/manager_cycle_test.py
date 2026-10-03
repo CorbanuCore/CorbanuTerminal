@@ -482,6 +482,23 @@ class BriefingSizeTests(unittest.TestCase):
         self.assertIn(returned["result"]["evidence_digest"], brief["original_evidence"])
         self.assertNotIn(returned["result"]["evidence_digest"], budget["evidence_digests"])
 
+    def test_many_returned_results_degrade_by_eviction_deterministically(self):
+        actions = self.live_actions(8, 10, 0)
+        for index, action in enumerate(actions):
+            action["status"] = "returned"
+            action["result"] = self.ref({"kind": "result", "text": ("%d" % index) * 12000})
+        packet = self.packet(actions, recent=actions[-3:])
+        raw = m.briefing(self.c, packet, self.context)
+        self.assertEqual(raw, m.briefing(self.c, packet, self.context))
+        brief = json.loads(raw)
+        self.assertLessEqual(len(raw), f.BRIEF_LIMIT)
+        results = {a["result"]["evidence_digest"] for a in actions}
+        absent = results - set(brief["original_evidence"])
+        budget = next(e for e in brief["evidence_omissions"] if e["id"] == "evidence_budget")
+        self.assertTrue(absent)
+        self.assertLessEqual(absent, set(budget["evidence_digests"]))
+        self.assertTrue(results & set(brief["original_evidence"]))
+
     def test_no_budget_omission_when_everything_fits(self):
         brief = self.brief(self.packet([self.action(size=10)]))
         self.assertEqual([], [e for e in brief["evidence_omissions"]
