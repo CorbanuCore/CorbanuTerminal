@@ -53,7 +53,7 @@ impl Fixture {
                     "--exact",
                     "root::tests::post_exec_child",
                     "--ignored",
-                "--test-threads=1",
+                    "--test-threads=1",
                     "--quiet",
                 ])
                 .env(POST_EXEC_CHILD_SOCKET, &path)
