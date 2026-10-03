@@ -689,5 +689,197 @@ class CLIFenceTests(unittest.TestCase):
         self.assertFalse(control.read_json(self.state / "control.json", self.state)["tasknode"]["enabled"])
 
 
+SYNTHETIC_TOKEN = "synthetic-terminal-token-0123456789"
+SYNTHETIC_KEY = "synthetic-plan-key-9876543210"
+
+
+class FakeHelper:
+    """Stands in for `corbanu vault auth-helper`; records argv and the home it was given."""
+
+    def __init__(self, session=None, key=SYNTHETIC_KEY, codes=None):
+        self.session = session if session is not None else json.dumps(
+            {"origin": tasknode.ORIGIN, "account_id": "acct_fixture", "github_username": "fixture",
+             "terminal_token": SYNTHETIC_TOKEN, "expires_at": None})
+        self.key, self.codes, self.calls = key, codes or {}, []
+
+    def __call__(self, argv, **kwargs):
+        label = argv[-1]
+        self.calls.append((argv, kwargs["env"]["CORBANU_HOME"], kwargs["env"]["CODEX_HOME"], kwargs))
+        value = self.session if "/session" in label else self.key
+        code = self.codes.get(label, 0)
+        return subprocess.CompletedProcess(argv, code, value.encode() if code == 0 else b"",
+                                           None)
+
+
+class VaultCredentialTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.session_home, self.key_home = root / "session-home", root / "key-home"
+        self.session_home.mkdir()
+        self.key_home.mkdir()
+        self.binary = Path(sys.executable).resolve()
+
+    def resolve(self, helper, **kwargs):
+        return tasknode.vault_credentials(self.binary, self.session_home, runner=helper, **kwargs)
+
+    def test_reads_session_and_key_from_explicit_homes_in_memory(self):
+        helper = FakeHelper()
+        with patch.dict(os.environ, {"CORBANU_HOME": "/elsewhere", "PFTERMINAL_HOME": "/elsewhere",
+                                     "CODEX_HOME": "/elsewhere"}):
+            auth = self.resolve(helper, api_key_home=self.key_home)
+        self.assertEqual(auth, {"terminal_session": SYNTHETIC_TOKEN, "api_key": SYNTHETIC_KEY})
+        (session_argv, s_home, s_codex, kwargs), (key_argv, k_home, k_codex, _) = helper.calls
+        self.assertEqual(session_argv, [str(self.binary), "vault", "auth-helper", "tasknode/session"])
+        self.assertEqual(key_argv[-1], "provider/pfterminal_plan_api_key")
+        self.assertEqual((s_home, s_codex), (str(self.session_home), str(self.session_home)))
+        self.assertEqual((k_home, k_codex), (str(self.key_home), str(self.key_home)))
+        self.assertNotIn("PFTERMINAL_HOME", kwargs["env"])
+        self.assertEqual((kwargs["stdin"], kwargs["stderr"]), (subprocess.DEVNULL, subprocess.DEVNULL))
+        self.assertEqual([p for p in Path(self.tmp.name).rglob("*") if p.is_file()], [])
+
+    def test_named_profile_uses_tasknode_session_scope_label(self):
+        helper = FakeHelper()
+        self.resolve(helper, profile="work")
+        digest = tasknode.hashlib.sha256(b"work").hexdigest()[:32]
+        self.assertEqual(helper.calls[0][0][-1], f"tasknode/profiles/{digest}/session")
+        self.assertEqual(helper.calls[1][1], str(self.session_home))
+        with self.assertRaises(ValueError):
+            tasknode.session_label("")
+
+    def test_unusable_sessions_and_helper_failures_fail_closed_without_echo(self):
+        expired = (control.timestamp(control.now()) - dt.timedelta(minutes=1)).isoformat()
+        sessions = {
+            "not json": SYNTHETIC_TOKEN,
+            "pending only": json.dumps({"origin": tasknode.ORIGIN, "poll_token": SYNTHETIC_TOKEN}),
+            "multiline": json.dumps({"origin": tasknode.ORIGIN, "terminal_token": SYNTHETIC_TOKEN + "\nx"}),
+            "other origin": json.dumps({"origin": "https://example.invalid",
+                                        "terminal_token": SYNTHETIC_TOKEN}),
+            "expired": json.dumps({"origin": tasknode.ORIGIN, "terminal_token": SYNTHETIC_TOKEN,
+                                   "expires_at": expired}),
+            "bad expiry": json.dumps({"origin": tasknode.ORIGIN, "terminal_token": SYNTHETIC_TOKEN,
+                                      "expires_at": "soon"}),
+        }
+        for name, session in sessions.items():
+            with self.subTest(name), self.assertRaises(ValueError) as caught:
+                self.resolve(FakeHelper(session=session))
+            self.assertNotIn(SYNTHETIC_TOKEN, str(caught.exception))
+        for helper in (FakeHelper(codes={"tasknode/session": 1}),
+                       FakeHelper(codes={"provider/pfterminal_plan_api_key": 1}),
+                       FakeHelper(key=""), FakeHelper(key=SYNTHETIC_KEY + "\n")):
+            with self.subTest(calls=helper.codes), self.assertRaises(ValueError) as caught:
+                self.resolve(helper)
+            self.assertNotIn(SYNTHETIC_KEY, str(caught.exception))
+            self.assertIn("nothing was sent", str(caught.exception))
+
+    def test_helper_must_be_real_absolute_binary_and_home_must_exist(self):
+        wrapper = Path(self.tmp.name) / "corbanu"
+        wrapper.write_text("#!/bin/sh\nexport CODEX_HOME=/other\n")
+        wrapper.chmod(0o700)
+        helper = FakeHelper()
+        for binary in (wrapper, Path("corbanu"), Path(self.tmp.name) / "missing"):
+            with self.subTest(binary=binary), self.assertRaises(ValueError):
+                tasknode.vault_credentials(binary, self.session_home, runner=helper)
+        for home in (Path("relative"), Path(self.tmp.name) / "missing"):
+            with self.subTest(home=home), self.assertRaises(ValueError):
+                tasknode.vault_credentials(self.binary, home, runner=helper)
+        self.assertEqual(helper.calls, [])
+
+
+class VaultSendTests(unittest.TestCase):
+    setUp = SendTests.setUp
+    snapshot = SendTests.snapshot
+    invoke = CLIFenceTests.invoke
+    denied = CLIFenceTests.denied
+
+    def vault(self, helper):
+        home = self.state / "vault-home"
+        home.mkdir(exist_ok=True)
+        return {"binary": Path(sys.executable).resolve(), "session_home": home, "runner": helper}
+
+    def assert_no_secret_on_disk(self):
+        for content in self.snapshot().values():
+            self.assertNotIn(SYNTHETIC_TOKEN.encode(), content)
+            self.assertNotIn(SYNTHETIC_KEY.encode(), content)
+
+    def test_live_send_reads_vault_once_and_replay_never_reads_or_posts(self):
+        helper = FakeHelper()
+        kwargs = dict(live=True, activation_file=self.activation_file, transport=self.transport)
+        result = tasknode.send(self.state, self.event_id, vault=self.vault(helper), **kwargs)
+        self.assertEqual(result["outcome"], "delivered")
+        self.assertEqual(result["idempotency_key"], self.event_id)
+        self.assertEqual(self.transport.call_args.args[2],
+                         {"terminal_session": SYNTHETIC_TOKEN, "api_key": SYNTHETIC_KEY})
+        self.assertEqual(len(helper.calls), 2)
+        self.assert_no_secret_on_disk()
+        self.assertNotIn(SYNTHETIC_TOKEN, json.dumps(result))
+        before = self.snapshot()
+        replay = tasknode.send(self.state, self.event_id,
+                               vault=self.vault(Mock(side_effect=AssertionError("no vault read"))), **kwargs)
+        self.assertTrue(replay["replayed"])
+        self.assertFalse(replay["network_writes"])
+        self.assertEqual(self.transport.call_count, 1)
+        self.assertEqual(before, self.snapshot())
+
+    def test_vault_failure_before_intent_leaves_no_attempt(self):
+        with self.assertRaises(ValueError):
+            tasknode.send(self.state, self.event_id, live=True, activation_file=self.activation_file,
+                          vault=self.vault(FakeHelper(codes={"tasknode/session": 1})),
+                          transport=self.transport)
+        self.assertFalse((self.state / "send-receipts").exists())
+        self.transport.assert_not_called()
+
+    def test_send_rejects_two_sources_and_dry_run_vault(self):
+        helper = FakeHelper()
+        with self.assertRaises(ValueError):
+            tasknode.send(self.state, self.event_id, live=True, activation_file=self.activation_file,
+                          credentials_file=self.auth_file, vault=self.vault(helper))
+        with self.assertRaises(ValueError):
+            tasknode.send(self.state, self.event_id, dry_run=True, vault=self.vault(helper))
+        self.assertEqual(helper.calls, [])
+
+    def test_cli_vault_send_and_enroll_never_echo_or_persist_secrets(self):
+        helper = FakeHelper()
+        home = self.state / "vault-home"
+        home.mkdir()
+        binary = Path(sys.executable).resolve()
+        source = ["--corbanu-bin", binary, "--vault-session-home", home]
+        with patch.object(tasknode.subprocess, "run", helper):
+            code, output, errors = self.invoke(
+                "send", "--state", self.state, "--event-id", self.event_id, "--live",
+                "--owner-activation-file", self.activation_file, *source,
+                transport=Mock(return_value=(200, {"ok": True, "id": self.event_id})))
+            self.assertEqual(code, 0, errors)
+            self.assertEqual(json.loads(output)["outcome"], "delivered")
+            (self.state / "enrollment.json").unlink()
+            enroll = Mock(return_value=(200, {"ok": True}))
+            code, output, errors = self.invoke("enroll", "--state", self.state, "--confirm-live",
+                                               *source, transport=enroll)
+            self.assertEqual(code, 0, errors)
+        self.assertEqual(enroll.call_args.args[:2],
+                         ("/enrollment", {"workspaceId": "fixture-workspace", "enabled": True}))
+        self.assertTrue(control.read_json(self.state / "enrollment.json", self.state)["verified"])
+        self.assertNotIn(SYNTHETIC_TOKEN, output + errors)
+        self.assert_no_secret_on_disk()
+
+    def test_cli_vault_options_are_scoped_and_exclusive(self):
+        home = self.state / "vault-home"
+        home.mkdir()
+        binary = Path(sys.executable).resolve()
+        source = ["--corbanu-bin", binary, "--vault-session-home", home]
+        with patch.object(tasknode.subprocess, "run", side_effect=AssertionError("no vault read")):
+            self.denied("send", "--state", self.state, "--event-id", self.event_id, "--live",
+                        "--owner-activation-file", self.activation_file, *source,
+                        "--credentials-file", self.auth_file, reason="choose one credential source")
+            self.denied("send", "--state", self.state, "--event-id", self.event_id, "--dry-run", *source)
+            self.denied("enroll", "--state", self.state, "--confirm-live", "--corbanu-bin", binary,
+                        reason="requires --corbanu-bin and --vault-session-home")
+            self.denied("enroll", "--state", self.state, *source, reason="--confirm-live")
+            for command in ("flush", "status", "identity-check"):
+                self.denied(command, "--state", self.state, "--confirm-live", *source,
+                            reason="only valid for send --live and enroll")
+
+
 if __name__ == "__main__":
     unittest.main()

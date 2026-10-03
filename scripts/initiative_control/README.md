@@ -64,6 +64,18 @@ idempotency key. A regression test patches `tasknode.post` while exercising
 `send(..., live=True, transport=None)` and checks exactly one call with the
 `/events` endpoint, exact prepared payload and immutable event-ID idempotency key.
 
+Instead of `--credentials-file`, `send --live` and `enroll --confirm-live` accept
+the vault helper (decision `tasknode-writeback-20261002`, A2):
+`--corbanu-bin REAL_BINARY --vault-session-home HOME [--vault-api-key-home HOME]
+[--tasknode-profile NAME]`. Only after every local gate passes, and before the
+durable intent, the sender runs `corbanu vault auth-helper` with `CORBANU_HOME`
+and `CODEX_HOME` set to that home, once for the Task Node session label and once
+for `provider/pfterminal_plan_api_key`. Both values stay in memory; nothing is
+written, logged or echoed, and replays never read the vault. The binary must be
+the real executable: wrapper scripts such as `~/.local/bin/corbanu` re-export
+another home and are refused. The two sources are mutually exclusive, and the
+vault options are refused on every other command.
+
 The activation file must be a regular file owned by the executing OS user with
 no group/other permissions. The manager supplies this exact schema:
 

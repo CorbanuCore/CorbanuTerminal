@@ -145,6 +145,79 @@ def credentials(path):
     return value
 
 
+SESSION_LABEL = "tasknode/session"  # Default-profile label owned by tasknode-session.
+API_KEY_LABEL = "provider/pfterminal_plan_api_key"  # Corbanu plan key stored by the TUI.
+HOME_ALIASES = ("CORBANU_HOME", "PFTERMINAL_HOME", "CODEX_HOME")
+
+
+def session_label(profile=None):
+    """Mirror tasknode-session's SessionScope labels; never guess another profile."""
+    if profile is None:
+        return SESSION_LABEL
+    if not isinstance(profile, str) or not profile:
+        raise ValueError("invalid Task Node profile")
+    return f"tasknode/profiles/{hashlib.sha256(profile.encode()).hexdigest()[:32]}/session"
+
+
+def vault_helper(binary):
+    """The real Corbanu binary; wrapper scripts may re-export another vault home."""
+    path = Path(binary)
+    if not path.is_absolute() or not path.is_file() or not os.access(path, os.X_OK):
+        raise ValueError("--corbanu-bin must be an absolute path to an executable Corbanu binary")
+    with path.open("rb") as stream:
+        if stream.read(2) == b"#!":
+            raise ValueError("--corbanu-bin is a wrapper script; pass the real binary so the vault home is not overridden")
+    return path
+
+
+def vault_secret(binary, home, label, runner=None):
+    """One `corbanu vault auth-helper` read held in memory; stderr and output never echoed."""
+    runner = runner or subprocess.run
+    home = Path(home)
+    if not home.is_absolute() or not home.is_dir():
+        raise ValueError("vault home must be an existing absolute directory")
+    env = {k: v for k, v in os.environ.items() if k not in HOME_ALIASES}
+    env.update(CORBANU_HOME=str(home), CODEX_HOME=str(home))
+    try:
+        result = runner([str(binary), "vault", "auth-helper", label], stdin=subprocess.DEVNULL,
+                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env,
+                        timeout=30, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        raise ValueError(f"vault helper failed for {label}; nothing was sent") from None
+    try:
+        value = result.stdout.decode("utf-8") if isinstance(result.stdout, bytes) else result.stdout
+    except UnicodeError:
+        value = None
+    if (result.returncode != 0 or not isinstance(value, str) or not value
+            or len(value) > 16384 or "\n" in value or "\r" in value):
+        raise ValueError(f"vault helper could not resolve {label} (exit {result.returncode}); nothing was sent")
+    return value
+
+
+def vault_credentials(binary, session_home, api_key_home=None, profile=None, runner=None):
+    """Resolve the Task Node session and plan key at send time. Memory only, no file."""
+    binary = vault_helper(binary)
+    raw = vault_secret(binary, session_home, session_label(profile), runner)
+    try:
+        session = json.loads(raw)
+    except ValueError:
+        session = None
+    token = session.get("terminal_token") if isinstance(session, dict) else None
+    if not isinstance(token, str) or not token.strip() or "\n" in token or "\r" in token:
+        raise ValueError("vault Task Node session holds no usable terminal session; relink in Corbanu")
+    if not isinstance(session.get("origin"), str) or session["origin"].rstrip("/") != ORIGIN:
+        raise ValueError("vault Task Node session belongs to another origin")
+    expires = session.get("expires_at")
+    try:
+        expired = expires is not None and timestamp(expires) <= timestamp(now())
+    except (AttributeError, TypeError, ValueError):
+        expired = True
+    if expired:
+        raise ValueError("vault Task Node session is expired or has an invalid expiry; relink in Corbanu")
+    api_key = vault_secret(binary, api_key_home or session_home, API_KEY_LABEL, runner)
+    return {"terminal_session": token, "api_key": api_key}
+
+
 def post(path, payload, auth, *, idempotency_key=None):
     if path not in {"/enrollment", "/events"}:
         raise ValueError("only enrollment and progress events are supported")
@@ -175,7 +248,8 @@ def enrolled(state, config):
         return False
 
 
-def enroll(state, auth, transport=post):
+def enroll(state, auth, transport=None):
+    transport = transport or post  # Late-bound like flush, so a patched module transport applies.
     config = read_json(state / "control.json", state)["tasknode"]
     workspace = identifier(config["workspace_id"])
     status, result = transport("/enrollment", {"workspaceId": workspace, "enabled": True}, auth)
@@ -291,7 +365,7 @@ def immutable_json(path, value):
 
 
 def send(state, event_id, *, live=False, dry_run=False, activation_file=None,
-         credentials_file=None, transport=None):
+         credentials_file=None, vault=None, transport=None):
     """Select one PF80 event; retries return receipts and never re-POST.
 
     A durable intent without a result is uncertain, even if the process crashed
@@ -300,8 +374,10 @@ def send(state, event_id, *, live=False, dry_run=False, activation_file=None,
     """
     if type(live) is not bool or type(dry_run) is not bool or live == dry_run:
         raise ValueError("send requires exactly one of --dry-run or --live")
-    if dry_run and (activation_file or credentials_file):
+    if dry_run and (activation_file or credentials_file or vault):
         raise ValueError("dry-run forbids activation and credentials")
+    if credentials_file and vault:
+        raise ValueError("choose one credential source: --credentials-file or the vault helper")
     preview = prepare(state, event_id)
     event = preview["payload"]["event"]
     config = read_json(state / "control.json", state)["tasknode"]
@@ -315,8 +391,8 @@ def send(state, event_id, *, live=False, dry_run=False, activation_file=None,
             "idempotency_key": event_id, "selected_count": 1}
     if dry_run:
         return {**preview, **base, "mode": "dry_run"}
-    if not activation_file or not credentials_file:
-        raise ValueError("live requires owner activation and credentials file")
+    if not activation_file or not (credentials_file or vault):
+        raise ValueError("live requires owner activation and credentials file or vault helper")
     # Shares the queue lock for exclusion only; never calls flush/retry/enqueue.
     with locked(state / ".outbox.lock"):
         preview = prepare(state, event_id)
@@ -366,7 +442,8 @@ def send(state, event_id, *, live=False, dry_run=False, activation_file=None,
             if any(receipt.get(k) != v for k, v in base.items()):
                 raise ValueError("existing receipt differs from selected request")
             return {**receipt, "replayed": True, "network_writes": False}
-        auth = credentials(Path(credentials_file))
+        # Vault reads happen only here: replays above never resolve credentials.
+        auth = credentials(Path(credentials_file)) if credentials_file else vault_credentials(**vault)
         immutable_json(intent_path, {**base, "created_at": now(),
                        "activation_digest": request_digest(activation)})
         # Once intent is durable, every exception leaves a non-retriable attempt.
@@ -621,7 +698,22 @@ def cli():
     parser.add_argument("--credentials-file", type=Path)
     parser.add_argument("--confirm-live", action="store_true")
     parser.add_argument("--event-id", action="append")
+    # Vault source (send/enroll only): secrets are read at send time and kept in memory.
+    parser.add_argument("--corbanu-bin", type=Path)
+    parser.add_argument("--vault-session-home", type=Path)
+    parser.add_argument("--vault-api-key-home", type=Path)
+    parser.add_argument("--tasknode-profile")
     args = parser.parse_args()
+    vault = None
+    if any((args.corbanu_bin, args.vault_session_home, args.vault_api_key_home, args.tasknode_profile)):
+        if args.command not in {"send", "enroll"}:
+            parser.error("vault helper options are only valid for send --live and enroll")
+        if not args.corbanu_bin or not args.vault_session_home:
+            parser.error("vault helper requires --corbanu-bin and --vault-session-home")
+        if args.credentials_file:
+            parser.error("choose one credential source: --credentials-file or the vault helper")
+        vault = {"binary": args.corbanu_bin, "session_home": args.vault_session_home,
+                 "api_key_home": args.vault_api_key_home, "profile": args.tasknode_profile}
     if args.event_id is not None and len(args.event_id) != 1:
         parser.error("--event-id must occur exactly once")
     args.event_id = args.event_id[0] if args.event_id else None
@@ -636,12 +728,12 @@ def cli():
     if args.command == "send":
         if (not args.event_id or args.report or args.confirm_live
                 or args.live == args.dry_run
-                or (args.dry_run and (args.credentials_file or args.owner_activation_file))
-                or (args.live and (not args.credentials_file or not args.owner_activation_file))):
+                or (args.dry_run and (args.credentials_file or args.owner_activation_file or vault))
+                or (args.live and (not (args.credentials_file or vault) or not args.owner_activation_file))):
             parser.error("send requires one --event-id and --dry-run OR --live with owner activation and credentials")
         print_status(send(args.state, args.event_id, live=args.live, dry_run=args.dry_run,
                           activation_file=args.owner_activation_file,
-                          credentials_file=args.credentials_file))
+                          credentials_file=args.credentials_file, vault=vault))
         return
     if args.live or args.dry_run or args.owner_activation_file:
         parser.error("single-event flags require send")
@@ -677,9 +769,9 @@ def cli():
             parser.error("enqueue requires --report")
         print(enqueue(args.state, read_json(args.report, args.report.parent)))
         return
-    if not args.confirm_live or not args.credentials_file:
-        parser.error("network writes require --confirm-live and private --credentials-file")
-    auth = credentials(args.credentials_file)
+    if not args.confirm_live or not (args.credentials_file or vault):
+        parser.error("network writes require --confirm-live and private --credentials-file (enroll may use the vault helper)")
+    auth = credentials(args.credentials_file) if args.credentials_file else vault_credentials(**vault)
     if args.command == "flush":
         result = flush(args.state, auth)
         print(f"Delivered {result} progress events")
