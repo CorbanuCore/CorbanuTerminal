@@ -105,7 +105,8 @@ def manager_settings(value):
     return value
 
 
-IN_PROGRESS_MARKERS = ("rebase-merge", "rebase-apply", "BISECT_LOG", "MERGE_HEAD", "CHERRY_PICK_HEAD")
+IN_PROGRESS_MARKERS = ("rebase-merge", "rebase-apply", "BISECT_LOG", "MERGE_HEAD", "CHERRY_PICK_HEAD",
+                       "REVERT_HEAD", "sequencer")
 
 
 def disposable_head(path):

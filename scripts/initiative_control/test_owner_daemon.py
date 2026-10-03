@@ -1942,6 +1942,9 @@ class HandoffTests(unittest.TestCase):
         with patch.object(owner.ExistingCoordinator, "_handoff", stale):
             self.assertEqual({}, self.tick()["actions"])
         self.assertNotIn("dispatch_owner", self.c.snapshot()["actions"]["later"])
+        # The route marker precedes the handoff, so a refused (or interrupted) handoff
+        # still leaves the claim-time worktree re-check armed.
+        self.assertTrue((self.root / "routes" / (digest(["route", "later"]) + ".json")).exists())
         self.assertEqual({"later": "returned"}, self.tick()["actions"])
         self.assertEqual("owner", self.c.snapshot()["actions"]["later"]["dispatch_owner"])
 
