@@ -482,6 +482,30 @@ class BriefingSizeTests(unittest.TestCase):
         self.assertIn(returned["result"]["evidence_digest"], brief["original_evidence"])
         self.assertNotIn(returned["result"]["evidence_digest"], budget["evidence_digests"])
 
+    def test_fit_prefers_fewer_events_over_dropping_a_returned_result(self):
+        for index in range(6):
+            self.c.event({"id": "bulk-%d" % index, "text": "e" * 9000})
+        actions = self.live_actions(1, 10, 0)
+        actions[0].update(status="returned", result=self.ref({"kind": "result", "text": "R" * 12000}))
+        packet = self.packet(actions, recent=actions)
+        self.assertEqual(7, len(packet["events"]))
+        # With every event selected, the mandatory event bodies leave no room for the result.
+        full = json.loads(m.briefing(self.c, {**packet, "event_batch": {"selected": 7, "deferred": 0}},
+                                     self.context))
+        self.assertNotIn(actions[0]["result"]["evidence_digest"], full["original_evidence"])
+        candidate, raw = m.fit_briefing(self.c, packet, self.context)
+        brief = json.loads(raw)
+        self.assertIn(actions[0]["result"]["evidence_digest"], brief["original_evidence"])
+        selected = brief["event_batch"]["selected"]
+        self.assertTrue(1 <= selected < 7)
+        self.assertEqual(7 - selected, brief["event_batch"]["deferred"])
+        self.assertEqual(selected, len(self.c.snapshot()["manager"]["events"]))
+        # The next prefix up would have dropped it: the choice is the largest that keeps it.
+        larger = json.loads(m.briefing(self.c, {**packet, "events": packet["events"][:selected + 1],
+                                                "event_batch": {"selected": selected + 1,
+                                                                "deferred": 6 - selected}}, self.context))
+        self.assertNotIn(actions[0]["result"]["evidence_digest"], larger["original_evidence"])
+
     def test_many_returned_results_degrade_by_eviction_deterministically(self):
         actions = self.live_actions(8, 10, 0)
         for index, action in enumerate(actions):

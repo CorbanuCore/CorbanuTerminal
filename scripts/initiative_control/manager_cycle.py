@@ -334,8 +334,17 @@ def timestamp(value):
 
 
 def fit_briefing(coordinator, packet, context):
-    """Size locally, restrict once, launch once. Never drop an event out of order."""
+    """Size locally, restrict once, launch once. Never drop an event out of order.
+
+    Prefer the largest FIFO prefix whose briefing still carries the result body of
+    every returned action awaiting a verdict; otherwise the largest prefix that fits.
+    Deferred events stay pending for later cycles.
+    """
     total = len(packet["events"])
+    awaiting = {action["result"]["evidence_digest"] for action in packet["actions"].values()
+                if action["status"] == "returned" and isinstance(action.get("result"), dict)
+                and "evidence_digest" in action["result"]}
+    chosen = None
     for count in range(total, 0, -1):
         candidate = {**packet, "events": packet["events"][:count],
                      "event_batch": {"selected": count, "deferred": packet["pending_event_count"] - count},
@@ -343,16 +352,25 @@ def fit_briefing(coordinator, packet, context):
         try:
             raw = briefing(coordinator, candidate, context)
         except (Rejected, f.LaunchError) as exc:
-            if str(exc) not in {"record exceeds JSON byte limit", "evidence_count_hold"} or count == 1:
+            if str(exc) not in {"record exceeds JSON byte limit", "evidence_count_hold"}:
+                raise
+            if count == 1 and chosen is None:
                 raise
             continue
-        if count != total:
-            revision = coordinator.restrict_manager_events(packet["manager_run"], count,
-                packet["state_revision"], {"reason": "largest fitting FIFO prefix before inference",
-                                            "bytes": len(raw), "event_batch": candidate["event_batch"]})
-            f.require(revision == candidate["state_revision"], "batch_revision_mismatch")
-        return candidate, raw
-    raise f.LaunchError("empty_manager_batch")
+        if chosen is None:
+            chosen = (count, candidate, raw)
+        if awaiting <= set(json.loads(raw)["original_evidence"]):
+            chosen = (count, candidate, raw)
+            break
+    if chosen is None:
+        raise f.LaunchError("empty_manager_batch")
+    count, candidate, raw = chosen
+    if count != total:
+        revision = coordinator.restrict_manager_events(packet["manager_run"], count,
+            packet["state_revision"], {"reason": "largest fitting FIFO prefix before inference",
+                                        "bytes": len(raw), "event_batch": candidate["event_batch"]})
+        f.require(revision == candidate["state_revision"], "batch_revision_mismatch")
+    return candidate, raw
 
 
 def validate(receipt, attempt, cycle, raw):
