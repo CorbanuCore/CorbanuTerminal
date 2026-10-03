@@ -1,0 +1,47 @@
+name: nightly-ci
+
+# Cold Linux Bazel jobs (test, clippy, release verify, argument comment lint)
+# take close to their 180-minute limit without a remote cache, so they run here
+# once a day instead of blocking every PR. Failures here do not block merges;
+# check this workflow before cutting a release.
+on:
+  schedule:
+    - cron: "17 9 * * *" # 09:17 UTC daily
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-ci::${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bazel:
+    name: Bazel
+    uses: ./.github/workflows/bazel.yml
+    with:
+      linux_heavy: true
+    secrets: inherit
+
+  rust-ci:
+    name: rust-ci
+    uses: ./.github/workflows/rust-ci.yml
+    with:
+      linux_heavy: true
+    secrets: inherit
+
+  results:
+    name: Nightly CI results
+    if: ${{ always() }}
+    needs:
+      - bazel
+      - rust-ci
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Require successful dependencies
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 .github/scripts/check_ci_results.py
