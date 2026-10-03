@@ -188,6 +188,40 @@ class CycleTests(unittest.TestCase):
         result = self.cycle(self.fenced_launcher(lambda text: "Decision:\n" + text))
         self.assertEqual(("owner_hold", "invalid_json"), (result["status"], result.get("reason")), result)
 
+    def test_verdict_end_to_end_and_accepting_needs_the_result_body(self):
+        key = self.cycle()["prepared_actions"][0]["id"]
+        claim = self.c.claim(key)
+        self.c.dispatched(key, claim["claim"], "agent-1", {"native": "fixture"})
+        self.c.acknowledge(key, "agent-1", claim["allocation_digest"], {"ack": "fixture"})
+        self.c.returned(key, "agent-1", {"returned": "RETURN\nfixture checks pass"})
+        def verdict(accepted):
+            def launch(args):
+                receipt = self.launch(args)
+                rewrite_decision(receipt, lambda d: d.update(actions=[], verdicts=[
+                    {"action": key, "accepted": accepted, "reason": "fixture"}]))
+                f.write_json(Path(receipt["artifacts"]["receipt"]), receipt)
+                return receipt
+            return launch
+        real = m.fit_briefing
+        def omit_result(coordinator, packet, context):
+            packet, raw = real(coordinator, packet, context)
+            brief = json.loads(raw)
+            digest = brief["actions"][key]["result"]["evidence_digest"]
+            del brief["original_evidence"][digest]
+            brief["evidence_omissions"].append({"source": "briefing", "id": "evidence_budget",
+                                                "reason": "briefing_byte_limit", "evidence_digests": [digest]})
+            return packet, json.dumps(brief).encode()
+        with patch.object(m, "fit_briefing", omit_result):
+            result = self.cycle(verdict(True))
+        self.assertEqual(("owner_hold", "verdict_without_result_evidence"),
+                         (result["status"], result.get("reason")), result)
+        self.assertEqual("returned", self.c.snapshot()["actions"][key]["status"])
+        self.c.fail_manager(self.c.snapshot()["manager"]["id"], "offline fixture reset")
+        result = self.cycle(verdict(True))
+        self.assertEqual("accepted", result["status"], result)
+        self.assertEqual([{"action": key, "accepted": True, "status": "accepted"}], result["verdicts"])
+        self.assertEqual([], result["prepared_actions"])
+
     def test_success_prepares_without_dispatch_and_preserves_full_brief(self):
         result = self.cycle()
         self.assertEqual("accepted", result["status"], result)

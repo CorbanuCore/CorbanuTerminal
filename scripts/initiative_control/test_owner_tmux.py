@@ -793,7 +793,7 @@ class TmuxTests(unittest.TestCase):
             self.worker.start()
         self.assertFalse((self.worker.run / "start-intent.json").exists())
 
-    def test_daemon_records_durable_return_after_pane_is_killed(self):
+    def daemon_case(self):
         from coordinator import digest
         from test_owner_daemon import WorkerLifecycleTests
         case = WorkerLifecycleTests()
@@ -830,6 +830,10 @@ class TmuxTests(unittest.TestCase):
         self.assertEqual("awaiting_ack", case.tick()["actions"]["one"])
         self.turn(self.worker.meta["prompt"], self.worker.meta["ack"], "ack-turn")
         self.assertEqual("awaiting_working", case.tick()["actions"]["one"])
+        return case
+
+    def test_daemon_records_durable_return_after_pane_is_killed(self):
+        case = self.daemon_case()
         self.turn("START", "RETURN\nfixture result", "work-turn")
         proc = self.worker.inspect()["process"]
         os.kill(proc["pid"], signal.SIGKILL)
@@ -840,11 +844,30 @@ class TmuxTests(unittest.TestCase):
                 self.assertEqual(("ACTIVE", "returned"), (result["state"], result["actions"]["one"]))
         self.assertEqual("returned", case.c.snapshot()["actions"]["one"]["status"])
         self.assertEqual([], case.sql("SELECT * FROM holds"))
-        self.assertEqual([("work-turn", "crashed")], case.sql(
+        # The dead pane's private server was then closed through its own socket.
+        self.assertEqual([("work-turn", "closed")], case.sql(
             "SELECT active_turn_id,terminal_status FROM processes"))
         with self.assertRaisesRegex(f.LaunchError, "worker_not_alive"):
             self.worker.send("quit", "/quit")
         self.assertFalse((self.worker.run / "quit-intent.json").exists())
+
+    def test_daemon_closes_idle_worker_after_return_through_its_own_socket(self):
+        case = self.daemon_case()
+        self.turn("START", "RETURN\nfixture result", "work-turn")
+        result = case.tick()
+        self.assertEqual(("ACTIVE", "returned"), (result["state"], result["actions"]["one"]))
+        self.assertEqual("returned", case.c.snapshot()["actions"]["one"]["status"])
+        self.assertTrue((self.worker.run / "quit-intent.json").exists())
+        self.assertIn("/quit", (self.worker.run / "home/received").read_text())
+        receipt = owner.load(case.root / case.sql(
+            "SELECT receipt_artifact FROM operations WHERE effect='close'")[0][0])["result"]
+        self.assertTrue(receipt["clean"], receipt)
+        self.assertFalse(receipt["forced"])
+        self.assertNotEqual(0, receipt["server_shutdown"]["probe_returncode"])
+        self.assertEqual([("work-turn", "closed")], case.sql(
+            "SELECT active_turn_id,terminal_status FROM processes"))
+        self.assertEqual([], case.sql("SELECT * FROM holds"))
+        self.assertEqual("returned", case.tick()["actions"]["one"])
 
     def test_wrong_digest_model_effort_claim_prompt_or_turn_cannot_ack(self):
         self.ack()

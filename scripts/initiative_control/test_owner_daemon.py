@@ -1415,16 +1415,84 @@ class WorkerLifecycleTests(unittest.TestCase):
         self.assertEqual(1, FakeWorker.events.count(("crash", "close")))
         self.assertEqual(1, FakeWorker.events.count(("unclean", "close")))
 
-    def test_prior_generation_return_is_history_not_closed_or_held(self):
+    def returned_without_close(self, key="one"):
+        self.prepared(key)
+        with patch.object(owner.Kernel, "close_worker", lambda *args: None):
+            self.assertEqual("returned", self.tick()["actions"][key])
+        return Path(self.sql("SELECT private_run_root FROM processes WHERE op_id=?",
+                             (digest(["tmux", key, "launch"]),))[0][0])
+
+    def rearm(self):
+        self.authority["generation"] += 1
+        self.arm()
+
+    def test_prior_generation_return_is_history_only_when_closed_or_proven_stopped(self):
+        self.configure()
+        self.prepared("closed")
+        self.assertEqual("returned", self.tick()["actions"]["closed"])
+        run = self.returned_without_close("stopped")
+        # Dead synthetic identity: no recorded process alive and no socket.
+        f.write_json(run / "process.json", dict(pid=12345, start="synthetic", server=12346,
+                                                server_start="synthetic"))
+        self.returned_without_close("unproven")
+        self.rearm()
+        self.assertEqual({"closed": "returned", "stopped": "returned", "unproven": "HOLD"},
+                         self.tick()["actions"])
+        self.assertEqual([("prior_activation",)], self.sql("SELECT reason_code FROM holds"))
+        # History is never closed or re-sent anything under the new activation.
+        self.assertEqual([("closed", "close")], [e for e in FakeWorker.events if e[1] == "close"])
+        self.assertEqual([("closed",)], self.sql("SELECT action_id FROM operations WHERE effect='close'"))
+
+    def test_prior_generation_uncertain_close_still_holds(self):
         self.configure()
         self.prepared()
-        with patch.object(owner.Kernel, "close_worker", lambda *args: None):
-            self.assertEqual("returned", self.tick()["actions"]["one"])
-        self.authority["generation"] = 2
-        self.arm()
-        self.assertEqual("returned", self.tick()["actions"]["one"])
+        FakeWorker.fail = ("one", "close")
+        self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        FakeWorker.fail = None
+        self.sql("UPDATE operations SET phase='intent' WHERE effect='close'")
+        self.sql("UPDATE operations SET phase='applied' WHERE effect<>'close'")
+        self.sql("UPDATE holds SET resolved_at=1, resolution_evidence_digest='fixture'")
+        self.rearm()
+        self.assertEqual("HOLD", self.tick()["actions"]["one"])
+        self.assertEqual(("effect_uncertain",), self.sql(
+            "SELECT reason_code FROM holds WHERE resolved_at IS NULL")[0])
+        self.assertEqual(1, FakeWorker.events.count(("one", "close")))
+
+    def test_close_waits_while_paused_or_manager_owned(self):
+        self.configure()
+        self.returned_without_close()
+        self.c.set_enabled(False, {"fixture": True})
+        self.assertEqual("deferred", self.tick()["actions"]["one"])
+        self.c.set_enabled(True, {"fixture": True})
+        self.c.event({"id": "manager-wakes"})
+        packet = self.c.begin_manager()
+        self.assertEqual("deferred", self.tick()["actions"]["one"])
         self.assertNotIn(("one", "close"), FakeWorker.events)
+        # The pre-effect gate refused: no close intent, nothing journaled as uncertain.
+        self.assertEqual([], self.sql("SELECT phase FROM operations WHERE effect='close'"))
+        self.c.fail_manager(packet["manager_run"], "fixture release")
+        self.assertEqual("returned", self.tick()["actions"]["one"])
+        self.assertEqual(1, FakeWorker.events.count(("one", "close")))
         self.assertEqual([], self.sql("SELECT * FROM holds"))
+
+    def test_close_after_manager_verdict_and_refused_without_recorded_return(self):
+        self.configure()
+        self.returned_without_close()
+        packet = self.c.begin_manager()
+        self.c.accept_decision(packet["manager_run"], {
+            "state_revision": packet["state_revision"], "actions": [],
+            "verdicts": [{"action": "one", "accepted": True, "reason": "fixture ok"}]}, {"fixture": True})
+        self.assertEqual("accepted", self.c.snapshot()["actions"]["one"]["status"])
+        self.assertEqual("returned", self.tick()["actions"]["one"])
+        self.assertEqual(1, FakeWorker.events.count(("one", "close")))
+        kernel = owner.Kernel(self.config_path)
+        kernel.db = sqlite3.connect(self.root / "owner.sqlite3")
+        kernel.db.row_factory = sqlite3.Row
+        self.addCleanup(kernel.db.close)
+        with self.c.mutation("fixture", {}) as (_, state):
+            state["actions"]["one"].pop("result")
+        with self.assertRaisesRegex(f.LaunchError, "close_requires_recorded_return"):
+            kernel.close_gate(self.c.snapshot()["actions"]["one"])
 
     def test_prior_activation_holds_inflight_worker(self):
         self.configure()
@@ -1676,6 +1744,30 @@ class HandoffTests(unittest.TestCase):
             self.assertNotIn("dispatch_owner", current["actions"][key])
         self.assertEqual("hand", current["actions"]["first"]["dispatch_owner"])
         self.assertEqual(before["dispatch_control"], current["dispatch_control"])
+
+    def test_default_route_never_adopts_hand_touched_work(self):
+        self.configure()
+        self.prepared("first")
+        self.transfer({"first": "hand"})
+        self.prepared("touched")
+        self.prepared("unowned_run")
+        with self.c.mutation("fixture", {}) as (_, state):
+            state["actions"]["unowned_run"].pop("manager_run")
+        real = owner.Kernel.worker_gate
+        def refuse(kernel, action):
+            if action["id"] == "touched":
+                raise f.LaunchError("fixture_gate_refusal")
+            return real(kernel, action)
+        with patch.object(owner.Kernel, "worker_gate", refuse):
+            result = owner.Kernel(self.config_path, dispatcher="hand").tick()
+        self.assertEqual("HOLD", result["actions"]["touched"])
+        self.assertEqual("prepared", self.c.snapshot()["actions"]["touched"]["status"])
+        result = self.tick()
+        self.assertEqual(("ACTIVE", {}), (result["state"], result["actions"]))
+        current = self.c.snapshot()["actions"]
+        self.assertNotIn("dispatch_owner", current["touched"])
+        self.assertNotIn("dispatch_owner", current["unowned_run"])
+        self.assertEqual([("fixture_gate_refusal",)], self.sql("SELECT reason_code FROM holds"))
 
     def test_default_route_skips_a_concurrent_revision_without_effect(self):
         self.configure()

@@ -863,11 +863,14 @@ class Kernel:
         return meta
 
     def close_gate(self, action):
-        """Closing needs only an admitted owner and the coordinator's recorded RETURN."""
+        """Closing needs an admitted owner and the coordinator's recorded RETURN. A pause
+        or a manager-owned cycle defers it like any other key delivery."""
         self.admit()
         state = self.c.snapshot()
         current = state["actions"][action["id"]]
         self.c._dispatcher(state, current, self.dispatcher)
+        if not state["enabled"] or state["manager"] is not None:
+            raise DispatchDeferred("dispatch_paused_or_owned")
         f.require(current.get("claim") == action.get("claim") and current.get("result")
                   and current["status"] in {"returned"} | TERMINAL, "close_requires_recorded_return")
 
@@ -1043,6 +1046,11 @@ class Kernel:
             if ("dispatch_owner" in action or action["status"] != "prepared" or action.get("claim")
                     or action["kind"] not in WORKER_KINDS or not action.get("manager_run")):
                 continue
+            # Never adopt anything the hand lane has touched: journal rows or a hold.
+            if (self.db.execute("SELECT 1 FROM operations WHERE action_id=?", (action["id"],)).fetchone()
+                    or self.db.execute("SELECT 1 FROM holds WHERE op_id=?",
+                                       (digest(["tmux", action["id"], "claim"]),)).fetchone()):
+                continue
             try:
                 worktree = worker_runtime(action["inputs"])["worktree"]
             except (f.LaunchError, KeyError, TypeError, ValueError):
@@ -1087,15 +1095,24 @@ class Kernel:
                           (digest(["tmux", action["id"], "claim"]),)).fetchone(), "operation_held")
                 f.require(all(row["phase"] != "held" for row in rows), "operation_held")
                 if any(row["effect"] == "returned" and row["phase"] == "applied" for row in rows):
-                    # RETURN is recorded; the only remaining effect is closing the
-                    # worker. A prior generation's returned claim is history: never
-                    # act on it (or hold it) under the current activation.
+                    # RETURN is recorded; the only remaining effect is closing the worker.
                     meta = self.admit()
                     current = all((row["config_generation"], row["authority_digest"]) ==
                                   (meta["control_generation"], meta["activation_digest"]) for row in rows)
-                    if current and not any(row["effect"] == "close" and row["phase"] == "applied"
-                                           for row in rows):
+                    closes = [row for row in rows if row["effect"] == "close"]
+                    if current and not any(row["phase"] == "applied" for row in closes):
                         self.close_returned(action, rows)
+                    elif not current and not any(row["phase"] == "applied" for row in closes):
+                        # A prior generation's return is history only when its worker is
+                        # closed, or was never sent a close and is proven stopped (no
+                        # recorded process alive, socket absent or refusing). Otherwise
+                        # the prior_activation/effect_uncertain checks below hold it.
+                        f.require(not any(row["phase"] != "deferred" for row in closes),
+                                  "effect_uncertain")
+                        try:
+                            stopped_worker(self.root, self.db, action["id"])
+                        except (f.LaunchError, OSError, KeyError, TypeError, ValueError):
+                            raise f.LaunchError("prior_activation") from None
                     outcomes[action["id"]] = "returned"
                     continue
                 for row in rows:

@@ -458,6 +458,14 @@ def run_cycle(*, state, runs_dir, binary, auth_vault_home, owner_context, timeou
         phase = "validation"
         f.write_json(cycle / "returned.json", receipt)
         decision = validate(receipt, attempt, cycle, raw)
+        # An accepting verdict needs the returned result body in the briefing; a body
+        # dropped for space (evidence_budget) was never read by the manager.
+        brief = f.strict_json(raw)
+        for verdict in decision.get("verdicts", []):
+            result = (brief["actions"].get(verdict["action"]) or {}).get("result")
+            f.require(not verdict["accepted"] or (isinstance(result, dict) and
+                      result.get("evidence_digest") in brief["original_evidence"]),
+                      "verdict_without_result_evidence")
         proof = {**attempt, "receipt": receipt["artifacts"]["receipt"],
                  "receipt_sha256": f.digest(f.read_file(Path(receipt["artifacts"]["receipt"]),
                                                        f.RECORD_LIMIT, private=True)),
