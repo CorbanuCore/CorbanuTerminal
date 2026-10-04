@@ -4250,15 +4250,23 @@ impl ThreadRequestProcessor {
                 // A compacted suffix is not evidence that the thread never recorded a tier.
                 // Use the existing store history API (including fork lineage), not a raw path.
                 // This cold-resume fallback may read the full history; it does not replay it.
-                let durable = self
+                // Stores that keep paginated history out of full-history reads report
+                // `Unsupported`; the model-context suffix then stays authoritative, as it
+                // was before this fallback existed, instead of failing the resume.
+                match self
                     .thread_store
                     .load_history(StoreLoadThreadHistoryParams {
                         thread_id: stored_thread.thread_id,
                         include_archived: true,
                     })
                     .await
-                    .map_err(thread_store_resume_read_error)?;
-                prepend_missing_resume_settings(&mut model_context.items, &durable.items);
+                {
+                    Ok(durable) => {
+                        prepend_missing_resume_settings(&mut model_context.items, &durable.items);
+                    }
+                    Err(ThreadStoreError::Unsupported { .. }) => {}
+                    Err(err) => return Err(thread_store_resume_read_error(err)),
+                }
             }
             let history = InitialHistory::Resumed(ResumedHistory {
                 conversation_id: model_context.thread_id,
