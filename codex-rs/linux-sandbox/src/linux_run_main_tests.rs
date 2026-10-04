@@ -323,10 +323,6 @@ const CLEANUP_REAPER_CHILD_TARGET_ENV: &str = "CODEX_LINUX_SANDBOX_TEST_CLEANUP_
 /// Plays the sandbox helper: registers and creates a synthetic `.git` mount
 /// target, hands the reaper a stand-in sandbox child, then dies by SIGKILL the
 /// way unified exec stops commands, so its own cleanup never runs.
-#[expect(
-    clippy::zombie_processes,
-    reason = "the helper dies by SIGKILL; the reaper must see the child outlive it"
-)]
 fn run_cleanup_reaper_killed_helper(target: &std::path::Path) -> ! {
     let registrations = register_synthetic_mount_targets(&[
         crate::bwrap::SyntheticMountTarget::missing_empty_directory(target),
