@@ -54,7 +54,7 @@ class NightlyHeavyJobsTest(unittest.TestCase):
         self.assertRegex(
             self.workflow("bazel.yml"),
             r"(?ms)^  test-windows-native-main:\n(?:    #.*?\n)*"
-            r"    if: \$\{\{ inputs\.cold_bazel \}\}\n    timeout-minutes: 180$",
+            r"    if: \$\{\{ inputs\.cold_bazel \}\}\n    timeout-minutes: 360$",
         )
 
     def test_blocking_ci_leaves_heavy_jobs_off(self) -> None:
