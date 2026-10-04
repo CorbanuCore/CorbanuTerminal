@@ -1,4 +1,4 @@
-#![cfg(all(target_os = "linux", feature = "synthetic-fixture"))]
+#![cfg(target_os = "linux")]
 #![forbid(unsafe_code)]
 // Fixture setup failures intentionally stop the test immediately.
 #![allow(clippy::unwrap_used)]
