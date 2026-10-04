@@ -2,6 +2,9 @@ use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_wallet::Wallet;
 use zeroize::Zeroizing;
 
+// Unreachable since provider management was unified (3db6321294); remove
+// with the rest of this status plumbing or wire it back in.
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PfTerminalPlanStatus {
     Checking,
@@ -19,6 +22,7 @@ pub(crate) enum PfTerminalPlanStatus {
     Unavailable,
 }
 
+#[allow(dead_code)]
 pub(crate) async fn load(
     codex_home: std::path::PathBuf,
     auth_store_mode: codex_login::AuthCredentialsStoreMode,

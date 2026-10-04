@@ -98,11 +98,15 @@ async fn corbanu_env_alias_restart(index: usize) -> Result<()> {
         let locks = Arc::clone(&locks);
         async move {
             loop {
-                let (stream, _) = listener.accept().await.unwrap();
+                let (stream, _) = listener.accept().await.expect("accept mock daemon");
                 let (read, mut write) = tokio::io::split(stream);
                 let mut line = String::new();
-                BufReader::new(read).read_line(&mut line).await.unwrap();
-                let request: serde_json::Value = serde_json::from_str(&line).unwrap();
+                BufReader::new(read)
+                    .read_line(&mut line)
+                    .await
+                    .expect("read mock daemon request");
+                let request: serde_json::Value =
+                    serde_json::from_str(&line).expect("parse mock daemon request");
                 let response = match request["type"].as_str() {
                     Some("ping") => serde_json::json!({"type": "pong"}),
                     Some("protocol_version") if compatible.load(Ordering::SeqCst) => {
@@ -123,7 +127,7 @@ async fn corbanu_env_alias_restart(index: usize) -> Result<()> {
                 write
                     .write_all(format!("{response}\n").as_bytes())
                     .await
-                    .unwrap();
+                    .expect("write mock daemon response");
             }
         }
     });
