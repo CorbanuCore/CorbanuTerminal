@@ -67,15 +67,26 @@ impl ChatWidget {
         let keyring_backend = self.config.auth_keyring_backend_kind();
         let tx = self.app_event_tx.clone();
         tokio::spawn(async move {
-            let result =
-                if let Some(capability) = capability {
-                    WalletDaemonClient::new(home)
-                        .execute_corbanu_api_operation(
-                            capability.to_string(),
-                            gateway_origin(),
-                            CorbanuApiOperation::Account,
-                        )
-                        .await
+            let mut capability_lapsed = false;
+            let result = if let Some(capability) = capability {
+                match WalletDaemonClient::new(home.clone())
+                    .execute_corbanu_api_operation(
+                        capability.to_string(),
+                        gateway_origin(),
+                        CorbanuApiOperation::Account,
+                    )
+                    .await
+                {
+                    // The unlock that granted this capability has lapsed (its
+                    // window expired, or the daemon restarted). Reading the
+                    // account needs no signature: the stored API key reads it.
+                    Err(codex_wallet_daemon::WalletDaemonError::Refused { code, .. })
+                        if lapsed_capability(&code) =>
+                    {
+                        capability_lapsed = true;
+                        load_read_only_account(home, credential_store_mode, keyring_backend).await
+                    }
+                    result => result
                         .map_err(|error| error.to_string())
                         .and_then(|result| match result {
                             CorbanuApiOperationResult::Account { account } => Ok(CorbanuApiView {
@@ -86,11 +97,16 @@ impl ChatWidget {
                             }),
                             _ => Err("Corbanu API returned the wrong account operation result"
                                 .to_string()),
-                        })
-                } else {
-                    load_read_only_account(home, credential_store_mode, keyring_backend).await
-                };
-            tx.send(AppEvent::CorbanuApiLoaded { result, deferred });
+                        }),
+                }
+            } else {
+                load_read_only_account(home, credential_store_mode, keyring_backend).await
+            };
+            tx.send(AppEvent::CorbanuApiLoaded {
+                result,
+                deferred,
+                capability_lapsed,
+            });
         });
     }
 
@@ -135,6 +151,13 @@ impl ChatWidget {
     #[cfg(test)]
     pub(crate) fn on_corbanu_api_loaded(&mut self, result: Result<CorbanuApiView, String>) {
         self.on_corbanu_api_loaded_with_deferred(result, /*deferred*/ None);
+    }
+
+    /// Drop a wallet capability the daemon no longer honours, so the next
+    /// signing action asks to unlock instead of failing with it.
+    pub(crate) fn forget_lapsed_wallet_capability(&mut self) {
+        self.wallet_capability = None;
+        self.wallet_capability_policy = None;
     }
 
     pub(crate) fn on_corbanu_api_loaded_with_deferred(
@@ -446,6 +469,11 @@ impl ChatWidget {
             effort: None,
         });
     }
+}
+
+/// Daemon refusals meaning the capability, not the request, is no longer good.
+fn lapsed_capability(code: &str) -> bool {
+    matches!(code, "capability_invalid" | "locked")
 }
 
 async fn load_read_only_account(

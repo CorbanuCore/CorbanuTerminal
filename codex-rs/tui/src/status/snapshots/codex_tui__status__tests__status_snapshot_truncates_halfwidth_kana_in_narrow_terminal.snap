@@ -5,12 +5,21 @@ expression: sanitized
 /status
 
 ╭────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v0.0.0)          │
+│  >_ Corbanu Terminal (v<V>)            │
+│                                        │
+│ Visit                                  │
+│ https://chatgpt.com/codex/settings/usa │
+│ for up-to-date                         │
+│ information on rate limits and credits │
 │                                        │
 │  Model:                ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟｶﾞ  │
-│  Model provider:       Ambient         │
 │  Directory: [[workspace]]              │
-│  Permissions:          Custom (workspa │
+│  Permissions:          Next turn:      │
+│                        Custom          │
+│                        (workspace      │
+│                        with network    │
+│                        access, Ask for │
+│                        approval)       │
 │  Security:             Requested       │
 │                        Permissive;     │
 │                        effective       │

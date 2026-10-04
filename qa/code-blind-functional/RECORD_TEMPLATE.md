@@ -37,6 +37,7 @@ design across variants, explicitly dispositioning non-applicable cases):
 
 ```json
 {
+  "schema_version": 2,
   "design_sha256": "...",
   "implementer": "implementation-agent-session-id",
   "candidate": {
@@ -52,6 +53,21 @@ design across variants, explicitly dispositioning non-applicable cases):
     "summary": "Observed outcome, including profile and launch path",
     "candidate_sha256": "...",
     "method": "native-ui",
+    "execution": {
+      "agent": "fresh-executor-session-id",
+      "run_id": "unique-attempt-id",
+      "model": "actual model and effort",
+      "machine": "isolated machine identity",
+      "profile": "fixture version and fresh/existing state",
+      "launcher": "actual packaged launcher",
+      "fresh_context": true,
+      "code_blind": true,
+      "results_blind": true,
+      "packet": {"path": "runs/F01/packet.md", "sha256": "..."},
+      "access_record": {"path": "runs/F01/session.md", "sha256": "..."},
+      "actions": {"path": "runs/F01/actions.json", "sha256": "..."},
+      "isolation_record": {"path": "runs/F01/isolation.json", "sha256": "..."}
+    },
     "evidence": [{"path": "runs/F01.md", "sha256": "..."}]
   }],
   "evidence_check": {
@@ -66,6 +82,41 @@ design across variants, explicitly dispositioning non-applicable cases):
   }
 }
 ```
+
+Each `isolation.json` has the following shape. Artifact paths are relative to
+`results.json`, including those nested here. A group run uses distinct case-bound
+receipts referencing the same actual preflight evidence. Populate only from
+observed enforced controls; never copy these booleans as acceptance.
+
+```json
+{
+  "enforcement": "os-enforced",
+  "agent": "fresh-executor-session-id",
+  "run_id": "unique-attempt-id",
+  "case_id": "F01-mac-existing",
+  "design_sha256": "...",
+  "candidate_sha256": "...",
+  "policy": {"path": "runs/F01/effective-policy.txt", "sha256": "..."},
+  "tool_inventory": {"path": "runs/F01/tools.json", "sha256": "..."},
+  "probe_evidence": {"path": "runs/F01/probes.json", "sha256": "..."},
+  "source_denied": true,
+  "history_denied": true,
+  "symlink_escape_denied": true,
+  "credentials_denied": true,
+  "cross_run_ipc_denied": true,
+  "network_restricted": true,
+  "package_readonly": true,
+  "children_confined": true,
+  "packet_readable": true,
+  "candidate_launchable": true,
+  "actual_input_available": true
+}
+```
+
+Executor differs from implementer and designer; reviewer differs from implementer
+and every executor. The designer may review evidence. Preserve original results
+and distinct fresh replay attempts. Legacy records fail the current checker;
+do not backfill fictitious identities/isolation to make historical evidence pass.
 
 For `failed` or `blocked`, retain the ID, summary and available evidence; the
 checker blocks readiness. For `out_of_scope`, replace execution fields with

@@ -1,0 +1,410 @@
+warning: enum `Checkpoint` is never used
+  --> protected-state/src/checkpoint.rs:24:17
+   |
+24 | pub(crate) enum Checkpoint {
+   |                 ^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: enum `Binding` is never used
+  --> protected-state/src/checkpoint.rs:31:17
+   |
+31 | pub(crate) enum Binding {
+   |                 ^^^^^^^
+
+warning: function `hash_valid` is never used
+  --> protected-state/src/checkpoint.rs:42:15
+   |
+42 | pub(crate) fn hash_valid(hash: &str) -> bool {
+   |               ^^^^^^^^^^
+
+warning: methods `validate_successor`, `validate`, and `sequence` are never used
+   --> protected-state/src/checkpoint.rs:50:19
+    |
+ 49 | impl Checkpoint {
+    | --------------- methods in this implementation
+ 50 |     pub(crate) fn validate_successor(
+    |                   ^^^^^^^^^^^^^^^^^^
+...
+ 77 |     pub(crate) fn validate(&self, binding: &Binding) -> Result<(), RootError> {
+    |                   ^^^^^^^^
+...
+113 |     pub(crate) fn sequence(&self) -> u64 {
+    |                   ^^^^^^^^
+
+warning: `codex-protected-state` (lib) generated 4 warnings
+warning: field `runtime` is never read
+  --> state/src/runtime/accounting.rs:27:5
+   |
+26 | struct Journal<'a> {
+   |        ------- field in this struct
+27 |     runtime: &'a StateRuntime,
+   |     ^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `begin_attempt`, `append_observation`, and `read_observations` are never used
+   --> state/src/runtime/accounting.rs:49:14
+    |
+ 30 | impl<'a> Journal<'a> {
+    | -------------------- methods in this implementation
+...
+ 49 |     async fn begin_attempt(&self, attempt: &Attempt) -> anyhow::Result<()> {
+    |              ^^^^^^^^^^^^^
+...
+ 54 |     async fn append_observation(
+    |              ^^^^^^^^^^^^^^^^^^
+...
+162 |     async fn read_observations(
+    |              ^^^^^^^^^^^^^^^^^
+
+warning: field `journal` is never read
+  --> state/src/runtime/accounting_estimates.rs:27:5
+   |
+26 | struct EstimateStore<'a> {
+   |        ------------- field in this struct
+27 |     journal: Journal<'a>,
+   |     ^^^^^^^
+
+warning: methods `persist_current` and `read_estimate` are never used
+  --> state/src/runtime/accounting_estimates.rs:50:14
+   |
+30 | impl<'a> EstimateStore<'a> {
+   | -------------------------- methods in this implementation
+...
+50 |     async fn persist_current(
+   |              ^^^^^^^^^^^^^^^
+...
+99 |     async fn read_estimate(
+   |              ^^^^^^^^^^^^^
+
+warning: method `full` is never used
+  --> state/src/runtime/accounting_lifecycle.rs:25:8
+   |
+24 | impl Metric {
+   | ----------- method in this implementation
+25 |     fn full(&self) -> Option<i64> {
+   |        ^^^^
+
+warning: method `full_usd` is never used
+  --> state/src/runtime/accounting_lifecycle.rs:63:8
+   |
+51 | impl DayTotals {
+   | -------------- method in this implementation
+...
+63 |     fn full_usd(&self) -> Option<Decimal> {
+   |        ^^^^^^^^
+
+warning: struct `Lifecycle` is never constructed
+  --> state/src/runtime/accounting_lifecycle.rs:93:8
+   |
+93 | struct Lifecycle<'a> {
+   |        ^^^^^^^^^
+
+warning: methods `refresh_current`, `read_day`, and `delete_recorded_thread` are never used
+   --> state/src/runtime/accounting_lifecycle.rs:114:14
+    |
+ 97 | impl<'a> Lifecycle<'a> {
+    | ---------------------- methods in this implementation
+...
+114 |     async fn refresh_current(&self, id: Uuid) -> anyhow::Result<Current<()>> {
+    |              ^^^^^^^^^^^^^^^
+...
+135 |     async fn read_day(&self, thread: ThreadId, day: i64) -> anyhow::Result<Current<DayTotals>> {
+    |              ^^^^^^^^
+...
+178 |     async fn delete_recorded_thread(&self, thread: ThreadId, as_of_ms: i64) -> anyhow::Result<()> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `maintain_retention` and `read_retained_day` are never used
+  --> state/src/runtime/accounting_retention_atomic.rs:55:14
+   |
+54 | impl Lifecycle<'_> {
+   | ------------------ methods in this implementation
+55 |     async fn maintain_retention(&self, as_of_ms: i64) -> anyhow::Result<()> {
+   |              ^^^^^^^^^^^^^^^^^^
+...
+73 |     pub(in crate::runtime::accounting::pricing::storage::lifecycle) async fn read_retained_day(
+   |                                                                              ^^^^^^^^^^^^^^^^^
+
+warning: method `append_native` is never used
+  --> state/src/runtime/accounting_native.rs:53:49
+   |
+ 8 | impl Journal<'_> {
+   | ---------------- method in this implementation
+...
+53 |     pub(in crate::runtime::accounting) async fn append_native(
+   |                                                 ^^^^^^^^^^^^^
+
+warning: `codex-state` (lib) generated 10 warnings
+warning: constant `STATUS_PATH` is never used
+  --> tasknode-session/src/session_validity.rs:13:7
+   |
+13 | const STATUS_PATH: &str = "/api/terminal/tasknode/status";
+   |       ^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `RESPONSE_LIMIT` is never used
+  --> tasknode-session/src/session_validity.rs:14:7
+   |
+14 | const RESPONSE_LIMIT: usize = 16 * 1024 * 1024;
+   |       ^^^^^^^^^^^^^^
+
+warning: enum `ObservationControl` is never used
+  --> tasknode-session/src/session_validity.rs:17:17
+   |
+17 | pub(crate) enum ObservationControl {
+   |                 ^^^^^^^^^^^^^^^^^^
+
+warning: struct `ValidityCurrent` is never constructed
+  --> tasknode-session/src/session_validity.rs:26:19
+   |
+26 | pub(crate) struct ValidityCurrent {
+   |                   ^^^^^^^^^^^^^^^
+
+warning: struct `ValidityBinding` is never constructed
+  --> tasknode-session/src/session_validity.rs:36:19
+   |
+36 | pub(crate) struct ValidityBinding {
+   |                   ^^^^^^^^^^^^^^^
+
+warning: enum `ValidityHold` is never used
+  --> tasknode-session/src/session_validity.rs:48:17
+   |
+48 | pub(crate) enum ValidityHold {
+   |                 ^^^^^^^^^^^^
+
+warning: associated items `new` and `fence` are never used
+  --> tasknode-session/src/session_validity.rs:72:19
+   |
+71 | impl ValidityBinding {
+   | -------------------- associated items in this implementation
+72 |     pub(crate) fn new(current: &ValidityCurrent) -> Result<Self, ValidityHold> {
+   |                   ^^^
+...
+90 |     fn fence(
+   |        ^^^^^
+
+warning: function `current_client` is never used
+   --> tasknode-session/src/session_validity.rs:113:4
+    |
+113 | fn current_client(current: &ValidityCurrent) -> Result<Client, ValidityHold> {
+    |    ^^^^^^^^^^^^^^
+
+warning: struct `CheckedIdentity` is never constructed
+   --> tasknode-session/src/session_validity.rs:145:19
+    |
+145 | pub(crate) struct CheckedIdentity {
+    |                   ^^^^^^^^^^^^^^^
+
+warning: struct `IdentityAtCheck` is never constructed
+   --> tasknode-session/src/session_validity.rs:152:19
+    |
+152 | pub(crate) struct IdentityAtCheck {
+    |                   ^^^^^^^^^^^^^^^
+
+warning: method `consume_for_observation` is never used
+   --> tasknode-session/src/session_validity.rs:158:19
+    |
+157 | impl CheckedIdentity {
+    | -------------------- method in this implementation
+158 |     pub(crate) fn consume_for_observation(
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `check_identity` is never used
+   --> tasknode-session/src/session_validity.rs:170:21
+    |
+170 | pub(crate) async fn check_identity(
+    |                     ^^^^^^^^^^^^^^
+
+warning: function `check_identity_with` is never used
+   --> tasknode-session/src/session_validity.rs:184:10
+    |
+184 | async fn check_identity_with<F: Future<Output = Result<(u16, Vec<u8>), ClientError>>>(
+    |          ^^^^^^^^^^^^^^^^^^^
+
+warning: struct `IdentityStatus` is never constructed
+   --> tasknode-session/src/session_validity.rs:213:8
+    |
+213 | struct IdentityStatus {
+    |        ^^^^^^^^^^^^^^
+
+warning: struct `Github` is never constructed
+   --> tasknode-session/src/session_validity.rs:222:8
+    |
+222 | struct Github {
+    |        ^^^^^^
+
+warning: function `object` is never used
+   --> tasknode-session/src/session_validity.rs:230:4
+    |
+230 | fn object<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(de: D) -> Result<T, D::Error> {
+    |    ^^^^^^
+
+warning: function `decode_identity_status` is never used
+   --> tasknode-session/src/session_validity.rs:244:4
+    |
+244 | fn decode_identity_status(status: u16, bytes: &[u8]) -> Result<IdentityStatus, ValidityHold> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `codex-tasknode-session` (lib) generated 17 warnings
+warning: variant `OpenPlans` is never constructed
+   --> tui/src/app_event.rs:318:5
+    |
+313 | pub(crate) enum WalletUnlockContinuation {
+    |                 ------------------------ variant in this enum
+...
+318 |     OpenPlans {
+    |     ^^^^^^^^^
+    |
+    = note: `WalletUnlockContinuation` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variants `ProviderCredentialStatusesReady`, `OpenWalletPlanReceipt`, `WalletRecoverPlanRequested`, and `UpdateActivePermissionProfile` are never constructed
+    --> tui/src/app_event.rs:1790:5
+     |
+ 395 | pub(crate) enum AppEvent {
+     |                 -------- variants in this enum
+...
+1790 |     ProviderCredentialStatusesReady {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1956 |     OpenWalletPlanReceipt {
+     |     ^^^^^^^^^^^^^^^^^^^^^
+...
+1960 |     WalletRecoverPlanRequested,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+2104 |     UpdateActivePermissionProfile(ActivePermissionProfile),
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `AppEvent` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: variant `Checking` is never constructed
+   --> tui/src/chatwidget/claude_code_login.rs:186:5
+    |
+185 | pub(crate) enum ClaudeCodePlanStatus {
+    |                 -------------------- variant in this enum
+186 |     Checking,
+    |     ^^^^^^^^
+    |
+    = note: `ClaudeCodePlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: variants `Checking`, `Active`, `WalletOnly`, `ConnectedStatusUnavailable`, `NotConnected`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:7:5
+   |
+ 6 | pub(crate) enum PfTerminalPlanStatus {
+   |                 -------------------- variants in this enum
+ 7 |     Checking,
+   |     ^^^^^^^^
+ 8 |     Active {
+   |     ^^^^^^
+...
+12 |     WalletOnly {
+   |     ^^^^^^^^^^
+...
+15 |     ConnectedStatusUnavailable {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+18 |     NotConnected,
+   |     ^^^^^^^^^^^^
+19 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `PfTerminalPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `load` is never used
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:22:21
+   |
+22 | pub(crate) async fn load(
+   |                     ^^^^
+
+warning: constant `PROVIDER_STATUS_TIMEOUT` is never used
+  --> tui/src/chatwidget/provider_credentials.rs:33:7
+   |
+33 | const PROVIDER_STATUS_TIMEOUT: Duration = Duration::from_secs(10);
+   |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `AvailableFromEnvironment`, `Stored`, `NotConfigured`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/provider_credentials.rs:38:5
+   |
+36 | pub(crate) enum ProviderApiKeyStatus {
+   |                 -------------------- variants in this enum
+37 |     Checking,
+38 |     AvailableFromEnvironment,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+39 |     Stored,
+   |     ^^^^^^
+40 |     NotConfigured,
+   |     ^^^^^^^^^^^^^
+41 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `ProviderApiKeyStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `open_provider_credentials_menu` and `refresh_provider_credentials_status_in_background` are never used
+   --> tui/src/chatwidget/provider_credentials.rs:108:19
+    |
+107 | impl ChatWidget {
+    | --------------- methods in this implementation
+108 |     pub(crate) fn open_provider_credentials_menu(&mut self) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+137 |     fn refresh_provider_credentials_status_in_background(&self) {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `provider_api_key_statuses` is never used
+   --> tui/src/chatwidget/provider_credentials.rs:380:4
+    |
+380 | fn provider_api_key_statuses(codex_home: &Path) -> Vec<(String, ProviderApiKeyStatus)> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `provider_api_key_unavailable_statuses` is never used
+   --> tui/src/chatwidget/provider_credentials.rs:409:4
+    |
+409 | fn provider_api_key_unavailable_statuses() -> Vec<(String, ProviderApiKeyStatus)> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `New`, `Onboarding`, and `Upgrade` are never constructed
+  --> tui/src/chatwidget/wallet_menu.rs:55:5
+   |
+54 | pub(crate) enum WalletPlanPurchaseMode {
+   |                 ---------------------- variants in this enum
+55 |     New,
+   |     ^^^
+56 |     Onboarding {
+   |     ^^^^^^^^^^
+...
+59 |     Upgrade {
+   |     ^^^^^^^
+   |
+   = note: `WalletPlanPurchaseMode` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `wallet_address` is never read
+   --> tui/src/chatwidget/wallet_menu.rs:114:16
+    |
+113 | pub(crate) struct WalletPlanStatus {
+    |                   ---------------- field in this struct
+114 |     pub(crate) wallet_address: String,
+    |                ^^^^^^^^^^^^^^
+    |
+    = note: `WalletPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `latest_plan_receipt` is never used
+   --> tui/src/chatwidget/wallet_receipt.rs:190:15
+    |
+190 | pub(super) fn latest_plan_receipt(
+    |               ^^^^^^^^^^^^^^^^^^^
+
+warning: constant `SANDBOX_WARNING_DOCS` is never used
+ --> telegram/src/sandbox_preflight.rs:3:7
+  |
+3 | const SANDBOX_WARNING_DOCS: &str = "docs/config.md#telegram";
+  |       ^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `codex-tui` (lib) generated 13 warnings
+warning: `codex-telegram` (lib) generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.07s

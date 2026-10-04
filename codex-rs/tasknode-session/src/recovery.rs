@@ -126,5 +126,15 @@ fn resolve_from_store<S: SessionStore + ?Sized>(
 }
 
 #[cfg(test)]
+pub(crate) fn resolve_fixture<S: SessionStore + ?Sized>(
+    store: &S,
+    scope: &SessionScope,
+    requested_origin: Option<&str>,
+    request: impl Fn(&Client, &str) -> Result<Response, String>,
+) -> Result<ActiveSession, String> {
+    resolve_from_store(store, scope, requested_origin, request)
+}
+
+#[cfg(test)]
 #[path = "recovery_tests.rs"]
 mod tests;

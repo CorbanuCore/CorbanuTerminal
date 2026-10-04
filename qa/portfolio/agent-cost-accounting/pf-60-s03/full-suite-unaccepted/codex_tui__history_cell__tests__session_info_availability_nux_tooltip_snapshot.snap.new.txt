@@ -1,0 +1,13 @@
+---
+source: tui/src/history_cell/tests.rs
+assertion_line: 700
+expression: rendered
+---
+╭─────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)       │
+│                                     │
+│ model:     gpt-5   /model to change │
+│ directory: /tmp/project             │
+╰─────────────────────────────────────╯
+
+  Tip: Model just became available

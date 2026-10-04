@@ -1,0 +1,29 @@
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/qa/initiative-control/management-bootstrap/owner_handoff_80_promotion_rehearsal.py", line 90, in main
+    assert result.returncode == 0
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/qa/initiative-control/management-bootstrap/owner_handoff_80_promotion_rehearsal.py", line 124, in <module>
+    main()
+    ~~~~^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/qa/initiative-control/management-bootstrap/owner_handoff_80_promotion_rehearsal.py", line 115, in main
+    activate.owner_activation(args)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/activate.py", line 144, in owner_activation
+    owner.publish_schedule(root)
+    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/owner_daemon.py", line 1098, in publish_schedule
+    f.write_json(f.private_dir(receipt["publish_state"]) / "owner-recurrence.json",
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                 observe_schedule(root))
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/fable_launcher.py", line 138, in write_json
+    write_file(path, json.dumps(value, ensure_ascii=True, indent=2) + "\n")
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/fable_launcher.py", line 124, in write_file
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+FileExistsError: [Errno 17] File exists: '/private/tmp/op80-cgr5pdiy/publish/owner-recurrence.json.pending'

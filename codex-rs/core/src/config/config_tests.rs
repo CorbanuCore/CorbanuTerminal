@@ -71,12 +71,12 @@ use codex_core_plugins::PluginsManager;
 use codex_exec_server::LOCAL_FS;
 use codex_features::Feature;
 use codex_features::FeaturesToml;
-use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID;
 use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
 use codex_model_provider_info::WireApi;
 use codex_models_manager::bundled_models_response;
 use codex_network_proxy::NetworkMode;
+use codex_protocol::config_types::ForcedLoginMethod;
 use codex_protocol::config_types::ModelProviderAuthInfo;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_protocol::config_types::ServiceTier;
@@ -6156,10 +6156,9 @@ model = "gpt-project-local"
         .build()
         .await?;
 
-    // The Ambient provider always resolves to a default model even when no
-    // model is explicitly configured, so the ignored project-local profile
-    // does not leave the model as `None`.
-    assert_eq!(config.model.as_deref(), Some(AMBIENT_DEFAULT_MODEL));
+    // The ignored project-local profile does not set the model; the default
+    // provider leaves model selection to its catalog.
+    assert_eq!(config.model, None);
     assert!(
         config.startup_warnings.iter().any(|warning| {
             warning.contains("profile")
@@ -6237,7 +6236,7 @@ async fn responses_websocket_features_do_not_change_wire_api() -> std::io::Resul
         )
         .await?;
 
-        assert_eq!(config.model_provider.wire_api, WireApi::Chat);
+        assert_eq!(config.model_provider.wire_api, WireApi::Responses);
     }
 
     Ok(())
@@ -12465,6 +12464,10 @@ async fn interactive_fallback_recovers_persisted_incompatible_pairs() -> std::io
     for (model, provider) in [
         ("gpt-5.6-sol", CLAUDE_PLAN_PROVIDER_ID),
         ("glm-5.2", OPENAI_PROVIDER_ID),
+        (
+            "gpt-6-astra",
+            codex_model_provider_info::DEEPSEEK_PROVIDER_ID,
+        ),
     ] {
         let cfg = toml::from_str::<ConfigToml>(&format!(
             "model_provider = {provider:?}\nmodel = {model:?}\n"
@@ -12482,7 +12485,12 @@ async fn interactive_fallback_recovers_persisted_incompatible_pairs() -> std::io
         .await?;
 
         assert_eq!(config.model_provider_id, provider);
-        assert_eq!(config.model, None);
+        // The provider's own default; OpenAI keeps None so its models
+        // manager picks the catalogue default.
+        assert_eq!(
+            config.model,
+            codex_model_provider_info::resolve_model_for_provider(None, provider)
+        );
         assert!(config.startup_warnings.iter().any(|warning| {
             warning.contains(model)
                 && warning.contains(provider)
@@ -12506,6 +12514,10 @@ async fn override_provider_with_stale_config_model_recovers_without_opt_in() -> 
     for (stale_model, provider) in [
         ("gpt-5.6-sol", CLAUDE_PLAN_PROVIDER_ID),
         ("glm-5.2", OPENAI_PROVIDER_ID),
+        (
+            "gpt-6-astra",
+            codex_model_provider_info::DEEPSEEK_PROVIDER_ID,
+        ),
     ] {
         let cfg = toml::from_str::<ConfigToml>(&format!("model = {stale_model:?}\n"))
             .expect("config should deserialize");
@@ -12521,7 +12533,12 @@ async fn override_provider_with_stale_config_model_recovers_without_opt_in() -> 
         .await?;
 
         assert_eq!(config.model_provider_id, provider);
-        assert_eq!(config.model, None);
+        // The provider's own default; OpenAI keeps None so its models
+        // manager picks the catalogue default.
+        assert_eq!(
+            config.model,
+            codex_model_provider_info::resolve_model_for_provider(None, provider)
+        );
         assert!(config.startup_warnings.iter().any(|warning| {
             warning.contains(stale_model) && warning.contains("using the provider's default model")
         }));
@@ -12602,6 +12619,42 @@ async fn explicit_claude_plan_normalizes_bare_claude_alias() -> std::io::Result<
     Ok(())
 }
 
+/// `corbanu -m claude-opus-5-5 -c model_provider="claude-plan"`: a bare slug
+/// requested at runtime used to be sent verbatim, which the subscription refuses
+/// (429) and the ledger cannot price. It is sent as its exact plan slug; plan
+/// slugs and slugs without a plan translation are left untouched.
+#[tokio::test]
+async fn explicit_runtime_bare_claude_on_claude_plan_uses_the_plan_slug() -> std::io::Result<()> {
+    use codex_model_provider_info::ANTHROPIC_OPUS_5_5_MODEL;
+    use codex_model_provider_info::CLAUDE_FABLE_5_1_MODEL;
+    use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
+    use codex_model_provider_info::CLAUDE_OPUS_5_5_PLAN_MODEL;
+    use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+
+    for (requested, sent) in [
+        (ANTHROPIC_OPUS_5_5_MODEL, CLAUDE_OPUS_5_5_PLAN_MODEL),
+        (CLAUDE_FABLE_5_1_MODEL, CLAUDE_FABLE_5_1_PLAN_MODEL),
+        (CLAUDE_OPUS_5_5_PLAN_MODEL, CLAUDE_OPUS_5_5_PLAN_MODEL),
+    ] {
+        let config = Config::load_from_base_config_with_overrides(
+            toml::from_str::<ConfigToml>("").expect("config should deserialize"),
+            ConfigOverrides {
+                model: Some(requested.to_string()),
+                model_provider: Some(CLAUDE_PLAN_PROVIDER_ID.to_string()),
+                ..ConfigOverrides::default()
+            },
+            tempdir()?.abs(),
+        )
+        .await?;
+        assert_eq!(
+            config.model_provider_id, CLAUDE_PLAN_PROVIDER_ID,
+            "{requested}"
+        );
+        assert_eq!(config.model.as_deref(), Some(sent), "{requested}");
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn corbanu_plan_provider_alias_normalizes_to_legacy_persisted_id() -> std::io::Result<()> {
     use codex_model_provider_info::CORBANU_PLAN_PROVIDER_ID;
@@ -12620,5 +12673,146 @@ async fn corbanu_plan_provider_alias_normalizes_to_legacy_persisted_id() -> std:
 
     assert_eq!(config.model_provider_id, PFTERMINAL_PLAN_PROVIDER_ID);
     assert!(config.model_provider.is_pfterminal_plan());
+    Ok(())
+}
+
+/// A fresh install has no `model_provider`, so it takes the Ambient default a
+/// few lines above this - and forcing the API-key login path on that default
+/// switched the provider picker off, leaving first-run onboarding with one
+/// option: "Use your Ambient API key". No ChatGPT, no Claude, no Corbanu Plan,
+/// and no way to reach them. Forcing that path is only right when the provider
+/// was actually asked for.
+#[tokio::test]
+async fn default_provider_does_not_force_the_api_only_login_path() -> std::io::Result<()> {
+    let unconfigured = Config::load_from_base_config_with_overrides(
+        ConfigToml::default(),
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(
+        unconfigured.model_provider_id,
+        codex_model_provider_info::OPENAI_PROVIDER_ID
+    );
+    assert_eq!(unconfigured.forced_login_method, None);
+    // The overall default is GPT-6 Sol at high effort: the OpenAI catalog
+    // supplies the model and its default effort, so config states neither.
+    assert_eq!(unconfigured.model, None);
+    assert_eq!(unconfigured.model_reasoning_effort, None);
+
+    // Asking for the same provider still does, because then it is a choice.
+    let chosen = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            model_provider: Some(codex_model_provider_info::AMBIENT_PROVIDER_ID.to_string()),
+            ..ConfigToml::default()
+        },
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(chosen.forced_login_method, Some(ForcedLoginMethod::Api));
+    // Implied, not configured: it shapes sign-in but must never remove the
+    // OpenAI login this profile also holds.
+    assert_eq!(chosen.configured_forced_login_method, None);
+    let configured = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            model_provider: Some(codex_model_provider_info::AMBIENT_PROVIDER_ID.to_string()),
+            forced_login_method: Some(ForcedLoginMethod::Chatgpt),
+            ..ConfigToml::default()
+        },
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(
+        configured.configured_forced_login_method,
+        Some(ForcedLoginMethod::Chatgpt)
+    );
+
+    // And so does asking for it at runtime rather than in the config file.
+    let overridden = Config::load_from_base_config_with_overrides(
+        ConfigToml::default(),
+        ConfigOverrides {
+            model_provider: Some(codex_model_provider_info::ZAI_PROVIDER_ID.to_string()),
+            ..Default::default()
+        },
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(overridden.forced_login_method, Some(ForcedLoginMethod::Api));
+
+    // A rented GPU provider that no longer exists falls back to the same
+    // default provider. The provider was stated, but what it named is gone, so
+    // this is the one case where an explicit request is deliberately not
+    // treated as one - and it reached the same dead end.
+    let stale_gpu = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            model_provider: Some("gpu-does-not-exist".to_string()),
+            ..ConfigToml::default()
+        },
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(
+        stale_gpu.model_provider_id,
+        codex_model_provider_info::OPENAI_PROVIDER_ID
+    );
+    assert_eq!(stale_gpu.forced_login_method, None);
+
+    // A model that implies an API-key-only provider still forces the API path,
+    // because naming that model is a choice of provider by another route. Here
+    // no provider is set and the pair correction resolves it.
+    let implied = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            model: Some("glm-5.3".to_string()),
+            ..ConfigToml::default()
+        },
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(
+        implied.model_provider_id,
+        codex_model_provider_info::ZAI_PROVIDER_ID
+    );
+    assert_eq!(implied.forced_login_method, Some(ForcedLoginMethod::Api));
+
+    // An explicit OpenAI selection never forced it and must not start.
+    let openai = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            model_provider: Some(codex_model_provider_info::OPENAI_PROVIDER_ID.to_string()),
+            ..ConfigToml::default()
+        },
+        ConfigOverrides::default(),
+        tempdir()?.abs(),
+    )
+    .await?;
+    assert_eq!(openai.forced_login_method, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn incompatible_fallback_uses_non_openai_provider_default() -> std::io::Result<()> {
+    use codex_model_provider_info::DEEPSEEK_DEFAULT_MODEL;
+    use codex_model_provider_info::DEEPSEEK_PROVIDER_ID;
+
+    // A foreign `gpt-*` model next to DeepSeek must resolve to DeepSeek's own
+    // default, never to None: None hands selection to the OpenAI catalogue,
+    // which then pairs an OpenAI model with DeepSeek and blocks the turn.
+    let cfg = toml::from_str::<ConfigToml>("model = \"gpt-6-astra\"\n")
+        .expect("config should deserialize");
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides {
+            model_provider: Some(DEEPSEEK_PROVIDER_ID.to_string()),
+            ..ConfigOverrides::default()
+        },
+        tempdir()?.abs(),
+    )
+    .await?;
+
+    assert_eq!(config.model_provider_id, DEEPSEEK_PROVIDER_ID);
+    assert_eq!(config.model.as_deref(), Some(DEEPSEEK_DEFAULT_MODEL));
     Ok(())
 }

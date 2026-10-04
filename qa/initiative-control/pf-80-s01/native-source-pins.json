@@ -1,0 +1,50 @@
+[
+  {
+    "root": ".",
+    "commit": "f17e5a54daba11c6da2554f14b62f11ace752142",
+    "files": [
+      {
+        "path": "codex-rs/cli/src/tasknode_cmd.rs",
+        "sha256": "1a86919ce6e8c986b9d1a9ff8bd06941c9c8daba2e3fca04cfc1c1724083eea1"
+      },
+      {
+        "path": "codex-rs/tasknode-session/src/client.rs",
+        "sha256": "bb940b67d6829dc789ceba71a7fd30b3f6c03f144654e5e9f4d37461302ec056"
+      },
+      {
+        "path": "codex-rs/tasknode-session/src/tracker.rs",
+        "sha256": "6f0dabb724253579ede012cfac3db818acd981081dd1ef71fdba06e9500cebeb"
+      },
+      {
+        "path": "codex-rs/tui/src/chatwidget/campaign_tracker.rs",
+        "sha256": "c0081c3b180cf6ef412e55ea897b1b96705260c876f47cf095a8beb6dddda712"
+      },
+      {
+        "path": "codex-rs/tui/src/chatwidget/tasknode_menu.rs",
+        "sha256": "42cbbbd8b1c75ec1cdf88c93ab5be0db6f247610b3a571158f4aa909a74828f7"
+      }
+    ]
+  },
+  {
+    "root": "/Volumes/CorbanuDrive/Corbanu/.codex-work/tasknode-beta.Rf2AJJ/tasknode-source",
+    "commit": "40d2df72710a644f33a2b30831061e8265716db0",
+    "files": [
+      {
+        "path": "server/campaign-tracker-contract.js",
+        "sha256": "a2f11df4adca1abe09b70bc4a0d7ae36118501831b13e884bc9e5de8c7198a7c"
+      },
+      {
+        "path": "server/campaign-tracker-routes.js",
+        "sha256": "9535786494b4e1b44291c4cdac26cce1cfe45854bbaa8f51dd5daa8b5503e9a8"
+      },
+      {
+        "path": "server/repositories/campaign-tracker.js",
+        "sha256": "eaf1a0112538afb6a56a337ff90069125521677c54acd692fa3a637c13f0b269"
+      },
+      {
+        "path": "server/campaign-tracker-model.js",
+        "sha256": "bd87a9c172b70d7126856fe8a5cc2ac9255650d08bf1a3968362b0d0044dbc8f"
+      }
+    ]
+  }
+]

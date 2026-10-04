@@ -1,0 +1,34 @@
+[
+  {
+    "pid": 33802,
+    "tz": "America/New_York",
+    "epoch": 1773144000,
+    "local": "2026-03-10T08:00:00-0400",
+    "expected_local": "2026-03-10T08:00:00-04:00",
+    "passed": true
+  },
+  {
+    "pid": 34045,
+    "tz": "UTC",
+    "epoch": 1773144000,
+    "local": "2026-03-10T12:00:00+0000",
+    "expected_local": "2026-03-10T12:00:00+00:00",
+    "passed": true
+  },
+  {
+    "pid": 34177,
+    "tz": "Asia/Kolkata",
+    "epoch": 1773144000,
+    "local": "2026-03-10T17:30:00+0530",
+    "expected_local": "2026-03-10T17:30:00+05:30",
+    "passed": true
+  },
+  {
+    "pid": 34302,
+    "tz": "America/Phoenix",
+    "epoch": 1773144000,
+    "local": "2026-03-10T05:00:00-0700",
+    "expected_local": "2026-03-10T05:00:00-07:00",
+    "passed": true
+  }
+]

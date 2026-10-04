@@ -73,14 +73,78 @@ owner must compare actual diffs to scope and record final combined-tree evidence
 
 ## Execution loop
 
+### Manager-owned continuation
+
+Travis's September 11 request to fix stalled orchestration authorizes the named
+integration owner to perform local receiving-branch integration, reconcile
+evidence, and revise exact worker allocations within already-approved active
+features. This is not permission to change a product contract or a hard gate.
+Do not ask the human to do routine allocation, branch preparation or bookkeeping.
+
+Travis's September 12 proactive-testing instruction: if an authorized test or
+qualification step holds up another task, start it now or dispatch a concrete
+bounded execution to an eligible subagent. Manager ownership is an assignment,
+not a reason to wait. Inspect actual tools and signed-in sessions and attempt
+safe preflight checks before requesting human execution. Preserve independent,
+code-blind acceptance requirements by assigning the right executor; an operator
+smoke test is not that acceptance. Record the attempt and evidence, or the exact
+missing prerequisite, owner and smallest actionable question. Continue other
+approved work while waiting. Do not leave executable tests in a holding pattern,
+repeat unchanged clean tests or infer broader external-action authority.
+
+Before a worker finishes, prepare the next bounded assignment and human test
+plan. On return, inspect its literal diff and independent review, integrate
+reviewed changes on the recorded local receiving branch, and run the combined
+tree's affected tests. Update Done/Remaining without equating a worker return,
+a passing test or a local merge with human acceptance. Preserve feature-OFF
+boundaries. Shared registration and policy edits remain manager-owned.
+
+Then either dispatch remaining work in the same sprint, or complete/archive
+the sprint and activate exactly one dependency-complete successor once all
+required evidence and decisions actually exist. A changed literal file
+allocation within approved feature scope is manager work: record it in plan
+and sprint, check overlap and coordinates, run both checkers, then dispatch.
+Preparing a successor while its predecessor is unfinished is allowed; starting
+its implementation is not. Do not split or waive dependencies merely to stay busy.
+
+Each reserved lane must have a running assignment, an executable next action,
+or a concrete blocker with owner, exact question, recommendation, affected scope
+and evidence. Manager-owned missing work stays in the manager queue, not marked
+as waiting on the human. Deliver newly required decisions to the human; a note
+hidden in a private packet does not count as asking. Continue independent work
+inside the approved sprint while waiting, without manufacturing busywork.
+
+When a decision stops implementation, also give a plain-language escalation in
+the user-facing response: stopped lane, running-worker count, exact question,
+recommendation, owner and consequence of waiting. A question card alone is not
+sufficient, especially when Travis is away. Maintain a stable manager-owned
+decision record for dashboard/approved alert projection; distinguish requested,
+sent, failed, delivery-uncertain, acknowledged and resolved. Missing alert
+integration must be explicit, never reported as delivered. Dashboard maintenance
+success does not mean product implementation is running. Process explicit answers
+into canonical records and the unlocked next action without another continue ask.
+
+Root AGENTS.md's September 12 delegation lets the named integrator extend review
+allowances to unblock work, preserving prior usage and recording each extension.
+One fresh independent review of a material candidate plus scoped corrections is
+normal, not repeated reviews of unchanged clean code. Move on when reviews have
+no substantive unresolved issues. The security owner retains sole implementation
+ownership; applicable functional acceptance is independently executed under the
+root policy. Only review-budget/time holds may be lifted by this delegation.
+Main merges/pushes, releases, deployments, live Task Node
+actions, new product contracts and paid-service commitments still need their
+separate authority. Current assignments/evidence are in the
+[manager handoff](../plans/workstream-manager-handoff-2026-09-11.md).
+
 1. Select the next dependency-complete sprint linked from the active plan.
 2. Resolve its exact worktree coordinates and set it to `ready`.
 3. Set it to `in_progress` before code changes.
 4. Execute only `Remaining` items; move verified work to `Done` with `[x]`.
 5. Run formatting before final affected tests and true-TUI QA.
    For user-facing work, collect the root policy's code-blind functional design
-   before disclosing test results, then execute its cases and reconcile every
-   disposition before human handoff. Link the record and shared review budget.
+   before disclosing test results, then assign independent permission-isolated
+   execution and reconcile every disposition before human handoff. Link schema-2
+   execution/isolation receipts, separate evidence review and shared review budget.
 6. Complete every verification and exit-evidence checkbox.
 7. Set status to `completed`, move the file to `archive/<plan-slug>/`, and remove
    it from current MkDocs navigation.
@@ -90,9 +154,9 @@ owner must compare actual diffs to scope and record final combined-tree evidence
 
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
-| [PF-13 / security — workstream 1](../plans/active/p0-security-levels.md) | Active | [52 current sprints](current/p0-security-levels/index.md), 32 completed archives | PF-35 remains external; PF-27-S04 draft pending fresh integration allocation |
-| [Accounting — workstream 2](../plans/active/portfolio-agent-cost-accounting.md) | Active | 4 sequential PF-60 sprints | S01 contract/fixtures selected for independent Astra High allocation after main merge |
-| [Task Node — workstream 3](../plans/active/initiative-delivery-control.md) | Active | PF-80-S01 then two PF-79 beta drafts | Scoped main port and progress qualification first; beta not launched |
+| [PF-13 / security — workstream 1](../plans/active/p0-security-levels.md) | Active | [52 current sprints](current/p0-security-levels/index.md), 32 completed archives | Accepted main d870c92da and owner allocation ca9774262 reconciled; PF-35 external, PF-27-S04 in progress in its fresh owner worktree |
+| [Accounting — workstream 2](../plans/active/portfolio-agent-cost-accounting.md) | Active | 3 current PF-60 sprints; S01 archived | S02 isolated native-state journal allocated after S01 review and defaults approval; no live collection |
+| [Task Node — workstream 3](../plans/active/initiative-delivery-control.md) | Active | PF-80-S01, two PF-79 beta drafts, PF-81-S01 visual QA draft | Offline native increments integrated locally; latest validity worker returned for manager review; beta/harness dependencies unchanged |
 | [Unified provider onboarding and management](../plans/proposed/unified-provider-auth.md) | Deferred | [1 current sprint](current/unified-provider-auth/index.md) | PF-58 human accepted for integration; residual automated/native qualification retained separately |
 | [Arbitrary-model Autoreview](../plans/proposed/arbitrary-model-autoreview.md) | Proposed | [7 draft sprints](current/arbitrary-model-autoreview/index.md) | None until plan activation and sprint worktree allocation |
 | [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | Historical 72-sprint decomposition remains cancelled; every record maps into the active P0 plan's current work |
@@ -105,7 +169,11 @@ baseline had 60 current and 121 archived records; the initial 50 plus two new PF
 and 121 archived records. The seven inherited sprint-link/ID errors are resolved;
 see the [identity reconciliation](identity-reconciliation-2026-09-10.md).
 September 11 adds PF-80-S01 (renamed operations PF-76) and PF-79-S01/S02:
-115 current, 121 archived. The three-initiative policy is now explicit; all
+115 current, 121 archived. The subsequent PF-81-S01 visual-QA planning amendment
+adds one dependent draft: 116 current, 121 archived, still only three reserved.
+S01 accounting closeout then transfers its reservation to S02: 115 current,
+122 archived, still three reserved and no extra initiative.
+The three-initiative policy is now explicit; all
 identity/dependency regression checks remain, with no error exceptions.
 Each proposal's sprint execution map links every draft directly.
 

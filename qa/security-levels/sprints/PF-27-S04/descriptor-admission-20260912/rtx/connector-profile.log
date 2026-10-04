@@ -1,0 +1,35 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.21s
+────────────
+ Nextest run ID 6afbb1ca-a5df-4ba0-9337-1fc81a0ac9c6 with nextest profile: local
+    Starting 1 test across 7 binaries (66 tests skipped)
+        FAIL [   0.003s] (1/1) codex-secret-broker-service launch::manifest::elf::tests::pf_27_s01_elf_profile_frozen_artifacts_as_data
+  stdout ───
+
+    running 1 test
+    test launch::manifest::elf::tests::pf_27_s01_elf_profile_frozen_artifacts_as_data ... FAILED
+
+    failures:
+
+    failures:
+        launch::manifest::elf::tests::pf_27_s01_elf_profile_frozen_artifacts_as_data
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 45 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'launch::manifest::elf::tests::pf_27_s01_elf_profile_frozen_artifacts_as_data' (1042222) panicked at secret-broker-service/src/launch/manifest/elf_tests.rs:236:9:
+    assertion failed: `(left == right)`: PF27_ELF_STATIC
+
+    Diff < left / right > :
+    <false
+    >true
+
+
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+────────────
+     Summary [   0.013s] 1 test run: 0 passed, 1 failed, 66 skipped
+        FAIL [   0.003s] (1/1) codex-secret-broker-service launch::manifest::elf::tests::pf_27_s01_elf_profile_frozen_artifacts_as_data
+error: test run failed
+error: recipe `test` failed on line 82 with exit code 100

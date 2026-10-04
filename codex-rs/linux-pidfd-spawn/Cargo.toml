@@ -1,0 +1,21 @@
+[package]
+name = "codex-linux-pidfd-spawn"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+doctest = false
+
+[features]
+synthetic-fixture = []
+
+[lints]
+workspace = true
+
+[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
+libc = { workspace = true }
+rustix = { version = "1.1.4", features = ["fs", "process"] }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

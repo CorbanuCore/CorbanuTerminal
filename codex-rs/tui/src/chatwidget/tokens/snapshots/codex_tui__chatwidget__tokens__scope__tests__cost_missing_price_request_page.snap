@@ -1,0 +1,14 @@
+---
+source: tui/src/chatwidget/tokens/scope_tests.rs
+expression: "pages[1].text.join(\"\\n\")"
+---
+Provider: local-mock
+Model: mock-model
+Billing: Pay per use
+Estimated cost: no price available
+Next step for requests with no price: check the bill from local-mock. No published price covers them, so only their tokens are shown here, not a cost.
+Tokens: 55 tokens
+—— Details ——
+Request: 00000000-0000-0000-0000-0000000003ea
+Estimate versus billed difference: unknown — no settlement evidence
+Billed cost: unavailable — no settlement evidence

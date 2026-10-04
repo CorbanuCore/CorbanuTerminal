@@ -1971,6 +1971,31 @@
           "type": "object"
         },
         {
+          "description": "Report a model request the client sent itself, so it reaches the ledger.",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/RequestId"
+            },
+            "method": {
+              "enum": [
+                "thread/recordSentModelRequest"
+              ],
+              "title": "Thread/recordSentModelRequestRequestMethod",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/definitions/ThreadRecordSentModelRequestParams"
+            }
+          },
+          "required": [
+            "id",
+            "method",
+            "params"
+          ],
+          "title": "Thread/recordSentModelRequestRequest",
+          "type": "object"
+        },
+        {
           "properties": {
             "id": {
               "$ref": "#/definitions/RequestId"
@@ -9767,6 +9792,35 @@
         }
       ]
     },
+    "MeteredRates": {
+      "description": "Per-token API rates, in milli-USD per million tokens.",
+      "properties": {
+        "cached_input_milli_usd_per_million_tokens": {
+          "default": null,
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "input_milli_usd_per_million_tokens": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "output_milli_usd_per_million_tokens": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "input_milli_usd_per_million_tokens",
+        "output_milli_usd_per_million_tokens"
+      ],
+      "type": "object"
+    },
     "MigrationDetails": {
       "properties": {
         "commands": {
@@ -10089,6 +10143,57 @@
             "input_milli_usd_per_million_tokens",
             "kind",
             "output_milli_usd_per_million_tokens"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Per-token rates that differ between peak windows and the rest of the week.\n\nThe rate that applies is the one in force at the dispatch instant, so a ledger states what a request was actually charged, not a range.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "metered_schedule"
+              ],
+              "type": "string"
+            },
+            "off_peak": {
+              "$ref": "#/definitions/MeteredRates"
+            },
+            "off_peak_dates_utc": {
+              "default": [],
+              "description": "UTC calendar dates (`YYYY-MM-DD`) with no peak at all, such as the provider's published holidays.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "peak": {
+              "$ref": "#/definitions/MeteredRates"
+            },
+            "peak_weekdays": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/WeekdaySet"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "UTC weekdays on which the peak windows apply. Omitted means every day."
+            },
+            "peak_windows": {
+              "description": "Peak windows. Outside every window the off-peak rates apply.",
+              "items": {
+                "$ref": "#/definitions/UtcHourWindow"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "off_peak",
+            "peak",
+            "peak_windows"
           ],
           "type": "object"
         },
@@ -18497,6 +18602,55 @@
       "title": "ThreadRealtimeTranscriptDoneNotification",
       "type": "object"
     },
+    "ThreadRecordSentModelRequestParams": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "description": "One model request a client sent itself, reported so the operator's ledger can record spend this process never saw.\n\nThe Claude panes bridge is the caller: it posts to a provider from inside the TUI, which does not run the model client. Only routes the server recognises are recorded.",
+      "properties": {
+        "baseUrl": {
+          "description": "The base URL the request went to, and the endpoint underneath it.",
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "providerId": {
+          "description": "The account the client believes it billed. Recorded only when the server knows this provider and the route below is its own.",
+          "type": "string"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "usage": {
+          "description": "The `usage` object the provider's response carried, if it carried one."
+        }
+      },
+      "required": [
+        "baseUrl",
+        "model",
+        "path",
+        "providerId",
+        "threadId"
+      ],
+      "title": "ThreadRecordSentModelRequestParams",
+      "type": "object"
+    },
+    "ThreadRecordSentModelRequestResponse": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "properties": {
+        "recorded": {
+          "description": "False when the server is not collecting, or does not recognise the route. Never an error: reporting spend must not fail the work.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "recorded"
+      ],
+      "title": "ThreadRecordSentModelRequestResponse",
+      "type": "object"
+    },
     "ThreadResumeInitialTurnsPageParams": {
       "properties": {
         "itemsView": {
@@ -18968,6 +19122,24 @@
         "sandboxPolicy"
       ],
       "type": "object"
+    },
+    "ThreadSettingsUpdateOutcome": {
+      "oneOf": [
+        {
+          "description": "Core applied this operation. Existing command turns retain their authority.",
+          "enum": [
+            "applied"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Application could not be determined. Do not retry automatically.",
+          "enum": [
+            "uncertain"
+          ],
+          "type": "string"
+        }
+      ]
     },
     "ThreadSettingsUpdatedNotification": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -20232,6 +20404,26 @@
           "type": "object"
         }
       ]
+    },
+    "UtcHourWindow": {
+      "description": "A `[start, end)` window in whole UTC hours; it may wrap past midnight.",
+      "properties": {
+        "end_utc_hour": {
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "start_utc_hour": {
+          "format": "uint8",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "end_utc_hour",
+        "start_utc_hour"
+      ],
+      "type": "object"
     },
     "Verbosity": {
       "description": "Controls output length/detail on GPT-5 models via the Responses API. Serialized with lowercase values to match the OpenAI API.",

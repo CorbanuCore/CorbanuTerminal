@@ -1,0 +1,44 @@
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                         │
+│                                                       │
+│ model:       claude-fable-5-1-plan   /model to change │
+│ directory:   /mnt/…/corbanu-0.1.42-qa/tensorcash      │
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────╯
+
+
+› Confirm after restart, without tools.
+
+
+• REPLACEMENT_WORKS
+
+
+› Run /review on my current changes
+
+  Claude Fable 5.1 Plan default · /mnt/HC_Volume_101713660…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

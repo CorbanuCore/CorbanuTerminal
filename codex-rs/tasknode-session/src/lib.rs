@@ -37,7 +37,11 @@ use sha2::Sha256;
 
 mod client;
 mod commands;
+mod delivery_goal;
+#[cfg(test)]
+mod delivery_send;
 mod recovery;
+mod session_validity;
 mod stream;
 pub mod tracker;
 pub use client::Client;

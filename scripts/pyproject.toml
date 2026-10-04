@@ -7,3 +7,9 @@ dependencies = ["ruff>=0.15.8"]
 [tool.uv]
 exclude-newer = "7 days"
 index-strategy = "first-index"
+
+[tool.ruff]
+# scripts/initiative_control is the management workstream's ops toolkit. It is
+# edited concurrently from live checkouts, so a bulk reformat would collide
+# with in-flight work; format it when that work settles.
+extend-exclude = ["initiative_control"]

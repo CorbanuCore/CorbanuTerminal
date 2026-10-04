@@ -1,0 +1,287 @@
+[
+  {
+    "source": "codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__command_popup__tests__command_popup_app.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__bottom_pane__command_popup__tests__command_popup_app.snap.new.txt",
+    "sha256": "19561f0cc5f2b0d48460b2eed853d7e7aedaa02110ca558a99f9f1f3db29a52f"
+  },
+  {
+    "source": "codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__command_popup__tests__command_popup_default_items.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__bottom_pane__command_popup__tests__command_popup_default_items.snap.new.txt",
+    "sha256": "5dffd53bf549f193449fc18360688626f820114dcbd716b549a13e2bec5b6554"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__app_server_guardian_review_denied_renders_denied_request.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__app_server_guardian_review_denied_renders_denied_request.snap.new.txt",
+    "sha256": "92295ff3151d5f9d0ad2174df6c8b02901f8cd31ed0ecb3a2a13807c23d70d39"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__app_server_guardian_review_timed_out_renders_timed_out_request.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__app_server_guardian_review_timed_out_renders_timed_out_request.snap.new.txt",
+    "sha256": "72f5e1d4fd753917da76727c1ab541f02553e838d547531738254f90c83dd996"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__app_server_mcp_startup_failure_renders_warning_history.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__app_server_mcp_startup_failure_renders_warning_history.snap.new.txt",
+    "sha256": "c32f26d32c5e77bc0fb4fc723bc20f63f204fdafaf7e9c64169f9a0543ed7573"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__astra_openai_model_picker.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__astra_openai_model_picker.snap.new.txt",
+    "sha256": "d8f7e9d4ad4025166f896cfc1ca3a97d2a55ee607e93dd4b2a60e9d51443e7ba"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__chatwidget_tall.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__chatwidget_tall.snap.new.txt",
+    "sha256": "c41a1078f4cc34278d5c23d23fead3cfd5ccdf5808df00001a29b44241118ecc"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__compact_queues_user_messages_snapshot.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__compact_queues_user_messages_snapshot.snap.new.txt",
+    "sha256": "7d6126d167be8c1b2cb6c397d37beda8edeb0e2f7603ecb132e00e98ed64d66c"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_approved_exec_renders_approved_request.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__guardian_approved_exec_renders_approved_request.snap.new.txt",
+    "sha256": "03b1a22b66a123f7a4e69d6bc46ac395307cdad4e56193e709d908fdc858072f"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_approved_request_permissions_renders_request_summary.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__guardian_approved_request_permissions_renders_request_summary.snap.new.txt",
+    "sha256": "161fb551d7db9fe697b8dad58a82e4071f6b9ea734add54a8f94ecfa39d77d71"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_denied_exec_renders_warning_and_denied_request.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__guardian_denied_exec_renders_warning_and_denied_request.snap.new.txt",
+    "sha256": "011842342ac1b380e91cbedebfd7ea7f0517997f7e0de51846c423d4baab3557"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_goal_continuation_drops_stale_reviews.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__guardian_goal_continuation_drops_stale_reviews.snap.new.txt",
+    "sha256": "6aaedcd1eaf6c248adcf99a2aae6e30f05a0bb258a8f99749fcecefda7c9a7ce"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_parallel_reviews_render_aggregate_status.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__guardian_parallel_reviews_render_aggregate_status.snap.new.txt",
+    "sha256": "c761ad89fbed2d649dd87a3fb86d083e1ef992740812cdd7c92fe7c171d0b3d2"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__guardian_timed_out_exec_renders_warning_and_timed_out_request.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__guardian_timed_out_exec_renders_warning_and_timed_out_request.snap.new.txt",
+    "sha256": "d9a0ce78eba7b4e297aa19012c0b048c98ff07c9ff2749856787989ebbb39f5a"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__image_generation_begin_restores_working_status.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__image_generation_begin_restores_working_status.snap.new.txt",
+    "sha256": "e9179cf5619fecb4e68cd81bb0d5f70749a8f7e8ece182234f8a38c6100286d0"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__mcp_startup_header_booting.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__mcp_startup_header_booting.snap.new.txt",
+    "sha256": "96fff4d6c04e7f7589b8af900eaddc128b5c30cbc23faf9c643b320e0395beaf"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__model_selection_popup.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__model_selection_popup.snap.new.txt",
+    "sha256": "b2adbb22cfb343f9fe27068d1b9e24164f6544684af65154e07c2638e9e124e4"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__model_selection_popup_kimi_code_provider.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__model_selection_popup_kimi_code_provider.snap.new.txt",
+    "sha256": "7d4b973cf1c5024c78c16e9dde5b3b1a0eec29e08e5ff54e509756e2e53e5926"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__model_selection_popup_openai_provider.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__model_selection_popup_openai_provider.snap.new.txt",
+    "sha256": "91f93f6bed7d02a5c1751423d3c3b3ede0f3070c316f5ad81d25bdc803a6faf0"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__model_selection_popup_openrouter_provider.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__model_selection_popup_openrouter_provider.snap.new.txt",
+    "sha256": "c9ebe4eb16fd0cd6bd0d0b29a5dd3136eaf4c68b772857b6d0def17f7324f462"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__pending_token_activity_refresh_renders_above_composer_snapshot.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__pending_token_activity_refresh_renders_above_composer_snapshot.snap.new.txt",
+    "sha256": "8f275e45c42b73ed2ea07777eb8a2629bf633289f79a189b3b5fc9a7473bceb9"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__preamble_keeps_working_status.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__preamble_keeps_working_status.snap.new.txt",
+    "sha256": "f84ee7485489e36c066b765c1eaf1b895d93f657ddf43ac33163e82a0d2cc83d"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__reasoning_delta_restores_recreated_status_indicator.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__reasoning_delta_restores_recreated_status_indicator.snap.new.txt",
+    "sha256": "894045f2f9d1fd9ce96716a6209b7bd694a4fe2d1e9c33b1b51e5f904720690b"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__review_queues_user_messages_snapshot.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__review_queues_user_messages_snapshot.snap.new.txt",
+    "sha256": "599bdfc0f58683a5b1b5288bfaec74c3d8971512af37a782e0a9abef52b24f08"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__side_context_label_shows_hidden_side.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__side_context_label_shows_hidden_side.snap.new.txt",
+    "sha256": "c9dcfcd6952a13dac4678db8ddce7e0df065fc0e86d00efb3575bd2c6f9cb156"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__slash_side_requests_forked_side_question_while_task_running.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__slash_side_requests_forked_side_question_while_task_running.snap.new.txt",
+    "sha256": "06c57b1d8e5b67429ef2f78ab191bd8bf1486bb6b40476e8a205b773202d36d5"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__spawn_model_selection_popup.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__spawn_model_selection_popup.snap.new.txt",
+    "sha256": "687319421e56c57620628b65a4b4090f983bf51d92474c5aa8816b1d7694b936"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__spawn_model_selection_popup_deepseek_provider.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__spawn_model_selection_popup_deepseek_provider.snap.new.txt",
+    "sha256": "34d1036e8c2f49f23da58f7374077632aa0e8128ccba7d5a2b81f0022c21b936"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_surface_previews_hardcoded_only.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__status_surface_previews_hardcoded_only.snap.new.txt",
+    "sha256": "d21a21a20c55ccea77d0aab7ccde2db55955f0967dd20346234447719072359e"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_surface_previews_mixed.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__status_surface_previews_mixed.snap.new.txt",
+    "sha256": "02ee9e4df3c24dcd01ff40941df8e70f6b2932741f526e5504fd5be731bdefb0"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__status_widget_active.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__status_widget_active.snap.new.txt",
+    "sha256": "52772502caf7f30521fec06a9eadaf0760ac6e3e6bd5a941e786a319c80ecaae"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__unified_exec_begin_restores_working_status.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__unified_exec_begin_restores_working_status.snap.new.txt",
+    "sha256": "7cbc5662e5591dd397b95b84d312f0f0b5996d971c1b87db36205f36510e39ea"
+  },
+  {
+    "source": "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__unified_exec_wait_status_renders_command_in_single_details_row.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__chatwidget__tests__unified_exec_wait_status_renders_command_in_single_details_row.snap.new.txt",
+    "sha256": "aa35b9b63713820a990c16df8210af6a39b8fdbeb0bbb5d4f611dde041135203"
+  },
+  {
+    "source": "codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__session_info_availability_nux_tooltip_snapshot.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__history_cell__tests__session_info_availability_nux_tooltip_snapshot.snap.new.txt",
+    "sha256": "8b06983889d18d4c047bfef185401c4d7440dad688f594a51a7e1972ceaeac8c"
+  },
+  {
+    "source": "codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__history_cell__tests__standalone_unix_update_available_history_cell_snapshot.snap.new.txt",
+    "sha256": "51c5da11981f73c6bfdaec7186e43d5f62ca000e623597d6083861daa1038db6"
+  },
+  {
+    "source": "codex-rs/tui/src/history_cell/snapshots/codex_tui__history_cell__tests__standalone_windows_update_available_history_cell_snapshot.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__history_cell__tests__standalone_windows_update_available_history_cell_snapshot.snap.new.txt",
+    "sha256": "96d0dcd7dc7918fa60c4c96e2f4e10b866dd3b8db0cabc927f71bcc6365c2472"
+  },
+  {
+    "source": "codex-rs/tui/src/snapshots/codex_tui__app__tests__model_change_refreshes_committed_session_header.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__app__tests__model_change_refreshes_committed_session_header.snap.new.txt",
+    "sha256": "d54164e5c41e9a04cbb21414c027ceb5ab1291b5a5b4d9b6cedadd52b2dcf961"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_cached_limits_hide_credits_without_flag.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_cached_limits_hide_credits_without_flag.snap.new.txt",
+    "sha256": "0707689d402d8aaf2da1edec8f886d6ddda0077a1694e353556a1272398fa724"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_includes_credits_and_limits.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_includes_credits_and_limits.snap.new.txt",
+    "sha256": "3777cc49a8cfefb5df4c07fa7d13a6cd30a28ff558e6f5896db8e0e0e0091290"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_includes_enterprise_monthly_credit_limit.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_includes_enterprise_monthly_credit_limit.snap.new.txt",
+    "sha256": "6fa90dfaa54f21acd02807a169f2ac571d6d4f1697600f6b3bff54e4cd1aa3e8"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_includes_forked_from.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_includes_forked_from.snap.new.txt",
+    "sha256": "34e42a03c645a7140eb645ec6881ea136a8bef77b66d00ba9ea6ebdd1042df07"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_includes_monthly_limit.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_includes_monthly_limit.snap.new.txt",
+    "sha256": "2aa169deff8d932593d2984583c35e9017032d6e7473cbaf2c2008c02d5786a5"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_includes_reasoning_details.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_includes_reasoning_details.snap.new.txt",
+    "sha256": "2915cc259b58e052972af69ec9415f10eac7895a1427f1b021f2363dd1504e85"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_shows_active_user_defined_profile.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_shows_active_user_defined_profile.snap.new.txt",
+    "sha256": "3f85903452c6738acc3d5b4fd18e6daa9ed029fcec5745510b501af7c3bde40b"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_shows_auto_review_permissions.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_shows_auto_review_permissions.snap.new.txt",
+    "sha256": "6583069d80556c63394376dd875c6e8698f5177a302e265c9f539833cc207c7d"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_shows_chatgpt_plan_without_email.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_shows_chatgpt_plan_without_email.snap.new.txt",
+    "sha256": "f8d2c392cc32f01f7c138ae317544bbe1daabb6d4633c944a1863e1001afc2ca"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_shows_missing_limits_message.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_shows_missing_limits_message.snap.new.txt",
+    "sha256": "25f4f6960b008dc97a83a494bd3f7da6a2b58a65863a31dc4e9acc998920bf12"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_shows_refreshing_limits_notice.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_shows_refreshing_limits_notice.snap.new.txt",
+    "sha256": "1ae82fc1aa51f77b720991c9af37e4c07b06d498c4f85675a9c16e4b3500e08b"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_shows_stale_limits_message.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_shows_stale_limits_message.snap.new.txt",
+    "sha256": "629ad230c7a97c453fd2f5c5cc734f87dfc8c81a4ed891a0062076eba83cbb4d"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_shows_unavailable_limits_message.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_shows_unavailable_limits_message.snap.new.txt",
+    "sha256": "0ead4365d1a03412ee255b466274c0e3c16a590a38201531cbf3cbb27749de47"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_treats_refreshing_empty_limits_as_unavailable.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_treats_refreshing_empty_limits_as_unavailable.snap.new.txt",
+    "sha256": "051a3f6607ea735aafed30e852213917593ba81248127e4325c92365fd8c8b60"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_truncates_halfwidth_kana_in_narrow_terminal.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_truncates_halfwidth_kana_in_narrow_terminal.snap.new.txt",
+    "sha256": "a44da15dd84a111068b1669583b237b8b6a674eab5929f74b449c5ce8d645a34"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_truncates_in_narrow_terminal.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_truncates_in_narrow_terminal.snap.new.txt",
+    "sha256": "c6787a9df644f9fc69a3e477e14963b34bf10bf5723748c044b9400eae38b73e"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_uses_command_backed_provider_account_identity.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_uses_command_backed_provider_account_identity.snap.new.txt",
+    "sha256": "8f86f45da1ec7ec7c33cd69ac12b620984783784844ded14ca6372d84a97b1fd"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_uses_default_reasoning_when_config_empty.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_uses_default_reasoning_when_config_empty.snap.new.txt",
+    "sha256": "12e7deb42baa2980bd28925f6c5cefcb820aff3b7d539413d83031392f78d412"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__status_snapshot_uses_generic_limit_labels_for_unsupported_windows.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__status_snapshot_uses_generic_limit_labels_for_unsupported_windows.snap.new.txt",
+    "sha256": "24f4d65b2bf3c7bae4d5e8596aeec2e394661067e176ec584b4efd977100aaf8"
+  },
+  {
+    "source": "codex-rs/tui/src/status/snapshots/codex_tui__status__tests__transcript_overlay_status_rate_limit_refresh.snap.new",
+    "artifact": "qa/portfolio/agent-cost-accounting/pf-60-s03/full-suite-unaccepted/codex_tui__status__tests__transcript_overlay_status_rate_limit_refresh.snap.new.txt",
+    "sha256": "c474e2282fb3e833e1af23c77213d205477de54a63a8552f1d07d29064405725"
+  }
+]

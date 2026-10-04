@@ -251,6 +251,61 @@ fn apply_persisted_thread_runtime(
     }
 }
 
+fn merge_persisted_service_tier(
+    history: &[RolloutItem],
+    request_overrides: Option<&HashMap<String, serde_json::Value>>,
+    typesafe_overrides: &mut ConfigOverrides,
+) {
+    if typesafe_overrides.service_tier.is_some()
+        || request_overrides.is_some_and(|overrides| overrides.contains_key("service_tier"))
+        || has_model_resume_override(request_overrides, typesafe_overrides)
+    {
+        return;
+    }
+    let runtime = latest_persisted_thread_runtime(history);
+    let tier = history
+        .iter()
+        .rev()
+        .find_map(|item| match item {
+            RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) => {
+                let settings = &event.thread_settings;
+                // TurnContext does not carry a tier. Never restore a tier from an older model.
+                Some(
+                    if runtime.as_ref().is_some_and(|runtime| {
+                        runtime.model == settings.model
+                            && runtime
+                                .model_provider
+                                .as_ref()
+                                .is_none_or(|provider| provider == &settings.model_provider_id)
+                    }) {
+                        settings.service_tier.clone()
+                    } else {
+                        None
+                    },
+                )
+            }
+            _ => None,
+        })
+        .flatten();
+    // Explicit standard routing also shields legacy sessions without a tier record from
+    // today's unrelated global default. No history/schema migration is needed.
+    typesafe_overrides.service_tier = Some(tier);
+}
+
+fn prepend_missing_resume_settings(context: &mut Vec<RolloutItem>, history: &[RolloutItem]) {
+    if let Some(settings) = history.iter().rev().find(|item| {
+        matches!(
+            item,
+            RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(_))
+        )
+    }) {
+        // Keep the newer model-context suffix authoritative; this older metadata only supplies
+        // fields (notably tier) that TurnContext cannot represent.
+        let position = usize::from(matches!(context.first(), Some(RolloutItem::SessionMeta(_))));
+        context.insert(position, settings.clone());
+    }
+}
+
 fn merge_persisted_approvals_reviewer(
     history: &[RolloutItem],
     request_overrides: Option<&HashMap<String, serde_json::Value>>,
@@ -3860,6 +3915,11 @@ impl ThreadRequestProcessor {
         );
         let had_explicit_model_override =
             has_model_resume_override(request_overrides.as_ref(), typesafe_overrides);
+        merge_persisted_service_tier(
+            &resumed_history.history,
+            request_overrides.as_ref(),
+            typesafe_overrides,
+        );
         let persisted_metadata = match self.state_db.as_ref() {
             Some(state_db_ctx) => state_db_ctx
                 .get_thread(resumed_history.conversation_id)
@@ -4173,7 +4233,7 @@ impl ThreadRequestProcessor {
         stored_thread: StoredThread,
     ) -> Result<(InitialHistory, StoredThread), JSONRPCErrorError> {
         if matches!(stored_thread.history_mode, ThreadHistoryMode::Paginated) {
-            let model_context = self
+            let mut model_context = self
                 .thread_store
                 .load_latest_model_context(StoreLoadThreadHistoryParams {
                     thread_id: stored_thread.thread_id,
@@ -4181,6 +4241,25 @@ impl ThreadRequestProcessor {
                 })
                 .await
                 .map_err(thread_store_resume_read_error)?;
+            if !model_context.items.iter().any(|item| {
+                matches!(
+                    item,
+                    RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(_))
+                )
+            }) {
+                // A compacted suffix is not evidence that the thread never recorded a tier.
+                // Use the existing store history API (including fork lineage), not a raw path.
+                // This cold-resume fallback may read the full history; it does not replay it.
+                let durable = self
+                    .thread_store
+                    .load_history(StoreLoadThreadHistoryParams {
+                        thread_id: stored_thread.thread_id,
+                        include_archived: true,
+                    })
+                    .await
+                    .map_err(thread_store_resume_read_error)?;
+                prepend_missing_resume_settings(&mut model_context.items, &durable.items);
+            }
             let history = InitialHistory::Resumed(ResumedHistory {
                 conversation_id: model_context.thread_id,
                 history: Arc::new(model_context.items),

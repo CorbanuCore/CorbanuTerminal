@@ -1,0 +1,34 @@
+{
+  "label": "block-02",
+  "command": [
+    "bash",
+    "--noprofile",
+    "--norc",
+    "-x",
+    "-c",
+    "set -eu\nq=qa/portfolio/agent-cost-accounting/pf-60-s03\ntest \"$(git rev-parse --show-toplevel)\" = \"$PWD\"\ntest \"$(git config --local --get corbanu.replayRoot)\" = \"$PWD\"\ntest \"$(git config --local --get corbanu.replayCandidate)\" = \"$(git rev-parse HEAD)\"\nrc=0\npython3 -B \"$q/acct-inventory-79/verify_acceptance.py\" || rc=$?\nprintf 'Acceptance exit: %s (expected 2)\\n' \"$rc\"\ntest \"$rc\" -eq 2\npython3 -B \"$q/acct-inventory-79/check_verifier.py\"\npython3 -B \"$q/acct-selfcheck-84/check_current_tip.py\"\n"
+  ],
+  "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/target/audit-copy",
+  "note_sha256": "5bb815f274e38d3f851fa7fa39892b716874cf7983f7d92ea66bb7f57cfde691",
+  "script_sha256": "c9aefe9485ab87669d5b14fa9f7a9a6842b095eff23faab7d0cb5b0b06bc0570",
+  "log_sha256": "99f31a7a87466db10638b24abf56b487740ccc7fe2903c8edfc881bd49a66def",
+  "exit": 0,
+  "expected_exit": 0,
+  "elapsed_seconds": 8.020301103591919,
+  "fresh_shell": true,
+  "environment_keys": [
+    "CARGO_HOME",
+    "CARGO_TERM_COLOR",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "LC_ALL",
+    "PATH",
+    "PYTHONDONTWRITEBYTECODE",
+    "RUSTUP_HOME",
+    "TERM",
+    "TMPDIR"
+  ],
+  "explicit_inputs": {}
+}

@@ -1,0 +1,4 @@
+85e64f97e348786a8fb4d9f3d52fec289e2fb86bba20f0731dfe61990525e0f7  /lib/x86_64-linux-gnu/libc.so.6
+f6ca8e3368dcbc8e5ba92bbbc7860ee825628b9470ac53116c6c3f6996bef3f0  /home/travis/security-round5/evidence/pf27-static-probe-20260912/linkage-retry/candidate/codex-protected-root-probe
+59ba145dc8178ae9680914943e8ba12c23c37d17ac4cc4a05a423539cbda1a6f  /home/travis/security-round5/evidence/pf27-adapter-20260912/profile-final/hold
+cc821a2ee024b3f17a9073de108a6212e5f2c34f77818715b775c59f880477ca  /home/travis/security-round5/evidence/pf27-adapter-20260912/profile-final/inspect

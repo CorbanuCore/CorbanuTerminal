@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use super::model::CommandOutcome;
 use super::model::CommandOutput;
 use super::model::ExecCall;
 use super::model::ExecCell;
@@ -111,7 +112,13 @@ pub(crate) fn output_lines(
         include_prefix,
     } = params;
     let output = match output {
-        Some(output) if only_err && output.exit_code == 0 => {
+        Some(output)
+            if only_err
+                && matches!(
+                    output.outcome,
+                    CommandOutcome::Running | CommandOutcome::Exited(0)
+                ) =>
+        {
             return OutputLines {
                 lines: Vec::new(),
                 omitted: None,
@@ -185,7 +192,12 @@ fn activity_marker(start_time: Option<Instant>, animations_enabled: bool) -> Spa
 
 impl HistoryCell for ExecCell {
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
-        if self.is_exploring_cell() {
+        if self.is_exploring_cell()
+            && !self
+                .calls
+                .iter()
+                .any(|call| call.is_declined() || call.is_unknown())
+        {
             self.exploring_display_lines(width)
         } else {
             self.command_display_lines(width)
@@ -208,6 +220,11 @@ impl HistoryCell for ExecCell {
             );
             lines.extend(cmd_display);
 
+            if call.is_declined() {
+                lines.push(Line::from("✗ Did not run (approval declined)".red()));
+                continue;
+            }
+
             if let Some(output) = call.output.as_ref() {
                 if !call.is_unified_exec_interaction() {
                     let wrap_width = width.max(1) as usize;
@@ -220,15 +237,19 @@ impl HistoryCell for ExecCell {
                         push_owned_lines(&wrapped, &mut lines);
                     }
                 }
-                if let Some(duration) = call.duration {
+                if call.is_unknown() {
+                    lines.push(Line::from(
+                        "✗ Execution unconfirmed (no exit status received)".red(),
+                    ));
+                }
+                if let Some(duration) = call.duration
+                    && let CommandOutcome::Exited(exit_code) = output.outcome
+                {
                     let duration = format_duration(duration);
-                    let mut result: Line = if output.exit_code == 0 {
+                    let mut result: Line = if exit_code == 0 {
                         Line::from("✓".green().bold())
                     } else {
-                        Line::from(vec![
-                            "✗".red().bold(),
-                            format!(" ({})", output.exit_code).into(),
-                        ])
+                        Line::from(vec!["✗".red().bold(), format!(" ({exit_code})").into()])
                     };
                     result.push_span(format!(" • {duration}").dim());
                     lines.push(result);
@@ -350,22 +371,36 @@ impl ExecCell {
     }
 
     fn command_display_lines(&self, width: u16) -> Vec<Line<'static>> {
-        let [call] = &self.calls.as_slice() else {
-            panic!("Expected exactly one call in a command display cell");
-        };
+        self.iter_calls()
+            .flat_map(|call| self.call_display_lines(call, width))
+            .collect()
+    }
+
+    fn call_display_lines(&self, call: &ExecCall, width: u16) -> Vec<Line<'static>> {
         let layout = EXEC_DISPLAY_LAYOUT;
-        let success = call
-            .duration
-            .and_then(|_| call.output.as_ref().map(|o| o.exit_code == 0));
-        let bullet = match success {
-            Some(true) => "•".green().bold(),
-            Some(false) => "•".red().bold(),
-            None => activity_marker(call.start_time, self.animations_enabled()),
+        let success = call.duration.and_then(|_| {
+            call.output
+                .as_ref()
+                .map(|o| o.outcome == CommandOutcome::Exited(0))
+        });
+        let bullet = if call.is_declined() || call.is_unknown() {
+            "✗".red().bold()
+        } else {
+            match success {
+                Some(true) => "•".green().bold(),
+                Some(false) => "•".red().bold(),
+                None => activity_marker(call.start_time, self.animations_enabled()),
+            }
         };
-        let is_interaction = call.is_unified_exec_interaction();
-        let title = if is_interaction {
+        let is_interaction =
+            call.is_unified_exec_interaction() && !call.is_declined() && !call.is_unknown();
+        let title = if call.is_declined() {
+            "Did not run"
+        } else if call.is_unknown() {
+            "Execution unconfirmed"
+        } else if is_interaction {
             ""
-        } else if self.is_active() {
+        } else if !call.is_complete() {
             "Running"
         } else if call.is_user_shell_command() {
             "You ran"
@@ -380,7 +415,7 @@ impl ExecCell {
         };
         let header_prefix_width = header_line.width();
 
-        let cmd_display = if call.is_unified_exec_interaction() {
+        let cmd_display = if is_interaction {
             format_unified_exec_interaction(&call.command, call.interaction_input.as_deref())
         } else {
             strip_bash_lc_and_escape(&call.command)
@@ -428,6 +463,14 @@ impl ExecCell {
             ));
         }
 
+        if call.is_declined() {
+            lines.push(Line::from("  └ Approval declined".dim()));
+            return lines;
+        }
+        if call.is_unknown() {
+            lines.push(Line::from("  └ No exit status received".dim()));
+        }
+
         if let Some(output) = call.output.as_ref() {
             let line_limit = if call.is_user_shell_command() {
                 USER_SHELL_TOOL_CALL_MAX_LINES
@@ -450,7 +493,7 @@ impl ExecCell {
             };
 
             if raw_output.lines.is_empty() {
-                if !call.is_unified_exec_interaction() {
+                if !call.is_unified_exec_interaction() && !call.is_unknown() {
                     lines.extend(prefix_lines(
                         vec![Line::from("(no output)".dim())],
                         Span::from(layout.output_block.initial_prefix).dim(),
@@ -710,6 +753,258 @@ mod tests {
             .iter()
             .map(|span| span.content.as_ref())
             .collect::<String>()
+    }
+
+    #[test]
+    fn declined_command_preview_and_transcript() {
+        for source in [
+            ExecCommandSource::Agent,
+            ExecCommandSource::UserShell,
+            ExecCommandSource::UnifiedExecInteraction,
+        ] {
+            let mut cell = new_active_exec_command(
+                "refused".into(),
+                vec!["echo".into(), "refused".into()],
+                Vec::new(),
+                source,
+                /*interaction_input*/ None,
+                /*animations_enabled*/ false,
+            );
+            assert!(cell.complete_call(
+                "refused",
+                CommandOutput::declined(),
+                std::time::Duration::ZERO,
+            ));
+            assert_eq!(cell.calls[0].duration, None);
+            assert!(!cell.is_active());
+            assert!(cell.should_flush());
+            cell.mark_failed(); // Turn finalization must not replace a refusal with an exit code.
+            let preview = cell.display_lines(/*width*/ 80);
+            assert_eq!(preview[0].spans[0].style.fg, Some(Color::Red));
+            let transcript = cell.transcript_lines(/*width*/ 80);
+            insta::allow_duplicates! {
+                insta::assert_snapshot!(
+                    preview.iter().map(render_line_text).chain(
+                        transcript.iter().map(render_line_text)
+                    ).join("\n"),
+                    @"
+                ✗ Did not run echo refused
+                  └ Approval declined
+                $ echo refused
+                ✗ Did not run (approval declined)
+                "
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn declined_exploring_call_keeps_running_neighbour_visible() {
+        let command = vec!["cat".to_string(), "refused.txt".to_string()];
+        let mut cell = new_active_exec_command(
+            "refused".into(),
+            command.clone(),
+            codex_shell_command::parse_command::parse_command(&command),
+            ExecCommandSource::Agent,
+            /*interaction_input*/ None,
+            /*animations_enabled*/ false,
+        );
+        let command = vec!["cat".to_string(), "allowed.txt".to_string()];
+        assert!(cell.add_call(
+            "allowed".into(),
+            command.clone(),
+            codex_shell_command::parse_command::parse_command(&command),
+            ExecCommandSource::Agent,
+            /*interaction_input*/ None,
+        ));
+        cell.complete_call(
+            "refused",
+            CommandOutput::declined(),
+            std::time::Duration::ZERO,
+        );
+        assert!(cell.is_active());
+        assert!(!cell.should_flush());
+        // Subsequent reads must still join the group while another call is active.
+        assert!(cell.add_call(
+            "later".into(),
+            command.clone(),
+            codex_shell_command::parse_command::parse_command(&command),
+            ExecCommandSource::Agent,
+            /*interaction_input*/ None,
+        ));
+        cell.complete_call(
+            "later",
+            CommandOutput::declined(),
+            std::time::Duration::ZERO,
+        );
+        insta::assert_snapshot!(
+            cell.display_lines(80).iter().map(render_line_text).join("\n"),
+            @"
+        ✗ Did not run cat refused.txt
+          └ Approval declined
+        • Running cat allowed.txt
+        ✗ Did not run cat allowed.txt
+          └ Approval declined
+        "
+        );
+        cell.complete_call(
+            "allowed",
+            CommandOutput::new(/*exit_code*/ 0, "allowed content".into()),
+            std::time::Duration::ZERO,
+        );
+        assert!(cell.should_flush());
+        insta::assert_snapshot!(
+            cell.display_lines(80).iter().map(render_line_text).join("\n"),
+            @"
+        ✗ Did not run cat refused.txt
+          └ Approval declined
+        • Ran cat allowed.txt
+          └ allowed content
+        ✗ Did not run cat allowed.txt
+          └ Approval declined
+        "
+        );
+    }
+
+    #[test]
+    fn unknown_command_preview_and_transcript() {
+        for source in [
+            ExecCommandSource::Agent,
+            ExecCommandSource::UserShell,
+            ExecCommandSource::UnifiedExecInteraction,
+        ] {
+            let mut cell = new_active_exec_command(
+                "unknown".into(),
+                vec!["echo".into(), "pending".into()],
+                Vec::new(),
+                source,
+                /*interaction_input*/ None,
+                /*animations_enabled*/ false,
+            );
+            assert!(cell.complete_call(
+                "unknown",
+                CommandOutput::unknown(String::new()),
+                std::time::Duration::ZERO,
+            ));
+            assert_eq!(cell.calls[0].duration, None);
+            assert!(!cell.is_active());
+            assert!(cell.should_flush());
+            cell.mark_failed();
+            let preview = cell.display_lines(/*width*/ 80);
+            assert_eq!(preview[0].spans[0].style.fg, Some(Color::Red));
+            let transcript = cell.transcript_lines(/*width*/ 80);
+            insta::allow_duplicates! {
+                insta::assert_snapshot!(
+                    preview.iter().map(render_line_text).chain(
+                        transcript.iter().map(render_line_text)
+                    ).join("\n"),
+                    @"
+                ✗ Execution unconfirmed echo pending
+                  └ No exit status received
+                $ echo pending
+                ✗ Execution unconfirmed (no exit status received)
+                "
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn unknown_exploring_call_keeps_running_neighbour_visible() {
+        let command = vec!["cat".to_string(), "pending.txt".to_string()];
+        let mut cell = new_active_exec_command(
+            "unknown".into(),
+            command.clone(),
+            codex_shell_command::parse_command::parse_command(&command),
+            ExecCommandSource::Agent,
+            /*interaction_input*/ None,
+            /*animations_enabled*/ false,
+        );
+        let command = vec!["cat".to_string(), "running.txt".to_string()];
+        assert!(cell.add_call(
+            "running".into(),
+            command.clone(),
+            codex_shell_command::parse_command::parse_command(&command),
+            ExecCommandSource::Agent,
+            /*interaction_input*/ None,
+        ));
+        cell.complete_call(
+            "unknown",
+            CommandOutput::unknown(String::new()),
+            std::time::Duration::ZERO,
+        );
+        assert!(cell.is_active());
+        assert!(!cell.should_flush());
+        insta::assert_snapshot!(
+            cell.display_lines(80).iter().map(render_line_text).join("\n"),
+            @"
+        ✗ Execution unconfirmed cat pending.txt
+          └ No exit status received
+        • Running cat running.txt
+        "
+        );
+        cell.append_output("running", "content\n");
+        cell.mark_failed();
+        assert!(cell.should_flush());
+        insta::assert_snapshot!(
+            cell.display_lines(80).iter().map(render_line_text).join("\n"),
+            @"
+        ✗ Execution unconfirmed cat pending.txt
+          └ No exit status received
+        • Ran cat running.txt
+          └ content
+        "
+        );
+    }
+
+    #[test]
+    fn unknown_completion_preserves_output_without_inventing_success() {
+        let mut cell = new_active_exec_command(
+            "unknown".into(),
+            vec!["echo".into(), "pending".into()],
+            Vec::new(),
+            ExecCommandSource::Agent,
+            /*interaction_input*/ None,
+            /*animations_enabled*/ false,
+        );
+        cell.complete_call(
+            "unknown",
+            CommandOutput::unknown("diagnostic".into()),
+            std::time::Duration::ZERO,
+        );
+        insta::assert_snapshot!(
+            cell.display_lines(80).iter().map(render_line_text).chain(
+                cell.transcript_lines(80).iter().map(render_line_text)
+            ).join("\n"),
+            @"
+        ✗ Execution unconfirmed echo pending
+          └ No exit status received
+          └ diagnostic
+        $ echo pending
+        diagnostic
+        ✗ Execution unconfirmed (no exit status received)
+        "
+        );
+    }
+
+    #[test]
+    fn interrupted_command_preserves_captured_output() {
+        let mut cell = new_active_exec_command(
+            "started".into(),
+            vec!["echo".into(), "started".into()],
+            Vec::new(),
+            ExecCommandSource::Agent,
+            /*interaction_input*/ None,
+            /*animations_enabled*/ false,
+        );
+        cell.append_output("started", "started\n");
+        cell.mark_failed();
+        let lines = cell.display_lines(/*width*/ 80);
+        assert_eq!(lines[0].spans[0].style.fg, Some(Color::Red));
+        assert_eq!(
+            lines.iter().map(render_line_text).collect::<Vec<_>>(),
+            vec!["• Ran echo started", "  └ started"]
+        );
     }
 
     #[test]

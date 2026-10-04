@@ -1,0 +1,168 @@
+{
+  "draft_accounting_attempts": [
+    {
+      "attempt_id": "cd95c387-e1c2-46ec-99fe-65ad38c17b2c",
+      "request_id": "59f8bca5-7f29-485a-8522-010e3b6c5f44",
+      "payload": "{\"attempt_id\":\"cd95c387-e1c2-46ec-99fe-65ad38c17b2c\",\"request_id\":\"59f8bca5-7f29-485a-8522-010e3b6c5f44\",\"thread_id\":\"019feb8b-4200-76f1-9b4c-60c4ffdd807b\",\"turn\":\"019feb8b-4200-76f1-9b4c-60f5e209f949\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"6aec8769-609f-48bf-ab36-58a64065238d\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786363200000}"
+    },
+    {
+      "attempt_id": "de749048-449c-49c8-86fc-dc4f478663e7",
+      "request_id": "d74b3265-c673-4999-9d45-27251ba0e3d1",
+      "payload": "{\"attempt_id\":\"de749048-449c-49c8-86fc-dc4f478663e7\",\"request_id\":\"d74b3265-c673-4999-9d45-27251ba0e3d1\",\"thread_id\":\"019feb8b-4200-76f1-9b4c-60c4ffdd807b\",\"turn\":\"019feb8b-4200-73c1-b811-cd046aa4adf8\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"7c9cd1b8-eeb2-4164-8974-a6c020e7c5f7\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786363200000}"
+    },
+    {
+      "attempt_id": "05a7c6e3-9589-475f-8481-dcc40695f8f2",
+      "request_id": "863e1e33-357b-48aa-8dd5-ea2b33f700f4",
+      "payload": "{\"attempt_id\":\"05a7c6e3-9589-475f-8481-dcc40695f8f2\",\"request_id\":\"863e1e33-357b-48aa-8dd5-ea2b33f700f4\",\"thread_id\":\"019feb8b-4200-7b50-a9f0-88b2f8955f4e\",\"turn\":\"019feb8b-4200-7b50-a9f0-88ee76ab1946\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"c4605c67-cf07-4a89-aa78-46b52c995def\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786363200000}"
+    },
+    {
+      "attempt_id": "89ee3e05-2ad8-4b89-b38c-470e72432863",
+      "request_id": "637edffd-c59f-4ce5-a561-ed472fd6abd7",
+      "payload": "{\"attempt_id\":\"89ee3e05-2ad8-4b89-b38c-470e72432863\",\"request_id\":\"637edffd-c59f-4ce5-a561-ed472fd6abd7\",\"thread_id\":\"019feb8b-4200-7790-9681-077c69d95463\",\"turn\":\"019feb8b-4200-7790-9681-07acb022d6d0\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"231fdd15-bfd0-4790-b751-78c18daa6636\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786363200000}"
+    }
+  ],
+  "draft_accounting_compact_days": [],
+  "draft_accounting_compact_snapshots": [],
+  "draft_accounting_contributions": [
+    {
+      "attempt_id": "cd95c387-e1c2-46ec-99fe-65ad38c17b2c",
+      "thread_id": "019feb8b-4200-76f1-9b4c-60c4ffdd807b",
+      "utc_day": 20675,
+      "evidence": "[{\"revision\":3,\"source\":\"5b12f224-6a98-4c63-8791-eae907666ae5\",\"sequence\":3,\"patch\":{\"input\":100,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110}}]"
+    },
+    {
+      "attempt_id": "de749048-449c-49c8-86fc-dc4f478663e7",
+      "thread_id": "019feb8b-4200-76f1-9b4c-60c4ffdd807b",
+      "utc_day": 20675,
+      "evidence": "[{\"revision\":3,\"source\":\"c6be3426-2d86-41e3-84d6-9f7642b2cb16\",\"sequence\":3,\"patch\":{\"input\":100,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110}}]"
+    },
+    {
+      "attempt_id": "05a7c6e3-9589-475f-8481-dcc40695f8f2",
+      "thread_id": "019feb8b-4200-7b50-a9f0-88b2f8955f4e",
+      "utc_day": 20675,
+      "evidence": "[{\"revision\":3,\"source\":\"027da610-6d53-497c-91f6-9ea146ed3c2e\",\"sequence\":3,\"patch\":{\"input\":100,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110}}]"
+    },
+    {
+      "attempt_id": "89ee3e05-2ad8-4b89-b38c-470e72432863",
+      "thread_id": "019feb8b-4200-7790-9681-077c69d95463",
+      "utc_day": 20675,
+      "evidence": "[{\"revision\":3,\"source\":\"e94ffb1a-a8bd-4b58-8e34-5b41143f3833\",\"sequence\":3,\"patch\":{\"input\":100,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110}}]"
+    }
+  ],
+  "draft_accounting_estimates": [
+    {
+      "attempt_id": "cd95c387-e1c2-46ec-99fe-65ad38c17b2c",
+      "evidence": "[]",
+      "payload": "{\"attempt\":{\"attempt_id\":\"cd95c387-e1c2-46ec-99fe-65ad38c17b2c\",\"request_id\":\"59f8bca5-7f29-485a-8522-010e3b6c5f44\",\"thread_id\":\"019feb8b-4200-76f1-9b4c-60c4ffdd807b\",\"turn\":\"019feb8b-4200-76f1-9b4c-60f5e209f949\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"6aec8769-609f-48bf-ab36-58a64065238d\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786363200000},\"observations\":[],\"usage\":{\"input\":null,\"noncached\":null,\"read\":null,\"write\":null,\"output\":null,\"reasoning\":null,\"total\":null},\"snapshot\":{\"id\":\"3dc5fdd0-653c-4014-90c3-e674b816e4f9\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"6aec8769-609f-48bf-ab36-58a64065238d\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786363200000,\"approved_at_ms\":1786363200000,\"effective_from_ms\":1786363200000,\"effective_end_ms\":null},\"buckets\":[\"MissingUsage\",\"MissingUsage\",\"MissingUsage\",\"MissingUsage\"],\"known_subtotal\":\"0\",\"all_buckets_priced\":null,\"subtotal_display\":{\"text\":\"0.000000\",\"rounded\":false,\"nonzero_sub_micro\":false}}"
+    },
+    {
+      "attempt_id": "cd95c387-e1c2-46ec-99fe-65ad38c17b2c",
+      "evidence": "[{\"revision\":3,\"source\":\"5b12f224-6a98-4c63-8791-eae907666ae5\",\"sequence\":3,\"patch\":{\"input\":100,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110}}]",
+      "payload": "{\"attempt\":{\"attempt_id\":\"cd95c387-e1c2-46ec-99fe-65ad38c17b2c\",\"request_id\":\"59f8bca5-7f29-485a-8522-010e3b6c5f44\",\"thread_id\":\"019feb8b-4200-76f1-9b4c-60c4ffdd807b\",\"turn\":\"019feb8b-4200-76f1-9b4c-60f5e209f949\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"6aec8769-609f-48bf-ab36-58a64065238d\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786363200000},\"observations\":[{\"revision\":3,\"source\":\"5b12f224-6a98-4c63-8791-eae907666ae5\",\"sequence\":3,\"patch\":{\"input\":100,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110}}],\"usage\":{\"input\":100,\"noncached\":80,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110},\"snapshot\":{\"id\":\"3dc5fdd0-653c-4014-90c3-e674b816e4f9\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"6aec8769-609f-48bf-ab36-58a64065238d\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786363200000,\"approved_at_ms\":1786363200000,\"effective_from_ms\":1786363200000,\"effective_end_ms\":null},\"buckets\":[{\"Priced\":\"0.0004\"},{\"Priced\":\"0.00001\"},{\"Priced\":\"0\"},{\"Priced\":\"0.0003\"}],\"known_subtotal\":\"0.00071\",\"all_buckets_priced\":\"0.00071\",\"subtotal_display\":{\"text\":\"0.000710\",\"rounded\":false,\"nonzero_sub_micro\":false}}"
+    },
+    {
+      "attempt_id": "de749048-449c-49c8-86fc-dc4f478663e7",
+      "evidence": "[]",
+      "payload": "{\"attempt\":{\"attempt_id\":\"de749048-449c-49c8-86fc-dc4f478663e7\",\"request_id\":\"d74b3265-c673-4999-9d45-27251ba0e3d1\",\"thread_id\":\"019feb8b-4200-76f1-9b4c-60c4ffdd807b\",\"turn\":\"019feb8b-4200-73c1-b811-cd046aa4adf8\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"7c9cd1b8-eeb2-4164-8974-a6c020e7c5f7\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786363200000},\"observations\":[],\"usage\":{\"input\":null,\"noncached\":null,\"read\":null,\"write\":null,\"output\":null,\"reasoning\":null,\"total\":null},\"snapshot\":{\"id\":\"23d0a956-7103-4b65-8c50-bf344d8e684e\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"7c9cd1b8-eeb2-4164-8974-a6c020e7c5f7\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786363200000,\"approved_at_ms\":1786363200000,\"effective_from_ms\":1786363200000,\"effective_end_ms\":null},\"buckets\":[\"MissingUsage\",\"MissingUsage\",\"MissingUsage\",\"MissingUsage\"],\"known_subtotal\":\"0\",\"all_buckets_priced\":null,\"subtotal_display\":{\"text\":\"0.000000\",\"rounded\":false,\"nonzero_sub_micro\":false}}"
+    },
+    {
+      "attempt_id": "de749048-449c-49c8-86fc-dc4f478663e7",
+      "evidence": "[{\"revision\":3,\"source\":\"c6be3426-2d86-41e3-84d6-9f7642b2cb16\",\"sequence\":3,\"patch\":{\"input\":100,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110}}]",
+      "payload": "{\"attempt\":{\"attempt_id\":\"de749048-449c-49c8-86fc-dc4f478663e7\",\"request_id\":\"d74b3265-c673-4999-9d45-27251ba0e3d1\",\"thread_id\":\"019feb8b-4200-76f1-9b4c-60c4ffdd807b\",\"turn\":\"019feb8b-4200-73c1-b811-cd046aa4adf8\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"7c9cd1b8-eeb2-4164-8974-a6c020e7c5f7\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786363200000},\"observations\":[{\"revision\":3,\"source\":\"c6be3426-2d86-41e3-84d6-9f7642b2cb16\",\"sequence\":3,\"patch\":{\"input\":100,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110}}],\"usage\":{\"input\":100,\"noncached\":80,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110},\"snapshot\":{\"id\":\"23d0a956-7103-4b65-8c50-bf344d8e684e\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"7c9cd1b8-eeb2-4164-8974-a6c020e7c5f7\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786363200000,\"approved_at_ms\":1786363200000,\"effective_from_ms\":1786363200000,\"effective_end_ms\":null},\"buckets\":[{\"Priced\":\"0.0004\"},{\"Priced\":\"0.00001\"},{\"Priced\":\"0\"},{\"Priced\":\"0.0003\"}],\"known_subtotal\":\"0.00071\",\"all_buckets_priced\":\"0.00071\",\"subtotal_display\":{\"text\":\"0.000710\",\"rounded\":false,\"nonzero_sub_micro\":false}}"
+    },
+    {
+      "attempt_id": "05a7c6e3-9589-475f-8481-dcc40695f8f2",
+      "evidence": "[]",
+      "payload": "{\"attempt\":{\"attempt_id\":\"05a7c6e3-9589-475f-8481-dcc40695f8f2\",\"request_id\":\"863e1e33-357b-48aa-8dd5-ea2b33f700f4\",\"thread_id\":\"019feb8b-4200-7b50-a9f0-88b2f8955f4e\",\"turn\":\"019feb8b-4200-7b50-a9f0-88ee76ab1946\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"c4605c67-cf07-4a89-aa78-46b52c995def\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786363200000},\"observations\":[],\"usage\":{\"input\":null,\"noncached\":null,\"read\":null,\"write\":null,\"output\":null,\"reasoning\":null,\"total\":null},\"snapshot\":{\"id\":\"a3794ec4-d5fc-43b8-9807-c4902b39e4b9\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"c4605c67-cf07-4a89-aa78-46b52c995def\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786363200000,\"approved_at_ms\":1786363200000,\"effective_from_ms\":1786363200000,\"effective_end_ms\":null},\"buckets\":[\"MissingUsage\",\"MissingUsage\",\"MissingUsage\",\"MissingUsage\"],\"known_subtotal\":\"0\",\"all_buckets_priced\":null,\"subtotal_display\":{\"text\":\"0.000000\",\"rounded\":false,\"nonzero_sub_micro\":false}}"
+    },
+    {
+      "attempt_id": "05a7c6e3-9589-475f-8481-dcc40695f8f2",
+      "evidence": "[{\"revision\":3,\"source\":\"027da610-6d53-497c-91f6-9ea146ed3c2e\",\"sequence\":3,\"patch\":{\"input\":100,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110}}]",
+      "payload": "{\"attempt\":{\"attempt_id\":\"05a7c6e3-9589-475f-8481-dcc40695f8f2\",\"request_id\":\"863e1e33-357b-48aa-8dd5-ea2b33f700f4\",\"thread_id\":\"019feb8b-4200-7b50-a9f0-88b2f8955f4e\",\"turn\":\"019feb8b-4200-7b50-a9f0-88ee76ab1946\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"c4605c67-cf07-4a89-aa78-46b52c995def\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786363200000},\"observations\":[{\"revision\":3,\"source\":\"027da610-6d53-497c-91f6-9ea146ed3c2e\",\"sequence\":3,\"patch\":{\"input\":100,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110}}],\"usage\":{\"input\":100,\"noncached\":80,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110},\"snapshot\":{\"id\":\"a3794ec4-d5fc-43b8-9807-c4902b39e4b9\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"c4605c67-cf07-4a89-aa78-46b52c995def\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786363200000,\"approved_at_ms\":1786363200000,\"effective_from_ms\":1786363200000,\"effective_end_ms\":null},\"buckets\":[{\"Priced\":\"0.0004\"},{\"Priced\":\"0.00001\"},{\"Priced\":\"0\"},{\"Priced\":\"0.0003\"}],\"known_subtotal\":\"0.00071\",\"all_buckets_priced\":\"0.00071\",\"subtotal_display\":{\"text\":\"0.000710\",\"rounded\":false,\"nonzero_sub_micro\":false}}"
+    },
+    {
+      "attempt_id": "89ee3e05-2ad8-4b89-b38c-470e72432863",
+      "evidence": "[]",
+      "payload": "{\"attempt\":{\"attempt_id\":\"89ee3e05-2ad8-4b89-b38c-470e72432863\",\"request_id\":\"637edffd-c59f-4ce5-a561-ed472fd6abd7\",\"thread_id\":\"019feb8b-4200-7790-9681-077c69d95463\",\"turn\":\"019feb8b-4200-7790-9681-07acb022d6d0\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"231fdd15-bfd0-4790-b751-78c18daa6636\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786363200000},\"observations\":[],\"usage\":{\"input\":null,\"noncached\":null,\"read\":null,\"write\":null,\"output\":null,\"reasoning\":null,\"total\":null},\"snapshot\":{\"id\":\"edaa46e5-bbfa-4c12-8e35-6540aebf2ffe\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"231fdd15-bfd0-4790-b751-78c18daa6636\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786363200000,\"approved_at_ms\":1786363200000,\"effective_from_ms\":1786363200000,\"effective_end_ms\":null},\"buckets\":[\"MissingUsage\",\"MissingUsage\",\"MissingUsage\",\"MissingUsage\"],\"known_subtotal\":\"0\",\"all_buckets_priced\":null,\"subtotal_display\":{\"text\":\"0.000000\",\"rounded\":false,\"nonzero_sub_micro\":false}}"
+    },
+    {
+      "attempt_id": "89ee3e05-2ad8-4b89-b38c-470e72432863",
+      "evidence": "[{\"revision\":3,\"source\":\"e94ffb1a-a8bd-4b58-8e34-5b41143f3833\",\"sequence\":3,\"patch\":{\"input\":100,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110}}]",
+      "payload": "{\"attempt\":{\"attempt_id\":\"89ee3e05-2ad8-4b89-b38c-470e72432863\",\"request_id\":\"637edffd-c59f-4ce5-a561-ed472fd6abd7\",\"thread_id\":\"019feb8b-4200-7790-9681-077c69d95463\",\"turn\":\"019feb8b-4200-7790-9681-07acb022d6d0\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"231fdd15-bfd0-4790-b751-78c18daa6636\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786363200000},\"observations\":[{\"revision\":3,\"source\":\"e94ffb1a-a8bd-4b58-8e34-5b41143f3833\",\"sequence\":3,\"patch\":{\"input\":100,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110}}],\"usage\":{\"input\":100,\"noncached\":80,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110},\"snapshot\":{\"id\":\"edaa46e5-bbfa-4c12-8e35-6540aebf2ffe\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"231fdd15-bfd0-4790-b751-78c18daa6636\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786363200000,\"approved_at_ms\":1786363200000,\"effective_from_ms\":1786363200000,\"effective_end_ms\":null},\"buckets\":[{\"Priced\":\"0.0004\"},{\"Priced\":\"0.00001\"},{\"Priced\":\"0\"},{\"Priced\":\"0.0003\"}],\"known_subtotal\":\"0.00071\",\"all_buckets_priced\":\"0.00071\",\"subtotal_display\":{\"text\":\"0.000710\",\"rounded\":false,\"nonzero_sub_micro\":false}}"
+    }
+  ],
+  "draft_accounting_observations": [
+    {
+      "attempt_id": "cd95c387-e1c2-46ec-99fe-65ad38c17b2c",
+      "revision": 3,
+      "source": "5b12f224-6a98-4c63-8791-eae907666ae5",
+      "sequence": 3,
+      "payload": "{\"revision\":3,\"source\":\"5b12f224-6a98-4c63-8791-eae907666ae5\",\"sequence\":3,\"patch\":{\"input\":100,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110}}"
+    },
+    {
+      "attempt_id": "de749048-449c-49c8-86fc-dc4f478663e7",
+      "revision": 3,
+      "source": "c6be3426-2d86-41e3-84d6-9f7642b2cb16",
+      "sequence": 3,
+      "payload": "{\"revision\":3,\"source\":\"c6be3426-2d86-41e3-84d6-9f7642b2cb16\",\"sequence\":3,\"patch\":{\"input\":100,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110}}"
+    },
+    {
+      "attempt_id": "05a7c6e3-9589-475f-8481-dcc40695f8f2",
+      "revision": 3,
+      "source": "027da610-6d53-497c-91f6-9ea146ed3c2e",
+      "sequence": 3,
+      "payload": "{\"revision\":3,\"source\":\"027da610-6d53-497c-91f6-9ea146ed3c2e\",\"sequence\":3,\"patch\":{\"input\":100,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110}}"
+    },
+    {
+      "attempt_id": "89ee3e05-2ad8-4b89-b38c-470e72432863",
+      "revision": 3,
+      "source": "e94ffb1a-a8bd-4b58-8e34-5b41143f3833",
+      "sequence": 3,
+      "payload": "{\"revision\":3,\"source\":\"e94ffb1a-a8bd-4b58-8e34-5b41143f3833\",\"sequence\":3,\"patch\":{\"input\":100,\"read\":20,\"write\":0,\"output\":10,\"reasoning\":4,\"total\":110}}"
+    }
+  ],
+  "draft_accounting_price_bindings": [
+    {
+      "attempt_id": "cd95c387-e1c2-46ec-99fe-65ad38c17b2c",
+      "snapshot_id": "3dc5fdd0-653c-4014-90c3-e674b816e4f9"
+    },
+    {
+      "attempt_id": "de749048-449c-49c8-86fc-dc4f478663e7",
+      "snapshot_id": "23d0a956-7103-4b65-8c50-bf344d8e684e"
+    },
+    {
+      "attempt_id": "05a7c6e3-9589-475f-8481-dcc40695f8f2",
+      "snapshot_id": "a3794ec4-d5fc-43b8-9807-c4902b39e4b9"
+    },
+    {
+      "attempt_id": "89ee3e05-2ad8-4b89-b38c-470e72432863",
+      "snapshot_id": "edaa46e5-bbfa-4c12-8e35-6540aebf2ffe"
+    }
+  ],
+  "draft_accounting_price_snapshots": [
+    {
+      "snapshot_id": "3dc5fdd0-653c-4014-90c3-e674b816e4f9",
+      "payload": "{\"id\":\"3dc5fdd0-653c-4014-90c3-e674b816e4f9\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"6aec8769-609f-48bf-ab36-58a64065238d\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786363200000,\"approved_at_ms\":1786363200000,\"effective_from_ms\":1786363200000,\"effective_end_ms\":null}"
+    },
+    {
+      "snapshot_id": "23d0a956-7103-4b65-8c50-bf344d8e684e",
+      "payload": "{\"id\":\"23d0a956-7103-4b65-8c50-bf344d8e684e\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"7c9cd1b8-eeb2-4164-8974-a6c020e7c5f7\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786363200000,\"approved_at_ms\":1786363200000,\"effective_from_ms\":1786363200000,\"effective_end_ms\":null}"
+    },
+    {
+      "snapshot_id": "a3794ec4-d5fc-43b8-9807-c4902b39e4b9",
+      "payload": "{\"id\":\"a3794ec4-d5fc-43b8-9807-c4902b39e4b9\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"c4605c67-cf07-4a89-aa78-46b52c995def\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786363200000,\"approved_at_ms\":1786363200000,\"effective_from_ms\":1786363200000,\"effective_end_ms\":null}"
+    },
+    {
+      "snapshot_id": "edaa46e5-bbfa-4c12-8e35-6540aebf2ffe",
+      "payload": "{\"id\":\"edaa46e5-bbfa-4c12-8e35-6540aebf2ffe\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"231fdd15-bfd0-4790-b751-78c18daa6636\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786363200000,\"approved_at_ms\":1786363200000,\"effective_from_ms\":1786363200000,\"effective_end_ms\":null}"
+    }
+  ],
+  "draft_accounting_retention_checkpoint": [
+    {
+      "singleton": 1,
+      "completed_as_of_ms": 1786363200000,
+      "admission_active": 1
+    }
+  ],
+  "draft_accounting_tombstones": []
+}

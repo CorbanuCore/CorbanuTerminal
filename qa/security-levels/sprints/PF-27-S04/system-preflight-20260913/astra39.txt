@@ -1,0 +1,3 @@
+autoreview clean: no accepted/actionable findings reported
+overall: patch is correct (0.92)
+No actionable defects found within the scoped change. The private preflight preserves fixed-system validation, compares both inspections before sealing, and releases owned resources before the reservation on success and failure paths. Existing enrollment and activation boundaries remain unchanged. Review used read-only inspection; tests were not rerun.

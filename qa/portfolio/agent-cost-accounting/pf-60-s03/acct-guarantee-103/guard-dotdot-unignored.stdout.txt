@@ -1,0 +1,1 @@
+STOP: inside-source destination did not pass git check-ignore; choose an ignored path.

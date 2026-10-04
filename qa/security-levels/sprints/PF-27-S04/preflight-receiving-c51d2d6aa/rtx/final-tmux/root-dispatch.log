@@ -1,0 +1,13 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+────────────
+ Nextest run ID 75c6aeab-d0ef-4a97-90f7-b9d57f4462ab with nextest profile: local
+    Starting 6 tests across 7 binaries (82 tests skipped)
+        PASS [   0.041s] (1/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_lost_reply
+        PASS [   0.065s] (2/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_actual_namespaces_and_duplicate
+        PASS [   0.083s] (3/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_wrong_and_stale_receipts
+        PASS [   0.121s] (4/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_construction_failures
+        PASS [   0.150s] (5/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_protocol_rejections
+        PASS [   0.829s] (6/6) codex-secret-broker-service launch::manifest::root_dispatch::tests::pf27_root_dispatch_lifecycle
+────────────
+     Summary [   0.830s] 6 tests run: 6 passed, 82 skipped

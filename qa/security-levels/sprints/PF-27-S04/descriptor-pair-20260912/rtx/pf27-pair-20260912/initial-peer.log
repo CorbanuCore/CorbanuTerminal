@@ -1,0 +1,16 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling libc v0.2.186
+   Compiling rustix v1.1.4
+   Compiling bitflags v2.13.1
+   Compiling linux-raw-sys v0.12.1
+   Compiling diff v0.1.13
+   Compiling yansi v1.0.1
+   Compiling pretty_assertions v1.4.1
+   Compiling codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-pair-20260912/codex-rs/linux-pidfd-spawn)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.16s
+────────────
+ Nextest run ID 7286e931-6c11-447b-a7c7-cd04ae07e6cb with nextest profile: local
+    Starting 1 test across 1 binary (11 tests skipped)
+        PASS [   0.002s] (1/1) codex-linux-pidfd-spawn peer::tests::pf_27_s01_pidfs_identity_matches_process_not_descriptor_number
+────────────
+     Summary [   0.002s] 1 test run: 1 passed, 11 skipped

@@ -21,6 +21,8 @@ pub use memories::MemoriesClient;
 pub use models::ModelsClient;
 pub use realtime_call::RealtimeCallClient;
 pub use realtime_call::RealtimeCallResponse;
+pub use realtime_call::realtime_call_route;
+pub use realtime_call::realtime_call_url;
 pub use realtime_websocket::RealtimeContextAppendChannel;
 pub use realtime_websocket::RealtimeEventParser;
 pub use realtime_websocket::RealtimeOutputModality;

@@ -1,0 +1,19 @@
+Correct the round-72 accounting evidence claims and scope acceptance
+
+Correct the record in 49e7d1b8cf6d762c433360e54efccd50a0840f83:
+its statement that the digest comparison no longer fires ahead of semantic
+checks and that the two run independently overstates qualifying mode.
+The default digest-bound auditor runs two arithmetic checks, then the JSON
+and viewport digest assertions, then the remaining monetary checks. A digest
+failure still stops those later checks. Only the explicit --semantics-only
+diagnostic bypasses digests; it cannot qualify capture integrity.
+
+The 159 diagnostic mutations reach and specifically fail all 147 named
+monetary check instances. Exact/displayed subtotal assertions apply to 15
+named pages, not all 24 JSON pages or all 45 viewports. The two zero-recorded
+pages require no displayed subtotal. Integrity mutations bind saved contents;
+they do not prove every visible amount correct or authenticate capture origin.
+
+Narrow the receipt, derive summary totals from checked evidence, and state
+acceptance owners, first slices and estimated costs. Acceptance remains open.
+This correction preserves the received commit and its merge history.

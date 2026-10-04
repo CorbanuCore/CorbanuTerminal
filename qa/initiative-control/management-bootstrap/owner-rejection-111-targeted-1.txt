@@ -1,0 +1,26 @@
+test_qualification_positive_rejections_hold_and_exact_retry_recovers (test_slack_transport.TransportTests.test_qualification_positive_rejections_hold_and_exact_retry_recovers) ... /opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 401: 'Unauthorized'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 403: 'Forbidden'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+ok
+test_qualification_inconclusive_sdk_responses_restore_exact_prior_hold (test_slack_transport.TransportTests.test_qualification_inconclusive_sdk_responses_restore_exact_prior_hold) ... /opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 429: 'Too Many Requests'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 500: 'Internal Server Error'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+ok
+test_positive_rejection_preserves_newer_fault_hold (test_slack_transport.TransportTests.test_positive_rejection_preserves_newer_fault_hold) ... ok
+test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure (test_slack_transport.TransportTests.test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure) ... ok
+test_qualification_single_flight_across_instances_and_processes (test_slack_transport.TransportTests.test_qualification_single_flight_across_instances_and_processes) ... ok
+test_initial_qualification_failures_retry_after_real_reload_without_reset (test_slack_transport.TransportTests.test_initial_qualification_failures_retry_after_real_reload_without_reset) ... ok
+test_off_missing_scopes_wrong_identity_and_stale_binding (test_slack_transport.TransportTests.test_off_missing_scopes_wrong_identity_and_stale_binding) ... ok
+test_unbound_expiry_without_route_is_durable_and_cannot_be_resurrected (test_slack_transport.TransportTests.test_unbound_expiry_without_route_is_durable_and_cannot_be_resurrected) ... ok
+test_unknown_history_guidance_renders_through_saved_projection_and_clears (test_decision_manager.ManagerTests.test_unknown_history_guidance_renders_through_saved_projection_and_clears) ... ok
+test_nonheld_expiry_renders_until_review_then_stays_cleared (test_decision_manager.ManagerTests.test_nonheld_expiry_renders_until_review_then_stays_cleared) ... ok
+test_qualification_rejection_reason_renders_through_saved_projection (test_decision_manager.ManagerTests.test_qualification_rejection_reason_renders_through_saved_projection) ... ok
+test_held_notices_distinguish_wait_act_and_expired_undelivered (test_attention.SlackNoticeTests.test_held_notices_distinguish_wait_act_and_expired_undelivered) ... ok
+test_mixed_conditions_retain_fault_and_each_intake_disposition (test_attention.SlackNoticeTests.test_mixed_conditions_retain_fault_and_each_intake_disposition) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 12.247s
+
+OK

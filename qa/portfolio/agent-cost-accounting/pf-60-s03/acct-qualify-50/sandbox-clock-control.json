@@ -1,0 +1,5 @@
+{
+  "exit": 65,
+  "stdout": "",
+  "stderr": "sandbox-exec: host must be * or localhost in network address\n\nBacktrace: \n<input string>:1:67:\n\t(remote ip \"127.0.0.1:*\")\n\n"
+}

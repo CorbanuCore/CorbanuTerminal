@@ -1,0 +1,150 @@
+{
+  "note_sha256": "338baf8fc210e86b49f0debc60a8b2ffe25aac158cc611aadbfd0eee4f1aa819",
+  "frozen_sha256": "d46df323a5d5538c6b4e8bddec84aa08266346d5cc827bc7ac5581d204457864",
+  "scope": "Byte/receipt checks plus current destination segment only; no clone or six-block execution.",
+  "blocks": [
+    {
+      "block": 1,
+      "equal": false,
+      "frozen_sha256": "50058e2ffc4e034551e6a38380a5fe21985c2e79451a33ad3159982730566320",
+      "live_sha256": "085d0e136741a6e6321a709a98e8479fd26c58d190197b7c5b7f8413f6f781c2",
+      "frozen_receipt_and_log_hashes_match": true
+    },
+    {
+      "block": 2,
+      "equal": true,
+      "frozen_sha256": "c9aefe9485ab87669d5b14fa9f7a9a6842b095eff23faab7d0cb5b0b06bc0570",
+      "live_sha256": "c9aefe9485ab87669d5b14fa9f7a9a6842b095eff23faab7d0cb5b0b06bc0570",
+      "frozen_receipt_and_log_hashes_match": true
+    },
+    {
+      "block": 3,
+      "equal": true,
+      "frozen_sha256": "3157e5a9d2d59898d586a7b214e7659d43ba1bf1f5b26c7221342177dbae6c87",
+      "live_sha256": "3157e5a9d2d59898d586a7b214e7659d43ba1bf1f5b26c7221342177dbae6c87",
+      "frozen_receipt_and_log_hashes_match": true
+    },
+    {
+      "block": 4,
+      "equal": true,
+      "frozen_sha256": "85575d8a1481cf7954f2a34781a2597432369ae2533bf14d5bb34ff778354377",
+      "live_sha256": "85575d8a1481cf7954f2a34781a2597432369ae2533bf14d5bb34ff778354377",
+      "frozen_receipt_and_log_hashes_match": true
+    },
+    {
+      "block": 5,
+      "equal": true,
+      "frozen_sha256": "30467fd62ebe39124ab6ebfe6fdba0f549912a0f8fe11515343a8ad34b8be833",
+      "live_sha256": "30467fd62ebe39124ab6ebfe6fdba0f549912a0f8fe11515343a8ad34b8be833",
+      "frozen_receipt_and_log_hashes_match": true
+    },
+    {
+      "block": 6,
+      "equal": true,
+      "frozen_sha256": "2717d6b59de3d3ea04179a3ac20466d0ffaca328adc83724a66ce231ee1c1bdd",
+      "live_sha256": "2717d6b59de3d3ea04179a3ac20466d0ffaca328adc83724a66ce231ee1c1bdd",
+      "frozen_receipt_and_log_hashes_match": true
+    }
+  ],
+  "guard_script": "set -eu\nq=unused\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\ntest ! -e \"$audit\"\ntest ! -L \"$audit\"\npython3 - \"$PWD\" \"$audit\" <<'PY'\nimport sys\n\nif sys.version_info < (3, 9):\n    print(\"STOP: destination guard requires Python 3.9 or newer.\")\n    sys.exit(1)\n\nfrom pathlib import Path\nimport subprocess\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    sys.exit(subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)]))\nPY\nprintf 'DESTINATION_ALLOWED\\n'\n",
+  "destination_cases": [
+    {
+      "case": "direct-unignored",
+      "expected_exit": 1,
+      "exit": 1,
+      "destination": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/target/guard-zx5uv4ln/source/unignored",
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "alias-unignored-regression",
+      "expected_exit": 1,
+      "exit": 1,
+      "destination": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/target/guard-zx5uv4ln/outside-alias/unignored",
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "alias-ignored",
+      "expected_exit": 0,
+      "exit": 0,
+      "destination": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/target/guard-zx5uv4ln/outside-alias/ignored/new-audit",
+      "stdout": ".gitignore:1:ignored/\t/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/target/guard-zx5uv4ln/source/ignored/new-audit\nDESTINATION_ALLOWED\n",
+      "stderr": ""
+    },
+    {
+      "case": "dotdot-unignored",
+      "expected_exit": 1,
+      "exit": 1,
+      "destination": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/target/guard-zx5uv4ln/../guard-zx5uv4ln/source/unignored",
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "case": "external",
+      "expected_exit": 0,
+      "exit": 0,
+      "destination": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/target/guard-zx5uv4ln/external-audit",
+      "stdout": "DESTINATION_ALLOWED\n",
+      "stderr": ""
+    },
+    {
+      "case": "direct-ignored",
+      "expected_exit": 0,
+      "exit": 0,
+      "destination": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/target/guard-zx5uv4ln/source/ignored/new-audit",
+      "stdout": ".gitignore:1:ignored/\t/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/target/guard-zx5uv4ln/source/ignored/new-audit\nDESTINATION_ALLOWED\n",
+      "stderr": ""
+    },
+    {
+      "case": "existing-destination",
+      "expected_exit": 1,
+      "exit": 1,
+      "destination": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/target/guard-zx5uv4ln/source/ignored",
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "version_test_scope": "Simulated sys.version_info on installed Python; not actual Python 3.8/3.9 qualification.",
+  "python_guard": "import sys\n\nif sys.version_info < (3, 9):\n    print(\"STOP: destination guard requires Python 3.9 or newer.\")\n    sys.exit(1)\n\nfrom pathlib import Path\nimport subprocess\n\nsource, destination = (Path(value).resolve() for value in sys.argv[1:])\nif destination.is_relative_to(source):\n    sys.exit(subprocess.call([\"git\", \"check-ignore\", \"-v\", str(destination)]))",
+  "version_cases": [
+    {
+      "simulated_version": [
+        3,
+        8,
+        0
+      ],
+      "host_version": "3.14.4 (main, Apr  7 2026, 13:13:20) [Clang 21.0.0 (clang-2100.0.123.102)]",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "-c",
+        "import sys; sys.version_info = (3, 8, 0); exec(compile(sys.stdin.read(), '<guard>', 'exec'))",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/target/guard-zx5uv4ln/source",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/target/guard-zx5uv4ln/new-external"
+      ],
+      "exit": 1,
+      "stdout": "STOP: destination guard requires Python 3.9 or newer.\n",
+      "stderr": ""
+    },
+    {
+      "simulated_version": [
+        3,
+        9,
+        0
+      ],
+      "host_version": "3.14.4 (main, Apr  7 2026, 13:13:20) [Clang 21.0.0 (clang-2100.0.123.102)]",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "-c",
+        "import sys; sys.version_info = (3, 9, 0); exec(compile(sys.stdin.read(), '<guard>', 'exec'))",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/target/guard-zx5uv4ln/source",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-divergence-102/target/guard-zx5uv4ln/new-external"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ]
+}

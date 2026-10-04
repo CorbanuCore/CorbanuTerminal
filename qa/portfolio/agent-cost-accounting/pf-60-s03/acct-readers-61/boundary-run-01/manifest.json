@@ -1,0 +1,10 @@
+{
+  "commit": "90095a359599f055653d39eb3e6aa9831faeaaef",
+  "binary": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target/debug/codex",
+  "binary_sha256": "f78a1cc8a433030d3f50d91cfd415946e5fe3dd4e08e69d5c9644244c0d018bb",
+  "driver_sha256": "aef9bf1da1509eba993233854801e299cf7d801395270144385b29a45c25ec6b",
+  "helper_sha256": "bfc7551ab44a5f4d60167e115b2ab3e6a85abdcd7cfd811df067c4cd8411b3f2",
+  "classification": "Routine QA only; code-aware supporting evidence, not independent acceptance",
+  "clock": "CLOCK_REALTIME/time frozen; monotonic and gettimeofday remain real",
+  "isolation": "synthetic HOME/profile, debug keyring denial, loopback-only OS network"
+}

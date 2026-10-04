@@ -1,0 +1,61 @@
+{
+  "base": "270a6644e01d780ef93f8715dd0051481643dc7d",
+  "sources": [
+    {
+      "identity": "startup-owner",
+      "path": "codex-rs/core/src/session_startup_prewarm.rs",
+      "start": 305,
+      "end": 325,
+      "sha256": "9f21ae8814def397e2931ea9d7b34ad33ad60311552c47038e0e7240d17a5d3c",
+      "excerpt": "    let window_id = session.current_window_id().await;\n    let responses_metadata = startup_turn_context\n        .turn_metadata_state\n        .to_responses_metadata(\n            session.installation_id.clone(),\n            window_id,\n            CodexResponsesRequestKind::Prewarm,\n        );\n    let mut client_session = session.services.new_model_client_session();\n    let websocket_warmup_started_at = Instant::now();\n    client_session\n        .prewarm_websocket(\n            &startup_prompt,\n            &startup_turn_context.model_info,\n            &startup_turn_context.session_telemetry,\n            startup_turn_context.reasoning_effort.clone(),\n            startup_turn_context.reasoning_summary,\n            startup_turn_context.config.service_tier.clone(),\n            &responses_metadata,\n        )\n        .await?;\n"
+    },
+    {
+      "identity": "warmup-exclusion",
+      "path": "codex-rs/core/src/client.rs",
+      "start": 3447,
+      "end": 3455,
+      "sha256": "b90d1212699da6e89e591728fc07fa190c394bf455fc943e93fd32df8f44ad3e",
+      "excerpt": "            let deferred = if warmup {\n                None\n            } else {\n                crate::accounting::responses::read(&self.responses_accounting)?\n                    .filter(|value| !matches!(value.websocket_endpoint(), Ok(None)))\n            };\n            let provenance = crate::accounting::websocket::Provenance::capture(\n                self.client.state.provider.info(),\n                client_setup.auth.as_ref(),\n"
+    },
+    {
+      "identity": "warmup-drain",
+      "path": "codex-rs/core/src/client.rs",
+      "start": 3694,
+      "end": 3745,
+      "sha256": "b90d1212699da6e89e591728fc07fa190c394bf455fc943e93fd32df8f44ad3e",
+      "excerpt": "    pub async fn prewarm_websocket(\n        &mut self,\n        prompt: &Prompt,\n        model_info: &ModelInfo,\n        session_telemetry: &SessionTelemetry,\n        effort: Option<ReasoningEffortConfig>,\n        summary: ReasoningSummaryConfig,\n        service_tier: Option<String>,\n        responses_metadata: &CodexResponsesMetadata,\n    ) -> Result<()> {\n        if !self.client.responses_websocket_enabled() {\n            return Ok(());\n        }\n        if self.websocket_session.last_request.is_some() {\n            return Ok(());\n        }\n\n        let disabled_trace = InferenceTraceContext::disabled();\n        match self\n            .stream_responses_websocket(\n                prompt,\n                model_info,\n                session_telemetry,\n                effort,\n                summary,\n                service_tier,\n                responses_metadata,\n                /*warmup*/ true,\n                current_span_w3c_trace_context(),\n                &disabled_trace,\n            )\n            .await\n        {\n            Ok(WebsocketStreamOutcome::Stream(mut stream)) => {\n                // Wait for the v2 warmup request to complete before sending the first turn request.\n                while let Some(event) = stream.next().await {\n                    match event {\n                        Ok(ResponseEvent::Completed { .. }) => break,\n                        Err(err) => return Err(err),\n                        _ => {}\n                    }\n                }\n                Ok(())\n            }\n            Ok(WebsocketStreamOutcome::FallbackToHttp) => {\n                self.try_switch_fallback_transport(session_telemetry, model_info);\n                Ok(())\n            }\n            Err(err) => Err(err),\n        }\n    }\n\n"
+    },
+    {
+      "identity": "startup-needs-owner",
+      "path": "codex-rs/core/src/accounting_responses.rs",
+      "start": 18,
+      "end": 26,
+      "sha256": "31833d2e1cc6f3bcc54c7082f0eed3c6bc5d3ea4678c2b4c314494ebd65f0f22",
+      "excerpt": "\npub(crate) struct DeferredResponsesSampling {\n    request: Uuid,\n    session: Arc<Session>,\n    turn: String,\n    mode: AccountingMode,\n    sampling: OnceCell<Arc<Sampling>>,\n    failed: AtomicBool,\n}\n"
+    },
+    {
+      "identity": "attempt-contract",
+      "path": "codex-rs/state/src/runtime/accounting_types.rs",
+      "start": 71,
+      "end": 88,
+      "sha256": "68b1c1131e04f0233c578abffa1cab0fefafe0fb3f3fc435b626296ea10692e0",
+      "excerpt": "#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]\n#[serde(deny_unknown_fields)]\npub struct Attempt {\n    pub attempt_id: Uuid,\n    pub request_id: Uuid,\n    pub thread_id: ThreadId,\n    pub turn: String,\n    pub retry_of: Option<Uuid>,\n    pub provider: String,\n    pub model: String,\n    pub scope: Uuid,\n    pub dialect: Dialect,\n    pub dispatched_at_ms: Count,\n}\n\nimpl Attempt {\n    pub fn validate(&self) -> anyhow::Result<()> {\n        for text in [&self.turn, &self.provider, &self.model] {\n"
+    },
+    {
+      "identity": "warmup-fixture",
+      "path": "codex-rs/core/tests/suite/accounting_responses_ws_support.rs",
+      "start": 121,
+      "end": 134,
+      "sha256": "03d00d23a2c6b0104acab5440a951dcbc4a6553fea20107535ef90e115c47eef",
+      "excerpt": "                                    let Some(events) = rx.recv().await else { return; };\n                                    for event in events {\n                                        if ws.send(tokio_tungstenite::tungstenite::Message::Text(event.to_string().into())).await.is_err() { return; }\n                                    }\n                                    continue;\n                                }\n                                let events = vec![core_test_support::responses::ev_response_created(\"warm\"),\n                                    event(\"response.completed\", json!({\"input_tokens\":999,\"output_tokens\":999,\"total_tokens\":1998}))];\n                                for event in events {\n                                    if ws.send(tokio_tungstenite::tungstenite::Message::Text(event.to_string().into())).await.is_err() { return; }\n                                }\n                                continue;\n                            }\n                            counts.lock().unwrap().2 += 1;\n"
+    },
+    {
+      "identity": "warmup-exclusion-test",
+      "path": "codex-rs/core/tests/suite/accounting_responses_ws.rs",
+      "start": 82,
+      "end": 106,
+      "sha256": "a870d6e06159ffa3aa877670daa26b0b1530643c57db240556956f77f4ace911",
+      "excerpt": "#[tokio::test]\nasync fn accounting_responses_ws_native_prewarm_preconnect_and_cached_reuse() -> anyhow::Result<()>\n{\n    let server = MockServer::start().await;\n    let mut gate = Gate::start().await?;\n    let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))\n        .build_with_auto_env(&server)\n        .await?;\n    submit(&test).await?;\n    let held = gate.next().await?;\n    assert_eq!(held.body[\"previous_response_id\"], \"reused-provider-id\");\n    let db = test.codex.state_db().unwrap();\n    assert!(observations(&db).await?.is_empty());\n    held.complete().await?;\n    terminal(&test).await?;\n    assert_eq!(observations(&db).await?.len(), 1);\n    assert_eq!(\n        totals(&db, &attempts(&db).await?[0]).await?.measured[0].known,\n        100\n    );\n    counts(&gate, (1, 1, 1, 0));\n    stop(&test).await;\n    Ok(())\n}\n#[tokio::test]\n"
+    }
+  ]
+}

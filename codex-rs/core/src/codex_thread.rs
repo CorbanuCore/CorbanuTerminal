@@ -217,6 +217,18 @@ pub struct BackgroundTerminalInfo {
 /// Conduit for the bidirectional stream of messages that compose a thread
 /// (formerly called a conversation) in Codex.
 impl CodexThread {
+    /// Record a model request a client outside this process already sent, on
+    /// this thread. Returns whether it was recorded; collection being off is a
+    /// `false`, not an error.
+    pub async fn record_sent_model_request(
+        &self,
+        request: crate::accounting_extensions::SentModelRequest,
+    ) -> bool {
+        crate::accounting_extensions::ExtensionAccounting::new(Arc::downgrade(&self.session))
+            .record_sent_request(request)
+            .await
+    }
+
     pub(crate) fn new(
         session: Arc<Session>,
         io: SessionIo,
@@ -261,6 +273,23 @@ impl CodexThread {
             expected_provider,
         )
         .await
+    }
+
+    /// Debug fixture: attach an existing, same-owner denial-only binding to live sampling.
+    #[cfg(debug_assertions)]
+    #[doc(hidden)]
+    pub fn attach_stage_one_binding_for_fixture(
+        &self,
+        client: &crate::memory_stage_one::StageOneMemoryClient,
+    ) -> Result<(), crate::memory_stage_one::StageOneMemoryDenial> {
+        let binding = client.binding_for_fixture(self.session.thread_id())?;
+        self.session
+            .services
+            .model_client()
+            .as_ref()
+            .clone()
+            .with_stage_one_memory_binding(binding)
+            .map(|_| ())
     }
 
     /// Returns the session telemetry handle for thread-scoped production instrumentation.
@@ -454,14 +483,14 @@ impl CodexThread {
 
     /// Injects model-visible items into the currently active turn.
     ///
-    /// This is the thread-level bridge to `Session::inject_if_running` for
-    /// callers that only hold a `CodexThread`.
+    /// New work is deferred until the turn boundary if the active task cannot
+    /// admit it under the latest authorization.
     /// It returns the unchanged items when this thread has no active turn.
     pub async fn inject_if_running(
         &self,
         items: Vec<ResponseItem>,
     ) -> Result<(), Vec<ResponseItem>> {
-        self.session.inject_if_running(items).await
+        self.session.inject_extension_if_running(items).await
     }
 
     /// Starts an automatic regular turn with model-visible items only when idle

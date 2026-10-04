@@ -1,0 +1,1922 @@
+"""Default-OFF one-tick owner; admitted, journaled TMUX worker lifecycle."""
+import argparse
+from contextlib import ExitStack, closing, contextmanager, nullcontext
+import fcntl
+import os
+from pathlib import Path
+import socket
+import sqlite3
+import stat
+import subprocess
+import sys
+import time
+import uuid
+
+import fable_launcher as f
+from coordinator import TERMINAL, Rejected, digest, encoded
+import manager_cycle
+from manager_cycle import ExistingCoordinator
+
+WORKER_KINDS = frozenset({"implement", "revise", "review", "design", "functional_test",
+                          "evidence_review", "repair", "reconcile"})
+# Seconds for an idle worker to exit after /quit once its RETURN is recorded.
+CLOSE_TIMEOUT = 20
+# Automatic manager cycles (the manager lane): settings recorded in config. Its
+# runs_dir must be dedicated to automatic cycles: recovery and release treat a
+# manager claim whose cycle directory is there as the lane's own.
+MANAGER_SETTINGS = frozenset({"binary", "binary_sha256", "auth_vault_home", "runs_dir",
+                              "timeout_seconds", "min_interval_seconds", "daily_cap"})
+MANAGER_STATE, MANAGER_LOG = "manager-auto.json", "manager-cycles.jsonl"
+# An unchanged wake situation (a result still awaiting a verdict, nothing queued)
+# is raised again at most once per window, never in a loop.
+WAKE_REPEAT_SECONDS = 12 * 3600
+IN_FLIGHT = frozenset({"dispatching", "dispatch_uncertain", "dispatched", "running"})
+
+
+class DispatchDeferred(Exception):
+    """Authority currently defers dispatch; no external effect was attempted."""
+
+
+SCHEMA = {
+    "meta": "singleton INTEGER PRIMARY KEY CHECK(singleton=1), schema_version INTEGER, config_digest TEXT, package_digest TEXT, control_generation INTEGER, requested_mode TEXT, activation_decision_id TEXT, activation_revision INTEGER, activation_digest TEXT",
+    "boots": "boot_id TEXT, owner_epoch INTEGER, host_boot_id TEXT, pid INTEGER, process_start TEXT, package_digest TEXT, started_at REAL, stopped_at REAL, stop_reason TEXT, PRIMARY KEY(boot_id,owner_epoch)",
+    "operations": "op_id TEXT PRIMARY KEY, domain TEXT, action_id TEXT, claim TEXT, allocation_digest TEXT, effect TEXT, ordinal INTEGER, expected_coordinator_revision INTEGER, config_generation INTEGER, authority_digest TEXT, request_digest TEXT, request_artifact TEXT, phase TEXT, receipt_digest TEXT, receipt_artifact TEXT, hold_reason TEXT, created_at REAL, updated_at REAL",
+    "processes": "op_id TEXT PRIMARY KEY, role TEXT, host_boot_id TEXT, actual_pid INTEGER, pgid INTEGER, process_start TEXT, socket_path TEXT, tmux_session TEXT, pane_id TEXT, corbanu_session_id TEXT, thread_id TEXT, active_turn_id TEXT, model TEXT, provider TEXT, effort TEXT, binary_digest TEXT, worktree TEXT, private_run_root TEXT, terminal_status TEXT",
+    "observations": "observation_id TEXT PRIMARY KEY, op_id TEXT, observed_at_utc TEXT, boot_id TEXT, monotonic_offset REAL, source_kind TEXT, source_cursor TEXT, content_digest TEXT, artifact_path TEXT, identity_valid INTEGER, liveness TEXT, progress_kind TEXT",
+    "deliveries": "delivery_id TEXT PRIMARY KEY, source_domain TEXT, source_event_id TEXT, source_revision_or_watermark TEXT, target_domain TEXT, target_operation_id TEXT, payload_digest TEXT, phase TEXT, receipt_digest TEXT",
+    "holds": "hold_id TEXT PRIMARY KEY, scope TEXT, op_id TEXT, reason_code TEXT, first_seen REAL, last_seen REAL, original_evidence_digest TEXT, resolution_evidence_digest TEXT, resolved_at REAL",
+    "health": "component TEXT PRIMARY KEY, last_attempt_at REAL, last_success_at REAL, consecutive_failures INTEGER, next_probe_at REAL, status TEXT, evidence_digest TEXT",
+}
+
+
+def package_digest():
+    root = Path(__file__).resolve().parent
+    return digest({name: f.file_digest(root / name) for name in
+                   ("owner_daemon.py", "owner_tmux.py", "coordinator.py", "manager_cycle.py", "fable_launcher.py")})
+
+
+def private_file(path):
+    path = f.no_links(path)
+    info = path.stat()
+    f.require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid()
+              and stat.S_IMODE(info.st_mode) == 0o600 and info.st_nlink == 1, "unsafe_file")
+    return path
+
+
+def load(path):
+    return f.strict_json(f.read_file(private_file(path), 262144, private=True))
+
+
+def configuration(path):
+    value = load(path)
+    f.require(set(value) - {"transport", "manager_cycle"} ==
+              {"coordinator", "worktrees", "package_digest", "manager_enabled"}, "invalid_config")
+    if "transport" in value:
+        from owner_tmux import validate
+        validate(value["transport"])
+    if "manager_cycle" in value:
+        manager_settings(value["manager_cycle"])
+    f.require(type(value["manager_enabled"]) is bool and isinstance(value["worktrees"], list)
+              and bool(value["worktrees"]), "invalid_config")
+    coordinator = ExistingCoordinator(value["coordinator"])
+    f.require(not any(Path(str(coordinator.path) + suffix).exists()
+                      for suffix in ("-journal", "-wal", "-shm")), "coordinator_recovery_required")
+    coordinator.snapshot()
+    for path in value["worktrees"]:
+        f.require(Path(path).is_absolute() and f.no_links(path).is_dir(), "missing_worktree")
+    f.require(value["package_digest"] == package_digest(), "package_drift")
+    return value
+
+
+def manager_settings(value):
+    """Structural checks; the binary pin is verified at use, before each cycle."""
+    f.require(type(value) is dict and set(value) == MANAGER_SETTINGS, "invalid_manager_cycle")
+    for key in ("binary", "auth_vault_home", "runs_dir"):
+        f.require(isinstance(value[key], str) and Path(value[key]).is_absolute(), "invalid_manager_cycle")
+    f.require(isinstance(value["binary_sha256"], str) and len(value["binary_sha256"]) == 64,
+              "invalid_manager_cycle")
+    for key, low, high in (("timeout_seconds", manager_cycle.LAUNCH_MARGIN + 1, 3600),
+                           ("min_interval_seconds", 60, 86400), ("daily_cap", 1, 288)):
+        f.require(type(value[key]) is int and low <= value[key] <= high, "invalid_manager_cycle")
+    binary = f.no_links(value["binary"])
+    f.require(binary.is_file() and os.access(binary, os.X_OK), "invalid_manager_cycle")
+    f.vault_home(value["auth_vault_home"])
+    f.private_dir(value["runs_dir"])
+    return value
+
+
+IN_PROGRESS_MARKERS = ("rebase-merge", "rebase-apply", "BISECT_LOG", "MERGE_HEAD", "CHERRY_PICK_HEAD",
+                       "REVERT_HEAD", "sequencer")
+
+
+def disposable_head(path):
+    """The detached HEAD commit of a linked Git worktree, else None.
+
+    An integration worktree has a branch checked out (HEAD is a ref), and a main
+    checkout has a .git directory; neither is disposable. Reads files only.
+    """
+    try:
+        marker = f.no_links(Path(path) / ".git")
+        f.require(marker.is_file(), "not_linked_worktree")
+        text = f.read_file(marker, 4096).decode()
+        f.require(text.startswith("gitdir: ") and text.count("\n") <= 1, "not_linked_worktree")
+        gitdir = Path(text[len("gitdir: "):].strip())
+        # A worktree detached by a rebase, bisect, merge or cherry-pick in progress
+        # is somebody's branch work, not a disposable checkout.
+        f.require(not any(os.path.lexists(gitdir / name) for name in IN_PROGRESS_MARKERS), "worktree_busy")
+        head = f.read_file(gitdir / "HEAD", 4096).decode().strip()
+        return head if len(head) in (40, 64) and all(c in "0123456789abcdef" for c in head) else None
+    except (f.LaunchError, OSError, UnicodeError, ValueError):
+        return None
+
+
+def disposable_worktree(path, base_commit=None):
+    """A disposable worktree created for one piece of work: a linked worktree whose
+    detached HEAD is the work's frozen base commit (when one is given)."""
+    head = disposable_head(path)
+    return head is not None and (base_commit is None or head == base_commit)
+
+
+def adoptable_worktree(config, inputs):
+    """Default routing (and its claim-time re-check) runs an action only in a
+    configured worktree created for it: detached at the allocation's frozen
+    base_commit. A branch checkout, such as the main integration worktree, or
+    any worktree whose HEAD moved stays on the hand lane."""
+    from owner_tmux import worker_runtime
+    worktree = worker_runtime(inputs)["worktree"]
+    base = inputs.get("base_commit")
+    return (worktree in config["worktrees"] and isinstance(base, str)
+            and disposable_worktree(worktree, base))
+
+
+def artifact(root, relative, value):
+    path = root / relative
+    for directory in (*reversed(path.parent.relative_to(root).parents), path.parent.relative_to(root)):
+        target = root / directory
+        if not target.exists():
+            target.mkdir(mode=0o700)
+            fd = os.open(target.parent, os.O_RDONLY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+        f.private_dir(target)
+    if path.exists():
+        f.require(load(path) == value, "artifact_conflict")
+    else:
+        f.write_json(path, value)
+    return str(path.relative_to(root))
+
+
+@contextmanager
+def locked(path):
+    path = private_file(path)
+    fd = os.open(path, os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        info, current = os.fstat(fd), path.stat()
+        f.require((info.st_dev, info.st_ino) == (current.st_dev, current.st_ino)
+                  and info.st_nlink == 1 and stat.S_IMODE(info.st_mode) == 0o600,
+                  "lock_identity_changed")
+        yield
+    finally:
+        os.close(fd)
+
+
+def setup(config_path):
+    """Explicit offline setup only; creates OFF state, never activation authority."""
+    config = configuration(config_path)
+    root = f.private_dir(config["coordinator"])
+    path = root / "owner.sqlite3"
+    f.require(not path.exists(), "owner_state_exists")
+    for name in ("owner-daemon.lock", "owner-admission.lock"):
+        f.write_file(root / name, b"") if not (root / name).exists() else private_file(root / name)
+    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    os.close(fd)
+    with closing(sqlite3.connect(path)) as db:
+        db.execute("PRAGMA synchronous=FULL")
+        for table, columns in SCHEMA.items():
+            db.execute(f"CREATE TABLE {table} ({columns})")
+        db.execute("INSERT INTO meta VALUES(1,1,?,?,0,'off',NULL,NULL,NULL)",
+                   (digest(config), config["package_digest"]))
+        db.commit()
+    directory = os.open(root, os.O_RDONLY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+
+def validate_authority(authority, config):
+    f.require(type(authority) is dict and set(authority) == {
+        "decision_id", "revision", "authority", "scope", "generation",
+        "config_digest", "package_digest"}, "invalid_activation")
+    for key, reason in (("decision_id", "activation_decision_id_required"),
+                        ("authority", "activation_authority_required")):
+        f.require(isinstance(authority[key], str) and bool(authority[key].strip()), reason)
+    for key in ("revision", "generation"):
+        f.require(type(authority[key]) is int and authority[key] > 0,
+                  "activation_" + key + "_required")
+    f.require(authority["scope"] == ("tmux-workers" if "transport" in config else "fixture-only"),
+              "activation_scope_mismatch")
+    f.require(authority["config_digest"] == digest(config), "activation_config_mismatch")
+    f.require(authority["package_digest"] == package_digest(), "activation_package_mismatch")
+
+
+def activation_pending(root):
+    return any(os.path.lexists(root / name) for name in
+               ("activation-transaction.json", "activation-transaction.json.pending",
+                "activation.json.pending"))
+
+
+def remove_activation_intent(root):
+    # Called only after FULL-synchronous SQLite commit, with admission excluded.
+    for name in ("activation-transaction.json", "activation-transaction.json.pending",
+                 "activation.json.pending"):
+        path = root / name
+        if os.path.lexists(path):
+            private_file(path).unlink()
+    fd = os.open(root, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+PREVIEW_READ_SECONDS = 0.25
+
+
+def preview_backup(source, destination):
+    """Bound each read-only SQLite backup; never hold an owner flock."""
+    deadline = time.monotonic() + PREVIEW_READ_SECONDS
+    source.execute("PRAGMA busy_timeout=0")
+
+    def progress(status, remaining, total):
+        f.require(time.monotonic() < deadline, "preview_read_budget_exceeded")
+        f.require(status not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED), "preview_database_busy")
+
+    source.backup(destination, pages=32, progress=progress, sleep=0)
+
+
+@contextmanager
+def activation_store(config_path, readonly=False):
+    # Disarm must remain possible after package/config drift. Only resolve the
+    # existing store here; arm performs full live configuration validation.
+    config = load(config_path)
+    f.require(type(config) is dict and isinstance(config.get("coordinator"), str), "invalid_config")
+    root = f.private_dir(config["coordinator"])
+    with (nullcontext() if readonly else locked(root / "owner-daemon.lock")), \
+            (nullcontext() if readonly else locked(root / "owner-admission.lock")):
+        path = private_file(root / "owner.sqlite3")
+        f.require(not any(Path(str(path) + suffix).exists() for suffix in
+                          ("-journal", "-wal", "-shm")), "owner_recovery_required")
+        with closing(sqlite3.connect(":memory:" if readonly else path.as_uri() + "?mode=rw",
+                                     uri=not readonly)) as db:
+            if readonly:
+                with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=0)) as source:
+                    f.require(source.execute("PRAGMA journal_mode").fetchone()[0] == "delete", "journal_mode")
+                    preview_backup(source, db)
+            db.row_factory = sqlite3.Row
+            db.execute("PRAGMA synchronous=FULL")
+            f.require(db.execute("PRAGMA journal_mode").fetchone()[0] ==
+                      ("memory" if readonly else "delete"), "journal_mode")
+            for table, columns in SCHEMA.items():
+                row = db.execute("SELECT sql FROM sqlite_master WHERE name=?", (table,)).fetchone()
+                f.require(row and row[0] == f"CREATE TABLE {table} ({columns})", "schema_drift")
+            db.execute("BEGIN" if readonly else "BEGIN IMMEDIATE")
+            row = db.execute("SELECT * FROM meta WHERE singleton=1").fetchone()
+            f.require(row is not None, "state_drift")
+            meta = dict(row)
+            f.require(meta["schema_version"] == 1 and type(meta["control_generation"]) is int
+                      and meta["control_generation"] >= 0, "state_drift")
+            yield root, db, meta
+
+
+def coordinator_activation_impact(root, dispatcher=None):
+    """Read one coordinator snapshot without running/recovering its watchdog."""
+    coordinator = ExistingCoordinator(root)
+    f.require(not any(Path(str(coordinator.path) + suffix).exists()
+                      for suffix in ("-journal", "-wal", "-shm")), "coordinator_recovery_required")
+    with coordinator.connection(readonly=True) as db:
+        db.execute("PRAGMA busy_timeout=250")
+        row = db.execute("SELECT body FROM state WHERE id=1").fetchone()
+        f.require(row is not None, "uninitialized_state")
+        snapshot = f.strict_json(row[0])
+    observed_at = time.time()
+    actions = sorted(snapshot["actions"].values(), key=lambda value: value["id"])
+    reportable = [a for a in actions if coordinator.watchdog_action_reportable(a, observed_at)]
+    covered = [a["id"] for a in reportable if coordinator.watchdog_covers(snapshot, a, dispatcher)]
+    excluded = [a["id"] for a in reportable if not coordinator.watchdog_covers(snapshot, a, dispatcher)]
+    default_action = {}
+    future_covered = coordinator.watchdog_covers(snapshot, default_action, dispatcher)
+    coverage = dict(
+        dispatcher=dispatcher, covered_actions=covered, excluded_actions=excluded,
+        future_default_owner=coordinator.dispatch_owner(snapshot, default_action),
+        default_route="An admitted owner tick in tmux-workers scope routes unassigned, prepared, "
+        "unclaimed worker-kind actions from a manager run whose frozen worktree is configured "
+        "and disposable (a detached linked worktree, never a branch checkout such as the main "
+        "integration worktree) to owner through an audited handoff; every other new action stays hand.",
+        future_default_covered=future_covered,
+        manager_covered=coordinator.watchdog_covers(snapshot, None, dispatcher),
+        counted_actions="unreported overdue dispatching/dispatched/running actions",
+        condition="On an admitted tick reaching the watchdog; OFF, refusal or earlier failure runs no watchdog.",
+        hand_stall_detection="manager responsibility (--hand-run is manual; no scheduled hand watchdog)"
+        if not coordinator.watchdog_covers(snapshot, {"dispatch_owner": "hand"}, dispatcher)
+        else "covered by this watchdog",
+    )
+    coverage["summary"] = (
+        f"Owner watchdog on admitted ticks (unreported overdue actions): "
+        f"covered={len(covered)}, excluded={len(excluded)}; "
+        f"manager={'covered' if coverage['manager_covered'] else 'excluded'}; "
+        f"new default actions={'covered' if future_covered else 'excluded'}; "
+        f"hand stall detection={coverage['hand_stall_detection']}."
+    )
+    in_flight = []
+    for action in actions:
+        if action["status"] not in {"dispatching", "dispatched", "running",
+                                    "dispatch_uncertain", "returned"}:
+            continue
+        overdue = action["deadline"] < observed_at
+        covered_action = coordinator.watchdog_covers(snapshot, action, dispatcher)
+        will_report = covered_action and coordinator.watchdog_action_reportable(action, observed_at)
+        in_flight.append(dict(id=action["id"], status=action["status"], deadline=action["deadline"],
+                              overdue=overdue, stall_reported=bool(action.get("stall_reported")),
+                              dispatch_owner=coordinator.dispatch_owner(snapshot, action),
+                              watchdog_covered=covered_action, watchdog_will_report=will_report,
+                              watchdog_status="dispatch_uncertain" if will_report and
+                              action["status"] == "dispatching" else action["status"]))
+    manager = snapshot["manager"]
+    if manager is not None:
+        overdue = manager["deadline"] < observed_at
+        manager = dict(id=manager["id"], deadline=manager["deadline"], overdue=overdue,
+                       stall_reported=bool(manager.get("stall_reported")),
+                       watchdog_will_report=coordinator.watchdog_manager_reportable(
+                           snapshot, observed_at, dispatcher))
+    return dict(observed_at=observed_at, revision=snapshot["revision"], enabled=snapshot["enabled"],
+                in_flight=in_flight, overdue=[row for row in in_flight if row["overdue"]],
+                manager=manager, watchdog_coverage=coverage,
+                dispatch_control=snapshot.get("dispatch_control"),
+                ownership={a["id"]: dict(owner=coordinator.dispatch_owner(snapshot, a),
+                           claim=a.get("claim"), allocation_digest=a.get("allocation_digest"),
+                           status=a["status"]) for a in snapshot["actions"].values()},
+                warning=coverage["summary"] + " Armed operation is not read-only. "
+                "For covered actions only, watchdog_will_report predicts unreported overdue "
+                "dispatching/dispatched/running stalls if an admitted tick reaches the watchdog; "
+                "dispatching becomes dispatch_uncertain. "
+                "Covered watchdog mutations can occur while dispatch is paused; "
+                "fixture-only processing can append events when dispatch is ready. "
+                "This snapshot is advisory, not an ownership gate or reservation; claims and "
+                "deadlines can change before a tick.")
+
+
+def unresolved_holds(db):
+    """Read receipts, including holds whose action is now in the other lane."""
+    return [dict(row, dispatch_owner=None, excluded_from_owner_lane=None,
+                 ownership_status="not_checked") for row in db.execute(
+        "SELECT h.op_id,h.reason_code,h.first_seen,h.last_seen,o.action_id "
+        "FROM holds h LEFT JOIN operations o ON o.op_id=h.op_id "
+        "WHERE h.resolved_at IS NULL ORDER BY h.op_id")]
+
+
+def activation_status(config_path):
+    """Independent advisory reads: unavailable state is unknown, never empty/off."""
+    config = load(config_path)
+    f.require(type(config) is dict and isinstance(config.get("coordinator"), str), "invalid_config")
+    root = f.private_dir(config["coordinator"])
+    result = dict(state=None, generation=None, next_generation=None, stored=None,
+                  config_digest=digest(config), package_digest=package_digest(),
+                  scope="tmux-workers" if "transport" in config else "fixture-only",
+                  recovery_required=activation_pending(root), coordinator=None,
+                  complete=False, unavailable={}, unresolved_holds=None,
+                  warning="Advisory independent reads, not an atomic snapshot or arming clearance. "
+                  "Armed ticks can mutate shared coordinator watchdog and fixture events; "
+                  "unavailable components must be inspected again while quiescent.")
+    errors = (f.LaunchError, Rejected, OSError, sqlite3.Error, ValueError, TypeError, KeyError)
+    try:
+        with activation_store(config_path) as (_, db, meta):
+            result["unresolved_holds"] = unresolved_holds(db)
+            for hold in result["unresolved_holds"]:
+                hold["ownership_status"] = "coordinator_unavailable"
+            result.update(state=meta["requested_mode"], generation=meta["control_generation"],
+                          next_generation=meta["control_generation"] + 1, stored=meta)
+    except errors as exc:
+        reason = str(exc) if isinstance(exc, (f.LaunchError, Rejected)) else type(exc).__name__
+        result["unavailable"]["owner"] = dict(error=type(exc).__name__, reason=reason)
+    try:
+        result["coordinator"] = coordinator_activation_impact(root, "owner" if "transport" in config else None)
+    except errors as exc:
+        reason = str(exc) if isinstance(exc, (f.LaunchError, Rejected)) else type(exc).__name__
+        result["unavailable"]["coordinator"] = dict(error=type(exc).__name__, reason=reason)
+    if result["coordinator"] is not None and result["unresolved_holds"] is not None:
+        ownership = result["coordinator"]["ownership"]
+        claims = {digest(["tmux", key, "claim"]): key for key in ownership}
+        for hold in result["unresolved_holds"]:
+            hold["action_id"] = hold["action_id"] or claims.get(hold["op_id"])
+            action = ownership.get(hold["action_id"])
+            hold["ownership_status"] = ("resolved" if action is not None else
+                                        "action_missing" if hold["action_id"] else "unmapped")
+            if action is not None:
+                hold["dispatch_owner"] = action["owner"]
+                hold["excluded_from_owner_lane"] = (
+                    "transport" in config and hold["dispatch_owner"] == "hand")
+    result["complete"] = not result["unavailable"]
+    return result
+
+
+def preview_changes(before, after, path=()):
+    """JSON field deltas, including missing versus null, for an advisory preview."""
+    if isinstance(before, dict) and isinstance(after, dict):
+        changes = []
+        for key in sorted(before.keys() | after.keys()):
+            if key not in before:
+                changes.append(dict(path=[*path, key], operation="insert", after=after[key]))
+            elif key not in after:
+                changes.append(dict(path=[*path, key], operation="delete", before=before[key]))
+            else:
+                changes.extend(preview_changes(before[key], after[key], (*path, key)))
+        return changes
+    return [] if before == after else [dict(path=list(path), operation="update",
+                                            before=before, after=after)]
+
+
+def arming_preview(root, db, meta, config, authority, impact):
+    """All arm checks have passed; predict fixture effects using only RAM writes.
+
+    Deliberately refuse unsupported transport/replay previews instead of presenting
+    a partial plan as exact. These are preview limits, not new arming policy.
+    """
+    f.require("transport" not in config, "preview_requires_fixture_only")
+    f.require(not db.execute("SELECT 1 FROM operations WHERE phase IN ('intent','observed')").fetchone(),
+              "preview_requires_settled_operations")
+    after = dict(meta, requested_mode="armed", control_generation=authority["generation"],
+                 activation_decision_id=authority["decision_id"],
+                 activation_revision=authority["revision"], activation_digest=digest(authority))
+    request = dict(identity=digest([authority["generation"], "fixture-tick"]), fixture_only=True)
+    op_id = digest([authority["generation"], "fixture", request["identity"], None, None, "observe", 0])
+    source = ExistingCoordinator(root)
+    observed_at = time.time()
+    with closing(sqlite3.connect(":memory:", isolation_level=None)) as memory:
+        memory.row_factory = sqlite3.Row
+        # The source connection is read-only; backup writes solely into RAM.
+        with source.connection(readonly=True) as original:
+            preview_backup(original, memory)
+        row = memory.execute("SELECT body FROM state WHERE id=1").fetchone()
+        f.require(row is not None and f.strict_json(row[0])["revision"] == impact["revision"],
+                  "preview_coordinator_changed")
+
+        class PreviewCoordinator(ExistingCoordinator):
+            def __init__(self):
+                self.clock = lambda: observed_at
+
+            @contextmanager
+            def connection(self, readonly=False):
+                try:
+                    yield memory
+                finally:
+                    # Match a real per-call connection's close/rollback semantics.
+                    if memory.in_transaction:
+                        memory.rollback()
+
+        def rows():
+            tables = {}
+            for table, key in (("state", "id"), ("events", "seq"), ("audit", "seq"),
+                               ("action_history", "id"), ("evidence", "digest"),
+                               ("sqlite_sequence", "name")):
+                tables[table] = {}
+                for row in memory.execute(f"SELECT * FROM {table}"):
+                    value = dict(row)
+                    if "body" in value:
+                        value["body"] = f.strict_json(value["body"])
+                    tables[table][str(value[key])] = value
+            return tables
+
+        coordinator = PreviewCoordinator()
+        before = rows()
+        watchdog = coordinator.watchdog()
+        held = bool(db.execute("SELECT 1 FROM holds WHERE resolved_at IS NULL").fetchone())
+        readiness = coordinator.readiness()
+        effect = not held and readiness in {"ready", "empty"} and not db.execute(
+            "SELECT 1 FROM operations WHERE op_id=?", (op_id,)).fetchone()
+        fixture = fixture_receipt(request) if effect else None
+        if fixture:
+            coordinator.event(fixture["event"])
+        changes = preview_changes(before, rows())
+    return dict(
+        state="WOULD_ARM", dry_run=True, generation=authority["generation"],
+        read_policy=dict(owner_locks=False, sqlite_backup_seconds=PREVIEW_READ_SECONDS,
+                         sqlite_backup_pages=32, busy_wait_seconds=0,
+                         warning="Advisory independent snapshots. SQLite briefly takes read locks; "
+                         "each backup refuses on contention or its 250ms budget. "
+                         "No owner lock spans the preview; revalidate at arm."),
+        activation_digest=digest(authority), coordinator=impact,
+        arm=dict(
+            database=str(root / "owner.sqlite3"), table="meta", key=dict(singleton=1),
+            before=meta, after=after,
+            activation_file=dict(path=str(root / "activation.json"),
+                                 operation="replace" if (root / "activation.json").exists() else "create",
+                                 after=authority),
+            transient_files=[str(root / name) for name in
+                             ("activation-transaction.json.pending", "activation-transaction.json",
+                              "activation.json.pending", "owner.sqlite3-journal")],
+            intent=dict(authority=authority, previous_generation=meta["control_generation"])),
+        first_admitted_tick=dict(
+            observed_at=observed_at, coordinator_database=str(source.path),
+            coordinator_changes=changes, watchdog_events=watchdog,
+            state="HOLD" if held else "ACTIVE" if readiness in {"ready", "empty"} else "READY",
+            readiness=readiness, fixture_event=fixture["event"] if fixture else None,
+            owner_database=str(root / "owner.sqlite3"),
+            owner_rows=dict(
+                boots="INSERT boot_id=<new UUID>, owner_epoch=generation, host_boot_id, pid, "
+                      "process_start, package_digest, started_at; UPDATE stopped_at, stop_reason=tick_exit",
+                health=dict(component="watchdog", operation="INSERT OR REPLACE",
+                            after=dict(last_attempt_at="<tick time>", last_success_at="<tick time>",
+                                       consecutive_failures=0, next_probe_at=None, status="ok",
+                                       evidence_digest=digest(watchdog))),
+                operations=dict(op_id=op_id, final_phase="applied") if effect else None,
+                observations=dict(observation_id=op_id, op_id=op_id) if effect else None,
+                deliveries=dict(delivery_id=op_id, phase="applied") if effect else None),
+            files=[str(root / "runs" / op_id / name) for name in
+                   ("request.json", "receipt.json", "observations/1.json")] if effect else [],
+            transient_files=[str(root / "owner.sqlite3-journal")]
+                            + ([str(root / "coordinator.sqlite3-journal")] if changes else []),
+            warning="WATCHDOG/EVENT HISTORY IS NOT UNDONE BY DISARM. No worker launch in fixture-only scope."),
+        schedule="Arming neither fires a tick nor clears a latched schedule HOLD. "
+                 "An installed schedule must be explicitly recovered before kernel admission; "
+                 "held probes still update tick.json and publish owner-recurrence.json.",
+        limitations="Point-in-time advisory, not a reservation. Inspect while coordinator is quiescent; "
+                    "deadlines and state may change before admission. UUIDs, PIDs and wall times are "
+                    "allocated only by the actual tick. Schedule/service/pin health is separate; "
+                    "this preview does not clear or inspect its HOLD.")
+
+
+def arm_owner(config_path, authority, dry_run=False):
+    """Explicit local authority; never installs a schedule or invokes transport.
+
+    File + SQLite have no shared physical transaction. Both owner locks exclude
+    readers; a durable intent fences admission across crashes, including a crash
+    after the SQL commit. Only explicit disarm clears an interrupted transaction.
+    """
+    with activation_store(config_path, readonly=dry_run) as (root, db, meta):
+        f.require(not activation_pending(root), "activation_recovery_required")
+        config = configuration(config_path)
+        f.require(config["coordinator"] == str(root), "config_drift")
+        f.require(meta["config_digest"] == digest(config)
+                  and meta["package_digest"] == package_digest(), "state_drift")
+        validate_authority(authority, config)
+        f.require(authority["generation"] == meta["control_generation"] + 1,
+                  "activation_generation_mismatch")
+        f.require(meta["requested_mode"] == "off", "owner_already_armed")
+        if os.path.lexists(root / "activation.json"):
+            private_file(root / "activation.json")
+        impact = coordinator_activation_impact(root, "owner" if "transport" in config else None)
+        if "transport" in config:
+            f.require(impact["dispatch_control"] is not None, "dispatch_handoff_required")
+        if dry_run:
+            return arming_preview(root, db, meta, config, authority, impact)
+        f.write_json(root / "activation-transaction.json",
+                     dict(authority=authority, previous_generation=meta["control_generation"]))
+        f.write_json(root / "activation.json", authority)
+        db.execute("UPDATE meta SET requested_mode='armed',control_generation=?,"
+                   "activation_decision_id=?,activation_revision=?,activation_digest=? WHERE singleton=1",
+                   (authority["generation"], authority["decision_id"],
+                    authority["revision"], digest(authority)))
+        db.commit()
+        remove_activation_intent(root)
+        return dict(state="ARMED", generation=authority["generation"], activation_digest=digest(authority),
+                    coordinator=impact)
+
+
+def disarm_owner(config_path, generation):
+    """Revoke admission, consume a generation and recover interrupted activation.
+
+    Retain activation.json as evidence. Existing processes and schedule HOLDs
+    are deliberately unaffected; this is revocation, not worker termination.
+    """
+    f.require(type(generation) is int and generation >= 0, "activation_generation_required")
+    with activation_store(config_path) as (root, db, meta):
+        f.require(generation == meta["control_generation"], "activation_generation_mismatch")
+        db.execute("UPDATE meta SET requested_mode='off',control_generation=? WHERE singleton=1",
+                   (generation + 1,))
+        db.commit()
+        remove_activation_intent(root)
+        return dict(state="OFF", generation=generation + 1)
+
+
+def handoff(config_path, request):
+    """One SQLite commit defines the cutover, with both dispatchers excluded.
+
+    Cooperating hand dispatch uses --hand-run and the same locks/journal. Initial
+    cutover requires the operator to quiesce legacy/manual key senders first.
+    """
+    f.require(type(request) is dict and set(request) ==
+              {"expected_revision", "assignments", "evidence"}, "invalid_handoff")
+    with activation_store(config_path) as (root, db, meta):
+        coordinator = ExistingCoordinator(root)
+        state = coordinator.snapshot()
+        f.require(isinstance(request["assignments"], dict), "invalid_handoff")
+        for key, selection in request["assignments"].items():
+            action = state["actions"][key]
+            if selection.get("to") == "owner" and action["status"] != "prepared":
+                # A legacy hand claim has no daemon effect receipts. Never
+                # fabricate those or relaunch it to make ownership appear valid.
+                row = db.execute("SELECT * FROM operations WHERE action_id=? AND effect='claim'",
+                                 (key,)).fetchone()
+                f.require(row is not None and row["phase"] == "applied"
+                          and row["config_generation"] == meta["control_generation"]
+                          and row["authority_digest"] == meta["activation_digest"],
+                          "handoff_requires_receipted_claim")
+                receipt = load(root / row["receipt_artifact"])
+                f.require(digest(receipt) == row["receipt_digest"]
+                          and receipt["result"]["claim"] == action.get("claim")
+                          and receipt["result"]["allocation_digest"] == action["allocation_digest"],
+                          "handoff_claim_mismatch")
+        control = coordinator._handoff(**request)
+        return dict(state="HANDED_OFF", control=control,
+                    coordinator=str(root), assignments=request["assignments"])
+
+
+RESOLVABLE = frozenset({"dispatching", "dispatch_uncertain", "dispatched", "running"})
+
+
+def socket_state(path):
+    """absent, stale (no listener: connection refused) or listening; unknown fails closed."""
+    if not os.path.lexists(path):
+        return "absent"
+    probe = socket.socket(socket.AF_UNIX)
+    probe.settimeout(1)
+    try:
+        probe.connect(str(path))
+        return "listening"
+    except ConnectionRefusedError:
+        return "stale"
+    except OSError:
+        return "unknown"
+    finally:
+        probe.close()
+
+
+def stopped_worker(root, db, action_id):
+    """Evidence that the recorded worker processes are gone and its TMUX socket is dead.
+
+    Fails closed: an attempted launch requires its run directory and recorded
+    process identity, cross-checked against the journal's process row.
+    """
+    from owner_tmux import processes
+    launch_id = digest(["tmux", action_id, "launch"])
+    launched = db.execute("SELECT 1 FROM operations WHERE op_id=?", (launch_id,)).fetchone() is not None
+    rows = {row["private_run_root"]: row for row in db.execute(
+        "SELECT actual_pid,process_start,private_run_root FROM processes WHERE op_id=?", (launch_id,))}
+    prepare = db.execute("SELECT receipt_artifact FROM operations WHERE op_id=?",
+                         (digest(["tmux", action_id, "prepare"]),)).fetchone()
+    runs = set(rows)
+    if prepare and prepare["receipt_artifact"]:
+        runs.add(load(root / prepare["receipt_artifact"])["result"])
+    f.require(not launched or (rows and len(runs) == 1), "resolution_requires_process_identity")
+    result = []
+    for run in sorted(runs):
+        f.require(isinstance(run, str) and Path(run).is_absolute() and Path(run).is_dir(),
+                  "resolution_requires_run_record")
+        run = f.private_dir(run)
+        pids = {}
+        if launched:
+            f.require((run / "process.json").exists(), "resolution_requires_process_identity")
+            proc = f.strict_json(f.read_file(run / "process.json", 4096, private=True))
+            f.require(all(proc.get(k) is not None for k in ("pid", "start", "server", "server_start")),
+                      "resolution_requires_process_identity")
+            row = rows[str(run)]
+            f.require(row["actual_pid"] in (None, proc["pid"])
+                      and row["process_start"] in (None, proc["start"]), "resolution_process_identity_mismatch")
+            pids = {str(proc["pid"]): proc["start"], str(proc["server"]): proc["server_start"]}
+        if (run / "owned.json").exists():
+            pids.update(f.strict_json(f.read_file(run / "owned.json", 65536, private=True)))
+        table = processes([int(pid) for pid in pids]) if pids else {}
+        alive = sorted(int(pid) for pid, start in pids.items() if int(pid) in table
+                       and table[int(pid)][3] == start and not table[int(pid)][2].startswith("Z"))
+        sock = socket_state(run / "s")
+        f.require(not alive and sock in ("absent", "stale"), "resolution_requires_stopped_worker")
+        result.append(dict(run=str(run), checked_pids=sorted(int(pid) for pid in pids),
+                           alive=alive, socket=sock))
+    return result
+
+
+def resolve_hold(config_path, request):
+    """Resolve one action's unresolved holds with recorded evidence; never delete rows.
+
+    Holds the same locks as arm/disarm, so no tick runs concurrently. Requires
+    the exact unresolved reasons, the recorded claim/allocation and a stopped
+    worker. A live owner claim is reconciled to failed (never resumed or
+    relaunched); operations keep their history and move held -> resolved,
+    which the owner lane skips. Each hold row records resolution_evidence_digest
+    and resolved_at; the evidence document is kept as a private artifact.
+    """
+    f.require(type(request) is dict and set(request) ==
+              {"action_id", "claim", "allocation_digest", "reason_codes", "evidence"}, "invalid_resolution")
+    f.require(isinstance(request["evidence"], str) and 0 < len(request["evidence"].strip()) <= 4000,
+              "resolution_evidence_required")
+    f.require(isinstance(request["reason_codes"], list)
+              and all(isinstance(r, str) for r in request["reason_codes"]), "invalid_resolution")
+    action_id = request["action_id"]
+    with activation_store(config_path) as (root, db, meta):
+        op_id = digest(["tmux", action_id, "claim"])
+        holds = [dict(h) for h in db.execute(
+            "SELECT * FROM holds WHERE op_id=? AND resolved_at IS NULL ORDER BY hold_id", (op_id,))]
+        f.require(bool(holds), "no_unresolved_hold")
+        f.require(sorted(request["reason_codes"]) == sorted(h["reason_code"] for h in holds),
+                  "hold_reasons_mismatch")
+        rows = [dict(r) for r in db.execute(
+            "SELECT op_id,effect,phase,hold_reason,receipt_digest,claim,allocation_digest FROM operations "
+            "WHERE domain='tmux' AND action_id=? ORDER BY op_id", (action_id,))]
+        f.require(bool(rows) and all(r["phase"] == "held" for r in rows),
+                  "resolution_requires_held_operations")
+        f.require(all(r["claim"] in (None, request["claim"])
+                      and r["allocation_digest"] == request["allocation_digest"] for r in rows),
+                  "resolution_claim_mismatch")
+        coordinator = ExistingCoordinator(root)
+        state = coordinator.snapshot()
+        action = state["actions"].get(action_id)
+        f.require(action is not None and coordinator.dispatch_owner(state, action) in (None, "owner"),
+                  "resolution_requires_owner_action")
+        f.require(action.get("claim") == request["claim"]
+                  and action["allocation_digest"] == request["allocation_digest"], "resolution_claim_mismatch")
+        before = action["status"]
+        # After a recorded RETURN only the close can hold; settle it without touching
+        # the coordinator's returned/verdict state.
+        returned = any(r["effect"] == "returned" and r["receipt_digest"] for r in rows)
+        f.require(before in RESOLVABLE | {"failed", "cancelled"}
+                  or (returned and before in {"returned", "accepted"}),
+                  "resolution_requires_reconcilable_action")
+        workers = stopped_worker(root, db, action_id)
+        document = dict(request=request, holds=holds, operations=rows, workers=workers,
+                        generation=meta["control_generation"], requested_mode=meta["requested_mode"],
+                        coordinator_revision=state["revision"], action_status_before=before, at=time.time())
+        document["coordinator_evidence"] = dict(kind="owner_hold_resolution",
+                                                pre_resolution_digest=digest(document))
+        if before in RESOLVABLE:
+            coordinator.reconcile_dispatch(action_id, document["coordinator_evidence"], dispatcher="owner")
+        after = coordinator.snapshot()["actions"][action_id]["status"]
+        document["action_status_after"] = after
+        relative = artifact(root, "runs/" + op_id + "/resolutions/" + digest(document) + ".json", document)
+        now = time.time()
+        db.execute("UPDATE holds SET resolution_evidence_digest=?,resolved_at=? "
+                   "WHERE op_id=? AND resolved_at IS NULL", (digest(document), now, op_id))
+        db.execute("UPDATE operations SET phase='resolved',updated_at=? WHERE domain='tmux' AND action_id=?",
+                   (now, action_id))
+        db.commit()
+        return dict(state="RESOLVED", action_id=action_id, resolved=[h["reason_code"] for h in holds],
+                    resolution_evidence_digest=digest(document), artifact=relative,
+                    action_status_before=before, action_status_after=after)
+
+
+@contextmanager
+def uninstalled_schedule(config_path, schedule_root):
+    """Serialize with install/repin and bind the inspected receipt to this config."""
+    f.require(schedule_root is not None, "reconfigure_requires_schedule")
+    schedule_root = f.private_dir(schedule_root)
+    with locked(schedule_root / "installation.lock"):
+        receipt = load(schedule_root / "installation.json")
+        f.require(receipt["pins"]["config"] == str(private_file(config_path)),
+                  "reconfigure_schedule_config_mismatch")
+        f.require(receipt["phase"] == "uninstalled", "reconfigure_requires_uninstalled")
+        domain = installation_domain(receipt)
+        sibling = ("user" if domain.startswith("gui/") else "gui") + "/" + str(os.getuid())
+        for location in (domain, sibling):
+            presence, _ = service(receipt["label"], location)
+            f.require(presence == "absent" or
+                      (location == sibling and presence == "domain_absent"),
+                      "reconfigure_requires_absent_service")
+        yield
+
+
+def reconfigure_owner(config_path, replacement, schedule_root=None):
+    """OFF-only repin of a recorded, uninstalled schedule; preserve history."""
+    with uninstalled_schedule(config_path, schedule_root), activation_store(config_path) as (root, db, meta):
+        f.require(meta["requested_mode"] == "off", "reconfigure_requires_off")
+        config = configuration(replacement)
+        f.require(config["coordinator"] == str(root), "coordinator_change_forbidden")
+        f.require(not db.execute("SELECT 1 FROM operations WHERE phase NOT IN ('applied','resolved')").fetchone()
+                  and not db.execute("SELECT 1 FROM holds WHERE resolved_at IS NULL").fetchone(),
+                  "reconfigure_requires_settled_operations")
+        state = ExistingCoordinator(root).snapshot()
+        f.require(not any(a.get("dispatch_owner") == "owner" and a["status"] not in
+                          {"prepared", "accepted", "failed", "cancelled"}
+                          for a in state["actions"].values()), "reconfigure_requires_quiescent_owner")
+        f.write_json(root / "activation-transaction.json",
+                     dict(reconfigure=digest(config), previous_generation=meta["control_generation"]))
+        f.write_json(config_path, config)
+        db.execute("UPDATE meta SET config_digest=?,package_digest=? WHERE singleton=1",
+                   (digest(config), package_digest()))
+        db.commit()
+        remove_activation_intent(root)
+        return dict(state="OFF", config_digest=digest(config), package_digest=package_digest(),
+                    generation=meta["control_generation"])
+
+
+def fixture_receipt(request):
+    return {"fixture_only": True, "request_digest": digest(request),
+            "event": {"id": "owner-fixture:" + request["identity"], "fixture_only": True}}
+
+
+class FixedTestAdapter:
+    """A deterministic fixture receipt; no callable, command, or transport configuration."""
+    def observe(self, request):
+        return fixture_receipt(request)
+
+
+def configured_adapter(config):
+    if "transport" in config:
+        from owner_tmux import TmuxAdapter
+        return TmuxAdapter(config["transport"])
+    return FixedTestAdapter()
+
+
+class Kernel:
+    def __init__(self, config_path, dispatcher="owner"):
+        f.require(dispatcher in {"owner", "hand"}, "invalid_dispatcher")
+        self.dispatcher = dispatcher
+        self.config_path = Path(config_path)
+        # Validate shared state only after acquiring the delivery lock in tick;
+        # a cooperating dispatcher may currently be committing its SQLite journal.
+        self.config = load(config_path)
+        self.root = f.private_dir(self.config["coordinator"])
+        self.c = ExistingCoordinator(self.root)
+        if dispatcher == "hand":
+            f.require("transport" in self.config, "hand_run_requires_transport")
+        self.db = None
+
+    def admit(self):
+        f.require(configuration(self.config_path) == self.config, "config_drift")
+        meta = dict(self.db.execute("SELECT * FROM meta WHERE singleton=1").fetchone())
+        f.require(meta["schema_version"] == 1 and meta["config_digest"] == digest(self.config)
+                  and meta["package_digest"] == package_digest(), "state_drift")
+        f.require(meta["requested_mode"] == "armed", "owner_off")
+        f.require(not activation_pending(self.root), "activation_recovery_required")
+        authority = load(self.root / "activation.json")
+        validate_authority(authority, self.config)
+        f.require((meta["activation_decision_id"], meta["activation_revision"],
+                   meta["activation_digest"], meta["control_generation"]) ==
+                  (authority["decision_id"], authority["revision"], digest(authority),
+                   authority["generation"]) and authority["config_digest"] == digest(self.config)
+                  and authority["package_digest"] == package_digest(), "activation_mismatch")
+        return meta
+
+    def hold(self, op_id, reason):
+        now = time.time()
+        artifact(self.root, "runs/" + (op_id or "global") + "/holds/" + str(uuid.uuid4()) + ".json",
+                 {"reason": reason, "op_id": op_id, "observed_at": now})
+        # A recurrence after resolution opens a new row; resolved rows stay as history.
+        prior = self.db.execute("SELECT COUNT(*) FROM holds WHERE op_id IS ? AND reason_code=? "
+                                "AND resolved_at IS NOT NULL", (op_id, reason)).fetchone()[0]
+        self.db.execute("INSERT INTO holds VALUES(?,?,?,?,?,?,?,NULL,NULL) "
+                        "ON CONFLICT(hold_id) DO UPDATE SET last_seen=excluded.last_seen",
+                        (digest([op_id, reason] + ([prior] if prior else [])),
+                         "operation" if op_id else "global",
+                         op_id, reason, now, now, digest({"reason": reason})))
+        if op_id:
+            self.db.execute("UPDATE operations SET phase='held',hold_reason=?,updated_at=? WHERE op_id=?",
+                            (reason, now, op_id))
+        self.db.commit()
+
+    def replay(self, row):
+        request = load(self.root / row["request_artifact"])
+        f.require(digest(request) == row["request_digest"], "request_drift")
+        receipt_path = "runs/" + row["op_id"] + "/receipt.json"
+        if not (self.root / receipt_path).exists():
+            self.hold(row["op_id"], "effect_uncertain")
+            return
+        meta = self.admit()
+        if (row["config_generation"], row["authority_digest"]) != (
+                meta["control_generation"], meta["activation_digest"]):
+            self.hold(row["op_id"], "prior_activation")
+            return
+        receipt = load(self.root / receipt_path)
+        f.require(receipt == fixture_receipt(request), "invalid_fixture_receipt")
+        f.require(row["receipt_digest"] in (None, digest(receipt)), "receipt_drift")
+        self.db.execute("UPDATE operations SET phase='observed',receipt_digest=?,receipt_artifact=? WHERE op_id=?",
+                        (digest(receipt), receipt_path, row["op_id"]))
+        self.db.commit()
+        # Coordinator.event checks exact duplicate content before mutating revision.
+        self.c.event(receipt["event"])
+        self.db.execute("INSERT OR REPLACE INTO deliveries VALUES(?,?,?,?,?,?,?,?,?)",
+                        (row["op_id"], "fixture", receipt["event"]["id"], "1", "coordinator",
+                         row["op_id"], digest(receipt["event"]), "applied", digest(receipt)))
+        self.db.execute("UPDATE operations SET phase='applied',updated_at=? WHERE op_id=?",
+                        (time.time(), row["op_id"]))
+        self.db.commit()
+
+    def effect(self, adapter, meta):
+        request = {"identity": digest([meta["control_generation"], "fixture-tick"]),
+                   "fixture_only": True}
+        op_id = digest([meta["control_generation"], "fixture", request["identity"],
+                        None, None, "observe", 0])
+        if self.db.execute("SELECT 1 FROM operations WHERE op_id=?", (op_id,)).fetchone():
+            return
+        relative = artifact(self.root, "runs/" + op_id + "/request.json", request)
+        now = time.time()
+        self.db.execute("INSERT INTO operations VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (op_id, "fixture", None, None, None, "observe", 0, self.c.snapshot()["revision"],
+                         meta["control_generation"], meta["activation_digest"], digest(request),
+                         relative, "intent", None, None, None, now, now))
+        self.db.commit()
+        receipt = adapter.observe(request)
+        artifact(self.root, "runs/" + op_id + "/receipt.json", receipt)
+        observation = artifact(self.root, "runs/" + op_id + "/observations/1.json", receipt)
+        self.db.execute("INSERT INTO observations VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (op_id, op_id, f.now(), self.boot, time.monotonic() - self.started,
+                         "fixture", "1", digest(receipt), observation, 1, "fixture", "receipt"))
+        self.db.commit()
+        self.replay(self.db.execute("SELECT * FROM operations WHERE op_id=?", (op_id,)).fetchone())
+
+    def worker_gate(self, action):
+        meta = self.admit()
+        state = self.c.snapshot()
+        current = state["actions"][action["id"]]
+        self.c._dispatcher(state, current, self.dispatcher)
+        if not state["enabled"] or state["manager"] is not None:
+            raise DispatchDeferred("dispatch_paused_or_owned")
+        f.require(current["allocation_digest"] == action["allocation_digest"]
+                  == digest(state["allocations"].get(action["inputs"]["allocation"]))
+                  and current["inputs"] == action["inputs"], "allocation_drift")
+        f.require(current.get("claim") == action.get("claim"), "claim_drift")
+        self.c._executable(state, current)
+        self.c._resources_available(state, current)
+        f.require("deadline" not in current or time.time() < current["deadline"], "lease_expired")
+        return meta
+
+    def close_gate(self, action):
+        """Closing needs an admitted owner and the coordinator's recorded RETURN. A pause
+        or a manager-owned cycle defers it like any other key delivery."""
+        self.admit()
+        state = self.c.snapshot()
+        current = state["actions"][action["id"]]
+        self.c._dispatcher(state, current, self.dispatcher)
+        if not state["enabled"] or state["manager"] is not None:
+            raise DispatchDeferred("dispatch_paused_or_owned")
+        f.require(current.get("claim") == action.get("claim") and current.get("result")
+                  and current["status"] in {"returned"} | TERMINAL, "close_requires_recorded_return")
+
+    def step(self, action, effect, request, perform, gate=None):
+        """Receipts permit continuation; a missing effect receipt never permits retry."""
+        gate = gate or self.worker_gate
+        op_id = digest(["tmux", action["id"], effect])
+        meta = self.admit()
+        row = self.db.execute("SELECT * FROM operations WHERE op_id=?", (op_id,)).fetchone()
+        if row:
+            f.require(row["phase"] != "held", "operation_held")
+            f.require((row["config_generation"], row["authority_digest"]) ==
+                      (meta["control_generation"], meta["activation_digest"]), "prior_activation")
+            f.require(row["request_digest"] == digest(request)
+                      and load(self.root / row["request_artifact"]) == request, "request_drift")
+        relative = "runs/" + op_id + "/receipt.json"
+        if row and row["phase"] != "deferred":
+            f.require((self.root / relative).exists(), "effect_uncertain")
+            receipt = load(self.root / relative)
+            f.require(receipt["request_digest"] == digest(request)
+                      and row["receipt_digest"] in (None, digest(receipt)), "receipt_drift")
+        else:
+            f.require(not (self.root / relative).exists(), "unexpected_deferred_receipt")
+            gate(action)
+            relative = artifact(self.root, "runs/" + op_id + "/request.json", request)
+            now = time.time()
+            self.db.execute("INSERT OR REPLACE INTO operations VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (op_id, "tmux", action["id"], action.get("claim"),
+                             action["allocation_digest"], effect, 0, self.c.snapshot()["revision"],
+                             meta["control_generation"], meta["activation_digest"], digest(request),
+                             relative, "intent", None, None, None, now, now))
+            self.db.commit()
+            try:
+                gate(action)
+            except DispatchDeferred:
+                # Only this pre-effect gate proves no effect occurred. A crash
+                # before this commit still leaves an uncertain intent, never a retry.
+                self.db.execute("UPDATE operations SET phase='deferred',updated_at=? WHERE op_id=?",
+                                (time.time(), op_id))
+                self.db.commit()
+                raise
+            receipt = {"request_digest": digest(request), "result": perform()}
+            relative = artifact(self.root, "runs/" + op_id + "/receipt.json", receipt)
+        self.db.execute("UPDATE operations SET phase='applied',receipt_digest=?,receipt_artifact=?,"
+                        "updated_at=? WHERE op_id=?", (digest(receipt), relative, time.time(), op_id))
+        self.db.commit()
+        return receipt["result"]
+
+    def worker_observation(self, worker, action, launch_id):
+        state = worker.inspect(deadline=action["deadline"])
+        relative = artifact(self.root, "runs/" + launch_id + "/observations/" +
+                            str(uuid.uuid4()) + ".json", state)
+        self.db.execute("INSERT INTO observations VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (str(uuid.uuid4()), launch_id, f.now(), self.boot,
+                         time.monotonic() - self.started, "tmux", state.get("rollout_digest"),
+                         digest(state), relative, int(state["identity_valid"]),
+                         state["liveness"], "working" if state.get("submitted") else "poll"))
+        proc, b = state.get("process", {}), worker.binding
+        self.db.execute("INSERT OR REPLACE INTO processes VALUES(" + ",".join(["?"] * 19) + ")",
+                        (launch_id, "worker", worker.meta["boot_id"], proc.get("pid"), proc.get("pgid"),
+                         proc.get("start"), worker.meta["socket"], worker.meta["session"],
+                         proc.get("pane"), state.get("session_id"), state.get("thread_id"),
+                         state.get("turn_id"), b["model"], b["provider"], b["effort"],
+                         worker.config["binary_sha256"], b["worktree"], str(worker.run),
+                         "lease_expired" if time.time() >= action["deadline"] else state["liveness"]))
+        self.db.commit()
+        f.require(state["identity_valid"], state.get("evidence_reason", "inspection_uncertain"))
+        # A correlated durable RETURN survives pane death. Worker.send still
+        # requires liveness before any further key delivery.
+        f.require(state.get("returned") is not None or state["liveness"] == "alive", "worker_dead")
+        return state
+
+    def worker_action(self, adapter, action):
+        from owner_tmux import Worker, worker_runtime
+        f.require(action["kind"] in WORKER_KINDS, "unsupported_worker_kind")
+        runtime = worker_runtime(action["inputs"])
+        f.require(runtime["worktree"] in self.config["worktrees"], "unallocated_worktree")
+        if (self.dispatcher == "owner" and action["status"] == "prepared"
+                and (self.root / "routes" / (digest(["route", action["id"]]) + ".json")).exists()
+                and not self.db.execute("SELECT 1 FROM operations WHERE action_id=?", (action["id"],)).fetchone()):
+            # Default-routed: the worktree must still be the one created for it.
+            f.require(adoptable_worktree(self.config, action["inputs"]), "worktree_not_disposable")
+        # Freeze the same action assignment used by NativeOwner, including scope.
+        assignment = encoded({k: action[k] for k in
+                              ("kind", "workstream", "sprint", "scope", "inputs", "timeout_seconds")})
+        claim_request = {"action_id": action["id"], "allocation_digest": action["allocation_digest"]}
+        action = self.step(action, "claim", claim_request, lambda: self.c.claim(action["id"], dispatcher=self.dispatcher))
+        f.require(self.c.snapshot()["actions"][action["id"]].get("claim") == action["claim"], "claim_drift")
+        binding = {k: runtime[k] for k in ("model", "provider", "effort", "worktree")}
+        binding.update(action_id=action["id"], claim=action["claim"],
+                       allocation_digest=action["allocation_digest"],
+                       sandbox="danger-full-access", approval="never")
+        assignment += ("\nOwner constraints: never push, send Slack, change owner daemon/transport source, "
+                       "access live profiles or credential stores, or approve additional permissions. "
+                       "Use only the recorded --yolo policy and allocated scope.")
+        prepare = {"binding": binding, "assignment": assignment}
+        run = self.step(action, "prepare", prepare, lambda: str(adapter.prepare(binding, assignment).run))
+        f.require(Path(run).parent == Path(adapter.config["runs_dir"]), "run_root_drift")
+        worker = Worker(run)
+        f.require(worker.binding == binding and worker.config == adapter.config, "worker_binding_drift")
+        launch_id = digest(["tmux", action["id"], "launch"])
+        request = {"run": run, "binding": binding}
+        self.step(action, "launch", request, worker.launch)
+        state = self.worker_observation(worker, action, launch_id)
+        if time.time() >= action["deadline"]:
+            # This is a lease failure even if a zombie or frozen child still has a PID.
+            pending = self.db.execute("SELECT effect FROM operations WHERE action_id=?",
+                                      (action["id"],)).fetchall()
+            effects = {row[0] for row in pending}
+            reason = ("start_not_working" if "start" in effects and "working" not in effects else
+                      "missing_ack" if "prompt" in effects and "ack" not in effects else "lease_expired")
+            raise f.LaunchError(reason)
+        prompted = self.db.execute("SELECT 1 FROM operations WHERE action_id=? AND effect='prompt'",
+                                   (action["id"],)).fetchone()
+        if not prompted and not state.get("ready"):
+            return "awaiting_ready"
+        self.step(action, "prompt", request, worker.prompt)
+        state = self.worker_observation(worker, action, launch_id)
+        if not state.get("ack"):
+            return "awaiting_ack"
+        f.require(state.get("ack_line") == worker.meta["ack"], "wrong_ack")
+        agent = worker.meta["session"]
+        ack = self.step(action, "ack", request, lambda: state)
+        self.step(action, "dispatched", request,
+                  lambda: self.c.dispatched(action["id"], action["claim"], agent, ack, dispatcher=self.dispatcher))
+        self.step(action, "acknowledged", request,
+                  lambda: self.c.acknowledge(action["id"], agent, action["allocation_digest"], ack, dispatcher=self.dispatcher))
+        self.step(action, "start", request, worker.start)
+        state = self.worker_observation(worker, action, launch_id)
+        if not state.get("submitted"):
+            return "awaiting_working"
+        # send-keys alone is never a working receipt: require correlated START turn.
+        self.step(action, "working", request, lambda: state)
+        if state.get("returned") is None:
+            return "working"
+        result = self.step(action, "return_observed", request, lambda: state)
+        self.step(action, "returned", request,
+                  lambda: self.c.returned(action["id"], agent, result, dispatcher=self.dispatcher))
+        self.close_worker(action, worker, request)
+        return "returned"
+
+    def close_worker(self, action, worker, request):
+        """After the coordinator records RETURN, close the idle worker through its own
+        socket only (Worker.close: /quit, then kill-session on that socket). A worker
+        already proven stopped (e.g. after a reboot) gets that proof instead of keys.
+        The journaled receipt is the audit record; an unclean close holds the action."""
+        def close():
+            try:
+                return {"clean": True, "already_stopped": stopped_worker(self.root, self.db, action["id"])}
+            except (f.LaunchError, OSError, KeyError, TypeError, ValueError, subprocess.SubprocessError):
+                return worker.close(timeout=CLOSE_TIMEOUT)
+        receipt = self.step(action, "close", request, close, gate=self.close_gate)
+        self.db.execute("UPDATE processes SET terminal_status=? WHERE op_id=?",
+                        ("closed" if receipt["clean"] else "close_unclean",
+                         digest(["tmux", action["id"], "launch"])))
+        self.db.commit()
+        f.require(receipt["clean"] is True, "worker_close_unclean")
+
+    def close_returned(self, action, rows):
+        """Finish a close that a restart separated from its recorded RETURN."""
+        from owner_tmux import Worker
+        launch = next(row for row in rows if row["effect"] == "launch")
+        request = load(self.root / launch["request_artifact"])
+        f.require(digest(request) == launch["request_digest"], "request_drift")
+        worker = Worker(request["run"])
+        f.require(worker.binding == request["binding"], "worker_binding_drift")
+        self.close_worker(action, worker, request)
+
+    def route_defaults(self, snapshot):
+        """Route new manager-prepared worker actions inside the armed scope to the owner.
+
+        Only actions with no explicit owner (the hand default), prepared and
+        unclaimed, of a worker kind, created by a manager run, with a valid frozen
+        worker runtime in a configured, disposable worktree (detached linked
+        worktree; never an integration branch checkout). Explicit hand assignments,
+        claims and everything outside that scope stay hand. One audited handoff.
+        """
+        if (self.dispatcher != "owner" or "dispatch_control" not in snapshot
+                or not snapshot["enabled"] or snapshot["manager"] is not None):
+            return snapshot
+        selected, reserved = {}, set()
+        for action in snapshot["actions"].values():
+            if action.get("dispatch_owner") == "owner" and action["status"] == "prepared":
+                reserved.update(action["resources"])
+        for action in sorted(snapshot["actions"].values(), key=lambda a: a["sequence"]):
+            if ("dispatch_owner" in action or action["status"] != "prepared" or action.get("claim")
+                    or action["kind"] not in WORKER_KINDS or not action.get("manager_run")):
+                continue
+            # Never adopt anything the hand lane has touched: journal rows or a hold.
+            if (self.db.execute("SELECT 1 FROM operations WHERE action_id=?", (action["id"],)).fetchone()
+                    or self.db.execute("SELECT 1 FROM holds WHERE op_id=?",
+                                       (digest(["tmux", action["id"], "claim"]),)).fetchone()):
+                continue
+            try:
+                if not adoptable_worktree(self.config, action["inputs"]):
+                    continue
+            except (f.LaunchError, KeyError, TypeError, ValueError):
+                continue
+            if reserved & set(action["resources"]):
+                continue
+            # Route only what the claim gate would admit now; contention, a paused or
+            # unreserved sprint or a stale allocation leaves it hand, not held.
+            try:
+                f.require(action["allocation_digest"] ==
+                          digest(snapshot["allocations"].get(action["inputs"]["allocation"])),
+                          "allocation_drift")
+                self.c._executable(snapshot, action)
+                self.c._resources_available(snapshot, action)
+            except (f.LaunchError, Rejected, KeyError):
+                continue
+            reserved.update(action["resources"])
+            selected[action["id"]] = {"from": "hand", "to": "owner", "claim": None,
+                                      "allocation_digest": action["allocation_digest"],
+                                      "status": "prepared"}
+        if not selected:
+            return snapshot
+        meta = self.admit()
+        for key in selected:
+            # Marks the action as default-routed before the handoff commits, so the
+            # claim always re-checks its worktree (a marker for a refused handoff is inert).
+            artifact(self.root, "routes/" + digest(["route", key]) + ".json", {"action": key})
+        evidence = {"kind": "armed_scope_default_route", "actions": sorted(selected),
+                    "generation": meta["control_generation"],
+                    "activation_digest": meta["activation_digest"],
+                    "config_digest": meta["config_digest"], "package_digest": meta["package_digest"],
+                    # Keep the chain back to the cutover record this handoff replaces.
+                    "previous_dispatch_control": snapshot["dispatch_control"]}
+        try:
+            self.c._handoff(selected, snapshot["revision"], evidence)
+        except Rejected:
+            # A concurrent coordinator change; nothing was routed. Retry next tick.
+            pass
+        return self.c.snapshot()
+
+    def workers(self, adapter):
+        """One bounded pass. An operation failure holds only its owning action."""
+        outcomes = {}
+        snapshot = self.route_defaults(self.c.snapshot())
+        for action in snapshot["actions"].values():
+            if (self.c.dispatch_owner(snapshot, action) not in (None, self.dispatcher)
+                    or action["kind"] not in WORKER_KINDS):
+                continue
+            rows = self.db.execute("SELECT * FROM operations WHERE domain='tmux' AND action_id=?",
+                                   (action["id"],)).fetchall()
+            if rows and all(row["phase"] == "resolved" for row in rows):
+                # resolve_hold settled this claim; never resume or relaunch it.
+                outcomes[action["id"]] = "resolved"
+                continue
+            if not rows and action["status"] not in {"prepared", "dispatching", "dispatch_uncertain",
+                                                     "dispatched", "running"}:
+                continue
+            try:
+                f.require(not self.db.execute("SELECT 1 FROM holds WHERE op_id=? AND resolved_at IS NULL",
+                          (digest(["tmux", action["id"], "claim"]),)).fetchone(), "operation_held")
+                f.require(all(row["phase"] != "held" for row in rows), "operation_held")
+                if any(row["effect"] == "returned" and row["phase"] == "applied" for row in rows):
+                    # RETURN is recorded; the only remaining effect is closing the worker.
+                    meta = self.admit()
+                    current = all((row["config_generation"], row["authority_digest"]) ==
+                                  (meta["control_generation"], meta["activation_digest"]) for row in rows)
+                    closes = [row for row in rows if row["effect"] == "close"]
+                    if current and not any(row["phase"] == "applied" for row in closes):
+                        self.close_returned(action, rows)
+                    elif not current and not any(row["phase"] == "applied" for row in closes):
+                        # A prior generation's return is history only when its worker is
+                        # closed, or was never sent a close and is proven stopped (no
+                        # recorded process alive, socket absent or refusing). Otherwise
+                        # the prior_activation/effect_uncertain checks below hold it.
+                        f.require(not any(row["phase"] != "deferred" for row in closes),
+                                  "effect_uncertain")
+                        try:
+                            stopped_worker(self.root, self.db, action["id"])
+                        except (f.LaunchError, OSError, KeyError, TypeError, ValueError):
+                            raise f.LaunchError("prior_activation") from None
+                    outcomes[action["id"]] = "returned"
+                    continue
+                for row in rows:
+                    f.require((row["config_generation"], row["authority_digest"]) ==
+                              (self.admit()["control_generation"], self.admit()["activation_digest"]),
+                              "prior_activation")
+                    f.require(row["phase"] != "intent" or
+                              (self.root / ("runs/" + row["op_id"] + "/receipt.json")).exists(),
+                              "effect_uncertain")
+                if self.c.readiness() in {"paused", "owned"}:
+                    if rows and time.time() >= action.get("deadline", float("inf")):
+                        self.db.execute("UPDATE processes SET terminal_status='lease_expired' WHERE op_id=?",
+                                        (digest(["tmux", action["id"], "launch"]),))
+                        self.db.commit()
+                        raise f.LaunchError("lease_expired")
+                    outcomes[action["id"]] = "deferred"
+                    continue
+                # Unreceipted claims are not adopted; only our recorded claim can resume.
+                if not rows and action["status"] != "prepared" and self.dispatcher == "hand":
+                    outcomes[action["id"]] = "external_hand_claim"
+                    continue
+                f.require(bool(rows) or action["status"] == "prepared", "unowned_claim")
+                outcomes[action["id"]] = self.worker_action(adapter, action)
+            except DispatchDeferred:
+                outcomes[action["id"]] = "deferred"
+            except Exception as exc:
+                self.db.rollback()
+                reason = str(exc) if isinstance(exc, f.LaunchError) else type(exc).__name__
+                op_id = digest(["tmux", action["id"], "claim"])
+                self.hold(op_id, reason)
+                # Fence all existing steps, including pending external effects.
+                self.db.execute("UPDATE operations SET phase='held',hold_reason=? "
+                                "WHERE domain='tmux' AND action_id=?", (reason, action["id"]))
+                self.db.commit()
+                outcomes[action["id"]] = "HOLD"
+        watchdog = self.c.watchdog(dispatcher=self.dispatcher)
+        now = time.time()
+        self.db.execute("INSERT OR REPLACE INTO health VALUES(?,?,?,?,?,?,?)",
+                        ("watchdog", now, now, 0, None, "ok", digest(watchdog)))
+        self.db.commit()
+        # An action-local hand HOLD is visible in status but must not turn the
+        # owner lane into HOLD (and vice versa). Unknown/global holds remain hard.
+        excluded = {digest(["tmux", a["id"], "claim"]) for a in snapshot["actions"].values()
+                    if self.c.dispatch_owner(snapshot, a) not in (None, self.dispatcher)}
+        excluded.update(row["op_id"] for row in self.db.execute("SELECT op_id,action_id FROM operations")
+                        if row["action_id"] in snapshot["actions"] and
+                        self.c.dispatch_owner(snapshot, snapshot["actions"][row["action_id"]])
+                        not in (None, self.dispatcher))
+        held = any(row[0] not in excluded for row in self.db.execute(
+            "SELECT op_id FROM holds WHERE resolved_at IS NULL"))
+        readiness = self.c.readiness()
+        return {"state": "HOLD" if held else "READY" if readiness in {"paused", "owned"} else "ACTIVE",
+                "actions": outcomes, "routing": "tmux-workers", "fixture_only": False,
+                "dispatcher": self.dispatcher, "unresolved_holds": unresolved_holds(self.db),
+                "ownership": {a["id"]: self.c.dispatch_owner(snapshot, a)
+                              for a in snapshot["actions"].values()}}
+
+    def tick(self, adapter=None):
+        adapter = configured_adapter(self.config) if adapter is None else adapter
+        from owner_tmux import TmuxAdapter
+        f.require(type(adapter) is FixedTestAdapter or (type(adapter) is TmuxAdapter
+                  and adapter.config == self.config.get("transport")), "live_adapter_unavailable")
+        path = private_file(self.root / "owner.sqlite3")
+        with locked(self.root / "owner-daemon.lock"):
+            f.require(not any(Path(str(path) + suffix).exists() for suffix in ("-journal", "-wal", "-shm")),
+                      "owner_recovery_required")
+            if self.dispatcher == "hand":
+                f.require("dispatch_control" in self.c.snapshot(), "dispatch_handoff_required")
+            self.db = sqlite3.connect(path.as_uri() + "?mode=rw", uri=True)
+            self.db.row_factory = sqlite3.Row
+            boot = None
+            try:
+                self.db.execute("PRAGMA synchronous=FULL")
+                f.require(self.db.execute("PRAGMA journal_mode").fetchone()[0] == "delete", "journal_mode")
+                for table, columns in SCHEMA.items():
+                    row = self.db.execute("SELECT sql FROM sqlite_master WHERE name=?", (table,)).fetchone()
+                    f.require(row and row[0] == f"CREATE TABLE {table} ({columns})", "schema_drift")
+                with locked(self.root / "owner-admission.lock"):
+                    meta = self.admit()
+                    boot = self.boot = str(uuid.uuid4())
+                    self.started = time.monotonic()
+                    from owner_tmux import boot_id
+                    host = boot_id()
+                    start = subprocess.check_output(
+                        ["/bin/ps", "-o", "lstart=", "-p", str(os.getpid())], timeout=2).decode().strip()
+                    self.db.execute("INSERT INTO boots VALUES(?,?,?,?,?,?,?,?,?)",
+                                    (boot, meta["control_generation"], host, os.getpid(), start,
+                                     package_digest(), time.time(), None, None))
+                    self.db.commit()
+                    if type(adapter) is TmuxAdapter:
+                        return self.workers(adapter)
+                    states = ["RECOVERING"]
+                    if self.c.readiness() != "owned":
+                        for row in self.db.execute("SELECT * FROM operations WHERE phase IN ('intent','observed')").fetchall():
+                            self.replay(row)
+                    watchdog = self.c.watchdog()
+                    now = time.time()
+                    self.db.execute("INSERT OR REPLACE INTO health VALUES(?,?,?,?,?,?,?)",
+                                    ("watchdog", now, now, 0, None, "ok", digest(watchdog)))
+                    self.db.commit()
+                    if self.db.execute("SELECT 1 FROM holds WHERE resolved_at IS NULL").fetchone():
+                        return {"state": "HOLD", "states": states + ["HOLD"]}
+                    states.append("READY")
+                    readiness = self.c.readiness()
+                    if readiness in {"ready", "empty"}:
+                        states.append("ACTIVE")
+                        self.effect(adapter, meta)
+                    manager = "deferred" if self.config["manager_enabled"] and readiness == "ready" else readiness
+                    return {"state": states[-1], "states": states, "manager": manager,
+                            "routing": "deferred", "fixture_only": True}
+            finally:
+                if boot:
+                    self.db.execute("UPDATE boots SET stopped_at=?,stop_reason=? WHERE boot_id=?",
+                                    (time.time(), "tick_exit" if sys.exc_info()[0] is None else "interrupted", boot))
+                    self.db.commit()
+                self.db.close()
+                self.db = None
+
+
+def append_log(path, record):
+    """Append-only private audit log: one JSON line per record, fsynced."""
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    try:
+        info = os.fstat(fd)
+        f.require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid()
+                  and stat.S_IMODE(info.st_mode) == 0o600 and info.st_nlink == 1, "unsafe_file")
+        os.write(fd, (encoded(record) + "\n").encode())
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def manager_status(schedule_root):
+    path = schedule_root / MANAGER_STATE
+    if not os.path.lexists(path):
+        return {"day": None, "day_count": 0, "cycles": 0, "last_started_at": None,
+                "last_cycle": None, "capped_day": None}
+    return load(path)
+
+
+def idle_allocations(state):
+    """Candidates when no work is queued: live allocations never used, or whose
+    actions all finished without an accepted result (a retry may be due).
+    Allocations with accepted work are done and are compacted later."""
+    if any(a["status"] == "prepared" or (a["status"] in IN_FLIGHT and a.get("dispatch_owner") == "owner")
+           for a in state["actions"].values()):
+        return []
+    used = {}
+    for action in state["actions"].values():
+        used.setdefault(manager_cycle.allocation_of(action), []).append(action)
+    return sorted([key, digest(allocation), sorted([a["id"], a["status"]] for a in used.get(key, []))]
+                  for key, allocation in state["allocations"].items()
+                  if allocation["inputs"].get("consumed") is not True
+                  and "complete_sprint" not in allocation["kinds"]
+                  and all(a["status"] in TERMINAL - {"accepted"} for a in used.get(key, [])))
+
+
+def manager_context(cycle, meta, state, triggers, holds, status, settings, compacted):
+    awaiting = sorted(a["id"] for a in state["actions"].values() if a["status"] == "returned")
+    context = {
+        "source": "armed owner, automatic manager cycle; no person started this cycle",
+        "cycle": cycle, "owner_generation": meta["control_generation"], "triggers": triggers,
+        "awaiting_verdict": awaiting[:24], "awaiting_verdict_total": len(awaiting),
+        "owner_holds": [{"action": h["action_id"], "reason": h["reason_code"]} for h in holds[:16]],
+        "owner_holds_total": len(holds),
+        "prepared_queued": sum(a["status"] == "prepared" for a in state["actions"].values()),
+        "cycles_today": status["day_count"], "daily_cap": settings["daily_cap"],
+        "compacted_allocations": compacted[:16],
+        "guidance": "Give a verdict for each returned result first. Prepare work only from live "
+                    "allocations. If nothing should be done now, return no_action_reason."}
+    value = {"observed_at": f.now(), "context": context}
+    try:
+        encoded(value, limit=8192)
+    except Rejected:
+        context.update(owner_holds=[], compacted_allocations=[], awaiting_verdict=awaiting[:8])
+    return value
+
+
+def manager_lane(config_path, schedule_root, clock=time.time, runner=None):
+    """One pass of the scheduled manager lane: start at most one manager cycle.
+
+    Runs only while the owner is armed (OFF and a paused or owned coordinator skip
+    without effect). A cycle starts when there is work for it: pending meaningful
+    events, results awaiting a verdict or, with nothing queued, finished work that
+    failed (the last two through one deduplicated owner wake event). Rate limits:
+    one in flight (this schedule's tick lock and the coordinator's manager claim),
+    min_interval_seconds between starts and daily_cap starts per UTC day. Every
+    start and outcome is appended to the audit log. A failed cycle returns HOLD,
+    which the schedule latches: no retry until evidence-backed --recover.
+    """
+    config = load(config_path)
+    settings = config.get("manager_cycle")
+    if not config.get("manager_enabled") or settings is None:
+        return {"state": "OFF", "lane": "manager", "reason_off": "manager_cycle_not_configured"}
+    with activation_store(config_path) as (root, db, meta):
+        kernel = Kernel(config_path)
+        kernel.db = db
+        try:
+            meta = kernel.admit()
+        except f.LaunchError as exc:
+            if str(exc) != "owner_off":
+                raise
+            return {"state": "OFF", "lane": "manager", "reason_off": "owner_off"}
+        holds = unresolved_holds(db)
+    manager_settings(settings)
+    c = ExistingCoordinator(root)
+    state = c.snapshot()
+    if not state["enabled"] or state["manager"] is not None:
+        return {"state": "PAUSED" if not state["enabled"] else "OWNED", "lane": "manager"}
+    log = schedule_root / MANAGER_LOG
+    status = manager_status(schedule_root)
+    now = clock()
+    day = time.strftime("%Y-%m-%d", time.gmtime(now))
+    if status["day"] != day:
+        status.update(day=day, day_count=0)
+    if status["day_count"] >= settings["daily_cap"]:
+        if status["capped_day"] != day:
+            status["capped_day"] = day
+            f.write_json(schedule_root / MANAGER_STATE, status)
+            append_log(log, {"event": "daily_cap_reached", "at": now, "day": day,
+                             "daily_cap": settings["daily_cap"]})
+        return {"state": "CAPPED", "lane": "manager", "day_count": status["day_count"]}
+    if status["last_started_at"] is not None and now - status["last_started_at"] < settings["min_interval_seconds"]:
+        return {"state": "WAITING", "lane": "manager",
+                "seconds": round(settings["min_interval_seconds"] - (now - status["last_started_at"]), 1)}
+    compacted = manager_cycle.compact_finished(c, now)
+    if compacted:
+        append_log(log, {"event": "compacted", "at": now, "allocations": compacted})
+    state = c.snapshot()
+    triggers = ["pending_events"] if c.readiness() == "ready" else []
+    if not triggers:
+        awaiting = sorted(a["id"] for a in state["actions"].values() if a["status"] == "returned")
+        wake = ({"kind": "awaiting_verdict", "actions": awaiting} if awaiting else
+                {"kind": "no_prepared_work", "allocations": idle_allocations(state)})
+        if awaiting or wake["allocations"]:
+            # One wake per distinct situation and repeat window: an unchanged one is a
+            # duplicate event ID until the window turns.
+            event = {"id": "owner-wake:" + wake["kind"] + ":" + digest(wake)[:24] + ":"
+                     + str(int(now // WAKE_REPEAT_SECONDS)), **wake}
+            if c.event(event):
+                triggers = [wake["kind"]]
+                append_log(log, {"event": "wake", "at": now, "wake": event["id"]})
+    if not triggers:
+        return {"state": "IDLE", "lane": "manager"}
+    binary = f.no_links(settings["binary"])
+    f.require(f.file_digest(binary) == settings["binary_sha256"], "manager_binary_pin_mismatch")
+    cycle = str(uuid.uuid4())
+    directory = schedule_root / "cycles" / cycle
+    context = manager_context(cycle, meta, state, triggers, holds, status, settings, compacted)
+    artifact(schedule_root, "cycles/" + cycle + "/owner-context.json", context)
+    status.update(last_started_at=now, last_cycle=cycle, day_count=status["day_count"] + 1,
+                  cycles=status["cycles"] + 1)
+    f.write_json(schedule_root / MANAGER_STATE, status)
+    append_log(log, {"event": "cycle_started", "at": now, "cycle": cycle, "triggers": triggers,
+                     "generation": meta["control_generation"], "day_count": status["day_count"],
+                     "daily_cap": settings["daily_cap"]})
+    generation = meta["control_generation"]
+    result = (runner or manager_cycle.run_cycle)(
+        state=root, runs_dir=Path(settings["runs_dir"]), binary=binary,
+        auth_vault_home=Path(settings["auth_vault_home"]), owner_context=directory / "owner-context.json",
+        timeout=settings["timeout_seconds"],
+        acceptance_gate=lambda: acceptance_gate(config_path, generation))
+    artifact(schedule_root, "cycles/" + cycle + "/result.json", result)
+    record = {"event": "cycle_finished", "at": clock(), "cycle": cycle, "status": result["status"],
+              "manager_run": result.get("manager_run"),
+              "prepared": [a["id"] for a in result.get("prepared_actions", [])],
+              "verdicts": result.get("verdicts", []), "event_batch": result.get("event_batch")}
+    for key in ("phase", "reason", "no_action_reason"):
+        if key in result:
+            record[key] = result[key]
+    append_log(log, record)
+    if result["status"] in {"accepted", "empty", "paused", "owned"}:
+        return {"state": "CYCLE", "lane": "manager", "cycle": cycle, "status": result["status"],
+                "manager_run": result.get("manager_run"), "prepared": record["prepared"],
+                "verdicts": record["verdicts"]}
+    reconciled, release_refusal = None, None
+    try:
+        # The cycle returned, so its launcher already ran its own shutdown. Release
+        # the coordinator claim only with that proven (no recorded or path-matching
+        # process alive, sockets dead), so worker dispatch continues while the lane
+        # holds. Otherwise the claim stays for evidence-backed --recover.
+        released = release_manager_claim(c, settings, "owner_auto_cycle_failed: " + str(result.get("reason")),
+                                         result.get("manager_run"))
+        reconciled = released["manager_run"]
+    except (f.LaunchError, Rejected, OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+        release_refusal = str(exc) if isinstance(exc, (f.LaunchError, Rejected)) else type(exc).__name__
+    append_log(log, {"event": "hold", "at": clock(), "cycle": cycle, "reason": "manager_cycle_failed",
+                     "refusal": result.get("reason"), "released_manager_run": reconciled,
+                     "release_refusal": release_refusal})
+    return {"state": "HOLD", "lane": "manager", "reason": "manager_cycle_failed", "cycle": cycle,
+            "refusal": result.get("reason"), "phase": result.get("phase"),
+            "released_manager_run": reconciled}
+
+
+ACCEPTANCE_WAIT = 25.0
+
+
+def admitted_generation(config_path, generation, deadline):
+    """The owner is still armed at `generation`. A read-only snapshot (no owner
+    lock); a busy database or a transient commit journal is retried until deadline."""
+    while True:
+        try:
+            with activation_store(config_path, readonly=True) as (_, db, _meta):
+                kernel = Kernel(config_path)
+                kernel.db = db
+                meta = kernel.admit()
+            f.require(meta["control_generation"] == generation, "owner_generation_changed")
+            return meta
+        except (sqlite3.OperationalError, f.LaunchError) as exc:
+            busy = isinstance(exc, sqlite3.OperationalError) or str(exc) in {
+                "preview_database_busy", "preview_read_budget_exceeded", "owner_recovery_required"}
+            if not busy or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.25)
+
+
+@contextmanager
+def acceptance_gate(config_path, generation, wait=None):
+    """Held around an automatic cycle's acceptance: the owner's admission lock
+    (as an owner tick holds it, so disarm cannot commit in between) and a fresh
+    check that the owner is still armed at the generation that started the cycle.
+    A running owner tick is waited out for up to ACCEPTANCE_WAIT seconds."""
+    deadline = time.monotonic() + (ACCEPTANCE_WAIT if wait is None else wait)
+    root = f.private_dir(load(config_path)["coordinator"])
+    with ExitStack() as stack:
+        while True:
+            try:
+                stack.enter_context(locked(root / "owner-admission.lock"))
+                break
+            except BlockingIOError:
+                f.require(time.monotonic() < deadline, "owner_admission_busy")
+                time.sleep(0.5)
+        yield admitted_generation(config_path, generation, deadline)
+
+
+def launchers_stopped(cycle):
+    """Proof that every launcher of a manager cycle directory is gone: its recorded
+    process (if any) is not alive, no process names its launch directory and its
+    TMUX socket is absent or refusing. Missing evidence is never proof by itself."""
+    launches = sorted(p for p in (cycle / "launches").iterdir()) if (cycle / "launches").is_dir() else []
+    table = f.processes()
+    listing = subprocess.run(["/bin/ps", "-axo", "pid=,command="], capture_output=True, text=True,
+                             timeout=5, env={"PATH": f.SAFE_PATH})
+    f.require(listing.returncode == 0, "process_inspection_failed")
+    checked = []
+    for launch in launches:
+        proc = (f.strict_json(f.read_file(launch / "process.json", 4096, private=True))
+                if (launch / "process.json").exists() else {})
+        recorded = proc.get("pid") in table and table[proc["pid"]][3] == proc.get("started")
+        named = sorted(int(line.split(None, 1)[0]) for line in listing.stdout.splitlines()
+                       if str(launch) in line and int(line.split(None, 1)[0]) != os.getpid())
+        sock = socket_state(launch / "tmux.sock")
+        f.require(not recorded and not named and sock in ("absent", "stale"), "manager_launcher_running")
+        checked.append({"launch": launch.name, "pid": proc.get("pid"),
+                        "process_record": bool(proc), "socket": sock})
+    return checked
+
+
+def release_manager_claim(c, settings, reason, expected=None):
+    """Release the coordinator's manager claim of an automatic cycle (one whose
+    directory is in the lane's dedicated runs_dir) once its launchers are proven
+    stopped. Never relaunches or accepts anything."""
+    run = c.snapshot()["manager"]
+    if run is None:
+        return {"manager_run": None}
+    f.require(expected in (None, run["id"]), "manager_run_changed")
+    cycle = f.no_links(Path(settings["runs_dir"]) / ("m-" + run["id"]))
+    f.require(cycle.is_dir(), "manager_run_not_automatic")
+    checked = launchers_stopped(cycle)
+    c.fail_manager(run["id"], reason)
+    return {"manager_run": run["id"], "launches": checked}
+
+
+def reconcile_manager_lane(config_path):
+    """Recovery for a held manager lane (crash or failed cycle)."""
+    config = load(config_path)
+    settings = config.get("manager_cycle")
+    f.require(settings is not None, "manager_cycle_not_configured")
+    return release_manager_claim(ExistingCoordinator(config["coordinator"]), settings,
+                                 "owner_auto_cycle_recovered")
+
+
+def schedule_pins(python, runtime, config, expected_python):
+    f.require(Path(python).is_absolute() and Path(runtime).is_absolute()
+              and Path(config).is_absolute(), "absolute_paths_required")
+    python = f.no_links(python)
+    f.private_dir(Path(config).parent)
+    info = python.stat()
+    f.require(python.is_absolute() and stat.S_ISREG(info.st_mode)
+              and info.st_uid in {0, os.getuid()} and not info.st_mode & 0o022, "unsafe_python")
+    runtime = f.private_dir(runtime)
+    f.require(f.file_digest(python) == expected_python, "python_pin_mismatch")
+    return {"python": str(python), "python_sha256": expected_python,
+            "version": subprocess.check_output([str(python), "-E", "-s", "-S", "--version"],
+                                              timeout=5, env={}).decode().strip(),
+            "runtime": str(runtime), "files": {p.name: f.file_digest(private_file(p))
+                                              for p in sorted(runtime.iterdir())},
+            "config": str(private_file(config)), "config_sha256": f.file_digest(config)}
+
+
+def installation_domain(receipt):
+    # Pre-domain receipts were installed exclusively into this user’s GUI domain.
+    domain = receipt.get("domain", f"gui/{os.getuid()}")
+    f.require(domain in (f"gui/{os.getuid()}", f"user/{os.getuid()}"), "invalid_domain")
+    return domain
+
+
+def service(label, domain=None):
+    import re
+    domain = installation_domain({"domain": domain} if domain is not None else {})
+    f.require(isinstance(label, str) and
+              re.fullmatch(r"com\.corbanu\.initiative-owner(?:\.[a-zA-Z0-9-]+)?", label), "invalid_label")
+    try:
+        result = subprocess.run(["/bin/launchctl", "print", f"{domain}/{label}"],
+                                capture_output=True, text=True, timeout=5, env={})
+    except UnicodeError as exc:
+        raise f.LaunchError(f"service_observation_unavailable: {domain}/{label}") from exc
+    if result.returncode == 0:
+        return "present", result.stdout
+    if result.returncode == 113 and f'Could not find service "{label}"' in result.stderr:
+        return "absent", ""
+    kind, uid = domain.split("/")
+    missing = f"Could not find domain for {'user gui' if kind == 'gui' else 'uid'}: {uid}"
+    if result.returncode == 112 and missing in result.stderr.splitlines():
+        return "domain_absent", missing
+    unavailable = "Could not print domain: 125: Domain does not support specified action"
+    if kind == "gui" and result.returncode == 125 and unavailable in result.stderr.splitlines():
+        # A real user without an Aqua session can have only a Background domain.
+        # Activation permits this observation only for the sibling domain.
+        return "domain_absent", unavailable
+    raise f.LaunchError(f"service_observation_unavailable: {domain}/{label}")
+
+
+def firing_source(root, receipt):
+    """Fail closed: launchd diagnostics are not a stable API or activation authority."""
+    try:
+        presence, output = service(receipt["label"], installation_domain(receipt))
+        lines = set(output.splitlines())
+        if (presence != "present" or f"\tpid = {os.getpid()}" not in lines
+                or "\tstate = running" not in lines):
+            return "manual"
+        f.require(f"path = {root / 'owner.plist'}\n" in output and
+                  f.file_digest(private_file(root / "owner.plist")) == receipt["plist_sha256"],
+                  "unowned_service")
+        return "interval" if "\timmediate reason = interval" in lines else "other"
+    except Exception:
+        return "unknown"
+
+
+def observe_schedule(root, label="com.corbanu.initiative-owner"):
+    result = dict(observed_at=time.time(), service="unknown", installed=False,
+                  started_at=None, completed_at=None, last_success=None, hold=None,
+                  reason="observation-unavailable", previous_success=None, interval=30,
+                  errors=0, consecutive_errors=0, last_error=None, firing="unknown",
+                  publication_errors=0, last_publication_error=None)
+    try:
+        root = f.private_dir(root)
+        receipt = load(root / "installation.json") if os.path.lexists(root / "installation.json") else None
+        f.require(receipt is not None or not os.path.lexists(root / "tick.json"), "installation_receipt_missing")
+        if receipt:
+            label = receipt["label"]
+        result["installed"] = receipt is not None and receipt["phase"] != "uninstalled"
+        result["service"], output = service(label, installation_domain(receipt or {}))
+        f.require(result["service"] != "domain_absent", "service_observation_unavailable")
+        if receipt and result["service"] == "present":
+            plist = root / "owner.plist"
+            f.require(f"path = {plist}\n" in output and
+                      f.file_digest(private_file(plist)) == receipt["plist_sha256"], "unowned_service")
+        if receipt:
+            result["interval"] = receipt["interval"]
+            status = load(root / "tick.json")
+            result.update({key: status.get(key, result[key]) for key in
+                           ("previous_success", "errors", "consecutive_errors", "last_error",
+                            "firing", "publication_errors", "last_publication_error")})
+            result.update({key: status[key] for key in
+                           ("started_at", "completed_at", "last_success", "hold")})
+        result["reason"] = None
+    except Exception:
+        result.update(service="unknown", reason="observation-unavailable")
+    return result
+
+
+def publication_preflight(publish_state):
+    """Refuse an interrupted publisher before any destructive cutover effect."""
+    root = f.private_dir(publish_state)
+    f.require(not any(path.name.endswith(".pending") for path in root.iterdir()),
+              "stale_publication_pending: quiesce publishers; preserve and inspect "
+              "*.pending and the last publication; reconcile the interrupted "
+              "write under integration-owner authority before retrying")
+    return root
+
+
+def publish_schedule(root):
+    receipt = load(root / "installation.json")
+    # The manager lane publishes its own file, never over the owner lane's.
+    name = "manager-recurrence.json" if receipt.get("lane") == "manager" else "owner-recurrence.json"
+    f.write_json(f.private_dir(receipt["publish_state"]) / name, observe_schedule(root))
+
+
+def scheduled_tick(root, recover=None):
+    root = f.private_dir(root)
+    with locked(root / "tick.lock"):
+        receipt = load(root / "installation.json")
+        f.require(receipt["phase"] == "installed", "schedule_not_installed")
+        lane = receipt.get("lane", "owner")
+        f.require(lane in {"owner", "manager"}, "invalid_lane")
+        status = load(root / "tick.json")
+        if recover is not None:
+            f.require(isinstance(recover, str) and 0 < len(recover.strip()) <= 1000, "recovery_evidence_required")
+            reconciliation = None
+            if lane == "manager" and (status["hold"] or (status["started_at"] is not None
+                                                         and status["completed_at"] is None)):
+                # Release a manager claim the interrupted or failed cycle left, only
+                # with its launcher proven stopped; otherwise recovery refuses.
+                reconciliation = reconcile_manager_lane(Path(receipt["pins"]["config"]))
+                append_log(root / MANAGER_LOG, {"event": "recovered", "at": time.time(),
+                                                "evidence": recover, "previous_hold": status["hold"],
+                                                "reconciliation": reconciliation})
+            artifact(root, "recovery/" + str(uuid.uuid4()) + ".json",
+                     {"at": time.time(), "evidence": recover, "previous": status,
+                      **({"reconciliation": reconciliation} if lane == "manager" else {})})
+            status.update(hold=None, started_at=None, completed_at=None,
+                          last_success=None, previous_success=None)
+            f.write_json(root / "tick.json", status)
+            return {"state": "RECOVERED"}
+        if status["started_at"] is not None and status["completed_at"] is None:
+            if lane == "manager" and not status["hold"]:
+                append_log(root / MANAGER_LOG, {"event": "hold", "at": time.time(),
+                                                "reason": "interrupted_tick",
+                                                "interrupted_started_at": status["started_at"]})
+            status["hold"] = status["hold"] or "interrupted_tick"
+        if status["hold"]:
+            status["skipped"] += 1
+            status["last_probe"] = time.time()
+            f.write_json(root / "tick.json", status)
+            return {"state": "HOLD", "reason": status["hold"]}
+        previous_firing = status.get("firing")
+        status.update(started_at=time.time(), completed_at=None, firing=firing_source(root, receipt))
+        f.write_json(root / "tick.json", status)
+        try:
+            pins = receipt["pins"]
+            f.require(schedule_pins(Path(pins["python"]), Path(pins["runtime"]),
+                                    Path(pins["config"]), pins["python_sha256"]) == pins, "schedule_pin_drift")
+            result = (manager_lane(Path(pins["config"]), root) if lane == "manager"
+                      else Kernel(Path(pins["config"])).tick())
+        except BlockingIOError:
+            result = {"state": "BUSY", "dispatcher": "owner"}
+        except (f.LaunchError, Rejected) as exc:
+            result = {"state": "HOLD", "reason": "owner_run_refused", "refusal": str(exc)}
+        except Exception as exc:
+            result = {"state": "ERROR", "reason": type(exc).__name__}
+        status["completed_at"] = time.time()
+        if lane == "manager" and result["state"] in {"HOLD", "ERROR"}:
+            # Fail closed: any manager-lane failure latches until --recover.
+            status.update(hold=result.get("reason") or "manager_lane_error",
+                          first_refusal=status.get("first_refusal") or time.time(),
+                          last_refusal=time.time(), refusal=result.get("refusal", result.get("reason")))
+            if result.get("reason") != "manager_cycle_failed":
+                append_log(root / MANAGER_LOG, {"event": "hold", "at": time.time(),
+                                                "reason": status["hold"], "refusal": status["refusal"]})
+        elif result.get("reason") == "owner_run_refused":
+            status.update(hold="owner_run_refused", first_refusal=status.get("first_refusal") or time.time(),
+                          last_refusal=time.time(), refusal=result.get("refusal"))
+        elif result["state"] == "BUSY":
+            status.update(skipped=status["skipped"] + 1, previous_success=None)
+        elif result.get("reason"):
+            status.update(errors=status.get("errors", 0) + 1,
+                          consecutive_errors=status.get("consecutive_errors", 0) + 1,
+                          last_error=result["reason"], previous_success=None)
+        else:
+            status.update(previous_success=status.get("last_success") if not status.get("consecutive_errors")
+                          and previous_firing == status["firing"] == "interval" else None,
+                          last_success=status["completed_at"], consecutive_errors=0, last_error=None)
+        status["ticks"] += 1
+        f.write_json(root / "tick.json", status)
+        artifact(root, "ticks/" + str(uuid.uuid4()) + ".json", status)
+        return result
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_mutually_exclusive_group()
+    commands.add_argument("--run", action="store_true")
+    commands.add_argument("--hand-run", action="store_true", help="one hand-owned TMUX pass using the shared journal")
+    commands.add_argument("--handoff", type=Path, help="revision-bound ownership partition/transfer JSON")
+    commands.add_argument("--resolve-hold", type=Path,
+                          help="evidence-bound resolution JSON for one action's holds; worker must be stopped")
+    commands.add_argument("--reconfigure", type=Path,
+                          help="OFF-only config/package repin; requires --schedule with an uninstalled receipt")
+    commands.add_argument("--arm", action="store_true",
+                          help="arm shared coordinator mutation; fixture-only is not read-only; "
+                          "inspect --activation-status before arming")
+    commands.add_argument("--disarm", action="store_true")
+    commands.add_argument("--activation-status", action="store_true",
+                          help="inspect in-flight/overdue deadlines and watchdog effects without arming")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="with --arm: validate and preview fixture-only changes without writing")
+    parser.add_argument("--authority", type=Path)
+    parser.add_argument("--generation", type=int)
+    parser.add_argument("--config", type=Path)
+    parser.add_argument("--schedule", type=Path)
+    parser.add_argument("--recover")
+    parser.add_argument("--observe", action="store_true")
+    parser.add_argument("--label", default="com.corbanu.initiative-owner")
+    parser.add_argument("--publish-state", type=Path)
+    args = parser.parse_args(argv)
+    if args.dry_run and not args.arm:
+        parser.error("--dry-run requires --arm")
+    if args.handoff or args.resolve_hold or args.reconfigure or args.hand_run:
+        if (args.config is None or (args.schedule is not None and not args.reconfigure)
+                or (args.reconfigure and args.schedule is None)
+                or args.recover is not None or args.observe or args.publish_state
+                or args.authority or args.generation is not None):
+            parser.error("handoff/hand-run require only --config and their input; "
+                         "reconfigure also requires --schedule")
+        try:
+            if args.handoff:
+                result = handoff(args.config, load(args.handoff))
+            elif args.resolve_hold:
+                result = resolve_hold(args.config, load(args.resolve_hold))
+            elif args.reconfigure:
+                result = reconfigure_owner(args.config, args.reconfigure, args.schedule)
+            else:
+                result = Kernel(args.config, dispatcher="hand").tick()
+            print(encoded(result))
+            return 0
+        except (f.LaunchError, Rejected, OSError, sqlite3.Error, ValueError, TypeError, KeyError) as exc:
+            reason = str(exc) if isinstance(exc, (f.LaunchError, Rejected)) else type(exc).__name__
+            print(encoded(dict(state="BUSY" if isinstance(exc, BlockingIOError) else "REFUSED", reason=reason)))
+            return 0 if args.hand_run and isinstance(exc, BlockingIOError) else 2
+    if args.arm or args.disarm or args.activation_status:
+        if (args.config is None or args.schedule or args.recover is not None or args.observe
+                or args.publish_state or (args.arm and (args.authority is None or args.generation is not None))
+                or (not args.arm and args.authority is not None)
+                or (args.disarm and args.generation is None)
+                or (args.activation_status and args.generation is not None)):
+            parser.error("activation commands require --config; --arm requires --authority; "
+                         "--disarm requires --generation; schedule options cannot be combined")
+        try:
+            result = (arm_owner(args.config, load(args.authority), dry_run=args.dry_run) if args.arm else
+                      disarm_owner(args.config, args.generation) if args.disarm else
+                      activation_status(args.config))
+            print(encoded(result))
+            return 0
+        except (f.LaunchError, Rejected, OSError, sqlite3.Error, ValueError, TypeError, KeyError) as exc:
+            reason = str(exc) if isinstance(exc, (f.LaunchError, Rejected)) else type(exc).__name__
+            print(encoded(dict(state="REFUSED", reason=reason)))
+            return 2
+    if args.authority is not None or args.generation is not None:
+        parser.error("--authority/--generation require an activation command")
+    if args.observe:
+        result = observe_schedule(args.schedule, args.label)
+        if args.publish_state:
+            f.write_json(f.private_dir(args.publish_state) / "owner-recurrence.json", result)
+        print(encoded(result))
+        return 0
+    if not args.run and args.recover is None:
+        print('{"state":"OFF"}')
+        return 0
+    try:
+        if args.schedule:
+            try:
+                result = scheduled_tick(args.schedule, args.recover)
+            except (f.LaunchError, OSError, sqlite3.Error, ValueError, TypeError, KeyError):
+                result = {"state": "HOLD", "reason": "owner_run_refused"}
+            try:
+                publish_schedule(args.schedule)
+            except Exception as exc:
+                result = dict(result, publication_error=type(exc).__name__, publication_recorded=False)
+                try:
+                    with locked(args.schedule / "tick.lock"):
+                        status = load(args.schedule / "tick.json")
+                        status.update(publication_errors=status.get("publication_errors", 0) + 1,
+                                      last_publication_error=type(exc).__name__)
+                        f.write_json(args.schedule / "tick.json", status)
+                        result["publication_recorded"] = True
+                except Exception:
+                    pass  # stdout still reports both outcomes if local recording also fails.
+            print(encoded(result))
+            return 2 if result.get("reason") else 3 if result.get("publication_error") else 0
+        f.require(args.config is not None and args.recover is None, "config_required")
+        kernel = Kernel(args.config)
+        # Configuration selects only built-in adapters; default remains the fixture.
+        print(encoded(kernel.tick()))
+        return 0
+    except (f.LaunchError, Rejected, OSError, sqlite3.Error, ValueError, TypeError, KeyError) as exc:
+        reason = str(exc) if isinstance(exc, (f.LaunchError, Rejected)) else type(exc).__name__
+        print(encoded(dict(state="BUSY" if isinstance(exc, BlockingIOError) else "HOLD",
+                           reason="dispatch_busy" if isinstance(exc, BlockingIOError) else "owner_run_refused",
+                           refusal=reason)))
+        return 0 if isinstance(exc, BlockingIOError) else 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

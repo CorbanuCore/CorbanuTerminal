@@ -1,0 +1,6 @@
+test_poison_shapes_are_quarantined_and_following_human_reply_is_delivered (test_slack_transport.TransportTests.test_poison_shapes_are_quarantined_and_following_human_reply_is_delivered) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 1.076s
+
+OK

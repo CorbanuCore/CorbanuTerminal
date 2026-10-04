@@ -1,0 +1,85 @@
+bash /home/travis/security-round5/evidence/pf27-preflight-receiving-c51d2d6aa/ru
+n-pf27-preflight-receiving-c51d2d6aa.shtravis@ambient-System-Product-Name:~/work
+trees/security-broker-preflight-receiving-c51d2d6aa$ bash /home/travis/security-
+round5/evidence/pf27-preflight-receiving-c51d2d6aa/run-pf27-preflight-receiving-
+c51d2d6aa.sh
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$
+@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s
+────────────
+ Nextest run ID f45d1bdc-a189-4f5a-996b-79d41bddf3cf with nextest profile: local
+    Starting 1 test across 7 binaries (87 tests skipped)
+        PASS [   0.002s] (1/1) codex-secret-broker-service launch::manifest::elf
+::tests::pf_27_s01_elf_profile_frozen_artifacts_as_data
+────────────
+     Summary [   0.003s] 1 test run: 1 passed, 87 skipped
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$
+@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+────────────
+ Nextest run ID 75c6aeab-d0ef-4a97-90f7-b9d57f4462ab with nextest profile: local
+    Starting 6 tests across 7 binaries (82 tests skipped)
+        PASS [   0.041s] (1/6) codex-secret-broker-service launch::manifest::roo
+t_dispatch::tests::pf27_root_dispatch_lost_reply
+        PASS [   0.065s] (2/6) codex-secret-broker-service launch::manifest::roo
+t_dispatch::tests::pf27_root_dispatch_actual_namespaces_and_duplicate
+        PASS [   0.083s] (3/6) codex-secret-broker-service launch::manifest::roo
+t_dispatch::tests::pf27_root_dispatch_wrong_and_stale_receipts
+        PASS [   0.121s] (4/6) codex-secret-broker-service launch::manifest::roo
+t_dispatch::tests::pf27_root_dispatch_construction_failures
+        PASS [   0.150s] (5/6) codex-secret-broker-service launch::manifest::roo
+t_dispatch::tests::pf27_root_dispatch_protocol_rejections
+        PASS [   0.829s] (6/6) codex-secret-broker-service launch::manifest::roo
+t_dispatch::tests::pf27_root_dispatch_lifecycle
+────────────
+     Summary [   0.830s] 6 tests run: 6 passed, 82 skipped
+PF27_ROOT_DISPATCH_TMUX_COMPLETE
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$
+@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+────────────
+ Nextest run ID 152290e6-6a4c-410c-8cf3-72272ce3c74e with nextest profile: local
+    Starting 7 tests across 7 binaries (81 tests skipped)
+        PASS [   0.034s] (1/7) codex-secret-broker-service launch::manifest::roo
+t_dispatch::session::tests::pf27_root_session_duplicate_receipts
+        PASS [   0.035s] (2/7) codex-secret-broker-service launch::manifest::roo
+t_dispatch::session::tests::pf27_root_session_accept_faults_are_bounded
+        PASS [   0.035s] (3/7) codex-secret-broker-service launch::manifest::roo
+t_dispatch::session::tests::pf27_root_session_routing_and_storage
+        PASS [   0.051s] (4/7) codex-secret-broker-service launch::manifest::roo
+t_dispatch::session::tests::pf27_root_session_pending_cancellation
+        PASS [   0.062s] (5/7) codex-secret-broker-service launch::manifest::roo
+t_dispatch::session::tests::pf27_root_session_protocol_errors
+        PASS [   0.070s] (6/7) codex-secret-broker-service launch::manifest::roo
+t_dispatch::session::tests::pf27_root_session_flood_fairness
+        PASS [   0.793s] (7/7) codex-secret-broker-service launch::manifest::roo
+t_dispatch::session::tests::pf27_root_session_lifecycle
+────────────
+     Summary [   0.793s] 7 tests run: 7 passed, 81 skipped
+PF27_ROOT_SESSION_TMUX_COMPLETE
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$
+@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+────────────
+ Nextest run ID 7141b595-9beb-4cac-9ae7-cafb12acdd85 with nextest profile: local
+    Starting 5 tests across 7 binaries (83 tests skipped)
+        PASS [   0.004s] (1/5) codex-secret-broker-service launch::manifest::sys
+tem_preflight::tests::pf27_system_preflight_real_non_root_entry_denies_without_s
+ide_effects
+        PASS [   0.016s] (2/5) codex-secret-broker-service launch::manifest::sys
+tem_preflight::tests::pf27_system_preflight_retains_complete_owner_and_reservati
+on
+        PASS [   0.017s] (3/5) codex-secret-broker-service launch::manifest::sys
+tem_preflight::tests::pf27_system_preflight_actual_invalid_manifest_hash_profile
+_deny
+        PASS [   0.018s] (4/5) codex-secret-broker-service launch::manifest::sys
+tem_preflight::tests::pf27_system_preflight_same_bytes_different_recipe_and_sour
+ce_deny
+        PASS [   0.018s] (5/5) codex-secret-broker-service launch::manifest::sys
+tem_preflight::tests::pf27_system_preflight_every_stage_failure_releases_inputs
+────────────
+     Summary [   0.019s] 5 tests run: 5 passed, 83 skipped
+PF27_SYSTEM_PREFLIGHT_TMUX_COMPLETE
+PF27_PREFLIGHT_RECEIVING_C51D2D6AA_COMPLETE
+travis@ambient-System-Product-Name:~/worktrees/security-broker-preflight-receivi
+ng-c51d2d6aa$

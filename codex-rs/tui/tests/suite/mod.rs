@@ -1,6 +1,8 @@
 // Aggregates all former standalone integration tests as modules.
 #[cfg(unix)]
 mod claude_auth;
+#[cfg(all(unix, feature = "developer-accounting"))]
+mod cost_scope;
 #[cfg(unix)]
 mod focus_palette;
 #[cfg(unix)]

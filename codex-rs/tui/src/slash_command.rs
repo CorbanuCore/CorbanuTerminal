@@ -56,6 +56,7 @@ pub enum SlashCommand {
     Mention,
     Status,
     Usage,
+    Cost,
     DebugConfig,
     Title,
     Statusline,
@@ -117,7 +118,10 @@ impl SlashCommand {
             SlashCommand::Import => "import setup, this project, and recent chats from Claude Code",
             SlashCommand::Hooks => "view and manage lifecycle hooks",
             SlashCommand::Status => "show current session configuration and token usage",
-            SlashCommand::Usage => "view account usage or use a rate-limit reset",
+            SlashCommand::Usage => {
+                "view recorded request cost, account usage, or use a rate-limit reset"
+            }
+            SlashCommand::Cost => "what your turns cost, on whichever provider served them",
             SlashCommand::DebugConfig => "show config layers and requirement sources for debugging",
             SlashCommand::Title => "configure which items appear in the terminal title",
             SlashCommand::Statusline => "configure which items appear in the status line",
@@ -192,6 +196,7 @@ impl SlashCommand {
                 | SlashCommand::Raw
                 | SlashCommand::Docs
                 | SlashCommand::Usage
+                | SlashCommand::Cost
                 | SlashCommand::Pets
                 | SlashCommand::Side
                 | SlashCommand::Btw
@@ -218,6 +223,7 @@ impl SlashCommand {
                 | SlashCommand::Mention
                 | SlashCommand::Status
                 | SlashCommand::Usage
+                | SlashCommand::Cost
                 | SlashCommand::Ide
                 | SlashCommand::Providers
                 | SlashCommand::Telegram
@@ -249,7 +255,8 @@ impl SlashCommand {
             | SlashCommand::Logout
             | SlashCommand::MemoryDrop
             | SlashCommand::MemoryUpdate => false,
-            SlashCommand::Diff
+            SlashCommand::Cost
+            | SlashCommand::Diff
             | SlashCommand::Archive
             | SlashCommand::Delete
             | SlashCommand::Docs
@@ -305,6 +312,12 @@ impl SlashCommand {
             SlashCommand::Copy => !cfg!(target_os = "android"),
             SlashCommand::App => cfg!(any(target_os = "macos", target_os = "windows")),
             SlashCommand::Rollout | SlashCommand::TestApproval => cfg!(debug_assertions),
+            // The recorded-request view is held: collection cannot exist in a
+            // shipped binary, and advertising the view there was never
+            // authorised. Listing it is gated on the same build that can
+            // collect. Typing it still works, exactly as `/usage requests`
+            // already did, so nothing new is reachable in a shipped build.
+            SlashCommand::Cost => cfg!(feature = "developer-accounting"),
             _ => true,
         }
     }

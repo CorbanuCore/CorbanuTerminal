@@ -47,7 +47,7 @@ pub(super) fn truncated_path_variants(path: &str) -> Vec<String> {
 }
 
 pub(super) fn normalize_snapshot_paths(text: impl Into<String>) -> String {
-    let mut text = text.into();
+    let mut text = crate::status::snapshot_helpers::normalize_snapshot_version(&text.into());
 
     for unix_path in ["/tmp/project", "/tmp/hooks.json"] {
         let platform_path = test_path_display(unix_path);
@@ -80,7 +80,7 @@ pub(super) fn normalized_backend_snapshot<T: std::fmt::Display>(value: &T) -> St
     let rendered = format!("{value}");
 
     if platform_test_cwd == "/tmp/project" {
-        return rendered;
+        return normalize_snapshot_paths(rendered);
     }
 
     rendered
@@ -99,6 +99,21 @@ pub(super) fn normalized_backend_snapshot<T: std::fmt::Display>(value: &T) -> St
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+#[test]
+fn backend_snapshot_normalizes_status_header_and_update_version() {
+    let version = crate::version::CODEX_CLI_VERSION;
+    let rendered = format!(
+        "\"│ >_ Corbanu Terminal (v{version})│\"\n\"│ Update available! {version} -> 9.9.9│\""
+    );
+    let padding = " ".repeat(version.len() - 3);
+    assert_eq!(
+        normalized_backend_snapshot(&rendered),
+        format!(
+            "\"│ >_ Corbanu Terminal (v<V>){padding}│\"\n\"│ Update available! <V> -> 9.9.9{padding}│\""
+        )
+    );
 }
 
 pub(super) fn invalid_value(
@@ -176,12 +191,22 @@ fn set_config_provider_for_test_model(config: &mut Config, model: &str) {
             codex_model_provider_info::ZAI_PROVIDER_ID.to_string(),
             codex_model_provider_info::ModelProviderInfo::create_zai_provider(),
         ))
+    } else if trimmed == codex_model_provider_info::KIMI_CODE_K3_MODEL {
+        Some((
+            codex_model_provider_info::KIMI_CODE_PROVIDER_ID.to_string(),
+            codex_model_provider_info::ModelProviderInfo::create_kimi_code_provider(),
+        ))
     } else if matches!(
         trimmed,
         codex_model_provider_info::OPENROUTER_DEFAULT_MODEL
             | "minimax/minimax-m3"
             | "openrouter/owl-alpha"
             | "google/gemini-3.5-flash"
+            // Served by OpenRouter and by Vercel both, so the model alone
+            // cannot say which provider a session is on. That is precisely why
+            // the picker reads the configured provider, and why this mapping
+            // has to exist for a fixture that claims to be on OpenRouter.
+            | "moonshotai/kimi-k3"
     ) {
         Some((
             codex_model_provider_info::OPENROUTER_PROVIDER_ID.to_string(),

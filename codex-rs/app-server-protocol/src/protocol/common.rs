@@ -700,6 +700,12 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadInjectItemsResponse,
     },
+    /// Report a model request the client sent itself, so it reaches the ledger.
+    ThreadRecordSentModelRequest => "thread/recordSentModelRequest" {
+        params: v2::ThreadRecordSentModelRequestParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadRecordSentModelRequestResponse,
+    },
     SkillsList => "skills/list" {
         params: v2::SkillsListParams,
         serialization: global_shared_read("config"),

@@ -1,0 +1,8 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.14s
+────────────
+ Nextest run ID d03a6b06-dcb1-4f5f-b447-0318d0cd46bf with nextest profile: local
+    Starting 0 tests across 1 binary
+────────────
+     Summary [   0.000s] 0 tests run: 0 passed, 0 skipped
+warning: no tests to run

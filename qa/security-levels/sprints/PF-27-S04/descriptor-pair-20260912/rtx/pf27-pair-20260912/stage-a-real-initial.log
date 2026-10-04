@@ -1,0 +1,8 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.21s
+────────────
+ Nextest run ID 1b517a78-2411-4883-b00c-cc06e7430b60 with nextest profile: local
+    Starting 1 test across 7 binaries (61 tests skipped)
+        PASS [   0.483s] (1/1) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_real_two_holds_cancel_drop_and_reap
+────────────
+     Summary [   0.484s] 1 test run: 1 passed, 61 skipped

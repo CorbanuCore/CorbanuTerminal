@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="nextest-run" tests="18" skipped="0" failures="0" errors="0" uuid="c0c87928-8044-4172-8679-f06dc8dca35c" timestamp="2026-09-15T19:39:22.770-07:00" time="0.530">
+    <testsuite name="codex-tui" tests="18" skipped="0" errors="0" failures="0">
+        <testcase name="chatwidget::tokens::tests::accounting_inspect_unpriced_zero_and_missing_rate" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.058"/>
+        <testcase name="chatwidget::tokens::tests::accounting_inspect_exact_rounding_reconciliation" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.062"/>
+        <testcase name="chatwidget::tokens::tests::accounting_inspect_availability_state_snapshots" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.062"/>
+        <testcase name="chatwidget::tokens::tests::accounting_inspect_partial_and_unknown_copy" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.062"/>
+        <testcase name="chatwidget::tokens::tests::accounting_inspect_coverage_never_claims_run_complete" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.068"/>
+        <testcase name="chatwidget::tokens::tests::accounting_inspect_request_attempt_price_detail" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.068"/>
+        <testcase name="app::tests::accounting_inspect_app_off_and_old_usage_routes" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.144"/>
+        <testcase name="chatwidget::tests::slash_commands::accounting_inspect_command_without_account_auth" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.144"/>
+        <testcase name="chatwidget::tokens::tests::accounting_inspect_snapshot_navigation_roundtrip" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.146"/>
+        <testcase name="chatwidget::tests::usage::accounting_inspect_cancel_refresh_generation" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.146"/>
+        <testcase name="chatwidget::tests::usage::accounting_inspect_menu_and_reset_regression" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.148"/>
+        <testcase name="chatwidget::tests::slash_commands::accounting_inspect_command_date_validation" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.164"/>
+        <testcase name="app::tests::accounting_inspect_app_error_retry_and_timeout" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.242"/>
+        <testcase name="app::tests::accounting_inspect_app_thread_switch_stale_reply" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.242"/>
+        <testcase name="chatwidget::tokens::tests::accounting_inspect_narrow_and_long_fields" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.281"/>
+        <testcase name="app::tests::accounting_inspect_app_remote_does_not_read_local" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.361"/>
+        <testcase name="app::tests::accounting_inspect_app_restart_and_profile_isolation" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.423"/>
+        <testcase name="app::tests::accounting_inspect_app_real_store_to_view" classname="codex-tui" timestamp="2026-09-15T19:39:22.795-07:00" time="0.504"/>
+    </testsuite>
+</testsuites>

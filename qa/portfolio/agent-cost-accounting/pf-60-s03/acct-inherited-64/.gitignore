@@ -1,0 +1,5 @@
+# Regenerable counterexample work directories; results retain exact exits/errors.
+/page-controls-*/*/
+/removal-controls-*/*/
+/gates-*/*.log
+__pycache__/

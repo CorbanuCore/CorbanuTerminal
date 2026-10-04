@@ -29,7 +29,7 @@ These providers are compiled into Corbanu Terminal:
 | `claude-plan`    | Claude Plan    | Claude Code account route               | Claude Code login    | Messages         |
 | `ambient`        | Ambient        | `https://api.ambient.xyz/v1`            | `AMBIENT_API_KEY`    | Chat Completions |
 | `kimi-code`      | Kimi Code      | `https://api.kimi.com/coding/v1`        | `KIMI_API_KEY`       | Chat Completions |
-| `zai`            | Z.AI           | `https://api.z.ai/api/coding/paas/v4`   | `ZAI_API_KEY`        | Chat Completions |
+| `zai`            | Z.AI           | `https://api.z.ai/api/paas/v4`          | `ZAI_API_KEY`        | Chat Completions |
 | `deepseek`       | DeepSeek       | `https://api.deepseek.com`              | `DEEPSEEK_API_KEY`   | Responses        |
 | `openrouter`     | OpenRouter     | `https://openrouter.ai/api/v1`          | `OPENROUTER_API_KEY` | Chat Completions |
 | `meta`           | Meta           | `https://api.meta.ai/v1`                | `MODEL_API_KEY`      | Responses        |
@@ -73,7 +73,7 @@ DeepSeek direct:
 
 ```toml
 model_provider = "deepseek"
-model = "deepseek-v4-flash"
+model = "deepseek-flash"
 ```
 
 Z.AI:
@@ -139,7 +139,7 @@ You can also select a model per run:
 ```bash
 corbanu -m glm-5.2
 corbanu -m gpt-5.6-luna
-corbanu -m deepseek-v4-flash
+corbanu -m deepseek-flash
 corbanu -m deepseek/deepseek-v4-flash-0731
 corbanu -m zai-org/GLM-5.2
 corbanu -m zai/glm-5.2

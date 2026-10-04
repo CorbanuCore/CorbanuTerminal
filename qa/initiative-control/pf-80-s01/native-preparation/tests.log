@@ -1,0 +1,17 @@
+Final-tree execution summary, 2026-09-11; exit 0 unless explicitly stated.
+cwd for Rust: codex-rs; cwd for Python/governance: repository root.
+rustfmt --edition 2024 tasknode-session/src/delivery_goal.rs tasknode-session/src/delivery_goal_tests.rs: exit 0.
+just test -p codex-tasknode-session delivery_goal
+Nextest run 15f043fa-66db-4b4d-835c-b107a93e1333: 9 tests run, 9 passed, 33 filtered/skipped; 0.029s.
+just test -p codex-tasknode-session
+Nextest run 66f7e36e-8b4e-4b85-bc95-3349a76f083e: 42 tests run, 42 passed, 0 skipped; 0.188s.
+PYTHONDONTWRITEBYTECODE=1 qa/initiative-control/pf-80-s01/.venv-v0D0As/bin/python qa/initiative-control/pf-80-s01/native-preparation/verify_goldens.py
+2 cross-language golden cases passed; Python checked_event + prepare + full-payload hash + pinned validateEvent; no live activity.
+PYTHONDONTWRITEBYTECODE=1 qa/initiative-control/pf-80-s01/.venv-v0D0As/bin/python -m unittest discover -s scripts/initiative_control -p 'test_*.py'
+Ran 54 tests in 2.856s; OK. Existing Python source remained unchanged.
+python3 docs/plans/check.py: plans active 3/3; available slots 0.
+python3 docs/sprints/check.py: sprints current 116; archived 121.
+git diff --check: exit 0.
+Environment failures: system Python import markdown_it failed (no tests executed); existing pinned venv used successfully.
+just fmt-check: exit 1; out-of-scope baseline Python formatting drift plus not-yet-formatted new Rust files; see handoff.md.
+No direct cargo test, model/reviewer invocation or process/lock termination.

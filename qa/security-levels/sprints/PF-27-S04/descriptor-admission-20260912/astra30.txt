@@ -1,0 +1,7 @@
+autoreview findings: 1
+[P2] Detect peer shutdown even when unread bytes remain
+codex-rs/secret-broker-service/src/launch/manifest/pair_admission.rs:243
+If an admitted child writes data and then shuts down its socket's write side while staying alive, MSG_PEEK keeps returning the first unread byte. This loop therefore never detects the shutdown until the caller drains the socket or the overall deadline expires, leaving the other role's blocked reader unwoken. The existing EOF test consumes the fixture's role marker before admission, so it misses this case. Check socket shutdown independently of buffered data (for example, with POLLRDHUP) and cover shutdown with an unread byte remaining.
+
+overall: patch is incorrect (0.96)
+The new EOF monitoring can miss remote shutdown while data remains buffered, violating the increment's requirement to fence both channels on either peer's shutdown. Review used read-only inspection; no tests were run.

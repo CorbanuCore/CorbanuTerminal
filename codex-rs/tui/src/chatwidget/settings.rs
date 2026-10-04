@@ -5,6 +5,18 @@ use crate::app_event::AppEvent;
 use crate::chatwidget::rate_limits::RATE_LIMIT_SWITCH_PROMPT_VIEW_ID;
 
 impl ChatWidget {
+    pub(crate) fn defer_turn_for_permission_confirmation(&mut self) {
+        if self.input_queue.user_turn_pending_start {
+            self.input_queue.user_turn_pending_start = false;
+            if let Some(prompt) = self.safety_buffering_prompt.take() {
+                self.restore_user_message_to_composer(prompt);
+            }
+            self.update_task_running_state();
+        }
+        // Unlike terminal turn rejection, this must not auto-submit queued input.
+        self.add_error_message("Permission confirmation is pending. Wait for its result, then resubmit this prompt. Stop and approval controls remain available.".into());
+    }
+
     pub(crate) fn replace_gpu_model_providers(
         &mut self,
         runtime_providers: &std::collections::HashMap<

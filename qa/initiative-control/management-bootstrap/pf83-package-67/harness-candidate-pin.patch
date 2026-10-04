@@ -1,0 +1,13 @@
+--- a/fixtures.py
++++ b/fixtures.py
+@@ -21,8 +21,8 @@
+ CLAIM = dict(action="pf83-harness-impl-05", claim="6236b22e-c2b8-49a4-b4e6-dc2fff1ba283",
+              allocation_digest="8793c16b450798679f056e3b4a7cda56bb287a96b91ad912a59139fc8ede1d12",
+              model="gpt-6-astra", effort="high", role="harness-author")
+-CANDIDATE = dict(commit="e3bd579bf4e0c7c58ad863af2a9c6098e2297f98",
+-                 tree="dd4ea6fc1584a10064aa15b38f50bd7eae35c259",
++CANDIDATE = dict(commit="ae5981d2d7d762dfd6d54e0ac0967729bf88f082",
++                 tree="834f57388066d33c27fdee6e3b234dec7fa0b0e6",
+                  version="0.1.42-unverified", package_sha256=None, archive_sha256=None)
+ SCOPE = """Additive product scope; preserve original ambiguities.
+ A submitted selection is not a confirmed change. Confirmation is request-correlated,

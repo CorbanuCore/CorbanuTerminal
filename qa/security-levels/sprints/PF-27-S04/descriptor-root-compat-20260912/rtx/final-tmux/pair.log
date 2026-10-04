@@ -1,0 +1,12 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s
+────────────
+ Nextest run ID d90413db-b1d7-4aa5-a0e1-0dff86870268 with nextest profile: local
+    Starting 5 tests across 7 binaries (65 tests skipped)
+        PASS [   0.004s] (1/5) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_panic_signals_both_without_releasing_quarantine
+        PASS [   0.005s] (2/5) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_reservation_worker_failure_and_prelaunch_cancel
+        PASS [   0.006s] (3/5) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_first_second_failure_and_between_spawn_cancel
+        PASS [   0.034s] (4/5) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_either_death_and_asymmetric_errors_poll_and_stop_both
+        PASS [   0.207s] (5/5) codex-secret-broker-service launch::manifest::pair::tests::pf_27_s01_pair_late_second_spawn_cancel_drop_and_deadline_keep_capacity
+────────────
+     Summary [   0.207s] 5 tests run: 5 passed, 65 skipped

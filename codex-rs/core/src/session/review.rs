@@ -160,6 +160,9 @@ pub(super) async fn spawn_review_thread(
         malformed_tool_call_state: Arc::new(
             crate::session::turn_context::MalformedToolCallState::default(),
         ),
+        repeated_tool_call_state: Arc::new(
+            crate::session::turn_context::RepeatedToolCallState::default(),
+        ),
         server_model_warning_emitted: AtomicBool::new(false),
         provider_cache_pressure_warning_emitted: AtomicBool::new(false),
         model_verification_emitted: AtomicBool::new(false),

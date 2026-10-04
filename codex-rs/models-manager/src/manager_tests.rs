@@ -14,6 +14,7 @@ use codex_protocol::auth::AuthMode;
 use codex_protocol::openai_models::ChatReasoningEffortProtocol;
 use codex_protocol::openai_models::ChatReasoningProtocol;
 use codex_protocol::openai_models::InputModality;
+use codex_protocol::openai_models::MeteredRates;
 use codex_protocol::openai_models::ModelBilling;
 use codex_protocol::openai_models::ModelCapabilityTier;
 use codex_protocol::openai_models::ModelOrchestrationMetadata;
@@ -21,6 +22,8 @@ use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::ModelsResponse;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ReasoningEffortPreset;
+use codex_protocol::openai_models::UtcHourWindow;
+use codex_protocol::openai_models::WeekdaySet;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::collections::VecDeque;
@@ -37,6 +40,8 @@ mod model_info_overrides_tests;
 const DEFAULT_HTTP_CLIENT_FACTORY: HttpClientFactory =
     HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault);
 const STANDARD_BASE: &str = include_str!("../../core/src/agent/builtins/standard_base.md");
+const GLM_FLASH_WORK_PATTERN: &str =
+    include_str!("../../core/src/agent/builtins/glm_flash_work_pattern.md");
 const STANDARD_BASE_OUTCOME_MARKER: &str = "inspect code before changing it, keep edits scoped";
 const STANDARD_BASE_EVIDENCE_MARKER: &str = "only narrate when needed";
 const OLD_STANDARD_BASE_MARKER: &str = "Narrate as you work";
@@ -723,6 +728,53 @@ async fn remote_overlay_keeps_retired_ambient_model_out_of_picker() {
 }
 
 #[tokio::test]
+async fn remote_and_cached_overlays_cannot_resurrect_bundled_hidden_models() {
+    let retired = load_remote_models_from_file()
+        .expect("bundled models")
+        .into_iter()
+        .filter(|model| model.visibility == ModelVisibility::Hide)
+        .collect::<Vec<_>>();
+    assert!(!retired.is_empty());
+    let advertised = retired
+        .iter()
+        .cloned()
+        .map(|mut model| {
+            model.visibility = ModelVisibility::List;
+            model
+        })
+        .collect::<Vec<_>>();
+    let codex_home = tempdir().expect("temp dir");
+    let manager = openai_manager_for_tests(
+        codex_home.path().to_path_buf(),
+        TestModelsEndpoint::new(vec![advertised]),
+    );
+    let online = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
+    let cached_endpoint = TestModelsEndpoint::new(Vec::new());
+    let cached = openai_manager_for_tests(codex_home.path().to_path_buf(), cached_endpoint.clone())
+        .list_models(
+            RefreshStrategy::OnlineIfUncached,
+            DEFAULT_HTTP_CLIENT_FACTORY,
+        )
+        .await;
+    assert_eq!(cached, online);
+    assert_eq!(cached_endpoint.fetch_count(), 0);
+    for retired_model in retired {
+        let preset = online
+            .iter()
+            .find(|model| model.model == retired_model.slug)
+            .expect("hidden metadata retained");
+        assert!(!preset.show_in_picker, "{} resurrected", preset.model);
+        let explicit = manager
+            .get_model_info(&retired_model.slug, &ModelsManagerConfig::default())
+            .await;
+        assert_eq!(explicit.slug, retired_model.slug);
+        assert!(!explicit.used_fallback_model_metadata);
+    }
+}
+
+#[tokio::test]
 async fn remote_model_overlay_preserves_bundled_orchestration_metadata() {
     let mut remote_models = vec![remote_model(
         "gpt-5.6-sol",
@@ -845,6 +897,8 @@ async fn chatgpt_catalog_keeps_bundled_openai_models_when_remote_omits_them() {
 
     for slug in [
         "gpt-6-astra",
+        "gpt-6-sol",
+        "gpt-6-luna",
         "gpt-5.6-sol",
         "gpt-5.6-terra",
         "gpt-5.6-luna",
@@ -858,8 +912,8 @@ async fn chatgpt_catalog_keeps_bundled_openai_models_when_remote_omits_them() {
     assert!(
         available
             .iter()
-            .any(|model| model.model == "gpt-5.6-sol" && model.is_default),
-        "Sol should be the default visible preset"
+            .any(|model| model.model == "gpt-6-sol" && model.is_default),
+        "GPT-6 Sol should be the default visible preset"
     );
 }
 
@@ -889,6 +943,66 @@ async fn chatgpt_catalog_honors_explicit_remote_hiding_for_current_openai_models
             .all(|model| !model.show_in_picker),
         "an explicit hidden response must override bundled visibility"
     );
+}
+
+#[tokio::test]
+async fn default_falls_back_to_gpt_5_6_sol_when_the_server_hides_gpt_6_sol() {
+    let mut remote_models = crate::bundled_models_response()
+        .expect("bundled models should parse")
+        .models
+        .into_iter()
+        .filter(|model| model.slug == "gpt-6-sol")
+        .collect::<Vec<_>>();
+    for model in &mut remote_models {
+        model.visibility = ModelVisibility::Hide;
+    }
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = TestModelsEndpoint::new(vec![remote_models]);
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+
+    let available = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
+    let defaults = available
+        .iter()
+        .filter(|model| model.is_default)
+        .map(|model| model.model.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(defaults, vec!["gpt-5.6-sol"]);
+}
+
+#[test]
+fn gpt_6_sol_defaults_to_high_effort() {
+    let sol = crate::bundled_models_response()
+        .expect("bundled models should parse")
+        .models
+        .into_iter()
+        .find(|model| model.slug == "gpt-6-sol")
+        .expect("bundled gpt-6-sol");
+    assert_eq!(sol.default_reasoning_level, Some(ReasoningEffort::High));
+}
+
+#[tokio::test]
+async fn default_ignores_a_server_list_that_names_neither_sol_candidate() {
+    let remote_models = crate::bundled_models_response()
+        .expect("bundled models should parse")
+        .models
+        .into_iter()
+        .filter(|model| model.slug == "gpt-5.6-luna")
+        .collect::<Vec<_>>();
+    let codex_home = tempdir().expect("temp dir");
+    let endpoint = TestModelsEndpoint::new(vec![remote_models]);
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+
+    let available = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
+    let defaults = available
+        .iter()
+        .filter(|model| model.is_default)
+        .map(|model| model.model.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(defaults, vec!["gpt-6-sol"]);
 }
 
 #[tokio::test]
@@ -946,10 +1060,17 @@ async fn chatgpt_catalog_shows_server_advertised_gpt_5_6_models() {
     let available = manager
         .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
         .await;
+    // The server did not advertise gpt-6-sol to this account, so the bundled
+    // entry stays selectable but the default falls back to gpt-5.6-sol.
     assert!(
         available
             .iter()
             .any(|model| model.model == "gpt-5.6-sol" && model.is_default)
+    );
+    assert!(
+        available
+            .iter()
+            .any(|model| model.model == "gpt-6-sol" && !model.is_default)
     );
     let sol = available
         .iter()
@@ -1578,6 +1699,7 @@ fn bundled_models_json_tracks_verified_image_capabilities() {
         "minimax/minimax-m3",
         "google/gemini-3.5-flash",
         "claude-opus-5-plan",
+        "claude-opus-5-5-plan",
         "claude-fable-5-1-plan",
         "claude-fable-5-plan",
         "claude-opus-5",
@@ -1609,6 +1731,7 @@ fn bundled_claude_5_models_have_provider_reported_output_limits() {
 
     for (slug, max_output_tokens) in [
         ("claude-opus-5-plan", 128_000),
+        ("claude-opus-5-5-plan", 128_000),
         ("claude-fable-5-1-plan", 128_000),
         ("claude-fable-5-plan", 128_000),
         ("claude-opus-5", 128_000),
@@ -1788,6 +1911,35 @@ fn bundled_models_have_complete_orchestration_contracts() {
                 // Both values are required by the enum; zero remains valid for an
                 // explicitly free metered route.
                 ModelBilling::Metered { .. } => {}
+                ModelBilling::MeteredSchedule {
+                    peak_windows,
+                    peak_weekdays,
+                    off_peak_dates_utc,
+                    ..
+                } => {
+                    assert!(
+                        !peak_windows.is_empty()
+                            && peak_windows.iter().all(|window| {
+                                window.start_utc_hour < 24
+                                    && window.end_utc_hour <= 24
+                                    && window.start_utc_hour != window.end_utc_hour
+                            }),
+                        "{} must have valid UTC peak windows",
+                        model.slug
+                    );
+                    assert!(
+                        peak_weekdays.is_none_or(|weekdays| !weekdays.is_empty()),
+                        "{} must not specify an empty peak weekday set",
+                        model.slug
+                    );
+                    for date in off_peak_dates_utc {
+                        assert!(
+                            chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").is_ok(),
+                            "{}: off-peak date {date} must be YYYY-MM-DD",
+                            model.slug
+                        );
+                    }
+                }
                 ModelBilling::AuthDependent { .. } => {}
                 ModelBilling::Local => {}
             },
@@ -1990,14 +2142,10 @@ fn bundled_models_json_contains_ambient_and_zai_models() {
             .orchestration
             .as_ref()
             .and_then(ModelOrchestrationMetadata::billing),
-        Some(&ModelBilling::PlanSchedule {
-            off_peak_relative_burn_millis: 1_000,
-            peak_relative_burn_millis: 3_000,
-            peak_start_utc_hour: 6,
-            peak_end_utc_hour: 10,
-            peak_weekdays: Some(codex_protocol::openai_models::WeekdaySet::weekdays_only()),
-            promotional_off_peak_relative_burn_millis: None,
-            promotion_valid_through_utc: None,
+        Some(&ModelBilling::Metered {
+            input_milli_usd_per_million_tokens: 1_400,
+            output_milli_usd_per_million_tokens: 4_400,
+            cached_input_milli_usd_per_million_tokens: Some(260),
         })
     );
     let preset = ModelPreset::from(zai_glm_5_3.clone());
@@ -2054,7 +2202,6 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
         "moonshotai/kimi-k2.7-code",
         "zai/glm-5.2",
         "zai/glm-5.2-fast",
-        "zai/glm-5.3-flash",
         "zai/glm-5.3",
         "vercel/moonshotai/kimi-k3",
         "vercel/deepseek/deepseek-v4-pro",
@@ -2065,12 +2212,14 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
         "openrouter/owl-alpha",
         "google/gemini-3.5-flash",
         "x-ai/grok-4.5",
+        "deepseek-flash",
         "deepseek-v4-flash",
         "deepseek/deepseek-v4-pro",
         "deepseek/deepseek-v4-flash-0731",
         "tencent/hy3:free",
         "muse-spark-1.1",
         "claude-opus-5-plan",
+        "claude-opus-5-5-plan",
         "claude-fable-5-1-plan",
         "claude-fable-5-plan",
         "claude-opus-5",
@@ -2183,7 +2332,7 @@ fn bundled_models_json_contains_openrouter_models() {
     assert_eq!(openrouter_owl.context_window, Some(1_048_756));
     assert_eq!(openrouter_owl.default_reasoning_level, None);
     assert!(openrouter_owl.supported_reasoning_levels.is_empty());
-    assert_eq!(openrouter_owl.visibility, ModelVisibility::List);
+    assert_eq!(openrouter_owl.visibility, ModelVisibility::Hide);
     assert!(
         openrouter_owl
             .description
@@ -2352,7 +2501,20 @@ fn bundled_models_json_contains_openrouter_models() {
             .contains("$3.00/M input, $0.30/M cached input, $15.00/M output")
     );
 
-    for model in [grok, deepseek_pro, deepseek_flash, hy3, kimi] {
+    for model in [
+        grok,
+        deepseek_pro,
+        deepseek_pro_0813,
+        deepseek_flash,
+        openrouter_owl,
+    ] {
+        assert_eq!(model.visibility, ModelVisibility::Hide);
+        assert!(matches!(
+            model.orchestration,
+            Some(ModelOrchestrationMetadata::Disabled { .. })
+        ));
+    }
+    for model in [hy3, kimi] {
         assert_eq!(model.visibility, ModelVisibility::List);
         assert!(!model.supports_parallel_tool_calls);
         assert_standard_base(&model.base_instructions);
@@ -2639,39 +2801,96 @@ fn bundled_models_json_contains_openrouter_models() {
 fn bundled_models_json_contains_direct_deepseek_flash() {
     let response = crate::bundled_models_response()
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
-    let deepseek = response
-        .models
-        .iter()
-        .find(|model| model.slug == "deepseek-v4-flash")
-        .expect("bundled models.json should include direct DeepSeek V4 Flash");
-
-    assert_eq!(deepseek.display_name, "DeepSeek V4 Flash 0731 (Direct)");
-    assert_eq!(deepseek.context_window, Some(1_048_576));
-    assert_eq!(deepseek.max_context_window, Some(1_048_576));
-    assert_eq!(deepseek.max_output_tokens, Some(384_000));
-    assert_eq!(
-        deepseek.default_reasoning_level,
-        Some(ReasoningEffort::High)
-    );
-    assert_eq!(
-        deepseek
-            .supported_reasoning_levels
+    // DeepSeek's pricing page (2026-09-10): V4.1 Flash is served as
+    // `deepseek-flash`; the legacy `deepseek-v4-flash` name is still accepted but is
+    // served by V4.1 Flash and billed at its price. Peak is 01:00-04:00 and
+    // 06:00-10:00 UTC Monday-Friday, except Chinese public holidays; off-peak is half.
+    let rates = |input, output, cached| MeteredRates {
+        input_milli_usd_per_million_tokens: input,
+        output_milli_usd_per_million_tokens: output,
+        cached_input_milli_usd_per_million_tokens: Some(cached),
+    };
+    let window = |start_utc_hour, end_utc_hour| UtcHourWindow {
+        start_utc_hour,
+        end_utc_hour,
+    };
+    let v4_1_peak = Some(ModelOrchestrationMetadata::Eligible {
+        provider_id: "deepseek".to_string(),
+        capability: ModelCapabilityTier::Fast,
+        billing: ModelBilling::MeteredSchedule {
+            off_peak: rates(150, 600, 3),
+            peak: rates(300, 1_200, 6),
+            peak_windows: vec![window(1, 4), window(6, 10)],
+            peak_weekdays: Some(WeekdaySet::weekdays_only()),
+            // State Council 2026 schedule: the remaining weekday holidays.
+            off_peak_dates_utc: [
+                "2026-09-25",
+                "2026-10-01",
+                "2026-10-02",
+                "2026-10-05",
+                "2026-10-06",
+                "2026-10-07",
+            ]
+            .map(String::from)
+            .to_vec(),
+        },
+    });
+    for (slug, display_name) in [
+        ("deepseek-flash", "DeepSeek V4.1 Flash (Direct)"),
+        ("deepseek-v4-flash", "DeepSeek V4 Flash 0731 (Direct)"),
+    ] {
+        let deepseek = response
+            .models
             .iter()
-            .map(|level| level.effort.clone())
-            .collect::<Vec<_>>(),
-        vec![ReasoningEffort::High, ReasoningEffort::Max]
-    );
-    assert_eq!(
-        deepseek.orchestration,
-        Some(ModelOrchestrationMetadata::Eligible {
-            provider_id: "deepseek".to_string(),
-            capability: ModelCapabilityTier::Fast,
-            billing: ModelBilling::Metered {
-                input_milli_usd_per_million_tokens: 140,
-                output_milli_usd_per_million_tokens: 280,
-                cached_input_milli_usd_per_million_tokens: Some(3),
-            },
-        })
-    );
-    assert_standard_base(&deepseek.base_instructions);
+            .find(|model| model.slug == slug)
+            .unwrap_or_else(|| panic!("bundled models.json should include {slug}"));
+
+        assert_eq!(deepseek.display_name, display_name);
+        assert_eq!(deepseek.visibility, ModelVisibility::List);
+        assert_eq!(deepseek.context_window, Some(1_048_576));
+        assert_eq!(deepseek.max_context_window, Some(1_048_576));
+        assert_eq!(deepseek.max_output_tokens, Some(384_000));
+        assert_eq!(
+            deepseek.default_reasoning_level,
+            Some(ReasoningEffort::High)
+        );
+        assert_eq!(
+            deepseek
+                .supported_reasoning_levels
+                .iter()
+                .map(|level| level.effort.clone())
+                .collect::<Vec<_>>(),
+            vec![ReasoningEffort::High, ReasoningEffort::Max]
+        );
+        assert_eq!(deepseek.orchestration, v4_1_peak, "{slug}");
+        assert_standard_base(&deepseek.base_instructions);
+    }
+}
+
+/// GLM 5.3 Flash worked in long chains of small edits and reasoned about half as
+/// much per step as under Hermes, fully passing 11 of 30 benchmark tasks against
+/// Hermes's 19 of 30. The standard base plus an explicit work pattern (batch
+/// independent calls, write complete implementations, verify every requirement)
+/// passed 13 of 20. Every GLM 5.3 Flash route carries that pattern.
+#[test]
+fn glm_5_3_flash_routes_use_standard_base_with_work_pattern() {
+    let response = crate::bundled_models_response()
+        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
+    let (first, rest) = STANDARD_BASE
+        .split_once("\n\n")
+        .expect("standard base has an opening paragraph");
+    let expected = format!("{first}\n\n{}\n\n{rest}", GLM_FLASH_WORK_PATTERN.trim_end());
+
+    for slug in ["glm-5.3-flash", "z-ai/glm-5.3-flash", "zai/glm-5.3-flash"] {
+        let model = response
+            .models
+            .iter()
+            .find(|model| model.slug == slug)
+            .unwrap_or_else(|| panic!("bundled models.json should include {slug}"));
+        assert_eq!(
+            model.base_instructions.trim_end(),
+            expected.trim_end(),
+            "{slug}"
+        );
+    }
 }

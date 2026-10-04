@@ -1,0 +1,26 @@
+test_omission_count_matches_own_revision_marks_with_answered_indirection (test_attention.DecisionRenderingTests.test_omission_count_matches_own_revision_marks_with_answered_indirection) ... 
+  test_omission_count_matches_own_revision_marks_with_answered_indirection (test_attention.DecisionRenderingTests.test_omission_count_matches_own_revision_marks_with_answered_indirection) (enabled=False) ... FAIL
+  test_omission_count_matches_own_revision_marks_with_answered_indirection (test_attention.DecisionRenderingTests.test_omission_count_matches_own_revision_marks_with_answered_indirection) (enabled=True) ... FAIL
+
+======================================================================
+FAIL: test_omission_count_matches_own_revision_marks_with_answered_indirection (test_attention.DecisionRenderingTests.test_omission_count_matches_own_revision_marks_with_answered_indirection) (enabled=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_attention.py", line 179, in test_omission_count_matches_own_revision_marks_with_answered_indirection
+    self.assertEqual(2, page.count("Slack projection row for revision "))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 2 != 0
+
+======================================================================
+FAIL: test_omission_count_matches_own_revision_marks_with_answered_indirection (test_attention.DecisionRenderingTests.test_omission_count_matches_own_revision_marks_with_answered_indirection) (enabled=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_attention.py", line 179, in test_omission_count_matches_own_revision_marks_with_answered_indirection
+    self.assertEqual(2, page.count("Slack projection row for revision "))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 2 != 0
+
+----------------------------------------------------------------------
+Ran 1 test in 0.028s
+
+FAILED (failures=2)

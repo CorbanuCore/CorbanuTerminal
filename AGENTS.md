@@ -2,8 +2,8 @@
 
 | Field             | Value                                                                                                                    |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Policy version    | 1.6                                                                                                                      |
-| Updated           | 2026-09-10                                                                                                               |
+| Policy version    | 1.7                                                                                                                      |
+| Updated           | 2026-09-12                                                                                                               |
 | Policy owner      | Lead developer, as assigned in the [product roles table](docs/corbanu-product-spec.md#ownership-and-decision-rights)     |
 | Product authority | The decision roles in the product specification                                                                          |
 | Amendment rule    | Changes to product scope or hard release gates require the product decision process defined in the product specification |
@@ -89,6 +89,16 @@ from plan prose.
 - Plans maintain a sprint execution map for every feature. Run
   `python3 docs/sprints/check.py` before implementation handoff and in CI.
 
+## Automated-test credential isolation
+
+Use `just test` for ordinary Rust tests, including manager, scheduled and
+subagent verification runs. Read [safe automated tests](docs/development/test-isolation.md)
+before launching a test campaign. Fixture children must not inherit live profile
+aliases or access the operator's native credential store. A native prompt or
+live-profile read stops successor/retry dispatch and invalidates that run; never
+ask the operator to authorize test binaries against their personal Keychain.
+Native/packaged credential qualification requires the separate isolated lane.
+
 ## Interactive product proof
 
 A user-facing interactive feature is not complete until the final built
@@ -124,6 +134,16 @@ For non-user-facing work, record a reasoned not-applicable decision.
 - Freeze its original, prioritized starting-state/action/observable-result cases
   before comparing them with implementation tests. Preserve ambiguities and
   subsequent amendments; do not coach it toward a preferred answer.
+- September 12, 2026 amendment authorized by Travis: acceptance execution must
+  use a separate fresh-context, code-blind agent, not the implementer, with only
+  frozen human cases, neutral navigation instructions and the exact read-only
+  binary package/assets. A binary-only working directory or prompt restriction
+  alone is insufficient: enforce filesystem, tool, process/IPC and network
+  boundaries; deny repository/history/prior findings and real credential access.
+  Record negative access probes from the actual executor and its children,
+  positive package/PTY controls, isolated per-run state and mediated inference.
+  Missing enforcement blocks applicable functional handoff, not unrelated
+  internal implementation. Never bypass a tool denial to complete a test.
 - Map every proposed case to execution evidence or an explicit disposition.
   Exercise the exact packaged candidate through real keys and representative
   fresh/existing profiles on applicable platforms. Screenshots alone cannot
@@ -133,11 +153,54 @@ For non-user-facing work, record a reasoned not-applicable decision.
   and recorded acceptance by product authority, not unilateral deletion by the
   implementing agent. A human may explicitly agree to limited testing around
   a named prerequisite; preserve that limitation rather than calling it passed.
+- The evidence reviewer must be independent of both implementer and executor;
+  the original designer may review. Preserve raw attempts, timeouts, fixture
+  defects and separate fresh replays; corrections never overwrite old results.
+  Internal-only stages need a reasoned, integrator-accepted N/A with the later
+  functional gate named. Unit tests cannot qualify an affected user workflow.
 - Normally use one independent design pass and one brief evidence check, both
   charged to the existing per-track review budget (default maximum five total,
   including code/external reviews). Do not reset the budget for this step.
-  Further reviews require the existing critical-finding exception or an explicit
-  human budget amendment; a spent budget is not permission to skip the gate.
+  Record execution sessions/cost separately; execution is mandatory test work,
+  not an additional opinion review. Additional reviews may be authorized by the named integrator under the
+  September 12 delegation below; a spent budget never waives a required gate.
+
+### Integrator review discretion
+
+Travis's September 12, 2026 instruction delegates authority to the named
+integration owner to authorize additional scoped reviews without asking him each
+time. Favor extensions that remove real review/evidence blockers. Record scope,
+purpose, prior usage, additional allowance and result in the existing ledger;
+never erase earlier passes or disguise an extension as a reset. This applies to
+code, security, code-blind design and evidence reviews, including tracks held
+solely by review-count or replenishment-time limits. Security reviews remain
+coordinated through the existing security owner, without duplicate workers or
+resuming work paused for another reason.
+
+When earlier reviews have no substantive unresolved issue, move to the next
+required test, integration or assignment instead of seeking more opinions on
+unchanged code. Record cosmetic/nonblocking observations as follow-ups. Do not
+waive correctness/security findings, independence, actual test evidence,
+dependencies, product decisions, human acceptance or external-action permissions.
+Scope-break and convergence rules remain. Workers request routine extensions
+from the integrator rather than blocking on a new human review-spend decision.
+
+### Model for adversarial functional cases
+
+User-authorized process amendment, October 2, 2026. Functional cases that ask
+the product to run boundary probes (permission, sandbox and security cases such
+as PF-83 F01-F11) run the product under test on GLM 5.2 (`-m glm-5.2 -c
+model_provider="zai"`). GPT-5.6-Sol refused PF-83 F05-F11 outright as a
+cybersecurity request. GLM 5.2 attempted F01, F02 and F05-F11 in the sealed
+guest (increment-33), with one intermittent refusal recorded in F05.
+
+- Record every model refusal verbatim as a result. A retry must resubmit the
+  frozen case wording unchanged; a changed prompt is a separate, labelled
+  attempt, never the case's verdict.
+- Another model needs a recorded reason, and a refusal count from the same
+  cases, before it replaces GLM 5.2.
+- Credentials reach an isolated guest only through the owner-approved path for
+  that guest; never print or log them.
 
 Use [the workflow and artifact templates](qa/code-blind-functional/README.md)
 and its handoff checker. The checker validates traceability, not the truth of

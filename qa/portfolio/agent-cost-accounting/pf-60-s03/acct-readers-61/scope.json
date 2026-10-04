@@ -1,0 +1,17 @@
+{
+  "status": " M qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/audit_boundaries.py\n M qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundaries.py\n?? qa/portfolio/agent-cost-accounting/pf-60-s03/acct-readers-61/\n",
+  "tracked_numstat": "15\t0\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/audit_boundaries.py\n12\t0\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundaries.py\n",
+  "production_lines": 0,
+  "rust_test_lines": 0,
+  "new_qa_source_lines": {
+    "audit_readers.py": 119,
+    "finalize_evidence.py": 62,
+    "negative_controls.py": 68,
+    "p3_checks.py": 28,
+    "readers.py": 245,
+    "tz_clock.c": 22
+  },
+  "binary_sha256": "f78a1cc8a433030d3f50d91cfd415946e5fe3dd4e08e69d5c9644244c0d018bb",
+  "clock_source_sha256": "1c6a22b658b2505f35cd01aed2168fbd19aa1a066000bc9dcc1ddf975b5eb2e1",
+  "clock_binary_sha256": "5e085082a3c0fb6bc32be604fde6551f712df525052b85bd04a72aeba6eb75e5"
+}

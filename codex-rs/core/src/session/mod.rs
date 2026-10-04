@@ -218,7 +218,7 @@ mod mcp;
 mod mcp_prewarm;
 mod mcp_refresh;
 mod mcp_runtime;
-mod memory_stage_one;
+pub(crate) mod memory_stage_one;
 pub(crate) mod multi_agents;
 mod output_text_stream;
 mod review;
@@ -263,6 +263,7 @@ pub enum SteerInputError {
     NoActiveTurn(Vec<UserInput>),
     ExpectedTurnMismatch { expected: String, actual: String },
     ActiveTurnNotSteerable { turn_kind: NonSteerableTurnKind },
+    AuthorizationChanged(Vec<UserInput>),
     EmptyInput,
 }
 
@@ -289,6 +290,10 @@ impl SteerInputError {
                     }),
                 }
             }
+            Self::AuthorizationChanged(_) => ErrorEvent {
+                message: "Permissions changed since this turn started. Wait for it to finish or stop it, then submit your message again.".to_string(),
+                codex_error_info: Some(CodexErrorInfo::BadRequest),
+            },
             Self::EmptyInput => ErrorEvent {
                 message: "input must not be empty".to_string(),
                 codex_error_info: Some(CodexErrorInfo::BadRequest),
@@ -1609,7 +1614,6 @@ impl Session {
             new_config,
             permission_profile_changed,
             mcp_inputs_changed,
-            model_client_configuration,
             stale_startup_prewarm,
         ) = {
             let mut state = self.state.lock().await;
@@ -1636,7 +1640,12 @@ impl Session {
                 .model_provider_id
                 != updated.original_config_do_not_use.model_provider_id
                 || state.session_configuration.provider != updated.provider;
-            let model_client_configuration = model_provider_changed.then(|| updated.clone());
+            if model_provider_changed {
+                // Publish while updates are serialized, before the new configuration
+                // becomes observable. Frame guards read this client without state locks.
+                self.services
+                    .replace_model_client(self.build_model_client_for_configuration(&updated));
+            }
             let stale_startup_prewarm = if model_provider_changed {
                 state.take_session_startup_prewarm()
             } else {
@@ -1656,15 +1665,10 @@ impl Session {
                 new_config,
                 permission_profile_changed,
                 mcp_inputs_changed,
-                model_client_configuration,
                 stale_startup_prewarm,
             )
         };
         self.emit_config_changed_contributors(previous_config.as_ref(), new_config.as_ref());
-        if let Some(configuration) = model_client_configuration {
-            self.services
-                .replace_model_client(self.build_model_client_for_configuration(&configuration));
-        }
         if let Some(startup_prewarm) = stale_startup_prewarm {
             startup_prewarm.abort().await;
         }
@@ -1863,6 +1867,17 @@ impl Session {
     pub(crate) async fn provider(&self) -> ModelProviderInfo {
         let state = self.state.lock().await;
         state.session_configuration.provider.clone()
+    }
+
+    /// The accounting mode and provider identity in force right now.
+    ///
+    /// Read live rather than snapshotted: a session's provider can change, and
+    /// a client that records against the identity it had at startup would
+    /// attribute a request to a provider it no longer uses.
+    pub(crate) async fn accounting_binding(&self) -> (crate::config::AccountingMode, String) {
+        let state = self.state.lock().await;
+        let config = &state.session_configuration.original_config_do_not_use;
+        (config.accounting.clone(), config.model_provider_id.clone())
     }
 
     pub(crate) async fn refresh_runtime_config(&self, next_config: Config) {
@@ -4319,6 +4334,21 @@ impl Session {
         self.send_event(turn_context, event).await;
     }
 
+    // Compare execution authority directly. User-layer reloads, model settings and
+    // config provenance cannot affect this check.
+    pub(super) fn authorization_matches(
+        current: &SessionConfiguration,
+        captured: &TurnContext,
+    ) -> bool {
+        current.approval_policy.value() == captured.approval_policy.value()
+            && current
+                .permission_profile()
+                .materialize_project_roots_with_workspace_roots(&current.primary_workspace_roots())
+                == captured.permission_profile
+            && current.approvals_reviewer == captured.config.approvals_reviewer
+            && current.windows_sandbox_level == captured.windows_sandbox_level
+    }
+
     /// Inject additional user input into the currently active turn.
     ///
     /// Returns the active turn id when accepted.
@@ -4371,10 +4401,15 @@ impl Session {
             return Err(SteerInputError::EmptyInput);
         }
 
-        let additional_context_input = {
-            let mut state = self.state.lock().await;
-            state.additional_context.merge(additional_context)
-        };
+        // Serialize authorization comparison and admission with settings updates.
+        // A new context cannot re-sandbox existing exec sessions: steered work
+        // could still send them instructions through write_stdin. Refuse admission
+        // instead of changing running work or revoking an already granted approval.
+        let mut state = self.state.lock().await;
+        if !Self::authorization_matches(&state.session_configuration, &active_task.turn_context) {
+            return Err(SteerInputError::AuthorizationChanged(input));
+        }
+        let additional_context_input = state.additional_context.merge(additional_context);
 
         if let Some(responsesapi_client_metadata) = responsesapi_client_metadata {
             active_task
@@ -4398,6 +4433,7 @@ impl Session {
                 pending_input,
             )
             .await;
+        drop(state);
         Ok(active_turn_id.clone())
     }
 
@@ -4410,6 +4446,7 @@ impl Session {
         input: Vec<UserInput>,
         additional_context: BTreeMap<String, AdditionalContextEntry>,
         client_user_message_id: Option<String>,
+        final_output_json_schema: Option<Value>,
     ) -> Result<String, SteerInputError> {
         let mut active = self.active_turn.lock().await;
         let Some(active_turn) = active.as_mut() else {
@@ -4439,7 +4476,11 @@ impl Session {
             client_id: client_user_message_id,
         });
         self.input_queue
-            .extend_pending_input_for_turn_state(active_turn.turn_state.as_ref(), pending_input)
+            .defer_input_for_turn_state(
+                active_turn.turn_state.as_ref(),
+                pending_input,
+                final_output_json_schema,
+            )
             .await;
         Ok(active_task.turn_context.sub_id.clone())
     }

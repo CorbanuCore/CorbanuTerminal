@@ -1,0 +1,222 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling subtle v2.6.1
+   Compiling futures-io v0.3.32
+   Compiling tinystr v0.8.3
+   Compiling zeroize v1.8.2
+   Compiling digest v0.10.7
+   Compiling futures-util v0.3.32
+   Compiling rustls-pki-types v1.14.0
+   Compiling icu_locale_core v2.2.0
+   Compiling sha1 v0.10.6
+   Compiling getrandom v0.2.17
+   Compiling aws-lc-rs v1.16.2
+   Compiling ring v0.17.14
+   Compiling icu_provider v2.2.0
+   Compiling unicode-normalization v0.1.25
+   Compiling icu_normalizer v2.2.0
+   Compiling gix-utils v0.3.1
+   Compiling futures-executor v0.3.32
+   Compiling icu_properties v2.2.0
+   Compiling linux-raw-sys v0.12.1
+   Compiling futures v0.3.31
+   Compiling rustls-webpki v0.103.13
+   Compiling sha2 v0.10.9
+   Compiling rustix v1.1.4
+   Compiling gix-features v0.46.2
+   Compiling rustls v0.23.36
+   Compiling idna_adapter v1.2.1
+   Compiling rama-core v0.3.0-alpha.4
+   Compiling idna v1.1.0
+   Compiling url v2.5.8
+   Compiling rustls-native-certs v0.8.3
+   Compiling hyper-util v0.1.20
+   Compiling tempfile v3.27.0
+   Compiling sha1-checked v0.10.0
+   Compiling rama-http-types v0.3.0-alpha.4
+   Compiling tower v0.5.3
+   Compiling tokio-rustls v0.26.4
+   Compiling gix-hash v0.23.0
+   Compiling webpki-roots v1.0.5
+   Compiling gix-hashtable v0.13.0
+   Compiling publicsuffix v2.3.0
+   Compiling gix-object v0.58.0
+   Compiling cookie_store v0.22.1
+   Compiling rama-net v0.3.0-alpha.4
+   Compiling hickory-proto v0.25.2
+   Compiling hyper-tls v0.6.0
+   Compiling hyper-rustls v0.27.7
+   Compiling tower-http v0.6.8
+   Compiling blake3 v1.8.2
+   Compiling reqwest v0.12.28
+   Compiling pagable v0.4.1
+   Compiling hickory-resolver v0.25.2
+   Compiling rama-http-headers v0.3.0-alpha.4
+   Compiling rama-dns v0.3.0-alpha.4
+   Compiling codex-utils-rustls-provider v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/rustls-provider)
+   Compiling rama-http v0.3.0-alpha.4
+   Compiling starlark_map v0.14.2
+   Compiling x509-parser v0.18.1
+   Compiling fd-lock v4.0.4
+   Compiling gix-fs v0.19.2
+   Compiling rama-tcp v0.3.0-alpha.4
+   Compiling rustyline v14.0.0
+   Compiling rcgen v0.14.7
+   Compiling starlark_syntax v0.14.2
+   Compiling codex-http-client v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/http-client)
+   Compiling rama-unix v0.3.0-alpha.4
+   Compiling rama-udp v0.3.0-alpha.4
+   Compiling codex-security-policy v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/security-policy)
+   Compiling starlark v0.14.2
+   Compiling enumflags2 v0.7.12
+   Compiling codex-utils-cache v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/cache)
+   Compiling rama-socks5 v0.3.0-alpha.4
+   Compiling rama-http-core v0.3.0-alpha.4
+   Compiling icu_locale v2.2.0
+   Compiling rama-tls-rustls v0.3.0-alpha.4
+   Compiling gix-tempfile v21.0.2
+   Compiling codex-utils-path-uri v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/path-uri)
+   Compiling headers v0.4.1
+   Compiling icu_decimal v2.2.0
+   Compiling gix-lock v21.0.2
+   Compiling codex-utils-image v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/image)
+   Compiling landlock v0.4.4
+   Compiling concurrent-queue v2.5.0
+   Compiling event-listener v5.4.1
+   Compiling tungstenite v0.27.0 (https://github.com/openai-oss-forks/tungstenite-rs?rev=4fffad30fe373adbdcffab9545e9e9bf4f2fc19f#4fffad30)
+   Compiling gix-commitgraph v0.35.0
+   Compiling hyper-timeout v0.5.2
+   Compiling gix-quote v0.7.0
+   Compiling tonic v0.14.3
+   Compiling gix-revwalk v0.29.0
+   Compiling tokio-tungstenite v0.28.0 (https://github.com/openai-oss-forks/tokio-tungstenite?rev=0e5b2d73aa18dd9f0a50ee9ff199d5aef7594186#0e5b2d73)
+   Compiling rama-http-backend v0.3.0-alpha.4
+   Compiling codex-network-proxy v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/network-proxy)
+   Compiling event-listener-strategy v0.5.4
+   Compiling gix-ref v0.61.0
+   Compiling gix-command v0.8.0
+   Compiling codex-client v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/codex-client)
+   Compiling async-channel v2.5.0
+   Compiling tonic-prost v0.14.3
+   Compiling codex-websocket-client v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/websocket-client)
+   Compiling opentelemetry_sdk v0.31.0
+   Compiling gix-glob v0.24.0
+   Compiling gix-pack v0.68.0
+   Compiling opentelemetry-proto v0.31.0
+   Compiling codex-execpolicy v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/execpolicy)
+   Compiling gix-transport v0.55.1
+   Compiling nix v0.30.1
+   Compiling gix-revision v0.43.0
+   Compiling gix-shallow v0.10.0
+   Compiling codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/protocol)
+   Compiling opentelemetry-http v0.31.0
+   Compiling gix-config v0.54.0
+   Compiling gix-protocol v0.59.0
+   Compiling opentelemetry-otlp v0.31.0
+   Compiling gix-refspec v0.39.0
+   Compiling os_info v3.14.0
+   Compiling gix-odb v0.78.0
+   Compiling gix-discover v0.49.0
+   Compiling gix-traverse v0.55.0
+   Compiling gix-diff v0.61.0
+   Compiling gethostname v1.1.0
+   Compiling gix v0.81.0
+   Compiling codex-utils-path v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/path-utils)
+   Compiling codex-security-audit v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/security-audit)
+   Compiling codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/linux-pidfd-spawn)
+   Compiling hmac v0.12.1
+   Compiling codex-api v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/codex-api)
+   Compiling codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/file-system)
+   Compiling codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/git-utils)
+   Compiling codex-otel v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/otel)
+   Compiling codex-model-provider-info v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/model-provider-info)
+   Compiling codex-features v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/features)
+   Compiling codex-config v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/config)
+   Compiling codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/protected-state)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 35.12s
+────────────
+ Nextest run ID 929adf96-9a0f-422a-8d60-fc3a36aa80ee with nextest profile: local
+    Starting 4 tests across 1 binary (20 tests skipped)
+        FAIL [   0.003s] (1/4) codex-protected-state native::tests::pf27_root_compat_both_entries_lost_reply_is_ambiguous
+  stdout ───
+
+    running 1 test
+    test native::tests::pf27_root_compat_both_entries_lost_reply_is_ambiguous ... FAILED
+
+    failures:
+
+    failures:
+        native::tests::pf27_root_compat_both_entries_lost_reply_is_ambiguous
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 23 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'native::tests::pf27_root_compat_both_entries_lost_reply_is_ambiguous' (1086697) panicked at protected-state/src/native_tests.rs:28:6:
+    called `Result::unwrap()` on an `Err` value: Unsupported
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   0.003s] (2/4) codex-protected-state native::tests::pf27_root_compat_both_entries_cas_and_death
+  stdout ───
+
+    running 1 test
+    test native::tests::pf27_root_compat_both_entries_cas_and_death ... FAILED
+
+    failures:
+
+    failures:
+        native::tests::pf27_root_compat_both_entries_cas_and_death
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 23 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'native::tests::pf27_root_compat_both_entries_cas_and_death' (1086696) panicked at protected-state/src/native_tests.rs:28:6:
+    called `Result::unwrap()` on an `Err` value: Unsupported
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   0.003s] (3/4) codex-protected-state native::tests::pf27_root_compat_both_entries_reject_malformed_and_replay
+  stdout ───
+
+    running 1 test
+    test native::tests::pf27_root_compat_both_entries_reject_malformed_and_replay ... FAILED
+
+    failures:
+
+    failures:
+        native::tests::pf27_root_compat_both_entries_reject_malformed_and_replay
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 23 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'native::tests::pf27_root_compat_both_entries_reject_malformed_and_replay' (1086698) panicked at protected-state/src/native_tests.rs:28:6:
+    called `Result::unwrap()` on an `Err` value: Unsupported
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   0.003s] (4/4) codex-protected-state native::tests::pf27_root_compat_rejected_identity_never_receives_key
+  stdout ───
+
+    running 1 test
+    test native::tests::pf27_root_compat_rejected_identity_never_receives_key ... FAILED
+
+    failures:
+
+    failures:
+        native::tests::pf27_root_compat_rejected_identity_never_receives_key
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 23 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'native::tests::pf27_root_compat_rejected_identity_never_receives_key' (1086699) panicked at protected-state/src/native_tests.rs:28:6:
+    called `Result::unwrap()` on an `Err` value: Unsupported
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+────────────
+     Summary [   0.004s] 4 tests run: 0 passed, 4 failed, 20 skipped
+        FAIL [   0.003s] (1/4) codex-protected-state native::tests::pf27_root_compat_both_entries_lost_reply_is_ambiguous
+        FAIL [   0.003s] (2/4) codex-protected-state native::tests::pf27_root_compat_both_entries_cas_and_death
+        FAIL [   0.003s] (3/4) codex-protected-state native::tests::pf27_root_compat_both_entries_reject_malformed_and_replay
+        FAIL [   0.003s] (4/4) codex-protected-state native::tests::pf27_root_compat_rejected_identity_never_receives_key
+error: test run failed
+error: recipe `test` failed on line 82 with exit code 100

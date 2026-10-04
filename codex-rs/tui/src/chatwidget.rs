@@ -591,6 +591,7 @@ pub(crate) struct ChatWidget {
     rate_limit_snapshots_by_limit_id: BTreeMap<String, RateLimitSnapshotDisplay>,
     refreshing_status_outputs: Vec<(u64, StatusHistoryHandle)>,
     next_status_refresh_request_id: u64,
+    accounting_inspector: Option<tokens::Inspector>,
     refreshing_token_activity_output: Option<tokens::PendingTokenActivityOutput>,
     completed_token_activity_output: Option<history_cell::CompositeHistoryCell>,
     next_token_activity_request_id: u64,
@@ -1404,6 +1405,7 @@ impl ChatWidget {
     }
 
     fn request_redraw(&mut self) {
+        self.invalidate_accounting_inspector_for_thread();
         self.frame_requester.schedule_frame();
     }
 
@@ -1698,6 +1700,7 @@ impl ChatWidget {
     pub(crate) fn on_terminal_resize(&mut self, width: u16) {
         let had_rendered_width = self.last_rendered_width.get().is_some();
         self.last_rendered_width.set(Some(width as usize));
+        self.reflow_accounting_inspector(width);
         let stream_width = self.current_stream_width(/*reserved_cols*/ 2);
         let plan_stream_width = self.current_stream_width(/*reserved_cols*/ 4);
         if let Some(controller) = self.stream_controller.as_mut() {
@@ -1821,10 +1824,7 @@ impl ChatWidget {
             .model_catalog
             .current_requires_recovery(&self.config.model_provider_id, self.current_model())
         {
-            self.add_error_message(
-                "The current provider is unavailable or inactive. Choose an active provider and model, or repair it in /providers."
-                    .to_string(),
-            );
+            self.add_error_message(provider_model_policy::current_provider_blocked_message());
             return false;
         }
         if self.blocks_direct_input

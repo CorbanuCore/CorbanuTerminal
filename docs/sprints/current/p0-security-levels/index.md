@@ -1,5 +1,15 @@
 # P0 security-level execution sprints
 
+September14 superseding allocation: [PF-83-S01](pf-83-s01-permission-confirmation.md)
+is the sole executable security/permission sprint for the user-approved
+app-server/TUI confirmation repair. PF-27-S04's owner handed its paused
+reservation back to draft, preserving all broker work/evidence. Historical
+resumption prose below is not execution authority. No fourth plan is added.
+
+| Order | Sprint | Outcome | Status | Depends on |
+| ---: | --- | --- | --- | --- |
+| 84 | [PF-83-S01](pf-83-s01-permission-confirmation.md) | Request-correlated permission confirmation | in progress | none |
+
 The active [P0 security plan](../../../plans/active/p0-security-levels.md) owns
 **52 current sprints** and **32 completed archives**.
 The integrated Sprint 13 branch completes PF-13-S02–S04 and the early PF-26-S01

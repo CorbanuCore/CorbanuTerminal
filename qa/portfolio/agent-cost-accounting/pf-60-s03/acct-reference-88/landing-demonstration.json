@@ -1,0 +1,38 @@
+{
+  "source_base": "e38b4ceec04c50d14699aa8b97f32274f87e66a5",
+  "clone": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/target/landing-gjhe29xq/checkout",
+  "integration_ref": "refs/heads/integrate/management-workstreams-20260911",
+  "before": "e38b4ceec04c50d14699aa8b97f32274f87e66a5",
+  "landed": "8928f8c44db55ec50e8c00ed6790845187403299",
+  "advanced": "07bf69ed7afae349aa71842d8f6121bdaba8bc55",
+  "source_refs_unchanged": true,
+  "proposed_files_sha256": {
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md": "f73073f66dd3b9945c99b152eb0b2ef8d21254fd8dca85c2a01a49f2d853fdf1",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json": "889aae0737c20a7787ffd58de6314142c6d70c38ae34453722d9486a867d3d43",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/inventory-correction.json": "61b1f88bf6391eaae3fba3ea7137651ccabdc7bd859d1988811eb13da4c4d3f5",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/.gitignore": "306fd52e74fca6746e12acc750f232de15e71da917756a1270d74c91f5eb7368",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/check_receipt.py": "20f0a50bc58264a12b3c43c644da5daff0e5858f0e98aed7120be9f90dc12b91",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt": "7c0be95732e992bdb92da90ec1868df60a102fb83a35109b4717d03825135190",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/gate.py": "867439fb4de5a404ac071c846d14cc99d4ad72991c6388eb4cc60c8ea3a2692f",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/gates-01/core-default.json": "c3e87654d5f0914ed36447fe4aebc63af9dda9c8da396a1ed80c3ae11934acd4",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/gates-01/core-default.log.gz": "68da7c8e633786bfea5afb8a0ddc99f902cabfa9a4882b8fe662bc218877c4a0",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/gates-01/prerequisites.json": "efd43896f2ba04841fb3f16c2408dff40206b039fc6da7476576bffdec88a0a6",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/gates-01/prerequisites.log.gz": "638d0c0ac741b644158069a6484032a5accd603c97ab35e974f195e878dc81f4",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/reference.json": "50f3138264c54261863c77b6647d58eb9f28d6877e553b0ba2a981a13b85c80d",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/refresh_inventory.py": "f618aa5542cacfef6d60cff4e178d932c38263e9ea1ebcdb93b055ef8e8813ba",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/simulate_landing.py": "1f67ee3c8c400e986836182eed357f740f6b0f44a0ebc7e58ac1258c053f8c7a",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-selfcheck-84/check_current_tip.py": "6dc2ec037ac09ee0c97f8cede46374ec54e390281c4dab9d658e53420a28fafb"
+  },
+  "replay_exits": [
+    0,
+    0
+  ],
+  "evidence_exits": [
+    2,
+    2
+  ],
+  "reference_sha256": "7c0be95732e992bdb92da90ec1868df60a102fb83a35109b4717d03825135190",
+  "identical_stdout": true,
+  "no_network": true,
+  "no_package_launch": true
+}

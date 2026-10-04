@@ -1,0 +1,41 @@
+{
+  "partial_status": {
+    "state": "off",
+    "generation": 0,
+    "next_generation": 1,
+    "stored": {
+      "singleton": 1,
+      "schema_version": 1,
+      "config_digest": "46151d178567a69d2edbaf8365f052b6c50f9678ce348d328497c74cec065dd6",
+      "package_digest": "c98c052877c7b584aecca5189c4c046d936d3577a9f0e3f43d1082bdeaf0bbe5",
+      "control_generation": 0,
+      "requested_mode": "off",
+      "activation_decision_id": null,
+      "activation_revision": null,
+      "activation_digest": null
+    },
+    "config_digest": "46151d178567a69d2edbaf8365f052b6c50f9678ce348d328497c74cec065dd6",
+    "package_digest": "c98c052877c7b584aecca5189c4c046d936d3577a9f0e3f43d1082bdeaf0bbe5",
+    "scope": "fixture-only",
+    "recovery_required": false,
+    "coordinator": null,
+    "complete": false,
+    "unavailable": {
+      "coordinator": {
+        "error": "LaunchError",
+        "reason": "coordinator_recovery_required"
+      }
+    },
+    "warning": "Advisory independent reads, not an atomic snapshot or arming clearance. Armed ticks can mutate shared coordinator watchdog and fixture events; unavailable components must be inspected again while quiescent."
+  }
+}
+{
+  "projection_rows": 20,
+  "omitted_revisions": 33,
+  "canonical_bytes": 6676,
+  "disk_bytes": 9716,
+  "minimum_record_bytes": 211,
+  "maximum_rows": 4969,
+  "slack_limit": 5109609,
+  "transport_limit": 6158441
+}

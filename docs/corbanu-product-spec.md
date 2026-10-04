@@ -75,6 +75,26 @@ silently change existing policies.** Moderate and Aggressive add deterministic
 protections around untrusted content, sensitive data, credentials, tools, and
 financial actions.
 
+## Permission selection confirmation — TO BUILD
+
+Travis explicitly expanded the permission repair scope on September 14, 2026
+to include app-server confirmation while retaining next-turn command permissions.
+A submitted selection is not a confirmed change. The TUI must distinguish
+requested, applied-to-next-turn, failed and uncertain results using an outcome
+correlated to that request, including unchanged selections. Existing active-turn
+approval/sandbox snapshots and pending approvals are not retroactively changed.
+Show a clear finish/stop-current-turn and continue path without automatic
+interruption, command approval or replay. Existing shared-service policy behavior
+is preserved; do not claim every service waits for the next turn.
+
+Keep old-client/server compatibility explicit: unsupported or acceptance-only
+replies cannot be presented as applied confirmation. Error, disconnect and
+restart recovery must not claim success or retry an uncertain change blindly.
+This is confirmation plumbing and truthful UI, not a new authorization policy,
+global quiescence, protected-mode activation, or live application replacement.
+The existing security/permission initiative owns its separately allocated PF-83
+feature; the isolated broker remains paused, not cancelled or completed.
+
 # Corbanu Plan — LIVE; DEPRECATION TARGET
 
 Corbanu Plan is wallet-native, one-calendar-month prepaid inference purchased through **x402**, normally using canonical USDC on Solana. The wallet proves ownership and receives a revocable Plan credential. Every tier uses the same model catalog and differs by allowance.
@@ -467,6 +487,19 @@ These are target expansion workflows, not claims that every step is live today.
 
 ## Internal delivery control — TO BUILD
 
+September 13 management-bootstrap authorization: implement the five-part
+coordinator goal recorded in [coordinator instructions](../coordinatorInstructions.md):
+fresh Fable 5.1 High management through Corbanu/TMUX; durable event dispatch,
+acknowledgments and watchdog; serialized verified integration; actual Slack
+reply/decision/agent acknowledgment; initialize
+and rehearse all three workstreams before enabling recurring operation. This
+authorizes the bootstrap and bounded live qualification, not premature product
+sprint resumption, new product scope, main/release or financial actions.
+
+September13 scope amendment: Travis removed Tailscale/private off-Mac dashboard
+access from the bootstrap goal. Keep private loopback viewing and direct-SSH
+publication; remote browser access is deferred, not qualified or a launch gate.
+
 Travis authorized up to three independent product initiatives on September 10,
 then selected PF-13, accounting and Task Node integration on September 11.
 Use sequential sprints per initiative, incremental merges behind verified
@@ -477,6 +510,36 @@ and freshness; preserve the last good publication on failure. Task Node receives
 only explicitly mapped, supported progress; no automatic reward, signing,
 financial action or task-completion claim is implied.
 
+Facilities is the private static operator link index for the existing media
+interfaces on RTX PRO 6000 and Drone, with upstream repository links. Travis's
+September 12 brief requests preserving this page across dashboard source moves;
+it is not a model service or a claim of current service availability.
+
+On September 11 Travis authorized correcting stalled orchestration: the manager
+owns local receiving-branch integration, exact allocations within approved
+features, successor preparation and concrete decision escalation under the
+sprint execution process. This is not blanket main-push, release, deployment,
+live-posting or product-contract acceptance authority.
+
+On September 12 Travis delegated additional-review authorization to the named
+integrator, particularly to unblock work. Preserve review history and move on
+when reviews have no substantive unresolved findings. Root AGENTS.md owns this
+execution rule; product and release acceptance remain separately authorized.
+
+Travis requested persistent, contextual decision cards on this dashboard and
+Slack alerts when human decisions stop work. He selected a dedicated private
+"The Corbanu Project" channel in AmbientCrypto. The manager owns one decision
+record with affected work, options, recommendation, impact and resolution;
+dashboard and alerts are projections. Slack connection, exact destination and
+delivery require verification; a question card or dashboard refresh is not proof
+the human was alerted. No arbitrary Slack reply grants operational authority.
+
+Travis's September 12 notice-format follow-up requests linked sprint summaries,
+expandable issue context and an answerable question only when a decision is
+needed. The matching Slack thread should log his answer and route it to the
+appropriate agent through a verified identity/revision-aware manager handoff;
+this two-way integration remains TO BUILD and requires qualified app access.
+
 Travis additionally requested an ongoing public manual-testing beta program
 under Task Node integration: a separate Corbanu Desktop beta branch/channel,
 candidate-pinned public assignments, independent evidence review and bounded
@@ -484,6 +547,15 @@ human triage. Private evidence is not public by default; stable installs stay
 isolated. Resolve Desktop source and public-board authority before readiness.
 Planning and kickoff do not launch, offer rewards or waive root release policy.
 See the [beta contract](plans/tasknode-beta-program.md).
+
+Travis's September 11 follow-up, relayed by the PF13/provider-reauth owner,
+adds standalone screenshot/inference QA infrastructure under delivery control:
+an isolated fixture driver, strictly validated typed actions, bounded runs and
+candidate-pinned evidence. Queue it after current delivery-control integration;
+do not reactivate provider-auth or add concurrent work. Model output cannot
+authorize arbitrary shell actions, credential access or a denied computer-use
+surface. Live targets and inference endpoints require separate permission;
+fixture success is not native-product acceptance.
 
 ## Measurement targets
 

@@ -1,0 +1,104 @@
+Run directory: /Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guard-91/target/replay-xeh9ctyl/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/target/current-tip-umso7axj/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-uiqvzl17
+{
+  "kind": "clean sparse Git checkout of proposed QA snapshot, then independent corruption controls",
+  "source_base": "c6aa2453572321f044789e64c7deca86d9360c5b",
+  "snapshot": "b062c49ea641d87e28a11a9665527cc25cab922b",
+  "run_directory": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-guard-91/target/replay-xeh9ctyl/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/target/current-tip-umso7axj/checkout/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/target/controls-uiqvzl17",
+  "ignored_package_absent": true,
+  "clean_before_and_after": true,
+  "no_network": true,
+  "no_package_launch": true,
+  "cases": [
+    {
+      "case": "clean-checkout",
+      "exit": 2,
+      "expected_exit": 2,
+      "passed": true,
+      "stdout_sha256": "0448345a1e9db7a844139960ae585127d03597bf0820e22c4de705b24c930aa5"
+    },
+    {
+      "case": "clean-finalizer",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "cb25ae61badef605a9cd9726d27c1e2b5032d7fe17855c47ebfeb67f8206d05a"
+    },
+    {
+      "case": "local-package-absent-refusal",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "cb25ae61badef605a9cd9726d27c1e2b5032d7fe17855c47ebfeb67f8206d05a"
+    },
+    {
+      "case": "wrong-claim",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "434f23a0d639c90b14ad4b08f5724ff14a47cb0c8aa77f89a167721abafcef52"
+    },
+    {
+      "case": "corrupt-viewport",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "ce8a9e71eacc90dc6bf0feb34278fa347bda278087e4f555178ae3aa1549aa46"
+    },
+    {
+      "case": "missing-log",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "8de5ef8c80d902fc3964efe1689c04c488a44985180a1f2d73001bd6ece42e29"
+    },
+    {
+      "case": "baseline-count",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "eea2e8bd6f2845fffe58adac391407b6b016cafb281b0c064ed1e65e8f91dec7"
+    },
+    {
+      "case": "baseline-identity",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "a4358eeb9854c22e6ef181219c3c1aa2fb70becb203925ddbc3374deded191a2"
+    },
+    {
+      "case": "baseline-exit",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "cf98387d8da3a614e6c48ec5c79ed1bfcc92f302fcd1ccc3e1f2ab58f7e57889"
+    },
+    {
+      "case": "baseline-missing",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "3475df79586081ba2d788f977038cd3e56dbbbd78a9c8676789425f2de093beb"
+    },
+    {
+      "case": "baseline-duplicate",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "6c04a1d826846afb4066003738163acbe3c360fce6352f57283af93847bc6c21"
+    },
+    {
+      "case": "local-package-disagreement",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "68ce11238897df36b5c4f010beaebf005b3ff76f03d6c7dacafee287a134c284"
+    },
+    {
+      "case": "local-package-agreement-refusal",
+      "exit": 3,
+      "expected_exit": 3,
+      "passed": true,
+      "stdout_sha256": "8b6d3b45713fc876565417366f9604e4a3c24422541a71cfa6a38b763da21b99"
+    }
+  ]
+}

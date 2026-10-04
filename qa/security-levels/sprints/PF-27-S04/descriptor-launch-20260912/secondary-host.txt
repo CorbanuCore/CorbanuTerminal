@@ -1,0 +1,18 @@
+1001
+Linux productionrpc 6.8.0-49-generic #49-Ubuntu SMP PREEMPT_DYNAMIC Mon Nov  4 02:06:24 UTC 2024 x86_64 x86_64 x86_64 GNU/Linux
+glibc 2.39
+libc6:amd64	2.39-0ubuntu8.9
+3a15d66867d83762c7f2f1e37359cb8f6c5743edb369c65285cb0b1c4f7498bf  /lib/x86_64-linux-gnu/libc.so.6
+46a7eafcfb493038c23eeecee5af2dc24bcad7b42013286a9c8f491097085351  /home/pfrpc/pf27-adapter-tests-20260912.tar.zst
+80c4c46da3d74ca3d1853ff7656cdc815921b27e15695f679e7bfed0e6df9709  /home/pfrpc/pf27-adapter-20260912-source/linux-pidfd-spawn/src/ffi.rs
+27ba0439e2911c49ce23107b7320b98afe1b021f79dd4824b955bc8a3cb7669d  /home/pfrpc/pf27-adapter-20260912-source/linux-pidfd-spawn/src/lib.rs
+3fb6b66925abb2b625a272d4f34cbb727386e4bceb98890a73804453df00544a  /home/pfrpc/pf27-adapter-20260912-source/linux-pidfd-spawn/src/spawn.rs
+79a821f857125beb75004ea5a41f39dd27a5e9858dd7b32be41cf27e990e755b  /home/pfrpc/pf27-adapter-20260912-source/linux-pidfd-spawn/src/spawn_tests.rs
+
+Verified nextest command (exit0):
+PATH=/home/pfrpc/.cargo/bin:$PATH just -f /home/pfrpc/repos/CorbanuTerminal/justfile test --archive-file /home/pfrpc/pf27-adapter-tests-20260912.tar.zst --extract-to /home/pfrpc/pf27-adapter-20260912-final --workspace-remap /home/pfrpc/pf27-adapter-20260912-source --run-ignored only -E 'test(pf27_unqualified_libc_fails_closed)' --retries 0 --test-threads 1
+The extraction directory must exist and be fresh. The remap contains exact
+source Cargo.toml/Cargo.lock, crate sources and .config/nextest.toml.
+Nextest run ID:66de3c7d-f74c-4810-947d-64fd02ca1394
+1 passed;10 excluded. No compilation on this host; explicit Unsupported behavior
+on GNU2.39 only, not positive child creation or all-OS qualification.

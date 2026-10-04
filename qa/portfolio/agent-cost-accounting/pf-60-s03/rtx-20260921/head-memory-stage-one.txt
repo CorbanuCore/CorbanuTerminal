@@ -1,0 +1,40 @@
+warning: method `submit_inter_agent_communication` is never used
+   --> core/src/agent/control.rs:428:14
+    |
+162 | impl AgentControl {
+    | ----------------- method in this implementation
+...
+428 |     async fn submit_inter_agent_communication(
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `codex-core` (lib test) generated 7 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.31s
+────────────
+ Nextest run ID eb7d784e-56ca-42a8-a899-e27ba404dace with nextest profile: local
+    Starting 24 tests across 4 binaries (3648 tests skipped)
+        PASS [   0.009s] ( 1/24) codex-core memory_stage_one::accounting_tests::accounting_developer_activation_accepts_provider_id_independently_of_dialect
+        PASS [   0.010s] ( 2/24) codex-core memory_stage_one::accounting_tests::accounting_build_activation_uses_loaded_provider
+        PASS [   0.011s] ( 3/24) codex-core memory_stage_one::accounting_tests::accounting_role_overlay_keeps_explicit_provider_fields_and_validates_conflicts
+        PASS [   0.029s] ( 4/24) codex-core memory_stage_one::accounting_tests::accounting_role_reload_preserves_internal_binding_without_changing_off_route_behavior
+        PASS [   0.029s] ( 5/24) codex-core memory_stage_one::accounting_tests::accounting_developer_loader_override_survives_refresh
+        PASS [   0.045s] ( 6/24) codex-core memory_stage_one::tests::pf_30_s04_provider_change_invalidates_bound_client
+        PASS [   0.034s] ( 7/24) codex-core memory_stage_one::tests::pf_30_s04_termination_and_dropped_owner_fail_closed
+        PASS [   0.047s] ( 8/24) codex-core memory_stage_one::accounting_tests::accounting_guard_denial_precedes_admission_and_never_sends
+        PASS [   0.035s] ( 9/24) codex-core memory_stage_one::tests::pf_30_s04_live_strengthening_is_sticky_through_later_downgrade
+        PASS [   0.035s] (10/24) codex-core memory_stage_one::tests::pf_30_s04_kill_switch_denies_an_existing_worker_binding
+        PASS [   0.046s] (11/24) codex-core memory_stage_one::tests::pf_30_s04_inherited_policy_is_not_weakened_by_permissive_worker_configuration
+        PASS [   0.060s] (12/24) codex-core memory_stage_one::tests::pf_30_s04_binding_is_owner_specific_and_missing_policy_denies
+        PASS [   0.051s] (13/24) codex-core memory_stage_one::tests::pf_30_s04_live_protected_floor_denies_without_a_request
+        PASS [   0.065s] (14/24) codex-core memory_stage_one::accounting_tests::accounting_awaited_auth_denial_creates_no_attempt_or_transport_send
+        PASS [   0.078s] (15/24) codex-core memory_stage_one::tests::pf_30_s04_http_attempt_guard_withholds_canary_after_live_change
+        PASS [   0.088s] (16/24) codex-core memory_stage_one::accounting_tests::accounting_scope_drop_clears_cancelled_sampling_and_observation_failure_is_fatal
+        PASS [   0.093s] (17/24) codex-core memory_stage_one::accounting_tests::accounting_developer_activation_samples_http_and_installs_inspectable_day
+        PASS [   0.082s] (18/24) codex-core memory_stage_one::tests::pf_30_s04_owner_termination_cancels_pending_http_without_a_retry
+        PASS [   0.103s] (19/24) codex-core memory_stage_one::accounting_tests::accounting_actual_transport_retries_and_old_response_keep_distinct_owned_identity
+        PASS [   0.119s] (20/24) codex-core memory_stage_one::tests::pf_60_s03_stage_one_extraction_records_its_own_turn
+        PASS [   0.121s] (21/24) codex-core memory_stage_one::accounting_tests::accounting_admission_failure_and_route_mismatch_are_sticky_without_send
+        PASS [   0.127s] (22/24) codex-core memory_stage_one::accounting_tests::accounting_writer_barrier_prevents_send_until_durable_admission
+        PASS [   0.146s] (23/24) codex-core::all suite::memory_stage_one_policy::pf_30_s04_host_factory_rejects_protected_wrong_owner_and_terminated_thread
+        PASS [   0.326s] (24/24) codex-core memory_stage_one::tests::pf_30_s04_websocket_connect_race_denies_before_first_frame
+────────────
+     Summary [   0.335s] 24 tests run: 24 passed, 3648 skipped

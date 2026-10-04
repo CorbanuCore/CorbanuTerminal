@@ -1,0 +1,78 @@
+{
+  "codex-code-mode-host": {
+    "/usr/bin/file": {
+      "argv": [
+        "/usr/bin/file",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/codex-code-mode-host"
+      ],
+      "exit_code": 0,
+      "stdout": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/codex-code-mode-host: Mach-O 64-bit executable arm64\n"
+    },
+    "/usr/bin/otool": {
+      "argv": [
+        "/usr/bin/otool",
+        "-L",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/codex-code-mode-host"
+      ],
+      "exit_code": 0,
+      "stdout": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/codex-code-mode-host:\n\t/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 4040.1.255)\n\t/System/Library/Frameworks/CFNetwork.framework/Versions/A/CFNetwork (compatibility version 1.0.0, current version 3860.100.1)\n\t/System/Library/Frameworks/Security.framework/Versions/A/Security (compatibility version 1.0.0, current version 61901.0.87)\n\t/System/Library/Frameworks/SystemConfiguration.framework/Versions/A/SystemConfiguration (compatibility version 1.0.0, current version 1385.0.7)\n\t/usr/lib/libiconv.2.dylib (compatibility version 7.0.0, current version 7.0.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)\n"
+    }
+  },
+  "corbanu": {
+    "/usr/bin/file": {
+      "argv": [
+        "/usr/bin/file",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/corbanu"
+      ],
+      "exit_code": 0,
+      "stdout": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/corbanu: Mach-O 64-bit executable arm64\n"
+    },
+    "/usr/bin/otool": {
+      "argv": [
+        "/usr/bin/otool",
+        "-L",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/corbanu"
+      ],
+      "exit_code": 0,
+      "stdout": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/corbanu:\n\t/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit (compatibility version 1.0.0, current version 275.0.0)\n\t/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 4040.1.255)\n\t/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices (compatibility version 1.0.0, current version 1226.0.0)\n\t/System/Library/Frameworks/SystemConfiguration.framework/Versions/A/SystemConfiguration (compatibility version 1.0.0, current version 1385.0.7)\n\t/usr/lib/liblzma.5.dylib (compatibility version 6.0.0, current version 6.3.0)\n\t/usr/lib/libbz2.1.0.dylib (compatibility version 1.0.0, current version 1.0.8)\n\t/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit (compatibility version 45.0.0, current version 2685.10.108)\n\t/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics (compatibility version 64.0.0, current version 1957.0.0)\n\t/System/Library/Frameworks/Security.framework/Versions/A/Security (compatibility version 1.0.0, current version 61901.0.87)\n\t/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation (compatibility version 300.0.0, current version 4040.1.255)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)\n\t/usr/lib/libobjc.A.dylib (compatibility version 1.0.0, current version 228.0.0)\n\t/System/Library/Frameworks/CFNetwork.framework/Versions/A/CFNetwork (compatibility version 1.0.0, current version 3860.100.1)\n\t/usr/lib/libiconv.2.dylib (compatibility version 7.0.0, current version 7.0.0)\n"
+    }
+  },
+  "corbanu-acp": {
+    "/usr/bin/file": {
+      "argv": [
+        "/usr/bin/file",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/corbanu-acp"
+      ],
+      "exit_code": 0,
+      "stdout": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/corbanu-acp: Mach-O 64-bit executable arm64\n"
+    },
+    "/usr/bin/otool": {
+      "argv": [
+        "/usr/bin/otool",
+        "-L",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/corbanu-acp"
+      ],
+      "exit_code": 0,
+      "stdout": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/corbanu-acp:\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)\n"
+    }
+  },
+  "corbanu-walletd": {
+    "/usr/bin/file": {
+      "argv": [
+        "/usr/bin/file",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/corbanu-walletd"
+      ],
+      "exit_code": 0,
+      "stdout": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/corbanu-walletd: Mach-O 64-bit executable arm64\n"
+    },
+    "/usr/bin/otool": {
+      "argv": [
+        "/usr/bin/otool",
+        "-L",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/corbanu-walletd"
+      ],
+      "exit_code": 0,
+      "stdout": "/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-package-67/artifacts/package/corbanu-walletd:\n\t/System/Library/Frameworks/SystemConfiguration.framework/Versions/A/SystemConfiguration (compatibility version 1.0.0, current version 1385.0.7)\n\t/System/Library/Frameworks/Security.framework/Versions/A/Security (compatibility version 1.0.0, current version 61901.0.87)\n\t/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 4040.1.255)\n\t/usr/lib/libiconv.2.dylib (compatibility version 7.0.0, current version 7.0.0)\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)\n"
+    }
+  }
+}
