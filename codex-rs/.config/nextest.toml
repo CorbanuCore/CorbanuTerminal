@@ -56,6 +56,25 @@ test-group = 'provider_tui_journeys'
 slow-timeout = { period = "60s", terminate-after = 3 }
 
 [[profile.default.overrides]]
+# While a sandboxed command runs with /tmp or $TMPDIR as a writable root,
+# bubblewrap keeps empty `.git`, `.codex` and `.agents` mount targets there on
+# the host. These tests assert that a fresh temp dir is outside any repo or
+# project, so run them with no other test (and so no sandbox) in flight.
+filter = '''
+  (package(codex-core) & (
+    test(=git_info_tests::resolve_root_git_project_for_trust_returns_none_outside_repo)
+    | test(=config::config_loader_tests::codex_home_is_not_loaded_as_project_layer_from_home_dir)
+    | test(=config::config_loader_tests::project_layers_disabled_when_untrusted_or_unknown)
+    | test(=realtime_context::tests::recent_work_section_groups_threads_by_cwd)
+    | test(=realtime_context::tests::workspace_section_requires_meaningful_structure)))
+  | (package(codex-core-skills) & (
+    test(=loader::tests::non_git_repo_skills_search_does_not_walk_parents)
+    | test(=loader::tests::skill_roots_include_admin_with_lowest_priority)))
+  | (package(codex-secrets) & test(=tests::environment_id_fallback_has_cwd_prefix))
+'''
+threads-required = "num-test-threads"
+
+[[profile.default.overrides]]
 # Do not add new tests here
 filter = 'test(rmcp_client) | test(humanlike_typing_1000_chars_appears_live_no_placeholder)'
 slow-timeout = { period = "1m", terminate-after = 4 }
