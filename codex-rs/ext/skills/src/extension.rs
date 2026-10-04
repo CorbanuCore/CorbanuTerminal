@@ -2,12 +2,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use codex_core_skills::HostSkillsSnapshot;
+use codex_core_skills::injection::HOST_SKILLS_CONTEXT_SOURCE_ID;
 use codex_core_skills::injection::HostSkillsCatalogInWorldState;
 use codex_core_skills::injection::InjectedHostSkillPrompts;
 use codex_exec_server::ExecutorCapabilityDiscoverySnapshot;
 use codex_exec_server::FileSystemSandboxContext;
 use codex_exec_server::LOCAL_ENVIRONMENT_ID;
 use codex_exec_server::ResolvedSelectedCapabilityRoot;
+use codex_extension_api::AttributedFragment;
 use codex_extension_api::ConfigContributor;
 use codex_extension_api::ContextContributor;
 use codex_extension_api::ContextualUserFragment;
@@ -597,7 +599,12 @@ where
                     self.emit_warning(thread_store.level_id(), Some(&input.turn_id), message);
                 }
                 if let Some(fragment) = rendered.fragment {
-                    fragments.push(Box::new(fragment));
+                    // This per-turn catalog stands in for the host catalog when it is not
+                    // projected through WorldState.
+                    fragments.push(Box::new(AttributedFragment::new(
+                        HOST_SKILLS_CONTEXT_SOURCE_ID,
+                        Box::new(fragment),
+                    )));
                 }
             }
 

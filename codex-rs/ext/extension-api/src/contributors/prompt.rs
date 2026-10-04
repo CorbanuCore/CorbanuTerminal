@@ -28,7 +28,8 @@ impl PromptFragment {
     /// Attributes the fragment to a stable producer ID.
     ///
     /// Use this when other producers may emit context with the same markers, so the harness can
-    /// keep one current copy per producer instead of one per marker.
+    /// keep one current copy per producer instead of one per marker. Producer IDs share one
+    /// namespace with World State section IDs.
     pub fn with_source_id(mut self, source_id: &'static str) -> Self {
         self.source_id = Some(source_id);
         self

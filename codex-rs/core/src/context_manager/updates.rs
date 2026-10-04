@@ -1,6 +1,4 @@
 use crate::context::ContextualUserFragment;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::InternalChatMessageMetadataPassthrough;
 use codex_protocol::models::ResponseItem;
 
 /// Model-visible context text and the stable producer it is attributed to, if any.
@@ -75,29 +73,10 @@ fn build_text_message(role: &str, sections: Vec<ContextSection>) -> Option<Respo
     if sections.is_empty() {
         return None;
     }
-
-    let (content, sources): (Vec<_>, Vec<_>) = sections
-        .into_iter()
-        .map(|section| {
-            (
-                ContentItem::InputText { text: section.text },
-                section.source_id.map(str::to_string),
-            )
-        })
-        .unzip();
-    // Only developer fragments are deduplicated per source for non-OpenAI providers.
-    let internal_chat_message_metadata_passthrough = (role == "developer"
-        && sources.iter().any(Option::is_some))
-    .then(|| InternalChatMessageMetadataPassthrough {
-        context_fragment_sources: Some(sources),
-        ..Default::default()
-    });
-
-    Some(ResponseItem::Message {
-        id: None,
-        role: role.to_string(),
-        content,
-        phase: None,
-        internal_chat_message_metadata_passthrough,
-    })
+    Some(codex_context_fragments::context_message(
+        role,
+        sections
+            .into_iter()
+            .map(|section| (section.text, section.source_id)),
+    ))
 }

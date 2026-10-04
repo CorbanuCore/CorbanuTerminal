@@ -966,6 +966,70 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn websocket_and_compaction_requests_omit_context_fragment_sources() {
+        let message = |sources| ResponseItem::Message {
+            id: None,
+            role: "developer".to_string(),
+            content: vec![ContentItem::InputText {
+                text: "<skills_instructions>host</skills_instructions>".to_string(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: Some(
+                codex_protocol::models::InternalChatMessageMetadataPassthrough {
+                    turn_id: Some("turn-1".to_string()),
+                    context_fragment_sources: sources,
+                    ..Default::default()
+                },
+            ),
+        };
+        let attributed = [message(Some(vec![Some("host_skills".to_string())]))];
+        let unattributed = [message(/*sources*/ None)];
+        let websocket = |input| {
+            serde_json::to_value(ResponseCreateWsRequest {
+                model: "gpt-5.4",
+                instructions: "",
+                previous_response_id: None,
+                input,
+                tools: None,
+                tool_choice: "auto",
+                parallel_tool_calls: true,
+                reasoning: None,
+                store: false,
+                stream: true,
+                stream_options: None,
+                include: &[],
+                service_tier: None,
+                prompt_cache_key: None,
+                text: None,
+                generate: None,
+                client_metadata: None,
+                thinking_budget: None,
+                emit_usage: None,
+                enable_thinking: None,
+                reasoning_effort: None,
+            })
+            .expect("serialize websocket request")
+        };
+        let compaction = |input| {
+            serde_json::to_value(CompactionInput {
+                model: "gpt-5.4",
+                input,
+                instructions: "",
+                tools: None,
+                parallel_tool_calls: true,
+                reasoning: None,
+                service_tier: None,
+                prompt_cache_key: None,
+                text: None,
+            })
+            .expect("serialize compaction request")
+        };
+
+        assert_eq!(websocket(&attributed), websocket(&unattributed));
+        assert_eq!(compaction(&attributed), compaction(&unattributed));
+    }
+
+    #[test]
     fn chat_completions_request_without_provider_serializes_unchanged() {
         let request = ChatCompletionsRequest {
             model: "z-ai/glm-5.2".to_string(),
