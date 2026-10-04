@@ -187,6 +187,9 @@ fn receipt_from_status(
     }
 }
 
+// Unreachable since the legacy plan state was retired (66ff6579d7); remove
+// or wire back in.
+#[allow(dead_code)]
 pub(super) fn latest_plan_receipt(
     status: &WalletPlanStatus,
     balances: Option<WalletBalances>,
