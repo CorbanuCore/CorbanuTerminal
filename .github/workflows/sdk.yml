@@ -11,6 +11,10 @@ on:
         type: boolean
         default: false
 
+# Read-only token: none of these jobs call the GitHub API.
+permissions:
+  contents: read
+
 jobs:
   python-sdk:
     runs-on: ubuntu-24.04
@@ -56,7 +60,7 @@ jobs:
     # execution. A cold local Bazel build can exceed ten minutes before the SDK
     # tests begin. Cold builds now compile V8 transitively and can exceed 90
     # minutes, so keep enough headroom for the build and SDK process matrix.
-    timeout-minutes: 180
+    timeout-minutes: 360
     environment:
       name: bazel
       deployment: false
@@ -179,7 +183,7 @@ jobs:
         continue-on-error: true
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          path: ${{ steps.setup_bazel.outputs.repository-cache-path }}
+          path: ${{ steps.prepare_bazel.outputs.repository-cache-path }}
           key: bazel-cache-x86_64-unknown-linux-gnu-${{ hashFiles('MODULE.bazel', 'codex-rs/Cargo.lock', 'codex-rs/Cargo.toml') }}
 
       - name: Check for a clean worktree

@@ -25,6 +25,10 @@ on:
       - "justfile"
       - ".github/workflows/orchestrate-tui-matrix.yml"
 
+# Read-only token: none of these jobs call the GitHub API.
+permissions:
+  contents: read
+
 jobs:
   real-tui:
     runs-on: ubuntu-latest
