@@ -76,7 +76,7 @@ fn unattributed_or_misaligned_sources_are_dropped() {
     assert_eq!(item, message(&["b"], /*turn_id*/ None, /*sources*/ None));
 
     let mut item = message(&["a", "b"], Some("turn-1"), Some(vec![Some("x")]));
-    assert_eq!(item.context_fragment_source(0), None);
+    assert_eq!(item.context_fragment_source(/*index*/ 0), None);
     retain_texts(&mut item, &["a", "b"]);
     assert_eq!(item, message(&["a", "b"], Some("turn-1"), /*sources*/ None));
 }
