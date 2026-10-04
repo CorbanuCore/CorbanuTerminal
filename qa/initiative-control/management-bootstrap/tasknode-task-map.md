@@ -134,8 +134,11 @@ against these tasks.
   branch `fix/account-tx-exact-limit-truncation`, commit `b7a54b95`, base
   `ce25aaa8`). Ready for review 2026-10-03 14:20Z. Regression test fails before,
   passes after; full `postfiat-node` suite passes on Linux.
-- Evidence: not submitted. Payment needs the PR **merged** by a postfiatorg
-  maintainer (IridiumMaster has read access only); submit the PR URL after merge.
+- Merged 2026-10-04T09:37:09Z by goodalexander (approved after re-running the
+  regression test), merge commit `b1d1928c091ed66836ce69d49cf8bc192a969281`.
+- Evidence: submitted once at 2026-10-04 ~09:40Z (PR URL + summary), receipt
+  `task_evt_3ecb66ac-78f1-4cf1-a0b9-2f56182d98c0`. Body:
+  `.codex-work/workers-20261002/tasknode-f4bec7e-evidence.md`.
 - Worker record: `.codex-work/workers-20261002/l1v2-bug.result.md`.
 
 ## Rules for evidence against these tasks
