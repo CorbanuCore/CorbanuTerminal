@@ -780,8 +780,9 @@ pub enum MessagePhase {
 /// Internal Responses API passthrough metadata copied into underlying chat messages.
 ///
 /// Responses API strongly types this payload. Do not modify it without first getting API
-/// approval and making the corresponding Responses API change. The exception is the local-only
-/// `context_fragment_sources`, which request serialization removes before any provider call.
+/// approval and making the corresponding Responses API change.
+// Exception: local-only `context_fragment_sources`, removed by request serialization before any
+// provider call. Kept as a plain comment so generated app-server schemas do not change.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, JsonSchema, TS)]
 pub struct InternalChatMessageMetadataPassthrough {
     #[serde(default, skip_serializing_if = "Option::is_none")]
