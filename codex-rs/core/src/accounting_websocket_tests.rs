@@ -178,6 +178,8 @@ impl Fixture {
         ))
     }
 }
+// Uses the debug-only stage-one binding fixture.
+#[cfg(debug_assertions)]
 #[tokio::test]
 async fn accounting_responses_ws_stream_guard_checks_live_policy_with_session_state_locked()
 -> anyhow::Result<()> {

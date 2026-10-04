@@ -231,6 +231,8 @@ fn request() -> Request {
     }
 }
 
+// Uses the debug-only stage-one binding fixture.
+#[cfg(debug_assertions)]
 #[tokio::test]
 async fn accounting_chat_auth_and_guard_before_admission() -> anyhow::Result<()> {
     let fixture = Fixture::new().await?;
@@ -304,6 +306,8 @@ async fn accounting_chat_auth_and_guard_before_admission() -> anyhow::Result<()>
     Ok(())
 }
 
+// Uses the debug-only stage-one binding fixture.
+#[cfg(debug_assertions)]
 #[tokio::test]
 async fn accounting_chat_borrowed_binding_denies_existing_and_future_clones() -> anyhow::Result<()>
 {
@@ -360,6 +364,8 @@ async fn accounting_chat_borrowed_binding_denies_existing_and_future_clones() ->
     Ok(())
 }
 
+// Uses the debug-only stage-one binding fixture.
+#[cfg(debug_assertions)]
 #[tokio::test]
 async fn accounting_chat_frame_guard_denies_provider_change_before_client_publication()
 -> anyhow::Result<()> {

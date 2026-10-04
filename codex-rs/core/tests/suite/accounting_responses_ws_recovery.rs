@@ -46,15 +46,20 @@ async fn accounting_responses_ws_native_admission_and_guard_barriers() -> anyhow
     assert!(guard.is_err());
     gate.no_pending().await;
     stop(&test).await;
-    live_binding_denial(/*prime_denial*/ true).await
+    // The live-binding fixture exists only in debug builds.
+    #[cfg(debug_assertions)]
+    live_binding_denial(/*prime_denial*/ true).await?;
+    Ok(())
 }
 
+#[cfg(debug_assertions)]
 #[tokio::test]
 async fn accounting_responses_ws_native_late_clone_binding_stops_running_dispatch()
 -> anyhow::Result<()> {
     live_binding_denial(/*prime_denial*/ false).await
 }
 
+#[cfg(debug_assertions)]
 async fn live_binding_denial(prime_denial: bool) -> anyhow::Result<()> {
     let server = MockServer::start().await;
     for prefix in [false, true] {
