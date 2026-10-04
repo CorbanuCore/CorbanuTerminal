@@ -21,6 +21,7 @@ use codex_app_server_protocol::UserInput as V2UserInput;
 use codex_core::test_support::all_model_presets;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use core_test_support::responses;
+use core_test_support::skip_if_wine_exec;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use std::time::Duration;
@@ -181,11 +182,19 @@ async fn pending_permission_probe(mcp: &mut TestAppServer, call_id: &str) -> Res
 
 #[tokio::test]
 async fn thread_settings_f05_pending_decline_is_not_approval_or_replay() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command approval routing requires a host-native cwd under Wine-exec"
+    );
     pending_selection_case("decline", /*expected_old_effects*/ 0).await
 }
 
 #[tokio::test]
 async fn thread_settings_f05_pending_accept_runs_once_and_next_turn_is_full() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command approval routing requires a host-native cwd under Wine-exec"
+    );
     pending_selection_case("accept", /*expected_old_effects*/ 1).await
 }
 
@@ -267,11 +276,19 @@ async fn wait_permission_barrier(fixture: &std::path::Path) -> Result<()> {
 
 #[tokio::test]
 async fn thread_settings_f06_f09_inflight_restricted_to_full_keeps_old_boundary() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command approval routing requires a host-native cwd under Wine-exec"
+    );
     inflight_permission_case(codex_app_server_protocol::AskForApproval::UnlessTrusted).await
 }
 
 #[tokio::test]
 async fn thread_settings_f06_f09_inflight_full_to_restricted_keeps_old_boundary() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command approval routing requires a host-native cwd under Wine-exec"
+    );
     inflight_permission_case(codex_app_server_protocol::AskForApproval::Never).await
 }
 
@@ -333,11 +350,19 @@ async fn inflight_permission_case(
 
 #[tokio::test]
 async fn thread_settings_f07_rapid_conflicts_end_full() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command approval routing requires a host-native cwd under Wine-exec"
+    );
     rapid_permission_case(codex_app_server_protocol::AskForApproval::Never).await
 }
 
 #[tokio::test]
 async fn thread_settings_f07_rapid_conflicts_end_restricted() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command approval routing requires a host-native cwd under Wine-exec"
+    );
     rapid_permission_case(codex_app_server_protocol::AskForApproval::UnlessTrusted).await
 }
 
@@ -420,11 +445,19 @@ async fn rapid_permission_case(
 
 #[tokio::test]
 async fn thread_settings_f10_restart_effective_restricted_reports_probe_authority() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command approval routing requires a host-native cwd under Wine-exec"
+    );
     restart_settled_permission_case(codex_app_server_protocol::AskForApproval::UnlessTrusted).await
 }
 
 #[tokio::test]
 async fn thread_settings_f10_restart_effective_full_reports_probe_authority() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command approval routing requires a host-native cwd under Wine-exec"
+    );
     restart_settled_permission_case(codex_app_server_protocol::AskForApproval::Never).await
 }
 
@@ -520,6 +553,10 @@ async fn restart_settled_permission_case(
 
 #[tokio::test]
 async fn thread_settings_f10_restart_does_not_accept_pending_approval() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command approval routing requires a host-native cwd under Wine-exec"
+    );
     use codex_app_server_protocol::AskForApproval;
     use codex_app_server_protocol::ThreadResumeParams;
     use codex_app_server_protocol::ThreadResumeResponse;
@@ -585,6 +622,10 @@ async fn thread_settings_f10_restart_does_not_accept_pending_approval() -> Resul
 
 #[tokio::test]
 async fn thread_settings_confirmation_f04_restricts_work_steered_after_applied() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command approval routing requires a host-native cwd under Wine-exec"
+    );
     use codex_app_server_protocol::AskForApproval;
     use codex_app_server_protocol::JSONRPCMessage;
     use std::sync::atomic::AtomicUsize;
@@ -760,6 +801,10 @@ async fn thread_settings_confirmation_f04_restricts_work_steered_after_applied()
 
 #[tokio::test]
 async fn thread_settings_inject_items_waits_for_latest_authorization() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command approval routing requires a host-native cwd under Wine-exec"
+    );
     use codex_app_server_protocol::AskForApproval;
     use codex_app_server_protocol::ServerRequest;
     use codex_app_server_protocol::ThreadInjectItemsParams;
@@ -827,6 +872,10 @@ async fn thread_settings_inject_items_waits_for_latest_authorization() -> Result
 
 #[tokio::test]
 async fn thread_settings_authorization_boundary_returns_input_and_discriminator() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command approval routing requires a host-native cwd under Wine-exec"
+    );
     use codex_app_server_protocol::AskForApproval;
     use codex_app_server_protocol::ServerRequest;
     let fixture = TempDir::new()?;
@@ -904,6 +953,10 @@ async fn thread_settings_authorization_boundary_returns_input_and_discriminator(
 
 #[tokio::test]
 async fn thread_settings_confirmation_next_turn_tightening_and_loosening() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command approval routing requires a host-native cwd under Wine-exec"
+    );
     use codex_app_server_protocol::AskForApproval;
     let home = TempDir::new()?;
     let outside = TempDir::new()?;
@@ -940,6 +993,10 @@ async fn thread_settings_confirmation_next_turn_tightening_and_loosening() -> Re
 
 #[tokio::test]
 async fn thread_settings_confirmation_preserves_pending_approval() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command approval routing requires a host-native cwd under Wine-exec"
+    );
     use codex_app_server_protocol::AskForApproval;
     use codex_app_server_protocol::ServerRequest;
     let home = TempDir::new()?;
@@ -1078,12 +1135,20 @@ async fn preserve_running_authority_after_confirmation(
 
 #[tokio::test]
 async fn thread_settings_confirmation_loosening_preserves_running_work_authority() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command approval routing requires a host-native cwd under Wine-exec"
+    );
     preserve_running_authority_after_confirmation(codex_app_server_protocol::AskForApproval::Never)
         .await
 }
 
 #[tokio::test]
 async fn thread_settings_confirmation_tightening_preserves_granted_approval() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command approval routing requires a host-native cwd under Wine-exec"
+    );
     preserve_running_authority_after_confirmation(
         codex_app_server_protocol::AskForApproval::UnlessTrusted,
     )
@@ -1092,6 +1157,10 @@ async fn thread_settings_confirmation_tightening_preserves_granted_approval() ->
 
 #[tokio::test]
 async fn thread_settings_confirmation_leaves_mcp_status_responses_unaffected() -> Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "the stdio MCP fixture does not start under Wine-exec"
+    );
     use codex_app_server_protocol::ListMcpServerStatusParams;
     use codex_app_server_protocol::ListMcpServerStatusResponse;
     use codex_app_server_protocol::McpServerStatusDetail;

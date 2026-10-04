@@ -5,6 +5,7 @@ use codex_core::config::PriceAuthority;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::Op;
 use codex_state::accounting::*;
+use core_test_support::skip_if_wine_exec;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -370,6 +371,10 @@ async fn accounting_chat_native_missing_usage_and_correlation() -> anyhow::Resul
 
 #[tokio::test]
 async fn accounting_chat_native_finish_reason_and_tool_parity() -> anyhow::Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command routing requires a host-native cwd under Wine-exec"
+    );
     for reason in ["stop", "length", "tool_calls", "error"] {
         let server = MockServer::start().await;
         let mut gate = Gate::start(GateRoutes::ChatOnly).await?;
@@ -425,6 +430,10 @@ async fn accounting_chat_native_finish_reason_and_tool_parity() -> anyhow::Resul
 
 #[tokio::test]
 async fn accounting_chat_native_sampling_auxiliary_scope() -> anyhow::Result<()> {
+    skip_if_wine_exec!(
+        Ok(()),
+        "shell-command routing requires a host-native cwd under Wine-exec"
+    );
     let server = MockServer::start().await;
     let mut gate = Gate::start(GateRoutes::ChatAndCompact).await?;
     let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
