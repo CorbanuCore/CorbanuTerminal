@@ -318,6 +318,65 @@ fn cleanup_synthetic_mount_targets_removes_only_empty_mount_targets() {
     assert!(!missing_file.exists());
 }
 
+const CLEANUP_REAPER_CHILD_TARGET_ENV: &str = "CODEX_LINUX_SANDBOX_TEST_CLEANUP_REAPER_TARGET";
+
+/// Plays the sandbox helper: registers and creates a synthetic `.git` mount
+/// target, hands the reaper a stand-in sandbox child, then dies by SIGKILL the
+/// way unified exec stops commands, so its own cleanup never runs.
+fn run_cleanup_reaper_killed_helper(target: &std::path::Path) -> ! {
+    let registrations = register_synthetic_mount_targets(&[
+        crate::bwrap::SyntheticMountTarget::missing_empty_directory(target),
+    ]);
+    std::fs::create_dir(target).expect("create synthetic mount target");
+    let reaper = CleanupReaper::spawn(&registrations, &[]).expect("cleanup reaper");
+    let sandbox = std::process::Command::new("sleep")
+        .arg("3")
+        .spawn()
+        .expect("spawn stand-in sandbox");
+    reaper.watch_bwrap_child(sandbox.id() as libc::pid_t);
+    unsafe {
+        libc::raise(libc::SIGKILL);
+    }
+    unreachable!("SIGKILL terminates the helper");
+}
+
+#[test]
+fn cleanup_reaper_removes_synthetic_targets_after_helper_is_killed() {
+    if let Some(target) = std::env::var_os(CLEANUP_REAPER_CHILD_TARGET_ENV) {
+        run_cleanup_reaper_killed_helper(std::path::Path::new(&target));
+    }
+
+    let temp_dir = tempfile::TempDir::new().expect("tempdir");
+    let dot_git = temp_dir.path().join(".git");
+    let status = std::process::Command::new(std::env::current_exe().expect("test executable"))
+        .args([
+            "--exact",
+            "linux_run_main::tests::cleanup_reaper_removes_synthetic_targets_after_helper_is_killed",
+        ])
+        .env(CLEANUP_REAPER_CHILD_TARGET_ENV, &dot_git)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .expect("run killed helper");
+    assert_eq!(
+        std::os::unix::process::ExitStatusExt::signal(&status),
+        Some(libc::SIGKILL)
+    );
+    assert!(
+        dot_git.is_dir(),
+        "the reaper must keep the target while the sandbox child is alive"
+    );
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while dot_git.exists() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(
+        !dot_git.exists(),
+        "the reaper should remove the synthetic target after the sandbox child exits"
+    );
+}
+
 #[test]
 fn synthetic_mount_registry_root_is_unique_to_effective_user() {
     let effective_uid = unsafe { libc::geteuid() };
