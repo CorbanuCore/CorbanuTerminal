@@ -10,9 +10,22 @@ red status noise without testing the code.
 - Formatting, spelling, manifest, and dependency checks.
 - Rust cargo checks on Linux x64.
 - Rust nextest on Linux x64.
-- Bazel test, clippy, and release-build verification on Linux x64.
 - SDK checks on hosted Linux x64.
 - V8 canary coverage on hosted Linux x64 only.
+
+## Nightly Coverage
+
+`nightly-ci.yml` runs daily at 09:17 UTC and on manual dispatch. It does not
+block merges. Without a BuildBuddy remote cache these cold Bazel jobs take close
+to their 180-minute limit, so they no longer run on every PR:
+
+- Bazel test (Linux gnu and musl), clippy, and release-build verification.
+- Argument comment lint on Linux and macOS (Windows still runs on PRs).
+- The Bazel-built SDK job (`sdk / sdks`; the Python SDK test still runs on PRs).
+
+Check the latest nightly run before cutting a release. To run these jobs on
+every PR again, pass `cold_bazel: true` to the `bazel`, `rust-ci` and `sdk` calls in
+`blocking-ci.yml` (and add a `BUILDBUDDY_API_KEY` secret so they finish in time).
 
 ## Disabled Until Runners Exist
 

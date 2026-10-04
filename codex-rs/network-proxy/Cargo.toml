@@ -64,3 +64,7 @@ windows-sys = { version = "0.52", features = [
 
 [target.'cfg(windows)'.dev-dependencies]
 codex-windows-sandbox = { path = "../windows-sandbox-rs" }
+
+[package.metadata.cargo-shear]
+# Shared with tests/destination_contract.rs through #[path]; not a library module.
+ignored-paths = ["src/destination_contract.rs"]

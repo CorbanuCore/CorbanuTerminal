@@ -91,7 +91,7 @@ where
         let mut request = make_request();
         if let Some(value) = request_id
             .lock()
-            .unwrap_or_else(|error| error.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .as_ref()
         {
             for name in CORBANU_REQUEST_ID_HEADERS {
@@ -124,10 +124,12 @@ where
                 && sent_id.is_some()
                 && headers.get("x-corbanu-request-id") == sent_id.as_ref()
             {
-                *next_id.lock().unwrap_or_else(|error| error.into_inner()) = Some(
-                    HeaderValue::from_str(&uuid::Uuid::new_v4().to_string())
-                        .expect("UUID is a valid header"),
-                );
+                // A hyphenated UUID is always a valid header value.
+                if let Ok(value) = HeaderValue::from_str(&uuid::Uuid::new_v4().to_string()) {
+                    *next_id
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(value);
+                }
             }
             if let Some(t) = telemetry.as_ref() {
                 let (status, err) = match &result {

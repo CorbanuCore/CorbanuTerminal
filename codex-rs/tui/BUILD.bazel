@@ -15,13 +15,18 @@ codex_rust_crate(
         "//codex-rs/collaboration-mode-templates:templates/plan.md",
     ],
     crate_name = "codex_tui",
-    deps_extra = [
-        "//codex-rs/provider-auth:provider-auth",
-    ],
     extra_binaries = [
         "//codex-rs/cli:codex",
     ],
     integration_compile_data_extra = ["src/test_backend.rs"],
+    # The tmux end-to-end tests are owned by the `tmux smoke` workflow, which
+    # installs tmux, builds `corbanu-walletd` beside the candidate binary and
+    # runs them serially with CORBANU_TMUX_REQUIRED=1. Bazel's strict action
+    # env and package layout cannot provide those prerequisites.
+    integration_test_args = [
+        "--skip",
+        "tmux",
+    ],
     rustc_flags_extra = MACOS_WEBRTC_RUSTC_LINK_FLAGS,
     test_data_extra = glob([
         "src/**/*.rs",

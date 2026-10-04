@@ -3388,6 +3388,8 @@ async fn model_selection_popup_openai_provider_snapshot() {
 async fn model_selection_popup_openrouter_provider_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("moonshotai/kimi-k3")).await;
     chat.thread_id = Some(ThreadId::new());
+    // The picker marks the exact provider/model pair current, not the slug alone.
+    chat.config.model_provider_id = OPENROUTER_PROVIDER_ID.to_string();
     let presets = chat
         .model_catalog
         .try_list_models()
@@ -3446,6 +3448,7 @@ async fn spawn_model_selection_popup_deepseek_provider_snapshot() {
 async fn model_selection_popup_kimi_code_provider_snapshot() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some(KIMI_CODE_K3_MODEL)).await;
     chat.thread_id = Some(ThreadId::new());
+    chat.config.model_provider_id = KIMI_CODE_PROVIDER_ID.to_string();
     let presets = chat
         .model_catalog
         .try_list_models()

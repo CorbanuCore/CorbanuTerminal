@@ -256,7 +256,6 @@ codex-sandboxing = { path = "sandboxing" }
 codex-security-audit = { path = "security-audit" }
 codex-security-policy = { path = "security-policy" }
 codex-secret-broker = { path = "secret-broker" }
-codex-secret-broker-service = { path = "secret-broker-service" }
 codex-secrets = { path = "secrets" }
 codex-shell-command = { path = "shell-command" }
 codex-shell-escalation = { path = "shell-escalation" }
