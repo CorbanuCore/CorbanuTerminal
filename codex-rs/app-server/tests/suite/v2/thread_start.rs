@@ -1394,8 +1394,9 @@ async fn thread_start_with_nested_git_cwd_trusts_repo_root() -> Result<()> {
 
     let repo_root = TempDir::new()?;
     std::fs::create_dir(repo_root.path().join(".git"))?;
+    std::fs::write(repo_root.path().join(".git/HEAD"), "ref: refs/heads/main\n")?;
     let nested = repo_root.path().join("nested/project");
-    std::fs::create_dir_all(&nested)?;
+    std::fs::create_dir_all(nested.join(".git"))?;
 
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())

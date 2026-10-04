@@ -89,58 +89,9 @@ jobs:
         env:
           RUST_MIN_STACK: "8388608" # 8 MiB
 
-  argument_comment_lint_prebuilt:
-    name: Argument comment lint - ${{ matrix.name }}
-    runs-on: ${{ matrix.runs_on || matrix.runner }}
-    timeout-minutes: 30
-    environment:
-      name: bazel
-      deployment: false
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Linux
-            runner: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup-bazel-ci
-        with:
-          target: ${{ runner.os }}
-      - name: Install Linux sandbox build dependencies
-        if: ${{ runner.os == 'Linux' }}
-        shell: bash
-        run: |
-          sudo DEBIAN_FRONTEND=noninteractive apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends pkg-config libcap-dev
-      - name: Run argument comment lint on codex-rs via Bazel
-        if: ${{ runner.os != 'Windows' }}
-        env:
-          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        shell: bash
-        run: |
-          bazel_targets="$(./tools/argument-comment-lint/list-bazel-targets.sh)"
-          ./.github/scripts/run-bazel-ci.sh \
-            -- \
-            build \
-            --config=argument-comment-lint \
-            --keep_going \
-            --build_metadata=COMMIT_SHA=${GITHUB_SHA} \
-            -- \
-            ${bazel_targets}
-      - name: Run argument comment lint on codex-rs via Bazel
-        if: ${{ runner.os == 'Windows' }}
-        env:
-          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        shell: bash
-        run: |
-          ./.github/scripts/run-argument-comment-lint-bazel.sh \
-            --config=argument-comment-lint \
-            --platforms=//:local_windows \
-            --keep_going \
-            --build_metadata=COMMIT_SHA=${GITHUB_SHA}
+  # The Bazel argument comment lint is not repeated here: a cold Bazel build
+  # (V8 from source) takes hours without a BuildBuddy cache, so the Linux and
+  # macOS lint runs in nightly-ci.yml (rust-ci.yml with cold_bazel) instead.
 
   # --- CI to validate on different os/targets --------------------------------
   lint_build:
@@ -389,7 +340,7 @@ jobs:
             /var/cache/apt
           key: apt-${{ matrix.runner }}-${{ matrix.target }}-v1
 
-  tests_linux_x64_remote:
+  tests_linux_x64:
     name: Tests — ubuntu-24.04 - x86_64-unknown-linux-gnu
     uses: ./.github/workflows/rust-ci-full-nextest-platform.yml
     with:
@@ -397,7 +348,12 @@ jobs:
       target: x86_64-unknown-linux-gnu
       profile: ci-test
       artifact_id: linux-x64
-      remote_env: true
+      # Local executor. The Docker remote-executor mode (upstream's "(remote)"
+      # lane) has never passed on this fork: its first run (37178057395) failed
+      # 47 remote-only cases that all pass locally. Repair is tracked in
+      # https://github.com/CorbanuCore/CorbanuTerminal/issues/157; flip back to
+      # true (and restore the `_remote` job id) once that is fixed.
+      remote_env: false
       use_sccache: true
     secrets: inherit
 
@@ -409,9 +365,8 @@ jobs:
         general,
         cargo_shear,
         argument_comment_lint_package,
-        argument_comment_lint_prebuilt,
         lint_build,
-        tests_linux_x64_remote,
+        tests_linux_x64,
       ]
     if: always()
     runs-on: ubuntu-24.04
@@ -420,17 +375,15 @@ jobs:
         shell: bash
         run: |
           echo "argpkg : ${{ needs.argument_comment_lint_package.result }}"
-          echo "arglint: ${{ needs.argument_comment_lint_prebuilt.result }}"
           echo "general: ${{ needs.general.result }}"
           echo "shear  : ${{ needs.cargo_shear.result }}"
           echo "lint   : ${{ needs.lint_build.result }}"
-          echo "test linux : ${{ needs.tests_linux_x64_remote.result }}"
+          echo "test linux : ${{ needs.tests_linux_x64.result }}"
           [[ '${{ needs.argument_comment_lint_package.result }}' == 'success' ]] || { echo 'argument_comment_lint_package failed'; exit 1; }
-          [[ '${{ needs.argument_comment_lint_prebuilt.result }}' == 'success' ]] || { echo 'argument_comment_lint_prebuilt failed'; exit 1; }
           [[ '${{ needs.general.result }}' == 'success' ]] || { echo 'general failed'; exit 1; }
           [[ '${{ needs.cargo_shear.result }}' == 'success' ]] || { echo 'cargo_shear failed'; exit 1; }
           [[ '${{ needs.lint_build.result }}' == 'success' ]] || { echo 'lint_build failed'; exit 1; }
-          [[ '${{ needs.tests_linux_x64_remote.result }}' == 'success' ]] || { echo 'tests_linux_x64_remote failed'; exit 1; }
+          [[ '${{ needs.tests_linux_x64.result }}' == 'success' ]] || { echo 'tests_linux_x64 failed'; exit 1; }
 
       - name: sccache summary note
         if: always()
