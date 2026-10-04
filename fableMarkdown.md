@@ -18,7 +18,7 @@ PF-80-S01 management bootstrap. Product basis: **Internal delivery control — T
 BUILD**, “Use sequential sprints per initiative, incremental merges behind verified
 default-OFF feature boundaries” in [the product specification](docs/corbanu-product-spec.md).
 Canonical policy and exact sprint contracts remain authoritative. This brief
-supersedes the *role split* in [coordinatorInstructions.md](coordinatorInstructions.md)
+supersedes the _role split_ in [coordinatorInstructions.md](coordinatorInstructions.md)
 when Travis starts the takeover; that file remains an operational reference.
 
 ## 1. Your mandate
@@ -508,10 +508,10 @@ Use Corbanu's **`/tasknode`** UI and `corbanu tasknode --help`, linked native
 profile **IridiumMaster / @iridiumeagle**, and Campaign Tracker. Do not build a
 parallel credential store. [Existing task records and receipts](docs/plans/tasknode-workstream-tasks-2026-09-11.md):
 
-| Initiative | Existing target |
-| --- | --- |
-| Security | `task_865f75c6911f953c6586cdc1f4531e4f` |
-| Accounting | `task_b3e8506327fb906173fd68b2f642221b` |
+| Initiative                    | Existing target                         |
+| ----------------------------- | --------------------------------------- |
+| Security                      | `task_865f75c6911f953c6586cdc1f4531e4f` |
+| Accounting                    | `task_b3e8506327fb906173fd68b2f642221b` |
 | Task Node / beta coordination | `task_789a0f3bd75b41d1eca20cae698f04cf` |
 
 These were created once and verified **Proposed**, not Accepted/completed/rewarded.
@@ -535,13 +535,13 @@ event to evade a hold. New PF80 reporting needs explicit PF80 mapping.
 
 ## 9. Machines and protected credentials
 
-| Machine | Verified coordinate / intended role | Important boundary |
-| --- | --- | --- |
-| This Mac | `/Volumes/CorbanuDrive/Corbanu`; current source/host coordinator, private Slack owner, dashboard tunnel | CorbanuDrive must be mounted; reserve build/write resources |
-| Alex RPC / development Linux | `pfrpc@178.156.143.199`; `/home/pfrpc/corbanu-control` | Direct SSH, no Tailscale dependency; remote web binds `127.0.0.1:8768` |
-| RTX PRO 6000 | `100.99.88.49`; fine-tuning/media | Different tailnet; current reachability not established by RPC success |
-| Drone / RTX 4090 | `100.81.145.102`; media/fallback | Verify reachability and exclusive allocation before use |
-| Other assets | Two local VMs, two laptops, three powerful GPU/CPU machines; three Codex plans, Claude, DeepSeek/GMI APIs, Brave, scrapling | Inventory supplied by Travis, not proof every service or credential is provisioned |
+| Machine                      | Verified coordinate / intended role                                                                                         | Important boundary                                                                 |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| This Mac                     | `/Volumes/CorbanuDrive/Corbanu`; current source/host coordinator, private Slack owner, dashboard tunnel                     | CorbanuDrive must be mounted; reserve build/write resources                        |
+| Alex RPC / development Linux | `pfrpc@178.156.143.199`; `/home/pfrpc/corbanu-control`                                                                      | Direct SSH, no Tailscale dependency; remote web binds `127.0.0.1:8768`             |
+| RTX PRO 6000                 | `100.99.88.49`; fine-tuning/media                                                                                           | Different tailnet; current reachability not established by RPC success             |
+| Drone / RTX 4090             | `100.81.145.102`; media/fallback                                                                                            | Verify reachability and exclusive allocation before use                            |
+| Other assets                 | Two local VMs, two laptops, three powerful GPU/CPU machines; three Codex plans, Claude, DeepSeek/GMI APIs, Brave, scrapling | Inventory supplied by Travis, not proof every service or credential is provisioned |
 
 Use the existing protected RPC adapter; it already has access to the supplied
 server authentication. Never embed the password in this file, command arguments,
@@ -579,12 +579,12 @@ credentials/install dependencies merely because hardware or subscriptions exist.
 
 Facilities must survive dashboard source updates:
 
-| Facility | Interface |
-| --- | --- |
-| ComfyUI — RTX | `http://100.99.88.49:8188/` |
-| YuE2 / YuE — RTX | `http://100.99.88.49:7861/` |
-| ACE-Step — RTX | `http://100.99.88.49:7862/` |
-| RVC — Drone | `http://100.81.145.102:7865/` |
+| Facility                  | Interface                     |
+| ------------------------- | ----------------------------- |
+| ComfyUI — RTX             | `http://100.99.88.49:8188/`   |
+| YuE2 / YuE — RTX          | `http://100.99.88.49:7861/`   |
+| ACE-Step — RTX            | `http://100.99.88.49:7862/`   |
+| RVC — Drone               | `http://100.81.145.102:7865/` |
 | ACE-Step fallback — Drone | `http://100.81.145.102:7866/` |
 
 Preserve Facilities navigation, generator, publish output, safe URL allowlist,

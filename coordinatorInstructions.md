@@ -69,11 +69,11 @@ Do not leave an executable assignment unstarted merely because you own it.
 
 Initially coordinate all three existing independent initiatives:
 
-| Initiative | Current reserved sprint at this handoff |
-| --- | --- |
-| PF13/security and protected credentials | [PF-27-S04](docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md) |
-| Accounting: unified agent cost and usage | [PF-60-S02](docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) |
-| Task Node integration and delivery control, including Slack and the planned beta-testing workflow | [PF-80-S01](docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md) |
+| Initiative                                                                                        | Current reserved sprint at this handoff                                                                                |
+| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| PF13/security and protected credentials                                                           | [PF-27-S04](docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md)                           |
+| Accounting: unified agent cost and usage                                                          | [PF-60-S02](docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) |
+| Task Node integration and delivery control, including Slack and the planned beta-testing workflow | [PF-80-S01](docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md)                            |
 
 Use sequential sprints within each initiative. Preserve the three-initiative
 limit, dependencies, feature flags and acceptance gates. Reconcile actual sprint,
@@ -427,13 +427,13 @@ link. A qualified shared HTTPS route is deferred, not a launch requirement.
 
 Approved binding:
 
-| Field | Value |
-| --- | --- |
-| Workspace / team | AmbientCrypto / `T074X5KNENT` |
+| Field                | Value                               |
+| -------------------- | ----------------------------------- |
+| Workspace / team     | AmbientCrypto / `T074X5KNENT`       |
 | Private channel / ID | the-corbanu-project / `C0C0X2ELFKR` |
-| App | `A0C1CC2P4SE` |
-| Bot / bot user | `B0C1CCAU4Q2` / `U0C1EBT4UJV` |
-| Travis | `U0758QY0MEZ` |
+| App                  | `A0C1CC2P4SE`                       |
+| Bot / bot user       | `B0C1CCAU4Q2` / `U0C1EBT4UJV`       |
+| Travis               | `U0758QY0MEZ`                       |
 
 [Approved channel](https://app.slack.com/client/T074X5KNENT/C0C0X2ELFKR).
 Private credential file:
@@ -737,8 +737,8 @@ product dispatch and recurring operation remain paused.
 4. Reconcile final ownership/state for all three workstreams; run a complete
    handoff plus crash/stall recovery rehearsal, then enable the verified watchdog
    and recurring coordinator. Send the final Slack completion notice only then.
-Private state, credentials, raw logs and historical one-off launchers remain
-outside Git. No secret values belong in this document or its verification output.
+   Private state, credentials, raw logs and historical one-off launchers remain
+   outside Git. No secret values belong in this document or its verification output.
 
 Documentation verification on September 13: the installed binary reports
 `corbanu 0.1.41`, TMUX `3.7c`; the launch flags above exist in its help. Shell
