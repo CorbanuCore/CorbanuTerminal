@@ -482,6 +482,9 @@ async fn pf_60_s03_stage_one_extraction_records_its_own_turn() -> anyhow::Result
 
     let (mut session, context) =
         crate::session::tests::make_session_and_context_for_config(config).await;
+    // Accounting attributes attempts to a persisted thread; without one the
+    // session is ephemeral and its calls deliberately run uncollected.
+    crate::session::tests::open_thread_persistence(&mut session).await;
     let db = StateRuntime::init(
         SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
         "openai".into(),
