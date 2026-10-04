@@ -11,4 +11,7 @@ codex_rust_crate(
         "thread_history_migrations/**",
     ]),
     crate_name = "codex_state",
+    # The accounting suites take ~210s on a 4-core Windows runner on their
+    # own, so the default 300s budget times out when Bazel runs tests in parallel.
+    unit_test_timeout = "long",
 )
