@@ -12,6 +12,7 @@ pub enum PromptSlot {
 pub struct PromptFragment {
     slot: PromptSlot,
     text: String,
+    source_id: Option<&'static str>,
 }
 
 impl PromptFragment {
@@ -20,7 +21,17 @@ impl PromptFragment {
         Self {
             slot,
             text: text.into(),
+            source_id: None,
         }
+    }
+
+    /// Attributes the fragment to a stable producer ID.
+    ///
+    /// Use this when other producers may emit context with the same markers, so the harness can
+    /// keep one current copy per producer instead of one per marker.
+    pub fn with_source_id(mut self, source_id: &'static str) -> Self {
+        self.source_id = Some(source_id);
+        self
     }
 
     /// Creates a developer-policy prompt fragment.
@@ -46,5 +57,10 @@ impl PromptFragment {
     /// Returns the model-visible text.
     pub fn text(&self) -> &str {
         &self.text
+    }
+
+    /// Returns the stable producer ID, if the fragment is attributed.
+    pub fn source_id(&self) -> Option<&'static str> {
+        self.source_id
     }
 }

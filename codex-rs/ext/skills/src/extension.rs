@@ -74,6 +74,10 @@ use crate::world_state::executor_skills_world_state_section;
 use crate::world_state::host_skills_world_state_section;
 use crate::world_state::rendered_host_skills_world_state_section;
 
+/// Stable producer ID of the thread-context skill catalog. It shares the skills markers with the
+/// WorldState catalogs but is a separate catalog that must not replace them.
+const THREAD_SKILLS_CONTEXT_SOURCE_ID: &str = "thread_skills";
+
 struct SkillsExtension<C> {
     providers: SkillProviders,
     event_sink: Arc<dyn ExtensionEventSink>,
@@ -236,7 +240,10 @@ where
             }
             rendered
                 .fragment
-                .map(|fragment| PromptFragment::developer_capability(fragment.render()))
+                .map(|fragment| {
+                    PromptFragment::developer_capability(fragment.render())
+                        .with_source_id(THREAD_SKILLS_CONTEXT_SOURCE_ID)
+                })
                 .into_iter()
                 .collect()
         })

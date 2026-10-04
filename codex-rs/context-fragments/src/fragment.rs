@@ -51,6 +51,13 @@ pub trait ContextualUserFragment {
         false
     }
 
+    /// Stable producer ID recorded with the rendered fragment, such as a World State section ID.
+    ///
+    /// Provider adapters use it to tell apart distinct sources that share markers.
+    fn source_id(&self) -> Option<&'static str> {
+        None
+    }
+
     fn markers(&self) -> (&'static str, &'static str);
 
     fn body(&self) -> String;

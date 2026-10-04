@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use codex_core_skills::HostSkillsSnapshot;
 use codex_core_skills::build_available_skills;
+use codex_core_skills::injection::HOST_SKILLS_CONTEXT_SOURCE_ID;
 use codex_core_skills::render::SkillRenderSideEffects;
 use codex_extension_api::ContextualUserFragment;
 use codex_extension_api::ExtensionMetrics;
@@ -18,7 +19,7 @@ use crate::render_observability::CatalogSurface;
 use crate::render_observability::record_catalog_metrics;
 
 pub(crate) const SKILLS_WORLD_STATE_ID: &str = "skills";
-pub(crate) const HOST_SKILLS_WORLD_STATE_ID: &str = "host_skills";
+pub(crate) const HOST_SKILLS_WORLD_STATE_ID: &str = HOST_SKILLS_CONTEXT_SOURCE_ID;
 const NO_EXECUTOR_SKILLS_BODY: &str =
     "\n## Skills update\nNo selected-environment skills are currently available.\n";
 const HIDDEN_EXECUTOR_SKILLS_BODY: &str = "\n## Skills update\nSelected-environment skills are not listed automatically. Explicit skill mentions can still be resolved when available.\n";

@@ -379,8 +379,53 @@ impl WorldState {
     ) -> Vec<Box<dyn ContextualUserFragment>> {
         self.sections
             .iter()
-            .filter_map(|(id, section)| section.render_diff(previous(id, section.as_ref())))
+            .filter_map(|(id, section)| {
+                section
+                    .render_diff(previous(id, section.as_ref()))
+                    .map(|fragment| {
+                        Box::new(SectionFragment {
+                            section_id: id,
+                            fragment,
+                        }) as Box<dyn ContextualUserFragment>
+                    })
+            })
             .collect()
+    }
+}
+
+/// A rendered fragment attributed to the World State section that produced it.
+struct SectionFragment {
+    section_id: &'static str,
+    fragment: Box<dyn ContextualUserFragment>,
+}
+
+impl ContextualUserFragment for SectionFragment {
+    fn role(&self) -> &'static str {
+        self.fragment.role()
+    }
+
+    fn requires_separate_message(&self) -> bool {
+        self.fragment.requires_separate_message()
+    }
+
+    fn source_id(&self) -> Option<&'static str> {
+        Some(self.section_id)
+    }
+
+    fn markers(&self) -> (&'static str, &'static str) {
+        self.fragment.markers()
+    }
+
+    fn body(&self) -> String {
+        self.fragment.body()
+    }
+
+    fn render(&self) -> String {
+        self.fragment.render()
+    }
+
+    fn type_markers() -> (&'static str, &'static str) {
+        ("", "")
     }
 }
 
