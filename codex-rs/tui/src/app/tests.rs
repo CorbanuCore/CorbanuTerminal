@@ -11666,6 +11666,10 @@ async fn clear_ui_header_shows_fast_status_for_fast_capable_models() {
 }
 
 #[tokio::test]
+#[cfg_attr(
+    target_os = "windows",
+    ignore = "snapshot path rendering differs on Windows"
+)]
 async fn model_change_refreshes_committed_session_header_snapshot() -> Result<()> {
     let mut app = make_test_app().await;
     app.config.cwd = test_path_buf("/tmp/project").abs();
@@ -11673,7 +11677,7 @@ async fn model_change_refreshes_committed_session_header_snapshot() -> Result<()
     app.chat_widget
         .set_reasoning_effort(Some(ReasoningEffortConfig::Medium));
 
-    let mut session = test_thread_session(ThreadId::new(), PathBuf::from("/tmp/project"));
+    let mut session = test_thread_session(ThreadId::new(), test_path_buf("/tmp/project"));
     session.model = "gpt-before".to_string();
     session.reasoning_effort = Some(ReasoningEffortConfig::Medium);
     app.transcript_cells = vec![Arc::new(new_session_info(

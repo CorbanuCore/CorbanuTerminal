@@ -832,6 +832,9 @@ async fn permissions_selection_requests_change_without_optimistic_history() {
     chat.set_feature_enabled(Feature::GuardianApproval, /*enabled*/ true);
     chat.open_permissions_popup();
     chat.handle_key_event(KeyEvent::from(KeyCode::Down));
+    // Windows lists the non-admin sandbox approval row first.
+    #[cfg(target_os = "windows")]
+    chat.handle_key_event(KeyEvent::from(KeyCode::Down));
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
 
     assert_permission_preset_request(

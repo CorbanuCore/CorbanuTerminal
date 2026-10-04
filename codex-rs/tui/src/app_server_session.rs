@@ -3207,18 +3207,27 @@ mod tests {
     #[tokio::test]
     async fn thread_resume_params_forward_explicit_permission_session_flags() {
         let temp_dir = tempfile::tempdir().expect("tempdir");
+        #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
+        let mut cli_overrides = vec![
+            (
+                "approval_policy".to_string(),
+                toml::Value::String("never".to_string()),
+            ),
+            (
+                "sandbox_mode".to_string(),
+                toml::Value::String("workspace-write".to_string()),
+            ),
+        ];
+        // Without a Windows sandbox, workspace-write deliberately downgrades
+        // to read-only on Windows.
+        #[cfg(target_os = "windows")]
+        cli_overrides.push((
+            "windows.sandbox".to_string(),
+            toml::Value::String("unelevated".to_string()),
+        ));
         let config = ConfigBuilder::default()
             .codex_home(temp_dir.path().to_path_buf())
-            .cli_overrides(vec![
-                (
-                    "approval_policy".to_string(),
-                    toml::Value::String("never".to_string()),
-                ),
-                (
-                    "sandbox_mode".to_string(),
-                    toml::Value::String("workspace-write".to_string()),
-                ),
-            ])
+            .cli_overrides(cli_overrides)
             .build()
             .await
             .expect("config should build");

@@ -2514,7 +2514,8 @@ fn claude_secret_redactor_redacts_bridge_credentials() {
 
 #[test]
 fn relative_claude_config_dir_is_bound_to_the_launch_cwd() {
-    let launch_cwd = PathBuf::from("/launch/cwd");
+    // `/launch/cwd` has no drive on Windows; anchor it like the product does.
+    let launch_cwd = std::path::absolute("/launch/cwd").expect("absolute launch cwd");
     let resolved = absolute_claude_config_dir_override_against(
         Some(PathBuf::from("profiles/work")),
         &launch_cwd,
