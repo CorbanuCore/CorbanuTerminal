@@ -5,6 +5,7 @@ use codex_core_skills::HostSkillsSnapshot;
 use codex_core_skills::injection::HOST_SKILLS_CONTEXT_SOURCE_ID;
 use codex_core_skills::injection::HostSkillsCatalogInWorldState;
 use codex_core_skills::injection::InjectedHostSkillPrompts;
+use codex_core_skills::injection::THREAD_SKILLS_CONTEXT_SOURCE_ID;
 use codex_exec_server::ExecutorCapabilityDiscoverySnapshot;
 use codex_exec_server::FileSystemSandboxContext;
 use codex_exec_server::LOCAL_ENVIRONMENT_ID;
@@ -75,10 +76,6 @@ use crate::world_state::HostSkillsWarningEmitter;
 use crate::world_state::executor_skills_world_state_section;
 use crate::world_state::host_skills_world_state_section;
 use crate::world_state::rendered_host_skills_world_state_section;
-
-/// Stable producer ID of the thread-context skill catalog. It shares the skills markers with the
-/// WorldState catalogs but is a separate catalog that must not replace them.
-const THREAD_SKILLS_CONTEXT_SOURCE_ID: &str = "thread_skills";
 
 struct SkillsExtension<C> {
     providers: SkillProviders,

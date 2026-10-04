@@ -8,18 +8,22 @@ pub(crate) struct ContextSection {
 }
 
 impl ContextSection {
-    pub(crate) fn attributed(text: String, source_id: Option<&'static str>) -> Self {
+    pub(crate) fn new(text: String, source_id: Option<&'static str>) -> Self {
         Self { text, source_id }
     }
 
+    pub(crate) fn attributed(text: String, source_id: &'static str) -> Self {
+        Self::new(text, Some(source_id))
+    }
+
     pub(crate) fn from_fragment(fragment: &dyn ContextualUserFragment) -> Self {
-        Self::attributed(fragment.render(), fragment.source_id())
+        Self::new(fragment.render(), fragment.source_id())
     }
 }
 
 impl From<String> for ContextSection {
     fn from(text: String) -> Self {
-        Self::attributed(text, /*source_id*/ None)
+        Self::new(text, /*source_id*/ None)
     }
 }
 

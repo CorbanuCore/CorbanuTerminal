@@ -175,7 +175,7 @@ fn developer_context(sections: Vec<(String, Option<&'static str>)>) -> ResponseI
         sections
             .into_iter()
             .map(|(text, source_id)| {
-                crate::context_manager::updates::ContextSection::attributed(text, source_id)
+                crate::context_manager::updates::ContextSection::new(text, source_id)
             })
             .collect(),
     )

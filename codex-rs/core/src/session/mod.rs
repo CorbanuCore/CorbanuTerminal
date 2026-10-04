@@ -986,7 +986,7 @@ fn push_prompt_fragment(
     separate_developer_sections: &mut Vec<ContextSection>,
 ) {
     let developer_section =
-        || ContextSection::attributed(fragment.text().to_string(), fragment.source_id());
+        || ContextSection::new(fragment.text().to_string(), fragment.source_id());
     match fragment.slot() {
         PromptSlot::DeveloperPolicy | PromptSlot::DeveloperCapabilities => {
             developer_sections.push(developer_section());
@@ -3805,7 +3805,7 @@ impl Session {
                 }
                 developer_sections.push(ContextSection::attributed(
                     skills_instructions.render(),
-                    Some(HOST_SKILLS_CONTEXT_SOURCE_ID),
+                    HOST_SKILLS_CONTEXT_SOURCE_ID,
                 ));
             }
         }
