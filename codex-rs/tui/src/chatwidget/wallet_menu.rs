@@ -50,7 +50,9 @@ pub(crate) struct WalletPlanChoice {
     pub(crate) deferred_setup: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
 }
 
-#[allow(dead_code)] // The plan purchase flow is handled but currently has no entry point.
+// Unreachable since the legacy plan state was retired (66ff6579d7); remove
+// or wire back in.
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WalletPlanPurchaseMode {
     New,
@@ -112,7 +114,8 @@ fn wallet_balance_endpoint(
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WalletPlanStatus {
-    #[allow(dead_code)] // Part of the plan status wire shape.
+    // Deserialized from the daemon status; no reader since 66ff6579d7.
+    #[allow(dead_code)]
     pub(crate) wallet_address: String,
     pub(crate) period: WalletPlanPeriod,
     pub(crate) weekly: WalletUsageWindow,
