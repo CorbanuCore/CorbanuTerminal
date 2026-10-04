@@ -26,6 +26,10 @@ concurrency:
   group: concurrency-group::${{ github.workflow }}::${{ github.event.pull_request.number > 0 && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}${{ github.ref_name == 'main' && format('::{0}', github.run_id) || ''}}
   cancel-in-progress: ${{ github.ref_name != 'main' }}
 
+# Read-only token: none of these jobs call the GitHub API.
+permissions:
+  contents: read
+
 jobs:
   test:
     if: ${{ inputs.cold_bazel }}
@@ -33,7 +37,7 @@ jobs:
     # See docs/ci.md for the restoration plan.
     # Cold local builds compile V8 transitively and can exceed 90 minutes when
     # remote execution is unavailable.
-    timeout-minutes: 180
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -324,11 +328,11 @@ jobs:
           fi
 
   test-windows-native-main:
-    # Native Windows Bazel tests are slower and frequently approach the
-    # 30-minute PR budget. Run this only for post-merge commits to main and give
-    # it a larger timeout.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    timeout-minutes: 40
+    # Native Windows Bazel tests build everything cold without a remote cache
+    # (~25 min) and then run ~400 tests, so they run nightly with the other
+    # cold Bazel jobs (nightly-ci.yml) instead of on every push to main.
+    if: ${{ inputs.cold_bazel }}
+    timeout-minutes: 360
     runs-on: windows-2022
     name: Bazel test on windows-latest for x86_64-pc-windows-gnullvm (native main)
     environment:
@@ -403,7 +407,7 @@ jobs:
 
   clippy:
     if: ${{ inputs.cold_bazel }}
-    timeout-minutes: 180
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -499,7 +503,7 @@ jobs:
 
   verify-release-build:
     if: ${{ inputs.cold_bazel }}
-    timeout-minutes: 180
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:

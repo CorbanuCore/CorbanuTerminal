@@ -14,7 +14,7 @@ class CiTimeoutBudgetTest(unittest.TestCase):
 
     def test_sdk_cold_build_has_release_headroom(self) -> None:
         sdk = self.workflow("sdk.yml")
-        self.assertRegex(sdk, r"(?ms)^  sdks:.*?^    timeout-minutes: 180$")
+        self.assertRegex(sdk, r"(?ms)^  sdks:.*?^    timeout-minutes: 360$")
 
     def test_linux_bazel_cold_build_jobs_have_release_headroom(self) -> None:
         bazel = self.workflow("bazel.yml")
@@ -22,18 +22,20 @@ class CiTimeoutBudgetTest(unittest.TestCase):
             with self.subTest(job=job):
                 self.assertRegex(
                     bazel,
-                    rf"(?ms)^  {re.escape(job)}:.*?^    timeout-minutes: 180$",
+                    rf"(?ms)^  {re.escape(job)}:.*?^    timeout-minutes: 360$",
                 )
 
     def test_argument_lint_platforms_have_release_headroom(self) -> None:
         rust_ci = self.workflow("rust-ci.yml")
-        for platform in ("Linux", "macOS", "Windows"):
+        # Linux and macOS run nightly only (cold_bazel), so they get the
+        # 360-minute hosted-runner maximum; Windows still runs on PRs.
+        for platform, minutes in (("Linux", 360), ("macOS", 360), ("Windows", 180)):
             with self.subTest(platform=platform):
                 self.assertRegex(
                     rust_ci,
                     rf"(?m)^          - name: {platform}\n"
                     rf"            runner: .+\n"
-                    rf"            timeout_minutes: 180$",
+                    rf"            timeout_minutes: {minutes}$",
                 )
 
 
@@ -49,6 +51,13 @@ class NightlyHeavyJobsTest(unittest.TestCase):
                     bazel,
                     rf"(?m)^  {re.escape(job)}:\n    if: \$\{{\{{ inputs\.cold_bazel \}}\}}$",
                 )
+
+    def test_native_windows_main_is_nightly(self) -> None:
+        self.assertRegex(
+            self.workflow("bazel.yml"),
+            r"(?ms)^  test-windows-native-main:\n(?:    #.*?\n)*"
+            r"    if: \$\{\{ inputs\.cold_bazel \}\}\n    timeout-minutes: 360$",
+        )
 
     def test_blocking_ci_leaves_heavy_jobs_off(self) -> None:
         self.assertNotIn("cold_bazel", self.workflow("blocking-ci.yml"))
