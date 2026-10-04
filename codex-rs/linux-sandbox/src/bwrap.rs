@@ -1696,9 +1696,9 @@ mod tests {
                 missing_path_behavior: None,
             },
             FileSystemSandboxEntry {
-                path: AbsolutePathBuf::try_from(temp_root)
-                    .expect("absolute temp root")
-                    .into(),
+                path: FileSystemPath::Path {
+                    path: AbsolutePathBuf::try_from(temp_root).expect("absolute temp root"),
+                },
                 access: FileSystemAccessMode::Deny,
                 missing_path_behavior: None,
             },

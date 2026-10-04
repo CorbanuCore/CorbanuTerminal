@@ -959,17 +959,26 @@ async fn sandbox_starts_with_denied_tmp_without_exposing_registry() {
                     value: FileSystemSpecialPath::SlashTmp,
                 }
             } else {
-                AbsolutePathBuf::try_from(tmp_root.as_path())
-                    .expect("absolute temp root")
-                    .into()
+                FileSystemPath::Path {
+                    path: AbsolutePathBuf::try_from(tmp_root.as_path())
+                        .expect("absolute temp root"),
+                }
             };
             let policy = FileSystemSandboxPolicy::restricted(vec![
                 FileSystemSandboxEntry::new(
                     FileSystemPath::Special { value: read_root },
                     FileSystemAccessMode::Read,
                 ),
-                FileSystemSandboxEntry::new(helper_dir.clone().into(), FileSystemAccessMode::Read),
-                FileSystemSandboxEntry::new(cwd.clone().into(), FileSystemAccessMode::Write),
+                FileSystemSandboxEntry::new(
+                    FileSystemPath::Path {
+                        path: helper_dir.clone(),
+                    },
+                    FileSystemAccessMode::Read,
+                ),
+                FileSystemSandboxEntry::new(
+                    FileSystemPath::Path { path: cwd.clone() },
+                    FileSystemAccessMode::Write,
+                ),
                 FileSystemSandboxEntry::new(denied_path, FileSystemAccessMode::Deny),
             ]);
             let mut env = create_env_from_core_vars();
