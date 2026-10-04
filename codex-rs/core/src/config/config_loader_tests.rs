@@ -4172,6 +4172,7 @@ async fn home_dot_codex_is_not_a_project_layer_inside_a_repository() -> std::io:
     let codex_home = home_dir.join(".corbanu");
     let workdir = home_dir.join("work");
     tokio::fs::create_dir_all(home_dir.join(".git")).await?;
+    tokio::fs::write(home_dir.join(".git/HEAD"), "ref: refs/heads/main\n").await?;
     tokio::fs::create_dir_all(home_dir.join(".codex")).await?;
     tokio::fs::create_dir_all(&codex_home).await?;
     tokio::fs::create_dir_all(&workdir).await?;
