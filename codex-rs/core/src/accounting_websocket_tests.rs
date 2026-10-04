@@ -490,7 +490,7 @@ async fn accounting_responses_ws_original_price_binding() -> anyhow::Result<()> 
 async fn accounting_responses_ws_failure_and_cancellation_latch() -> anyhow::Result<()> {
     let fixture = Fixture::new(mode()).await?;
     let admission = fixture.admission().await?;
-    let permit = crate::accounting::WRITES.acquire().await?;
+    let permit = crate::accounting::writes().acquire().await?;
     let mut pending = admission.admit("gpt-5.6-sol".into(), /*tier*/ None);
     assert!(poll!(&mut pending).is_pending());
     drop(pending);
@@ -518,7 +518,7 @@ async fn accounting_responses_ws_failure_and_cancellation_latch() -> anyhow::Res
     assert!(super::super::responses::read(&slot)?.is_none());
 
     let fresh = Fixture::new(mode()).await?;
-    let permit = crate::accounting::WRITES.acquire().await?;
+    let permit = crate::accounting::writes().acquire().await?;
     let mut bootstrap = Box::pin(fresh.resolve());
     assert!(poll!(&mut bootstrap).is_pending());
     drop(bootstrap);

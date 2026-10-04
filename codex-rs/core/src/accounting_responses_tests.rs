@@ -243,7 +243,7 @@ async fn accounting_responses_bootstrap_failure_and_cancellation() -> anyhow::Re
     );
     assert!(deferred.check().is_err());
     let fixture = Fixture::new().await?;
-    let permit = crate::accounting::WRITES.acquire().await?;
+    let permit = crate::accounting::writes().acquire().await?;
     let mut pending = Box::pin(fixture.resolve());
     assert!(poll!(&mut pending).is_pending());
     drop(pending);

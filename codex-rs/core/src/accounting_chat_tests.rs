@@ -485,7 +485,7 @@ async fn accounting_chat_bootstrap_cancel_scope_and_latch() -> anyhow::Result<()
     );
     assert!(deferred.check().is_err());
     let fixture = Fixture::new().await?;
-    let permit = crate::accounting::WRITES.acquire().await?;
+    let permit = crate::accounting::writes().acquire().await?;
     let mut pending = Box::pin(fixture.resolve());
     assert!(poll!(&mut pending).is_pending());
     drop(pending);

@@ -903,7 +903,7 @@ fn poison<T>(mutex: &Mutex<T>) {
 #[tokio::test]
 async fn accounting_policy_wait_cancellation_and_post_wait_failure_have_no_effect() -> Result<()> {
     let fixture = Fixture::new().await?;
-    let permit = WRITES.acquire().await?;
+    let permit = writes().acquire().await?;
     let mut waiting = Box::pin(fixture.sampling.admit(MODEL, ENDPOINT));
     assert!(poll!(&mut waiting).is_pending());
     drop(waiting);
@@ -948,7 +948,7 @@ async fn accounting_policy_wait_cancellation_and_post_wait_failure_have_no_effec
 #[tokio::test]
 async fn accounting_policy_serial_retry_identity_and_time_sample_after_gate() -> Result<()> {
     let fixture = Fixture::new().await?;
-    let permit = WRITES.acquire().await?;
+    let permit = writes().acquire().await?;
     let mut first = Box::pin(fixture.sampling.admit(MODEL, ENDPOINT));
     let mut second = Box::pin(fixture.sampling.admit(MODEL, ENDPOINT));
     assert!(poll!(&mut first).is_pending());
@@ -980,7 +980,7 @@ async fn accounting_policy_serial_retry_identity_and_time_sample_after_gate() ->
 async fn accounting_policy_observe_wait_cancel_and_start_cancel_publish_nothing() -> Result<()> {
     let fixture = Fixture::new().await?;
     let attempt = fixture.sampling.admit(MODEL, ENDPOINT).await?;
-    let permit = WRITES.acquire().await?;
+    let permit = writes().acquire().await?;
     let mut waiting = Box::pin(fixture.sampling.observe(
         &attempt,
         Uuid::new_v4(),
@@ -1008,9 +1008,9 @@ async fn accounting_policy_observe_wait_cancel_and_start_cancel_publish_nothing(
         SamplingScope::attach(slot.clone(), Some(sampling))
     });
     assert!(poll!(&mut start).is_pending());
-    assert_eq!(WRITES.available_permits(), 0);
+    assert_eq!(writes().available_permits(), 0);
     drop(start);
-    assert_eq!(WRITES.available_permits(), 1);
+    assert_eq!(writes().available_permits(), 1);
     assert!(read_slot(&slot)?.is_none());
     sqlx::query("ROLLBACK").execute(&mut connection).await?;
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM draft_accounting_observations")
@@ -1050,13 +1050,13 @@ async fn accounting_policy_cancel_in_operation_rejects_and_releases_capacity() -
         });
         assert!(poll!(&mut pending).is_pending());
         assert_eq!(
-            WRITES.available_permits(),
+            writes().available_permits(),
             0,
             "inside the operation, not queued"
         );
         drop(pending);
         assert!(fixture.sampling.check().is_err());
-        assert_eq!(WRITES.available_permits(), 1);
+        assert_eq!(writes().available_permits(), 1);
         sqlx::query("ROLLBACK").execute(&mut connection).await?;
         connection.close().await?;
         assert!(fixture.sampling.admit(MODEL, ENDPOINT).await.is_err());
@@ -1116,14 +1116,14 @@ async fn accounting_policy_previous_poison_before_and_during_admission_is_sticky
         let mut pending = Box::pin(fixture.sampling.admit(MODEL, ENDPOINT));
         if phase == "during" {
             assert!(poll!(&mut pending).is_pending());
-            assert_eq!(WRITES.available_permits(), 0);
+            assert_eq!(writes().available_permits(), 0);
             poison(&fixture.sampling.previous);
             sqlx::query("ROLLBACK").execute(&mut connection).await?;
         }
         assert!(pending.await.is_err());
         assert!(fixture.sampling.check().is_err());
         assert!(fixture.sampling.admit(MODEL, ENDPOINT).await.is_err());
-        assert_eq!(WRITES.available_permits(), 1);
+        assert_eq!(writes().available_permits(), 1);
         connection.close().await?;
         let rows = fixture.attempts().await?;
         assert_eq!(rows.len(), usize::from(phase == "during"));
