@@ -11,8 +11,13 @@ fn exact_wire_packets_admit_without_rewriting() {
         assert_eq!(parsed["store"], false);
         assert_eq!(parsed["model"], "synthetic-no-inference");
         assert!(parsed["input"].is_array());
-        // This is a wire compatibility check, not static-constant equality.
-        assert!(admit(serde_json::to_vec(&parsed).unwrap().as_slice()).is_err());
+        // This is a wire compatibility check, not static-constant equality:
+        // equivalent JSON with different bytes stays outside the corpus. Use
+        // pretty output so the bytes differ whether or not workspace feature
+        // unification enables serde_json's `preserve_order`.
+        let equivalent = serde_json::to_vec_pretty(&parsed).unwrap();
+        assert_ne!(equivalent.as_slice(), packet.as_bytes());
+        assert!(admit(equivalent.as_slice()).is_err());
     }
 }
 
