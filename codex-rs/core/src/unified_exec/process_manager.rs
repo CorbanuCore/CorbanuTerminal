@@ -300,6 +300,9 @@ async fn wait_for_late_network_denial(network_cancelled: Option<CancellationToke
     }
 
     tokio::select! {
+        // A denial that is already signalled wins even if the grace period
+        // also elapsed while this task was waiting to be polled.
+        biased;
         _ = network_cancelled.cancelled() => true,
         _ = tokio::time::sleep(LATE_NETWORK_DENIAL_GRACE_PERIOD) => false,
     }
