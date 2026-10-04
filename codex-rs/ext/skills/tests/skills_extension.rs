@@ -7,7 +7,9 @@ use std::sync::atomic::Ordering;
 use codex_core_skills::HostSkillsSnapshot;
 use codex_core_skills::SKILLS_INTRO_WITH_ABSOLUTE_PATHS;
 use codex_core_skills::SkillLoadOutcome;
+use codex_core_skills::injection::HOST_SKILLS_CONTEXT_SOURCE_ID;
 use codex_core_skills::injection::InjectedHostSkillPrompts;
+use codex_core_skills::injection::THREAD_SKILLS_CONTEXT_SOURCE_ID;
 use codex_core_skills::loader::MAX_CONCURRENT_ROOT_SCANS;
 use codex_core_skills::loader::SkillRoot;
 use codex_core_skills::loader::load_skills_from_roots;
@@ -147,10 +149,17 @@ async fn installed_extension_uses_host_service_snapshot() -> TestResult {
         "<skill>\n<name>demo</name>\n<path>{skill_prompt_path}</path>\n{DEMO_SKILL_CONTENTS}\n</skill>"
     );
     assert_eq!(
-        vec![("developer", expected_catalog), ("user", expected_skill),],
+        vec![
+            (
+                "developer",
+                Some(HOST_SKILLS_CONTEXT_SOURCE_ID),
+                expected_catalog
+            ),
+            ("user", None, expected_skill),
+        ],
         fragments
             .iter()
-            .map(|fragment| (fragment.role(), fragment.render()))
+            .map(|fragment| (fragment.role(), fragment.source_id(), fragment.render()))
             .collect::<Vec<_>>()
     );
     let injected_host_skill_prompts = turn_store
@@ -742,6 +751,10 @@ async fn default_context_truncates_catalog_descriptions() -> TestResult {
         .contribute_thread_context(&session_store, &thread_store)
         .await;
     assert_eq!(1, fragments.len());
+    assert_eq!(
+        Some(THREAD_SKILLS_CONTEXT_SOURCE_ID),
+        fragments[0].source_id()
+    );
     let rendered = fragments[0].text();
     assert!(rendered.contains(&("x".repeat(1_021) + "...")));
     assert!(!rendered.contains(&"x".repeat(1_024)));

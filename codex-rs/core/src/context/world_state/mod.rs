@@ -15,6 +15,8 @@ mod test_support;
 mod tools;
 
 use crate::context::ContextualUserFragment;
+use codex_context_fragments::AttributedFragment;
+use codex_core_skills::injection::HOST_SKILLS_CONTEXT_SOURCE_ID;
 use codex_extension_api::PreviousWorldStateSection;
 use codex_extension_api::RenderedWorldStateFragment;
 use codex_extension_api::WorldStateSectionContribution;
@@ -312,7 +314,7 @@ impl WorldState {
             "duplicate world-state section ID: {id}"
         );
         let section = Box::new(ExtensionWorldStateSection(section));
-        if id == "host_skills"
+        if id == HOST_SKILLS_CONTEXT_SOURCE_ID
             && let Some(index) = self.sections.get_index_of(PermissionsState::ID)
         {
             self.sections.shift_insert(index, id, section);
@@ -379,7 +381,14 @@ impl WorldState {
     ) -> Vec<Box<dyn ContextualUserFragment>> {
         self.sections
             .iter()
-            .filter_map(|(id, section)| section.render_diff(previous(id, section.as_ref())))
+            .filter_map(|(id, section)| {
+                section
+                    .render_diff(previous(id, section.as_ref()))
+                    .map(|fragment| {
+                        Box::new(AttributedFragment::new(id, fragment))
+                            as Box<dyn ContextualUserFragment>
+                    })
+            })
             .collect()
     }
 }

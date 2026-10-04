@@ -56,6 +56,7 @@ use codex_analytics::SubAgentThreadStartedInput;
 use codex_analytics::TurnCodexErrorFact;
 use codex_async_utils::OrCancelExt;
 use codex_connectors::connector_runtime_context_key;
+use codex_core_skills::injection::HOST_SKILLS_CONTEXT_SOURCE_ID;
 use codex_core_skills::injection::HostSkillsCatalogInWorldState;
 use codex_exec_server::Environment;
 use codex_exec_server::EnvironmentManager;
@@ -195,6 +196,7 @@ use crate::config::PermissionProfileState;
 use crate::config::StartedNetworkProxy;
 use crate::config::resolve_web_search_mode_for_turn;
 use crate::context_manager::ContextManager;
+use crate::context_manager::updates::ContextSection;
 use crate::thread_rollout_truncation::initial_history_has_prior_user_turns;
 use codex_config::CONFIG_TOML_FILE;
 use codex_config::ConfigLayerSource;
@@ -979,19 +981,21 @@ async fn thread_title_from_thread_store(
 
 fn push_prompt_fragment(
     fragment: PromptFragment,
-    developer_sections: &mut Vec<String>,
+    developer_sections: &mut Vec<ContextSection>,
     contextual_user_sections: &mut Vec<String>,
-    separate_developer_sections: &mut Vec<String>,
+    separate_developer_sections: &mut Vec<ContextSection>,
 ) {
+    let developer_section =
+        || ContextSection::new(fragment.text().to_string(), fragment.source_id());
     match fragment.slot() {
         PromptSlot::DeveloperPolicy | PromptSlot::DeveloperCapabilities => {
-            developer_sections.push(fragment.text().to_string());
+            developer_sections.push(developer_section());
         }
         PromptSlot::ContextualUser => {
             contextual_user_sections.push(fragment.text().to_string());
         }
         PromptSlot::SeparateDeveloper => {
-            separate_developer_sections.push(fragment.text().to_string());
+            separate_developer_sections.push(developer_section());
         }
     }
 }
@@ -3751,9 +3755,9 @@ impl Session {
         turn_context: &TurnContext,
         world_state: &WorldState,
     ) -> Vec<ResponseItem> {
-        let mut developer_sections = Vec::<String>::with_capacity(8);
+        let mut developer_sections = Vec::<ContextSection>::with_capacity(8);
         let mut contextual_user_sections = Vec::<String>::with_capacity(2);
-        let mut separate_developer_sections = Vec::<String>::new();
+        let mut separate_developer_sections = Vec::<ContextSection>::new();
         let (session_source, auto_compact_window_ids) = {
             let state = self.state.lock().await;
             (
@@ -3769,7 +3773,7 @@ impl Session {
             && let Some(developer_instructions) = turn_context.developer_instructions.as_deref()
             && !developer_instructions.is_empty()
         {
-            developer_sections.push(developer_instructions.to_string());
+            developer_sections.push(developer_instructions.to_string().into());
         }
         if turn_context.config.include_skill_instructions
             && turn_context
@@ -3799,7 +3803,10 @@ impl Session {
                     })
                     .await;
                 }
-                developer_sections.push(skills_instructions.render());
+                developer_sections.push(ContextSection::attributed(
+                    skills_instructions.render(),
+                    HOST_SKILLS_CONTEXT_SOURCE_ID,
+                ));
             }
         }
         let loaded_plugins = self
@@ -3908,7 +3915,8 @@ impl Session {
                     auto_compact_window_ids.window_id,
                     mcp_result,
                 )
-                .render(),
+                .render()
+                .into(),
             );
         }
         // Render the active mode after the usage hint so it can override that hint.
@@ -3919,12 +3927,14 @@ impl Session {
                     if fragment.markers().0 == ModelSwitchInstructions::type_markers().0 =>
                 {
                     // New-model instructions must precede the rest of the developer context.
-                    developer_sections.insert(0, fragment.render());
+                    developer_sections.insert(0, ContextSection::from_fragment(fragment.as_ref()));
                 }
                 "developer" if fragment.markers().0 == MULTI_AGENT_MODE_OPEN_TAG => {
                     initial_multi_agent_mode = Some(fragment);
                 }
-                "developer" => developer_sections.push(fragment.render()),
+                "developer" => {
+                    developer_sections.push(ContextSection::from_fragment(fragment.as_ref()))
+                }
                 "user" => contextual_user_sections.push(fragment.render()),
                 _ => {}
             }

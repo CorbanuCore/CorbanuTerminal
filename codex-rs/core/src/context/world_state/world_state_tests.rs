@@ -158,6 +158,43 @@ fn extension_owned_section_uses_its_snapshot_and_renderer() {
 }
 
 #[test]
+fn rendered_developer_sections_record_their_section_ids() {
+    let catalog = |id: &'static str, body: &'static str| {
+        WorldStateSectionContribution::new(id, json!({}), move |_| {
+            Some(RenderedWorldStateFragment::new(
+                "developer",
+                ("<catalog>", "</catalog>"),
+                body,
+            ))
+        })
+    };
+    let mut world_state = WorldState::default();
+    world_state.add_extension_section(catalog("executor_catalog", "executor"));
+    world_state.add_extension_section(catalog("host_catalog", "host"));
+
+    let items =
+        crate::context_manager::updates::merge_contextual_fragments(world_state.render_full());
+
+    assert_eq!(
+        items,
+        vec![codex_context_fragments::context_message(
+            "developer",
+            [
+                (
+                    "<catalog>executor</catalog>".to_string(),
+                    Some("executor_catalog"),
+                ),
+                ("<catalog>host</catalog>".to_string(), Some("host_catalog")),
+            ],
+        )]
+    );
+    assert_eq!(
+        [0, 1].map(|index| items[0].context_fragment_source(index)),
+        [Some("executor_catalog"), Some("host_catalog")]
+    );
+}
+
+#[test]
 fn missing_retained_fragment_is_rendered_again() {
     let mut world_state = WorldState::default();
     world_state.add_extension_section(
