@@ -183,6 +183,8 @@ impl std::fmt::Display for PlatformLoginHealthCheckError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ClaudeCodePlanStatus {
+    // Only built by the unreachable provider-credentials status refresh.
+    #[allow(dead_code)]
     Checking,
     ManagedToken {
         stored: bool,

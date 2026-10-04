@@ -315,6 +315,8 @@ pub(crate) enum WalletUnlockContinuation {
     OpenCorbanuApi {
         deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
     },
+    // Only the unlock tests construct this; see WalletPlanPurchaseMode.
+    #[cfg_attr(not(test), allow(dead_code))]
     OpenPlans {
         mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode,
     },
@@ -1761,6 +1763,9 @@ pub(crate) enum AppEvent {
     },
 
     /// Latest provider credential statuses loaded away from the TUI event thread.
+    // Unreachable since provider management was unified (3db6321294); remove
+    // with the rest of this status plumbing or wire it back in.
+    #[allow(dead_code)]
     ProviderCredentialStatusesReady {
         claude_status: crate::chatwidget::claude_code_login::ClaudeCodePlanStatus,
         pfterminal_plan_status: crate::chatwidget::provider_credentials::PfTerminalPlanStatus,
@@ -1927,10 +1932,16 @@ pub(crate) enum AppEvent {
         selection_policy: WalletPlanReceiptSelectionPolicy,
         receipt: crate::chatwidget::wallet_receipt::WalletPlanReceipt,
     },
+    // Unreachable since the legacy plan state was retired (66ff6579d7); remove
+    // or wire back in.
+    #[allow(dead_code)]
     OpenWalletPlanReceipt {
         receipt: crate::chatwidget::wallet_receipt::WalletPlanReceipt,
     },
     CloseWalletPlanReceipt,
+    // Unreachable since the legacy plan state was retired (66ff6579d7); remove
+    // or wire back in.
+    #[allow(dead_code)]
     WalletRecoverPlanRequested,
 
     /// Open the vault credential list.

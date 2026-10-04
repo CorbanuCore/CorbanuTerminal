@@ -3742,20 +3742,6 @@ fn mark_chat_message_cache_control(message: &mut ChatMessage) -> bool {
     true
 }
 
-#[cfg(test)]
-fn append_chat_messages_for_response_item(
-    item: ResponseItem,
-    messages: &mut Vec<ChatMessage>,
-    skipped_tool_call_ids: &mut HashSet<String>,
-) {
-    append_chat_messages_for_response_items(
-        std::iter::once(item),
-        messages,
-        skipped_tool_call_ids,
-        ChatReasoningProtocol::Independent,
-    );
-}
-
 fn append_chat_messages_for_response_items(
     items: impl IntoIterator<Item = ResponseItem>,
     messages: &mut Vec<ChatMessage>,

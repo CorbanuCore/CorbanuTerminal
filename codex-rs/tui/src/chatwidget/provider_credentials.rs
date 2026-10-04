@@ -30,8 +30,12 @@ use std::time::Duration;
 const PROVIDER_CREDENTIALS_VIEW_ID: &str = "provider-credentials";
 const CODEX_ACCOUNT_DEVICE_LOGIN_VIEW_ID: &str = "codex-account-device-login";
 const PROVIDER_API_KEY_SAVE_VIEW_ID: &str = "provider-api-key-save";
+// Unreachable since provider management was unified (3db6321294); remove
+// with the rest of this status plumbing or wire it back in.
+#[allow(dead_code)]
 const PROVIDER_STATUS_TIMEOUT: Duration = Duration::from_secs(10);
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ProviderApiKeyStatus {
     Checking,
@@ -105,6 +109,9 @@ const PROVIDER_CREDENTIAL_OPTIONS: &[ProviderCredentialOption] = &[
 ];
 
 impl ChatWidget {
+    // Unreachable since provider management was unified (3db6321294); remove
+    // with the rest of this status plumbing or wire it back in.
+    #[allow(dead_code)]
     pub(crate) fn open_provider_credentials_menu(&mut self) {
         let params = self.provider_credentials_params(
             &ClaudeCodePlanStatus::Checking,
@@ -134,6 +141,7 @@ impl ChatWidget {
             .replace_selection_view_if_present(PROVIDER_CREDENTIALS_VIEW_ID, params);
     }
 
+    #[allow(dead_code)]
     fn refresh_provider_credentials_status_in_background(&self) {
         let codex_home = self.config.codex_home.clone();
         let plan_home = codex_home.clone();
@@ -377,6 +385,7 @@ fn provider_credential_items(
         .collect()
 }
 
+#[allow(dead_code)]
 fn provider_api_key_statuses(codex_home: &Path) -> Vec<(String, ProviderApiKeyStatus)> {
     let stored_labels = match codex_vault::Vault::new(codex_home.to_path_buf()).list() {
         Ok(credentials) => credentials
@@ -406,6 +415,7 @@ fn provider_api_key_statuses(codex_home: &Path) -> Vec<(String, ProviderApiKeySt
         .collect()
 }
 
+#[allow(dead_code)]
 fn provider_api_key_unavailable_statuses() -> Vec<(String, ProviderApiKeyStatus)> {
     PROVIDER_CREDENTIAL_OPTIONS
         .iter()
