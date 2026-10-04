@@ -13,6 +13,7 @@ use tempfile::tempdir;
 use uuid::Uuid;
 use wiremock::MockServer;
 
+use crate::support::chat_ready;
 use crate::support::secret_scan;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
@@ -537,7 +538,7 @@ fn selected_title(capture: &str) -> Option<String> {
 
 fn wait_chat_ready(pane: &TmuxPane<'_>) -> Result<()> {
     pane.wait_stable_until("chat ready", READY_TIMEOUT, |capture| {
-        capture.contains("/model to change")
+        chat_ready::session_configured(capture)
             && !capture.contains("Press enter to confirm or esc to go back")
     })?;
     Ok(())

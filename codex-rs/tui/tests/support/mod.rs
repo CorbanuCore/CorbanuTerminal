@@ -1,3 +1,4 @@
+pub(crate) mod chat_ready;
 pub(crate) mod secret_scan;
 pub(crate) mod tmux;
 mod tmux_artifacts;

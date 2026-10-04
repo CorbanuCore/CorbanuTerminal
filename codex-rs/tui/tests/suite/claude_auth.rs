@@ -15,6 +15,7 @@ use tempfile::TempDir;
 use tempfile::tempdir;
 
 use super::provider_management::select_label;
+use crate::support::chat_ready;
 use crate::support::secret_scan;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
@@ -222,6 +223,11 @@ fn assert_claude_model_catalog(pane: &TmuxPane) -> Result<()> {
             && !text.contains("Press enter to confirm or esc to go back")
     })?;
     pane.wait_stable_contains("Corbanu Terminal · TPS:", READY_TIMEOUT)?;
+    pane.wait_stable_until(
+        "session configured",
+        READY_TIMEOUT,
+        chat_ready::session_configured,
+    )?;
     pane.send_literal("/model")?;
     pane.wait_stable_contains("/model", Duration::from_secs(10))?;
     pane.send_key(TmuxKey::Enter)?;
