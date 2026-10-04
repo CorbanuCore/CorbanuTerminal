@@ -505,6 +505,10 @@ async fn disconnect_and_run_expiry_cancel_an_active_upstream() {
 }
 
 #[tokio::test]
+#[cfg_attr(
+    windows,
+    ignore = "a nonblocking Windows send accepts the whole 4 MiB body at once, so the write never blocks"
+)]
 async fn owned_driver_cancels_a_proven_blocked_large_fixture_write() {
     // Supporting transport proof only: production admission still allows four
     // small packets, which cannot reliably fill a TCP send window by themselves.
