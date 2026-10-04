@@ -835,7 +835,10 @@ async fn accounting_scope_drop_clears_cancelled_sampling_and_observation_failure
 #[tracing_test::traced_test]
 async fn accounting_waits_out_another_process_holding_the_state_db_past_its_busy_timeout()
 -> anyhow::Result<()> {
-    const HELD: std::time::Duration = std::time::Duration::from_millis(5_600);
+    // Comfortably past the 5 s busy timeout: on Windows SQLite's short busy
+    // sleeps round up to the ~15 ms timer tick, so a 5.6 s hold could end
+    // before the busy wait gave up and no retry would ever be logged.
+    const HELD: std::time::Duration = std::time::Duration::from_millis(8_000);
     let fixture = Fixture::new().await?;
     let sends = Arc::new(AtomicUsize::new(0));
     let evidence = ResponseEvidence::new(fixture.sampling.clone());

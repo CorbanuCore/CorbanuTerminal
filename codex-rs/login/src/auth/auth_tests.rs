@@ -1377,7 +1377,10 @@ if not defined first_line exit /b 1
 setlocal EnableDelayedExpansion
 echo(!first_line!
 endlocal
-more +1 tokens.txt > tokens.next
+rem Drop the first line without more.com, which fails in Bazel's batched
+rem Windows test runs and would leave an empty token file behind.
+type nul > tokens.next
+for /f "usebackq skip=1 delims=" %%L in ("tokens.txt") do >>tokens.next echo(%%L
 move /y tokens.next tokens.txt >nul
 "#,
             )?;
