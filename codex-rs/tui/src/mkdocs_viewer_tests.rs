@@ -1,10 +1,17 @@
 use super::*;
 use pretty_assertions::assert_eq;
 
+/// The viewer reports canonical paths, so compare against a canonical temp
+/// root (Windows runners expose TEMP through an 8.3 short name).
+fn canonical_root(temp: &tempfile::TempDir) -> PathBuf {
+    dunce::canonicalize(temp.path()).expect("canonical tempdir")
+}
+
 #[test]
 fn loads_index_from_parent_mkdocs_project() {
     let temp = tempfile::tempdir().expect("tempdir");
-    let root = temp.path();
+    let root_buf = canonical_root(&temp);
+    let root = root_buf.as_path();
     fs::create_dir_all(root.join("docs/guide")).expect("docs dirs");
     fs::create_dir_all(root.join("src/deep")).expect("cwd dirs");
     fs::write(
@@ -50,7 +57,8 @@ nav:
 #[test]
 fn resolves_page_hint_by_suffix() {
     let temp = tempfile::tempdir().expect("tempdir");
-    let root = temp.path();
+    let root_buf = canonical_root(&temp);
+    let root = root_buf.as_path();
     fs::create_dir_all(root.join("docs/reference")).expect("docs dirs");
     fs::write(root.join("mkdocs.yml"), "site_name: Docs\n").expect("mkdocs config");
     fs::write(root.join("docs/index.md"), "# Home").expect("index");
@@ -75,8 +83,9 @@ fn resolves_page_hint_by_suffix() {
 #[test]
 fn can_open_explicit_repo_path_and_page_hint() {
     let temp = tempfile::tempdir().expect("tempdir");
-    let workspace = temp.path().join("workspace");
-    let repo = temp.path().join("repo");
+    let root = canonical_root(&temp);
+    let workspace = root.join("workspace");
+    let repo = root.join("repo");
     fs::create_dir_all(&workspace).expect("workspace");
     fs::create_dir_all(repo.join("docs/reference")).expect("docs dirs");
     fs::write(repo.join("mkdocs.yml"), "site_name: Repo Docs\n").expect("mkdocs config");
@@ -97,13 +106,14 @@ fn can_open_explicit_repo_path_and_page_hint() {
 #[test]
 fn can_open_explicit_docs_dir_without_mkdocs_config() {
     let temp = tempfile::tempdir().expect("tempdir");
-    let docs = temp.path().join("loose-docs");
+    let root = canonical_root(&temp);
+    let docs = root.join("loose-docs");
     fs::create_dir_all(&docs).expect("docs dir");
     fs::write(docs.join("index.md"), "# Loose").expect("index");
     fs::write(docs.join("exec.md"), "# Exec").expect("exec");
 
     let args = format!("--docs-dir {} exec.md", docs.display());
-    let site = load_mkdocs_site(temp.path(), Some(&args)).expect("site");
+    let site = load_mkdocs_site(&root, Some(&args)).expect("site");
 
     assert_eq!(site.docs_dir, docs);
     assert_eq!(
