@@ -3,9 +3,13 @@ use crate::runtime::test_support::test_thread_metadata;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 
+// Shared fixture file, deliberately included by several test modules.
+#[allow(clippy::duplicate_mod)]
 #[path = "accounting_retention_test_support.rs"]
 mod support;
 use support::*;
+// Shared fixture file, deliberately included by several test modules.
+#[allow(clippy::duplicate_mod)]
 #[path = "accounting_retention_atomic_test_support.rs"]
 mod atomic_support;
 use atomic_support::*;
