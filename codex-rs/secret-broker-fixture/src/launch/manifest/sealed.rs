@@ -27,7 +27,7 @@ pub struct SyntheticProfileInspectedImage {
     _sealed: SyntheticSealedImage,
 }
 
-#[cfg(target_env = "gnu")]
+#[cfg(all(target_env = "gnu", synthetic_pidfd_owner))]
 impl SyntheticProfileInspectedImage {
     // No descriptor export or configurable argv: reject rather than silently
     // replacing a manifest identity unsupported by this synthetic-only adapter.

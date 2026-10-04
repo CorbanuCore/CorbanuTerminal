@@ -55,7 +55,7 @@ impl Default for ProviderAccountMetadata {
 impl ProviderAccountMetadata {
     pub(crate) async fn discover(config: &Config) -> Self {
         let codex_home = config.codex_home.to_path_buf();
-        let openai = codex_login::discover_openai_auth_metadata(
+        let openai = codex_login::openai_auth_metadata_from_config(
             config, /*enable_codex_api_key_env*/ true,
         );
         let claude_status = crate::chatwidget::claude_code_login::current_status_with_timeout(

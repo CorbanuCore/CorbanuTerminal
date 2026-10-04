@@ -19,8 +19,8 @@ run() {
     tail -35 "$proof/$label.log"
     test "$result" = 0
 }
-run check cargo check --manifest-path codex-rs/Cargo.toml --locked -p codex-secret-broker-service --features synthetic-fixture --tests
-run fix just fix -p codex-secret-broker-service --features synthetic-fixture
+run check cargo check --manifest-path codex-rs/Cargo.toml --locked -p codex-secret-broker-service -p codex-secret-broker-fixture --tests
+run fix just fix -p codex-secret-broker-service -p codex-secret-broker-fixture
 run fmt just fmt
-run cases just test --locked -p codex-secret-broker-service --features synthetic-fixture --run-ignored only -E 'test(pf27_root_session_)' --retries 0
+run cases just test --locked -p codex-secret-broker-service -p codex-secret-broker-fixture --run-ignored only -E 'test(pf27_root_session_)' --retries 0
 printf 'PF27_SESSION_PRELIMINARY_COMPLETE\n'

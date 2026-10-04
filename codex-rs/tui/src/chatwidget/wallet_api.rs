@@ -43,7 +43,7 @@ struct ModelListResponse {
 
 impl ChatWidget {
     pub(crate) fn open_corbanu_api(&mut self) {
-        self.open_corbanu_api_with_deferred(None);
+        self.open_corbanu_api_with_deferred(/*deferred*/ None);
     }
 
     pub(crate) fn open_corbanu_api_for_deferred(
@@ -112,7 +112,7 @@ impl ChatWidget {
 
     #[cfg(test)]
     fn show_corbanu_api_loading(&mut self) {
-        self.show_corbanu_api_loading_with_deferred(None);
+        self.show_corbanu_api_loading_with_deferred(/*deferred*/ None);
     }
 
     fn show_corbanu_api_loading_with_deferred(
@@ -150,7 +150,7 @@ impl ChatWidget {
 
     #[cfg(test)]
     pub(crate) fn on_corbanu_api_loaded(&mut self, result: Result<CorbanuApiView, String>) {
-        self.on_corbanu_api_loaded_with_deferred(result, None);
+        self.on_corbanu_api_loaded_with_deferred(result, /*deferred*/ None);
     }
 
     /// Drop a wallet capability the daemon no longer honours, so the next
@@ -331,7 +331,7 @@ impl ChatWidget {
         let tx = self.app_event_tx.clone();
         self.add_info_message(
             "Submitting the wallet-authorized Corbanu API operation…".to_string(),
-            None,
+            /*hint*/ None,
         );
         tokio::spawn(async move {
             let result = WalletDaemonClient::new(home)
@@ -375,7 +375,7 @@ impl ChatWidget {
                         transaction
                             .map_or_else(String::new, |value| format!(" Settlement: {value}")),
                     ),
-                    None,
+                    /*hint*/ None,
                 );
                 if let Some(api_key) = api_key {
                     self.store_and_reveal_corbanu_api_key(api_key)
@@ -390,14 +390,14 @@ impl ChatWidget {
                 self.add_info_message(
                     "Corbanu API key created. Its plaintext is available only in the secure view."
                         .to_string(),
-                    None,
+                    /*hint*/ None,
                 );
                 self.store_and_reveal_corbanu_api_key(api_key)
             }
             Ok(CorbanuApiOperationResult::KeyRevoked { .. }) => {
                 self.add_info_message(
                     "Corbanu API key revoked. The shared dollar balance was unchanged.".to_string(),
-                    None,
+                    /*hint*/ None,
                 );
                 if refresh_surface {
                     self.open_corbanu_api_after_operation(deferred);

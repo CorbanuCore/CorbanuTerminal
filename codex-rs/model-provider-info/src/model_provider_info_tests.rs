@@ -9,7 +9,7 @@ use tempfile::tempdir;
 
 #[test]
 fn corbanu_environment_precedence_and_blank_fallback_match_both_wire_providers() {
-    let providers = built_in_model_providers(None);
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
     for provider in [
         PFTERMINAL_PLAN_PROVIDER_ID,
         PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
@@ -1726,7 +1726,8 @@ fn corbanu_api_kimi_uses_the_gateway_messages_provider() {
         Some(CORBANU_API_KIMI_K3_MODEL)
     );
     assert_eq!(
-        resolve_model_for_provider(None, PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID).as_deref(),
+        resolve_model_for_provider(/*model*/ None, PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID)
+            .as_deref(),
         Some(CLAUDE_FABLE_5_MODEL),
         "the established bare-provider default remains compatible with pre-0.1.37 sessions",
     );

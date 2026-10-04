@@ -22,7 +22,9 @@ impl InteractionGuard {
         let status = unsafe { SecKeychainGetUserInteractionAllowed(&mut previous) };
         check_status(status)?;
         // SAFETY: Boolean zero disables optional UI only for this process.
-        check_status(unsafe { SecKeychainSetUserInteractionAllowed(0) })?;
+        check_status(unsafe {
+            SecKeychainSetUserInteractionAllowed(/*state*/ 0)
+        })?;
         Ok(Self { previous })
     }
 }

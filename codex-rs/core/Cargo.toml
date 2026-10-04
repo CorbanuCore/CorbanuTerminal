@@ -185,4 +185,14 @@ zstd = { workspace = true }
 
 [package.metadata.cargo-shear]
 ignored = ["openssl-sys"]
-ignored-paths = ["tests/remote_env_windows/*.rs"]
+ignored-paths = [
+    "tests/remote_env_windows/*.rs",
+    # PF-23-S02 registration seams: declared modules that intentionally hold only docs.
+    "src/security/aggressive.rs",
+    "src/security/confidentiality/mod.rs",
+    "src/security/protected_surface.rs",
+    "src/security/recovery.rs",
+    "src/security/taint/mod.rs",
+    "src/security/transition.rs",
+    "src/security/ui_events.rs",
+]

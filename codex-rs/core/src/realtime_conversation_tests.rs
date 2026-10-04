@@ -25,7 +25,10 @@ fn pf_30_realtime_start(
     base_url: String,
     sdp: Option<String>,
 ) -> super::RealtimeStart {
-    let mut api_provider = model_client.provider_info().to_api_provider(None).unwrap();
+    let mut api_provider = model_client
+        .provider_info()
+        .to_api_provider(/*auth_mode*/ None)
+        .unwrap();
     api_provider.base_url = base_url;
     super::RealtimeStart {
         accounting: None,
@@ -135,7 +138,11 @@ async fn pf_30_s01_realtime_live_strengthening_stops_next_frame() {
     });
     let manager = super::RealtimeConversationManager::new();
     let output = manager
-        .start(pf_30_realtime_start(model_client, base_url, None))
+        .start(pf_30_realtime_start(
+            model_client,
+            base_url,
+            /*sdp*/ None,
+        ))
         .await
         .unwrap();
     let initial = tokio::time::timeout(Duration::from_secs(5), frames_rx.recv())

@@ -2,6 +2,14 @@ name: sdk
 
 on:
   workflow_call:
+    inputs:
+      cold_bazel:
+        description: >-
+          Run the Bazel-built SDK job. Its cold build takes close to 180 minutes
+          without a remote cache, so blocking PR CI skips it and nightly-ci.yml
+          runs it.
+        type: boolean
+        default: false
 
 jobs:
   python-sdk:
@@ -42,6 +50,7 @@ jobs:
         uses: ./.github/actions/check-clean-worktree
 
   sdks:
+    if: ${{ inputs.cold_bazel }}
     runs-on: ubuntu-24.04
     # Fork and secretless PRs build locally instead of using BuildBuddy remote
     # execution. A cold local Bazel build can exceed ten minutes before the SDK

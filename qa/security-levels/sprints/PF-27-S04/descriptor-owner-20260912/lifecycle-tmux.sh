@@ -27,10 +27,10 @@ run() {
     printf '%s\n' "$result" > "$out/$label.exit"
     test "$result" = 0
 }
-run focused just test -p codex-secret-broker-service --features synthetic-fixture -E 'test(pf_27_s01_owner_)' --retries 0
-run real-owner just test -p codex-secret-broker-service --features synthetic-fixture --run-ignored only -E 'test(pf_27_s01_owner_)' --retries 0
+run focused just test -p codex-secret-broker-service -p codex-secret-broker-fixture -E 'test(pf_27_s01_owner_)' --retries 0
+run real-owner just test -p codex-secret-broker-service -p codex-secret-broker-fixture --run-ignored only -E 'test(pf_27_s01_owner_)' --retries 0
 for fixture in hold inspect; do
-    run "profile-$fixture" env PF27_ELF_STATIC="/home/travis/security-round5/evidence/pf27-adapter-20260912/profile-final/$fixture" PF27_ELF_GNU=/home/travis/security-round5/evidence/pf27-sealed-20260912/verified/candidate/codex-protected-root-probe PF27_ELF_INTERPRETER=/home/travis/security-round5/evidence/pf27-static-probe-20260912/uapi-retry/candidate/codex-protected-root-probe just test -p codex-secret-broker-service --features synthetic-fixture --run-ignored only -E 'test(pf_27_s01_elf_profile_frozen_artifacts_as_data)' --retries 0
+    run "profile-$fixture" env PF27_ELF_STATIC="/home/travis/security-round5/evidence/pf27-adapter-20260912/profile-final/$fixture" PF27_ELF_GNU=/home/travis/security-round5/evidence/pf27-sealed-20260912/verified/candidate/codex-protected-root-probe PF27_ELF_INTERPRETER=/home/travis/security-round5/evidence/pf27-static-probe-20260912/uapi-retry/candidate/codex-protected-root-probe just test -p codex-secret-broker-service -p codex-secret-broker-fixture --run-ignored only -E 'test(pf_27_s01_elf_profile_frozen_artifacts_as_data)' --retries 0
 done
-run service just test -p codex-secret-broker-service --features synthetic-fixture --retries 0
+run service just test -p codex-secret-broker-service -p codex-secret-broker-fixture --retries 0
 printf 'PF27_OWNER_TMUX_COMPLETE\n'

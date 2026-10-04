@@ -28,7 +28,7 @@ fn credential_authority_revoke_during_use_linearizes_after_the_active_resolution
         human(),
         RevocationTarget::AllActiveAuthority,
         RevocationReason::HumanRequest,
-        101,
+        /*created_at_unix_seconds*/ 101,
     )
     .expect("revocation event");
     revocations

@@ -2,6 +2,8 @@ import contextlib
 import copy
 import io
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -14,6 +16,105 @@ import security_platform_probe as probe
 
 
 class SecurityPlatformProbeTests(unittest.TestCase):
+    def test_git_autocrlf_checkout_preserves_archival_probe_identity(self) -> None:
+        repository = Path(__file__).resolve().parents[1]
+        probe_relative = Path("scripts/security_platform_probe.py")
+        canonical_source = (repository / probe_relative).read_bytes()
+        self.assertNotIn(b"\r\n", canonical_source)
+        evidence_directory = repository / "qa/security-levels/sprints/PF-27-S03/results"
+        evidence_bytes = {
+            platform: (evidence_directory / f"{platform}.json").read_bytes()
+            for platform in ("linux", "macos", "windows")
+        }
+        # The disposable repository must not inherit caller Git configuration,
+        # attributes, or worktree/index overrides.
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith("GIT_")
+        }
+        environment.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+
+            def git(*arguments: str) -> None:
+                completed = subprocess.run(
+                    ["git", *arguments],
+                    cwd=checkout,
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=False,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+
+            git("init", "--quiet")
+            git("config", "core.autocrlf", "true")
+            git("config", "core.attributesFile", os.devnull)
+            git("config", "core.safecrlf", "false")
+            checked_out_probe = checkout / probe_relative
+            checked_out_probe.parent.mkdir()
+            checked_out_probe.write_bytes(canonical_source)
+            for platform, contents in evidence_bytes.items():
+                (checkout / f"{platform}.json").write_bytes(contents)
+            git("add", "--", probe_relative.as_posix())
+
+            def check_evidence(stage: str, expected_exit: int) -> None:
+                for platform, contents in evidence_bytes.items():
+                    with self.subTest(stage=stage, platform=platform):
+                        evidence = checkout / f"{platform}.json"
+                        self.assertEqual(evidence.read_bytes(), contents)
+                        completed = subprocess.run(
+                            [
+                                sys.executable,
+                                str(checked_out_probe),
+                                "--validate-evidence",
+                                str(evidence),
+                            ],
+                            capture_output=True,
+                            text=True,
+                            timeout=30,
+                            check=False,
+                        )
+                        self.assertEqual(
+                            completed.returncode, expected_exit, completed.stderr
+                        )
+                        if expected_exit == 0:
+                            self.assertEqual(
+                                completed.stdout.strip(),
+                                "security-platform-probe: archival evidence valid",
+                            )
+                            self.assertEqual(completed.stderr, "")
+                        else:
+                            self.assertEqual(
+                                completed.stderr.strip(),
+                                "security-platform-probe: ContractError: wrong_probe_identity",
+                            )
+
+            # Exercise Git's actual index-to-worktree conversion, without a
+            # source attribute, then with the repository's checked-in rules.
+            checked_out_probe.unlink()
+            git("checkout-index", "--force", "--", probe_relative.as_posix())
+            self.assertEqual(
+                checked_out_probe.read_bytes(),
+                canonical_source.replace(b"\n", b"\r\n"),
+            )
+            check_evidence("baseline CRLF checkout", 1)
+
+            (checkout / ".gitattributes").write_bytes(
+                (repository / ".gitattributes").read_bytes()
+            )
+            git("add", "--", ".gitattributes")
+            checked_out_probe.unlink()
+            git("checkout-index", "--force", "--", probe_relative.as_posix())
+            self.assertEqual(checked_out_probe.read_bytes(), canonical_source)
+            check_evidence("LF-pinned checkout", 0)
+
+            checked_out_probe.write_bytes(canonical_source + b"\n# identity mutation\n")
+            check_evidence("genuine source mutation", 1)
+
     def test_contract_regressions(self) -> None:
         probe.self_test()
 

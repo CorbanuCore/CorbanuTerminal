@@ -202,7 +202,8 @@ impl KeyringOperationPermit {
 impl Drop for KeyringOperationPermit {
     fn drop(&mut self) {
         if !self.finished {
-            self.gate.finish(self.generation, false);
+            self.gate
+                .finish(self.generation, /*completed_successfully*/ false);
         }
     }
 }
@@ -239,7 +240,7 @@ where
             let _ = sender.send(result);
         });
     if let Err(error) = spawn_result {
-        gate.finish(generation, false);
+        gate.finish(generation, /*completed_successfully*/ false);
         return Err(CredentialStoreError::from_message(format!(
             "failed to start OS keyring {operation}: {error}"
         )));

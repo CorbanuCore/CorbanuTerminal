@@ -44,7 +44,7 @@ fn status_version_normalization_preserves_flush_frames() {
 
 #[test]
 fn status_update_version_normalization_preserves_target_and_other_versions() {
-    let version = env!("CARGO_PKG_VERSION");
+    let version = crate::version::CODEX_CLI_VERSION;
     let rendered = format!(
         "│ ✨\u{200a}Update available! {version} -> {version}          │\naccount: {version}\n"
     );
@@ -63,7 +63,7 @@ fn status_update_version_normalization_preserves_target_and_other_versions() {
 
 #[test]
 fn status_header_version_normalization_only_masks_the_compiled_version() {
-    let version = env!("CARGO_PKG_VERSION");
+    let version = crate::version::CODEX_CLI_VERSION;
     let rendered = format!(
         "│ >_ Corbanu Terminal (v{version})            │\naccount: {version}\n│ >_ Corbanu Terminal (v{version})            │"
     );

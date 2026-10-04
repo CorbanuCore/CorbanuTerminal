@@ -20,5 +20,5 @@ sha256sum qa/security-levels/sprints/PF-27-S04/descriptor-root-dispatch-20260912
 readelf -hlWd "$PF27_DISPATCH_RELAY" > "$out/relay-elf.txt"
 export PF27_ELF_GNU=/home/travis/security-round5/evidence/pf27-sealed-20260912/verified/candidate/codex-protected-root-probe
 export PF27_ELF_INTERPRETER=/home/travis/security-round5/evidence/pf27-static-probe-20260912/uapi-retry/candidate/codex-protected-root-probe
-run relay-profile env PF27_ELF_STATIC="$PF27_DISPATCH_RELAY" just test --locked -p codex-secret-broker-service --features synthetic-fixture --run-ignored only -E 'test(pf_27_s01_elf_profile_frozen_artifacts_as_data)' --retries 0
-run dispatch-initial just test --locked -p codex-secret-broker-service --features synthetic-fixture --run-ignored only -E 'test(pf27_root_dispatch_)' --retries 0
+run relay-profile env PF27_ELF_STATIC="$PF27_DISPATCH_RELAY" just test --locked -p codex-secret-broker-service -p codex-secret-broker-fixture --run-ignored only -E 'test(pf_27_s01_elf_profile_frozen_artifacts_as_data)' --retries 0
+run dispatch-initial just test --locked -p codex-secret-broker-service -p codex-secret-broker-fixture --run-ignored only -E 'test(pf27_root_dispatch_)' --retries 0

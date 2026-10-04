@@ -8,7 +8,7 @@ fn configured(
     control: CredentialControl,
 ) -> ProviderStatusSnapshot {
     let catalog = ProviderCatalog::from_runtime_providers(
-        &codex_model_provider_info::built_in_model_providers(None),
+        &codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None),
     );
     let entry = catalog.get(id).unwrap();
     ProviderStatusSnapshot {

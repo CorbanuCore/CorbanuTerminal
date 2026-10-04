@@ -26,12 +26,12 @@ run() {
 run adapter just test --locked -p codex-linux-pidfd-spawn --features synthetic-fixture --retries 0
 run adapter-os just test --locked -p codex-linux-pidfd-spawn --features synthetic-fixture --run-ignored only -E '!test(pf27_unqualified_libc_fails_closed)' --retries 0
 run default just test --locked -p codex-secret-broker-service --retries 0
-run pair just test --locked -p codex-secret-broker-service --features synthetic-fixture -E 'test(pf_27_s01_pair_)' --retries 0
-run real-pair just test --locked -p codex-secret-broker-service --features synthetic-fixture --run-ignored only -E 'test(pf_27_s01_pair_)' --retries 0
-run owner just test --locked -p codex-secret-broker-service --features synthetic-fixture -E 'test(pf_27_s01_owner_)' --retries 0
-run real-owner just test --locked -p codex-secret-broker-service --features synthetic-fixture --run-ignored only -E 'test(pf_27_s01_owner_)' --retries 0
+run pair just test --locked -p codex-secret-broker-service -p codex-secret-broker-fixture -E 'test(pf_27_s01_pair_)' --retries 0
+run real-pair just test --locked -p codex-secret-broker-service -p codex-secret-broker-fixture --run-ignored only -E 'test(pf_27_s01_pair_)' --retries 0
+run owner just test --locked -p codex-secret-broker-service -p codex-secret-broker-fixture -E 'test(pf_27_s01_owner_)' --retries 0
+run real-owner just test --locked -p codex-secret-broker-service -p codex-secret-broker-fixture --run-ignored only -E 'test(pf_27_s01_owner_)' --retries 0
 for fixture in "${PF27_PROFILE_HOLD:?}" "${PF27_PROFILE_INSPECT:?}"; do
-    run "profile-$(basename "$fixture")" env PF27_ELF_STATIC="$fixture" just test --locked -p codex-secret-broker-service --features synthetic-fixture --run-ignored only -E 'test(pf_27_s01_elf_profile_frozen_artifacts_as_data)' --retries 0
+    run "profile-$(basename "$fixture")" env PF27_ELF_STATIC="$fixture" just test --locked -p codex-secret-broker-service -p codex-secret-broker-fixture --run-ignored only -E 'test(pf_27_s01_elf_profile_frozen_artifacts_as_data)' --retries 0
 done
-run service just test --locked -p codex-secret-broker-service --features synthetic-fixture --retries 0
+run service just test --locked -p codex-secret-broker-service -p codex-secret-broker-fixture --retries 0
 printf 'PF27_PAIR_A_TMUX_COMPLETE\n'

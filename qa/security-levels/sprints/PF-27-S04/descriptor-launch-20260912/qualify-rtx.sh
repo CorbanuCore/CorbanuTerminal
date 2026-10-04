@@ -40,11 +40,11 @@ for fixture in hold inspect; do
     readelf -hlWd "$out/$fixture" > "$out/$fixture-elf.txt"
     if grep -Eq 'INTERP|NEEDED' "$out/$fixture-elf.txt"; then exit 1; fi
     sha256sum "$out/$fixture" >> "$out/artifacts.sha256"
-    run "profile-$fixture" env PF27_ELF_STATIC="$out/$fixture" PF27_ELF_GNU=/home/travis/security-round5/evidence/pf27-sealed-20260912/verified/candidate/codex-protected-root-probe PF27_ELF_INTERPRETER=/home/travis/security-round5/evidence/pf27-static-probe-20260912/uapi-retry/candidate/codex-protected-root-probe just test -p codex-secret-broker-service --features synthetic-fixture --run-ignored only -E 'test(pf_27_s01_elf_profile_frozen_artifacts_as_data)' --retries 0
+    run "profile-$fixture" env PF27_ELF_STATIC="$out/$fixture" PF27_ELF_GNU=/home/travis/security-round5/evidence/pf27-sealed-20260912/verified/candidate/codex-protected-root-probe PF27_ELF_INTERPRETER=/home/travis/security-round5/evidence/pf27-static-probe-20260912/uapi-retry/candidate/codex-protected-root-probe just test -p codex-secret-broker-service -p codex-secret-broker-fixture --run-ignored only -E 'test(pf_27_s01_elf_profile_frozen_artifacts_as_data)' --retries 0
 done
 run default just test -p codex-linux-pidfd-spawn --retries 0 --no-tests warn
 run focused just test -p codex-linux-pidfd-spawn --features synthetic-fixture --retries 0 --test-threads 1
 run os just test -p codex-linux-pidfd-spawn --features synthetic-fixture --run-ignored only -E 'not test(pf27_unqualified_libc_fails_closed)' --retries 0 --test-threads 1
-run service just test -p codex-secret-broker-service --features synthetic-fixture --retries 0 --test-threads 4
+run service just test -p codex-secret-broker-service -p codex-secret-broker-fixture --retries 0 --test-threads 4
 run archive cargo nextest archive --manifest-path codex-rs/Cargo.toml -p codex-linux-pidfd-spawn --features synthetic-fixture --archive-file "$out/adapter-tests.tar.zst"
 printf 'COMPLETE\n'

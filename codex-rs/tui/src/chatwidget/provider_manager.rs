@@ -404,8 +404,9 @@ mod tests {
                 availability: ProviderAvailabilityState::Ready,
             })
             .collect::<Vec<_>>();
-        chat.open_provider_manager(&catalog, &statuses, None);
-        let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 80);
+        chat.open_provider_manager(&catalog, &statuses, /*focused_provider*/ None);
+        let rendered =
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 80);
         insta::assert_snapshot!("provider_manager_shared_status", rendered);
     }
 
@@ -429,7 +430,7 @@ mod tests {
             .collect::<Vec<_>>();
         let focused_provider = statuses[2].id.clone();
 
-        chat.open_provider_manager(&catalog, &statuses, None);
+        chat.open_provider_manager(&catalog, &statuses, /*focused_provider*/ None);
         chat.open_provider_manager(&catalog, &statuses, Some(&focused_provider));
         assert_eq!(chat.provider_manager_selected_index(), Some(2));
 
@@ -451,7 +452,7 @@ mod tests {
             current: ProviderCurrentState::NotCurrent,
             availability: ProviderAvailabilityState::Ready,
         }];
-        chat.open_provider_manager(&catalog, &statuses, None);
+        chat.open_provider_manager(&catalog, &statuses, /*focused_provider*/ None);
 
         chat.handle_key_event(crossterm::event::KeyEvent::new(
             crossterm::event::KeyCode::Enter,
@@ -469,7 +470,7 @@ mod tests {
     fn external_credential_copy_never_claims_deletion() {
         let status = ProviderStatusSnapshot {
             id: ProviderCatalog::from_runtime_providers(
-                &codex_model_provider_info::built_in_model_providers(None),
+                &codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None),
             )
             .entries()[0]
                 .id

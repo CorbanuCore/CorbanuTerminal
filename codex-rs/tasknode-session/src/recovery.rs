@@ -31,7 +31,7 @@ pub fn resolve_scoped(
         requested_origin,
         |client, path| {
             client
-                .request_blocking(Method::GET, path, None)
+                .request_blocking(Method::GET, path, /*body*/ None)
                 .map_err(|error| error.to_string())
         },
     )

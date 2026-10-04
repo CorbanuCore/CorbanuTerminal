@@ -103,7 +103,7 @@ pub(super) fn normalized_backend_snapshot<T: std::fmt::Display>(value: &T) -> St
 
 #[test]
 fn backend_snapshot_normalizes_status_header_and_update_version() {
-    let version = env!("CARGO_PKG_VERSION");
+    let version = crate::version::CODEX_CLI_VERSION;
     let rendered = format!(
         "\"│ >_ Corbanu Terminal (v{version})│\"\n\"│ Update available! {version} -> 9.9.9│\""
     );

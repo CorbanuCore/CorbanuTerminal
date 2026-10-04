@@ -166,19 +166,19 @@ Corbanu Terminal ships built-in providers. You do not need to define these provi
 manually in `config.toml`; you only need a credential for the provider you plan
 to use.
 
-| Provider     | Provider id   | Credential           | Current model examples                                                               |
-| ------------ | ------------- | -------------------- | ------------------------------------------------------------------------------------ |
-| OpenAI Codex | `openai`      | Codex account login  | `gpt-5.6-sol`, `gpt-5.6-luna`, `gpt-5.6-terra`                                       |
-| Claude Plan  | `claude-plan` | Claude Code login    | `claude-opus-5-5-plan`, `claude-opus-5-plan`, `claude-fable-5-1-plan`, `claude-fable-5-plan`                 |
-| Anthropic    | `anthropic`   | `ANTHROPIC_API_KEY`  | `claude-opus-5`, `claude-fable-5-1`, `claude-fable-5`                               |
-| Ambient      | `ambient`     | `AMBIENT_API_KEY`    | `z-ai/glm-5.2`                                                                     |
-| Kimi Code    | `kimi-code`   | `KIMI_API_KEY`       | `k3`                                                                                 |
-| Z.AI         | `zai`         | `ZAI_API_KEY`        | `glm-5.2`                                                                            |
-| DeepSeek     | `deepseek`    | `DEEPSEEK_API_KEY`   | `deepseek-flash`, `deepseek-v4-flash`                                                |
-| OpenRouter   | `openrouter`  | `OPENROUTER_API_KEY` | `deepseek/deepseek-v4-flash-0731`, `moonshotai/kimi-k3`, and other catalogued routes |
-| Meta         | `meta`        | `MODEL_API_KEY`      | `muse-spark-1.1`                                                                     |
-| Baseten      | `baseten`     | `BASETEN_API_KEY`    | `zai-org/GLM-5.2`                                                                    |
-| Vercel       | `vercel`      | `AI_GATEWAY_API_KEY` | `zai/glm-5.3-flash`, `zai/glm-5.3`, Vercel Kimi K3 and DeepSeek V4 Pro routes        |
+| Provider     | Provider id   | Credential           | Current model examples                                                                       |
+| ------------ | ------------- | -------------------- | -------------------------------------------------------------------------------------------- |
+| OpenAI Codex | `openai`      | Codex account login  | `gpt-5.6-sol`, `gpt-5.6-luna`, `gpt-5.6-terra`                                               |
+| Claude Plan  | `claude-plan` | Claude Code login    | `claude-opus-5-5-plan`, `claude-opus-5-plan`, `claude-fable-5-1-plan`, `claude-fable-5-plan` |
+| Anthropic    | `anthropic`   | `ANTHROPIC_API_KEY`  | `claude-opus-5`, `claude-fable-5-1`, `claude-fable-5`                                        |
+| Ambient      | `ambient`     | `AMBIENT_API_KEY`    | `z-ai/glm-5.2`                                                                               |
+| Kimi Code    | `kimi-code`   | `KIMI_API_KEY`       | `k3`                                                                                         |
+| Z.AI         | `zai`         | `ZAI_API_KEY`        | `glm-5.2`                                                                                    |
+| DeepSeek     | `deepseek`    | `DEEPSEEK_API_KEY`   | `deepseek-flash`, `deepseek-v4-flash`                                                        |
+| OpenRouter   | `openrouter`  | `OPENROUTER_API_KEY` | `deepseek/deepseek-v4-flash-0731`, `moonshotai/kimi-k3`, and other catalogued routes         |
+| Meta         | `meta`        | `MODEL_API_KEY`      | `muse-spark-1.1`                                                                             |
+| Baseten      | `baseten`     | `BASETEN_API_KEY`    | `zai-org/GLM-5.2`                                                                            |
+| Vercel       | `vercel`      | `AI_GATEWAY_API_KEY` | `zai/glm-5.3-flash`, `zai/glm-5.3`, Vercel Kimi K3 and DeepSeek V4 Pro routes                |
 
 The first-run provider picker and `/providers` expose account/plan routes and
 all of the API-key rows above. Provider keys entered through the Corbanu Terminal UI

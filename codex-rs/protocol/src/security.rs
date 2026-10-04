@@ -23,6 +23,8 @@ pub struct SecurityInspectorEvent {
     pub epoch: AuthorityEpoch,
 }
 
+// Short-lived wire type, like the other protocol enums allowed below; boxing
+// the grant variant would change no behavior and only add an allocation.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]

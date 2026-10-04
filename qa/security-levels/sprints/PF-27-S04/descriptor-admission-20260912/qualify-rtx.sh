@@ -17,8 +17,8 @@ sha256sum "$fixture" "$PF27_PAIR_CONNECT" > "$out/fixture-hashes.txt"
 test "$(sha256sum "$PF27_PAIR_CONNECT" | cut -d ' ' -f1)" = 4b1e56b4bab25158d089197e5fe02c1523e9e52ad77075acba9c7ee96bb3fa17
 readelf -hlWd "$PF27_PAIR_CONNECT" > "$out/fixture-elf.txt"
 # Profile as data must pass before any connector invocation.
-run connector-profile env PF27_ELF_STATIC="$PF27_PAIR_CONNECT" just test --locked -p codex-secret-broker-service --features synthetic-fixture --run-ignored only -E 'test(pf_27_s01_elf_profile_frozen_artifacts_as_data)' --retries 0
-run admission just test --locked -p codex-secret-broker-service --features synthetic-fixture --run-ignored all -E 'test(pf_27_s01_admission_)' --retries 0
+run connector-profile env PF27_ELF_STATIC="$PF27_PAIR_CONNECT" just test --locked -p codex-secret-broker-service -p codex-secret-broker-fixture --run-ignored only -E 'test(pf_27_s01_elf_profile_frozen_artifacts_as_data)' --retries 0
+run admission just test --locked -p codex-secret-broker-service -p codex-secret-broker-fixture --run-ignored all -E 'test(pf_27_s01_admission_)' --retries 0
 run strict-clippy cargo clippy --manifest-path codex-rs/Cargo.toml --locked --no-deps -p codex-secret-broker-service -p codex-linux-pidfd-spawn --features synthetic-fixture --tests -- -D warnings
 sha256sum codex-rs/Cargo.lock MODULE.bazel.lock > "$out/locks-before.txt"
 run bazel-parity bazel --output_base="${PF27_BAZEL_TARGET:?exclusive target required}" mod deps --lockfile_mode=error

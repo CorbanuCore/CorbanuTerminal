@@ -61,20 +61,14 @@ async fn host_skill_catalog_refreshes_once_when_skills_change() -> Result<()> {
 model = "mock-model"
 approval_policy = "never"
 sandbox_mode = "read-only"
-model_provider = "mock_provider"
+model_provider = "openai"
+openai_base_url = "{}/v1"
 
 [skills]
 include_instructions = true
 
 [skills.bundled]
 enabled = false
-
-[model_providers.mock_provider]
-name = "Mock provider for test"
-base_url = "{}/v1"
-wire_api = "responses"
-request_max_retries = 0
-stream_max_retries = 0
 "#,
             server.uri()
         ),

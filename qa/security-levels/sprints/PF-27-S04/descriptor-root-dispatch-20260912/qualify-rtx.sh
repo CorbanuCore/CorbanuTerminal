@@ -9,8 +9,8 @@ run dispatch-relay-build cc -nostdlib -static-pie -fPIE -fcf-protection=none -fn
 sha256sum "$fixture" "$PF27_DISPATCH_RELAY" > "$out/dispatch-relay-hashes.txt"
 test "$(sha256sum "$PF27_DISPATCH_RELAY" | cut -d ' ' -f1)" = 36f1fa188f3e95faa5643ec20e6640504ce44a2cfb3093e7aa0f205ec3a32867
 readelf -hlWd "$PF27_DISPATCH_RELAY" > "$out/dispatch-relay-elf.txt"
-run dispatch-relay-profile env PF27_ELF_STATIC="$PF27_DISPATCH_RELAY" just test --locked -p codex-secret-broker-service --features synthetic-fixture --run-ignored only -E 'test(pf_27_s01_elf_profile_frozen_artifacts_as_data)' --retries 0
-run root-dispatch just test --locked -p codex-secret-broker-service --features synthetic-fixture --run-ignored only -E 'test(pf27_root_dispatch_)' --retries 0
+run dispatch-relay-profile env PF27_ELF_STATIC="$PF27_DISPATCH_RELAY" just test --locked -p codex-secret-broker-service -p codex-secret-broker-fixture --run-ignored only -E 'test(pf_27_s01_elf_profile_frozen_artifacts_as_data)' --retries 0
+run root-dispatch just test --locked -p codex-secret-broker-service -p codex-secret-broker-fixture --run-ignored only -E 'test(pf27_root_dispatch_)' --retries 0
 sha256sum codex-rs/Cargo.lock MODULE.bazel.lock > "$out/dispatch-locks-after.txt"
 diff "$out/locks-before.txt" "$out/dispatch-locks-after.txt"
 git diff --exit-code

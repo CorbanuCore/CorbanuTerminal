@@ -21,7 +21,7 @@ fn inspected() -> SyntheticManifestInspection {
         _recipe: SyntheticLaunchRecipe::new(
             "/unused".into(),
             [(101, 201), (102, 202), (103, 203)],
-            204,
+            /*anchor_gid*/ 204,
         )
         .unwrap(),
         _digest: files::image_digest(&mut bytes().as_slice(), IMAGE_LIMIT).unwrap(),
@@ -157,7 +157,7 @@ fn pf_27_s01_sealed_image_every_failure_drops_both_handles() {
             assert_closed(created);
         }
     }
-    let mut incomplete = Faults::new(0);
+    let mut incomplete = Faults::new(/*fail*/ 0);
     incomplete.incomplete = true;
     assert_eq!(
         prepare(inspected(), &mut incomplete)
@@ -167,7 +167,7 @@ fn pf_27_s01_sealed_image_every_failure_drops_both_handles() {
         "image seals incomplete"
     );
     assert_closed(incomplete.created.unwrap());
-    let mut corrupt = Faults::new(0);
+    let mut corrupt = Faults::new(/*fail*/ 0);
     corrupt.corrupt = true;
     assert_eq!(
         prepare(inspected(), &mut corrupt)
@@ -200,9 +200,9 @@ fn pf_27_s01_sealed_image_stale_source_and_invalid_bytes_deny() {
 #[test]
 fn pf_27_s01_sealed_copy_bounds_and_partial_io_errors() {
     let mut output = Vec::new();
-    copy_bounded(&mut bytes().as_slice(), &mut output, 96).unwrap();
+    copy_bounded(&mut bytes().as_slice(), &mut output, /*limit*/ 96).unwrap();
     assert_eq!(output, bytes());
-    assert!(copy_bounded(&mut bytes().as_slice(), &mut Vec::new(), 95).is_err());
+    assert!(copy_bounded(&mut bytes().as_slice(), &mut Vec::new(), /*limit*/ 95).is_err());
     struct Broken;
     impl Read for Broken {
         fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
@@ -220,13 +220,13 @@ fn pf_27_s01_sealed_copy_bounds_and_partial_io_errors() {
     let data = bytes();
     let mut partial = data.as_slice().chain(Broken);
     assert_eq!(
-        copy_bounded(&mut partial, &mut Vec::new(), 200)
+        copy_bounded(&mut partial, &mut Vec::new(), /*limit*/ 200)
             .unwrap_err()
             .to_string(),
         "image copy read failed"
     );
     assert_eq!(
-        copy_bounded(&mut bytes().as_slice(), &mut Broken, 200)
+        copy_bounded(&mut bytes().as_slice(), &mut Broken, /*limit*/ 200)
             .unwrap_err()
             .to_string(),
         "image copy write failed"
@@ -249,7 +249,7 @@ fn pf_27_s01_sealed_copy_bounds_and_partial_io_errors() {
     }
     let mut writer = Partial { calls: 0 };
     assert_eq!(
-        copy_bounded(&mut data.as_slice(), &mut writer, 200)
+        copy_bounded(&mut data.as_slice(), &mut writer, /*limit*/ 200)
             .unwrap_err()
             .to_string(),
         "image copy write failed"

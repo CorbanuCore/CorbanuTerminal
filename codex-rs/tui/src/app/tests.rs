@@ -14295,12 +14295,18 @@ async fn interrupt_without_active_turn_is_treated_as_handled() {
 async fn override_turn_context_sends_thread_settings_update() {
     Box::pin(async {
         let mut app = make_test_app().await;
-        // This test switches GPT models, so start with a compatible provider.
-        // The default fixture uses Ambient, which rejects GPT before submission.
-        let (chat_widget, _events, _ops) =
-            crate::chatwidget::tests::helpers::make_chatwidget_manual(Some("gpt-5.3-codex")).await;
-        app.chat_widget = chat_widget;
-        app.config = app.chat_widget.config_ref().clone();
+        // The update below selects gpt-5.4. Exact model/provider validation rejects
+        // that model on the default Ambient provider, so run the thread on OpenAI.
+        let openai_provider = app
+            .chat_widget
+            .config_ref()
+            .model_providers
+            .get(OPENAI_PROVIDER_ID)
+            .cloned()
+            .expect("OpenAI provider");
+        app.chat_widget
+            .set_model_provider(OPENAI_PROVIDER_ID.to_string(), openai_provider);
+        app.chat_widget.set_model("gpt-5.5");
         let mut app_server =
             crate::start_embedded_app_server_for_picker(app.chat_widget.config_ref())
                 .await
@@ -14818,7 +14824,9 @@ async fn provider_manager_open_preserves_lazy_command_authorization_without_shar
         reused.resolve_provider("command").unwrap().availability,
         codex_provider_auth::ProviderAvailabilityState::Ready
     );
-    let fallback = super::provider_management_status::provider_manager_status_host(&config, None);
+    let fallback = super::provider_management_status::provider_manager_status_host(
+        &config, /*shared*/ None,
+    );
     assert_eq!(
         fallback.resolve_provider("command").unwrap().availability,
         codex_provider_auth::ProviderAvailabilityState::Ready
@@ -14836,7 +14844,7 @@ fn provider_manager_claude_intent_uses_typed_status_and_recovery_source() {
     use codex_provider_auth::claude_account_flow::ClaudeUnauthorizedRecoverySource as Source;
 
     let catalog = codex_provider_auth::ProviderCatalog::from_runtime_providers(
-        &codex_model_provider_info::built_in_model_providers(None),
+        &codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None),
     );
     let provider_id = catalog
         .get(codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID)
@@ -15172,7 +15180,8 @@ fn embedded_provider_key_save_is_visible_to_one_bulk_status_refresh() -> Result<
             .await?;
         config.model_provider_id = provider_id.into();
         config.model_provider = provider.clone();
-        config.model_providers = codex_model_provider_info::built_in_model_providers(None);
+        config.model_providers =
+            codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None);
         config.model_providers.insert(provider_id.into(), provider);
 
         let app_server = crate::start_embedded_app_server_for_picker(&config).await?;

@@ -4,16 +4,17 @@ mod files;
 mod schema;
 mod sealed;
 // Construction-stage private entry points, exercised by non-root OS tests.
-#[cfg(target_env = "gnu")]
+// Cargo-only: see build.rs.
+#[cfg(all(target_env = "gnu", synthetic_pidfd_owner))]
 #[allow(dead_code)]
 mod pair;
-#[cfg(target_env = "gnu")]
+#[cfg(all(target_env = "gnu", synthetic_pidfd_owner))]
 #[allow(dead_code)]
 mod root_dispatch;
-#[cfg(target_env = "gnu")]
+#[cfg(all(target_env = "gnu", synthetic_pidfd_owner))]
 #[allow(dead_code)]
 mod spawn;
-#[cfg(target_env = "gnu")]
+#[cfg(all(target_env = "gnu", synthetic_pidfd_owner))]
 #[allow(dead_code)]
 mod system_preflight;
 pub use sealed::SyntheticSealedImage;

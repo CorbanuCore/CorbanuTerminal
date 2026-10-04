@@ -3479,6 +3479,7 @@ async fn spawn_model_selection_popup_deepseek_provider_snapshot() {
 async fn model_selection_popup_kimi_code_provider_snapshot() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some(KIMI_CODE_K3_MODEL)).await;
     chat.thread_id = Some(ThreadId::new());
+    chat.config.model_provider_id = KIMI_CODE_PROVIDER_ID.to_string();
     let presets = chat
         .model_catalog
         .try_list_models()
@@ -5148,11 +5149,11 @@ async fn model_picker_runtime_refresh_keeps_claude_out_of_openai_tab() {
     );
     let presets = chat.model_catalog.try_list_models().unwrap();
     chat.open_all_models_popup(presets);
-    let claude = render_bottom_popup_with_height(&chat, 140, 36);
+    let claude = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 36);
     assert!(claude.contains("[Claude Plan]"), "{claude}");
     assert!(claude.contains(&format!("Model: {CLAUDE_FABLE_5_PLAN_MODEL}.")));
     for _ in 0..16 {
-        let popup = render_bottom_popup_with_height(&chat, 140, 36);
+        let popup = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 36);
         if popup.contains("[OpenAI]") {
             assert!(
                 !popup.contains(&format!("Model: {CLAUDE_FABLE_5_PLAN_MODEL}.")),

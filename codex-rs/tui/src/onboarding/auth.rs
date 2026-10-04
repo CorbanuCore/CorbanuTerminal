@@ -722,7 +722,7 @@ impl AuthModeWidget {
             },
         );
         if transition.applied {
-            self.set_error(None);
+            self.set_error(/*message*/ None);
         } else {
             self.set_error(Some("Selected provider could not be applied.".to_string()));
         }
@@ -809,7 +809,7 @@ impl AuthModeWidget {
             }
         }
         *self.provider_statuses.write().unwrap() = self.provider_status_host.resolve();
-        self.set_error(None);
+        self.set_error(/*message*/ None);
         if self.provider_picker_enabled() {
             *self.sign_in_state.write().unwrap() = SignInState::PickMode;
         } else {
@@ -2620,7 +2620,7 @@ mod tests {
         widget.forced_login_method = None;
         widget.api_key_provider_options =
             vec![api_key_option("deepseek", "DeepSeek", "DEEPSEEK_API_KEY")];
-        assert!(widget.select_provider_api_key_option(0));
+        assert!(widget.select_provider_api_key_option(/*index*/ 0));
         *widget.sign_in_state.write().unwrap() =
             SignInState::ApiKeyEntry(ApiKeyInputState::default());
 
@@ -3042,7 +3042,7 @@ Your account and billing path change only after success. Esc keeps the current m
     #[tokio::test]
     async fn device_code_guidance_keeps_numbered_steps_and_cancel_visible() {
         let (widget, _tmp) = widget_forced_chatgpt().await;
-        widget.set_animations_suppressed(true);
+        widget.set_animations_suppressed(/*suppressed*/ true);
         let state = ContinueWithDeviceCodeState::ready(
             "request-1".to_string(),
             "login-1".to_string(),

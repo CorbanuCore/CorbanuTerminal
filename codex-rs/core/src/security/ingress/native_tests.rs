@@ -19,7 +19,7 @@ fn pf_30_s01_native_tool_and_mcp_origins_bind_before_admission() {
         let item = tool_item();
         ingress.register_call("call-1", SourceKind::Tool);
         ingress.register_call("call-1", kind);
-        ingress.observe(std::slice::from_ref(&item), 1);
+        ingress.observe(std::slice::from_ref(&item), /*retrieved_at_unix_ms*/ 1);
         let raw = serde_json::to_vec(&item).unwrap();
         let key = ContentDigest::of(&raw);
         let pending = ingress.pending.get(&key).unwrap();
@@ -48,7 +48,7 @@ fn pf_30_s01_native_tool_and_mcp_origins_bind_before_admission() {
 fn pf_30_s01_new_tool_cannot_supply_its_own_registered_origin() {
     let mut ingress = NativeIngress::default();
     let item = tool_item();
-    ingress.observe(std::slice::from_ref(&item), 1);
+    ingress.observe(std::slice::from_ref(&item), /*retrieved_at_unix_ms*/ 1);
     assert!(ingress.pending.is_empty());
     assert!(ingress.project(&[item]).is_err());
 }
@@ -65,11 +65,14 @@ fn pf_30_s01_native_transcript_metadata_is_host_owned_and_stable() {
         phase: None,
         internal_chat_message_metadata_passthrough: None,
     };
-    ingress.observe(std::slice::from_ref(&item), 1);
+    ingress.observe(std::slice::from_ref(&item), /*retrieved_at_unix_ms*/ 1);
     let raw = serde_json::to_vec(&item).unwrap();
     let key = ContentDigest::of(&raw);
     let envelope = ingress.pending.get(&key).unwrap().envelope().clone();
-    ingress.observe(std::slice::from_ref(&item), 99);
+    ingress.observe(
+        std::slice::from_ref(&item),
+        /*retrieved_at_unix_ms*/ 99,
+    );
     assert_eq!(ingress.pending.get(&key).unwrap().envelope(), &envelope);
     assert_eq!(envelope.source().kind, SourceKind::Transcript);
     assert_eq!(
@@ -85,7 +88,7 @@ fn pf_30_s01_native_mismatched_producer_result_consumes_pending_binding() {
     let mut second = NativeIngress::default();
     for ingress in [&mut first, &mut second] {
         ingress.register_call("call-1", SourceKind::Tool);
-        ingress.observe(std::slice::from_ref(&item), 1);
+        ingress.observe(std::slice::from_ref(&item), /*retrieved_at_unix_ms*/ 1);
     }
     let candidate = first.screening_candidate(&item).unwrap();
     let screened = super::super::tests::screen_binding(candidate.source(), candidate.normalized());
@@ -105,9 +108,9 @@ fn pf_30_s01_native_capacity_never_evicts_or_invalidates_repeat_observation() {
     }
     ingress.register_call("call-1", SourceKind::Tool);
     assert!(!ingress.unavailable);
-    ingress.observe(&[tool_item()], 1);
+    ingress.observe(&[tool_item()], /*retrieved_at_unix_ms*/ 1);
     let before = ingress.screening_candidate(&tool_item()).unwrap().source();
-    ingress.observe(&[tool_item()], 99);
+    ingress.observe(&[tool_item()], /*retrieved_at_unix_ms*/ 99);
     assert_eq!(
         ingress.screening_candidate(&tool_item()).unwrap().source(),
         before
@@ -130,7 +133,7 @@ fn pf_30_s01_native_serialization_bound_withholds_complete_oversized_item() {
     assert_eq!(item_bytes(&item), Err(IngressError::TooLarge));
     let mut ingress = NativeIngress::default();
     ingress.register_call("call-1", SourceKind::Tool);
-    ingress.observe(&[item], 1);
+    ingress.observe(&[item], /*retrieved_at_unix_ms*/ 1);
     assert!(ingress.unavailable);
     assert!(ingress.pending.is_empty());
 }

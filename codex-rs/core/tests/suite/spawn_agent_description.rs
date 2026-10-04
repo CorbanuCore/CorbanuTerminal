@@ -499,7 +499,7 @@ async fn spawn_agent_v2_catalog_respects_provider_policy_with_mixed_model_defaul
     let expected_other_provider = allowlist.is_none();
     let test = test_codex()
         // Reproduce the account catalog's Luna preference without overriding it in
-        // production. The bundled Kimi model has no multi-agent version preference.
+        // production. Bundled non-OpenAI models have no multi-agent version preference.
         .with_model_info_override("gpt-5.6-luna", |model| {
             model.multi_agent_version = Some(MultiAgentVersion::V1);
         })

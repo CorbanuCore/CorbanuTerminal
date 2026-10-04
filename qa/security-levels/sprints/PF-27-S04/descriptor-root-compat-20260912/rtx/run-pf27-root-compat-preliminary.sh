@@ -23,6 +23,6 @@ run() {
 }
 run fix just fix -p codex-protected-state -p codex-linux-pidfd-spawn --features synthetic-fixture --no-deps
 run fmt-repaired just fmt
-run relay-profile just test --locked -p codex-secret-broker-service --features synthetic-fixture --run-ignored only -E 'test(pf_27_s01_elf_profile_frozen_artifacts_as_data)' --retries 0
+run relay-profile just test --locked -p codex-secret-broker-service -p codex-secret-broker-fixture --run-ignored only -E 'test(pf_27_s01_elf_profile_frozen_artifacts_as_data)' --retries 0
 run identity-focused just test --locked -p codex-linux-pidfd-spawn --features synthetic-fixture --run-ignored all -E 'test(pf27_retained_identity_)' --retries 0
 run transport-focused just test --locked -p codex-protected-state --features synthetic-fixture --run-ignored all -E 'test(pf27_root_compat_)' --retries 0

@@ -1,9 +1,10 @@
 //! Assertion-boundary normalization for rendered build versions.
 
-/// Replace only the exact package version in application headers and update notices.
-/// Other versions (including empty or malformed ones) remain visible to snapshots.
+/// Replace only the exact rendered build version in application headers and update
+/// notices. Other versions (including empty or malformed ones) remain visible to
+/// snapshots.
 pub(crate) fn normalize_snapshot_version(text: &str) -> String {
-    normalize_header_version(text, env!("CARGO_PKG_VERSION"))
+    normalize_header_version(text, crate::version::CODEX_CLI_VERSION)
 }
 
 fn normalize_header_version(text: &str, version: &str) -> String {

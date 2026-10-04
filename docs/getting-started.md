@@ -30,23 +30,23 @@ Corbanu Terminal currently ships these provider paths:
 
 With nothing configured, Corbanu Terminal uses OpenAI with GPT-6 Sol at high reasoning effort.
 
-| Use case                  | Provider           | Current release-visible model examples                                                                           |
-| ------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| OpenAI Codex account (default) | OpenAI        | `gpt-6-sol` (default, high effort; `gpt-5.6-sol` if your account does not offer it), `gpt-5.6-luna`, `gpt-5.6-terra` |
-| Claude subscription       | Claude Plan        | `claude-opus-5-5-plan`, `claude-opus-5-plan`, `claude-fable-5-1-plan`, `claude-fable-5-plan`                                             |
-| Direct Claude API         | Anthropic          | `claude-opus-5`, `claude-fable-5-1`, `claude-fable-5`                                                           |
-| Ambient coding plan       | Ambient            | `z-ai/glm-5.2`                                                                                                 |
-| Kimi coding plan          | Kimi Code          | `k3`                                                                                                             |
-| Z.AI API (pay per use)    | Z.AI               | `glm-5.2`                                                                                                        |
-| Direct DeepSeek Responses | DeepSeek           | `deepseek-flash` (DeepSeek V4.1 Flash); legacy `deepseek-v4-flash`, now served by V4.1 Flash                     |
-| Metered model gateway     | OpenRouter         | `deepseek/deepseek-v4-flash-0731`, `deepseek/deepseek-v4-pro`, `moonshotai/kimi-k3`, and other catalogued routes |
-| Meta API                  | Meta               | `muse-spark-1.1`                                                                                                 |
-| Metered GLM               | Baseten            | `zai-org/GLM-5.2`                                                                                                |
-| Metered model gateway     | Vercel             | `zai/glm-5.3-flash`, `zai/glm-5.3`, Kimi K3, DeepSeek V4 Pro, and legacy GLM 5.2 routes                          |
-| Wallet-funded inference   | Corbanu API         | GLM 5.3 Flash, GLM 5.3, GPT-5.6 Luna/Sol, Kimi K3, DeepSeek V4 Pro, plus Claude Fable 5.1 and 5                   |
-| Cloud model runtime       | Bedrock            | Models available to the configured AWS account                                                                   |
-| Local model runtime       | Ollama / LM Studio | Models served by the configured local endpoint                                                                   |
-| Operator-defined endpoint | Custom             | Models declared in `config.toml`                                                                                 |
+| Use case                       | Provider           | Current release-visible model examples                                                                               |
+| ------------------------------ | ------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| OpenAI Codex account (default) | OpenAI             | `gpt-6-sol` (default, high effort; `gpt-5.6-sol` if your account does not offer it), `gpt-5.6-luna`, `gpt-5.6-terra` |
+| Claude subscription            | Claude Plan        | `claude-opus-5-5-plan`, `claude-opus-5-plan`, `claude-fable-5-1-plan`, `claude-fable-5-plan`                         |
+| Direct Claude API              | Anthropic          | `claude-opus-5`, `claude-fable-5-1`, `claude-fable-5`                                                                |
+| Ambient coding plan            | Ambient            | `z-ai/glm-5.2`                                                                                                       |
+| Kimi coding plan               | Kimi Code          | `k3`                                                                                                                 |
+| Z.AI API (pay per use)         | Z.AI               | `glm-5.2`                                                                                                            |
+| Direct DeepSeek Responses      | DeepSeek           | `deepseek-flash` (DeepSeek V4.1 Flash); legacy `deepseek-v4-flash`, now served by V4.1 Flash                         |
+| Metered model gateway          | OpenRouter         | `deepseek/deepseek-v4-flash-0731`, `deepseek/deepseek-v4-pro`, `moonshotai/kimi-k3`, and other catalogued routes     |
+| Meta API                       | Meta               | `muse-spark-1.1`                                                                                                     |
+| Metered GLM                    | Baseten            | `zai-org/GLM-5.2`                                                                                                    |
+| Metered model gateway          | Vercel             | `zai/glm-5.3-flash`, `zai/glm-5.3`, Kimi K3, DeepSeek V4 Pro, and legacy GLM 5.2 routes                              |
+| Wallet-funded inference        | Corbanu API        | GLM 5.3 Flash, GLM 5.3, GPT-5.6 Luna/Sol, Kimi K3, DeepSeek V4 Pro, plus Claude Fable 5.1 and 5                      |
+| Cloud model runtime            | Bedrock            | Models available to the configured AWS account                                                                       |
+| Local model runtime            | Ollama / LM Studio | Models served by the configured local endpoint                                                                       |
+| Operator-defined endpoint      | Custom             | Models declared in `config.toml`                                                                                     |
 
 See
 [`/providers`, account login, and `/model`](features/model-providers.md)
