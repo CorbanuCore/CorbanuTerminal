@@ -1,4 +1,5 @@
 use super::*;
+use crate::runtime::busy_retry::retry_busy;
 
 const RATE_LIMIT_STATUS: i64 = 429;
 const DEFAULT_COOLDOWN_CAP_MS: i64 = 5 * 60 * 1000;
@@ -67,13 +68,13 @@ pub enum ProviderRequestResult {
 }
 
 impl StateRuntime {
-    pub async fn check_provider_request_cooldown(
+    async fn check_provider_request_cooldown_once(
         &self,
         key: &ProviderRequestKey,
         preflight: &ProviderRequestPreflight,
         now_ms: i64,
     ) -> anyhow::Result<Option<ProviderRequestBlock>> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
 
         sqlx::query(
             r#"
@@ -148,7 +149,7 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ?
         Ok(block)
     }
 
-    pub async fn try_acquire_provider_request_lease(
+    async fn try_acquire_provider_request_lease_once(
         &self,
         key: &ProviderRequestKey,
         preflight: &ProviderRequestPreflight,
@@ -157,7 +158,7 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ?
         now_ms: i64,
     ) -> anyhow::Result<ProviderRequestLeaseDecision> {
         let lease_until_ms = now_ms.saturating_add(lease_ttl_ms.max(1));
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
 
         sqlx::query(
             r#"
@@ -273,7 +274,7 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ?
         ))
     }
 
-    pub async fn record_provider_request_result(
+    async fn record_provider_request_result_once(
         &self,
         lease: &ProviderRequestLease,
         result: ProviderRequestResult,
@@ -314,7 +315,7 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ? AND lease_owner = ?
                 retry_after_ms,
             } => {
                 let status_i64 = status.map(i64::from);
-                let mut tx = self.pool.begin().await?;
+                let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
                 let existing_count = sqlx::query_scalar::<_, i64>(
                     r#"
 SELECT consecutive_429_count
@@ -379,7 +380,7 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ? AND lease_owner = ?
         Ok(rows_affected)
     }
 
-    pub async fn release_provider_request_lease(
+    async fn release_provider_request_lease_once(
         &self,
         lease: &ProviderRequestLease,
         now_ms: i64,
@@ -403,6 +404,80 @@ WHERE provider_id = ? AND model = ? AND key_fingerprint = ? AND lease_owner = ?
         .rows_affected();
         Ok(rows_affected)
     }
+}
+
+impl StateRuntime {
+    // Each write below is one short transaction that rolls back whole when the
+    // state DB is busy, so it is retried; see `retry_busy`. A busy state DB used
+    // to fail the turn with "failed to check provider request throttle state:
+    // ... database is locked" whenever another Corbanu process held the write
+    // lock past SQLite's 5 s busy timeout. A retry's clock reading moves on by
+    // the time spent waiting, so cooldowns and leases count from when the write
+    // lands.
+
+    pub async fn check_provider_request_cooldown(
+        &self,
+        key: &ProviderRequestKey,
+        preflight: &ProviderRequestPreflight,
+        now_ms: i64,
+    ) -> anyhow::Result<Option<ProviderRequestBlock>> {
+        let started = Instant::now();
+        retry_busy("check provider request cooldown", || {
+            self.check_provider_request_cooldown_once(key, preflight, since(now_ms, started))
+        })
+        .await
+    }
+
+    pub async fn try_acquire_provider_request_lease(
+        &self,
+        key: &ProviderRequestKey,
+        preflight: &ProviderRequestPreflight,
+        owner: &str,
+        lease_ttl_ms: i64,
+        now_ms: i64,
+    ) -> anyhow::Result<ProviderRequestLeaseDecision> {
+        let started = Instant::now();
+        retry_busy("acquire provider request lease", || {
+            self.try_acquire_provider_request_lease_once(
+                key,
+                preflight,
+                owner,
+                lease_ttl_ms,
+                since(now_ms, started),
+            )
+        })
+        .await
+    }
+
+    pub async fn record_provider_request_result(
+        &self,
+        lease: &ProviderRequestLease,
+        result: ProviderRequestResult,
+        now_ms: i64,
+    ) -> anyhow::Result<u64> {
+        let started = Instant::now();
+        retry_busy("record provider request result", || {
+            self.record_provider_request_result_once(lease, result.clone(), since(now_ms, started))
+        })
+        .await
+    }
+
+    pub async fn release_provider_request_lease(
+        &self,
+        lease: &ProviderRequestLease,
+        now_ms: i64,
+    ) -> anyhow::Result<u64> {
+        let started = Instant::now();
+        retry_busy("release provider request lease", || {
+            self.release_provider_request_lease_once(lease, since(now_ms, started))
+        })
+        .await
+    }
+}
+
+/// `now_ms`, read at `started`, moved on by the time elapsed since.
+fn since(now_ms: i64, started: Instant) -> i64 {
+    now_ms.saturating_add(i64::try_from(started.elapsed().as_millis()).unwrap_or(i64::MAX))
 }
 
 fn block_from_row(

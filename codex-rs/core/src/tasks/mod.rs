@@ -733,9 +733,9 @@ impl Session {
         self.input_queue.mark_mailbox_ready_for_next_turn().await;
         let mut follow_up_input = Vec::new();
         if !pending_input.is_empty() {
-            for pending_input_item in pending_input {
+            for (pending_input_item, final_output_json_schema) in pending_input {
                 if completed_naturally && pending_input_seeds_follow_up(&pending_input_item) {
-                    follow_up_input.push(pending_input_item);
+                    follow_up_input.push((pending_input_item, final_output_json_schema));
                 } else {
                     let hook_outcome =
                         inspect_pending_input(self, &turn_context, &pending_input_item).await;
@@ -1028,13 +1028,16 @@ impl Session {
             .await
     }
 
-    async fn submit_follow_up_input(&self, follow_up_input: Vec<TurnInput>) {
-        for input in follow_up_input {
+    async fn submit_follow_up_input(
+        &self,
+        follow_up_input: Vec<(TurnInput, Option<serde_json::Value>)>,
+    ) {
+        for (input, final_output_json_schema) in follow_up_input {
             let (op, client_user_message_id) = match input {
                 TurnInput::UserInput { content, client_id } => (
                     Op::UserInput {
                         items: content,
-                        final_output_json_schema: None,
+                        final_output_json_schema,
                         responsesapi_client_metadata: None,
                         additional_context: Default::default(),
                         thread_settings: Default::default(),

@@ -4162,3 +4162,67 @@ prefix_rules = []
         Ok(())
     }
 }
+
+#[tokio::test]
+async fn home_dot_codex_is_not_a_project_layer_inside_a_repository() -> std::io::Result<()> {
+    // A home directory that is itself a repository (dotfiles) holds the Codex
+    // CLI's own `~/.codex`; it must not load as this program's project config.
+    let tmp = tempdir()?;
+    let home_dir = tmp.path().join("home");
+    let codex_home = home_dir.join(".corbanu");
+    let workdir = home_dir.join("work");
+    tokio::fs::create_dir_all(home_dir.join(".git")).await?;
+    tokio::fs::create_dir_all(home_dir.join(".codex")).await?;
+    tokio::fs::create_dir_all(&codex_home).await?;
+    tokio::fs::create_dir_all(&workdir).await?;
+    tokio::fs::write(
+        home_dir.join(".codex").join(CONFIG_TOML_FILE),
+        "model = \"gpt-6-astra\"\n",
+    )
+    .await?;
+    make_config_for_test(
+        &codex_home,
+        &home_dir,
+        TrustLevel::Trusted,
+        /*project_root_markers*/ None,
+    )
+    .await?;
+
+    let load = |user_home_dir: Option<std::path::PathBuf>| {
+        let codex_home = codex_home.clone();
+        let workdir = workdir.clone();
+        async move {
+            load_config_layers_state(
+                LOCAL_FS.as_ref(),
+                &codex_home,
+                Some(AbsolutePathBuf::from_absolute_path(&workdir)?),
+                &[] as &[(String, TomlValue)],
+                LoaderOverrides {
+                    user_home_dir,
+                    ..LoaderOverrides::default()
+                },
+                &codex_config::NoopThreadConfigLoader,
+            )
+            .await
+        }
+    };
+    // Control: the same folder outside the user's home is a project layer.
+    let elsewhere = load(Some(tmp.path().join("someone-else"))).await?;
+    assert_eq!(
+        elsewhere.effective_config().get("model"),
+        Some(&TomlValue::String("gpt-6-astra".to_string()))
+    );
+    let layers = load(Some(home_dir.clone())).await?;
+
+    assert!(
+        layers
+            .get_layers(
+                ConfigLayerStackOrdering::HighestPrecedenceFirst,
+                /*include_disabled*/ true,
+            )
+            .into_iter()
+            .all(|layer| !matches!(layer.name, ConfigLayerSource::Project { .. }))
+    );
+    assert_eq!(layers.effective_config().get("model"), None);
+    Ok(())
+}

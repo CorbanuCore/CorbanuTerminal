@@ -29,6 +29,7 @@ product behavior.
 | Remote control | Users need bounded access away from the keyboard     | Allowlisted Telegram connector with explicit workspace and authorization                                | [Telegram](features/telegram.md)                                                                              |
 | Context        | Long work and tangents need different persistence    | Durable goals and memories; ephemeral side conversations; in-terminal skills and docs                   | [Context tools](features/context-tools.md)                                                                    |
 | Benchmarking   | Green unit tests can hide degraded agent performance | Three-way release gates, visual website bakeoffs, synthetic coding tasks, and TUI/provider diagnostics  | [Benchmarking](benchmarking/index.md)                                                                         |
+| Releases       | Users need to know what changed and how it performed | Release fixes, known limitations, and benchmark results against Hermes                                  | [0.1.46 and 0.1.47](releases/0.1.46-0.1.47.md)                                                                |
 
 ## Fast reading path
 

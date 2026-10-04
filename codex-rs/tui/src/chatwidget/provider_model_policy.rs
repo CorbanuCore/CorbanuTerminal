@@ -8,6 +8,23 @@ use codex_provider_auth::ProviderUseDecision;
 
 use crate::provider_status_host::ProviderStatusHost;
 
+/// Explains why a turn cannot use the current provider.
+///
+/// A locked login keychain, typical of an SSH session, makes stored provider
+/// logins unreadable. That looks like an unavailable provider, but the repair is
+/// to unlock the keychain rather than to change anything in `/providers`.
+pub(crate) fn current_provider_blocked_message() -> String {
+    if codex_keyring_store::default_keychain_locked() {
+        "Your macOS login keychain is locked, so saved provider logins can't be read. This is \
+         usual over SSH. Run `security unlock-keychain login.keychain-db`, then restart Corbanu."
+            .to_string()
+    } else {
+        "The current provider is unavailable or inactive. Choose an active provider and model, \
+         or repair it in /providers."
+            .to_string()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct ProviderModelPolicy {
     host: ProviderStatusHost,

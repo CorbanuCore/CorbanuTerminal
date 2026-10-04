@@ -1,0 +1,26 @@
+{
+  "base": "7b4fb5b07cd26cbb17f47f9da5ec71940854448a",
+  "files": {
+    "qa/initiative-control/management-bootstrap/owner-handoff-80-promotion.md": {
+      "lines": 338,
+      "sha256": "b721cc4330c3a9032444b721dd6c7b71affa0b6f5f28ceb0a0137bffc2ca907e"
+    },
+    "qa/initiative-control/management-bootstrap/owner_derived_89_control.py": {
+      "lines": 102,
+      "sha256": "65f43ff0518c1f940832e2b44f15250b7abaa64277cfc98296c60ccf6ff227be"
+    },
+    "scripts/initiative_control/coordinator.py": {
+      "lines": 852,
+      "sha256": "1a726549667b59849d1736884d7878e5b6c8a5f1b2483a0fa98c8a24bcab6ab2"
+    },
+    "scripts/initiative_control/owner_daemon.py": {
+      "lines": 1271,
+      "sha256": "3812a2cca5e5cd70af836c795cf10a6a4971511a45ccf74fff95d72b5f80a36f"
+    },
+    "scripts/initiative_control/test_owner_daemon.py": {
+      "lines": 2288,
+      "sha256": "467532351a4a76b13876385160961d5a1f2b4e18a5f07c4a6e784f5c15f89eed"
+    }
+  },
+  "package_digest": "e03487f31b04bd48dc249e460ef24b6b0d4468c49d3551fc211476e2b1ce31bb"
+}

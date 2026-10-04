@@ -209,9 +209,29 @@ async fn run_remote_compact_task_inner_impl(
     let compaction_item = TurnItem::ContextCompaction(context_compaction_item);
     sess.emit_turn_item_started(turn_context, &compaction_item)
         .await;
+    // The legacy compaction endpoint is inference the operator paid for, so it
+    // is collected like every other compaction, on a client session of its own
+    // and under the same `compact:` identity. Best effort: a compaction that
+    // cannot be recorded still runs.
+    let client_session = sess.services.new_model_client_session();
+    let _accounting = match crate::accounting::attach_turn(
+        sess,
+        turn_context.as_ref(),
+        &client_session,
+        crate::accounting::compaction_turn_label(&turn_context.sub_id),
+    )
+    .await
+    {
+        Ok(scopes) => Some(scopes),
+        Err(error) => {
+            tracing::warn!(%error, "accounting: legacy compaction proceeding unrecorded");
+            None
+        }
+    };
     let attempt = run_remote_compact_attempt(
         sess,
         step_context,
+        &client_session,
         turn_state.clone(),
         &compaction_trace,
         compaction_metadata,
@@ -238,6 +258,7 @@ async fn run_remote_compact_task_inner_impl(
             let fallback_result = run_remote_compact_attempt(
                 sess,
                 fallback_step_context,
+                &client_session,
                 turn_state,
                 &fallback_compaction_trace,
                 compaction_metadata,

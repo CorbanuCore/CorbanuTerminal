@@ -1,0 +1,2663 @@
+diff --git a/codex-rs/state/src/runtime/accounting_estimates.rs b/codex-rs/state/src/runtime/accounting_estimates.rs
+index 8e605bdfa..7d665e210 100644
+--- a/codex-rs/state/src/runtime/accounting_estimates.rs
++++ b/codex-rs/state/src/runtime/accounting_estimates.rs
+@@ -253,6 +253,17 @@ pub use lifecycle::RetainedDay;
+ pub use lifecycle::RetentionCoverage;
+ 
+ impl Journal<'_> {
++    pub(in crate::runtime::accounting) async fn inspect_quote_on_connection(
++        conn: &mut SqliteConnection,
++        id: Uuid,
++    ) -> anyhow::Result<ObservationQuote> {
++        ensure!(
++            binding(conn, id).await?.is_some(),
++            "missing original binding"
++        );
++        EstimateStore::latest_quote_on_connection(conn, id).await
++    }
++
+     pub(in crate::runtime::accounting) async fn persist_price_on_connection(
+         conn: &mut SqliteConnection,
+         id: Uuid,
+diff --git a/codex-rs/state/src/runtime/accounting_lifecycle.rs b/codex-rs/state/src/runtime/accounting_lifecycle.rs
+index 496c9761d..28b526c0f 100644
+--- a/codex-rs/state/src/runtime/accounting_lifecycle.rs
++++ b/codex-rs/state/src/runtime/accounting_lifecycle.rs
+@@ -268,6 +268,161 @@ pub use retention_plan::reduction::atomic::RetainedDay;
+ pub use retention_plan::reduction::atomic::RetentionCoverage;
+ 
+ impl Journal<'_> {
++    pub(in crate::runtime::accounting) async fn inspect_on_connection(
++        conn: &mut SqliteConnection,
++        owner: ThreadId,
++        day: i64,
++        read_at_ms: i64,
++    ) -> anyhow::Result<crate::accounting::InspectionDay> {
++        use crate::accounting::Inspection;
++        use crate::accounting::InspectionDay;
++        let checkpoint = match retention_fixture_on_connection(conn).await? {
++            RetentionFixture::Active(time) => time,
++            RetentionFixture::Staging => return Ok(InspectionDay::NeedsRefresh),
++            RetentionFixture::Absent => anyhow::bail!("missing retention schema"),
++        };
++        ensure!(read_at_ms >= checkpoint, "backward inspection read");
++        // The inherited retained reader validates the whole store. Bound its inputs
++        // before it deserializes any payload; no LIMIT-based partial total.
++        let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM draft_accounting_attempts")
++            .fetch_one(&mut *conn)
++            .await?;
++        if rows > 10_000 {
++            return Ok(InspectionDay::TooLarge);
++        }
++        let excessive: bool = sqlx::query_scalar(
++            "SELECT EXISTS(SELECT 1 FROM draft_accounting_observations GROUP BY attempt_id HAVING count(*) > 4096)",
++        ).fetch_one(&mut *conn).await?;
++        if excessive {
++            return Ok(InspectionDay::TooLarge);
++        }
++        // Conservative input budget also bounds historical estimate versions and
++        // unrelated retained data visited by the inherited whole-store validator.
++        let bytes: i64 = sqlx::query_scalar(
++            "SELECT coalesce(sum(n), 0) FROM (
++             SELECT length(CAST(payload AS BLOB)) AS n FROM draft_accounting_attempts UNION ALL
++             SELECT length(CAST(payload AS BLOB)) FROM draft_accounting_observations UNION ALL
++             SELECT length(CAST(payload AS BLOB)) FROM draft_accounting_price_snapshots UNION ALL
++             SELECT length(CAST(payload AS BLOB)) + length(CAST(evidence AS BLOB)) FROM draft_accounting_estimates UNION ALL
++             SELECT length(CAST(evidence AS BLOB)) FROM draft_accounting_contributions UNION ALL
++             SELECT length(CAST(payload AS BLOB)) FROM draft_accounting_compact_days UNION ALL
++             SELECT length(thread_id) + length(snapshot_id) + 8 FROM draft_accounting_compact_snapshots UNION ALL
++             SELECT length(attempt_id) + 8 FROM draft_accounting_tombstones)",
++        ).fetch_one(&mut *conn).await?;
++        if bytes > 4 * 1024 * 1024 {
++            return Ok(InspectionDay::TooLarge);
++        }
++        if day > checkpoint / DAY_MS {
++            return Ok(InspectionDay::NeedsRefresh);
++        }
++        let selected: i64 = sqlx::query_scalar(
++            "SELECT count(*) FROM draft_accounting_attempts WHERE json_extract(payload, '$.thread_id') = ? AND json_extract(payload, '$.dispatched_at_ms') / 86400000 = ?",
++        ).bind(owner.to_string()).bind(day).fetch_one(&mut *conn).await?;
++        if selected > 512 {
++            return Ok(InspectionDay::TooLarge);
++        }
++        // Validate original bindings and old estimates before freshness hides corruption.
++        let ids: Vec<String> =
++            sqlx::query_scalar("SELECT attempt_id FROM draft_accounting_attempts")
++                .fetch_all(&mut *conn)
++                .await?;
++        for id in ids {
++            Self::inspect_quote_on_connection(conn, Uuid::parse_str(&id)?).await?;
++        }
++        let missing: bool = sqlx::query_scalar(
++            "SELECT EXISTS(SELECT 1 FROM draft_accounting_contributions c LEFT JOIN draft_accounting_estimates e ON c.attempt_id = e.attempt_id AND c.evidence = e.evidence WHERE e.attempt_id IS NULL)",
++        ).fetch_one(&mut *conn).await?;
++        if missing {
++            return Ok(InspectionDay::NeedsRefresh);
++        }
++        let retained = Self::retained_day_on_connection(conn, owner, day, checkpoint).await?;
++        let (coverage, expected) = match retained {
++            RetainedDay::Available {
++                coverage,
++                totals: Current::Ready(totals),
++            } => (coverage, totals),
++            RetainedDay::Expired(coverage) => {
++                return Ok(InspectionDay::DetailUnavailable {
++                    coverage,
++                    read_at_ms,
++                    compact: false,
++                });
++            }
++            RetainedDay::Available { .. }
++            | RetainedDay::NeedsActivation
++            | RetainedDay::NeedsMaintenance { .. } => return Ok(InspectionDay::NeedsRefresh),
++        };
++        let compact: bool = sqlx::query_scalar(
++            "SELECT EXISTS(SELECT 1 FROM draft_accounting_compact_days WHERE thread_id = ? AND utc_day = ?)",
++        ).bind(owner.to_string()).bind(day).fetch_one(&mut *conn).await?;
++        let start = day.checked_mul(DAY_MS).context("day overflow")?;
++        if compact || (read_at_ms >= 90 * DAY_MS && start <= read_at_ms - 90 * DAY_MS) {
++            return Ok(InspectionDay::DetailUnavailable {
++                coverage,
++                read_at_ms,
++                compact,
++            });
++        }
++        let records = owned_attempts(conn, owner).await?;
++        let selected = records
++            .iter()
++            .filter(|(a, _)| i64::from(a.dispatched_at_ms) / DAY_MS == day)
++            .count();
++        if selected > 512 {
++            return Ok(InspectionDay::TooLarge);
++        }
++        let mut requests: BTreeMap<Uuid, Vec<ObservationQuote>> = BTreeMap::new();
++        let mut totals = DayTotals::default();
++        // Budget the packet header, totals, map keys and per-row containers too.
++        let mut projected = 8192usize;
++        for (attempt, _) in records {
++            if i64::from(attempt.dispatched_at_ms) / DAY_MS != day {
++                continue;
++            }
++            // Check logical ownership across days and threads, including retries.
++            let siblings: Vec<String> = sqlx::query_scalar(
++                "SELECT payload FROM draft_accounting_attempts WHERE request_id = ?",
++            )
++            .bind(attempt.request_id.to_string())
++            .fetch_all(&mut *conn)
++            .await?;
++            for payload in siblings {
++                ensure!(
++                    attempt.same_owner(&serde_json::from_str(&payload)?),
++                    "request owner mismatch"
++                );
++            }
++            let mut predecessor = attempt.retry_of;
++            let mut seen = HashSet::from([attempt.attempt_id]);
++            while let Some(id) = predecessor {
++                ensure!(seen.insert(id), "retry cycle");
++                let parent = read_attempt(conn, id).await?;
++                // Compaction can legitimately remove a cross-day predecessor.
++                let Some(parent) = parent else { break };
++                ensure!(attempt.same_owner(&parent), "retry owner mismatch");
++                predecessor = parent.retry_of;
++            }
++            let quote = Self::inspect_quote_on_connection(conn, attempt.attempt_id).await?;
++            projected = projected
++                .checked_add(serde_json::to_vec(&quote)?.len() + 2048)
++                .context("inspection size overflow")?;
++            if projected > 4 * 1024 * 1024 {
++                return Ok(InspectionDay::TooLarge);
++            }
++            totals.add(&quote)?;
++            requests.entry(attempt.request_id).or_default().push(quote);
++        }
++        ensure!(totals == expected, "inspection contribution mismatch");
++        Ok(InspectionDay::Ready(Inspection {
++            owner,
++            utc_day: day,
++            read_at_ms,
++            coverage,
++            totals,
++            requests,
++        }))
++    }
++
+     pub(in crate::runtime::accounting) async fn refresh_contribution_on_connection(
+         conn: &mut SqliteConnection,
+         id: Uuid,
+diff --git a/codex-rs/state/src/runtime/accounting_pricing.rs b/codex-rs/state/src/runtime/accounting_pricing.rs
+index 1837236db..ab3fe534c 100644
+--- a/codex-rs/state/src/runtime/accounting_pricing.rs
++++ b/codex-rs/state/src/runtime/accounting_pricing.rs
+@@ -86,7 +86,7 @@ impl Decimal {
+         Ok(Self::canonical(coefficient, scale))
+     }
+ 
+-    fn display(self) -> DisplayAmount {
++    pub fn display(self) -> DisplayAmount {
+         let (whole, fraction, rounded, nonzero_sub_micro) = if self.scale <= 6 {
+             let divisor = 10_u128.pow(self.scale);
+             (
+diff --git a/codex-rs/state/src/runtime/accounting_store.rs b/codex-rs/state/src/runtime/accounting_store.rs
+index 0bccc9877..4da189c75 100644
+--- a/codex-rs/state/src/runtime/accounting_store.rs
++++ b/codex-rs/state/src/runtime/accounting_store.rs
+@@ -28,6 +28,32 @@ pub use super::types::Patch;
+ pub use super::types::Presence;
+ pub use super::types::Usage;
+ 
++/// One UTC day's immutable, recorded-only explanation. No collection coverage claim.
++#[derive(Debug, PartialEq, Eq)]
++pub struct Inspection {
++    pub owner: ThreadId,
++    pub utc_day: i64,
++    pub read_at_ms: i64,
++    pub coverage: RetentionCoverage,
++    pub totals: DayTotals,
++    pub requests: std::collections::BTreeMap<uuid::Uuid, Vec<ObservationQuote>>,
++}
++
++/// Unavailability never carries a partial amount.
++#[derive(Debug, PartialEq, Eq)]
++pub enum InspectionDay {
++    Absent,
++    MissingThread,
++    NeedsRefresh,
++    TooLarge,
++    DetailUnavailable {
++        coverage: RetentionCoverage,
++        read_at_ms: i64,
++        compact: bool,
++    },
++    Ready(Inspection),
++}
++
+ /// Original dispatch-time evidence, never a catalog to select a replacement from.
+ #[derive(Clone, Debug, PartialEq, Eq)]
+ pub enum OriginalPriceEvidence {
+@@ -60,6 +86,40 @@ pub struct AccountingStore<'a> {
+ }
+ 
+ impl<'a> AccountingStore<'a> {
++    /// Inspect an existing ledger in one read transaction, without installation,
++    /// maintenance, repricing or repair. All times are UTC milliseconds/days.
++    pub async fn inspect_day(
++        runtime: &StateRuntime,
++        owner: ThreadId,
++        utc_day: i64,
++        read_at_ms: i64,
++    ) -> anyhow::Result<InspectionDay> {
++        let start = utc_day.checked_mul(86_400_000).context("day overflow")?;
++        ensure!(utc_day >= 0 && read_at_ms >= start, "invalid or future day");
++        start.checked_add(86_400_000).context("day end overflow")?;
++        let mut tx = runtime.pool.begin().await?;
++        if !ledger_exists(&mut tx).await? {
++            let objects: i64 = sqlx::query_scalar(
++                "SELECT count(*) FROM sqlite_schema WHERE name GLOB 'draft_accounting_*'",
++            )
++            .fetch_one(&mut *tx)
++            .await?;
++            ensure!(objects == 0, "unversioned accounting schema");
++            return Ok(InspectionDay::Absent);
++        }
++        validate_on_connection(&mut tx).await?;
++        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM threads WHERE id = ?)")
++            .bind(owner.to_string())
++            .fetch_one(&mut *tx)
++            .await?;
++        if !exists {
++            return Ok(InspectionDay::MissingThread);
++        }
++        let result = Journal::inspect_on_connection(&mut tx, owner, utc_day, read_at_ms).await?;
++        tx.commit().await?;
++        Ok(result)
++    }
++
+     /// Atomically import 1..=64 complete attempts aged 90..365 days without raw
+     /// staging. Each has at most 256 observations, with at most 4096 in total.
+     /// Duplicate identical entries receive the same outcome but contribute once.
+diff --git a/codex-rs/state/src/runtime/accounting_store_tests.rs b/codex-rs/state/src/runtime/accounting_store_tests.rs
+index 00384d897..23f7b01b0 100644
+--- a/codex-rs/state/src/runtime/accounting_store_tests.rs
++++ b/codex-rs/state/src/runtime/accounting_store_tests.rs
+@@ -6,6 +6,372 @@ use std::path::Path;
+ use std::sync::Arc;
+ use uuid::Uuid;
+ 
++fn inspection(value: InspectionDay) -> Inspection {
++    let InspectionDay::Ready(value) = value else {
++        panic!("{value:?}")
++    };
++    value
++}
++
++async fn inspected(runtime: &StateRuntime, day: i64, time: i64) -> anyhow::Result<InspectionDay> {
++    AccountingStore::inspect_day(runtime, attempt(1).thread_id, day, time).await
++}
++
++#[tokio::test]
++async fn accounting_inspect_absent_schema_is_read_only() -> anyhow::Result<()> {
++    let path = home();
++    let runtime = open(&path).await?;
++    let before = rows(&runtime).await?;
++    assert_eq!(inspected(&runtime, 0, 0).await?, InspectionDay::Absent);
++    assert_eq!(rows(&runtime).await?, before);
++    runtime.close().await;
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_schema_rejection_matrix() -> anyhow::Result<()> {
++    for mutation in [
++        "DROP TABLE draft_accounting_price_bindings",
++        "DROP INDEX draft_accounting_request",
++        "UPDATE _accounting_migrations SET success = 0",
++        "UPDATE _accounting_migrations SET checksum = X'00'",
++        "UPDATE _accounting_migrations SET version = 2",
++        "DELETE FROM _accounting_migrations",
++        "DROP TABLE _accounting_migrations",
++    ] {
++        let path = home();
++        let runtime = open(&path).await?;
++        seed(&runtime).await?;
++        sqlx::raw_sql(mutation)
++            .execute(runtime.pool.as_ref())
++            .await?;
++        let before = rows(&runtime).await?;
++        assert!(inspected(&runtime, 0, 1).await.is_err(), "{mutation}");
++        assert_eq!(rows(&runtime).await?, before);
++        runtime.close().await;
++    }
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_raw_day_reconciles_contributions() -> anyhow::Result<()> {
++    let path = home();
++    let runtime = open(&path).await?;
++    seed(&runtime).await?;
++    let a = attempt(1);
++    let mut retry = attempt(2);
++    retry.request_id = a.request_id;
++    retry.retry_of = Some(a.attempt_id);
++    let store = AccountingStore::open(&runtime, 0).await?;
++    store.admit(a.thread_id, &a, &[snapshot()], 0).await?;
++    store.observe(a.thread_id, &a, &[row(1)], 0).await?;
++    let first = store.observe(a.thread_id, &a, &[row(2)], 0).await?;
++    let second = store.admit(a.thread_id, &retry, &[], 0).await?;
++    let view = inspection(inspected(&runtime, 0, 0).await?);
++    assert_eq!(
++        view.requests,
++        std::collections::BTreeMap::from([(a.request_id, vec![first, second])])
++    );
++    assert_eq!(
++        view.totals,
++        DayTotals {
++            measured: std::array::from_fn(|index| Metric {
++                known: if index == 1 { 2 } else { 0 },
++                unknown: if index == 1 { 1 } else { 2 },
++            }),
++            known_usd: "0.000002".to_owned().try_into()?,
++            unknown_estimates: 2,
++            attempts: 2,
++        }
++    );
++    runtime.close().await;
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_original_null_and_price_are_immutable() -> anyhow::Result<()> {
++    let path = home();
++    let runtime = open(&path).await?;
++    seed(&runtime).await?;
++    let store = AccountingStore::open(&runtime, 0).await?;
++    for (a, prices) in [(attempt(1), vec![snapshot()]), (attempt(2), vec![])] {
++        store.admit(a.thread_id, &a, &prices, 0).await?;
++        let before = inspected(&runtime, 0, 0).await?;
++        let mut later = snapshot();
++        later.id = Uuid::from_u128(9999);
++        later.rates.noncached = Some("99".to_owned().try_into()?);
++        store.admit(a.thread_id, &a, &[later], 0).await?;
++        assert_eq!(inspected(&runtime, 0, 0).await?, before);
++    }
++    runtime.close().await;
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_missing_binding_is_not_unpriced() -> anyhow::Result<()> {
++    for mutation in [
++        "DELETE FROM draft_accounting_contributions; DELETE FROM draft_accounting_estimates; DELETE FROM draft_accounting_price_bindings",
++        "UPDATE draft_accounting_contributions SET thread_id = '00000000-0000-0000-0000-000000000008'",
++        "UPDATE draft_accounting_attempts SET request_id = '00000000-0000-0000-0000-000000000008'",
++    ] {
++        let path = home();
++        let runtime = open(&path).await?;
++        seed(&runtime).await?;
++        let a = attempt(1);
++        AccountingStore::open(&runtime, 0)
++            .await?
++            .admit(a.thread_id, &a, &[], 0)
++            .await?;
++        assert!(
++            inspection(inspected(&runtime, 0, 0).await?).requests[&a.request_id][0]
++                .snapshot
++                .is_none()
++        );
++        sqlx::raw_sql(mutation)
++            .execute(runtime.pool.as_ref())
++            .await?;
++        let before = rows(&runtime).await?;
++        assert!(inspected(&runtime, 0, 0).await.is_err(), "{mutation}");
++        assert_eq!(rows(&runtime).await?, before);
++        runtime.close().await;
++    }
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_checkpoint_and_stale_estimate() -> anyhow::Result<()> {
++    let path = home();
++    let runtime = open(&path).await?;
++    seed(&runtime).await?;
++    let a = attempt(1);
++    let store = AccountingStore::open(&runtime, 0).await?;
++    store.admit(a.thread_id, &a, &[], 0).await?;
++    let before = rows(&runtime).await?;
++    let lagged = inspection(inspected(&runtime, 0, 12).await?);
++    assert_eq!(
++        (lagged.read_at_ms, lagged.coverage.completed_as_of_ms),
++        (12, 0)
++    );
++    assert_eq!(rows(&runtime).await?, before);
++    store.observe(a.thread_id, &a, &[row(1)], 0).await?;
++    sqlx::query("UPDATE draft_accounting_contributions SET evidence = '[]'")
++        .execute(runtime.pool.as_ref())
++        .await?;
++    let stale = rows(&runtime).await?;
++    assert_eq!(
++        inspected(&runtime, 0, 1).await?,
++        InspectionDay::NeedsRefresh
++    );
++    assert_eq!(rows(&runtime).await?, stale);
++    sqlx::raw_sql(
++        "DELETE FROM draft_accounting_contributions; DELETE FROM draft_accounting_estimates",
++    )
++    .execute(runtime.pool.as_ref())
++    .await?;
++    assert_eq!(
++        inspected(&runtime, 0, 1).await?,
++        InspectionDay::NeedsRefresh
++    );
++    runtime.close().await;
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_retention_and_compact_matrix() -> anyhow::Result<()> {
++    const DAY: i64 = 86_400_000;
++    let path = home();
++    let runtime = open(&path).await?;
++    seed(&runtime).await?;
++    let a = attempt(1);
++    let store = AccountingStore::open(&runtime, 0).await?;
++    store.admit(a.thread_id, &a, &[], 0).await?;
++    assert!(matches!(
++        inspected(&runtime, 0, 90 * DAY - 1).await?,
++        InspectionDay::Ready(_)
++    ));
++    let before = rows(&runtime).await?;
++    for now in [90 * DAY, 90 * DAY + 1, 365 * DAY] {
++        assert!(matches!(
++            inspected(&runtime, 0, now).await?,
++            InspectionDay::DetailUnavailable { compact: false, .. }
++        ));
++    }
++    assert_eq!(rows(&runtime).await?, before);
++    let mut late = attempt(2);
++    late.dispatched_at_ms = 1.try_into()?;
++    store.admit(a.thread_id, &late, &[], 1).await?;
++    store.maintain(90 * DAY).await?;
++    let unavailable = inspected(&runtime, 0, 90 * DAY).await?;
++    assert!(matches!(
++        unavailable,
++        InspectionDay::DetailUnavailable {
++            compact: true,
++            coverage: RetentionCoverage {
++                oldest_recorded_day: Some(0),
++                ..
++            },
++            ..
++        }
++    ));
++    store.maintain(90 * DAY + 1).await?;
++    assert!(matches!(
++        inspected(&runtime, 0, 90 * DAY + 1).await?,
++        InspectionDay::DetailUnavailable { compact: true, .. }
++    ));
++    store.maintain(365 * DAY).await?;
++    assert!(matches!(
++        inspected(&runtime, 0, 365 * DAY).await?,
++        InspectionDay::DetailUnavailable {
++            coverage: RetentionCoverage {
++                aggregate_day_floor: 1,
++                oldest_recorded_day: None,
++                ..
++            },
++            ..
++        }
++    ));
++    runtime.close().await;
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_half_open_date_bounds() -> anyhow::Result<()> {
++    const DAY: i64 = 86_400_000;
++    let path = home();
++    let runtime = open(&path).await?;
++    seed(&runtime).await?;
++    let store = AccountingStore::open(&runtime, 0).await?;
++    for (id, time) in [(1, 0), (2, DAY - 1), (3, DAY)] {
++        let mut a = attempt(id);
++        a.dispatched_at_ms = time.try_into()?;
++        store.admit(a.thread_id, &a, &[], time).await?;
++    }
++    // Later observation admission does not change request-day ownership.
++    store
++        .observe(attempt(1).thread_id, &attempt(1), &[row(1)], DAY)
++        .await?;
++    assert_eq!(
++        inspection(inspected(&runtime, 0, DAY).await?)
++            .totals
++            .attempts,
++        2
++    );
++    assert_eq!(
++        inspection(inspected(&runtime, 1, DAY).await?)
++            .totals
++            .attempts,
++        1
++    );
++    for (day, now) in [
++        (-1, DAY),
++        (2, DAY),
++        (0, -1),
++        (0, DAY - 1),
++        (i64::MAX, i64::MAX),
++    ] {
++        assert!(inspected(&runtime, day, now).await.is_err());
++    }
++    runtime.close().await;
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_corruption_and_unknowns() -> anyhow::Result<()> {
++    for mutation in [
++        "UPDATE draft_accounting_observations SET source = '00000000-0000-0000-0000-000000000009'",
++        "UPDATE draft_accounting_observations SET sequence = 9",
++        "UPDATE draft_accounting_estimates SET payload = '{}' WHERE evidence = '[]'",
++        "UPDATE draft_accounting_attempts SET payload = '{}'",
++    ] {
++        let path = home();
++        let runtime = open(&path).await?;
++        seed(&runtime).await?;
++        let a = attempt(1);
++        let store = AccountingStore::open(&runtime, 0).await?;
++        store.admit(a.thread_id, &a, &[], 0).await?;
++        let mut zero = row(1);
++        zero.patch = serde_json::from_value(json!({"input":0,"read":null}))?;
++        store.observe(a.thread_id, &a, &[zero.clone()], 0).await?;
++        let view = inspection(inspected(&runtime, 0, 0).await?);
++        assert_eq!(view.requests[&a.request_id][0].observations, vec![zero]);
++        assert_eq!(view.requests[&a.request_id][0].usage.noncached, Some(0));
++        assert_eq!(view.requests[&a.request_id][0].usage.read, None);
++        sqlx::raw_sql(mutation)
++            .execute(runtime.pool.as_ref())
++            .await?;
++        let before = rows(&runtime).await?;
++        assert!(inspected(&runtime, 0, 0).await.is_err(), "{mutation}");
++        assert_eq!(rows(&runtime).await?, before);
++        runtime.close().await;
++    }
++    let path = home();
++    let runtime = open(&path).await?;
++    seed(&runtime).await?;
++    let store = AccountingStore::open(&runtime, 0).await?;
++    for id in [1, 2] {
++        let a = attempt(id);
++        store.admit(a.thread_id, &a, &[], 0).await?;
++        let mut observation = row(1);
++        observation.source = a.attempt_id;
++        observation.patch =
++            serde_json::from_value(json!({"input": if id == 1 { i64::MAX } else { 1 }}))?;
++        sqlx::query("INSERT INTO draft_accounting_observations VALUES (?, 1, ?, 1, ?)")
++            .bind(a.attempt_id.to_string())
++            .bind(observation.source.to_string())
++            .bind(serde_json::to_string(&observation)?)
++            .execute(runtime.pool.as_ref())
++            .await?;
++    }
++    marker(inspected(&runtime, 0, 0).await.unwrap_err(), "overflow");
++    runtime.close().await;
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_single_snapshot_concurrent_writer() -> anyhow::Result<()> {
++    let path = home();
++    let runtime = open(&path).await?;
++    seed(&runtime).await?;
++    let a = attempt(1);
++    let store = AccountingStore::open(&runtime, 0).await?;
++    store.admit(a.thread_id, &a, &[snapshot()], 0).await?;
++    let before = inspected(&runtime, 0, 0).await?;
++    // Establish the same read snapshot as inspect_day before releasing the writer.
++    let mut tx = runtime.pool.begin().await?;
++    validate_on_connection(&mut tx).await?;
++    let (release, barrier) = tokio::sync::oneshot::channel();
++    let writer_runtime = runtime.clone();
++    let writer = tokio::spawn(async move {
++        barrier.await?;
++        AccountingStore::open(&writer_runtime, 0)
++            .await?
++            .observe(a.thread_id, &a, &[row(1)], 0)
++            .await?;
++        anyhow::Ok(())
++    });
++    release.send(()).unwrap();
++    writer.await??;
++    assert_eq!(
++        Journal::inspect_on_connection(&mut tx, attempt(1).thread_id, 0, 0).await?,
++        before
++    );
++    tx.commit().await?;
++    let after = inspection(inspected(&runtime, 0, 0).await?);
++    assert_eq!(
++        after.totals.measured[1],
++        Metric {
++            known: 1,
++            unknown: 0
++        }
++    );
++    assert_eq!(
++        after.requests[&attempt(1).request_id][0].usage.noncached,
++        Some(1)
++    );
++    runtime.close().await;
++    Ok(())
++}
++
+ fn home() -> impl std::ops::Deref<Target = std::path::PathBuf> {
+     scopeguard::guard(crate::runtime::test_support::unique_temp_dir(), |path| {
+         let _ = std::fs::remove_dir_all(path);
+diff --git a/codex-rs/state/tests/accounting_store.rs b/codex-rs/state/tests/accounting_store.rs
+index daabb11ff..5fc6290c9 100644
+--- a/codex-rs/state/tests/accounting_store.rs
++++ b/codex-rs/state/tests/accounting_store.rs
+@@ -17,6 +17,416 @@ use uuid::Uuid;
+ 
+ const DAY: i64 = 86_400_000;
+ 
++fn ready(result: InspectionDay) -> Inspection {
++    let InspectionDay::Ready(view) = result else {
++        panic!("{result:?}")
++    };
++    view
++}
++
++#[tokio::test]
++async fn accounting_inspect_public_reopens_twice() -> anyhow::Result<()> {
++    let path = home();
++    let runtime = open(&path).await?;
++    let a = attempt(1, 0)?;
++    native(&runtime, a.thread_id).await?;
++    let store = AccountingStore::open(&runtime, 0).await?;
++    store.admit(a.thread_id, &a, &[snapshot()?], 0).await?;
++    store
++        .observe(a.thread_id, &a, &[observation(&a, 1, 4)?], 0)
++        .await?;
++    let expected = AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?;
++    runtime.close().await;
++    for _ in 0..2 {
++        let runtime = open(&path).await?;
++        assert_eq!(
++            AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?,
++            expected
++        );
++        runtime.close().await;
++    }
++    Ok(())
++}
++
++// Read every table/column, including schemas and checkpoint, without fixture DDL.
++async fn inspection_tables(conn: &mut SqliteConnection) -> anyhow::Result<Vec<Vec<String>>> {
++    let tables: Vec<String> =
++        sqlx::query_scalar("SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name")
++            .fetch_all(&mut *conn)
++            .await?;
++    let mut rows = vec![
++        sqlx::query_scalar("SELECT json_array(name, sql) FROM sqlite_schema ORDER BY name")
++            .fetch_all(&mut *conn)
++            .await?,
++    ];
++    for table in tables {
++        let columns: Vec<String> =
++            sqlx::query_scalar("SELECT name FROM pragma_table_info(?) ORDER BY cid")
++                .bind(&table)
++                .fetch_all(&mut *conn)
++                .await?;
++        let columns = columns
++            .iter()
++            .map(|c| format!("quote(\"{}\")", c.replace('"', "\"\"")))
++            .collect::<Vec<_>>()
++            .join(",");
++        let table = table.replace('"', "\"\"");
++        rows.push(
++            sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
++                "SELECT json_array({columns}) FROM \"{table}\" ORDER BY 1"
++            )))
++            .fetch_all(&mut *conn)
++            .await?,
++        );
++    }
++    Ok(rows)
++}
++
++#[tokio::test]
++async fn accounting_inspect_public_reads_do_not_write() -> anyhow::Result<()> {
++    let path = home();
++    let runtime = open(&path).await?;
++    let a = attempt(1, 0)?;
++    native(&runtime, a.thread_id).await?;
++    let mut conn = connection(&runtime).await?;
++    let before = inspection_tables(&mut conn).await?;
++    assert_eq!(
++        AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?,
++        InspectionDay::Absent
++    );
++    assert_eq!(inspection_tables(&mut conn).await?, before);
++    AccountingStore::open(&runtime, 0)
++        .await?
++        .admit(a.thread_id, &a, &[], 0)
++        .await?;
++    let before = inspection_tables(&mut conn).await?;
++    assert_eq!(
++        ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 1).await?)
++            .totals
++            .attempts,
++        1
++    );
++    assert!(
++        AccountingStore::inspect_day(&runtime, a.thread_id, -1, 0)
++            .await
++            .is_err()
++    );
++    // Drop a polled read at its first asynchronous database boundary.
++    let mut read = Box::pin(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0));
++    std::future::poll_fn(|cx| {
++        assert!(std::future::Future::poll(read.as_mut(), cx).is_pending());
++        std::task::Poll::Ready(())
++    })
++    .await;
++    drop(read);
++    assert_eq!(inspection_tables(&mut conn).await?, before);
++    conn.close().await?;
++    runtime.close().await;
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_public_identity_retry_scope() -> anyhow::Result<()> {
++    let path = home();
++    let runtime = open(&path).await?;
++    let a = attempt(1, DAY - 1)?;
++    let mut retry = attempt(2, DAY)?;
++    retry.request_id = a.request_id;
++    retry.retry_of = Some(a.attempt_id);
++    let separate = attempt(3, DAY)?;
++    let mut other = attempt(4, DAY)?;
++    other.thread_id = ThreadId::new();
++    for owner in [a.thread_id, other.thread_id] {
++        native(&runtime, owner).await?;
++    }
++    let store = AccountingStore::open(&runtime, DAY - 1).await?;
++    for a in [&a, &retry, &separate, &other] {
++        store
++            .admit(a.thread_id, a, &[], i64::from(a.dispatched_at_ms))
++            .await?;
++    }
++    let mut retry2 = retry.clone();
++    retry2.attempt_id = Uuid::from_u128(5);
++    retry2.retry_of = Some(retry.attempt_id);
++    store.admit(a.thread_id, &retry2, &[], DAY).await?;
++    let view = ready(AccountingStore::inspect_day(&runtime, a.thread_id, 1, DAY).await?);
++    let members: std::collections::BTreeMap<_, Vec<_>> = view
++        .requests
++        .iter()
++        .map(|(id, rows)| (*id, rows.iter().map(|q| q.attempt.attempt_id).collect()))
++        .collect();
++    assert_eq!(
++        members,
++        std::collections::BTreeMap::from([
++            (a.request_id, vec![retry.attempt_id, retry2.attempt_id]),
++            (separate.request_id, vec![separate.attempt_id]),
++        ])
++    );
++    assert_eq!(view.totals.attempts, 3);
++    assert_eq!(
++        ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, DAY).await?)
++            .totals
++            .attempts,
++        1
++    );
++    runtime.close().await;
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_public_literal_partial_goldens() -> anyhow::Result<()> {
++    for (priced, patch, expected_cost, unknown, noncached) in [
++        (
++            true,
++            json!({"input":100,"read":20,"output":40}),
++            "0.00018",
++            1,
++            None,
++        ),
++        (
++            true,
++            json!({"input":100,"read":20,"write":0,"output":40}),
++            "0.00026",
++            0,
++            Some(80),
++        ),
++        (
++            false,
++            json!({"input":0,"read":0,"write":0,"output":0}),
++            "0",
++            0,
++            Some(0),
++        ),
++        (
++            false,
++            json!({"input":100,"read":20,"write":0,"output":40}),
++            "0",
++            1,
++            Some(80),
++        ),
++    ] {
++        let path = home();
++        let runtime = open(&path).await?;
++        let mut a = attempt(1, 0)?;
++        a.dialect = Dialect::Inclusive;
++        native(&runtime, a.thread_id).await?;
++        let mut price = snapshot()?;
++        price.rates =
++            serde_json::from_value(json!({"noncached":"1","read":"1","write":"2","output":"4"}))?;
++        let store = AccountingStore::open(&runtime, 0).await?;
++        store
++            .admit(
++                a.thread_id,
++                &a,
++                if priced {
++                    std::slice::from_ref(&price)
++                } else {
++                    &[]
++                },
++                0,
++            )
++            .await?;
++        let mut o = observation(&a, 1, 0)?;
++        o.patch = serde_json::from_value(patch)?;
++        store.observe(a.thread_id, &a, &[o], 0).await?;
++        let view = ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?);
++        assert_eq!(
++            serde_json::to_value(view.totals.known_usd)?,
++            json!(expected_cost)
++        );
++        assert_eq!(view.totals.unknown_estimates, unknown);
++        let quote = &view.requests[&a.request_id][0];
++        assert_eq!(quote.usage.noncached, noncached);
++        assert_eq!(quote.snapshot.is_some(), priced);
++        assert_eq!(quote.all_buckets_priced.is_none(), unknown == 1);
++        runtime.close().await;
++    }
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_public_delete_and_empty() -> anyhow::Result<()> {
++    let path = home();
++    let runtime = open(&path).await?;
++    let now = chrono::Utc::now().timestamp_millis();
++    let a = attempt(1, now)?;
++    native(&runtime, a.thread_id).await?;
++    assert_eq!(
++        AccountingStore::inspect_day(&runtime, a.thread_id, now / DAY, now).await?,
++        InspectionDay::Absent
++    );
++    let store = AccountingStore::open(&runtime, now).await?;
++    assert_eq!(
++        ready(AccountingStore::inspect_day(&runtime, a.thread_id, now / DAY, now).await?)
++            .totals
++            .attempts,
++        0
++    );
++    let mut other = attempt(2, now)?;
++    other.thread_id = ThreadId::new();
++    native(&runtime, other.thread_id).await?;
++    for a in [&a, &other] {
++        store.admit(a.thread_id, a, &[], now).await?;
++    }
++    let other_before =
++        AccountingStore::inspect_day(&runtime, other.thread_id, now / DAY, now).await?;
++    runtime.delete_thread(a.thread_id).await?;
++    let read_at = chrono::Utc::now().timestamp_millis();
++    assert_eq!(
++        AccountingStore::inspect_day(&runtime, a.thread_id, now / DAY, read_at).await?,
++        InspectionDay::MissingThread
++    );
++    let mut other_after =
++        ready(AccountingStore::inspect_day(&runtime, other.thread_id, now / DAY, read_at).await?);
++    let before = ready(other_before);
++    other_after.read_at_ms = before.read_at_ms;
++    // Deletion can advance the store checkpoint; retained evidence must remain identical.
++    assert_eq!(
++        (other_after.owner, other_after.totals, other_after.requests),
++        (before.owner, before.totals, before.requests)
++    );
++    native(&runtime, a.thread_id).await?;
++    assert_eq!(
++        ready(AccountingStore::inspect_day(&runtime, a.thread_id, now / DAY, read_at).await?)
++            .totals
++            .attempts,
++        0
++    );
++    runtime.close().await;
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_public_limits_no_truncation() -> anyhow::Result<()> {
++    let path = home();
++    let runtime = open(&path).await?;
++    let a = attempt(1, 0)?;
++    native(&runtime, a.thread_id).await?;
++    let store = AccountingStore::open(&runtime, 0).await?;
++    store.admit(a.thread_id, &a, &[], 0).await?;
++    // Clone legitimately admitted, all-unknown intent and its original NULL evidence.
++    let mut conn = connection(&runtime).await?;
++    let quote = ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?).requests
++        [&a.request_id][0]
++        .clone();
++    for id in 2..=513 {
++        let a = attempt(id, 0)?;
++        let mut q = quote.clone();
++        q.attempt = a.clone();
++        sqlx::query("INSERT INTO draft_accounting_attempts VALUES (?, ?, ?)")
++            .bind(a.attempt_id.to_string())
++            .bind(a.request_id.to_string())
++            .bind(serde_json::to_string(&a)?)
++            .execute(&mut conn)
++            .await?;
++        sqlx::query("INSERT INTO draft_accounting_price_bindings VALUES (?, NULL)")
++            .bind(a.attempt_id.to_string())
++            .execute(&mut conn)
++            .await?;
++        sqlx::query("INSERT INTO draft_accounting_estimates VALUES (?, '[]', ?)")
++            .bind(a.attempt_id.to_string())
++            .bind(serde_json::to_string(&q)?)
++            .execute(&mut conn)
++            .await?;
++        sqlx::query("INSERT INTO draft_accounting_contributions VALUES (?, ?, 0, '[]')")
++            .bind(a.attempt_id.to_string())
++            .bind(a.thread_id.to_string())
++            .execute(&mut conn)
++            .await?;
++        if id == 512 {
++            assert_eq!(
++                ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?)
++                    .totals
++                    .attempts,
++                512
++            );
++        }
++    }
++    assert_eq!(
++        AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?,
++        InspectionDay::TooLarge
++    );
++    conn.close().await?;
++    runtime.close().await;
++    inspection_limit_edges().await?;
++    Ok(())
++}
++
++async fn inspection_limit_edges() -> anyhow::Result<()> {
++    let path = home();
++    let runtime = open(&path).await?;
++    let a = attempt(1, 0)?;
++    native(&runtime, a.thread_id).await?;
++    let store = AccountingStore::open(&runtime, 0).await?;
++    store.admit(a.thread_id, &a, &[], 0).await?;
++    let observations: Vec<_> = (1..=4096)
++        .map(|r| observation(&a, r, r))
++        .collect::<anyhow::Result<_>>()?;
++    let mut conn = connection(&runtime).await?;
++    for batch in observations.chunks(256) {
++        store.observe(a.thread_id, &a, batch, 0).await?;
++        // This fixture retains one estimate version to isolate the observation cap.
++        sqlx::query("DELETE FROM draft_accounting_estimates WHERE evidence NOT IN (SELECT evidence FROM draft_accounting_contributions)")
++            .execute(&mut conn).await?;
++    }
++    conn.close().await?;
++    assert_eq!(
++        ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?).requests
++            [&a.request_id][0]
++            .observations
++            .len(),
++        4096
++    );
++    store
++        .observe(a.thread_id, &a, &[observation(&a, 4097, 4097)?], 0)
++        .await?;
++    assert_eq!(
++        AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?,
++        InspectionDay::TooLarge
++    );
++    runtime.close().await;
++    let path = home();
++    let runtime = open(&path).await?;
++    native(&runtime, a.thread_id).await?;
++    AccountingStore::open(&runtime, 0).await?;
++    let mut conn = connection(&runtime).await?;
++    // Deliberately invalid small rows prove the cap precedes materialization.
++    sqlx::raw_sql("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<10000)
++        INSERT INTO draft_accounting_attempts SELECT CAST(x AS TEXT), CAST(x AS TEXT), 'null' FROM n")
++        .execute(&mut conn).await?;
++    assert!(
++        AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0)
++            .await
++            .is_err()
++    );
++    sqlx::raw_sql("INSERT INTO draft_accounting_attempts VALUES ('extra','extra','null')")
++        .execute(&mut conn)
++        .await?;
++    assert_eq!(
++        AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?,
++        InspectionDay::TooLarge
++    );
++    sqlx::raw_sql("DELETE FROM draft_accounting_attempts")
++        .execute(&mut conn)
++        .await?;
++    for size in [4 * 1024 * 1024, 4 * 1024 * 1024 + 1] {
++        let payload = format!("null{}", " ".repeat(size - 4));
++        sqlx::query("INSERT OR REPLACE INTO draft_accounting_attempts VALUES ('bad','bad',?)")
++            .bind(payload)
++            .execute(&mut conn)
++            .await?;
++        let result = AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await;
++        if size == 4 * 1024 * 1024 {
++            assert!(result.is_err());
++        } else {
++            assert_eq!(result?, InspectionDay::TooLarge);
++        }
++    }
++    conn.close().await?;
++    runtime.close().await;
++    Ok(())
++}
++
+ fn home() -> impl std::ops::Deref<Target = std::path::PathBuf> {
+     scopeguard::guard(
+         std::env::temp_dir().join(format!("accounting-store-{}", Uuid::new_v4())),
+diff --git a/codex-rs/tui/src/app/event_dispatch.rs b/codex-rs/tui/src/app/event_dispatch.rs
+index e339e9d02..14c9ddc33 100644
+--- a/codex-rs/tui/src/app/event_dispatch.rs
++++ b/codex-rs/tui/src/app/event_dispatch.rs
+@@ -23,6 +23,83 @@ use std::collections::HashSet;
+ 
+ const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
+ 
++impl App {
++    // This local-only route has no app-server client or account request capability.
++    pub(super) fn handle_accounting_inspector_event(&mut self, event: AppEvent) {
++        match event {
++            AppEvent::OpenAccountingInspector { day } => {
++                self.chat_widget.open_accounting_inspector(day)
++            }
++            AppEvent::LoadAccountingInspector {
++                generation,
++                thread,
++                day,
++            } => {
++                let db = self.state_db.clone();
++                let embedded = matches!(self.app_server_target, crate::AppServerTarget::Embedded);
++                let current = self.current_displayed_thread_id();
++                let tx = self.app_event_tx.clone();
++                tokio::spawn(async move {
++                    let result = if !embedded {
++                        Err("Unavailable — recorded request inspection is local-only; remote server selected.".into())
++                    } else if thread.is_none() || thread != current {
++                        Err("Unavailable — no current native thread.".into())
++                    } else if let (Some(db), Some(owner)) = (db, thread) {
++                        accounting_inspector_read_result(
++                            codex_state::accounting::AccountingStore::inspect_day(
++                                &db,
++                                owner,
++                                day,
++                                chrono::Utc::now().timestamp_millis(),
++                            ),
++                        )
++                        .await
++                    } else {
++                        Err("Unavailable — native state database is not open.".into())
++                    };
++                    tx.send(AppEvent::AccountingInspectorLoaded {
++                        generation,
++                        thread,
++                        day,
++                        result,
++                    });
++                });
++            }
++            AppEvent::AccountingInspectorLoaded {
++                generation,
++                thread,
++                day,
++                result,
++            } => {
++                if thread == self.current_displayed_thread_id() {
++                    self.chat_widget
++                        .finish_accounting_inspector(generation, thread, day, result);
++                }
++            }
++            AppEvent::NavigateAccountingInspector { generation, page } => self
++                .chat_widget
++                .navigate_accounting_inspector(generation, page),
++            AppEvent::CloseAccountingInspector { generation } => {
++                self.chat_widget.close_accounting_inspector(generation)
++            }
++            AppEvent::RefreshAccountingInspector { generation } => {
++                self.chat_widget.refresh_accounting_inspector(generation)
++            }
++            _ => unreachable!("non-inspector event"),
++        }
++    }
++}
++
++pub(super) async fn accounting_inspector_read_result(
++    read: impl std::future::Future<Output = anyhow::Result<codex_state::accounting::InspectionDay>>,
++) -> Result<codex_state::accounting::InspectionDay, String> {
++    match tokio::time::timeout(Duration::from_secs(15), read).await {
++        Ok(Ok(value)) => Ok(value),
++        Ok(Err(_)) => Err("Unavailable — accounting evidence is corrupt, incompatible or could not be read. Refresh to retry; no repair performed.".into()),
++        Err(_) => Err("Unavailable — inspection timed out. Refresh to retry.".into()),
++    }
++}
++
+ fn resolve_shared_provider_selection_model(
+     configured_model: Option<String>,
+     active_model: &str,
+@@ -1680,6 +1757,12 @@ impl App {
+             AppEvent::RefreshRateLimits { origin } => {
+                 self.refresh_rate_limits(app_server, origin);
+             }
++            event @ (AppEvent::OpenAccountingInspector { .. }
++            | AppEvent::LoadAccountingInspector { .. }
++            | AppEvent::AccountingInspectorLoaded { .. }
++            | AppEvent::NavigateAccountingInspector { .. }
++            | AppEvent::CloseAccountingInspector { .. }
++            | AppEvent::RefreshAccountingInspector { .. }) => self.handle_accounting_inspector_event(event),
+             AppEvent::RefreshTokenActivity { request_id } => {
+                 self.refresh_token_activity(app_server, request_id);
+             }
+diff --git a/codex-rs/tui/src/app/tests.rs b/codex-rs/tui/src/app/tests.rs
+index 1027f50c6..3822524c7 100644
+--- a/codex-rs/tui/src/app/tests.rs
++++ b/codex-rs/tui/src/app/tests.rs
+@@ -1,5 +1,291 @@
+ //! App-level orchestration tests for the TUI.
+ 
++async fn accounting_fixture(
++    app: &mut App,
++    path: &std::path::Path,
++) -> anyhow::Result<(ThreadId, i64)> {
++    use codex_state::accounting::*;
++    let now = chrono::Utc::now().timestamp_millis();
++    let owner = ThreadId::new();
++    let db = codex_state::StateRuntime::init(
++        codex_state::SqliteConfig::from_sqlite_home(path.abs()),
++        "synthetic".into(),
++    )
++    .await?;
++    let metadata = codex_state::ThreadMetadataBuilder::new(
++        owner,
++        path.join("synthetic.jsonl"),
++        chrono::Utc::now(),
++        codex_protocol::protocol::SessionSource::Cli,
++    );
++    db.upsert_thread(&metadata.build("synthetic")).await?;
++    let a: Attempt = serde_json::from_value(serde_json::json!({
++        "attempt_id":uuid::Uuid::from_u128(1),"request_id":uuid::Uuid::from_u128(2),
++        "thread_id":owner,"turn":"synthetic","retry_of":null,"provider":"fixture-only",
++        "model":"fixture-model","scope":uuid::Uuid::nil(),"dialect":"Inclusive","dispatched_at_ms":now
++    }))?;
++    let s: Snapshot = serde_json::from_value(serde_json::json!({
++        "id":uuid::Uuid::from_u128(3),"provider":"fixture-only","model":"fixture-model",
++        "scope":uuid::Uuid::nil(),"currency":"USD","unit":"PerMillionTokens",
++        "rates":{"noncached":"1","read":"1","write":"2","output":"4"},
++        "source_reference":uuid::Uuid::from_u128(4),"source_kind":"ProviderPublished",
++        "observed_at_ms":0,"approved_at_ms":0,"effective_from_ms":0,"effective_end_ms":null
++    }))?;
++    let o: Observation = serde_json::from_value(serde_json::json!({
++        "revision":1,"source":uuid::Uuid::from_u128(5),"sequence":1,
++        "patch":{"input":100,"read":20,"output":40}
++    }))?;
++    let store = AccountingStore::open(&db, now).await?;
++    store.admit(owner, &a, &[s], now).await?;
++    store.observe(owner, &a, &[o], now).await?;
++    app.chat_widget
++        .handle_thread_session_quiet(test_thread_session(owner, path.to_path_buf()));
++    app.active_thread_id = Some(owner);
++    app.state_db = Some(db);
++    Ok((owner, now / 86_400_000))
++}
++
++async fn accounting_load(
++    app: &mut App,
++    rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
++    day: i64,
++) -> AppEvent {
++    while rx.try_recv().is_ok() {}
++    app.handle_accounting_inspector_event(AppEvent::OpenAccountingInspector { day });
++    let load = rx.recv().await.unwrap();
++    assert!(matches!(load, AppEvent::LoadAccountingInspector { .. }));
++    app.handle_accounting_inspector_event(load);
++    tokio::time::timeout(Duration::from_secs(20), rx.recv())
++        .await
++        .unwrap()
++        .unwrap()
++}
++
++fn accounting_scroll(app: &mut App) -> String {
++    let mut output = String::new();
++    for _ in 0..120 {
++        output.push_str(&render_bottom_popup(&app.chat_widget, 40));
++        app.chat_widget
++            .handle_key_event(crossterm::event::KeyEvent::new(
++                crossterm::event::KeyCode::Down,
++                crossterm::event::KeyModifiers::NONE,
++            ));
++    }
++    output
++}
++
++#[tokio::test]
++async fn accounting_inspect_app_real_store_to_view() -> anyhow::Result<()> {
++    use codex_state::accounting::InspectionDay;
++    let path = tempdir()?;
++    let (mut app, mut rx, mut ops) = make_test_app_with_channels().await;
++    let (_, day) = accounting_fixture(&mut app, path.path()).await?;
++    while ops.try_recv().is_ok() {}
++    let event = accounting_load(&mut app, &mut rx, day).await;
++    let generation = match &event {
++        AppEvent::AccountingInspectorLoaded {
++            result: Ok(InspectionDay::Ready(v)),
++            generation,
++            ..
++        } => {
++            assert_eq!(
++                serde_json::to_value(v.totals.known_usd)?,
++                serde_json::json!("0.00018")
++            );
++            assert_eq!(v.totals.unknown_estimates, 1);
++            assert_eq!(v.requests.len(), 1);
++            *generation
++        }
++        other => panic!("{other:?}"),
++    };
++    app.handle_accounting_inspector_event(event);
++    let summary = accounting_scroll(&mut app);
++    assert!(
++        summary.contains("$0.000180") && summary.contains("+ unknown") && summary.contains("costs")
++    );
++    for page in [1, 2] {
++        app.handle_accounting_inspector_event(AppEvent::NavigateAccountingInspector {
++            generation,
++            page,
++        });
++    }
++    let detail = accounting_scroll(&mut app);
++    for required in [
++        "Cache write: unknown",
++        "fixture-only",
++        "fixture-model",
++        "0.00018",
++        "Price ID:",
++    ] {
++        assert!(detail.contains(required), "{required}");
++    }
++    assert!(ops.try_recv().is_err());
++    assert!(rx.try_recv().is_err());
++    app.state_db.as_ref().unwrap().close().await;
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_app_remote_does_not_read_local() -> anyhow::Result<()> {
++    let path = tempdir()?;
++    let (mut app, mut rx, _ops) = make_test_app_with_channels().await;
++    let (_, day) = accounting_fixture(&mut app, path.path()).await?;
++    app.app_server_target = crate::AppServerTarget::Remote {
++        endpoint: crate::RemoteAppServerEndpoint::UnixSocket {
++            socket_path: path.path().join("missing.sock").abs(),
++        },
++    };
++    let event = accounting_load(&mut app, &mut rx, day).await;
++    assert!(
++        matches!(&event, AppEvent::AccountingInspectorLoaded { result: Err(message), .. } if message.contains("remote"))
++    );
++    app.handle_accounting_inspector_event(event);
++    let screen = accounting_scroll(&mut app);
++    assert!(!screen.contains("0.000180"));
++    assert!(!screen.contains("fixture-only"));
++    app.state_db.as_ref().unwrap().close().await;
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_app_thread_switch_stale_reply() -> anyhow::Result<()> {
++    let path = tempdir()?;
++    let (mut app, mut rx, _ops) = make_test_app_with_channels().await;
++    let (_, day) = accounting_fixture(&mut app, path.path()).await?;
++    let held_result = accounting_load(&mut app, &mut rx, day).await;
++    let other = ThreadId::new();
++    app.chat_widget
++        .handle_thread_session_quiet(test_thread_session(other, path.path().to_path_buf()));
++    app.active_thread_id = Some(other);
++    app.handle_accounting_inspector_event(held_result);
++    assert!(!render_bottom_popup(&app.chat_widget, 80).contains("Recorded requests"));
++    let next = accounting_load(&mut app, &mut rx, day).await;
++    assert!(matches!(next, AppEvent::AccountingInspectorLoaded {
++        thread: Some(id), result: Ok(codex_state::accounting::InspectionDay::MissingThread), ..
++    } if id == other));
++    app.state_db.as_ref().unwrap().close().await;
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_app_error_retry_and_timeout() -> anyhow::Result<()> {
++    let path = tempdir()?;
++    let (mut app, mut rx, _ops) = make_test_app_with_channels().await;
++    let (_, day) = accounting_fixture(&mut app, path.path()).await?;
++    let db = app.state_db.take().unwrap();
++    let missing = accounting_load(&mut app, &mut rx, day).await;
++    assert!(
++        matches!(&missing, AppEvent::AccountingInspectorLoaded { result: Err(s), .. } if s.contains("database is not open"))
++    );
++    app.handle_accounting_inspector_event(missing);
++    app.state_db = Some(db.clone());
++    let event = accounting_load(&mut app, &mut rx, day).await;
++    let AppEvent::AccountingInspectorLoaded { generation, .. } = &event else {
++        panic!()
++    };
++    let generation = *generation;
++    app.handle_accounting_inspector_event(event);
++    tokio::time::pause();
++    let timeout =
++        super::event_dispatch::accounting_inspector_read_result(std::future::pending()).await;
++    tokio::time::resume();
++    assert!(timeout.unwrap_err().contains("timed out"));
++    app.handle_accounting_inspector_event(AppEvent::RefreshAccountingInspector { generation });
++    let AppEvent::LoadAccountingInspector {
++        generation: next, ..
++    } = rx.recv().await.unwrap()
++    else {
++        panic!()
++    };
++    assert_ne!(generation, next);
++    db.close().await;
++    let failed = accounting_load(&mut app, &mut rx, day).await;
++    assert!(
++        matches!(&failed, AppEvent::AccountingInspectorLoaded { result: Err(s), .. } if s.contains("could not be read") && !s.contains("SELECT"))
++    );
++    app.handle_accounting_inspector_event(failed);
++    app.chat_widget
++        .handle_key_event(crossterm::event::KeyEvent::new(
++            crossterm::event::KeyCode::Esc,
++            crossterm::event::KeyModifiers::NONE,
++        ));
++    app.handle_accounting_inspector_event(rx.recv().await.unwrap());
++    assert!(!render_bottom_popup(&app.chat_widget, 80).contains("Recorded requests"));
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_app_restart_and_profile_isolation() -> anyhow::Result<()> {
++    let path = tempdir()?;
++    let fresh = tempdir()?;
++    let (mut app, mut rx, _ops) = make_test_app_with_channels().await;
++    let (owner, day) = accounting_fixture(&mut app, path.path()).await?;
++    let before = accounting_load(&mut app, &mut rx, day).await;
++    app.handle_accounting_inspector_event(before);
++    app.state_db.take().unwrap().close().await;
++    app.chat_widget.clear_pending_token_activity_refreshes();
++    app.state_db = Some(
++        codex_state::StateRuntime::init(
++            codex_state::SqliteConfig::from_sqlite_home(path.path().abs()),
++            "synthetic".into(),
++        )
++        .await?,
++    );
++    let reopened = accounting_load(&mut app, &mut rx, day).await;
++    assert!(
++        matches!(reopened, AppEvent::AccountingInspectorLoaded { result: Ok(codex_state::accounting::InspectionDay::Ready(v)), .. } if v.owner == owner && v.totals.attempts == 1)
++    );
++    app.state_db.take().unwrap().close().await;
++    app.chat_widget
++        .update_account_state(None, None, false, false);
++    app.state_db = Some(
++        codex_state::StateRuntime::init(
++            codex_state::SqliteConfig::from_sqlite_home(fresh.path().abs()),
++            "synthetic".into(),
++        )
++        .await?,
++    );
++    let empty = accounting_load(&mut app, &mut rx, day).await;
++    assert!(matches!(
++        &empty,
++        AppEvent::AccountingInspectorLoaded {
++            result: Ok(codex_state::accounting::InspectionDay::Absent),
++            ..
++        }
++    ));
++    app.handle_accounting_inspector_event(empty);
++    assert!(!accounting_scroll(&mut app).contains("0.000180"));
++    app.state_db.take().unwrap().close().await;
++    Ok(())
++}
++
++#[tokio::test]
++async fn accounting_inspect_app_off_and_old_usage_routes() -> anyhow::Result<()> {
++    let (mut app, mut rx, mut ops) = make_test_app_with_channels().await;
++    let event = accounting_load(&mut app, &mut rx, 0).await;
++    assert!(
++        matches!(&event, AppEvent::AccountingInspectorLoaded { result: Err(s), .. } if s.contains("no current native thread"))
++    );
++    app.handle_accounting_inspector_event(event);
++    assert!(ops.try_recv().is_err());
++    assert!(rx.try_recv().is_err());
++    app.chat_widget.clear_pending_token_activity_refreshes();
++    set_chatgpt_auth(&mut app.chat_widget);
++    app.chat_widget.handle_paste("/usage".into());
++    app.chat_widget
++        .handle_key_event(crossterm::event::KeyEvent::new(
++            crossterm::event::KeyCode::Enter,
++            crossterm::event::KeyModifiers::NONE,
++        ));
++    app.chat_widget
++        .handle_key_event(crossterm::event::KeyEvent::new(
++            crossterm::event::KeyCode::Enter,
++            crossterm::event::KeyModifiers::NONE,
++        ));
++    assert!(matches!(rx.recv().await, Some(AppEvent::OpenTokenActivity)));
++    Ok(())
++}
++
+ #[path = "tests/advanced_reasoning_tests.rs"]
+ mod advanced_reasoning_tests;
+ mod dispatch_integration;
+diff --git a/codex-rs/tui/src/app_event.rs b/codex-rs/tui/src/app_event.rs
+index 109598aea..a4d0dc3d3 100644
+--- a/codex-rs/tui/src/app_event.rs
++++ b/codex-rs/tui/src/app_event.rs
+@@ -1050,6 +1050,31 @@ pub(crate) enum AppEvent {
+     /// Open the default token-activity view selected from the `/usage` menu.
+     OpenTokenActivity,
+ 
++    OpenAccountingInspector {
++        day: i64,
++    },
++    LoadAccountingInspector {
++        generation: uuid::Uuid,
++        thread: Option<ThreadId>,
++        day: i64,
++    },
++    AccountingInspectorLoaded {
++        generation: uuid::Uuid,
++        thread: Option<ThreadId>,
++        day: i64,
++        result: Result<codex_state::accounting::InspectionDay, String>,
++    },
++    NavigateAccountingInspector {
++        generation: uuid::Uuid,
++        page: usize,
++    },
++    CloseAccountingInspector {
++        generation: uuid::Uuid,
++    },
++    RefreshAccountingInspector {
++        generation: uuid::Uuid,
++    },
++
+     /// Open the reset-credit flow selected from the `/usage` menu.
+     OpenRateLimitResetCredits,
+ 
+diff --git a/codex-rs/tui/src/chatwidget.rs b/codex-rs/tui/src/chatwidget.rs
+index b520b65b6..478dfb75e 100644
+--- a/codex-rs/tui/src/chatwidget.rs
++++ b/codex-rs/tui/src/chatwidget.rs
+@@ -591,6 +591,7 @@ pub(crate) struct ChatWidget {
+     rate_limit_snapshots_by_limit_id: BTreeMap<String, RateLimitSnapshotDisplay>,
+     refreshing_status_outputs: Vec<(u64, StatusHistoryHandle)>,
+     next_status_refresh_request_id: u64,
++    accounting_inspector: Option<tokens::Inspector>,
+     refreshing_token_activity_output: Option<tokens::PendingTokenActivityOutput>,
+     completed_token_activity_output: Option<history_cell::CompositeHistoryCell>,
+     next_token_activity_request_id: u64,
+@@ -1404,6 +1405,7 @@ impl ChatWidget {
+     }
+ 
+     fn request_redraw(&mut self) {
++        self.invalidate_accounting_inspector_for_thread();
+         self.frame_requester.schedule_frame();
+     }
+ 
+diff --git a/codex-rs/tui/src/chatwidget/constructor.rs b/codex-rs/tui/src/chatwidget/constructor.rs
+index eae29dc05..09a9e755a 100644
+--- a/codex-rs/tui/src/chatwidget/constructor.rs
++++ b/codex-rs/tui/src/chatwidget/constructor.rs
+@@ -134,6 +134,7 @@ impl ChatWidget {
+             rate_limit_snapshots_by_limit_id: BTreeMap::new(),
+             refreshing_status_outputs: Vec::new(),
+             next_status_refresh_request_id: 0,
++            accounting_inspector: None,
+             refreshing_token_activity_output: None,
+             completed_token_activity_output: None,
+             next_token_activity_request_id: 0,
+diff --git a/codex-rs/tui/src/chatwidget/slash_dispatch.rs b/codex-rs/tui/src/chatwidget/slash_dispatch.rs
+index 077ead9db..89483ec2f 100644
+--- a/codex-rs/tui/src/chatwidget/slash_dispatch.rs
++++ b/codex-rs/tui/src/chatwidget/slash_dispatch.rs
+@@ -760,11 +760,13 @@ impl ChatWidget {
+         let trimmed = args.trim();
+         match cmd {
+             SlashCommand::Usage => {
+-                if self.ensure_usage_command_available() {
++                if trimmed.split_whitespace().next() == Some("requests") {
++                    self.open_accounting_command(trimmed, chrono::Utc::now().date_naive());
++                } else if self.ensure_usage_command_available() {
+                     match tokens::TokenActivityView::parse(trimmed) {
+                         Some(view) => self.add_token_activity_output(view),
+                         None => self.add_error_message(
+-                            "Usage: /usage [daily|weekly|cumulative]".to_string(),
++                            "Usage: /usage [daily|weekly|cumulative] or /usage requests [YYYY-MM-DD]".to_string(),
+                         ),
+                     }
+                 }
+diff --git a/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu.snap b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu.snap
+index 70aa225aa..fa183badb 100644
+--- a/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu.snap
++++ b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu.snap
+@@ -7,5 +7,7 @@ expression: "render_bottom_popup(&chat, 80)"
+ 
+ › 1. Show usage                View recent account token usage.
+   2. Redeem usage limit reset  You have 2 usage limit resets available.
++  3. Recorded requests         Explain this thread's recorded requests for
++                               today (UTC).
+ 
+   Press enter to confirm or esc to go back
+diff --git a/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_before_reset_refresh.snap b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_before_reset_refresh.snap
+index d4dc5deff..c56d3e750 100644
+--- a/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_before_reset_refresh.snap
++++ b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_before_reset_refresh.snap
+@@ -7,5 +7,7 @@ expression: "render_bottom_popup(&chat, 80)"
+ 
+ › 1. Show usage                View recent account token usage.
+   2. Redeem usage limit reset  Check reset availability.
++  3. Recorded requests         Explain this thread's recorded requests for
++                               today (UTC).
+ 
+   Press enter to confirm or esc to go back
+diff --git a/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_without_resets.snap b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_without_resets.snap
+index 127e37f7a..00182816f 100644
+--- a/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_without_resets.snap
++++ b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_menu_without_resets.snap
+@@ -7,5 +7,7 @@ expression: "render_bottom_popup(&chat, 80)"
+ 
+ › 1. Show usage                View recent account token usage.
+      Redeem usage limit reset  No usage limit resets available.
++  2. Recorded requests         Explain this thread's recorded requests for
++                               today (UTC).
+ 
+   Press enter to confirm or esc to go back
+diff --git a/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_with_invalid_view_reports_usage.snap b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_with_invalid_view_reports_usage.snap
+index bd4615eb8..2e174c14a 100644
+--- a/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_with_invalid_view_reports_usage.snap
++++ b/codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__usage_command_with_invalid_view_reports_usage.snap
+@@ -2,4 +2,4 @@
+ source: tui/src/chatwidget/tests/slash_commands.rs
+ expression: rendered
+ ---
+-■ Usage: /usage [daily|weekly|cumulative]
++■ Usage: /usage [daily|weekly|cumulative] or /usage requests [YYYY-MM-DD]
+diff --git a/codex-rs/tui/src/chatwidget/tests/slash_commands.rs b/codex-rs/tui/src/chatwidget/tests/slash_commands.rs
+index 7207e289c..620645ddf 100644
+--- a/codex-rs/tui/src/chatwidget/tests/slash_commands.rs
++++ b/codex-rs/tui/src/chatwidget/tests/slash_commands.rs
+@@ -3,6 +3,62 @@ use crate::bottom_pane::slash_commands::ServiceTierCommand;
+ use pretty_assertions::assert_eq;
+ use serial_test::serial;
+ 
++#[tokio::test]
++async fn accounting_inspect_command_without_account_auth() {
++    let (mut chat, mut rx, mut ops) = make_chatwidget_manual(None).await;
++    assert!(!chat.has_codex_backend_auth());
++    chat.dispatch_command_with_args(SlashCommand::Usage, "requests".into(), Vec::new());
++    assert_matches!(rx.try_recv(), Ok(AppEvent::LoadAccountingInspector { .. }));
++    assert!(rx.try_recv().is_err());
++    assert!(ops.try_recv().is_err());
++    assert!(render_bottom_popup(&chat, 80).contains("Loading recorded requests"));
++    chat.clear_pending_token_activity_refreshes();
++    chat.dispatch_command_with_args(SlashCommand::Usage, "weekly".into(), Vec::new());
++    let cells = drain_insert_history(&mut rx);
++    assert!(
++        cells
++            .iter()
++            .map(|c| lines_to_single_string(c))
++            .collect::<String>()
++            .contains("Sign in with ChatGPT")
++    );
++}
++
++#[tokio::test]
++async fn accounting_inspect_command_date_validation() {
++    let today = chrono::NaiveDate::from_ymd_opt(2026, 9, 15).unwrap();
++    for (args, day) in [
++        ("requests", Some(20711)),
++        ("requests 1970-01-01", Some(0)),
++        ("requests 2024-02-29", Some(19782)),
++        ("requests 2026-02-29", None),
++        ("requests 2026-9-15", None),
++        ("requests 2026-09-16", None),
++        ("requests 1969-12-31", None),
++        ("requests 2026-09-15 extra", None),
++        ("requests junk", None),
++    ] {
++        let (mut chat, mut rx, mut ops) = make_chatwidget_manual(None).await;
++        chat.open_accounting_command(args, today);
++        if let Some(expected) = day {
++            let AppEvent::LoadAccountingInspector { day, .. } = rx.try_recv().unwrap() else {
++                panic!("{args}")
++            };
++            assert_eq!(day, expected);
++            assert!(rx.try_recv().is_err());
++        } else {
++            let events: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
++            assert!(
++                events
++                    .iter()
++                    .all(|e| !matches!(e, AppEvent::LoadAccountingInspector { .. }))
++            );
++            assert!(!render_bottom_popup(&chat, 80).contains("Loading recorded requests"));
++        }
++        assert!(ops.try_recv().is_err());
++    }
++}
++
+ fn force_pet_image_support(chat: &mut ChatWidget) {
+     chat.set_pet_image_support_for_tests(crate::pets::PetImageSupport::Supported(
+         crate::pets::ImageProtocol::Kitty,
+diff --git a/codex-rs/tui/src/chatwidget/tests/usage.rs b/codex-rs/tui/src/chatwidget/tests/usage.rs
+index 82c201764..3bca54e7d 100644
+--- a/codex-rs/tui/src/chatwidget/tests/usage.rs
++++ b/codex-rs/tui/src/chatwidget/tests/usage.rs
+@@ -13,6 +13,82 @@ use uuid::Uuid;
+ 
+ const TEST_OVERLAY_VIEW_ID: &str = "usage-test-overlay";
+ 
++#[tokio::test]
++async fn accounting_inspect_menu_and_reset_regression() {
++    for (credits, downs, expected) in [(2, 0, 0), (2, 1, 1), (2, 2, 2), (0, 1, 2)] {
++        let (mut chat, mut rx, _ops) = make_chatwidget_manual(None).await;
++        set_chatgpt_auth(&mut chat);
++        chat.available_rate_limit_reset_credits = Some(credits);
++        chat.open_usage_menu();
++        while rx.try_recv().is_ok() {}
++        for _ in 0..downs {
++            chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
++        }
++        chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
++        match (expected, rx.try_recv().unwrap()) {
++            (0, AppEvent::OpenTokenActivity)
++            | (1, AppEvent::OpenRateLimitResetCredits)
++            | (2, AppEvent::OpenAccountingInspector { .. }) => {}
++            (_, other) => panic!("{other:?}"),
++        }
++    }
++}
++
++#[tokio::test]
++async fn accounting_inspect_cancel_refresh_generation() {
++    let (mut chat, mut rx, _ops) = make_chatwidget_manual(None).await;
++    chat.open_accounting_inspector(0);
++    let AppEvent::LoadAccountingInspector {
++        generation,
++        thread,
++        day,
++    } = rx.try_recv().unwrap()
++    else {
++        panic!()
++    };
++    chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
++    // Even before the queued close is handled, a late result cannot reopen it.
++    chat.finish_accounting_inspector(
++        generation,
++        thread,
++        day,
++        Ok(codex_state::accounting::InspectionDay::Absent),
++    );
++    chat.navigate_accounting_inspector(generation, 0);
++    assert!(!render_bottom_popup(&chat, 80).contains("Recorded requests"));
++    assert_matches!(rx.try_recv(), Ok(AppEvent::CloseAccountingInspector { .. }));
++    chat.close_accounting_inspector(generation);
++    assert!(chat.accounting_inspector.is_none());
++    chat.open_accounting_inspector(0);
++    let AppEvent::LoadAccountingInspector {
++        generation: next, ..
++    } = rx.try_recv().unwrap()
++    else {
++        panic!()
++    };
++    assert_ne!(generation, next);
++    chat.refresh_accounting_inspector(next);
++    let AppEvent::LoadAccountingInspector {
++        generation: refreshed,
++        ..
++    } = rx.try_recv().unwrap()
++    else {
++        panic!()
++    };
++    assert_ne!(next, refreshed);
++    chat.finish_accounting_inspector(next, thread, day, Err("STALE".into()));
++    assert!(!render_bottom_popup(&chat, 80).contains("STALE"));
++    chat.finish_accounting_inspector(
++        refreshed,
++        thread,
++        day,
++        Ok(codex_state::accounting::InspectionDay::Absent),
++    );
++    chat.update_account_state(None, None, false, false);
++    assert!(chat.accounting_inspector.is_none());
++    assert!(!render_bottom_popup(&chat, 80).contains("Recorded requests"));
++}
++
+ fn reset_credits(available_count: i64) -> RateLimitResetCreditsSummary {
+     RateLimitResetCreditsSummary {
+         available_count,
+@@ -146,9 +222,10 @@ async fn usage_command_disables_reset_after_cached_zero_snapshot() {
+             origin: RateLimitRefreshOrigin::UsageMenu { request_id: 1 }
+         })
+     );
++    // The disabled reset is skipped; the appended inspector is now next.
+     chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+     chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+-    assert_matches!(rx.try_recv(), Ok(AppEvent::OpenTokenActivity));
++    assert_matches!(rx.try_recv(), Ok(AppEvent::OpenAccountingInspector { .. }));
+ }
+ 
+ #[tokio::test]
+@@ -205,9 +282,10 @@ async fn usage_menu_refresh_failure_preserves_disabled_known_zero() {
+     );
+ 
+     assert!(render_bottom_popup(&chat, /*width*/ 80).contains("No usage limit resets available."));
++    // The disabled reset is skipped; the appended inspector is now next.
+     chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+     chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+-    assert_matches!(rx.try_recv(), Ok(AppEvent::OpenTokenActivity));
++    assert_matches!(rx.try_recv(), Ok(AppEvent::OpenAccountingInspector { .. }));
+ }
+ 
+ #[tokio::test]
+@@ -703,7 +781,7 @@ async fn no_credit_outcome_disables_reset_entry_in_usage_menu() {
+     chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+     chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+ 
+-    assert_matches!(rx.try_recv(), Ok(AppEvent::OpenTokenActivity));
++    assert_matches!(rx.try_recv(), Ok(AppEvent::OpenAccountingInspector { .. }));
+ 
+     chat.available_rate_limit_reset_credits = Some(2);
+     let consume_request_id = chat.show_rate_limit_reset_consuming_popup();
+diff --git a/codex-rs/tui/src/chatwidget/tokens.rs b/codex-rs/tui/src/chatwidget/tokens.rs
+index 52db0a60f..7bdd68d97 100644
+--- a/codex-rs/tui/src/chatwidget/tokens.rs
++++ b/codex-rs/tui/src/chatwidget/tokens.rs
+@@ -278,6 +278,8 @@ impl ChatWidget {
+     /// Late background responses cannot mutate cards after a transcript reset,
+     /// backtrack, or replacement flow clears this widget-owned state.
+     pub(crate) fn clear_pending_token_activity_refreshes(&mut self) {
++        self.accounting_inspector = None;
++        self.bottom_pane.dismiss_view_by_id(INSPECTOR_VIEW);
+         let cleared_refresh = self.refreshing_token_activity_output.take().is_some();
+         let cleared_completed = self.completed_token_activity_output.take().is_some();
+         if cleared_refresh || cleared_completed {
+@@ -287,6 +289,509 @@ impl ChatWidget {
+     }
+ }
+ 
++// Inspector pages contain local evidence only; never insert them into history.
++use crate::bottom_pane::SelectionItem;
++use crate::bottom_pane::SelectionViewParams;
++use codex_protocol::ThreadId;
++use codex_state::accounting::BucketQuote;
++use codex_state::accounting::Decimal;
++use codex_state::accounting::InspectionDay;
++use codex_state::accounting::ObservationQuote;
++use uuid::Uuid;
++
++const INSPECTOR_VIEW: &str = "recorded-requests";
++
++pub(super) struct Inspector {
++    generation: Uuid,
++    thread: Option<ThreadId>,
++    day: i64,
++    pages: Vec<InspectorPage>,
++    page: usize,
++    alive: Arc<std::sync::atomic::AtomicBool>,
++}
++
++struct InspectorPage {
++    title: String,
++    text: Vec<String>,
++    links: Vec<(String, usize)>,
++    parent: Option<usize>,
++    selected: Arc<std::sync::atomic::AtomicUsize>,
++}
++
++fn money(value: Decimal) -> String {
++    let display = value.display();
++    format!(
++        "${}{}{}",
++        display.text,
++        if display.rounded { " (rounded)" } else { "" },
++        if display.nonzero_sub_micro {
++            " (nonzero, less than $0.000001)"
++        } else {
++            ""
++        }
++    )
++}
++
++fn exact(value: Decimal) -> String {
++    serde_json::to_value(value)
++        .ok()
++        .and_then(|v| v.as_str().map(str::to_owned))
++        .unwrap_or_else(|| "unavailable".to_string())
++}
++
++fn estimate(known: Decimal, unknown: i64, attempts: i64) -> Vec<String> {
++    if attempts == 0 {
++        return vec!["No recorded attempts in this day; collection coverage unknown.".into()];
++    }
++    if unknown == 0 {
++        return vec![format!(
++            "Estimated token cost for recorded attempts: {}",
++            money(known)
++        )];
++    }
++    let mut lines = vec![
++        format!(
++            "Known estimated token cost: {} + unknown costs",
++            money(known)
++        ),
++        format!(
++            "Full recorded estimate: unavailable ({unknown} of {attempts} attempts incomplete)"
++        ),
++    ];
++    if known == Decimal::default() {
++        lines.insert(0, "Estimated token cost: unknown".into());
++    }
++    lines
++}
++
++const METRICS: [&str; 7] = [
++    "Input",
++    "Noncached input (derived for inclusive input)",
++    "Cache read",
++    "Cache write",
++    "Output",
++    "Reasoning (subset, not separately billed)",
++    "Total (not separately billed)",
++];
++const BUCKETS: [&str; 4] = ["Noncached input", "Cache read", "Cache write", "Output"];
++
++fn attempt_text(q: &ObservationQuote) -> Vec<String> {
++    let a = &q.attempt;
++    let mut lines = vec![
++        format!("Request: {}", a.request_id),
++        format!("Attempt: {}", a.attempt_id),
++        format!("Thread: {}", a.thread_id),
++        format!("Turn: {}", a.turn),
++        format!("Provider: {}", a.provider),
++        format!("Model: {}", a.model),
++        format!("Opaque scope: {}", a.scope),
++        format!("Arithmetic dialect: {:?}", a.dialect),
++        format!(
++            "Admission time: {} ms since Unix epoch (UTC)",
++            i64::from(a.dispatched_at_ms)
++        ),
++        format!(
++            "Retry predecessor: {}",
++            a.retry_of.map_or("none".into(), |v| v.to_string())
++        ),
++        "Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable"
++            .into(),
++    ];
++    lines.extend(estimate(
++        q.known_subtotal,
++        i64::from(q.all_buckets_priced.is_none()),
++        1,
++    ));
++    let u = &q.usage;
++    for (index, (label, value)) in METRICS
++        .iter()
++        .zip([
++            u.input,
++            u.noncached,
++            u.read,
++            u.write,
++            u.output,
++            u.reasoning,
++            u.total,
++        ])
++        .enumerate()
++    {
++        let derived = match a.dialect {
++            codex_state::accounting::Dialect::Inclusive => index == 1,
++            codex_state::accounting::Dialect::NativeAnthropic => index == 0 || index == 6,
++            codex_state::accounting::Dialect::UnknownCompatible => false,
++        };
++        lines.push(format!(
++            "{label}: {}",
++            value.map_or("unknown — no retained numeric evidence".into(), |n| {
++                if n == 0 {
++                    if derived {
++                        "0 (derived)"
++                    } else {
++                        "0 (reported)"
++                    }
++                    .into()
++                } else {
++                    format!("{n}{}", if derived { " (derived)" } else { "" })
++                }
++            })
++        ));
++    }
++    for (label, bucket) in BUCKETS.iter().zip(q.buckets) {
++        lines.push(format!(
++            "{label} cost: {}",
++            match bucket {
++                BucketQuote::Priced(v) => format!("{}; exact USD {}", money(v), exact(v)),
++                BucketQuote::MissingUsage => "unknown — no retained numeric evidence".into(),
++                BucketQuote::MissingRate => "unknown — rate unavailable".into(),
++            }
++        ));
++    }
++    lines.push(format!(
++        "Known subtotal exact USD: {}",
++        exact(q.known_subtotal)
++    ));
++    if let Some(s) = &q.snapshot {
++        lines.extend([
++            format!("Price ID: {}", s.id),
++            format!(
++                "Price source: {:?}; reference {}",
++                s.source_kind, s.source_reference
++            ),
++            format!("Price currency/unit: {:?} / {:?}", s.currency, s.unit),
++            format!(
++                "Price observed/approved: {} / {} ms UTC",
++                i64::from(s.observed_at_ms),
++                i64::from(s.approved_at_ms)
++            ),
++            format!(
++                "Price effective interval: [{}, {}) ms UTC",
++                i64::from(s.effective_from_ms),
++                s.effective_end_ms
++                    .map_or("unbounded".into(), |n| i64::from(n).to_string())
++            ),
++        ]);
++        for (label, rate) in BUCKETS.iter().zip([
++            s.rates.noncached,
++            s.rates.read,
++            s.rates.write,
++            s.rates.output,
++        ]) {
++            lines.push(rate.map_or_else(
++                || format!("Rate unavailable for {label}"),
++                |r| format!("{label} rate: {} USD per million tokens", exact(r)),
++            ));
++        }
++    } else {
++        lines.push("Price: unavailable — no dispatch-time price snapshot".into());
++    }
++    for o in &q.observations {
++        lines.push(format!(
++            "Evidence revision {}; source {}; sequence {}; presence patch {}",
++            i64::from(o.revision),
++            o.source,
++            i64::from(o.sequence),
++            serde_json::to_string(&o.patch).unwrap_or_default()
++        ));
++    }
++    lines
++}
++
++fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage> {
++    let mut pages = vec![InspectorPage { title: "Recorded requests — this thread only".into(), text: vec![
++        "Collection coverage: unknown; recorded attempts only. Descendants excluded.".into(),
++        "Billed cost: unavailable — no settlement evidence".into(),
++        "Logical requests may have attempts on other days; this UTC day is not their complete lifetime.".into(),
++    ], links: Vec::new(), parent: None, selected: Arc::default() }];
++    let ready = match result {
++        Ok(InspectionDay::Ready(view)) => view,
++        other => {
++            pages[0].text.push(match other {
++                Ok(InspectionDay::Absent) => "Unavailable — accounting ledger not installed. Collection remains off.".into(),
++                Ok(InspectionDay::MissingThread) => "Unavailable — native thread no longer exists.".into(),
++                Ok(InspectionDay::NeedsRefresh) => "Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.".into(),
++                Ok(InspectionDay::TooLarge) => "Range too large for this inspector. No total shown.".into(),
++                Ok(InspectionDay::DetailUnavailable { coverage, read_at_ms, compact }) => format!(
++                    "Request detail unavailable for this whole UTC day — {}. No total shown. Store checkpoint: {}; aggregate day floor: {}; oldest recorded day: {:?}; 90-day wall-clock detail cutoff: {:?} ms UTC.",
++                    if compact { "compacted history lost request/provider attribution" } else { "day touches expired detail or aggregate history" },
++                    coverage.completed_as_of_ms, coverage.aggregate_day_floor, coverage.oldest_recorded_day, read_at_ms.checked_sub(90 * 86_400_000).filter(|n| *n >= 0)),
++                Err(message) => message,
++                Ok(InspectionDay::Ready(_)) => unreachable!(),
++            });
++            return pages;
++        }
++    };
++    if ready.read_at_ms > ready.coverage.completed_as_of_ms {
++        pages[0]
++            .text
++            .push("Snapshot is not current; newer activity is unverified".into());
++    }
++    let t = &ready.totals;
++    pages[0]
++        .text
++        .splice(0..0, estimate(t.known_usd, t.unknown_estimates, t.attempts));
++    pages[0].text.extend([
++        format!("UTC admission interval: [{}, {}) ms since Unix epoch", ready.utc_day * 86_400_000, (ready.utc_day + 1) * 86_400_000),
++        format!("Read at: {} ms UTC; store checkpoint: {} ms UTC; maintenance lag: {} ms",
++            ready.read_at_ms, ready.coverage.completed_as_of_ms, ready.read_at_ms - ready.coverage.completed_as_of_ms),
++        format!("90-day wall-clock detail cutoff: {:?}; aggregate day floor at checkpoint: {}; oldest recorded day: {:?}",
++            ready.read_at_ms.checked_sub(90 * 86_400_000).filter(|n| *n >= 0), ready.coverage.aggregate_day_floor, ready.coverage.oldest_recorded_day),
++        format!("Known subtotal exact USD: {}", exact(t.known_usd)),
++    ]);
++    for (label, m) in METRICS.iter().zip(&t.measured) {
++        pages[0].text.push(format!(
++            "{label}: {} known + unknown in {} attempts",
++            m.known, m.unknown
++        ));
++    }
++    for (request, quotes) in ready.requests {
++        let request_page = pages.len();
++        let number = pages[0].links.len() + 1;
++        pages[0]
++            .links
++            .push((format!("Request {number}"), request_page));
++        pages.push(InspectorPage {
++            title: "Logical request".into(),
++            text: vec![format!("Request: {request}")],
++            links: Vec::new(),
++            parent: Some(0),
++            selected: Arc::default(),
++        });
++        for (index, quote) in quotes.iter().enumerate() {
++            let target = pages.len();
++            pages[request_page]
++                .links
++                .push((format!("Attempt {}", index + 1), target));
++            pages.push(InspectorPage {
++                title: "Attempt, components and original price".into(),
++                text: attempt_text(quote),
++                links: Vec::new(),
++                parent: Some(request_page),
++                selected: Arc::default(),
++            });
++        }
++    }
++    pages
++}
++
++impl Inspector {
++    fn params(&self) -> SelectionViewParams {
++        let page = &self.pages[self.page];
++        let generation = self.generation;
++        // Small selectable fragments keep every long field reachable at 40 columns.
++        let mut items: Vec<SelectionItem> = page
++            .text
++            .iter()
++            .flat_map(|text| {
++                let clean: String = text.chars().filter(|c| !c.is_control()).collect();
++                textwrap::wrap(&clean, 26)
++                    .into_iter()
++                    .map(|part| SelectionItem {
++                        name: part.into_owned(),
++                        ..Default::default()
++                    })
++                    .collect::<Vec<_>>()
++            })
++            .collect();
++        for (label, target) in &page.links {
++            let page = *target;
++            items.push(SelectionItem {
++                name: label.clone(),
++                actions: vec![Box::new(move |tx| {
++                    tx.send(AppEvent::NavigateAccountingInspector { generation, page })
++                })],
++                ..Default::default()
++            });
++        }
++        if let Some(page) = page.parent {
++            items.push(SelectionItem {
++                name: "Back".into(),
++                actions: vec![Box::new(move |tx| {
++                    tx.send(AppEvent::NavigateAccountingInspector { generation, page })
++                })],
++                ..Default::default()
++            });
++        }
++        items.push(SelectionItem {
++            name: "Refresh".into(),
++            actions: vec![Box::new(move |tx| {
++                tx.send(AppEvent::RefreshAccountingInspector { generation })
++            })],
++            ..Default::default()
++        });
++        let close_alive = self.alive.clone();
++        items.push(SelectionItem {
++            name: "Close".into(),
++            dismiss_on_select: true,
++            actions: vec![Box::new(move |tx| {
++                close_alive.store(false, std::sync::atomic::Ordering::Release);
++                tx.send(AppEvent::CloseAccountingInspector { generation });
++            })],
++            ..Default::default()
++        });
++        let alive = self.alive.clone();
++        let parent = page.parent;
++        let selected = page.selected.clone();
++        SelectionViewParams {
++            initial_selected_idx: Some(selected.load(std::sync::atomic::Ordering::Relaxed)),
++            on_selection_changed: Some(Box::new(move |index, _| {
++                selected.store(index, std::sync::atomic::Ordering::Relaxed);
++            })),
++            view_id: Some(INSPECTOR_VIEW),
++            title: Some(page.title.clone()),
++            items,
++            allow_number_shortcuts: false,
++            footer_hint: Some("↑↓ scroll · Enter open · Esc back/close".into()),
++            on_cancel: Some(Box::new(move |tx| {
++                if let Some(page) = parent {
++                    tx.send(AppEvent::NavigateAccountingInspector { generation, page });
++                } else {
++                    alive.store(false, std::sync::atomic::Ordering::Release);
++                    tx.send(AppEvent::CloseAccountingInspector { generation });
++                }
++            })),
++            ..Default::default()
++        }
++    }
++}
++
++impl ChatWidget {
++    pub(super) fn invalidate_accounting_inspector_for_thread(&mut self) {
++        if self
++            .accounting_inspector
++            .as_ref()
++            .is_some_and(|v| v.thread != self.thread_id())
++        {
++            self.accounting_inspector = None;
++            self.bottom_pane.dismiss_view_by_id(INSPECTOR_VIEW);
++        }
++    }
++
++    pub(super) fn open_accounting_command(&mut self, args: &str, today: NaiveDate) {
++        let parts: Vec<_> = args.split_whitespace().collect();
++        let date = match parts.as_slice() {
++            ["requests"] => Some(today),
++            ["requests", date] if date.len() == 10 => NaiveDate::parse_from_str(date, "%Y-%m-%d")
++                .ok()
++                .filter(|d| d.to_string() == *date),
++            _ => None,
++        };
++        if let Some(date) = date.filter(|d| *d <= today)
++            && let Some(time) = date.and_hms_opt(0, 0, 0)
++            && time.and_utc().timestamp() >= 0
++        {
++            self.open_accounting_inspector(time.and_utc().timestamp() / 86_400);
++        } else {
++            self.add_error_message(
++                "Usage: /usage requests [YYYY-MM-DD] (UTC, no future dates)".into(),
++            );
++        }
++    }
++
++    pub(crate) fn open_accounting_inspector(&mut self, day: i64) {
++        let generation = Uuid::new_v4();
++        let thread = self.thread_id();
++        let inspector = Inspector {
++            generation,
++            thread,
++            day,
++            pages: vec![InspectorPage {
++                title: "Recorded requests".into(),
++                text: vec!["Loading recorded requests…".into()],
++                links: Vec::new(),
++                parent: None,
++                selected: Arc::default(),
++            }],
++            page: 0,
++            alive: Arc::new(std::sync::atomic::AtomicBool::new(true)),
++        };
++        let params = inspector.params();
++        if !self
++            .bottom_pane
++            .replace_selection_view_if_present(INSPECTOR_VIEW, inspector.params())
++        {
++            self.bottom_pane.show_selection_view(params);
++        }
++        self.accounting_inspector = Some(inspector);
++        self.app_event_tx.send(AppEvent::LoadAccountingInspector {
++            generation,
++            thread,
++            day,
++        });
++        self.request_redraw();
++    }
++
++    pub(crate) fn finish_accounting_inspector(
++        &mut self,
++        generation: Uuid,
++        thread: Option<ThreadId>,
++        day: i64,
++        result: Result<InspectionDay, String>,
++    ) {
++        let current_thread = self.thread_id();
++        let Some(view) = self.accounting_inspector.as_mut().filter(|v| {
++            v.generation == generation
++                && v.thread == thread
++                && v.day == day
++                && v.thread == current_thread
++                && v.alive.load(std::sync::atomic::Ordering::Acquire)
++        }) else {
++            return;
++        };
++        view.pages = inspection_pages(result);
++        view.page = 0;
++        if !self
++            .bottom_pane
++            .replace_selection_view_if_present(INSPECTOR_VIEW, view.params())
++        {
++            self.accounting_inspector = None;
++        }
++        self.request_redraw();
++    }
++
++    pub(crate) fn navigate_accounting_inspector(&mut self, generation: Uuid, page: usize) {
++        let thread = self.thread_id();
++        let Some(view) = self.accounting_inspector.as_mut().filter(|v| {
++            v.thread == thread
++                && v.generation == generation
++                && v.alive.load(std::sync::atomic::Ordering::Acquire)
++        }) else {
++            return;
++        };
++        if page >= view.pages.len() {
++            return;
++        }
++        view.page = page;
++        if !self
++            .bottom_pane
++            .replace_selection_view_if_present(INSPECTOR_VIEW, view.params())
++        {
++            self.bottom_pane.show_selection_view(view.params());
++        }
++        self.request_redraw();
++    }
++
++    pub(crate) fn close_accounting_inspector(&mut self, generation: Uuid) {
++        if self
++            .accounting_inspector
++            .as_ref()
++            .is_some_and(|v| v.generation == generation)
++        {
++            self.accounting_inspector = None;
++            self.bottom_pane.dismiss_view_by_id(INSPECTOR_VIEW);
++        }
++    }
++
++    pub(crate) fn refresh_accounting_inspector(&mut self, generation: Uuid) {
++        if let Some(view) = &self.accounting_inspector
++            && view.generation == generation
++            && view.alive.load(std::sync::atomic::Ordering::Acquire)
++        {
++            self.open_accounting_inspector(view.day);
++        }
++    }
++}
++
+ #[cfg(test)]
+ #[path = "tokens_tests.rs"]
+ mod tests;
+diff --git a/codex-rs/tui/src/chatwidget/tokens_tests.rs b/codex-rs/tui/src/chatwidget/tokens_tests.rs
+index 042baa84d..30929f181 100644
+--- a/codex-rs/tui/src/chatwidget/tokens_tests.rs
++++ b/codex-rs/tui/src/chatwidget/tokens_tests.rs
+@@ -1,7 +1,316 @@
+ use super::*;
++use crate::chatwidget::tests::helpers::{render_bottom_popup, render_bottom_popup_with_height};
++use crate::chatwidget::tests::make_chatwidget_manual;
+ use codex_app_server_protocol::AccountTokenUsageSummary;
++use codex_state::accounting::{
++    Attempt, DayTotals, Dialect, Inspection, Metric, RetentionCoverage, Usage,
++};
++use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+ use pretty_assertions::assert_eq;
+ 
++fn decimal(text: &str) -> Decimal {
++    text.to_owned().try_into().unwrap()
++}
++
++fn quote() -> ObservationQuote {
++    let known = decimal("0.00018");
++    ObservationQuote {
++        attempt: Attempt {
++            attempt_id: Uuid::from_u128(1),
++            request_id: Uuid::from_u128(2),
++            thread_id: ThreadId::from_string(&Uuid::from_u128(3).to_string()).unwrap(),
++            turn: "synthetic".into(),
++            retry_of: Some(Uuid::from_u128(4)),
++            provider: "synthetic".into(),
++            model: "synthetic-model".into(),
++            scope: Uuid::from_u128(5),
++            dialect: Dialect::Inclusive,
++            dispatched_at_ms: 0.try_into().unwrap(),
++        },
++        observations: vec![],
++        snapshot: None,
++        usage: Usage {
++            input: Some(100),
++            read: Some(20),
++            output: Some(40),
++            ..Usage::default()
++        },
++        buckets: [
++            BucketQuote::MissingUsage,
++            BucketQuote::Priced(decimal("0.00002")),
++            BucketQuote::MissingUsage,
++            BucketQuote::Priced(decimal("0.00016")),
++        ],
++        known_subtotal: known,
++        all_buckets_priced: None,
++        subtotal_display: known.display(),
++    }
++}
++
++fn packet() -> InspectionDay {
++    let q = quote();
++    InspectionDay::Ready(Inspection {
++        owner: q.attempt.thread_id,
++        utc_day: 0,
++        read_at_ms: 1,
++        coverage: RetentionCoverage {
++            completed_as_of_ms: 0,
++            detail_expired_through_ms: None,
++            aggregate_day_floor: 0,
++            oldest_recorded_day: Some(0),
++        },
++        totals: DayTotals {
++            known_usd: q.known_subtotal,
++            unknown_estimates: 1,
++            attempts: 1,
++            measured: [Some(100), None, Some(20), None, Some(40), None, None].map(|n| Metric {
++                known: n.unwrap_or(0),
++                unknown: i64::from(n.is_none()),
++            }),
++        },
++        requests: std::collections::BTreeMap::from([(q.attempt.request_id, vec![q])]),
++    })
++}
++
++#[test]
++fn accounting_inspect_partial_and_unknown_copy() {
++    insta::assert_snapshot!(estimate(decimal("0.00018"), 1, 1).join("\n"), @"
++    Known estimated token cost: $0.000180 + unknown costs
++    Full recorded estimate: unavailable (1 of 1 attempts incomplete)
++    ");
++    let pages = inspection_pages(Ok(packet()));
++    let summary = pages[0].text.join("\n");
++    for label in METRICS {
++        assert!(summary.contains(label));
++    }
++    assert!(summary.contains("100 known + unknown in 0 attempts"));
++    assert!(summary.contains("Billed cost: unavailable"));
++    assert!(summary.contains("Collection coverage: unknown"));
++    assert!(
++        attempt_text(&quote())
++            .join("\n")
++            .contains("Cache write: unknown — no retained numeric evidence")
++    );
++}
++
++#[test]
++fn accounting_inspect_unpriced_zero_and_missing_rate() {
++    insta::assert_snapshot!(estimate(Decimal::default(), 1, 1).join("\n"), @"
++    Estimated token cost: unknown
++    Known estimated token cost: $0.000000 + unknown costs
++    Full recorded estimate: unavailable (1 of 1 attempts incomplete)
++    ");
++    assert_eq!(
++        estimate(Decimal::default(), 0, 1),
++        vec!["Estimated token cost for recorded attempts: $0.000000"]
++    );
++    let mut q = quote();
++    q.usage.write = Some(0);
++    q.buckets[1] = BucketQuote::MissingRate;
++    let text = attempt_text(&q).join("\n");
++    assert!(text.contains("Cache write: 0"));
++    assert!(text.contains("Cache read cost: unknown — rate unavailable"));
++    assert!(text.contains("Price: unavailable — no dispatch-time price snapshot"));
++}
++
++#[test]
++fn accounting_inspect_exact_rounding_reconciliation() {
++    for (exact_value, displayed) in [
++        (
++            "0.0000005",
++            "$0.000000 (rounded) (nonzero, less than $0.000001)",
++        ),
++        (
++            "0.0000006",
++            "$0.000001 (rounded) (nonzero, less than $0.000001)",
++        ),
++        ("0.0000015", "$0.000002 (rounded)"),
++        ("0.0000025", "$0.000002 (rounded)"),
++    ] {
++        assert_eq!(money(decimal(exact_value)), displayed);
++        assert_eq!(exact(decimal(exact_value)), exact_value);
++    }
++    // Two exact half-micro components round only after their stored subtotal.
++    let mut q = quote();
++    q.buckets = [BucketQuote::Priced(decimal("0.0000005")); 4];
++    q.known_subtotal = decimal("0.000002");
++    let text = attempt_text(&q).join("\n");
++    assert_eq!(text.matches("exact USD 0.0000005").count(), 4);
++    assert!(text.contains("Known subtotal exact USD: 0.000002"));
++}
++
++#[test]
++fn accounting_inspect_request_attempt_price_detail() {
++    let mut q = quote();
++    q.snapshot = Some(serde_json::from_value(serde_json::json!({
++        "id":Uuid::from_u128(6),"provider":"synthetic","model":"synthetic-model","scope":Uuid::from_u128(5),
++        "currency":"USD","unit":"PerMillionTokens","rates":{"noncached":"1","read":null,"write":"2","output":"4"},
++        "source_reference":Uuid::from_u128(7),"source_kind":"ProviderPublished",
++        "observed_at_ms":0,"approved_at_ms":0,"effective_from_ms":0,"effective_end_ms":1000
++    })).unwrap());
++    let text = attempt_text(&q).join("\n");
++    for id in 1..=7 {
++        assert!(text.contains(&Uuid::from_u128(id).to_string()));
++    }
++    for required in [
++        "Turn: synthetic",
++        "Provider: synthetic",
++        "Model: synthetic-model",
++        "Opaque scope:",
++        "Price source: ProviderPublished",
++        "Price effective interval: [0, 1000)",
++        "Rate unavailable for Cache read",
++        "Literal wire/endpoint",
++        "Completion/billing status: not recorded",
++    ] {
++        assert!(text.contains(required), "{required}");
++    }
++}
++
++#[tokio::test]
++async fn accounting_inspect_narrow_and_long_fields() {
++    for width in [40, 80] {
++        let (mut chat, _rx, _ops) = make_chatwidget_manual(None).await;
++        let mut q = quote();
++        q.attempt.provider = format!("provider\u{1b}[31m{}", "LONG".repeat(30));
++        let page = InspectorPage {
++            title: "Attempt".into(),
++            text: attempt_text(&q),
++            links: vec![],
++            parent: None,
++            selected: Arc::default(),
++        };
++        let inspector = Inspector {
++            generation: Uuid::new_v4(),
++            thread: None,
++            day: 0,
++            pages: vec![page],
++            page: 0,
++            alive: Arc::new(std::sync::atomic::AtomicBool::new(true)),
++        };
++        let params = inspector.params();
++        let names: Vec<_> = params.items.iter().map(|i| i.name.clone()).collect();
++        assert!(names.iter().all(|s| !s.chars().any(char::is_control)));
++        chat.bottom_pane.show_selection_view(params);
++        // Every selectable fragment can actually be reached in a small viewport.
++        for name in names {
++            let screen = render_bottom_popup_with_height(&chat, width, 12);
++            assert!(
++                screen.contains(&name),
++                "{name:?} missing at {width}: {screen}"
++            );
++            chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
++        }
++    }
++}
++
++#[test]
++fn accounting_inspect_availability_state_snapshots() {
++    let states = [
++        InspectionDay::Absent,
++        InspectionDay::MissingThread,
++        InspectionDay::NeedsRefresh,
++        InspectionDay::TooLarge,
++    ];
++    let text: Vec<_> = states
++        .into_iter()
++        .map(|s| inspection_pages(Ok(s))[0].text.last().unwrap().clone())
++        .collect();
++    insta::assert_snapshot!(text.join("\n"), @"
++    Unavailable — accounting ledger not installed. Collection remains off.
++    Unavailable — native thread no longer exists.
++    Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.
++    Range too large for this inspector. No total shown.
++    ");
++    let InspectionDay::Ready(mut empty) = packet() else {
++        unreachable!()
++    };
++    empty.totals = DayTotals::default();
++    empty.requests.clear();
++    assert!(
++        inspection_pages(Ok(InspectionDay::Ready(empty)))[0].text[0]
++            .contains("No recorded attempts")
++    );
++    let InspectionDay::Ready(view) = packet() else {
++        unreachable!()
++    };
++    let page = inspection_pages(Ok(InspectionDay::DetailUnavailable {
++        coverage: view.coverage,
++        read_at_ms: 90 * 86_400_000,
++        compact: true,
++    }));
++    let text = page[0].text.join("\n");
++    assert!(text.contains("compacted history lost request/provider attribution"));
++    assert!(!text.contains('$'));
++    for error in [
++        "remote connection",
++        "corrupt evidence",
++        "inspection timed out",
++    ] {
++        assert!(
++            inspection_pages(Err(error.into()))[0]
++                .text
++                .contains(&error.to_owned())
++        );
++    }
++}
++
++#[test]
++fn accounting_inspect_coverage_never_claims_run_complete() {
++    let InspectionDay::Ready(mut view) = packet() else {
++        unreachable!()
++    };
++    view.totals.unknown_estimates = 0;
++    let text = inspection_pages(Ok(InspectionDay::Ready(view)))[0]
++        .text
++        .join("\n");
++    assert!(text.starts_with("Estimated token cost for recorded attempts:"));
++    for caveat in [
++        "Collection coverage: unknown",
++        "Descendants excluded",
++        "Billed cost: unavailable",
++        "other days",
++        "Snapshot is not current; newer activity is unverified",
++    ] {
++        assert!(text.contains(caveat));
++    }
++}
++
++#[tokio::test]
++async fn accounting_inspect_snapshot_navigation_roundtrip() {
++    let (mut chat, mut rx, _ops) = make_chatwidget_manual(None).await;
++    chat.open_accounting_inspector(0);
++    let AppEvent::LoadAccountingInspector {
++        generation,
++        thread,
++        day,
++    } = rx.try_recv().unwrap()
++    else {
++        panic!()
++    };
++    chat.finish_accounting_inspector(generation, thread, day, Ok(packet()));
++    let original = chat.accounting_inspector.as_ref().unwrap().pages[0]
++        .text
++        .clone();
++    for page in [1, 2, 1, 0] {
++        chat.navigate_accounting_inspector(generation, page);
++        assert_eq!(chat.accounting_inspector.as_ref().unwrap().page, page);
++        chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
++    }
++    assert_eq!(
++        chat.accounting_inspector.as_ref().unwrap().pages[0].text,
++        original
++    );
++    chat.navigate_accounting_inspector(generation, 2);
++    chat.navigate_accounting_inspector(generation, 0);
++    assert_eq!(
++        chat.bottom_pane
++            .selected_index_for_active_view(INSPECTOR_VIEW),
++        Some(1)
++    );
++    assert!(render_bottom_popup(&chat, 40).contains("Recorded requests"));
++}
++
+ #[test]
+ fn loaded_state_freezes_chart_anchor_date_at_completion() {
+     let state = Arc::new(RwLock::new(TokenActivityState::Loading));
+diff --git a/codex-rs/tui/src/chatwidget/usage.rs b/codex-rs/tui/src/chatwidget/usage.rs
+index 8d91aa26c..8d600c63c 100644
+--- a/codex-rs/tui/src/chatwidget/usage.rs
++++ b/codex-rs/tui/src/chatwidget/usage.rs
+@@ -70,6 +70,19 @@ impl ChatWidget {
+                     dismiss_on_select: true,
+                     ..Default::default()
+                 },
++                SelectionItem {
++                    name: "Recorded requests".into(),
++                    description: Some(
++                        "Explain this thread's recorded requests for today (UTC).".into(),
++                    ),
++                    actions: vec![Box::new(|tx| {
++                        tx.send(AppEvent::OpenAccountingInspector {
++                            day: chrono::Utc::now().timestamp_millis() / 86_400_000,
++                        })
++                    })],
++                    dismiss_on_select: true,
++                    ..Default::default()
++                },
+             ],
+             ..Default::default()
+         }

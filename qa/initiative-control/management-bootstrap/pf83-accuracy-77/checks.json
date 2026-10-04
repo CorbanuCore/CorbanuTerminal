@@ -1,0 +1,124 @@
+{
+  "functional_cases_executed": 0,
+  "guest_contact": false,
+  "lanes": {
+    "permission-confirmation": {
+      "exit_code": 0,
+      "failed": 0,
+      "failure_names": [],
+      "passed": 12,
+      "run": 12,
+      "seconds": 41.889,
+      "skipped": 4161
+    },
+    "thread-settings": {
+      "exit_code": 0,
+      "failed": 0,
+      "failure_names": [],
+      "passed": 26,
+      "run": 26,
+      "seconds": 31.798,
+      "skipped": 1082
+    }
+  },
+  "local_controls": {
+    "errors": 0,
+    "failures": 0,
+    "functional_cases_executed": 0,
+    "guest_contact": false,
+    "run": 13
+  },
+  "preflights": {
+    "preflight-existing-harness.json": {
+      "checked": 12,
+      "exit_code": 1,
+      "failed": 9,
+      "guest_contact_attempted": false,
+      "passed": 3
+    },
+    "preflight-local.json": {
+      "checked": 12,
+      "exit_code": 1,
+      "failed": 9,
+      "guest_contact_attempted": false,
+      "passed": 3
+    }
+  },
+  "prerequisites_exit_code": 0,
+  "raw_log_sha256": {
+    "controls.log": "e4bc8a599fb60bfcfc6e4804d333acd7f7a1a20ad55b2381ddb0febaf05aab39",
+    "permission-confirmation.log": "510917566275ad5dfdea960e9fcad6336a4c691a8c78ea2aa0fb34c6a8ea2932",
+    "prerequisites.log": "3b6b767f14a6b9fbd6ed4e73b03bc537ce2f903a4589305a9f1bdc1a6a9f0740",
+    "thread-settings.log": "3869c9e89f5a2e103aa9f067d0d6da985847a487fe4051b40d0a2d4c19974a1c"
+  },
+  "syntax": {
+    "bash_checks": [
+      {
+        "block": 1,
+        "exit_code": 0,
+        "stderr": ""
+      },
+      {
+        "block": 2,
+        "exit_code": 0,
+        "stderr": ""
+      }
+    ],
+    "bash_syntax_blocks": 2,
+    "python_checks": [
+      {
+        "path": "pf83-accuracy-77/collect_checks.py",
+        "status": "passed"
+      },
+      {
+        "path": "pf83-accuracy-77/inspect_paths.py",
+        "status": "passed"
+      },
+      {
+        "path": "pf83-accuracy-77/measure_syntax.py",
+        "status": "passed"
+      },
+      {
+        "path": "pf83-accuracy-77/test_controls.py",
+        "status": "passed"
+      },
+      {
+        "path": "pf83-accuracy-77/validate.py",
+        "status": "passed"
+      },
+      {
+        "path": "pf83-failclosed-73/collect_checks.py",
+        "status": "passed"
+      },
+      {
+        "path": "pf83-failclosed-73/dispatch_guard.py",
+        "status": "passed"
+      },
+      {
+        "path": "pf83-failclosed-73/guest_check.py",
+        "status": "passed"
+      },
+      {
+        "path": "pf83-failclosed-73/preflight.py",
+        "status": "passed"
+      },
+      {
+        "path": "pf83-failclosed-73/prepare_payload.py",
+        "status": "passed"
+      },
+      {
+        "path": "pf83-failclosed-73/stage.py",
+        "status": "passed"
+      },
+      {
+        "path": "pf83-failclosed-73/test_guards.py",
+        "status": "passed"
+      },
+      {
+        "path": "pf83-failclosed-73/validate.py",
+        "status": "passed"
+      }
+    ],
+    "python_syntax_files": 13
+  }
+}

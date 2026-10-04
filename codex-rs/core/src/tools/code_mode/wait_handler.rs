@@ -140,6 +140,9 @@ impl CodeModeWaitHandler {
 }
 
 impl CoreToolRuntime for CodeModeWaitHandler {
+    fn repeated_identical_calls_are_polling(&self) -> bool {
+        true
+    }
     fn pre_tool_use_payload(&self, _invocation: &ToolInvocation) -> Option<PreToolUsePayload> {
         // Code-mode `wait` is runtime control for an existing code cell, not a
         // standalone user action. Tool calls made from code mode still flow

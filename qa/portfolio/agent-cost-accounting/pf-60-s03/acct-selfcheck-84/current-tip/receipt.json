@@ -1,0 +1,42 @@
+{
+  "commit": "7b3173115b015ef36c33dc2a8bfd081566cd23d2",
+  "source_tip_after": "7b3173115b015ef36c33dc2a8bfd081566cd23d2",
+  "clone": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-selfcheck-84/target/current-tip-eq5lgaxe/checkout",
+  "run_directory": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-selfcheck-84/target/current-tip-eq5lgaxe",
+  "status_before": "",
+  "status_after": "",
+  "full_checkout": true,
+  "copied_working_tree_files": false,
+  "package_absent": true,
+  "no_network": true,
+  "no_package_launch": true,
+  "reference": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-baseline-81/replay-1/clean-checkout.stdout.txt",
+  "reference_sha256": "cd5951e7f00cc4307326ec89d1968ea8c4958aa88d08a9606b9015fc4e7f8807",
+  "stdout_matches_prior_replay": true,
+  "commands": [
+    {
+      "name": "acceptance",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py"
+      ],
+      "exit": 2,
+      "expected_exit": 2,
+      "stdout_sha256": "cd5951e7f00cc4307326ec89d1968ea8c4958aa88d08a9606b9015fc4e7f8807",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "controls",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-B",
+        "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/check_verifier.py"
+      ],
+      "exit": 0,
+      "expected_exit": 0,
+      "stdout_sha256": "a3c77bdeb820753e3ecb8b0c92fad28854c8c533dcbf3777c2680f7b0728e8cd",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

@@ -4,6 +4,7 @@
 //! exec-cell grouping and unified exec wait state.
 
 use super::*;
+use codex_app_server_protocol::CommandExecutionStatus;
 
 impl ChatWidget {
     pub(super) fn flush_unified_exec_wait_streak(&mut self) {
@@ -338,6 +339,7 @@ impl ChatWidget {
             source,
             command_actions,
             aggregated_output,
+            status,
             exit_code,
             duration_ms,
             ..
@@ -351,7 +353,6 @@ impl ChatWidget {
             .map(codex_app_server_protocol::CommandAction::into_core)
             .collect();
         let duration = Duration::from_millis(duration_ms.unwrap_or_default().max(0) as u64);
-        let exit_code = exit_code.unwrap_or_default();
         let aggregated_output = aggregated_output.unwrap_or_default();
 
         let running = self.running_commands.remove(&id);
@@ -381,10 +382,18 @@ impl ChatWidget {
 
         // Unified exec interaction rows intentionally hide command output text in the exec cell and
         // instead render the interaction-specific content elsewhere in the UI.
-        let output = if is_unified_exec_interaction {
-            CommandOutput::new(exit_code, String::new())
+        let output = if status == CommandExecutionStatus::Declined {
+            CommandOutput::declined()
         } else {
-            CommandOutput::new(exit_code, aggregated_output)
+            let aggregated_output = if is_unified_exec_interaction {
+                String::new()
+            } else {
+                aggregated_output
+            };
+            match exit_code {
+                Some(exit_code) => CommandOutput::new(exit_code, aggregated_output),
+                None => CommandOutput::unknown(aggregated_output),
+            }
         };
 
         match end_target {

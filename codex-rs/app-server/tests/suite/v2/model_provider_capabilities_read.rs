@@ -35,12 +35,11 @@ async fn read_default_provider_capabilities() -> Result<()> {
     assert_eq!(
         received,
         ModelProviderCapabilitiesReadResponse {
-            // PFTerminal's unconfigured provider is Ambient, whose capability
-            // surface is intentionally conservative. Explicit OpenAI behavior
-            // is pinned separately below.
-            namespace_tools: false,
-            image_generation: false,
-            web_search: false,
+            // The unconfigured provider is OpenAI, so it has OpenAI's
+            // capabilities; explicit Ambient is pinned separately below.
+            namespace_tools: true,
+            image_generation: true,
+            web_search: true,
         }
     );
     Ok(())

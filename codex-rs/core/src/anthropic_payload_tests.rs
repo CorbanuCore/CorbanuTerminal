@@ -1,6 +1,8 @@
 use super::ANTHROPIC_MESSAGES_REQUEST_BUDGET_BYTES;
+use super::ImageDimensionReport;
 use super::PayloadBudgetReport;
 use super::enforce_anthropic_payload_budget;
+use super::fit_anthropic_image_dimensions;
 use codex_api::AnthropicMessagesRequest;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
@@ -198,4 +200,100 @@ fn fifteen_visual_turns_stay_below_anthropic_messages_limit() {
         Some(&json!(image_data)),
         "the newest visual evidence must survive request-local pruning"
     );
+}
+
+fn png_base64(width: u32, height: u32) -> String {
+    use base64::Engine;
+    let image = image::ImageBuffer::from_pixel(width, height, image::Rgba([10u8, 20, 30, 255]));
+    let mut encoded = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image)
+        .write_to(&mut encoded, image::ImageFormat::Png)
+        .expect("encode PNG");
+    base64::engine::general_purpose::STANDARD.encode(encoded.into_inner())
+}
+
+fn image_dimensions(value: &Value, out: &mut Vec<(u32, u32)>) {
+    if let Some(data) = value.pointer("/source/data").and_then(Value::as_str) {
+        out.push(codex_utils_image::base64_image_dimensions(data).expect("image dimensions"));
+    }
+    match value {
+        Value::Array(values) => values.iter().for_each(|value| image_dimensions(value, out)),
+        Value::Object(object) => object
+            .values()
+            .for_each(|value| image_dimensions(value, out)),
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
+}
+
+fn tool_result_with_images(count: usize, width: u32, height: u32) -> Vec<Value> {
+    let data = png_base64(width, height);
+    let content = (0..count).map(|_| image(&data)).collect::<Vec<_>>();
+    vec![json!({
+        "role": "user",
+        "content": [{"type": "tool_result", "tool_use_id": "toolu_1", "content": content}],
+    })]
+}
+
+#[test]
+fn requests_with_more_than_twenty_images_cap_every_image_at_2000_px() {
+    let mut request = request(tool_result_with_images(21, 2048, 40));
+
+    let report = fit_anthropic_image_dimensions(&mut request);
+
+    assert_eq!(
+        report,
+        ImageDimensionReport {
+            resized_images: 21,
+            omitted_images: 0
+        }
+    );
+    let mut dimensions = Vec::new();
+    request
+        .messages
+        .iter()
+        .for_each(|message| image_dimensions(message, &mut dimensions));
+    assert_eq!(dimensions, vec![(2000, 39); 21]);
+}
+
+#[test]
+fn requests_with_twenty_images_keep_images_up_to_8000_px() {
+    let original = tool_result_with_images(20, 2048, 40);
+    let mut request = request(original.clone());
+
+    assert_eq!(
+        fit_anthropic_image_dimensions(&mut request),
+        ImageDimensionReport::default()
+    );
+    assert_eq!(request.messages, original);
+
+    let mut single = request_with_single_image(8_100, 10);
+    assert_eq!(
+        fit_anthropic_image_dimensions(&mut single).resized_images,
+        1
+    );
+    let mut dimensions = Vec::new();
+    single
+        .messages
+        .iter()
+        .for_each(|message| image_dimensions(message, &mut dimensions));
+    assert_eq!(dimensions, vec![(8_000, 10)]);
+}
+
+fn request_with_single_image(width: u32, height: u32) -> codex_api::AnthropicMessagesRequest {
+    request(vec![json!({
+        "role": "user",
+        "content": [{"type": "text", "text": "inspect"}, image(&png_base64(width, height))],
+    })])
+}
+
+#[test]
+fn undecodable_images_are_left_for_the_provider_to_judge() {
+    let original = vec![json!({"role": "user", "content": [image("cG5n")]})];
+    let mut request = request(original.clone());
+
+    assert_eq!(
+        fit_anthropic_image_dimensions(&mut request),
+        ImageDimensionReport::default()
+    );
+    assert_eq!(request.messages, original);
 }

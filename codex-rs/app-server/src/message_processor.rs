@@ -1314,6 +1314,11 @@ impl MessageProcessor {
             ClientRequest::ThreadInjectItems { params, .. } => {
                 self.turn_processor.thread_inject_items(params).await
             }
+            ClientRequest::ThreadRecordSentModelRequest { params, .. } => {
+                self.turn_processor
+                    .thread_record_sent_model_request(params)
+                    .await
+            }
             ClientRequest::TurnSteer { params, .. } => {
                 self.turn_processor
                     .turn_steer(&request_id, params, app_server_client_name.as_deref())

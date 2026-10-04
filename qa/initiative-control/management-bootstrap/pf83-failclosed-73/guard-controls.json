@@ -1,0 +1,43 @@
+{
+  "candidate_disagreement": {
+    "dispatch_calls": 0,
+    "matching_pin_checked_packets": 288,
+    "result": "refused"
+  },
+  "payload_allowlist": {
+    "files": [
+      "package/codex-code-mode-host",
+      "package/corbanu",
+      "package/corbanu-acp",
+      "package/corbanu-walletd",
+      "packet/navigation.md",
+      "packet/original-F01-F11.md"
+    ],
+    "product_staged": false,
+    "provenance_and_runtime": "host only"
+  },
+  "positive_transport_control": {
+    "guest_contact": false,
+    "mock_calls": 3
+  },
+  "summary": {
+    "errors": 0,
+    "failures": 0,
+    "functional_cases_executed": 0,
+    "guest_contact": false,
+    "run": 8
+  },
+  "wrong_host_key": {
+    "result": "refused before transport",
+    "ssh_calls": 0,
+    "transferred_bytes": 0,
+    "transferred_files": []
+  },
+  "wrong_uuid": {
+    "result": "refused after simulated identity reply",
+    "ssh_calls": 1,
+    "transferred_bytes": 0,
+    "transferred_files": [],
+    "transport": "local mock; no network connection"
+  }
+}

@@ -11,12 +11,15 @@ activation_basis: "P0 sequencing plus Travis Good’s 2026-08-28 decision to rec
 target_release: "TBD — candidate qualified by 2026-10-08"
 deadline: 2026-10-08
 created: 2026-08-23
-updated: 2026-09-11
+updated: 2026-09-14
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
   requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/live-permission-transition-20260913"
+    branch: "fix/live-permission-transition-20260913"
+    base_commit: "005cc644f59b1e762e5497b329e106c67925d4ed"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-broker-resume-20260911"
     branch: "feat/security-broker-resume-20260911"
     base_commit: "d870c92dab2bf3fbb602dc3b8447fe9f3534aecb"
@@ -86,6 +89,73 @@ implementation_worktrees:
 ---
 
 # P0 `/security` levels
+
+## Current permission-confirmation allocation — September 14
+
+Travis's explicit "yes, scope is expanded" authorizes the app-server/TUI
+confirmation repair with next-turn command permission semantics. This narrow
+PF-83 amendment is distinct from the rejected global-quiescence/PF-22-S03
+proposal and does not change the protected `/security` contracts below.
+The security owner explicitly handed back PF-27-S04's reservation to the repair
+coordinator; PF27 returns to draft with its paused work/evidence intact. This
+supersedes historical PF27 execution-status prose, not its remaining scope.
+There remain three active plans and only one executable security sprint.
+
+Product citation: **Permission selection confirmation — TO BUILD**:
+"A submitted selection is not a confirmed change." Existing live capability
+citation: **Live MVP versus the P0 security controls**, "approvals, and general
+workspace sandboxing." Current user approval permits only confirmation API
+semantics and associated UI/compatibility tests; the no-Permissive-policy-change
+and no-replacement-of-`/permissions` exclusions continue to hold.
+
+| Feature | Contract | Sprint | Owner / receiving gate |
+| --- | --- | --- | --- |
+| PF-83 | Request-correlated permission application outcome and truthful next-turn UI | [PF-83-S01](../../sprints/current/p0-security-levels/pf-83-s01-permission-confirmation.md) | Astra High permission-confirmation worker; this repair coordinator receives and verifies, then coordinates any integration with the existing Fable writer |
+
+PF83 owns the exact worktree/branch/base above and only the literal sprint scope.
+The previous PF27 owner remains paused, no broker work is dispatched, and
+accounting/Task Node scopes do not overlap the selected app-server/TUI files.
+No canonical integration worktree, running app/profile/shortcut, service or
+credential is modified by the allocation. Raw estimate: one bounded engineering
+increment plus review and isolated qualification; reserve at least35% for
+integration/testing, no calendar completion guarantee. Local pinned Rust1.95
+builds use the repair's private cache, not historical RTX-only round-five tooling.
+
+### PF-83 outcome and evidence contract
+
+Success/no-op returns a request-specific applied outcome; invalid updates return
+their correlated failure. Unknown effects on timeout/disconnect stay uncertain
+without blind retry. Register correlation before submission and bind it to
+connection/thread/listener generation; clean pending state on terminal paths.
+TUI selection/cache must not claim backend confirmation before that outcome.
+Active-turn command authority stays unchanged; the next turn picks up the
+confirmed selection in either direction. Already-pending command approvals,
+background process lifetime, MCP policy refresh, persistence and provider wire
+are unchanged. Old servers with no applied acknowledgement remain visibly
+unconfirmed; old clients' acceptance behavior is preserved through a narrow
+opt-in confirmation path where required. No new dependency or Core authorization
+change is allocated.
+
+Upstream touch: canonical `https://github.com/openai/codex` ancestor
+`413492cd6c3a4d4f8dff6f406247ccda5a9d88aa`, verified by canonical commit API
+and local ancestry; fork base `005cc644f59b1e762e5497b329e106c67925d4ed`.
+This is not an upstream update: no merge/rebase candidate or upgrade pass.
+App-server pending outcome module and thin native processor/listener adapters
+own correlation, TUI adapters own presentation, generated v2 fixtures own wire
+parity. Detailed source proof and receipt live in
+[the repair evidence](../../../qa/reliability/live-permission-transition-20260913/manager-checkpoint.md).
+
+Required acceptance: success/no-op/failure, rapid stale responses, disconnect and
+restart, old/new server combinations, both permission directions, next-turn
+continuation and pending approvals. Freeze originals F01-F11; attach the user's
+next-turn scope as an explicit amendment, not rewritten cases. Exact-package
+independent enforced code-blind execution and independent evidence check remain
+mandatory. Both TensorCash and Isometric Game disposable workflows apply;
+resolve bases before execution. Human acceptance is pending. API documentation
+must describe actual semantics; finished user docs wait for qualified evidence.
+No release/install is authorized; benchmark/release assessment remains a later
+candidate gate. Plan/sprint checks and affected app-server, protocol, TUI plus
+unchanged relevant Core regressions must pass; commands are in the sprint.
 
 Policy: repository-root `AGENTS.md`
 
@@ -982,6 +1052,141 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
+Private system preflight qualified at source19f6624938c53e0c9709e1b25ada4a44fd13267e/
+Rust09f72396304d80a82cf466e220378f763ea8313b. [Literal proof](../../../qa/security-levels/sprints/PF-27-S04/system-preflight-20260913/README.md):
+all30 command exits plus suite0 in105s, five preflight cases, retained suites,
+strict lint/parity and source/module/fixture invariance on non-root RTX/TMUX.
+Astra39/Fable40 exit0/findings[]; no source repair or extra opinion. Private
+uncalled all-or-nothing preparation only; no transfer, native activation or
+identity-guard relaxation. Manager receiving next; later policy1.7 gates remain.
+
+Manager accepted combined session c1d866fd4/Rustec50d0378:29 command exits+
+suite0,139s actual RTX/TMUX, strict/parity/source/modules/input invariance.
+Next [private system-preflight allocation](../../../qa/security-levels/sprints/PF-27-S04/system-preflight-allocation-20260913.md)
+uses same sole owner/worktree/plan base; sourcebaseae2a4c940, seven paths550/700,
+reviews39/40 retain1–38. All-or-nothing input preparation only, no spawn/bind,
+native activation or identity-guard relaxation. Later policy1.7 gates unchanged.
+
+Private root-session pump qualified at source74263bbbc5bf2163f571947c6828fbf108866c3f/
+Rustb7275b0c0433f081d6423463993abc658141a6a7. [Literal evidence](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-session-20260912/README.md):
+29 command exits+suite0 on exact non-root RTX/TMUX (105s), seven actual session
+cases plus full retained proof, strict lint/parity/source/lock invariance.
+Astra37/Fable38 exit0/findings[]; no runtime corrections. Fixed two-listener
+private pump only; manager receiving is next. Policy1.7 internal-only N/A does
+not waive later protected-user/PF26 isolated functional/native/human gates.
+
+Private descriptor-pair root dispatch now qualified at source
+c7d48e4822293ec0899311be63fbd08848516ba0/Rustbd56b597e348d2924da21706c594c20a868bace4.
+[Literal evidence](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-dispatch-20260912/README.md):
+28 command exits+suite0 on exact non-root RTX/TMUX (104s), six actual two-child
+PF20 protocol/lifecycle cases, preserved prior suites, strict scoped lint and
+source/lock invariance. Astra35/Fable36 exit0/findings[]; original failures kept.
+Fixed production factories/public Child composition/default builds unchanged;
+this private increment does not enable the live service. Manager receiving
+combined-tree proof is next; policy1.7 N/A only here, later protected-user/PF26
+isolated functional execution, native/live-repository/human gates remain open.
+
+22:45UTC: manager accepted exact combined compatibility37f23b991/Rust99265431b6,
+all25 command exits+suite0 and actual RTX/TMUX/locks proof. Next sole-owner
+[fifteen-path private root dispatch](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-dispatch-allocation-20260912.md)
+is allocated from clean12e0bc2d8,740target/800hard. Fresh synthetic root/client
+bridge explicitly approved, no production factory widening; reviews35/36 preserve
+1–34. Earlier compatibility assignments below are historical. No human decision.
+
+Descriptor identity compatibility is qualified for manager receiving, source
+d776e938d8a0c07cc9b50b1d6a818d9f6feb0c11/Rustb48e9c4f9cb89e814b8bdabd6069be86cc47badd.
+[Exact proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-20260912/README.md):
+all25 commands+suite0 on non-root RTX/TMUX, both transport entries/five rejection
+scenarios, retained identity2, affected suites/strict lint/locks/source pass;
+Astra33/Fable34 exit0/findings[]. Original failed attempts retained. This is
+synthetic/default-OFF internal compatibility only; receiving combined proof,
+root dispatch composition and later protected-user/PF26/native gates remain open.
+
+Manager accepted receiving Stage B e1cc38a70/Rust2588dfe0: all17 commands+suite0,
+actual RTX/TMUX/provenance and unchanged locks verified. Next sole-owner
+[descriptor identity compatibility allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-allocation-20260912.md)
+starts at clean6b393f134 with eleven exact paths/hard800, including narrow PF20
+dependency surfaces now serialized to this owner. Reviews33/34 authorized without
+resetting1–32. No native/default activation or whole-sprint acceptance.
+
+Combined Stage A63cbce998/Rust205e89cd remains accepted; all15 scoped exits0.
+[Stage A receiving proof](../../../qa/initiative-control/status-display/pf27-stage-a-receiving-20260912.md).
+
+StageB private descriptor admission is qualified for manager receiving at
+source7839f9f653a3471bb9bbed19ebc7bed43308bbe3/Rust5a4ee88b5fe4c9b946842a4709f9b88f85c54c79,
+892changed lines/same7paths within amended900. [Literal proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-admission-20260912/README.md):
+all18 repairedexits0, admission8/tenactualpeer scenarios, fullservice59 with11
+exclusions explicitly covered, preservedA/adapter suites, strict scopedlint,
+read-onlyparity/source/locks and actual-key RTX TMUX pass. Astra30 P2 bufferedEOF
+reproduced/repaired; Fable31 missingreceipt fixed; Fable32 patchcorrect/exit1
+soleP3 tablecount fixed without runtime change or extra review. Originals
+preserved, no sourcepush/native/protected/product acceptance. Manager owns
+receiving/combinedproof and next allocation, now accepted above; policy1.7 N/A only this increment.
+
+StageB now allocated by manager67273f7e19f3d515086147c7f8408245e986369d after
+accepted combinedA63cbce998 proof. [Literal admission allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-admission-allocation-20260912.md):
+seven exact paths, hard900 additions/deletions against qualified6d770938c;
+manager3e76ee4ec amended at measured791 for tests/runner only; manager251074ef7
+permits only review30 buffered-EOF repair to runtime254 plus regression/review32;
+same sole owner/worktree/branch/original base, no rebase. Preserve A lifecycle,
+add private bounded socket admission and hashed static connector, all actual
+socket/UID/death/delivery/race cases. Reviews30/31 are +2, not reset. No source
+push/native/activation/dependencies/locks/Core/Vault/PF20 edits. Record launch
+checkpoint before source edits; policy1.7 N/A only this internal increment.
+
+September12 manager accepted combined receiving c5e606fa2/Rust18cf961a proof.
+The initial pair/admission draft reached758 lines before complete test coverage;
+unqualified WIPdb971e9b8 is preserved with hashes locally and onRTX, not accepted.
+Manager narrowed execution to [StageA stable identity and two-child lifecycle](../../../qa/security-levels/sprints/PF-27-S04/descriptor-pair-a-allocation-20260912.md):
+ten exact source/test/fixture paths, hard800 changed lines against62956038e;
+same sole owner/worktree/branch/original base, narrowing launchdb971e9b8.
+Only PairImages and launch_pair(images,deadline) returning existing LaunchHandle;
+no admission/UID/generation/socket surface, shared lock, PF20 or native activation.
+Reviews28AstraHigh/29Fable5.1High now cover A, retaining all historical usage.
+StageA sourcee0eb9eac4/Rustf64820d0 is qualified at614 changed lines: adapter4
+normal/8 supported-OS, default3, pair5/real pair1, owner8/real owner3, profiles1+1,
+full service57 pass; five service ignored cases executed separately. Strict
+scoped two-crate Clippy, read-only Cargo/Bazel parity and actual-key RTX TMUX
+pass; both reviews28/29 exit0/findings[], no repairs. [Original evidence](../../../qa/security-levels/sprints/PF-27-S04/descriptor-pair-20260912/README.md).
+Manager receiving integration remains required. Accepted policy1.7's independent
+isolated execution gate has reasoned N/A only for this private increment, not
+later protected-user flows/PF26 or the whole sprint. No product readiness claim.
+StageB admission/connector/missing cases remain deferred until accepted A and
+a fresh literal manager allocation. No omitted test is waived or called Done.
+
+September12 receiving owner accepted adapterfb7523f4b for branch continuation
+and allocated the [single-child asynchronous owner](../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-next-20260912.md).
+Exact private reservation/launch/status API and QA lifecycle script were frozen
+there before implementation; same owner/worktree/branch/base. Literal service
+manifest spawn/sealed/mod seams and synthetic dependency/lock parity only.
+No adapter semantic, children.rs/PF20/Core/Vault/native/dashboard/main changes.
+Permit-before-image, worker-before-spawn, sticky cancellation, no-block caller
+Drop, late-child cleanup and unrecoverable-quarantine proof now pass at
+source4d830cbb3/Rust7e488200: default3/focused8/real3/profile2/service52;
+four standard ignored cases separately covered; actual-key RTX TMUX and strict
+Clippy/Cargo-Bazel parity pass. Astra25 clean, Fable26 lint finding reproduced
+and repaired, Fable27 clean; historical results preserved, five current-window
+slots spent. [Frozen proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-20260912/README.md).
+PF27 remains in_progress. Two-child/native admission, trusted credential wiring,
+all-OS containment and product/release acceptance remain separate unfinished
+scope; no privileged, main or protected-activation action claimed.
+
+September12 17:29UTC: Travis explicitly approved the isolated Linux launch
+adapter; manager relayed execution authority. The [accepted adapter-only
+allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-launch-next-20260912.md)
+adds `codex-rs/linux-pidfd-spawn/`, workspace Cargo/Bazel registration and
+non-root synthetic RTX/second-Linux proof to the existing sole PF27 lane.
+Service forbid(unsafe_code) remains intact; no service wiring or privileged
+installation/credential execution/main push/release is included. Stage one
+precedes separately bounded asynchronous ownership integration. Replenished
+review allowance covers two necessary independent security/evidence closeouts.
+
+Adapter implementation now qualified at source30b471a47/Rust2d270c5c:
+focused3/OS7/service44/static-profile2/TMUX7 pass, second-host GNU2.39 explicit
+unsupported1 pass; service's one artifact exclusion remains disclosed.
+Cargo/Bazel parity passes; Astra23/Fable24 exit0/findings[]. Receiving-owner
+integration disposition and [next single-child owner allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-next-20260912.md)
+remain separate from [this internal proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-launch-20260912/README.md).
 September12 receiving owner accepted [sealed-byte ELF profile inspection](../../../qa/security-levels/sprints/PF-27-S04/runtime-elf-next-20260912.md)
 on clean8d1a4f49/incremental97d, original d870 allocation unchanged. Literal service
 `src/launch/manifest/{elf.rs,elf_tests.rs,mod.rs,sealed.rs,sealed_tests.rs}` only,
@@ -1209,6 +1414,17 @@ index rather than inherited historical snapshot arithmetic.
 9. **Accept and document.** PF-26-S03 requires named human/independent review,
    finished-only guidance and release/benchmark evidence. Planning completeness
    is not implementation, release readiness or a promised ship date.
+
+## Independent functional execution — September 12
+
+The next applicable user-facing handoff follows the mandatory
+[isolated execution gate](../../../qa/code-blind-functional/isolated-execution.md).
+The named integrator owns packet/isolation provisioning and separate executor
+and reviewer assignments; implementation owners do not execute acceptance cases.
+Record increment-specific internal-only N/A with later functional gate, not a
+plan-wide exemption. Missing isolation is manager work, not unanswered approval.
+Existing evidence stays historical; dependencies, feature flags and live authority
+are unchanged. See the linked rollout table for this lane's next acceptance.
 
 ## Automated evidence
 

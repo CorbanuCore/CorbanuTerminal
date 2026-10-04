@@ -1,0 +1,485 @@
+{
+  "source_commit": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
+  "clean_snapshot_commit": "78b7f9c92b62af63ed81bf6c13a1d984078c1f09",
+  "classification": "routine internal evidence maintenance",
+  "all_changes_within_scope": true,
+  "diff_check_exit": 0,
+  "clean_run_inputs_unchanged": true,
+  "post_run_reporting": "RETURN.md, final streams/receipt, control bookkeeping, this finalizer, patch and scope ledger are reporting artifacts; no verifier/reference/evidence input changed after final run.",
+  "self_entry_excluded": true,
+  "files": [
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md",
+      "kind": "modified",
+      "bytes": 18490,
+      "text_lines": 244,
+      "sha256": "6f50dd49303a3d128674b93348285ea58c8f69debdc865bf3eedd802fad86bc9",
+      "added_lines": 8,
+      "removed_lines": 3
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json",
+      "kind": "modified",
+      "bytes": 6528,
+      "text_lines": 157,
+      "sha256": "cc59f846a5c60310a787f0bab19a89f731bb82c1e7816f56ee0552023c9f0e5c",
+      "added_lines": 14,
+      "removed_lines": 8
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-disclose-105/RETURN.md",
+      "kind": "modified",
+      "bytes": 6109,
+      "text_lines": 103,
+      "sha256": "519d395fac2847a6ae7bf00ae628e1bef59151704491784f8b20d76b5a2a671f",
+      "added_lines": 6,
+      "removed_lines": 4
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-disclose-105/review-provenance.json",
+      "kind": "modified",
+      "bytes": 689,
+      "text_lines": 17,
+      "sha256": "9ac6cafe4d658167c0b995b5281927c44982bf8a074a6d6c122a446a466fc00f",
+      "added_lines": 7,
+      "removed_lines": 9
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/inventory-correction.json",
+      "kind": "modified",
+      "bytes": 10839,
+      "text_lines": 257,
+      "sha256": "460d6cb5f02724123db05d102c469af4fd274d791a430889da054686970809b4",
+      "added_lines": 10,
+      "removed_lines": 5
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py",
+      "kind": "modified",
+      "bytes": 22779,
+      "text_lines": 440,
+      "sha256": "ded2cd90fe9740a48885e4879b00b94744213682889f24a9b64fd7dce1b90e45",
+      "added_lines": 4,
+      "removed_lines": 2
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/RETURN.md",
+      "kind": "added",
+      "bytes": 12943,
+      "text_lines": 197,
+      "sha256": "57fdb77b10a7d8ce51c29456d5344b1a923038072afb06b85ccb4a6c78b9917b",
+      "added_lines": 197,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/before-acceptance.txt",
+      "kind": "added",
+      "bytes": 18094,
+      "text_lines": 239,
+      "sha256": "ec5c2da8f2760b5ef219f16f7e103d9b7f9fe5d930e68aabc708adaa4a94fb87",
+      "added_lines": 239,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/before-correction.txt",
+      "kind": "added",
+      "bytes": 10553,
+      "text_lines": 252,
+      "sha256": "72fdb723e1ab27fbda7e62ebf84f60ca6de5d93bbc5374aea749dcaf71e1d4a1",
+      "added_lines": 252,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/before-inventory.txt",
+      "kind": "added",
+      "bytes": 6050,
+      "text_lines": 151,
+      "sha256": "cb8a70050303d4fc3c625b5baae9bb2d95bea7b7830196d43ca602caa1063a63",
+      "added_lines": 151,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/before-reference-manifest.txt",
+      "kind": "added",
+      "bytes": 434,
+      "text_lines": 7,
+      "sha256": "f472d0828903c9261ed321cbd2ad71b3a4780697c67df4d4a03bcd0ec5f6c4b5",
+      "added_lines": 7,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/before-reference.txt",
+      "kind": "added",
+      "bytes": 3339,
+      "text_lines": 26,
+      "sha256": "97316af06e636192bd1086eafae4bc7acb6c03b5faa95239adfd48096209db60",
+      "added_lines": 26,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/before-verifier.py",
+      "kind": "added",
+      "bytes": 22618,
+      "text_lines": 438,
+      "sha256": "f64435d28a5d95885ea80c8c59c143596de2b904e76d1f1ad362031e74ab8f9d",
+      "added_lines": 438,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/before.stderr.txt",
+      "kind": "added",
+      "bytes": 0,
+      "text_lines": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "added_lines": 0,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/before.stdout.txt",
+      "kind": "added",
+      "bytes": 3351,
+      "text_lines": 26,
+      "sha256": "bd84782bb90ec65db4ed4ceeab8053d1cf02fb85883e56b437c643d6f9e1e69c",
+      "added_lines": 26,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/changed-lines.patch",
+      "kind": "added",
+      "bytes": 16788,
+      "text_lines": 234,
+      "sha256": "d5dc0f6021d977a819469cc80ba8ebccca5e53a7b0a677a12fded2eb14a15e3c",
+      "added_lines": 234,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/controls.stderr.txt",
+      "kind": "added",
+      "bytes": 0,
+      "text_lines": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "added_lines": 0,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/controls.stdout.txt",
+      "kind": "added",
+      "bytes": 3350,
+      "text_lines": 104,
+      "sha256": "16c06b68ab4e9a0d0d0002c59b3b26eb257932e2a69fa85a51c42c7ad1ca71a6",
+      "added_lines": 104,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/drift-disposable-optimized.stderr.txt",
+      "kind": "added",
+      "bytes": 0,
+      "text_lines": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "added_lines": 0,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/drift-disposable-optimized.stdout.txt",
+      "kind": "added",
+      "bytes": 3492,
+      "text_lines": 26,
+      "sha256": "956c5ae2d1c67e3e65593af87e16630db5071adbbb70261c4fa3233074dba950",
+      "added_lines": 26,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/drift-disposable.stderr.txt",
+      "kind": "added",
+      "bytes": 0,
+      "text_lines": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "added_lines": 0,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/drift-disposable.stdout.txt",
+      "kind": "added",
+      "bytes": 3492,
+      "text_lines": 26,
+      "sha256": "956c5ae2d1c67e3e65593af87e16630db5071adbbb70261c4fa3233074dba950",
+      "added_lines": 26,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/drift-optimized.stderr.txt",
+      "kind": "added",
+      "bytes": 0,
+      "text_lines": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "added_lines": 0,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/drift-optimized.stdout.txt",
+      "kind": "added",
+      "bytes": 3492,
+      "text_lines": 26,
+      "sha256": "956c5ae2d1c67e3e65593af87e16630db5071adbbb70261c4fa3233074dba950",
+      "added_lines": 26,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/drift.stderr.txt",
+      "kind": "added",
+      "bytes": 0,
+      "text_lines": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "added_lines": 0,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/drift.stdout.txt",
+      "kind": "added",
+      "bytes": 3492,
+      "text_lines": 26,
+      "sha256": "956c5ae2d1c67e3e65593af87e16630db5071adbbb70261c4fa3233074dba950",
+      "added_lines": 26,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/final-check.json",
+      "kind": "added",
+      "bytes": 17474,
+      "text_lines": 349,
+      "sha256": "c5101479cb99bcbdc0bb64530a853be24f32f5bf945e5f22bb8c78ca168b696e",
+      "added_lines": 349,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/final-optimized.stderr.txt",
+      "kind": "added",
+      "bytes": 0,
+      "text_lines": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "added_lines": 0,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/final-optimized.stdout.txt",
+      "kind": "added",
+      "bytes": 3345,
+      "text_lines": 26,
+      "sha256": "c0c52beb096b3aeb4a54676e57356b3ac3b804f28ccdb42f49f07dfdc081eecc",
+      "added_lines": 26,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/final.stderr.txt",
+      "kind": "added",
+      "bytes": 0,
+      "text_lines": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "added_lines": 0,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/final.stdout.txt",
+      "kind": "added",
+      "bytes": 3345,
+      "text_lines": 26,
+      "sha256": "c0c52beb096b3aeb4a54676e57356b3ac3b804f28ccdb42f49f07dfdc081eecc",
+      "added_lines": 26,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/finalize.py",
+      "kind": "added",
+      "bytes": 3681,
+      "text_lines": 73,
+      "sha256": "44555f9c642deaf72d1a4c8a5fb4ade9aa4574ef794a44658575ac4371e93498",
+      "added_lines": 73,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gate.py",
+      "kind": "added",
+      "bytes": 3361,
+      "text_lines": 72,
+      "sha256": "b31dcd6b6ec6db0c664bcc3213729b0a88606c2c424f42653114e398d6fab486",
+      "added_lines": 72,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gates-01/core-default.json",
+      "kind": "added",
+      "bytes": 1406,
+      "text_lines": 42,
+      "sha256": "79a8a4c53da998de3982026ad9012b1e0da5acca5ac5f52db531975ac45578f7",
+      "added_lines": 42,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gates-01/core-default.log.gz",
+      "kind": "added",
+      "bytes": 4989,
+      "text_lines": null,
+      "sha256": "23e44f54ec62f7c5b5bd3c8ef3d1357f9a3605990e93aa09fb37b413eefe0e8f",
+      "added_lines": null,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gates-01/core-feature.json",
+      "kind": "added",
+      "bytes": 1464,
+      "text_lines": 44,
+      "sha256": "65c9f05594331b9248a94401a3dc0c37c67cbb66573ecf67984ca9733ee44730",
+      "added_lines": 44,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gates-01/core-feature.log.gz",
+      "kind": "added",
+      "bytes": 5058,
+      "text_lines": null,
+      "sha256": "36d537da789138d826fe765b0a54726c0cbae31f76e7206e6941a558a41b8e47",
+      "added_lines": null,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gates-01/prerequisites.json",
+      "kind": "added",
+      "bytes": 991,
+      "text_lines": 34,
+      "sha256": "fca93c4359b3ec83eac7711971490e5d02ad08cf49e9e582ab922d686617666a",
+      "added_lines": 34,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gates-01/prerequisites.log.gz",
+      "kind": "added",
+      "bytes": 3132,
+      "text_lines": null,
+      "sha256": "f0aae65337610d1e2585d3b4c01137e35051b4eb43b8fcde0afeb3ad363f6cb6",
+      "added_lines": null,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gates-01/tui.json",
+      "kind": "added",
+      "bytes": 1032,
+      "text_lines": 39,
+      "sha256": "24aa6641fa6c97f0291d202e25f4013cb1c837293b71711eaa935811e763b514",
+      "added_lines": 39,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/gates-01/tui.log.gz",
+      "kind": "added",
+      "bytes": 6540,
+      "text_lines": null,
+      "sha256": "55723ba279a979fdbc1919251df9370a5ca97d920bbc5efc6a655c5a769dbdf6",
+      "added_lines": null,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/identifier-controls.json",
+      "kind": "added",
+      "bytes": 1140,
+      "text_lines": 37,
+      "sha256": "cf02316a21fa7b187c4bf07f4438b32751f51bc53ca4bde86429027c492fdafb",
+      "added_lines": 37,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/refresh.json",
+      "kind": "added",
+      "bytes": 2803,
+      "text_lines": 64,
+      "sha256": "5bc063960c7bd7984af240d78779e439ac0d3ba44a38ecbba1a6bd7d9d09e2d4",
+      "added_lines": 64,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/refresh.py",
+      "kind": "added",
+      "bytes": 8059,
+      "text_lines": 169,
+      "sha256": "a025b82caf22338602f322c36b7ec88418835ae68fb5ba2113ab3518a46414db",
+      "added_lines": 169,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/refreshed.stderr.txt",
+      "kind": "added",
+      "bytes": 0,
+      "text_lines": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "added_lines": 0,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/refreshed.stdout.txt",
+      "kind": "added",
+      "bytes": 3345,
+      "text_lines": 26,
+      "sha256": "c0c52beb096b3aeb4a54676e57356b3ac3b804f28ccdb42f49f07dfdc081eecc",
+      "added_lines": 26,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/simulate_disposable.py",
+      "kind": "added",
+      "bytes": 2925,
+      "text_lines": 58,
+      "sha256": "e785542ae36ed4f9d30ec3d5e3e17580ca803fbbb23b1224a5163f5848b18005",
+      "added_lines": 58,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/simulation-working-tree.json",
+      "kind": "added",
+      "bytes": 423,
+      "text_lines": 11,
+      "sha256": "840e2aaa1550587e5138c705ca2e72679eb3708cffc7facf10215f7ad0c78dbf",
+      "added_lines": 11,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/simulation.json",
+      "kind": "added",
+      "bytes": 1876,
+      "text_lines": 40,
+      "sha256": "8677fa193573231b047fd3c2db04e3edadeef9caaed626f6d82d5363fb5fa95e",
+      "added_lines": 40,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reconcile-107/verify_clean.py",
+      "kind": "added",
+      "bytes": 6464,
+      "text_lines": 121,
+      "sha256": "3a24cba449089131dba2fba53792f1071be3ffcefb60ac09532c25734b00cd75",
+      "added_lines": 121,
+      "removed_lines": 0
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt",
+      "kind": "modified",
+      "bytes": 3345,
+      "text_lines": 26,
+      "sha256": "c0c52beb096b3aeb4a54676e57356b3ac3b804f28ccdb42f49f07dfdc081eecc",
+      "added_lines": 2,
+      "removed_lines": 2
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/reference.json",
+      "kind": "modified",
+      "bytes": 700,
+      "text_lines": 12,
+      "sha256": "980d5943532b5f3294dc20591087238465557e0654398b6c4f94aacc71a1433e",
+      "added_lines": 7,
+      "removed_lines": 2
+    }
+  ],
+  "modified_files": 8,
+  "modified_added_lines": 58,
+  "modified_removed_lines": 35,
+  "added_files": 44,
+  "added_text_lines": 3009
+}

@@ -1,0 +1,72 @@
+{
+  "false_driver_pass_flag_does_not_gate_audit": {
+    "exact_numeric_pages_checked": 48,
+    "bucket_labels_checked": 48,
+    "buckets": 8,
+    "groups": 4,
+    "unknown_causes": 5,
+    "passed": true,
+    "expected_source": "wire counts, fixed rates, driver-recorded windows; no results.passed gate",
+    "limitation": "Membership expectations are driver-derived; store reads establish fixture identity/ancestry, not independent ancestry truth."
+  },
+  "consistent_mislabel_and_amount_rejected": "(PosixPath('<synthetic-copy>/week-edge-hours-0-selected.json'), 'wrong bucket label')",
+  "wrong_amount_rejected": "(PosixPath('<synthetic-copy>/week-edge-hours-0-selected.json'), ['Known subtotal exact USD: 0.00197'], Decimal('0.001960'))",
+  "five_causes": [
+    {
+      "cause": "malformed-source",
+      "pid": 87117,
+      "sha256": "6c0069c5b1ae8b4a481c759cd1bfe900c1141bf75a130111e6f5823f41a20bbd"
+    },
+    {
+      "cause": "absent-ancestor",
+      "pid": 87657,
+      "sha256": "8860a72aa4ce73e422b907b6e6347eb2af8b80ddbed5637311302bdb4a5d35e9"
+    },
+    {
+      "cause": "conflicting-source-edge",
+      "pid": 88131,
+      "sha256": "a44e0629ee19fc05fc34a41a971bd9c055085001111e40c6975042022a976eb1"
+    },
+    {
+      "cause": "cycle",
+      "pid": 88302,
+      "sha256": "01810699947005133cd4f7fc627256b97debb79bcc35cd801cf6e8ce94dbe089"
+    },
+    {
+      "cause": "source-without-edge",
+      "pid": 88410,
+      "sha256": "cd742138c518b7cb72ab176cab8933b9be09b7089511218d6a912e32c7243f80"
+    }
+  ],
+  "stale_first_cause_readback_rejected": [
+    "absent-ancestor",
+    "conflicting-source-edge",
+    "cycle",
+    "source-without-edge"
+  ],
+  "historical_receipt_unchanged": {
+    "sha256": "e79fc734489cfdd2a1472593908e9ff866842e467bd5cfd73552b197610f2858",
+    "mtime_ns": 1789630126268437772
+  },
+  "historical_mismatch_rejected": {
+    "exit": 1,
+    "error": "Historical receipt mismatch"
+  },
+  "checkpoint": {
+    "role": "checkpoint",
+    "selected_root": "01a054e6-b180-7ca3-8abb-c8c8ea6ec539",
+    "stored_attempt": {
+      "attempt_id": "8b1ce6c8-068b-4ead-95d9-23ede01cd6c9",
+      "request_id": "557ffbc3-f6e8-40a2-a64f-b887550df1f0",
+      "thread_id": "01a054e6-b180-7ca3-8abb-c8c8ea6ec539",
+      "turn": "01a0fc7c-4e00-7ed1-abff-97817ca2bfa9",
+      "retry_of": null,
+      "provider": "openai",
+      "model": "gpt-5.6-sol",
+      "scope": "c6166689-7d12-4eac-b932-90dafff578be",
+      "dialect": "Inclusive",
+      "dispatched_at_ms": 1790942400000
+    },
+    "outside_all_compared_ranges": true
+  }
+}

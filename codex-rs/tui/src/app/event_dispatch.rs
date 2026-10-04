@@ -23,6 +23,93 @@ use std::collections::HashSet;
 
 const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
 
+impl App {
+    // This local-only route has no app-server client or account request capability.
+    pub(super) fn handle_accounting_inspector_event(&mut self, event: AppEvent) {
+        match event {
+            AppEvent::OpenAccountingInspector { day } => {
+                self.chat_widget.open_accounting_inspector(day)
+            }
+            AppEvent::LoadAccountingInspector {
+                generation,
+                thread,
+                day,
+                range,
+            } => {
+                let db = self.state_db.clone();
+                let embedded = matches!(self.app_server_target, crate::AppServerTarget::Embedded);
+                let current = self.current_displayed_thread_id();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = if !embedded {
+                        Err("Unavailable — recorded request inspection is local-only; remote server selected.".into())
+                    } else if thread.is_none() || thread != current {
+                        Err("Unavailable — no current native thread.".into())
+                    } else if let (Some(db), Some(owner)) = (db, thread) {
+                        accounting_inspector_read_result(async {
+                            let now = chrono::Utc::now().timestamp_millis();
+                            match range {
+                                Some(range) => {
+                                    codex_state::accounting::AccountingStore::inspect_range(
+                                        &db, owner, range, now,
+                                    )
+                                    .await
+                                }
+                                None => {
+                                    codex_state::accounting::AccountingStore::inspect_day(
+                                        &db, owner, day, now,
+                                    )
+                                    .await
+                                }
+                            }
+                        })
+                        .await
+                    } else {
+                        Err("Unavailable — native state database is not open.".into())
+                    };
+                    tx.send(AppEvent::AccountingInspectorLoaded {
+                        generation,
+                        thread,
+                        day,
+                        result,
+                    });
+                });
+            }
+            AppEvent::AccountingInspectorLoaded {
+                generation,
+                thread,
+                day,
+                result,
+            } => {
+                if thread == self.current_displayed_thread_id() {
+                    self.chat_widget
+                        .finish_accounting_inspector(generation, thread, day, result);
+                }
+            }
+            AppEvent::NavigateAccountingInspector { generation, page } => self
+                .chat_widget
+                .navigate_accounting_inspector(generation, page),
+            AppEvent::CloseAccountingInspector { generation } => {
+                self.chat_widget.close_accounting_inspector(generation)
+            }
+            AppEvent::RefreshAccountingInspector { generation } => {
+                self.chat_widget.refresh_accounting_inspector(generation)
+            }
+            _ => unreachable!("non-inspector event"),
+        }
+    }
+}
+
+pub(super) async fn accounting_inspector_read_result(
+    read: impl std::future::Future<Output = anyhow::Result<codex_state::accounting::InspectionDay>>,
+) -> Result<codex_state::accounting::InspectionDay, String> {
+    match tokio::time::timeout(Duration::from_secs(15), read).await {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(_)) => Err("Unavailable — accounting evidence is corrupt, incompatible or could not be read. Refresh to retry; no repair performed.".into()),
+        Err(_) => Err("Unavailable — inspection timed out. Refresh to retry.".into()),
+    }
+}
+
 fn resolve_shared_provider_selection_model(
     configured_model: Option<String>,
     active_model: &str,
@@ -82,6 +169,61 @@ const RESERVED_PANE_DISPLAY_NAMES: &[&str] = &[
 ];
 
 impl App {
+    pub(super) async fn handle_resume_picker_event(
+        &mut self,
+        tui: &mut tui::Tui,
+        app_server: &mut AppServerSession,
+        tui_events: &mut (dyn Stream<Item = TuiEvent> + Send + Unpin),
+    ) -> Result<AppRunControl> {
+        let picker_app_server = match crate::start_app_server_for_picker(
+            &self.config,
+            &self.app_server_target,
+            self.state_db.clone(),
+            self.environment_manager.clone(),
+        )
+        .await
+        {
+            Ok(app_server) => app_server,
+            Err(err) => {
+                self.chat_widget
+                    .add_error_message(format!("Failed to start TUI session picker: {err}"));
+                self.chat_widget.maybe_send_next_queued_input();
+                return Ok(AppRunControl::Continue);
+            }
+        };
+        let selection =
+            crate::resume_picker::run_resume_picker_from_existing_session_with_app_server(
+                tui,
+                &self.config,
+                /*show_all*/ false,
+                /*include_non_interactive*/ false,
+                picker_app_server,
+                tui_events,
+            )
+            .await?;
+        match selection {
+            SessionSelection::Resume(target_session) => {
+                match self
+                    .resume_target_session_with_events(tui, app_server, target_session, tui_events)
+                    .await?
+                {
+                    AppRunControl::Continue => {}
+                    AppRunControl::Exit(reason) => return Ok(AppRunControl::Exit(reason)),
+                }
+            }
+            SessionSelection::Exit
+            | SessionSelection::StartFresh
+            | SessionSelection::ResumePanesOnly { .. } => {
+                self.refresh_in_memory_config_from_disk_best_effort("closing the session picker")
+                    .await;
+            }
+            SessionSelection::Fork(_) => {}
+        }
+        self.chat_widget.maybe_send_next_queued_input();
+        tui.frame_requester().schedule_frame();
+        Ok(AppRunControl::Continue)
+    }
+
     pub(super) async fn handle_external_agent_config_migration_event(
         &mut self,
         tui: &mut tui::Tui,
@@ -862,57 +1004,10 @@ impl App {
                 .await;
             }
             AppEvent::OpenResumePicker => {
-                let picker_app_server = match crate::start_app_server_for_picker(
-                    &self.config,
-                    &self.app_server_target,
-                    self.state_db.clone(),
-                    self.environment_manager.clone(),
-                )
-                .await
-                {
-                    Ok(app_server) => app_server,
-                    Err(err) => {
-                        self.chat_widget.add_error_message(format!(
-                            "Failed to start TUI session picker: {err}"
-                        ));
-                        self.chat_widget.maybe_send_next_queued_input();
-                        return Ok(AppRunControl::Continue);
-                    }
-                };
-                match crate::resume_picker::run_resume_picker_from_existing_session_with_app_server(
-                    tui,
-                    &self.config,
-                    /*show_all*/ false,
-                    /*include_non_interactive*/ false,
-                    picker_app_server,
-                )
-                .await?
-                {
-                    SessionSelection::Resume(target_session) => {
-                        match self
-                            .resume_target_session(tui, app_server, target_session)
-                            .await?
-                        {
-                            AppRunControl::Continue => {}
-                            AppRunControl::Exit(reason) => {
-                                return Ok(AppRunControl::Exit(reason));
-                            }
-                        }
-                    }
-                    SessionSelection::Exit
-                    | SessionSelection::StartFresh
-                    | SessionSelection::ResumePanesOnly { .. } => {
-                        self.refresh_in_memory_config_from_disk_best_effort(
-                            "closing the session picker",
-                        )
-                        .await;
-                    }
-                    SessionSelection::Fork(_) => {}
-                }
-
-                self.chat_widget.maybe_send_next_queued_input();
-                // Leaving alt-screen may blank the inline viewport; force a redraw either way.
-                tui.frame_requester().schedule_frame();
+                // The main loop must lend its drained input queue to modal screens.
+                self.chat_widget.add_error_message(
+                    "Resume could not acquire terminal input. Retry /resume.".to_string(),
+                );
             }
             AppEvent::OpenExternalAgentConfigMigration => {
                 self.chat_widget.add_error_message(
@@ -1672,6 +1767,12 @@ impl App {
             AppEvent::RefreshRateLimits { origin } => {
                 self.refresh_rate_limits(app_server, origin);
             }
+            event @ (AppEvent::OpenAccountingInspector { .. }
+            | AppEvent::LoadAccountingInspector { .. }
+            | AppEvent::AccountingInspectorLoaded { .. }
+            | AppEvent::NavigateAccountingInspector { .. }
+            | AppEvent::CloseAccountingInspector { .. }
+            | AppEvent::RefreshAccountingInspector { .. }) => self.handle_accounting_inspector_event(event),
             AppEvent::RefreshTokenActivity { request_id } => {
                 self.refresh_token_activity(app_server, request_id);
             }
@@ -3259,7 +3360,14 @@ impl App {
                     }
                 }
             }
-            AppEvent::CorbanuApiLoaded { result, deferred } => {
+            AppEvent::CorbanuApiLoaded {
+                result,
+                deferred,
+                capability_lapsed,
+            } => {
+                if capability_lapsed {
+                    self.chat_widget.forget_lapsed_wallet_capability();
+                }
                 if corbanu_api_continuation_is_current(
                     self.active_deferred_provider_setup.as_ref(),
                     deferred.as_ref(),
@@ -4307,7 +4415,7 @@ impl App {
                                         /*personality*/ None,
                                     ),
                                 ));
-                                if self.apply_permission_profile_selection(selection).await {
+                                if self.apply_permission_profile_selection(app_server, selection).await {
                                     self.chat_widget.submit_initial_user_message_if_pending();
                                 }
                                 self.chat_widget.add_plain_history_lines(vec![
@@ -4322,10 +4430,10 @@ impl App {
                                 self.app_event_tx.send(AppEvent::CodexOp(
                                     AppCommand::override_turn_context(
                                         /*cwd*/ None,
-                                        Some(AskForApproval::from(preset.approval)),
-                                        Some(self.config.approvals_reviewer),
-                                        Some(preset.permission_profile.clone()),
-                                        Some(preset.active_permission_profile.clone()),
+                                        /*approval_policy*/ None,
+                                        /*approvals_reviewer*/ None,
+                                        /*permission_profile*/ None,
+                                        /*active_permission_profile*/ None,
                                         #[cfg(target_os = "windows")]
                                         Some(windows_sandbox_level),
                                         /*model*/ None,
@@ -4336,13 +4444,12 @@ impl App {
                                         /*personality*/ None,
                                     ),
                                 ));
-                                self.app_event_tx.send(AppEvent::UpdateAskForApprovalPolicy(
-                                    AskForApproval::from(preset.approval),
-                                ));
-                                self.app_event_tx
-                                    .send(AppEvent::UpdateActivePermissionProfile(
-                                        preset.active_permission_profile.clone(),
-                                    ));
+                                self.app_event_tx.send(AppEvent::SelectPermissionProfile(PermissionProfileSelection {
+                                    profile_id: preset.active_permission_profile.id.clone(),
+                                    approval_policy: Some(AskForApproval::from(preset.approval)),
+                                    approvals_reviewer: Some(self.config.approvals_reviewer),
+                                    display_label: preset.active_permission_profile.id.clone(),
+                                }));
                                 self.chat_widget.add_plain_history_lines(vec![
                                     Line::from(vec!["• ".dim(), "Sandbox ready".into()]),
                                     Line::from(vec![
@@ -4643,7 +4750,36 @@ impl App {
                 }
             }
             AppEvent::SelectPermissionProfile(selection) => {
-                if self.apply_permission_profile_selection(selection).await {
+                if self.apply_permission_profile_selection(app_server, selection).await {
+                    self.chat_widget.submit_initial_user_message_if_pending();
+                }
+            }
+            AppEvent::PermissionConfirmationCompleted { selection_id, result } => {
+                // Completion also carries confirmed settings into fresh sessions and
+                // submits or restores held initial input after checking correlation.
+                if let Some(reviewer) = self.finish_permission_confirmation(selection_id, result)
+                    && let Err(error) = crate::config_update::write_config_batch(
+                        app_server.request_handle(),
+                        vec![crate::config_update::replace_config_value("approvals_reviewer", serde_json::json!(reviewer.to_string()))],
+                    ).await
+                {
+                    self.chat_widget.add_error_message(format!("Permissions applied, but the default reviewer could not be saved: {error}"));
+                }
+            }
+            AppEvent::SelectPermissionPreset(selection) => {
+                let reviewer = selection.approvals_reviewer;
+                if let Some(thread_id) = self.active_thread_id {
+                    self.request_permission_confirmation(app_server, codex_app_server_protocol::ThreadSettingsUpdateParams {
+                        thread_id: thread_id.to_string(),
+                        permissions: Some(selection.profile_id),
+                        approval_policy: selection.approval_policy,
+                        approvals_reviewer: reviewer.map(Into::into),
+                        ..Default::default()
+                    }, selection.display_label, reviewer);
+                } else if self.apply_permission_profile_selection(app_server, selection).await {
+                    if let Some(reviewer) = reviewer {
+                        self.app_event_tx.send(AppEvent::UpdateApprovalsReviewer(reviewer));
+                    }
                     self.chat_widget.submit_initial_user_message_if_pending();
                 }
             }
@@ -5775,6 +5911,22 @@ impl App {
             }
             AppEvent::ClaudePaneTurnProgress { progress } => {
                 self.on_claude_pane_turn_progress(progress);
+            }
+            AppEvent::PaneBridgeModelRequestSent {
+                provider_id,
+                base_url,
+                path,
+                model,
+                usage,
+            } => {
+                self.record_pane_bridge_model_request(
+                    app_server,
+                    provider_id,
+                    base_url,
+                    path,
+                    model,
+                    usage,
+                );
             }
             AppEvent::StartSide {
                 parent_thread_id,

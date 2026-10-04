@@ -1,0 +1,30 @@
+{
+  "sprint": "PF-80-S01",
+  "status": "implementation returned; parent review and integration pending",
+  "allocation": "Canonical fixed-transport extraction, after the live preflight",
+  "allocation_record_commit": "06f2d52c1",
+  "base_commit": "0c5dfca05aca00567671f1335e476c89b4f7f72c",
+  "worktree": "/Volumes/CorbanuDrive/Corbanu/worktrees/isolated-model-transport-20260913",
+  "branch": "bootstrap/isolated-model-transport-20260913",
+  "native_identity": {
+    "CODEX_THREAD_ID": "01a09a13-de7f-7a43-97e6-358b1dbaf659",
+    "CODEX_SESSION_ID": "01a08522-76a1-7ad1-afe6-ad690d55c0d7",
+    "provenance": "Exact named environment fields in this worker, not native home/log inspection",
+    "runtime_self_description": "Codex, GPT-6",
+    "requested_model_effort": "Astra High",
+    "verified_native_model_slug": null,
+    "verified_native_effort": null,
+    "limitation": "Exact native model slug/effort were not independently exposed; no invented agent name"
+  },
+  "write_scope": [
+    "scripts/initiative_control/isolated_model_transport.py",
+    "scripts/initiative_control/test_isolated_model_transport.py",
+    "scripts/initiative_control/isolated-model-catalog.json",
+    "qa/initiative-control/management-bootstrap/isolated-model-transport.md",
+    "qa/initiative-control/management-bootstrap/transport-allocation.json"
+  ],
+  "new_files_only": true,
+  "line_budget": {"target_total": 900, "target_non_test": 450, "hard_total": 1200, "hard_non_test": 600},
+  "worker_reviews_or_agent_descendants_launched": 0,
+  "parent_owns": ["one Fable material review", "final commit", "integration", "exact-candidate OS/live replay"]
+}

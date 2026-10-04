@@ -1,0 +1,3934 @@
+{
+  "counts": {
+    "existing_diff_numstat": "1\t1\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-50/RETURN.md\n8\t3\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-55/REPRODUCE.md\n11\t7\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-55/RETURN.md\n70\t46\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-55/audit.py\n19\t5\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-55/qualify.py\n7\t1\tqa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-55/verify_utc_alignment.py\n",
+    "existing_added_lines": 116,
+    "existing_removed_lines": 63,
+    "new_program_lines": 571,
+    "new_text_evidence_lines": 40877,
+    "tracked_change_files": 560,
+    "production_rust_lines": 0,
+    "outside_scope_paths": []
+  },
+  "files": [
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/.gitignore",
+      "sha256": "a2e82020adce299f6ba25517c1402059b9160c165a4dfdba9699e47a4f392a77",
+      "bytes": 57,
+      "lines": 6,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/PREFLIGHT.md",
+      "sha256": "11cd12d9e967fd3f98852976d6e67a3aad17a9b69e96026c06590d2ec9fa2d4e",
+      "bytes": 1970,
+      "lines": 12,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/REPRODUCE.md",
+      "sha256": "b693e5418e80ed24dab465e715d13cf6556ad982bf77a6b15e7e0e3c121b87e8",
+      "bytes": 3100,
+      "lines": 48,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/RETURN.md",
+      "sha256": "5e2d7547d199e22bc9079650c64602f27b4d97d65d13ade23cf9d69970d39495",
+      "bytes": 11467,
+      "lines": 178,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/attempts.json",
+      "sha256": "8ac0f92135db4fcd0f715891314389d9e155f11964b7de26fecadc8486c8c586",
+      "bytes": 1077,
+      "lines": 18,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/audit-attempts.json",
+      "sha256": "0bfc9516e514f669fe772dca7fa3b9293097f185ca1de41e7ecabe53d6557f4c",
+      "bytes": 761,
+      "lines": 21,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/audit_boundaries.py",
+      "sha256": "277e5296a787c9e04c992485df6f99bf97a8348498d478424ecd2e694ab7bef1",
+      "bytes": 5838,
+      "lines": 92,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundaries.py",
+      "sha256": "519be4232affc33dc29070927f707890527ae1f3ff5b81e70d83cc79b0918a41",
+      "bytes": 13398,
+      "lines": 253,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/boundary-results.json",
+      "sha256": "1635310a2b7e1f99e1c4654d61f2f59353c9627cee622fa8d2f19a5f10a8aa3e",
+      "bytes": 7967,
+      "lines": 149,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/clock.c.gz",
+      "sha256": "553e11ff865e60fb355c9f010fffc43c9f5d35594670679d61dfd6cce967cad3",
+      "bytes": 680,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/driver.py.gz",
+      "sha256": "0554d44576b83b64b9deb3ff99319a17f2be59dd36ce4154a7a7c7a0c9fb2ea6",
+      "bytes": 3987,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/expanded-helpers.py.gz",
+      "sha256": "0e9ab2310f5b62d6b2586779aa3dec1382f46df1f37a0d4324b9f6f23d2a418b",
+      "bytes": 4211,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/first-complete.txt.gz",
+      "sha256": "d4b41a75969507221469b2ab51bec57884871aae87ec813d55cd19e8d878287f",
+      "bytes": 300,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/first-startup.txt.gz",
+      "sha256": "4b8f4b71fe7e463cee9582728f99cef10968ead5aa6b6d55a7f5e3f0f9a13694",
+      "bytes": 206,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/first.raw.gz",
+      "sha256": "6c474bbc018774ed4d756b52332695865636db91934e30faee32a3f37fbe1f25",
+      "bytes": 1137,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/helpers.py.gz",
+      "sha256": "7b5945cc7273e4820883b688acb3b0a4df715b1c0eec58cc249e2fbf0b37ac57",
+      "bytes": 2525,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/independent-arithmetic.json",
+      "sha256": "ad941b560a37dd757a42054e98cbd5b0cf3fce1ec31c2d69e344588a310e534b",
+      "bytes": 2065,
+      "lines": 102,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/keys.json",
+      "sha256": "cfb05bb3e308e1b7432e60824a4dc3067f6ef4467903f20d6310d90c127ce4c9",
+      "bytes": 53528,
+      "lines": 3386,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/manifest.json",
+      "sha256": "b1a36bd6455689097528b08cca6d97ab5856fcb77451a21d61773a086a016031",
+      "bytes": 760,
+      "lines": 10,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/requests.json",
+      "sha256": "cc0798ce37a390ea9616588df5176d4ca7d4c5852f988acf0fd5d48e0ab8c6b5",
+      "bytes": 1488,
+      "lines": 67,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/results.json",
+      "sha256": "7575c68b4330d33532d6ac6dfbc3483da07cf6abb3b4971610548ffd63bfc011",
+      "bytes": 1596,
+      "lines": 67,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-0-Request-1-Attempt-1-selected.json",
+      "sha256": "ff43502f301de579833e01f965900bcdfce769fb97003998ee90ac2a76fdeca8",
+      "bytes": 2731,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-0-Request-1-Attempt-1.txt.gz",
+      "sha256": "32a66876386de5e1df57652d096a69724f5ca4952cebb5545b2ea723c70790e6",
+      "bytes": 2504,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-0-Request-1-selected.json",
+      "sha256": "147c63d3f63671a2fc19e01dfd339320d2babd426c05f75ff5e32a9491ce4c77",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-0-Request-1.txt.gz",
+      "sha256": "f12b6451056ef6c4e7e94528b802de7be24a7276daad5000a45ff54254d74dca",
+      "bytes": 1142,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-0-Request-2-Attempt-1-selected.json",
+      "sha256": "829ee62c597eeef08c65ac8282f5b5ef6ef9e3ac7f92456d2c8fb4bf125337f1",
+      "bytes": 2734,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-0-Request-2-Attempt-1.txt.gz",
+      "sha256": "5eb3ea000dc62f159f6ecb5b176c3998c97985752b899dd1afc084177001f47c",
+      "bytes": 2509,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-0-Request-2-selected.json",
+      "sha256": "b2ffafb1706626ea8e905ae5cafdde9741be1770ddf757ae48c671bd29c837e8",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-0-Request-2.txt.gz",
+      "sha256": "c6f861b87ca214eba3ae125ef14ff806ea03ea07d3edb75335e02e1e9a368232",
+      "bytes": 1143,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-0-Request-3-Attempt-1-selected.json",
+      "sha256": "38c21f396ce2ca567236d6a6b2980d9778fddc5b5b0bbabb1381fe9969e504b8",
+      "bytes": 2729,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-0-Request-3-Attempt-1.txt.gz",
+      "sha256": "e889a17b97f510c3765f670c89e90af4306bfb93f865b1541d6e65f21b5c87a2",
+      "bytes": 2504,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-0-Request-3-selected.json",
+      "sha256": "b1ccc584cfd2405deb5ebb27c5ccde38235ca9831de6df990a5ff641d5c6f0eb",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-0-Request-3.txt.gz",
+      "sha256": "a23513e3dc1f9b384b7cb8bc7198e2d649d3c0698fb986cf7d266fa1ea8c4188",
+      "bytes": 1143,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-0-selected.json",
+      "sha256": "d998291003afe8f16c917ba58d8abf4d9aef0f9e91a8ef1a181627c7ed073435",
+      "bytes": 2402,
+      "lines": 38,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-0.txt.gz",
+      "sha256": "90fcc6405b20644114409a082a5a6fdfe44fc6954b352ba9b3444cab25b1cda4",
+      "bytes": 1950,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-1-Request-1-Attempt-1-selected.json",
+      "sha256": "e9b2e9218639df9ed9001d3417b26ea9fa199c8c993f832454b2aadcde1fea3b",
+      "bytes": 2732,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-1-Request-1-Attempt-1.txt.gz",
+      "sha256": "d78d527b9b9bc38ca7328263dc823e5beb963f60af11e9cc6964c7d3a380f559",
+      "bytes": 2522,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-1-Request-1-selected.json",
+      "sha256": "0b982b0bc8a449b23bc00d12a53a588e05300692cd1b641ac88999141af5b10c",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-1-Request-1.txt.gz",
+      "sha256": "075a4e53e8c7dbb614761015292db186061360252da6eb9b3227f113e609bf05",
+      "bytes": 1144,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-1-selected.json",
+      "sha256": "c866230ca6985ac2a24abf45c00c49d4aaa8fd5241efb81664aa04fb68934890",
+      "bytes": 2370,
+      "lines": 36,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-1.txt.gz",
+      "sha256": "443351364971f781b6354a9a5fb2deb9ce23396f2ea9bd10b51f1f7f43ca854a",
+      "bytes": 1909,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-day-selected.json",
+      "sha256": "44bd61fdb013850e8a03495cf798677d4533b69584b9d8256b76a5ea9a02812f",
+      "bytes": 1669,
+      "lines": 31,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-day.txt.gz",
+      "sha256": "fa7f1bd33c378925848dd2598dd36bf60668970226530058e7b6c5c0d984cb0c",
+      "bytes": 1600,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-overview-selected.json",
+      "sha256": "9f3cabb90748e07cdc6be87b55c41f8d86536accc08e27b4f949c273b8fbbef7",
+      "bytes": 1100,
+      "lines": 14,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-America-New_York-overview.txt.gz",
+      "sha256": "48f89d7b1735adf820395ec29def4f60df384650c416b1cb7d146652dc211c83",
+      "bytes": 1028,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-UTC-0-Request-1-Attempt-1-selected.json",
+      "sha256": "ff43502f301de579833e01f965900bcdfce769fb97003998ee90ac2a76fdeca8",
+      "bytes": 2731,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-UTC-0-Request-1-Attempt-1.txt.gz",
+      "sha256": "32a66876386de5e1df57652d096a69724f5ca4952cebb5545b2ea723c70790e6",
+      "bytes": 2504,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-UTC-0-Request-1-selected.json",
+      "sha256": "147c63d3f63671a2fc19e01dfd339320d2babd426c05f75ff5e32a9491ce4c77",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-UTC-0-Request-1.txt.gz",
+      "sha256": "f12b6451056ef6c4e7e94528b802de7be24a7276daad5000a45ff54254d74dca",
+      "bytes": 1142,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-UTC-0-Request-2-Attempt-1-selected.json",
+      "sha256": "829ee62c597eeef08c65ac8282f5b5ef6ef9e3ac7f92456d2c8fb4bf125337f1",
+      "bytes": 2734,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-UTC-0-Request-2-Attempt-1.txt.gz",
+      "sha256": "5eb3ea000dc62f159f6ecb5b176c3998c97985752b899dd1afc084177001f47c",
+      "bytes": 2509,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-UTC-0-Request-2-selected.json",
+      "sha256": "b2ffafb1706626ea8e905ae5cafdde9741be1770ddf757ae48c671bd29c837e8",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-UTC-0-Request-2.txt.gz",
+      "sha256": "c6f861b87ca214eba3ae125ef14ff806ea03ea07d3edb75335e02e1e9a368232",
+      "bytes": 1143,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-UTC-0-selected.json",
+      "sha256": "d998291003afe8f16c917ba58d8abf4d9aef0f9e91a8ef1a181627c7ed073435",
+      "bytes": 2402,
+      "lines": 38,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-UTC-0.txt.gz",
+      "sha256": "90fcc6405b20644114409a082a5a6fdfe44fc6954b352ba9b3444cab25b1cda4",
+      "bytes": 1950,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-UTC-overview-selected.json",
+      "sha256": "9f3cabb90748e07cdc6be87b55c41f8d86536accc08e27b4f949c273b8fbbef7",
+      "bytes": 1100,
+      "lines": 14,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-UTC-overview.txt.gz",
+      "sha256": "48f89d7b1735adf820395ec29def4f60df384650c416b1cb7d146652dc211c83",
+      "bytes": 1028,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-after-complete.txt.gz",
+      "sha256": "267d9182de8feedb59f21183178fdef34d497042c0cee3db0d3b99035af95655",
+      "bytes": 355,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-after-startup.txt.gz",
+      "sha256": "c64fe97be95d924ac6450be4360af7239defc3cf779a9426449ffaaa17d956a5",
+      "bytes": 290,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-after.raw.gz",
+      "sha256": "bf2eb64af9a4fd8111f9ec6ddbda684a072123268d3c6b8f1c4850d60e81332e",
+      "bytes": 1035,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-checkpoint-complete.txt.gz",
+      "sha256": "87681b5cc92139a560606cc543d0327769bc5b6609a7910204345cb1a1c71e0e",
+      "bytes": 369,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-checkpoint-startup.txt.gz",
+      "sha256": "6167d2bb0d6282de2ffccd96c4de99ecf34cc63317e56592bf86eb5e255885b7",
+      "bytes": 355,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-checkpoint.raw.gz",
+      "sha256": "86e4e723980f894bd6fba57bc9840da0ee90bf8b98aa3d5689d93a01b082d08d",
+      "bytes": 999,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-inspect-America-New_York-startup.txt.gz",
+      "sha256": "083420e4bbcb7795e0516b6020a507a2ed5993c13c286754efcd4bd4bd1bee7e",
+      "bytes": 365,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-inspect-America-New_York.raw.gz",
+      "sha256": "3dc2bc63621555873ed42e9371f73cd5b2ba47f7b249f6e2a0a96f53c9b67328",
+      "bytes": 55599,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-inspect-UTC-startup.txt.gz",
+      "sha256": "74998b39d89dd107509bc2953a92683a0e49a137eb66c85ecf1c653bb31a6b2b",
+      "bytes": 360,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-01/spring-inspect-UTC.raw.gz",
+      "sha256": "051058518d00027df703c6730c14b33dba0e56cd120274a182db8f50c53122f6",
+      "bytes": 28919,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/after-deletion-inspect-startup.txt.gz",
+      "sha256": "6f604478fc9068c9c7ec0d10b97400fa4616207444f7207413d786e63fcff403",
+      "bytes": 356,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/after-deletion-inspect.raw.gz",
+      "sha256": "839f1a7521fc529ddf6355e3da978f65e5bc7b10372c95f0ece4e709bb659da2",
+      "bytes": 4768,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/after-deletion-selected.json",
+      "sha256": "3e661a1b3953a98cfac360bdc925e7625fdc7544a43f73e07b0434b02ac3c3c5",
+      "bytes": 1655,
+      "lines": 30,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/after-deletion.txt.gz",
+      "sha256": "f200f2d698d81ea34559e63771dbc3490160a255964f142bf93ec0dc943da710",
+      "bytes": 1582,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/before-deletion-inspect-startup.txt.gz",
+      "sha256": "0954e7018a8d486ed110024ee7bb0565636a1d6e9048a2b40ca9af9dc4fd29d6",
+      "bytes": 367,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/before-deletion-inspect.raw.gz",
+      "sha256": "326abe8922463c222c8dfd5825b53b050bf754abfd056bcb24cd433cf0653789",
+      "bytes": 4757,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/before-deletion-selected.json",
+      "sha256": "44bd61fdb013850e8a03495cf798677d4533b69584b9d8256b76a5ea9a02812f",
+      "bytes": 1669,
+      "lines": 31,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/before-deletion.txt.gz",
+      "sha256": "fa7f1bd33c378925848dd2598dd36bf60668970226530058e7b6c5c0d984cb0c",
+      "bytes": 1600,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/boundary-results.json",
+      "sha256": "e2349fd80f2f6fbe4682290c67ea63d4da7c792af8ff134fe30a32bbecc9ccba",
+      "bytes": 36360,
+      "lines": 690,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/clock.c.gz",
+      "sha256": "553e11ff865e60fb355c9f010fffc43c9f5d35594670679d61dfd6cce967cad3",
+      "bytes": 680,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/delete-rpc.json",
+      "sha256": "65b953701c1b4ef4315754b1b0a4c3a36870b8ea01a37f8064e6cba63a660214",
+      "bytes": 952,
+      "lines": 43,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/delete-server.log.gz",
+      "sha256": "0fc0ad54d19464fa3cd3be94f04e4ebb9ca38cdf46a8892f9d3214ee2696c333",
+      "bytes": 6921,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/deleted-store-readback.json",
+      "sha256": "c69389976181e1e270fbd968e0b084973effc9aee412c9e3137a73c82539181f",
+      "bytes": 116,
+      "lines": 6,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/driver.py.gz",
+      "sha256": "23554018394b3d6d43abda3ec1cfb641dedb7938ce5ce89b559983f07cba754a",
+      "bytes": 4219,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/expanded-helpers.py.gz",
+      "sha256": "0e9ab2310f5b62d6b2586779aa3dec1382f46df1f37a0d4324b9f6f23d2a418b",
+      "bytes": 4211,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/fall-after-complete.txt.gz",
+      "sha256": "ae44e0601360a1a930ca5c03e0a248c3b30887adaf7f5d3586e1ec676bfce0bc",
+      "bytes": 465,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/fall-after-startup.txt.gz",
+      "sha256": "ed4936e849cd4037ab2f876506793c53342761320eee6c546e0c83dcd9e4fc55",
+      "bytes": 459,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/fall-after.raw.gz",
+      "sha256": "6417fca4f67709a51930bf8bca438200737fe642ce3c5f5f09dbd8291392e16e",
+      "bytes": 1098,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/fall-before-complete.txt.gz",
+      "sha256": "fb5f7042d41ce6a2cc6696a337d91bd4a5219ef6dd366f84578ea1e53a981f7f",
+      "bytes": 364,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/fall-before-startup.txt.gz",
+      "sha256": "62063a36c51326d3af1321d17c252122c79dcd1ffac2f81a12c28f94165fbee9",
+      "bytes": 359,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/fall-before.raw.gz",
+      "sha256": "e8507195ab1b40b32cc91e6eec873e4fa771987b30b71ae4fbea877da05e800b",
+      "bytes": 1000,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/fall-checkpoint-complete.txt.gz",
+      "sha256": "61f0df525c63e55255594032cc2bb6f61225de17ac1eff11e1dd5c8890ddffc3",
+      "bytes": 374,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/fall-checkpoint-startup.txt.gz",
+      "sha256": "fc2f4191b005fb650b459f106471d364f82811690f0940f85a02f66cbdb0a096",
+      "bytes": 431,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/fall-checkpoint.raw.gz",
+      "sha256": "a12d814064ec6da1ca60bce73add45bb75064e6cd022873f716e692ec08a0099",
+      "bytes": 1060,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/fall-inspect-startup-timeout.txt.gz",
+      "sha256": "721f68c595de82d312b6d0117bee1e7dd765dbeca3dcc867bc11cf36e9276900",
+      "bytes": 282,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/fall-inspect.raw.gz",
+      "sha256": "862d77cf2e397bcc714997c12ac2853c191d502478a1554de2178a1381752d7e",
+      "bytes": 793,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/first-complete.txt.gz",
+      "sha256": "f97ac1bd23d893a0372c864bc6f421e6b713e90f1f7f4810ae5af97da1f844d6",
+      "bytes": 301,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/first-startup.txt.gz",
+      "sha256": "a19cc462f4adad1d0a3ff57bda6a46898ce9fdc04f6435a3a0e86039a866fb5c",
+      "bytes": 207,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/first.raw.gz",
+      "sha256": "0898ad5aa606b46e237c8a3d00498b8abec15246188a7c1a422f32a8a2f515a8",
+      "bytes": 1147,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/helpers.py.gz",
+      "sha256": "7b5945cc7273e4820883b688acb3b0a4df715b1c0eec58cc249e2fbf0b37ac57",
+      "bytes": 2525,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/independent-arithmetic.json",
+      "sha256": "15bf7ada47bda92d6a1679c7c73a5142ef41e3fa264a605656b4991e51aa88fe",
+      "bytes": 4140,
+      "lines": 202,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/keys.json",
+      "sha256": "138e93171ffcc9fcc0c0a5e6d917a2c3f7b10c4231765cb33ba1b0fbb90b8fde",
+      "bytes": 68286,
+      "lines": 4306,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/manifest.json",
+      "sha256": "8c4cb8133a4f14619c270b1a8874b6b03f803e2928e3de5f185ab2521001b6bc",
+      "bytes": 760,
+      "lines": 10,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/partial-leading-complete.txt.gz",
+      "sha256": "3063093b718d91dcf8f4ae2b7a1f8cd30958d1b09c48ade54b248e66fa839290",
+      "bytes": 370,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/partial-leading-startup.txt.gz",
+      "sha256": "58d760ec3005babefd8203d1aafce98ef91f65ddb0916682b8cc48a3d1c790e0",
+      "bytes": 365,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/partial-leading.raw.gz",
+      "sha256": "ab018d672a22083c990689b55e1b29a545d1a34d3632c0948c41c85f6512a5e7",
+      "bytes": 1037,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/partial-trailing-complete.txt.gz",
+      "sha256": "a113bfee64d0767eb3888402fc8e8a772ec01b5684dada2bf667690bd0883052",
+      "bytes": 369,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/partial-trailing-startup.txt.gz",
+      "sha256": "09011173f9ab56c2d459fb2c50b4d57ce287855e4fcb4122485d03b6000a07a1",
+      "bytes": 365,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/partial-trailing.raw.gz",
+      "sha256": "4b8ad815991096542449321c5a514059134ff90e4f053e765cc44940bebb502c",
+      "bytes": 1012,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/requests.json",
+      "sha256": "53873bcdef13406867378232b2af912334fe2406b18f9231b081ab56ec511088",
+      "bytes": 2978,
+      "lines": 132,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-0-Request-1-Attempt-1-selected.json",
+      "sha256": "d4cb7c55dd0492711396ad86e2bde2c1476c17f28a7cd46bb227ef4dd5e6cc16",
+      "bytes": 2731,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-0-Request-1-Attempt-1.txt.gz",
+      "sha256": "f74ae2ecaf4678df32ba1d2d1cc1708c7b72c6f71e0d093ad826f770dd9b6b11",
+      "bytes": 2506,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-0-Request-1-selected.json",
+      "sha256": "0d4dccdc4a65a6522aa67fb11e68e5e2bac6237b53e5daf46695f9f1ada47c3f",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-0-Request-1.txt.gz",
+      "sha256": "b80eab54b2c8a1fe57349f3c5fbd2b2126771ad47ee652b882c808332c6281df",
+      "bytes": 1143,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-0-Request-2-Attempt-1-selected.json",
+      "sha256": "49f264ff83d9eea9cbe96a5585f067b0d1f7733b503ce16f6a07b77898b7d709",
+      "bytes": 2729,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-0-Request-2-Attempt-1.txt.gz",
+      "sha256": "ece85755f6319a22b6b300d97f02006b40d4611124df3cfd936a2a72fe1b9f6e",
+      "bytes": 2509,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-0-Request-2-selected.json",
+      "sha256": "6d5dc2e265660044bcb2b6417234dbccbd9b0fe6aebc8a6942f2c0ac2d06a23f",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-0-Request-2.txt.gz",
+      "sha256": "3035d9a8cd049eaf740502f386bc00b882336ee8619b919067807a53beb2c889",
+      "bytes": 1143,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-0-Request-3-Attempt-1-selected.json",
+      "sha256": "a319c5b22459aa22cb2e1775a7680b479dbdeb72542a10d08e371f06ef56d9b0",
+      "bytes": 2734,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-0-Request-3-Attempt-1.txt.gz",
+      "sha256": "4b6e5105ccef31aa47a89e4e2f747aadf18a41b71cce4ea1158adce99207c95e",
+      "bytes": 2507,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-0-Request-3-selected.json",
+      "sha256": "3c73b3d138e65099eae986571f151036cd529c77e9e69c11ee095b683d5b4e53",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-0-Request-3.txt.gz",
+      "sha256": "30713bccc767f70bedf26f516e75a7aebf72aa82a2673c9c0da3867e96e4dd8e",
+      "bytes": 1144,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-0-selected.json",
+      "sha256": "d998291003afe8f16c917ba58d8abf4d9aef0f9e91a8ef1a181627c7ed073435",
+      "bytes": 2402,
+      "lines": 38,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-0.txt.gz",
+      "sha256": "90fcc6405b20644114409a082a5a6fdfe44fc6954b352ba9b3444cab25b1cda4",
+      "bytes": 1950,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-1-Request-1-Attempt-1-selected.json",
+      "sha256": "cc67da79d3440b53ab9c120dfda32bf5884e7b084ff36a3ddfced0924430df66",
+      "bytes": 2732,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-1-Request-1-Attempt-1.txt.gz",
+      "sha256": "0ae3196a1827ea7b67ee98f2924c38ab7f5e6da853e9e31f1e69eb677d59a995",
+      "bytes": 2519,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-1-Request-1-selected.json",
+      "sha256": "db653f28c6e7d80d27704c64e06b423a2bec7582136fc8f8388e3bac71048117",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-1-Request-1.txt.gz",
+      "sha256": "021ac24f53684bfe25a2cefe8d546f469658d43d9c147aca71fba3431046487a",
+      "bytes": 1143,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-1-selected.json",
+      "sha256": "c866230ca6985ac2a24abf45c00c49d4aaa8fd5241efb81664aa04fb68934890",
+      "bytes": 2370,
+      "lines": 36,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-1.txt.gz",
+      "sha256": "443351364971f781b6354a9a5fb2deb9ce23396f2ea9bd10b51f1f7f43ca854a",
+      "bytes": 1909,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-day-selected.json",
+      "sha256": "44bd61fdb013850e8a03495cf798677d4533b69584b9d8256b76a5ea9a02812f",
+      "bytes": 1669,
+      "lines": 31,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-day.txt.gz",
+      "sha256": "fa7f1bd33c378925848dd2598dd36bf60668970226530058e7b6c5c0d984cb0c",
+      "bytes": 1600,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-overview-selected.json",
+      "sha256": "9f3cabb90748e07cdc6be87b55c41f8d86536accc08e27b4f949c273b8fbbef7",
+      "bytes": 1100,
+      "lines": 14,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-New_York-overview.txt.gz",
+      "sha256": "48f89d7b1735adf820395ec29def4f60df384650c416b1cb7d146652dc211c83",
+      "bytes": 1028,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-Phoenix-0-selected.json",
+      "sha256": "d998291003afe8f16c917ba58d8abf4d9aef0f9e91a8ef1a181627c7ed073435",
+      "bytes": 2402,
+      "lines": 38,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-Phoenix-0.txt.gz",
+      "sha256": "90fcc6405b20644114409a082a5a6fdfe44fc6954b352ba9b3444cab25b1cda4",
+      "bytes": 1950,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-Phoenix-1-selected.json",
+      "sha256": "c866230ca6985ac2a24abf45c00c49d4aaa8fd5241efb81664aa04fb68934890",
+      "bytes": 2370,
+      "lines": 36,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-Phoenix-1.txt.gz",
+      "sha256": "443351364971f781b6354a9a5fb2deb9ce23396f2ea9bd10b51f1f7f43ca854a",
+      "bytes": 1909,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-Phoenix-day-selected.json",
+      "sha256": "44bd61fdb013850e8a03495cf798677d4533b69584b9d8256b76a5ea9a02812f",
+      "bytes": 1669,
+      "lines": 31,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-Phoenix-day.txt.gz",
+      "sha256": "fa7f1bd33c378925848dd2598dd36bf60668970226530058e7b6c5c0d984cb0c",
+      "bytes": 1600,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-Phoenix-overview-selected.json",
+      "sha256": "9f3cabb90748e07cdc6be87b55c41f8d86536accc08e27b4f949c273b8fbbef7",
+      "bytes": 1100,
+      "lines": 14,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-America-Phoenix-overview.txt.gz",
+      "sha256": "48f89d7b1735adf820395ec29def4f60df384650c416b1cb7d146652dc211c83",
+      "bytes": 1028,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-Asia-Kolkata-0-selected.json",
+      "sha256": "d998291003afe8f16c917ba58d8abf4d9aef0f9e91a8ef1a181627c7ed073435",
+      "bytes": 2402,
+      "lines": 38,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-Asia-Kolkata-0.txt.gz",
+      "sha256": "90fcc6405b20644114409a082a5a6fdfe44fc6954b352ba9b3444cab25b1cda4",
+      "bytes": 1950,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-Asia-Kolkata-1-selected.json",
+      "sha256": "c866230ca6985ac2a24abf45c00c49d4aaa8fd5241efb81664aa04fb68934890",
+      "bytes": 2370,
+      "lines": 36,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-Asia-Kolkata-1.txt.gz",
+      "sha256": "443351364971f781b6354a9a5fb2deb9ce23396f2ea9bd10b51f1f7f43ca854a",
+      "bytes": 1909,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-Asia-Kolkata-day-selected.json",
+      "sha256": "44bd61fdb013850e8a03495cf798677d4533b69584b9d8256b76a5ea9a02812f",
+      "bytes": 1669,
+      "lines": 31,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-Asia-Kolkata-day.txt.gz",
+      "sha256": "fa7f1bd33c378925848dd2598dd36bf60668970226530058e7b6c5c0d984cb0c",
+      "bytes": 1600,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-Asia-Kolkata-overview-selected.json",
+      "sha256": "9f3cabb90748e07cdc6be87b55c41f8d86536accc08e27b4f949c273b8fbbef7",
+      "bytes": 1100,
+      "lines": 14,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-Asia-Kolkata-overview.txt.gz",
+      "sha256": "48f89d7b1735adf820395ec29def4f60df384650c416b1cb7d146652dc211c83",
+      "bytes": 1028,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-UTC-0-selected.json",
+      "sha256": "d998291003afe8f16c917ba58d8abf4d9aef0f9e91a8ef1a181627c7ed073435",
+      "bytes": 2402,
+      "lines": 38,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-UTC-0.txt.gz",
+      "sha256": "90fcc6405b20644114409a082a5a6fdfe44fc6954b352ba9b3444cab25b1cda4",
+      "bytes": 1950,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-UTC-1-selected.json",
+      "sha256": "c866230ca6985ac2a24abf45c00c49d4aaa8fd5241efb81664aa04fb68934890",
+      "bytes": 2370,
+      "lines": 36,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-UTC-1.txt.gz",
+      "sha256": "443351364971f781b6354a9a5fb2deb9ce23396f2ea9bd10b51f1f7f43ca854a",
+      "bytes": 1909,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-UTC-day-selected.json",
+      "sha256": "44bd61fdb013850e8a03495cf798677d4533b69584b9d8256b76a5ea9a02812f",
+      "bytes": 1669,
+      "lines": 31,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-UTC-day.txt.gz",
+      "sha256": "fa7f1bd33c378925848dd2598dd36bf60668970226530058e7b6c5c0d984cb0c",
+      "bytes": 1600,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-UTC-overview-selected.json",
+      "sha256": "9f3cabb90748e07cdc6be87b55c41f8d86536accc08e27b4f949c273b8fbbef7",
+      "bytes": 1100,
+      "lines": 14,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-UTC-overview.txt.gz",
+      "sha256": "48f89d7b1735adf820395ec29def4f60df384650c416b1cb7d146652dc211c83",
+      "bytes": 1028,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-after-complete.txt.gz",
+      "sha256": "9fb03a554f682bd3145b759e8cceeb4cf3994ed0e8a573828b2cbb2a0ecf06fc",
+      "bytes": 353,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-after-startup.txt.gz",
+      "sha256": "3c5a3f70bf70701f39f370167888eb1237ce90f59da966be4d3743cfb60689a4",
+      "bytes": 289,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-after.raw.gz",
+      "sha256": "205e57103c22c51f47d72551cff8f2f9195ca0e0305e2e2ae2745f056280afb4",
+      "bytes": 1086,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-checkpoint-complete.txt.gz",
+      "sha256": "cd46d2e1bd723dbc6eb9eaf92eaee0b6052bea9f7ec5f28cea32e8b7d8016e6a",
+      "bytes": 359,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-checkpoint-startup.txt.gz",
+      "sha256": "29b54ab9116576acc83054e6f8ee6115076617efb61b92fb7419c904ce4f59c1",
+      "bytes": 347,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-checkpoint.raw.gz",
+      "sha256": "aa33834abe7f30d51c45476be16180d56024e3605f678cc8e39decb8bd776c1f",
+      "bytes": 1031,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-inspect-America-New_York-startup.txt.gz",
+      "sha256": "58d760ec3005babefd8203d1aafce98ef91f65ddb0916682b8cc48a3d1c790e0",
+      "bytes": 365,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-inspect-America-New_York.raw.gz",
+      "sha256": "9c8f674eeec3cdf9152e87c634233118410e344984e8a4e22abf94ae967ad438",
+      "bytes": 55905,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-inspect-America-Phoenix-startup.txt.gz",
+      "sha256": "083420e4bbcb7795e0516b6020a507a2ed5993c13c286754efcd4bd4bd1bee7e",
+      "bytes": 365,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-inspect-America-Phoenix.raw.gz",
+      "sha256": "f3d01e309778c1a0a444f5df2ac5ac92c2751c39d3482f548507748b1a57a230",
+      "bytes": 16438,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-inspect-Asia-Kolkata-startup.txt.gz",
+      "sha256": "74998b39d89dd107509bc2953a92683a0e49a137eb66c85ecf1c653bb31a6b2b",
+      "bytes": 360,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-inspect-Asia-Kolkata.raw.gz",
+      "sha256": "dc94f867bd72cd9a475eb2cfc463003dfa5e4b3c3a44ce3b40df46bde7545709",
+      "bytes": 16396,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-inspect-UTC-startup.txt.gz",
+      "sha256": "6f604478fc9068c9c7ec0d10b97400fa4616207444f7207413d786e63fcff403",
+      "bytes": 356,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-02/spring-inspect-UTC.raw.gz",
+      "sha256": "c188bfd42e1da549f39ea9719b66ab3c8022cf67b51d6243c4c5e4dcc580762b",
+      "bytes": 16400,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/after-deletion-inspect-startup.txt.gz",
+      "sha256": "3da689327ee37da8a480300774100a587005fa6e853caf57982571f46da7bcbe",
+      "bytes": 359,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/after-deletion-inspect.raw.gz",
+      "sha256": "c5bb426cc4754b593e647e23854c07e7448fc62b0dd45b1769deaf60aa66cc35",
+      "bytes": 4910,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/after-deletion-selected.json",
+      "sha256": "3e661a1b3953a98cfac360bdc925e7625fdc7544a43f73e07b0434b02ac3c3c5",
+      "bytes": 1655,
+      "lines": 30,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/after-deletion.txt.gz",
+      "sha256": "f200f2d698d81ea34559e63771dbc3490160a255964f142bf93ec0dc943da710",
+      "bytes": 1582,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/before-deletion-inspect-startup.txt.gz",
+      "sha256": "6f604478fc9068c9c7ec0d10b97400fa4616207444f7207413d786e63fcff403",
+      "bytes": 356,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/before-deletion-inspect.raw.gz",
+      "sha256": "d570aa1c235e889b5bcddb9a8d72b1391899f1b0a465e061619099f99fa0fea6",
+      "bytes": 4937,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/before-deletion-selected.json",
+      "sha256": "44bd61fdb013850e8a03495cf798677d4533b69584b9d8256b76a5ea9a02812f",
+      "bytes": 1669,
+      "lines": 31,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/before-deletion.txt.gz",
+      "sha256": "fa7f1bd33c378925848dd2598dd36bf60668970226530058e7b6c5c0d984cb0c",
+      "bytes": 1600,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/boundary-results.json",
+      "sha256": "09732a6e424c117cb4f1a826522255856221ef9d220ff42dc724514ac11be749",
+      "bytes": 62949,
+      "lines": 1157,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/clock.c.gz",
+      "sha256": "553e11ff865e60fb355c9f010fffc43c9f5d35594670679d61dfd6cce967cad3",
+      "bytes": 680,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/completion.json",
+      "sha256": "69c84243125a7f6129218a2fe5338108a4f558d253ff775f8e01314c25e79578",
+      "bytes": 99,
+      "lines": 5,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/delete-rpc.json",
+      "sha256": "0b02bceb1ba9e1163ce85a75b3b84749be5637394200f2afcda89dc643b33d99",
+      "bytes": 952,
+      "lines": 43,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/delete-server.log.gz",
+      "sha256": "392846d716d17c72c53a3aac2e749daa9a46acb6f897cf7d38e42af27f07eedc",
+      "bytes": 6899,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/deleted-history-after-retention-selected.json",
+      "sha256": "66e138da10a3d3dcee933f814ce05d935fd984fec81d6ddc3a7b2173164c92a7",
+      "bytes": 595,
+      "lines": 9,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/deleted-history-after-retention.txt.gz",
+      "sha256": "454ec22c7e49960c3e0c9b4fb1001ec8d3cd2919856b00672aeb8e36594d0273",
+      "bytes": 710,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/deleted-store-readback.json",
+      "sha256": "6739cebab8d2c2084146a9db230e49fcc5f01c758fa466f0f89b0489a3e6c93b",
+      "bytes": 116,
+      "lines": 6,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/driver.py.gz",
+      "sha256": "fc7fd247a33d63b9f830db7a704156570e5717c97bc20d654a5e67955741caa8",
+      "bytes": 4260,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/dst-conversions.json",
+      "sha256": "ffe236beba48c9281b667c710ddc3a71d51d8457a78a07f44c499ac51a8df4e2",
+      "bytes": 343,
+      "lines": 18,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/empty-day-selected.json",
+      "sha256": "4a0cdb3ad8c156186a6fe685b16829400ee0b91b208f24db7f24cf42012a4671",
+      "bytes": 1561,
+      "lines": 26,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/empty-day.txt.gz",
+      "sha256": "b89802a9bec4d95f75ef7e684ae5107eebf32c4eb58d7c6acd4067bc6fc81274",
+      "bytes": 1289,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/expanded-helpers.py.gz",
+      "sha256": "51e3248a6aab0198b4a254e5c6b0e14b0aa08642b907bb4d5e7d23ec061d6a1b",
+      "bytes": 4219,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/expired-range-selected.json",
+      "sha256": "a76d92a700b292f42f5dd8df39326a5e971a27dd18b17ee3b1deb8d116b4e140",
+      "bytes": 959,
+      "lines": 13,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/expired-range.txt.gz",
+      "sha256": "eb2b865688fea9a6b0d9e1295225ae577b263a50c85f072b2b6459c0d3a98738",
+      "bytes": 878,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-0-Request-1-Attempt-1-selected.json",
+      "sha256": "e24d9ed08fa0629377f13f9df022098a9407290d4860c6139f958f12b08b6b0c",
+      "bytes": 2739,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-0-Request-1-Attempt-1.txt.gz",
+      "sha256": "d40f639c06da6a058c89fc4811ca059c24fdaed00c482585fd8d060abdcf4eb8",
+      "bytes": 2333,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-0-Request-1-selected.json",
+      "sha256": "4db7714ccd44351d4fe1039ee0239dbbbbd3334223eef8e145d92dfbc9c44805",
+      "bytes": 1051,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-0-Request-1.txt.gz",
+      "sha256": "b547545b97f168d47e186100fa6ebb3d4f7e59d3d62ab118e5c9042ae67e0fdf",
+      "bytes": 1009,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-0-selected.json",
+      "sha256": "783dd4416a298b70c5d019c184475debd3d2c9145a62580db8929c588529c27b",
+      "bytes": 2377,
+      "lines": 36,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-0.txt.gz",
+      "sha256": "a9983f3212cdfadc0bef37288b8464d6e9fe0406c9a923853b7bdafa9f282541",
+      "bytes": 1732,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-1-Request-1-Attempt-1-selected.json",
+      "sha256": "6fd81ed35b4d8e0984309dad7caeafc710308bcd1e6fd8d0cb419920472a7ed6",
+      "bytes": 2770,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-1-Request-1-Attempt-1.txt.gz",
+      "sha256": "109dc1542dc1d4d799b4bb83a0482b21ff961babf63b7855b8ab6e9351e47bbc",
+      "bytes": 2347,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-1-Request-1-selected.json",
+      "sha256": "f712dac2201b8d5a52fb6b78a029c1dada9df4a333b183f803f18e6104f9d8cb",
+      "bytes": 1051,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-1-Request-1.txt.gz",
+      "sha256": "1a2a33855688154bd858eb5772d14dccb61fc092770a70d6e69f6dfe7dd7b524",
+      "bytes": 1007,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-1-selected.json",
+      "sha256": "82a908fd6d6962a687ac21ef3d9affd1ea6bb6bc5e562428c9ec7bf27063b9f8",
+      "bytes": 2391,
+      "lines": 36,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-1.txt.gz",
+      "sha256": "e6952ca86cc8e7e84f3fbdb558add4545df7a004aa471c57bf8b344c17c070a9",
+      "bytes": 1745,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-after-complete.txt.gz",
+      "sha256": "03bb997d7833813a55392257774966ca058c7af70cf439d3a54cf4f9ff73d8b3",
+      "bytes": 464,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-after-startup.txt.gz",
+      "sha256": "0e1f2c704530e6dc93397577d54bd7c30bbf9aabebcaf998f838404813ba1896",
+      "bytes": 460,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-after.raw.gz",
+      "sha256": "e019278f619be835cf0b1700510c6686496a4e085f0fa6daf9279bfdac9284b9",
+      "bytes": 1094,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-before-complete.txt.gz",
+      "sha256": "e404d4f4798c86b61e94a387170df16b608249ab8291de90d43ab925639ebee4",
+      "bytes": 368,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-before-startup.txt.gz",
+      "sha256": "0e6140b24ccc146afd4afd8cdfa1073604c343352ed2489153bad0b770544381",
+      "bytes": 363,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-before.raw.gz",
+      "sha256": "7948905dab5248c0adc6eee23c5010cfd503490cdb2c7a034cb81c5ec5e08f8e",
+      "bytes": 985,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-checkpoint-complete.txt.gz",
+      "sha256": "2917967d92850c912920c0696606ea5e22750af3aa2808a62f70f32e757521fc",
+      "bytes": 378,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-checkpoint-startup.txt.gz",
+      "sha256": "6f55fc5ff93ea91991d1281ea540cc02bd003f9f2b82fa65469abc6523de32db",
+      "bytes": 432,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-checkpoint.raw.gz",
+      "sha256": "9dfaa70692a444fba69e047dd7f426daf47cb7c090a36c5ac4d19a1633348abc",
+      "bytes": 1079,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-day-selected.json",
+      "sha256": "8a1e8a7f004a677fb1983a7c399625b1c680cfa5ae0f9d4408b91698703a652e",
+      "bytes": 1694,
+      "lines": 30,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-day.txt.gz",
+      "sha256": "09447400968f201c6aefd6b1a66e1050ebc178ff56b913c893c9fd649743d617",
+      "bytes": 1424,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-inspect-startup.txt.gz",
+      "sha256": "17e121ec87a9b058e411452de7f6bdd40d5529a416b1bfe24cfe9706c3b48770",
+      "bytes": 283,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-inspect.raw.gz",
+      "sha256": "48b7f3d18ffbddb3bfe6c8b802db37d39e25f0c6a2d61bc42ee2c1cb45184bae",
+      "bytes": 40465,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-overview-selected.json",
+      "sha256": "44cb2b8b0efc1727b42471d1acc847e0a76d973611a451afa22a3bebb7e20593",
+      "bytes": 1117,
+      "lines": 14,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fall-overview.txt.gz",
+      "sha256": "eec96b81f6f18fc502f0a4d62c662146db2665b58fd667d205cd4360c85a2e0e",
+      "bytes": 915,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/first-complete.txt.gz",
+      "sha256": "87bfb5886ef2adc4e1fdc9eefe1969f4ed1ca01aba7625982100b2957b6d064a",
+      "bytes": 306,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/first-startup.txt.gz",
+      "sha256": "fc0d2bf6300facacfb5b4aeba1018e8b11a5e31586ac42d829fb29f217374acc",
+      "bytes": 220,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/first.raw.gz",
+      "sha256": "cabca29de8ce474d25c8f9a4c2ef314510fb3229467d309cbb31502c40626818",
+      "bytes": 1098,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/helpers.py.gz",
+      "sha256": "91c66fd172bdd2b48b9218a382669205fccd98bdd0ee5456ed54ec0aef636a50",
+      "bytes": 2534,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/independent-arithmetic.json",
+      "sha256": "bc5acdf1dee91e0696dc47ae0b8579b68e54ef517713853673e76d2cc5f26713",
+      "bytes": 4558,
+      "lines": 222,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/independent-audit-final.json",
+      "sha256": "c2c0700188938f366a2d5dd30b6035c9baa7461e6dbdbfe0d3a1e7e4c08daa78",
+      "bytes": 13916,
+      "lines": 572,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/independent-audit.json",
+      "sha256": "2672ecc0ac5165d63c33543681faf83c97e153f31e03063da15577d796b467ae",
+      "bytes": 12985,
+      "lines": 503,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/keys.json",
+      "sha256": "06f67192bad2fb8bb84ed611648cbea80302c4d1a8cd3e998de20d4d1cfb0a17",
+      "bytes": 114331,
+      "lines": 7210,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/manifest.json",
+      "sha256": "ced019aed36ca46dc319bd51ff5bc048710d9c4cea0039e96ca709adea951b3c",
+      "bytes": 760,
+      "lines": 10,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-checkpoint-complete.txt.gz",
+      "sha256": "bdee18aebc7dbf9d5c39450523437195beeb061ef0fd1031e65029634b8a308a",
+      "bytes": 287,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-checkpoint-startup.txt.gz",
+      "sha256": "17e121ec87a9b058e411452de7f6bdd40d5529a416b1bfe24cfe9706c3b48770",
+      "bytes": 283,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-checkpoint.raw.gz",
+      "sha256": "005391c795aee91efe667ec08d0aa4bc1a0b4cf004701b22e1bffa2b38870fad",
+      "bytes": 959,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-compact-hour-selected.json",
+      "sha256": "4d21abf186a8c3149eb6a9b947055afece3ec119e4aa39cf88c7a6aa08d46a81",
+      "bytes": 1781,
+      "lines": 21,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-compact-hour.txt.gz",
+      "sha256": "6fab6dd289026413bfb3a58c38501ed6819d9a6a3458140ff0fad7bf472e834b",
+      "bytes": 1313,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-day-selected.json",
+      "sha256": "66e138da10a3d3dcee933f814ce05d935fd984fec81d6ddc3a7b2173164c92a7",
+      "bytes": 595,
+      "lines": 9,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-day.txt.gz",
+      "sha256": "8cf018529b309b5e9e3186f69d1bd3cc4e2e007a74f03cbf08b088224dcf66ed",
+      "bytes": 710,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-hours-overview-selected.json",
+      "sha256": "66fc7060b72ba75cec78ee348069d8f8987167ac5210d316df77300e445f1a55",
+      "bytes": 1255,
+      "lines": 15,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-hours-overview.txt.gz",
+      "sha256": "07d8f3fe95c3f217bce0916de963cf44ce0da5adcb2bd051fad3a10f140ff1d1",
+      "bytes": 941,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-inspect-startup.txt.gz",
+      "sha256": "538e6981ea8ccfdba46e698d72cd9dc0bc21578332343cdc83c267bcf110fafa",
+      "bytes": 267,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-inspect.raw.gz",
+      "sha256": "11eb5df9c5462cce1ce3aea94842647b806c16aaf674d5a50c51db2ff1293bd3",
+      "bytes": 23066,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-raw-hour-Request-1-Attempt-1-selected.json",
+      "sha256": "feffc3a622b4a986e1cb3ecef608846ab50bfa7cd631fdc3868c96da35a09cc3",
+      "bytes": 2882,
+      "lines": 50,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-raw-hour-Request-1-Attempt-1.txt.gz",
+      "sha256": "9aca7bf5e204f4d6fb1abbc63fc29a362db629d5877a0a2355884a3b26ab8a30",
+      "bytes": 2386,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-raw-hour-Request-1-selected.json",
+      "sha256": "25a75091d37a41903e9612326be50c748dba051339da8cc9bf44e5edb90b7356",
+      "bytes": 1163,
+      "lines": 18,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-raw-hour-Request-1.txt.gz",
+      "sha256": "0ee2dcd3bf635e4a8cd20599aba2e731ba0fc8766a77cd90fba25d34d91c5e20",
+      "bytes": 1052,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-raw-hour-selected.json",
+      "sha256": "9ed8b25d3a26f9f05ba25f8a27887d9adc8df2bbe15387cd71bd674125fe8965",
+      "bytes": 2503,
+      "lines": 37,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-raw-hour.txt.gz",
+      "sha256": "62066c4226ded7911935e02bf2ad0654ace282bf36504f6c38c3b0a30a9b024a",
+      "bytes": 1787,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/mixed-store-readback.json",
+      "sha256": "9e5669b321be8c932005b0e8d4da2770a73d29b69d7d29d7631492aa81633d8b",
+      "bytes": 2870,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/offset-input-result.json",
+      "sha256": "b34e8dd8906ef94fbe3131c74a89f24433e3693d4622c9975ef9636104bc5748",
+      "bytes": 826,
+      "lines": 3,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/offset-input.txt.gz",
+      "sha256": "0aa8ca5124f737e27a10a9a4689ba009dd489375a6d102498d3a04f4e62b6615",
+      "bytes": 317,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/partial-day-2026-10-31-selected.json",
+      "sha256": "9ca91b074f29d4d3a96b424ecd1cedddbfd75a75ae0e83d1464a9b03e727b14c",
+      "bytes": 800,
+      "lines": 13,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/partial-day-2026-10-31.txt.gz",
+      "sha256": "8dbcfb7cf8ed856f7c41022032f990b692b545eac8a86c51eef4a0284caa7c1a",
+      "bytes": 841,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/partial-day-2026-11-02-selected.json",
+      "sha256": "d1b55f81f99740dd16e6220e0fa74fa0fc5593893070f6a0ac1fab9272be0418",
+      "bytes": 800,
+      "lines": 13,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/partial-day-2026-11-02.txt.gz",
+      "sha256": "74240952d4a591e0473fcd58a85b0e85fc53ad0ff184d89d10556c6e1e1bdb60",
+      "bytes": 844,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/partial-days-full-middle-selected.json",
+      "sha256": "e80c3d3d2fe3999f607c37d3976a9d7da565bb5bfd5634683730cac53fde09bb",
+      "bytes": 2446,
+      "lines": 38,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/partial-days-full-middle.txt.gz",
+      "sha256": "51fae2e7b7f294c05c53f2ab54221a08105b395f644cf7d32d56fb6f4ed197b3",
+      "bytes": 1787,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/partial-days-overview-selected.json",
+      "sha256": "3511b54abbdf3931441819fba1abe38a176f24c8fbb82fc5e593ed81b5d64640",
+      "bytes": 1392,
+      "lines": 16,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/partial-days-overview.txt.gz",
+      "sha256": "53c43ec10f01e72e52d96502bad4253c74a6ff08b9baac4df8549f673ef1c869",
+      "bytes": 975,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/partial-leading-complete.txt.gz",
+      "sha256": "3063093b718d91dcf8f4ae2b7a1f8cd30958d1b09c48ade54b248e66fa839290",
+      "bytes": 370,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/partial-leading-startup.txt.gz",
+      "sha256": "58d760ec3005babefd8203d1aafce98ef91f65ddb0916682b8cc48a3d1c790e0",
+      "bytes": 365,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/partial-leading.raw.gz",
+      "sha256": "5564a4a2a0c9706b907f7c19e5b603332d798fadf43e8c97c7f0756fd1be9693",
+      "bytes": 1000,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/partial-trailing-complete.txt.gz",
+      "sha256": "e9726a40102969341b42e8374872a628191765cc82187378391f4e9ddc0c5b08",
+      "bytes": 377,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/partial-trailing-startup.txt.gz",
+      "sha256": "fd268ca801ea6457055b504aec1667b4d31bd70fd97b2ecd72443c2d01032142",
+      "bytes": 373,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/partial-trailing.raw.gz",
+      "sha256": "5e1a7b86ebd826891b729977a7322175b3c710b558e38587adac00620a145c0e",
+      "bytes": 1062,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/requests.json",
+      "sha256": "d8ff6a1bcf8da884915d8994d2b30abccd6efdeaf9e0781a0e02abe57e6d6f3e",
+      "bytes": 3280,
+      "lines": 145,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-0-Request-1-Attempt-1-selected.json",
+      "sha256": "9fb86bb949839596122e87397e8555b0495f5c3cf339cb989a781fce49e6b02e",
+      "bytes": 2734,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-0-Request-1-Attempt-1.txt.gz",
+      "sha256": "7ae80a929cf428e84aef8dad022eae10566b32081275dae5d01f511d9720719b",
+      "bytes": 2507,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-0-Request-1-selected.json",
+      "sha256": "66e365fc7053e147f6dc2ecbfa048e8ca6cc7ed20091da56b5e644ba099e0726",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-0-Request-1.txt.gz",
+      "sha256": "b96b7fac209b3ad77993da148db6399e1a09c3f68f98f0b36f4eb4e019ed1170",
+      "bytes": 1144,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-0-Request-2-Attempt-1-selected.json",
+      "sha256": "c1f2c7aa857331d781c19a142f4762a9daf49c0616995bac3ebb702850ad2ff2",
+      "bytes": 2729,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-0-Request-2-Attempt-1.txt.gz",
+      "sha256": "ec63779c7317b5cab67c8c60c0c8b0803037c7387e3a48062a9f32958ea931bc",
+      "bytes": 2508,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-0-Request-2-selected.json",
+      "sha256": "918a78f0d9822bf2ec073bd14894a5393a9853802e703b7ccd791fcc70c25ff5",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-0-Request-2.txt.gz",
+      "sha256": "82274d1d38f759a9c409d5fcd523b379cde8937d5b6870b9fb35b491dd8a9240",
+      "bytes": 1145,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-0-Request-3-Attempt-1-selected.json",
+      "sha256": "4dffa99f38cde185358c24324888a9afe4f092852a5976b6e2963ffdfed953c3",
+      "bytes": 2731,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-0-Request-3-Attempt-1.txt.gz",
+      "sha256": "939515513f2ebede5b9730a486216fc9610ae39927543c1f2f7096cb22da82a4",
+      "bytes": 2502,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-0-Request-3-selected.json",
+      "sha256": "82df7ecea5940c1e00e7c03c7e545f1d4de8fc5dee517c950c1dda5826a652fa",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-0-Request-3.txt.gz",
+      "sha256": "e3c23564f4f3c1f2e4046c89acf2f163dcaa7f76cb41d0319e77f64e3737d787",
+      "bytes": 1142,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-0-selected.json",
+      "sha256": "d998291003afe8f16c917ba58d8abf4d9aef0f9e91a8ef1a181627c7ed073435",
+      "bytes": 2402,
+      "lines": 38,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-0.txt.gz",
+      "sha256": "90fcc6405b20644114409a082a5a6fdfe44fc6954b352ba9b3444cab25b1cda4",
+      "bytes": 1950,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-1-Request-1-Attempt-1-selected.json",
+      "sha256": "c598eb2eefa8a7a4370e554ad6c46467e5adfc4acf29cb463eb75f4133fb3025",
+      "bytes": 2732,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-1-Request-1-Attempt-1.txt.gz",
+      "sha256": "5b57743e85e23af1f11bbc269f32224a7303b82a3dd3c27299cb2963329c2bc0",
+      "bytes": 2517,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-1-Request-1-selected.json",
+      "sha256": "fa399ea4e10b4ff134993bcd45237f5301d7563fe42be0cddef203ddc5d3a4a1",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-1-Request-1.txt.gz",
+      "sha256": "3b92e5d3a26bb59bbcf84dde8f9bfed23421e02d42c302efd0618c02e545d5a2",
+      "bytes": 1142,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-1-selected.json",
+      "sha256": "c866230ca6985ac2a24abf45c00c49d4aaa8fd5241efb81664aa04fb68934890",
+      "bytes": 2370,
+      "lines": 36,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-1.txt.gz",
+      "sha256": "443351364971f781b6354a9a5fb2deb9ce23396f2ea9bd10b51f1f7f43ca854a",
+      "bytes": 1909,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-day-selected.json",
+      "sha256": "44bd61fdb013850e8a03495cf798677d4533b69584b9d8256b76a5ea9a02812f",
+      "bytes": 1669,
+      "lines": 31,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-day.txt.gz",
+      "sha256": "fa7f1bd33c378925848dd2598dd36bf60668970226530058e7b6c5c0d984cb0c",
+      "bytes": 1600,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-overview-selected.json",
+      "sha256": "9f3cabb90748e07cdc6be87b55c41f8d86536accc08e27b4f949c273b8fbbef7",
+      "bytes": 1100,
+      "lines": 14,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-New_York-overview.txt.gz",
+      "sha256": "48f89d7b1735adf820395ec29def4f60df384650c416b1cb7d146652dc211c83",
+      "bytes": 1028,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-Phoenix-0-selected.json",
+      "sha256": "d998291003afe8f16c917ba58d8abf4d9aef0f9e91a8ef1a181627c7ed073435",
+      "bytes": 2402,
+      "lines": 38,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-Phoenix-0.txt.gz",
+      "sha256": "90fcc6405b20644114409a082a5a6fdfe44fc6954b352ba9b3444cab25b1cda4",
+      "bytes": 1950,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-Phoenix-1-selected.json",
+      "sha256": "c866230ca6985ac2a24abf45c00c49d4aaa8fd5241efb81664aa04fb68934890",
+      "bytes": 2370,
+      "lines": 36,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-Phoenix-1.txt.gz",
+      "sha256": "443351364971f781b6354a9a5fb2deb9ce23396f2ea9bd10b51f1f7f43ca854a",
+      "bytes": 1909,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-Phoenix-day-selected.json",
+      "sha256": "44bd61fdb013850e8a03495cf798677d4533b69584b9d8256b76a5ea9a02812f",
+      "bytes": 1669,
+      "lines": 31,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-Phoenix-day.txt.gz",
+      "sha256": "fa7f1bd33c378925848dd2598dd36bf60668970226530058e7b6c5c0d984cb0c",
+      "bytes": 1600,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-Phoenix-overview-selected.json",
+      "sha256": "9f3cabb90748e07cdc6be87b55c41f8d86536accc08e27b4f949c273b8fbbef7",
+      "bytes": 1100,
+      "lines": 14,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-America-Phoenix-overview.txt.gz",
+      "sha256": "48f89d7b1735adf820395ec29def4f60df384650c416b1cb7d146652dc211c83",
+      "bytes": 1028,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-Asia-Kolkata-0-selected.json",
+      "sha256": "d998291003afe8f16c917ba58d8abf4d9aef0f9e91a8ef1a181627c7ed073435",
+      "bytes": 2402,
+      "lines": 38,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-Asia-Kolkata-0.txt.gz",
+      "sha256": "90fcc6405b20644114409a082a5a6fdfe44fc6954b352ba9b3444cab25b1cda4",
+      "bytes": 1950,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-Asia-Kolkata-1-selected.json",
+      "sha256": "c866230ca6985ac2a24abf45c00c49d4aaa8fd5241efb81664aa04fb68934890",
+      "bytes": 2370,
+      "lines": 36,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-Asia-Kolkata-1.txt.gz",
+      "sha256": "443351364971f781b6354a9a5fb2deb9ce23396f2ea9bd10b51f1f7f43ca854a",
+      "bytes": 1909,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-Asia-Kolkata-day-selected.json",
+      "sha256": "44bd61fdb013850e8a03495cf798677d4533b69584b9d8256b76a5ea9a02812f",
+      "bytes": 1669,
+      "lines": 31,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-Asia-Kolkata-day.txt.gz",
+      "sha256": "fa7f1bd33c378925848dd2598dd36bf60668970226530058e7b6c5c0d984cb0c",
+      "bytes": 1600,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-Asia-Kolkata-overview-selected.json",
+      "sha256": "9f3cabb90748e07cdc6be87b55c41f8d86536accc08e27b4f949c273b8fbbef7",
+      "bytes": 1100,
+      "lines": 14,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-Asia-Kolkata-overview.txt.gz",
+      "sha256": "48f89d7b1735adf820395ec29def4f60df384650c416b1cb7d146652dc211c83",
+      "bytes": 1028,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-UTC-0-selected.json",
+      "sha256": "d998291003afe8f16c917ba58d8abf4d9aef0f9e91a8ef1a181627c7ed073435",
+      "bytes": 2402,
+      "lines": 38,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-UTC-0.txt.gz",
+      "sha256": "90fcc6405b20644114409a082a5a6fdfe44fc6954b352ba9b3444cab25b1cda4",
+      "bytes": 1950,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-UTC-1-selected.json",
+      "sha256": "c866230ca6985ac2a24abf45c00c49d4aaa8fd5241efb81664aa04fb68934890",
+      "bytes": 2370,
+      "lines": 36,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-UTC-1.txt.gz",
+      "sha256": "443351364971f781b6354a9a5fb2deb9ce23396f2ea9bd10b51f1f7f43ca854a",
+      "bytes": 1909,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-UTC-day-selected.json",
+      "sha256": "44bd61fdb013850e8a03495cf798677d4533b69584b9d8256b76a5ea9a02812f",
+      "bytes": 1669,
+      "lines": 31,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-UTC-day.txt.gz",
+      "sha256": "fa7f1bd33c378925848dd2598dd36bf60668970226530058e7b6c5c0d984cb0c",
+      "bytes": 1600,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-UTC-overview-selected.json",
+      "sha256": "9f3cabb90748e07cdc6be87b55c41f8d86536accc08e27b4f949c273b8fbbef7",
+      "bytes": 1100,
+      "lines": 14,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-UTC-overview.txt.gz",
+      "sha256": "48f89d7b1735adf820395ec29def4f60df384650c416b1cb7d146652dc211c83",
+      "bytes": 1028,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-after-complete.txt.gz",
+      "sha256": "6fe876451fbb661cfb65c43d4aef97cc49fde8dfb1f150c8921e9805a8bc825e",
+      "bytes": 354,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-after-startup.txt.gz",
+      "sha256": "3c5a3f70bf70701f39f370167888eb1237ce90f59da966be4d3743cfb60689a4",
+      "bytes": 289,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-after.raw.gz",
+      "sha256": "f210c266118b8c25849b3448d76e98e5861c7d3592b519e93b771b8781273014",
+      "bytes": 1032,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-checkpoint-complete.txt.gz",
+      "sha256": "db18a689a7413ac051549bacb63e680c93766c13817fb6e70f72bbb5576ae0bf",
+      "bytes": 368,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-checkpoint-startup.txt.gz",
+      "sha256": "e0ea72e2a036d6f5ba7a144d6d5a59e6a72c9f4a82e1f6f4a1abe4107cb70fd1",
+      "bytes": 354,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-checkpoint.raw.gz",
+      "sha256": "1a78b70042dbbc4a39e1261ccd0e5724823f330ba95006001c5bd4dc53fe2c97",
+      "bytes": 1000,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-inspect-America-New_York-startup.txt.gz",
+      "sha256": "6f604478fc9068c9c7ec0d10b97400fa4616207444f7207413d786e63fcff403",
+      "bytes": 356,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-inspect-America-New_York.raw.gz",
+      "sha256": "d33b1f2f4a4ecb88ea4459a4b6981b260bbd705106f44feff8bb3ac395e605e3",
+      "bytes": 55709,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-inspect-America-Phoenix-startup.txt.gz",
+      "sha256": "3da689327ee37da8a480300774100a587005fa6e853caf57982571f46da7bcbe",
+      "bytes": 359,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-inspect-America-Phoenix.raw.gz",
+      "sha256": "2ed880aa3d7747fd18e19dd20b2fca09552fa0b0710faebbf74481c0b0bbbc79",
+      "bytes": 16424,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-inspect-Asia-Kolkata-startup.txt.gz",
+      "sha256": "6f604478fc9068c9c7ec0d10b97400fa4616207444f7207413d786e63fcff403",
+      "bytes": 356,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-inspect-Asia-Kolkata.raw.gz",
+      "sha256": "517f6b0ee97b4506c65d85a7cda59175afcf8774c6476d7b1d1248bf2ab99dc7",
+      "bytes": 16453,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-inspect-UTC-startup.txt.gz",
+      "sha256": "40a9c5c54e3022f329e6f85a1e9890a40b854c8b4e5265d0517c9b967aff71a4",
+      "bytes": 358,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/spring-inspect-UTC.raw.gz",
+      "sha256": "96dacf80f05dfa71b5056f810fffaa99f3096b5d85bfcc422c7f85862c2c8541",
+      "bytes": 16416,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/campaign.py",
+      "sha256": "fc03daa478fe0624341d51b19ea71cf36cb35f97779477f921e16f0db55df438",
+      "bytes": 1870,
+      "lines": 38,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/check_p3.py",
+      "sha256": "1c9ac1418d7e5024a0056b5716b5e40061d7294a7809e481e33a14bff0179ebc",
+      "bytes": 5710,
+      "lines": 103,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/core-default.log.gz",
+      "sha256": "173dfb467b34866f0c358126f2a92571157c88f6364902089b0d39c3fd6e1233",
+      "bytes": 4991,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/core-feature.log.gz",
+      "sha256": "c968450c2858bb77ed441a99e7f951c2154534aa118245b2c3c5446ce04803a8",
+      "bytes": 5056,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/feature-binary.log.gz",
+      "sha256": "ff3f950a70e26c0481a9b2d357fe3e0d53ee810cab13585f02fedda10931362a",
+      "bytes": 3132,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/fixture_clock.c",
+      "sha256": "8ddbe16f59f33477e120cd6111a11512e7c446a0eaddcf49d55ec111141f98ae",
+      "bytes": 1503,
+      "lines": 38,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/historical-numeric-audit.json",
+      "sha256": "b0e7611f4782ebd0fd320c951d8066f5ad8389a8b383701b70aa7f0dd877c4c1",
+      "bytes": 385,
+      "lines": 10,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/lanes.json",
+      "sha256": "b1303ec4e03ebc355d8f7f5a539a12bb5723ad7d223c7e95000fe8f6953aa481",
+      "bytes": 2011,
+      "lines": 80,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-negative-controls.json",
+      "sha256": "887337e1ac1378f495c8e6d57df8cc5c7d8e7c2fa7a33841786891fc64744426",
+      "bytes": 2539,
+      "lines": 72,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/bound-prices-and-attempts.json",
+      "sha256": "8ce8f60100b91bdbf1f0f2cc2376494f69dc6eac03d777fd405f1643c3733699",
+      "bytes": 6520,
+      "lines": 30,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/breakdown-bucket-selected.json",
+      "sha256": "ce8521bbafeebe137bd853f21646257b1b4a9d346c3098bb1afa946a18030e1b",
+      "bytes": 2487,
+      "lines": 41,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/breakdown-bucket.txt.gz",
+      "sha256": "7bf06fc8425053c385f674fd1d73f1a8c997c8ffeaab9984ed189e8be2b1330e",
+      "bytes": 2059,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/breakdown-overview-selected.json",
+      "sha256": "ed7f39a15bf8a7f30f80267670b76f5bf80b62c73b1c9ea82487547ce252bb7f",
+      "bytes": 859,
+      "lines": 12,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/breakdown-overview.txt.gz",
+      "sha256": "6e1f2e5b96e420c8573a7a66eaa4be58699f35f2b2af94d720e2a7b899be8319",
+      "bytes": 975,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/checkpoint-complete.txt.gz",
+      "sha256": "29d8fe2a425958513955c776c9844c0b7f5e0b9fca3153e8c14f3e8ef66116eb",
+      "bytes": 459,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/checkpoint-startup.txt.gz",
+      "sha256": "759e60ab340a024d1901c8d7643acf78d6cd180560f9cbce7292ed28e42bdd68",
+      "bytes": 448,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/checkpoint.raw.gz",
+      "sha256": "4780f7459cd39ce19ff5f1010ec8b3c7e0abf7fc9761b3fe785021ccfa6aa288",
+      "bytes": 1092,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/clock.c.gz",
+      "sha256": "553e11ff865e60fb355c9f010fffc43c9f5d35594670679d61dfd6cce967cad3",
+      "bytes": 680,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/driver.py.gz",
+      "sha256": "ff40406e78c4df70ecdeedfc6466cb0434db2222ab523a4566ad805d2da3711a",
+      "bytes": 5357,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/expanded-helpers.py.gz",
+      "sha256": "0e9ab2310f5b62d6b2586779aa3dec1382f46df1f37a0d4324b9f6f23d2a418b",
+      "bytes": 4211,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/first-complete.txt.gz",
+      "sha256": "9693f83f3f6453847be11e67bb0ec186dc1a131dc07698f797f7f073fbb362eb",
+      "bytes": 300,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/first-startup.txt.gz",
+      "sha256": "4b8f4b71fe7e463cee9582728f99cef10968ead5aa6b6d55a7f5e3f0f9a13694",
+      "bytes": 206,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/first.raw.gz",
+      "sha256": "3396fd1ae86714edcce7109b65d54a11e26bf3713581eb6044db352f566f95b5",
+      "bytes": 1142,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/group-0-selected.json",
+      "sha256": "d51aca64412516aa3ce77716a81020c18fea7b6ba6bcb6c8b0a62ea87ebd6477",
+      "bytes": 1634,
+      "lines": 25,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/group-0.txt.gz",
+      "sha256": "553a36250e1a40043cc2cb5bf7ee2140bd688f2f01652beec764947beb138b27",
+      "bytes": 1573,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/group-1-selected.json",
+      "sha256": "e796b8f4e54b5e9a2f143add5f532cf88df59c998f472722ba2a8a553f4d935f",
+      "bytes": 1473,
+      "lines": 22,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/group-1.txt.gz",
+      "sha256": "0c3c3ece2ac1ae58351cd7c87bfe37be65953187d1e8c7f934098f312f5abeb3",
+      "bytes": 1407,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/group-2-selected.json",
+      "sha256": "de6634487b80bfd85279b14aaf150a8469e8b8d32762407566da500701b00329",
+      "bytes": 1622,
+      "lines": 25,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/group-2.txt.gz",
+      "sha256": "3cb21917f0aabda184d83859f312a654aa81971746f45faf39296820bd64b82f",
+      "bytes": 1570,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/group-3-selected.json",
+      "sha256": "e03ab5039b0b828f14bb9d7867aedfa1b416c283d5212caa19b57a1ae1b0018b",
+      "bytes": 1484,
+      "lines": 22,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/group-3.txt.gz",
+      "sha256": "5e064e96d504c3bbbcd1b2c0a8050687a5ba5d45b93247b6e0370653bde5d3d6",
+      "bytes": 1428,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/identities.json",
+      "sha256": "c7e60382cdd81dee8f3ce7e066d65c5ecdf01dd669b504eca4e318416a9fb0f0",
+      "bytes": 159,
+      "lines": 5,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/independent-arithmetic.json",
+      "sha256": "93a8ff98b72e33d6453205b06c766842c4aa79f4aef02938ff10212a98934c33",
+      "bytes": 2895,
+      "lines": 142,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/inspect-startup.txt.gz",
+      "sha256": "f6c30a4164c01a674d41882e1ecaaeb81f914130e40843dd1fbda45d3bca6c11",
+      "bytes": 357,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/inspect.raw.gz",
+      "sha256": "2a968f6d4922bb24a1f5ec54e374e60433a70ce41276ee81d801fab04b7f4dc4",
+      "bytes": 263277,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/keys.json",
+      "sha256": "ae3c359293d4ec91b88194b140cf5b080ffb0d01f4021616c51186bd5a13dc65",
+      "bytes": 239000,
+      "lines": 15138,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/manifest.json",
+      "sha256": "2b995634960efbd8b4d9cf79675a39240d3aef1cb68df0c3f50d04095709f333",
+      "bytes": 961,
+      "lines": 12,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-boundary-complete.txt.gz",
+      "sha256": "e22500091d3a4ff307ba00ee8c3100840fb155ebb24fc575c8b87eef427b0b18",
+      "bytes": 356,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-boundary-startup.txt.gz",
+      "sha256": "370a352f91ec57c11495a8ee22b0866c38e9c8866b271128695377e80184cae1",
+      "bytes": 354,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-boundary.raw.gz",
+      "sha256": "10776b90d2321183dd9064b4eb0591d1a1a4fd1883b6ee0fdc3feb20306c7917",
+      "bytes": 993,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-edge-hours-0-Request-1-Attempt-1-selected.json",
+      "sha256": "086e51910e71f35edbd033a82d5c52f6bded92fc74de75df21b0abc65e66b7f6",
+      "bytes": 2763,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-edge-hours-0-Request-1-Attempt-1.txt.gz",
+      "sha256": "075a047a2867223d8bfe10ceb50d8dbb33a7d0aa6a3e748d6d5c4230eaa23693",
+      "bytes": 2619,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-edge-hours-0-Request-1-selected.json",
+      "sha256": "df97063377119610375330d5bcaad8eec21c19ad6572bb31423b3bd4548accfb",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-edge-hours-0-Request-1.txt.gz",
+      "sha256": "6c5261367fe97e1424c91a5076bbdee067c8c5a094dd93146624456367161a4a",
+      "bytes": 1157,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-edge-hours-0-selected.json",
+      "sha256": "5f43b411624223ea255bf9e4b43a9fdfa7e3511465740a7f9501399c5c789d17",
+      "bytes": 2384,
+      "lines": 36,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-edge-hours-0.txt.gz",
+      "sha256": "d1817a5f46778b6c23b9d9f06b74c6851dd8161c17aedad27ee51c8db016be9f",
+      "bytes": 1967,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-edge-hours-1-Request-1-Attempt-1-selected.json",
+      "sha256": "a3c6c995a6a7cb0a4398039f6268ac3ed7fc4f7cee2bc7b43607109496e72b62",
+      "bytes": 2740,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-edge-hours-1-Request-1-Attempt-1.txt.gz",
+      "sha256": "1913e155bfe8acff36d2df744f5000fdcdde8d7c45fcb6649d7f15ef0c217e00",
+      "bytes": 2605,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-edge-hours-1-Request-1-selected.json",
+      "sha256": "4ce57ebf547a962bffa3f32943e5cce5d7d7f83d468a4976b0fd46166fed592d",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-edge-hours-1-Request-1.txt.gz",
+      "sha256": "dc400c46a186bd4b47af928c1921a0a8ece0852a62875c55d40f9641c4b9a319",
+      "bytes": 1159,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-edge-hours-1-selected.json",
+      "sha256": "b7586c36fe21c65107dac6fe2c98b3a353d6b598006f16322d6993a7a58df73d",
+      "bytes": 2373,
+      "lines": 36,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-edge-hours-1.txt.gz",
+      "sha256": "e613c78ec306e388a3eb5457fedc801d3634fe99fc20a3fe81c673e8bbff4528",
+      "bytes": 1957,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-edge-hours-overview-selected.json",
+      "sha256": "692a0abe7d944eca70f589a1100111751f896277f1d8c28bb769733a53118be4",
+      "bytes": 1110,
+      "lines": 14,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/month-edge-hours-overview.txt.gz",
+      "sha256": "a0a080bcb1cf230da633ceab8710e7ab033ddf2a84a5f68d1288e6d009a9e24c",
+      "bytes": 1058,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-1-Attempt-1-selected.json",
+      "sha256": "57da5d4bedd5e6bd45130364da45bc8f928d159c5fb2d9bd0a9ae07d97480d3a",
+      "bytes": 2735,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-1-Attempt-1.txt.gz",
+      "sha256": "2682a8883fd9e7745d5b5c48b995dc8394d66b3e91bc0c6f1f7295ac8655bad7",
+      "bytes": 2580,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-1-selected.json",
+      "sha256": "c6f1e85a1f699b1f5f3749979290ecbb2c5894a027327ddba947c007c39891e8",
+      "bytes": 1045,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-1.txt.gz",
+      "sha256": "e3ea91a1ec5da455c0751a09256e1422f3184e670fa64e35753b2661d3c8c151",
+      "bytes": 1155,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-2-Attempt-1-selected.json",
+      "sha256": "30c8813c4af4eb1e61f1e93bd423c5260753c7c69fce6dbda461f8955c8d2706",
+      "bytes": 2733,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-2-Attempt-1.txt.gz",
+      "sha256": "37ecd7baaefab05d805e0ac521c03ac1b3b0285d4abd9280672240cc6af04733",
+      "bytes": 2597,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-2-selected.json",
+      "sha256": "cfbbb2d4f2e21764619310d49c3ff420326706b2c26db20ada7ccdccc20d584d",
+      "bytes": 1045,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-2.txt.gz",
+      "sha256": "21519860162d9cd08aafe13c0b2a06af203ee0ab4534993ba7d81ce6887d0f0f",
+      "bytes": 1155,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-3-Attempt-1-selected.json",
+      "sha256": "0b160d4fa98eac59f7abb6dd885f80e3fbb1d6c90e169e060b110c5c51c59c88",
+      "bytes": 2730,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-3-Attempt-1.txt.gz",
+      "sha256": "56ba0e57a8ff0293edc63094e0ae579b491c01b235c478d6065fb575cb4fbf6e",
+      "bytes": 2581,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-3-selected.json",
+      "sha256": "8afccb80101c974113b64ebce89c5142e468238509a899af3456ce981eeda686",
+      "bytes": 1045,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-3.txt.gz",
+      "sha256": "e7c870b59f63869dfa0323acfc9a8c7f7fc967c2554b8be18b501c7489776b6f",
+      "bytes": 1155,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-4-Attempt-1-selected.json",
+      "sha256": "2f934326230bed83aae729993f5feff7ef4f301c762efd0a4da8aeb447aa10f8",
+      "bytes": 2732,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-4-Attempt-1.txt.gz",
+      "sha256": "c4017f10c8243253d0ff039db8d9ecdf3f6dc0634f42e8434e9ab5e62a7bed7d",
+      "bytes": 2575,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-4-selected.json",
+      "sha256": "fbd9022c144fbee82e16ed61e1562f0e03c31e58bed6a35c087e0f83e00d3470",
+      "bytes": 1045,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-4.txt.gz",
+      "sha256": "a163e2ae95b9eb8a9dccd0e8e660e5b3420e0ed502da5e43a4d11bca67a3f1fb",
+      "bytes": 1156,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-5-Attempt-1-selected.json",
+      "sha256": "d11626ef037050775f9071041c23b7aba67879689f41c3f04ae6b92a4a923782",
+      "bytes": 2764,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-5-Attempt-1.txt.gz",
+      "sha256": "927001a6785db9e552579b4fda495a4044ce4a2d9d3fc1e4ad9631f4c29c9d5e",
+      "bytes": 2615,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-5-selected.json",
+      "sha256": "cac20dab15461e983c3cb2e5f0d7edac30e86a9288562c951876e8c609d510ac",
+      "bytes": 1045,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-Request-5.txt.gz",
+      "sha256": "919772f2b4bf0f8c3b911ba94fc77a19edbf5c4bc58adfdd60e643057cc65e7e",
+      "bytes": 1153,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0-selected.json",
+      "sha256": "f5834a88eb039877c648c934f621e81d17f33316c515da89a67d17aa61b95c33",
+      "bytes": 2487,
+      "lines": 41,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-0.txt.gz",
+      "sha256": "1d1a6a2ab539c76374ceecac19cf74897ec1c3a7939a71473420d124939ed13f",
+      "bytes": 2064,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-1-Request-1-Attempt-1-selected.json",
+      "sha256": "746335eb9553358d4001e8114474c5ec3108ffd47afd5148085ba28079acd856",
+      "bytes": 2741,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-1-Request-1-Attempt-1.txt.gz",
+      "sha256": "545e22eb8a2b29f77f8a63a88a1a88b12a916f6f25df0206dbdf7986ee6dcde2",
+      "bytes": 2599,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-1-Request-1-selected.json",
+      "sha256": "6a99f6dda2b10e0dca8303f07e0da3f1365a0a85740c7d8117b59d52444ce88b",
+      "bytes": 1045,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-1-Request-1.txt.gz",
+      "sha256": "ac40a69410d616f356e3f56fb78c6cac45e38b0020df093b9346b2f65a56a073",
+      "bytes": 1152,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-1-selected.json",
+      "sha256": "344b3b4230b01d874e7d611b82e37f4663809d7051fcb8a66ca394e3a7d9ef9d",
+      "bytes": 2372,
+      "lines": 36,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-1.txt.gz",
+      "sha256": "5aab31ae06c85be248af7058fa5620ba8e1cec112c08547a0869a1f50b7480d2",
+      "bytes": 1944,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-overview-selected.json",
+      "sha256": "da4d44b69b06da8b993e2764fe7fdface44875350deeda34535ffd9a967000c4",
+      "bytes": 1113,
+      "lines": 14,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/months-overview.txt.gz",
+      "sha256": "57f1f6343c85b58aadade97a146e97ed8f1bdf4cb85a7c8b94c726d8d69c283a",
+      "bytes": 1052,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/numeric-audit.json",
+      "sha256": "b0e7611f4782ebd0fd320c951d8066f5ad8389a8b383701b70aa7f0dd877c4c1",
+      "bytes": 385,
+      "lines": 10,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/partial-bucket-selected.json",
+      "sha256": "7ab8b1e8ccc74be093766e0e356bba67f2a4309b137022681653819a6348a35c",
+      "bytes": 794,
+      "lines": 13,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/partial-bucket.txt.gz",
+      "sha256": "752bd90f34285a7a479c55f53b9dc8b8c44554e5cd8d73643a09c1828ddc6b32",
+      "bytes": 985,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/partial-full-neighbour-Request-1-Attempt-1-selected.json",
+      "sha256": "cf9bbceadba56d46c66a3b3aa32720e55f225c8ffc0efaeecc597cd8ba57e979",
+      "bytes": 2732,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/partial-full-neighbour-Request-1-Attempt-1.txt.gz",
+      "sha256": "ca34b560d950c9d94b103ceceae44c539c23ddffaedca8e2cbac210eab6a77b5",
+      "bytes": 2606,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/partial-full-neighbour-Request-1-selected.json",
+      "sha256": "9908583c6794e53a79bcd521beb9aeafb25de792db4a0b704d214cdb65480d7d",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/partial-full-neighbour-Request-1.txt.gz",
+      "sha256": "7c6040032fc583187781117c21319f6cf665ff0d2cbcdd76c055e9354e400a2d",
+      "bytes": 1164,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/partial-full-neighbour-selected.json",
+      "sha256": "596e0f1e7d9d49260acad207c8b618a5232de19346ca84a7f3ad0e3fa5e15677",
+      "bytes": 2370,
+      "lines": 36,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/partial-full-neighbour.txt.gz",
+      "sha256": "1a497239e800c5f878830a94377d2b73f1b720cdc0410efd1c73fbe434dc0a77",
+      "bytes": 1960,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/partial-overview-selected.json",
+      "sha256": "4c1ebc935fa98b4e78cec1871d379262c5bdda2c8a28a111fd774148f7065d93",
+      "bytes": 1136,
+      "lines": 14,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/partial-overview.txt.gz",
+      "sha256": "aede5524acd1f4d0219e7cd0e950c465857691e4bf93c449ddf6ab04d95c8529",
+      "bytes": 1059,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/requests.json",
+      "sha256": "f1f18d2d0641b53e6301d0fe4380cd324a418b1cc2178ba4ad5c101d9c85253c",
+      "bytes": 2379,
+      "lines": 106,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/results.json",
+      "sha256": "d8aec19b6414c634d3db297aec21ba753f60d66dc49b0de4dc65082691bb282c",
+      "bytes": 13105,
+      "lines": 485,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/third-hour-complete.txt.gz",
+      "sha256": "70a39661541f133af528a1d19c8e2a6b468effc48499eb7138d16cc87425990e",
+      "bytes": 448,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/third-hour-startup.txt.gz",
+      "sha256": "98e6e05ef7e6e306e382de2626c9dba29129b2680f312ab6db4a24e9037036bd",
+      "bytes": 442,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/third-hour.raw.gz",
+      "sha256": "a05ca71e7193cc29a59e837f57236de41a497b1d1446c0e0374bbb027906d694",
+      "bytes": 1079,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-absent-ancestor-Request-1-Attempt-1-selected.json",
+      "sha256": "3d2ae31b0c9e5ce4217491e89f1aae80c9d1ce43cd88d48f58e8b4001c203697",
+      "bytes": 1937,
+      "lines": 41,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-absent-ancestor-Request-1-Attempt-1.txt.gz",
+      "sha256": "fbfc9242de70b5f48afab71a63f388927334ae9f89ab42b3a929d4ef46964d0f",
+      "bytes": 2055,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-absent-ancestor-Request-1-selected.json",
+      "sha256": "e50cc0df2642b6973f53bff446034090139070604ef2c1c5c285b11d02d9ab40",
+      "bytes": 241,
+      "lines": 9,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-absent-ancestor-Request-1.txt.gz",
+      "sha256": "3e8b12eda1a441c6a59d26cb38bf464966ceb3c38ef9172a348993397fb62b0c",
+      "bytes": 629,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-absent-ancestor-attempt-selected.json",
+      "sha256": "f86cef06b40139a2547d6f4fd08da5452155a8924969bbdb289153a70b6c70f7",
+      "bytes": 1947,
+      "lines": 41,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-absent-ancestor-attempt.txt.gz",
+      "sha256": "d20877ee72c228f236fce126f6cf0d4d3e7852d992eeda82a8fbaffed4a6142f",
+      "bytes": 2029,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-absent-ancestor-fresh-inspect-startup.txt.gz",
+      "sha256": "7ed02788464706ad749c0219db957819b37f47681bf92d18ba7b8645fb3e5528",
+      "bytes": 366,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-absent-ancestor-fresh-inspect.raw.gz",
+      "sha256": "411acdfd37506d9c73cbbbcc429494f460b449991bef2bf0e30cf8d33ea0bded",
+      "bytes": 19290,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-absent-ancestor-population-selected.json",
+      "sha256": "e217fd5c7c298c64066b89afbc0f1691d201c136b4f1cbef4103c036b947c28c",
+      "bytes": 918,
+      "lines": 15,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-absent-ancestor-population.txt.gz",
+      "sha256": "46ebd7c5282fb9eec1e95d50b98b8c7c5a515098898d0fda5a97a1a8e41dba78",
+      "bytes": 1124,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-absent-ancestor-selected.json",
+      "sha256": "f2a2bb2980f1d37c7c42f1d6cd6f15d43a5430310a4badbec4438a65097c0b2f",
+      "bytes": 1625,
+      "lines": 28,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-absent-ancestor-store-readback.json",
+      "sha256": "8860a72aa4ce73e422b907b6e6347eb2af8b80ddbed5637311302bdb4a5d35e9",
+      "bytes": 350,
+      "lines": 10,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-absent-ancestor.txt.gz",
+      "sha256": "7b27004811f4d8232299c1b07d5b436ac64f144831e7818752ac924982b40af6",
+      "bytes": 1573,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-conflicting-source-edge-Request-1-Attempt-1-selected.json",
+      "sha256": "3d2ae31b0c9e5ce4217491e89f1aae80c9d1ce43cd88d48f58e8b4001c203697",
+      "bytes": 1937,
+      "lines": 41,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-conflicting-source-edge-Request-1-Attempt-1.txt.gz",
+      "sha256": "fbfc9242de70b5f48afab71a63f388927334ae9f89ab42b3a929d4ef46964d0f",
+      "bytes": 2055,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-conflicting-source-edge-Request-1-selected.json",
+      "sha256": "e50cc0df2642b6973f53bff446034090139070604ef2c1c5c285b11d02d9ab40",
+      "bytes": 241,
+      "lines": 9,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-conflicting-source-edge-Request-1.txt.gz",
+      "sha256": "3e8b12eda1a441c6a59d26cb38bf464966ceb3c38ef9172a348993397fb62b0c",
+      "bytes": 629,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-conflicting-source-edge-attempt-selected.json",
+      "sha256": "f86cef06b40139a2547d6f4fd08da5452155a8924969bbdb289153a70b6c70f7",
+      "bytes": 1947,
+      "lines": 41,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-conflicting-source-edge-attempt.txt.gz",
+      "sha256": "d20877ee72c228f236fce126f6cf0d4d3e7852d992eeda82a8fbaffed4a6142f",
+      "bytes": 2029,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-conflicting-source-edge-fresh-inspect-startup.txt.gz",
+      "sha256": "c980b55f2767923a167c6e1ed4642357932b1583387a52c0e6351eca881f41a3",
+      "bytes": 368,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-conflicting-source-edge-fresh-inspect.raw.gz",
+      "sha256": "65f8fb03fa2e824484abc31521cb015e3cfb4d70e152cbec054fc9572e3846dc",
+      "bytes": 19331,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-conflicting-source-edge-population-selected.json",
+      "sha256": "e217fd5c7c298c64066b89afbc0f1691d201c136b4f1cbef4103c036b947c28c",
+      "bytes": 918,
+      "lines": 15,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-conflicting-source-edge-population.txt.gz",
+      "sha256": "46ebd7c5282fb9eec1e95d50b98b8c7c5a515098898d0fda5a97a1a8e41dba78",
+      "bytes": 1124,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-conflicting-source-edge-selected.json",
+      "sha256": "f2a2bb2980f1d37c7c42f1d6cd6f15d43a5430310a4badbec4438a65097c0b2f",
+      "bytes": 1625,
+      "lines": 28,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-conflicting-source-edge-store-readback.json",
+      "sha256": "a44e0629ee19fc05fc34a41a971bd9c055085001111e40c6975042022a976eb1",
+      "bytes": 358,
+      "lines": 10,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-conflicting-source-edge.txt.gz",
+      "sha256": "7b27004811f4d8232299c1b07d5b436ac64f144831e7818752ac924982b40af6",
+      "bytes": 1573,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-cycle-Request-1-Attempt-1-selected.json",
+      "sha256": "3d2ae31b0c9e5ce4217491e89f1aae80c9d1ce43cd88d48f58e8b4001c203697",
+      "bytes": 1937,
+      "lines": 41,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-cycle-Request-1-Attempt-1.txt.gz",
+      "sha256": "fbfc9242de70b5f48afab71a63f388927334ae9f89ab42b3a929d4ef46964d0f",
+      "bytes": 2055,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-cycle-Request-1-selected.json",
+      "sha256": "e50cc0df2642b6973f53bff446034090139070604ef2c1c5c285b11d02d9ab40",
+      "bytes": 241,
+      "lines": 9,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-cycle-Request-1.txt.gz",
+      "sha256": "3e8b12eda1a441c6a59d26cb38bf464966ceb3c38ef9172a348993397fb62b0c",
+      "bytes": 629,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-cycle-attempt-selected.json",
+      "sha256": "f86cef06b40139a2547d6f4fd08da5452155a8924969bbdb289153a70b6c70f7",
+      "bytes": 1947,
+      "lines": 41,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-cycle-attempt.txt.gz",
+      "sha256": "d20877ee72c228f236fce126f6cf0d4d3e7852d992eeda82a8fbaffed4a6142f",
+      "bytes": 2029,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-cycle-fresh-inspect-startup.txt.gz",
+      "sha256": "f6c30a4164c01a674d41882e1ecaaeb81f914130e40843dd1fbda45d3bca6c11",
+      "bytes": 357,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-cycle-fresh-inspect.raw.gz",
+      "sha256": "b73682ad5720944c09154bce4ad8f137b4e0a6874cc96a17b14906ff89ee4b36",
+      "bytes": 19260,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-cycle-population-selected.json",
+      "sha256": "e217fd5c7c298c64066b89afbc0f1691d201c136b4f1cbef4103c036b947c28c",
+      "bytes": 918,
+      "lines": 15,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-cycle-population.txt.gz",
+      "sha256": "46ebd7c5282fb9eec1e95d50b98b8c7c5a515098898d0fda5a97a1a8e41dba78",
+      "bytes": 1124,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-cycle-selected.json",
+      "sha256": "f2a2bb2980f1d37c7c42f1d6cd6f15d43a5430310a4badbec4438a65097c0b2f",
+      "bytes": 1625,
+      "lines": 28,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-cycle-store-readback.json",
+      "sha256": "01810699947005133cd4f7fc627256b97debb79bcc35cd801cf6e8ce94dbe089",
+      "bytes": 340,
+      "lines": 10,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-cycle.txt.gz",
+      "sha256": "7b27004811f4d8232299c1b07d5b436ac64f144831e7818752ac924982b40af6",
+      "bytes": 1573,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-malformed-source-Request-1-Attempt-1-selected.json",
+      "sha256": "3d2ae31b0c9e5ce4217491e89f1aae80c9d1ce43cd88d48f58e8b4001c203697",
+      "bytes": 1937,
+      "lines": 41,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-malformed-source-Request-1-Attempt-1.txt.gz",
+      "sha256": "fbfc9242de70b5f48afab71a63f388927334ae9f89ab42b3a929d4ef46964d0f",
+      "bytes": 2055,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-malformed-source-Request-1-selected.json",
+      "sha256": "e50cc0df2642b6973f53bff446034090139070604ef2c1c5c285b11d02d9ab40",
+      "bytes": 241,
+      "lines": 9,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-malformed-source-Request-1.txt.gz",
+      "sha256": "3e8b12eda1a441c6a59d26cb38bf464966ceb3c38ef9172a348993397fb62b0c",
+      "bytes": 629,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-malformed-source-attempt-selected.json",
+      "sha256": "f86cef06b40139a2547d6f4fd08da5452155a8924969bbdb289153a70b6c70f7",
+      "bytes": 1947,
+      "lines": 41,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-malformed-source-attempt.txt.gz",
+      "sha256": "d20877ee72c228f236fce126f6cf0d4d3e7852d992eeda82a8fbaffed4a6142f",
+      "bytes": 2029,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-malformed-source-fresh-inspect-startup.txt.gz",
+      "sha256": "bfecef90060faabc0c1af932982550b22bb6039b7e1e44922ed7f4bb72d55d2d",
+      "bytes": 362,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-malformed-source-fresh-inspect.raw.gz",
+      "sha256": "e7d4d381c32d509bde5bbe0f2f6de0b00eee2bba5ebf19ae2181205b92792189",
+      "bytes": 19268,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-malformed-source-population-selected.json",
+      "sha256": "e217fd5c7c298c64066b89afbc0f1691d201c136b4f1cbef4103c036b947c28c",
+      "bytes": 918,
+      "lines": 15,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-malformed-source-population.txt.gz",
+      "sha256": "46ebd7c5282fb9eec1e95d50b98b8c7c5a515098898d0fda5a97a1a8e41dba78",
+      "bytes": 1124,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-malformed-source-selected.json",
+      "sha256": "f2a2bb2980f1d37c7c42f1d6cd6f15d43a5430310a4badbec4438a65097c0b2f",
+      "bytes": 1625,
+      "lines": 28,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-malformed-source-store-readback.json",
+      "sha256": "6c0069c5b1ae8b4a481c759cd1bfe900c1141bf75a130111e6f5823f41a20bbd",
+      "bytes": 246,
+      "lines": 10,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-malformed-source.txt.gz",
+      "sha256": "7b27004811f4d8232299c1b07d5b436ac64f144831e7818752ac924982b40af6",
+      "bytes": 1573,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-source-without-edge-Request-1-Attempt-1-selected.json",
+      "sha256": "3d2ae31b0c9e5ce4217491e89f1aae80c9d1ce43cd88d48f58e8b4001c203697",
+      "bytes": 1937,
+      "lines": 41,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-source-without-edge-Request-1-Attempt-1.txt.gz",
+      "sha256": "fbfc9242de70b5f48afab71a63f388927334ae9f89ab42b3a929d4ef46964d0f",
+      "bytes": 2055,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-source-without-edge-Request-1-selected.json",
+      "sha256": "e50cc0df2642b6973f53bff446034090139070604ef2c1c5c285b11d02d9ab40",
+      "bytes": 241,
+      "lines": 9,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-source-without-edge-Request-1.txt.gz",
+      "sha256": "3e8b12eda1a441c6a59d26cb38bf464966ceb3c38ef9172a348993397fb62b0c",
+      "bytes": 629,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-source-without-edge-attempt-selected.json",
+      "sha256": "f86cef06b40139a2547d6f4fd08da5452155a8924969bbdb289153a70b6c70f7",
+      "bytes": 1947,
+      "lines": 41,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-source-without-edge-attempt.txt.gz",
+      "sha256": "d20877ee72c228f236fce126f6cf0d4d3e7852d992eeda82a8fbaffed4a6142f",
+      "bytes": 2029,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-source-without-edge-fresh-inspect-startup.txt.gz",
+      "sha256": "f6c30a4164c01a674d41882e1ecaaeb81f914130e40843dd1fbda45d3bca6c11",
+      "bytes": 357,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-source-without-edge-fresh-inspect.raw.gz",
+      "sha256": "7d5e0624f1c8c153d41cf10b5c0369b66defa3a45f908ecd1a8f1920e2357025",
+      "bytes": 19293,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-source-without-edge-population-selected.json",
+      "sha256": "e217fd5c7c298c64066b89afbc0f1691d201c136b4f1cbef4103c036b947c28c",
+      "bytes": 918,
+      "lines": 15,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-source-without-edge-population.txt.gz",
+      "sha256": "46ebd7c5282fb9eec1e95d50b98b8c7c5a515098898d0fda5a97a1a8e41dba78",
+      "bytes": 1124,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-source-without-edge-selected.json",
+      "sha256": "f2a2bb2980f1d37c7c42f1d6cd6f15d43a5430310a4badbec4438a65097c0b2f",
+      "bytes": 1625,
+      "lines": 28,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-source-without-edge-store-readback.json",
+      "sha256": "cd742138c518b7cb72ab176cab8933b9be09b7089511218d6a912e32c7243f80",
+      "bytes": 308,
+      "lines": 8,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unknown-source-without-edge.txt.gz",
+      "sha256": "7b27004811f4d8232299c1b07d5b436ac64f144831e7818752ac924982b40af6",
+      "bytes": 1573,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unrelated-complete.txt.gz",
+      "sha256": "0ed0353d3aebfae17cbbfb8a90e87ec4a43a73d1000635625266bbc15030736f",
+      "bytes": 264,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unrelated-startup.txt.gz",
+      "sha256": "534c804074e80950bc53d7ef6c024eace1a975af9de1e0bebae765f02ad6d7b8",
+      "bytes": 210,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/unrelated.raw.gz",
+      "sha256": "811e689bb81566e4d8a3fdd8d3d9ab0a5bc409459e0c417ed9b9d6d8fe09768a",
+      "bytes": 1006,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-boundary-complete.txt.gz",
+      "sha256": "f89b87750759830b3b7235d0519e9616ec19d5e91c526f2d64c90a3e0a3c479e",
+      "bytes": 354,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-boundary-startup.txt.gz",
+      "sha256": "c64fe97be95d924ac6450be4360af7239defc3cf779a9426449ffaaa17d956a5",
+      "bytes": 290,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-boundary.raw.gz",
+      "sha256": "1fed8ffde829c44c9b19c00339e702a27f6f868d6d39f964ecd4e4fbf41859c6",
+      "bytes": 1041,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-0-Request-1-Attempt-1-selected.json",
+      "sha256": "bb9b25cbe560bdfd2e701c77abae0d994ac1e12e38b4432c8035680668ef577e",
+      "bytes": 2734,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-0-Request-1-Attempt-1.txt.gz",
+      "sha256": "31367d884a109def930cdb1a247ccff77ef1f7c9688e6785beebd8e1a14fb3a5",
+      "bytes": 2583,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-0-Request-1-selected.json",
+      "sha256": "5c89a58b53d45deea47afc9c459afd0a0608ddb54d0683d6537d089cbf2d1795",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-0-Request-1.txt.gz",
+      "sha256": "3784dec1d1a3efdc6c06e2b6a94c747170bddbda6eb35a43f741ed2ce1fafcdf",
+      "bytes": 1157,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-0-Request-2-Attempt-1-selected.json",
+      "sha256": "36d8513ebed3430315b88d766b803e8a408617a5862a8dadbbf7bc667600cafe",
+      "bytes": 2729,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-0-Request-2-Attempt-1.txt.gz",
+      "sha256": "c5ceef1ba1872328332ebac5fab82673c6ed6b4b78eadb4d997864fb1488f077",
+      "bytes": 2583,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-0-Request-2-selected.json",
+      "sha256": "7b555ab0db6510462a56cc8882bb59bc6e788605458398532da687e728898637",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-0-Request-2.txt.gz",
+      "sha256": "5ae544daa3775a63830ad47b4e68f7443cc35d240385ab203a16d3a1579a6cc6",
+      "bytes": 1157,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-0-Request-3-Attempt-1-selected.json",
+      "sha256": "9c71cbbcf99bb9b28a9900eef6509d0e233b1ec3d6bac9e799070316c89ebb28",
+      "bytes": 2731,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-0-Request-3-Attempt-1.txt.gz",
+      "sha256": "0157c399a155b8216b237906db6d55ae0ee76caf0edb1e2f6a0cab9b6df18a52",
+      "bytes": 2578,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-0-Request-3-selected.json",
+      "sha256": "ebccd6fdf9bcd22593ae35926ecfadebdbbcaaf1e9829411aec7ead83011fe90",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-0-Request-3.txt.gz",
+      "sha256": "932b92c02885d0c12def0604456a6a4ed57cf3efd335ad458f5c992240892b9a",
+      "bytes": 1157,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-0-selected.json",
+      "sha256": "d686566aa76a9bd1822a45b072f6d2224eba47eee480e3f898416610f6caf29a",
+      "bytes": 2402,
+      "lines": 38,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-0.txt.gz",
+      "sha256": "d9c4a7eab96742616431d5d532d1497956cf4489958d86bcc1b971a2bc956161",
+      "bytes": 1997,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-1-Request-1-Attempt-1-selected.json",
+      "sha256": "1287744e8f33bc3ac4bbd71955e7b477976cdb07e8cf489b4e83a66a2c5acb2a",
+      "bytes": 2732,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-1-Request-1-Attempt-1.txt.gz",
+      "sha256": "172197c169371710c4cc9da64ec036c9ad6fac7b830e23140fee7b04e65793aa",
+      "bytes": 2601,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-1-Request-1-selected.json",
+      "sha256": "57a3be6aadf1aa04636b067499037888481950676b2b798b9d0d07130a8b39ec",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-1-Request-1.txt.gz",
+      "sha256": "3589461e0f969698ce4a303c7b571b5b296118b9a4708d50e2d41fb38a062977",
+      "bytes": 1159,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-1-selected.json",
+      "sha256": "33a8cd7a6b174b57335b0d1e63cb056c62e5b16f0ae01be2c700d7b0fdd106e0",
+      "bytes": 2370,
+      "lines": 36,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-1.txt.gz",
+      "sha256": "cf0fe8c1004674499f4061733bdffad8c341673ee499a75778517feaf683590d",
+      "bytes": 1955,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-overview-selected.json",
+      "sha256": "fffe778c4ae7495d40fd42f2cbc302126506a5739b647951b956a67dddaf58b0",
+      "bytes": 1100,
+      "lines": 14,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/week-edge-hours-overview.txt.gz",
+      "sha256": "1ef7101d5146279aa73ef6a9438e4fd9f62f3c6dc02f892a4da200aa7d8f370e",
+      "bytes": 1048,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-0-Request-1-Attempt-1-selected.json",
+      "sha256": "494e0e48ee85718102e04c415143d7ef72ba46e0120338df8606f8a8a4b241c9",
+      "bytes": 2734,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-0-Request-1-Attempt-1.txt.gz",
+      "sha256": "5cfcb12af257ae4cc3b9446011901531aa1076ba643d9088b73df6792a7d37cb",
+      "bytes": 2583,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-0-Request-1-selected.json",
+      "sha256": "d59f655cd588efdcb1c2ccbb00d665b26e4205ba3031f8ee9cd52af532cec4a0",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-0-Request-1.txt.gz",
+      "sha256": "7b22b44a88c53e865314e02ea3035ef9999b825cdbba805ec6bb7bb592893b7d",
+      "bytes": 1158,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-0-Request-2-Attempt-1-selected.json",
+      "sha256": "2367c2b3b8cc62abdde6bdcd6e7c79f8fc65e9ac1719c7378f02f9da3ed579f6",
+      "bytes": 2729,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-0-Request-2-Attempt-1.txt.gz",
+      "sha256": "540eeb71ab0c3329d05fccb9c529e5477ad269d206f0500ec89887a2ecac4967",
+      "bytes": 2585,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-0-Request-2-selected.json",
+      "sha256": "73ae88ae279f9f18f76a1a0623b23a14565dd5932e1ac95ee88fb6f65abf969b",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-0-Request-2.txt.gz",
+      "sha256": "e8a8fff4b639de5694c85469bc4ef8b11ddcf796a6428b41841f50b94e8d4dae",
+      "bytes": 1158,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-0-Request-3-Attempt-1-selected.json",
+      "sha256": "52b4026362cd0b2727c1ef8a76ad37904f5035e9329f010ef88a3fd79cbdc875",
+      "bytes": 2731,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-0-Request-3-Attempt-1.txt.gz",
+      "sha256": "f0b2e91c1001bdf69c98693a5dd2ee1da88805e9c1dd201d9cb262663ab97f69",
+      "bytes": 2578,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-0-Request-3-selected.json",
+      "sha256": "947423d0063f515b14773d8d8203c0259b26b3b0e8382c934ba6472045c385bf",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-0-Request-3.txt.gz",
+      "sha256": "5ef86a25925bf4d1ca1e86fb1ad7d38ac7b38a3f76872226ea7b0f4e2483557f",
+      "bytes": 1158,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-0-selected.json",
+      "sha256": "c6b24288df80724474b20873753d0d0c02134d82d57d6e26ee7e259cbe915d55",
+      "bytes": 2400,
+      "lines": 38,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-0.txt.gz",
+      "sha256": "0f78b5977b278c63551771082876465380c2ecd819031647adf274726f6fae3b",
+      "bytes": 1993,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-1-Request-1-Attempt-1-selected.json",
+      "sha256": "327ffa784313db4b303b8fe30a1083d385e482c1d9657acdf2eb291b7262b96a",
+      "bytes": 2732,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-1-Request-1-Attempt-1.txt.gz",
+      "sha256": "62985fb75698adf2735fa034d3b377127665bace069e302ee4442170616da019",
+      "bytes": 2598,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-1-Request-1-selected.json",
+      "sha256": "092dcac2d8388e80386558fc42bb01385cf21d2f52d5d616d0d26cd7c29e735e",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-1-Request-1.txt.gz",
+      "sha256": "3e3317c883dff567c3e71da0ac69dd797113a0b9db947dcec8857d870b089fda",
+      "bytes": 1156,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-1-Request-2-Attempt-1-selected.json",
+      "sha256": "11b5401c64621f6a1b844e1f377f19f6ac57bd7ad1a1477dcc16132291046dff",
+      "bytes": 2740,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-1-Request-2-Attempt-1.txt.gz",
+      "sha256": "7e33c515812076b12886c913f4abf9621eebe797a8e49bbc08c37c8bc51defa5",
+      "bytes": 2600,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-1-Request-2-selected.json",
+      "sha256": "24e4e4500fc0e244054541b1ad3da59a4d825b76f7e2efd82670cc25392a18a9",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-1-Request-2.txt.gz",
+      "sha256": "cfc718f1212fd18bdf97cf48465352001f428f299f95cc92134edd7fb021d624",
+      "bytes": 1154,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-1-Request-3-Attempt-1-selected.json",
+      "sha256": "c58a22eb01c7b6e7109eaeb1433f39c68025cfb86ba414bbdcb25abda52910a5",
+      "bytes": 2763,
+      "lines": 49,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-1-Request-3-Attempt-1.txt.gz",
+      "sha256": "298417baad213c167958d375e7611f0fe9a8c1132b0e01f90c96b5f47a02126f",
+      "bytes": 2616,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-1-Request-3-selected.json",
+      "sha256": "94ebc26df8a33343b461505297b16d67cf2adaedff7bab0fdfb6ae867642831f",
+      "bytes": 1044,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-1-Request-3.txt.gz",
+      "sha256": "ec321d8a4a2323b256cd1f8488a52f6c3a6a72d2e809d014f1e9c649d1a56aea",
+      "bytes": 1153,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-1-selected.json",
+      "sha256": "56c41fffb74566f14579882e70573135c6a8c7da1a76699557c37fc91f7915e6",
+      "bytes": 2456,
+      "lines": 39,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-1.txt.gz",
+      "sha256": "2ac22adc2c1257b4efcba4ca71ff80e11040eb46aa3fb42b084ff97750876acb",
+      "bytes": 2026,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-overview-selected.json",
+      "sha256": "f18dadaed1924e17992b6cd77a99d24b03e0c925b20b88f0e2de145795fe9a28",
+      "bytes": 1110,
+      "lines": 14,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/p3-run-01/weeks-overview.txt.gz",
+      "sha256": "f28ef5e20eee859401eccf44c4491b146c7efc161905975bcbbace3974bc0b4c",
+      "bytes": 1057,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/prerequisites.log.gz",
+      "sha256": "441cf84a477e64043420f2595a723180e839490ff4f9ce7c8fd77d542ed836df",
+      "bytes": 3132,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/reader-findings.md",
+      "sha256": "80a4e707de936b4117276db09678e23e74c32c9921aea82ee172785dbc596b78",
+      "bytes": 5033,
+      "lines": 109,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/summarize.py",
+      "sha256": "05cf0a9d226fa8ac3d2023915f3a0d6d26bd2b3505c3eae27a1ea6fb5e3c6caa",
+      "bytes": 2638,
+      "lines": 47,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/test-results.json",
+      "sha256": "6b09d1edc22593dd8df94c8d4e84a1b5a869196afa83dc89514352c9a4681cd2",
+      "bytes": 767,
+      "lines": 32,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/tui.log.gz",
+      "sha256": "34bb30c705c3a379335fce1b62df8e7b75c8b55075d4f8fc7c46b4b627f768c9",
+      "bytes": 6536,
+      "lines": null,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-50/RETURN.md",
+      "sha256": "9fd4f292450c8e59cf0000937053c46eb4b8b9f7e79688cb77696fc11557a025",
+      "bytes": 15221,
+      "lines": 135,
+      "status": "modified"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-55/REPRODUCE.md",
+      "sha256": "e8abd2e78e37c8768b2906cdef7b213466e582563c2c9a2f9b2fb240f2abf3e3",
+      "bytes": 3552,
+      "lines": 48,
+      "status": "modified"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-55/RETURN.md",
+      "sha256": "a40c54f213220478383939447c0d5b317e01dd02c9e5725de5dc773bddc84574",
+      "bytes": 12478,
+      "lines": 218,
+      "status": "modified"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-55/audit.py",
+      "sha256": "de8aed08fef43ec1912f4a5ce2ddeac15c9b260c3805be63b24a592e49adc5e1",
+      "bytes": 4572,
+      "lines": 76,
+      "status": "modified"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-55/qualify.py",
+      "sha256": "bfc7551ab44a5f4d60167e115b2ab3e6a85abdcd7cfd811df067c4cd8411b3f2",
+      "bytes": 16647,
+      "lines": 291,
+      "status": "modified"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-55/utc-alignment-regenerated.json",
+      "sha256": "e79fc734489cfdd2a1472593908e9ff866842e467bd5cfd73552b197610f2858",
+      "bytes": 407,
+      "lines": 17,
+      "status": "new"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-qualify-55/verify_utc_alignment.py",
+      "sha256": "d8885dba5c535574a5b5c37c9a961c56635be9358da27dce1d2a65339e80e019",
+      "bytes": 1160,
+      "lines": 23,
+      "status": "modified"
+    }
+  ]
+}

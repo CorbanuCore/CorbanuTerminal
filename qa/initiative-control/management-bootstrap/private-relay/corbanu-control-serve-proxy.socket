@@ -1,0 +1,12 @@
+[Unit]
+Description=Private Unix socket for Corbanu Control Tailscale backend
+
+[Socket]
+ListenStream=/home/pfrpc/corbanu-control/private-serve/dashboard.sock
+SocketMode=0600
+DirectoryMode=0700
+RemoveOnStop=yes
+Accept=no
+
+[Install]
+WantedBy=sockets.target

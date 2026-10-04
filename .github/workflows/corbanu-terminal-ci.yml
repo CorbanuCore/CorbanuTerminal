@@ -159,6 +159,15 @@ jobs:
           test -f "$telegram_resources/dist/corbanu-terminal-telegram.service"
           test -f "$telegram_resources/dist/org.corbanu.terminal.telegram.plist"
 
+      - name: Verify developer accounting cannot be packaged
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --manifest-path codex-rs/Cargo.toml --profile dev-small \
+            --bin corbanu --features codex-core/developer-accounting
+          python3 -B scripts/test_build_codex_package.py \
+            --feature-artifact codex-rs/target/dev-small/corbanu
+
       - name: Upload package smoke artifact
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:

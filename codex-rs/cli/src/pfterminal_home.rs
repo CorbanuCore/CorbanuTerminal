@@ -46,6 +46,47 @@ pub(crate) fn configure_for_entrypoint(entrypoint: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Exit with the repair when macOS privacy protection blocks the Corbanu home.
+///
+/// macOS denies access to external volumes and some folders to apps the user
+/// has not allowed, and SSH logins need their own "full disk access" switch.
+/// Those denials surface as EPERM from arbitrary later reads, which reads as an
+/// unexplained "Operation not permitted". Only the interactive entrypoints are
+/// checked: sandboxed helper aliases can see EPERM from the sandbox instead.
+pub(crate) fn exit_if_home_blocked_by_macos_privacy() {
+    #[cfg(target_os = "macos")]
+    {
+        const EPERM: i32 = 1;
+        if !current_entrypoint_is_corbanu() {
+            return;
+        }
+        let Ok(home) = codex_core::config::find_codex_home() else {
+            return;
+        };
+        let Err(error) = std::fs::read_dir(&home) else {
+            return;
+        };
+        if error.raw_os_error() != Some(EPERM) {
+            return;
+        }
+        let repair = if std::env::var_os("SSH_CONNECTION").is_some() {
+            "On this Mac, open System Settings > General > Sharing, click (i) next to Remote \
+             Login, turn on \"Allow full disk access for remote users\", then reconnect."
+        } else {
+            "Allow this terminal app in System Settings > Privacy & Security > Full Disk Access \
+             (or Files and Folders > Removable Volumes), then quit and reopen it."
+        };
+        #[allow(clippy::print_stderr)]
+        {
+            eprintln!(
+                "macOS is blocking access to the Corbanu home at {}: {error}.\n{repair}",
+                home.display()
+            );
+        }
+        std::process::exit(1);
+    }
+}
+
 fn entrypoint_from_argv0(arg0: &std::ffi::OsStr) -> Option<String> {
     let arg0 = arg0.to_string_lossy();
     let file_name = arg0

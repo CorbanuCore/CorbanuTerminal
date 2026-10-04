@@ -14,9 +14,19 @@ use codex_app_server_protocol::CommandExecutionSource as ExecCommandSource;
 use codex_protocol::parse_command::ParsedCommand;
 use itertools::Either;
 
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(super) enum CommandOutcome {
+    #[default]
+    Running,
+    Exited(i32),
+    Declined,
+    /// Finalized without evidence of an exit; the command may never have started.
+    Unknown,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct CommandOutput {
-    pub(crate) exit_code: i32,
+    pub(super) outcome: CommandOutcome,
     /// The finalized, interleaved stderr and stdout that replaces any streamed preview.
     aggregated_output: String,
     /// The live preview while command-output deltas are still arriving.
@@ -26,9 +36,24 @@ pub(crate) struct CommandOutput {
 impl CommandOutput {
     pub(crate) fn new(exit_code: i32, aggregated_output: String) -> Self {
         Self {
-            exit_code,
+            outcome: CommandOutcome::Exited(exit_code),
             aggregated_output,
             live_output: None,
+        }
+    }
+
+    pub(crate) fn unknown(aggregated_output: String) -> Self {
+        Self {
+            outcome: CommandOutcome::Unknown,
+            aggregated_output,
+            live_output: None,
+        }
+    }
+
+    pub(crate) fn declined() -> Self {
+        Self {
+            outcome: CommandOutcome::Declined,
+            ..Self::default()
         }
     }
 
@@ -127,18 +152,32 @@ impl ExecCell {
             return false;
         };
         call.output = Some(output);
-        call.duration = Some(duration);
+        // Refusal or a missing exit status cannot establish an execution duration.
+        call.duration = (!call.is_declined() && !call.is_unknown()).then_some(duration);
         call.start_time = None;
         true
     }
 
     pub(crate) fn should_flush(&self) -> bool {
-        !self.is_exploring_cell() && self.calls.iter().all(|c| c.duration.is_some())
+        (!self.is_exploring_cell()
+            || self
+                .calls
+                .iter()
+                .any(|call| call.is_declined() || call.is_unknown()))
+            && self.calls.iter().all(ExecCall::is_complete)
     }
 
     pub(crate) fn mark_failed(&mut self) {
         for call in self.calls.iter_mut() {
-            if call.duration.is_none() {
+            if !call.is_complete() {
+                // ItemStarted can precede approval. Only captured output establishes that an
+                // incomplete call ran; silence also covers admitted commands that emitted nothing.
+                if call.output.is_none() {
+                    call.output = Some(CommandOutput::unknown(String::new()));
+                    call.start_time = None;
+                    call.duration = None;
+                    continue;
+                }
                 let elapsed = call
                     .start_time
                     .map(|st| st.elapsed())
@@ -147,7 +186,7 @@ impl ExecCell {
                 call.duration = Some(elapsed);
                 call.output
                     .get_or_insert_with(CommandOutput::default)
-                    .exit_code = 1;
+                    .outcome = CommandOutcome::Exited(1);
             }
         }
     }
@@ -157,13 +196,13 @@ impl ExecCell {
     }
 
     pub(crate) fn is_active(&self) -> bool {
-        self.calls.iter().any(|c| c.duration.is_none())
+        self.calls.iter().any(|c| !c.is_complete())
     }
 
     pub(crate) fn active_start_time(&self) -> Option<Instant> {
         self.calls
             .iter()
-            .find(|c| c.duration.is_none())
+            .find(|c| !c.is_complete())
             .and_then(|c| c.start_time)
     }
 
@@ -205,6 +244,22 @@ impl ExecCell {
 }
 
 impl ExecCall {
+    pub(super) fn is_declined(&self) -> bool {
+        self.output
+            .as_ref()
+            .is_some_and(|output| output.outcome == CommandOutcome::Declined)
+    }
+
+    pub(super) fn is_unknown(&self) -> bool {
+        self.output
+            .as_ref()
+            .is_some_and(|output| output.outcome == CommandOutcome::Unknown)
+    }
+
+    pub(super) fn is_complete(&self) -> bool {
+        self.duration.is_some() || self.is_declined() || self.is_unknown()
+    }
+
     pub(crate) fn is_user_shell_command(&self) -> bool {
         matches!(self.source, ExecCommandSource::UserShell)
     }

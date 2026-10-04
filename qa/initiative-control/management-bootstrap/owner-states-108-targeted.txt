@@ -1,0 +1,8 @@
+test_quiet_legacy_unknown_requires_explicit_review_and_clears_durably (test_slack_transport.TransportTests.test_quiet_legacy_unknown_requires_explicit_review_and_clears_durably) ... ok
+test_quiet_legacy_unknown_failed_review_write_preserves_unknown (test_slack_transport.TransportTests.test_quiet_legacy_unknown_failed_review_write_preserves_unknown) ... ok
+test_quiet_legacy_unknown_rejects_inexact_explicit_reviews (test_slack_transport.TransportTests.test_quiet_legacy_unknown_rejects_inexact_explicit_reviews) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 3.183s
+
+OK

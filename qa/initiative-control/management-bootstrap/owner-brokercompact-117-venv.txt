@@ -1,0 +1,7 @@
+Looking in links: /private/tmp/ctncli15.YZc0c6/tmp/tn-cli-fences-15-4xz0q9dm/wheels
+Processing /private/tmp/ctncli15.YZc0c6/tmp/tn-cli-fences-15-4xz0q9dm/wheels/markdown_it_py-3.0.0-py3-none-any.whl (from -r scripts/initiative_control/requirements.txt (line 1))
+Processing /private/tmp/ctncli15.YZc0c6/tmp/tn-cli-fences-15-4xz0q9dm/wheels/mdurl-0.1.2-py3-none-any.whl (from -r scripts/initiative_control/requirements.txt (line 2))
+Processing /private/tmp/ctncli15.YZc0c6/tmp/tn-cli-fences-15-4xz0q9dm/wheels/slack_sdk-3.44.1-py3-none-any.whl (from -r scripts/initiative_control/requirements.txt (line 3))
+Installing collected packages: slack-sdk, mdurl, markdown-it-py
+
+Successfully installed markdown-it-py-3.0.0 mdurl-0.1.2 slack-sdk-3.44.1

@@ -1,0 +1,166 @@
+..............................................................................................................................................Refresh complete; live writeback disabled
+Verified export activated; private server refreshed; timer activation unchanged
+.......................................................................EEEEEEE.Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+Verified export activated; private server refreshed; timer activation unchanged
+....................../opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 429: 'Too Many Requests'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+.....................................................................................................................................................................................usage: python -m unittest [-h]
+
+Fixed guest runtime. Requires parent-enforced containment; provides no host
+isolation.
+
+options:
+  -h, --help  show this help message and exit
+Synthetic retained evidence: /private/tmp/isolated-transport-tests-t11qtp_j
+.......................................................................................................................................................................................................................................................................................................{"reason":"TimeoutExpired","state":"ERROR"}
+{"reason":"TimeoutExpired","state":"ERROR"}
+{"fixture_only":true,"manager":"empty","routing":"deferred","state":"ACTIVE","states":["RECOVERING","READY","ACTIVE"]}
+Refresh complete; live writeback disabled
+...................../opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 500: 'Internal Server Error'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+............/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 429: 'Too Many Requests'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+..................................................................
+======================================================================
+ERROR: test_cli_keeps_fixed_redaction_and_records_import_failure (test_decision_manager.ListenerStartupTests.test_cli_keeps_fixed_redaction_and_records_import_failure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 193, in setUp
+    self.store = a.Store(self.root)
+                 ~~~~~~~^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_alerts.py", line 52, in __init__
+    self.root = d.fixture_root(root)
+                ~~~~~~~~~~~~~~^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 216, in fixture_root
+    require(root == root.resolve(strict=True))
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 33, in require
+    raise Invalid()
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+ERROR: test_one_shot_records_real_child_death_before_and_after_handshake (test_decision_manager.ListenerStartupTests.test_one_shot_records_real_child_death_before_and_after_handshake)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 193, in setUp
+    self.store = a.Store(self.root)
+                 ~~~~~~~^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_alerts.py", line 52, in __init__
+    self.root = d.fixture_root(root)
+                ~~~~~~~~~~~~~~^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 216, in fixture_root
+    require(root == root.resolve(strict=True))
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 33, in require
+    raise Invalid()
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+ERROR: test_rejected_start_keeps_running_child_supervised (test_decision_manager.ListenerStartupTests.test_rejected_start_keeps_running_child_supervised)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 193, in setUp
+    self.store = a.Store(self.root)
+                 ~~~~~~~^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_alerts.py", line 52, in __init__
+    self.root = d.fixture_root(root)
+                ~~~~~~~~~~~~~~^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 216, in fixture_root
+    require(root == root.resolve(strict=True))
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 33, in require
+    raise Invalid()
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+ERROR: test_restart_child_death_before_handshake_is_not_lost_after_reap (test_decision_manager.ListenerStartupTests.test_restart_child_death_before_handshake_is_not_lost_after_reap)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 193, in setUp
+    self.store = a.Store(self.root)
+                 ~~~~~~~^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_alerts.py", line 52, in __init__
+    self.root = d.fixture_root(root)
+                ~~~~~~~~~~~~~~^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 216, in fixture_root
+    require(root == root.resolve(strict=True))
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 33, in require
+    raise Invalid()
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+ERROR: test_spawn_failure_does_not_invent_child_exit (test_decision_manager.ListenerStartupTests.test_spawn_failure_does_not_invent_child_exit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 193, in setUp
+    self.store = a.Store(self.root)
+                 ~~~~~~~^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_alerts.py", line 52, in __init__
+    self.root = d.fixture_root(root)
+                ~~~~~~~~~~~~~~^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 216, in fixture_root
+    require(root == root.resolve(strict=True))
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 33, in require
+    raise Invalid()
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+ERROR: test_supervised_post_handshake_startup_death_is_observed (test_decision_manager.ListenerStartupTests.test_supervised_post_handshake_startup_death_is_observed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 193, in setUp
+    self.store = a.Store(self.root)
+                 ~~~~~~~^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_alerts.py", line 52, in __init__
+    self.root = d.fixture_root(root)
+                ~~~~~~~~~~~~~~^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 216, in fixture_root
+    require(root == root.resolve(strict=True))
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 33, in require
+    raise Invalid()
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+ERROR: test_supervised_startup_death_retries_failed_record_without_duplicate (test_decision_manager.ListenerStartupTests.test_supervised_startup_death_retries_failed_record_without_duplicate)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_manager.py", line 193, in setUp
+    self.store = a.Store(self.root)
+                 ~~~~~~~^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decision_alerts.py", line 52, in __init__
+    self.root = d.fixture_root(root)
+                ~~~~~~~~~~~~~~^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 216, in fixture_root
+    require(root == root.resolve(strict=True))
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 33, in require
+    raise Invalid()
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+----------------------------------------------------------------------
+Ran 818 tests in 446.857s
+
+FAILED (errors=7)
+Verified publication: manager @ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa · bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb · 2026-09-17T14:33:31+00:00
+Verified publication: manager @ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa · bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb · 2026-09-17T14:33:31+00:00

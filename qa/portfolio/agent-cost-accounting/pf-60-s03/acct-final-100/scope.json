@@ -1,0 +1,163 @@
+{
+  "base": "967425cc72ea28b5f59ecc38a56419b7db6885e8",
+  "self_entry_excluded": true,
+  "files": [
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/RETURN.md",
+      "kind": "modified",
+      "added_lines": 3,
+      "deleted_lines": 1,
+      "current_text_lines": 115,
+      "bytes": 7211,
+      "sha256": "8d9a2e68c702e1bb8d113a3952d729f65290ec945d7c46dfc41aae13e617213b"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md",
+      "kind": "modified",
+      "added_lines": 9,
+      "deleted_lines": 1,
+      "current_text_lines": 230,
+      "bytes": 12725,
+      "sha256": "aa688e99db130333cb692beb44ba9e33c4bb0860a827725bdad5cd11e39a1f6d"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/RETURN.md",
+      "kind": "added",
+      "added_lines": 92,
+      "deleted_lines": 0,
+      "current_text_lines": 92,
+      "bytes": 5537,
+      "sha256": "4f42e1263cbee016351f7a307303180f7b991aa086d080f121830ac14b1972f9"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/destination-results.json",
+      "kind": "added",
+      "added_lines": 81,
+      "deleted_lines": 0,
+      "current_text_lines": 81,
+      "bytes": 8800,
+      "sha256": "62b866a69fdeaec93b467a2d5a8d541403a1d97d87167b6d8c0d37460022b491"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/final-check.json",
+      "kind": "added",
+      "added_lines": 192,
+      "deleted_lines": 0,
+      "current_text_lines": 192,
+      "bytes": 7333,
+      "sha256": "f604f2c85ccb70574405232736656f4aee48d1eebbfbfbcfe20d7aee3b80a130"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/finalize.py",
+      "kind": "added",
+      "added_lines": 80,
+      "deleted_lines": 0,
+      "current_text_lines": 80,
+      "bytes": 4136,
+      "sha256": "7b7df50d4af89e69bb4afcd9238ea569efcf85f2bdf3055e445ef9404a598834"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gate.py",
+      "kind": "added",
+      "added_lines": 72,
+      "deleted_lines": 0,
+      "current_text_lines": 72,
+      "bytes": 3361,
+      "sha256": "b31dcd6b6ec6db0c664bcc3213729b0a88606c2c424f42653114e398d6fab486"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gates-01/core-default.json",
+      "kind": "added",
+      "added_lines": 42,
+      "deleted_lines": 0,
+      "current_text_lines": 42,
+      "bytes": 1406,
+      "sha256": "7aca4a13f969db9630e13634ce88dd64b5a524935758cf3cc3ef1c232c35cb98"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gates-01/core-default.log.gz",
+      "kind": "added",
+      "added_lines": null,
+      "deleted_lines": 0,
+      "current_text_lines": null,
+      "bytes": 4984,
+      "sha256": "0c39ff4836d2b22ed0f33586fa04d48b8919718fec37ce922a5c2e980ded8a05"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gates-01/core-feature.json",
+      "kind": "added",
+      "added_lines": 44,
+      "deleted_lines": 0,
+      "current_text_lines": 44,
+      "bytes": 1464,
+      "sha256": "58d60d422579ea87fb44de79a44eb09b83a9ab92ac67db79c7bff974f7177676"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gates-01/core-feature.log.gz",
+      "kind": "added",
+      "added_lines": null,
+      "deleted_lines": 0,
+      "current_text_lines": null,
+      "bytes": 5060,
+      "sha256": "8f67f2b08d4eda3efdf995ad536d27a4b7131390e2a25bccd0b1c97e8be294cb"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gates-01/prerequisites.json",
+      "kind": "added",
+      "added_lines": 34,
+      "deleted_lines": 0,
+      "current_text_lines": 34,
+      "bytes": 991,
+      "sha256": "e5687b9d43323bd0ab7f068bbd5347b384f1af377a5cf3a0e7ee5a0810dcad53"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gates-01/prerequisites.log.gz",
+      "kind": "added",
+      "added_lines": null,
+      "deleted_lines": 0,
+      "current_text_lines": null,
+      "bytes": 3132,
+      "sha256": "bfa6015803328af38e393b727960fd85dbae4da1a0c362bec44bc841bb11ffa4"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gates-01/tui.json",
+      "kind": "added",
+      "added_lines": 39,
+      "deleted_lines": 0,
+      "current_text_lines": 39,
+      "bytes": 1032,
+      "sha256": "c645b7bd54d717e8f849a0d3d1ad229d872a5df34e97101c3a1a581d9b03ff96"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/gates-01/tui.log.gz",
+      "kind": "added",
+      "added_lines": null,
+      "deleted_lines": 0,
+      "current_text_lines": null,
+      "bytes": 6543,
+      "sha256": "c0361f546ca8f5e52d623082fad6e5fa23389659dcae5f7e9e624b6fda70dce1"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/prose-review.md",
+      "kind": "added",
+      "added_lines": 135,
+      "deleted_lines": 0,
+      "current_text_lines": 135,
+      "bytes": 7843,
+      "sha256": "64108f4db2d0ad60bb3e940df986dc8624ca51315198c81db23b5802f79139f7"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py",
+      "kind": "added",
+      "added_lines": 69,
+      "deleted_lines": 0,
+      "current_text_lines": 69,
+      "bytes": 3311,
+      "sha256": "bc89fa7e976d720400aa112f050fb7d9e8a509426c77bb2c45c39e2dd58e903c"
+    }
+  ],
+  "modified_added": 12,
+  "modified_deleted": 2,
+  "new_text_lines": 880,
+  "new_binary_bytes": 19719
+}

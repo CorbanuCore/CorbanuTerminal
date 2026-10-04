@@ -1,0 +1,29 @@
+# RETURN — tn-cli-fences-17
+
+Allocation digest: `d2308f4bbac999084c1ad247928a82e9572ca14d74032f1d9887c1bcc17c7b55`; claim `81e866cc-464b-40d7-ba00-54871def2e87`; runtime gpt-6-astra/high.
+Verified base: `2db53555c5f23132a85ed5aa5769007753e29107`; brief SHA-256 verified with `shasum -a 256`: `e6501e9ed321f125e70f1c50bb0d1a6e42529e85fc8a0ee5724b0f22e827c065`.
+Worktree: `/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-cli-fences-20260916`.
+Class: bounded correction of the already-authorized PF-80-S01 CLI fences. Product heading **Internal delivery control — TO BUILD**: “Task Node receives only explicitly mapped, supported progress”. Existing active plan `initiative-delivery-control.md`, sprint PF-80-S01 `in_progress`; manager retains coordinate reconciliation and final functional qualification.
+
+## Four corrections
+
+1. `scripts/initiative_control/tick.py:refresh` accepts and separately counts `uncertain`. It appends a worded uncertainty/reconciliation explanation to the existing displayed `error` field, preserving any concurrent corrupt-record diagnostic. New `test_tick.TickTests.test_uncertain_outbox_is_published_distinct_from_invalid` checks publication with an uncertain record alone and alongside a corrupt record; it verifies separate literal counts, explanations and unchanged queue bytes.
+2. `tick.py:__main__` sets and finally resets `tasknode.CLI_CONTEXT`. New `test_tick_cli_lock_wait_is_bounded_and_recovers` executes that entry point in a child against a real held flock: acquisition expires after two seconds without queue/index changes, then succeeds after release. Existing tick refresh error handling still reports a rejected run and completes publication. New `test_library_tick_tasknode_and_control_still_block_until_release` independently tests library tick, tasknode.locked and control.locked children: each remains blocked beyond the CLI bound (2.3 seconds), then succeeds after actual holder release. `control.locked` is unchanged.
+3. `tasknode.py:retry` preserves `attempts` when the prior status is uncertain. The existing CLI crash/retry test now proves `uncertain/1 → pending/1 → delivered/2`, with the same immutable event. An operator can inspect that record's event ID, payload and retained attempt count to distinguish the resend from first delivery; the count does not prove remote acceptance. Blocked-record retry behavior stays unchanged. This supersedes the zero-attempt interpretation in the retained tn-cli-fences-15 return.
+4. `tasknode.py:prepare` calls `delivery_status` and exposes `status` plus a worded `reason` outside `blockers`. The existing single-send CLI crash test now checks both prepare and preview after process exit 73, then proves live replay returns `uncertain`, `replayed=true`, `network_writes=false`, without transport or fixture changes. The existing allowed-blocker gate and retained-receipt retry refusal remain intact.
+
+## Validation
+
+Read `docs/development/test-isolation.md` before testing. New disposable root: `/private/tmp/tn-cli-fences-17.K3cssB`; no existing venv reused.
+Created with `env -i PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin HOME=<root> TMPDIR=/private/tmp PYTHONDONTWRITEBYTECODE=1 /opt/homebrew/bin/python3 -m venv <root>/venv`.
+Installed with that venv's `python -m pip install --no-deps -r scripts/initiative_control/requirements.txt` under the same empty environment. Application packages: markdown-it-py==3.0.0, mdurl==0.1.2, slack-sdk==3.44.1; only additional package is venv bootstrap pip==26.0.1.
+Test prefix: `env -i PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin HOME=<root> TMPDIR=/private/tmp CODEX_HOME=<root>/profile CORBANU_HOME=<root>/profile PFTERMINAL_HOME=<root>/profile CORBANU_TEST_DISABLE_NATIVE_KEYRING=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=<worktree>/scripts/initiative_control <root>/venv/bin/python`.
+Initial focused command: prefix + `-m unittest test_tasknode test_tick test_preparation test_control -v`: **93 tests passed**, 22.387s; `<root>/focused.log`. This preceded the final change to tick's displayed diagnostic field and is not final-tree evidence.
+Final command: prefix + `-m unittest discover -s scripts/initiative_control -p 'test_*.py' -v`: **702 tests, 1 failure, 0 errors**, 458.826s, exit 1; full-suite gate not satisfied. All 93 affected Task Node/tick/preparation/control tests passed in this final run. Raw `<root>/suite-final.log`, SHA-256 `b113a5a09a1bee77297f969f2cfd43cd2d58eb71befa830079b36e73ab523160`.
+TMUX observations: still appears — `test_owner_tmux.TmuxTests.test_bridge_incomplete_and_malformed_rollouts_never_issue_evidence (mode='partial')`. Did not appear — `test_decision_manager.ManagerTests.test_tmux_handoff_end_to_end_mixed_transport_refusals_and_one_unlock`; `test_owner_tmux.TmuxTests.test_bridge_incomplete_and_malformed_rollouts_never_issue_evidence (mode='malformed')`; `test_owner_tmux.TmuxTests.test_bridge_uncertain_enter_never_resends_after_receiver_reload`.
+Governance checkers passed: plans 3/3 active; sprints 115 current/127 archived. Final `git diff --check` clean; only the four allowed Python files and this evidence changed. Changed lines: tests **147 added / 2 deleted = 149**; implementation **16 added / 5 deleted = 21**; evidence **29 added**; all outside tests **50**, below target 90 and hard limit 150. AST comparison confirms all 30 prior Task Node tests retained.
+
+## Limits
+
+All existing tests retained. No live profile, real credentials, native credential prompt, live posting, push, Rust test, workspace formatter or out-of-scope source edit. Synthetic CLI subprocess tests are supporting evidence, not independent code-blind/TUI acceptance or release qualification; those remain manager-owned gates.
+The batch idempotency-key finding is deliberately untouched; the existing three-argument transport contract is unchanged.

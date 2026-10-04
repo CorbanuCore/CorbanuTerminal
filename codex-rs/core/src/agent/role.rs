@@ -276,7 +276,7 @@ mod reload {
         let config_layer_stack = build_config_layer_stack(config, &role_layer_toml)?;
         let merged_config = deserialize_effective_config(config, &config_layer_stack)?;
 
-        let next_config = Config::load_config_with_layer_stack(
+        let mut next_config = Config::load_config_with_layer_stack(
             LOCAL_FS.as_ref(),
             merged_config,
             overrides,
@@ -284,6 +284,53 @@ mod reload {
             config_layer_stack,
         )
         .await?;
+        next_config.accounting.clone_from(&config.accounting);
+        // Overlay explicit role fields onto the embedding's runtime provider,
+        // including nested settings. A whole-provider copy loses role overrides;
+        // copying selected fields would lose the next supported provider setting.
+        let accounting_wire = match &config.accounting {
+            crate::config::AccountingMode::Provider { .. } => Some(config.model_provider.wire_api),
+            crate::config::AccountingMode::DirectAnthropic { .. }
+                if config.model_provider_id == "anthropic" =>
+            {
+                Some(codex_model_provider_info::WireApi::Anthropic)
+            }
+            crate::config::AccountingMode::DirectOpenAiResponsesHttp { .. }
+            | crate::config::AccountingMode::DirectOpenAiResponses { .. }
+                if config.model_provider_id == "openai" =>
+            {
+                Some(codex_model_provider_info::WireApi::Responses)
+            }
+            crate::config::AccountingMode::DirectOpenAiChat { .. }
+                if config.model_provider_id == "openai" =>
+            {
+                Some(codex_model_provider_info::WireApi::Chat)
+            }
+            _ => None,
+        };
+        if next_config.model_provider_id == config.model_provider_id
+            && let Some(accounting_wire) = accounting_wire
+        {
+            let mut provider = TomlValue::try_from(&config.model_provider)?;
+            if let Some(overlay) = role_layer_toml
+                .get("model_providers")
+                .and_then(|providers| providers.get(&config.model_provider_id))
+            {
+                codex_config::merge_toml_values(&mut provider, overlay);
+            }
+            let provider: codex_model_provider_info::ModelProviderInfo = provider.try_into()?;
+            provider.validate().map_err(anyhow::Error::msg)?;
+            // An explicit wire change cannot bypass the bound Messages adapter.
+            // Endpoint changes remain visible to its existing pre-send rejection.
+            anyhow::ensure!(
+                provider.wire_api == accounting_wire,
+                crate::accounting::FAILURE
+            );
+            next_config
+                .model_providers
+                .insert(config.model_provider_id.clone(), provider.clone());
+            next_config.model_provider = provider;
+        }
         Ok(next_config)
     }
 

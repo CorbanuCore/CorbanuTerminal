@@ -3386,10 +3386,41 @@ async fn model_selection_popup_openai_provider_snapshot() {
 
 #[tokio::test]
 async fn model_selection_popup_openrouter_provider_snapshot() {
-    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("moonshotai/kimi-k3")).await;
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("x-ai/grok-4.7")).await;
+    chat.config.model_provider_id = "openrouter".to_string();
+    chat.set_model("x-ai/grok-4.7");
     chat.thread_id = Some(ThreadId::new());
-    // The picker marks the exact provider/model pair current, not the slug alone.
-    chat.config.model_provider_id = OPENROUTER_PROVIDER_ID.to_string();
+    let presets = chat
+        .model_catalog
+        .try_list_models()
+        .expect("model catalog should load");
+    chat.open_all_models_popup(presets);
+
+    let popup = render_bottom_popup_with_height(&chat, /*width*/ 130, /*height*/ 44);
+    for model in [
+        "x-ai/grok-4.7",
+        "deepseek/deepseek-v4.1-flash",
+        "z-ai/glm-5.3-flash",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+    ] {
+        assert!(popup.contains(model), "missing {model}: {popup}");
+    }
+    for retired in [
+        "grok-4.5",
+        "grok-4.6",
+        "deepseek-v4-pro",
+        "deepseek-v4-flash",
+        "owl-alpha",
+    ] {
+        assert!(!popup.contains(retired), "retired {retired}: {popup}");
+    }
+    assert_chatwidget_snapshot!("model_selection_popup_openrouter_provider", popup);
+}
+
+#[tokio::test]
+async fn model_selection_popup_zai_flash_provider_snapshot() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("glm-5.3-flash")).await;
+    chat.thread_id = Some(ThreadId::new());
     let presets = chat
         .model_catalog
         .try_list_models()
@@ -3397,7 +3428,7 @@ async fn model_selection_popup_openrouter_provider_snapshot() {
     chat.open_all_models_popup(presets);
 
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 32);
-    assert_chatwidget_snapshot!("model_selection_popup_openrouter_provider", popup);
+    assert_chatwidget_snapshot!("model_selection_popup_zai_flash_provider", popup);
 }
 
 #[tokio::test]
@@ -3421,7 +3452,7 @@ async fn spawn_model_selection_popup_deepseek_provider_snapshot() {
     assert_chatwidget_snapshot!("spawn_model_selection_popup_deepseek_provider", popup);
     assert!(popup.contains("Corbanu Terminal Orc pane - DeepSeek API key"));
     assert!(popup.contains("[DeepSeek]"));
-    assert!(popup.contains("DeepSeek V4 Flash 0731 (Direct) (current)"));
+    assert!(popup.contains("DeepSeek V4.1 Flash (Direct) (current)"));
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
     let (preset, purpose) = loop {
@@ -4191,9 +4222,13 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         "expected MiniMax M3 price description in /model picker:\n{minimax_popup}"
     );
     assert!(
-        minimax_popup.contains("openrouter/owl-alpha")
-            && minimax_popup.contains("OpenRouter: Owl Alpha - $0/M input, $0/M output."),
+        minimax_popup.contains("x-ai/grok-4.7"),
         "expected OpenRouter models to share the OpenRouter tab:\n{minimax_popup}"
+    );
+    // Owl Alpha is retired from the picker; it stays selectable by exact name.
+    assert!(
+        !minimax_popup.contains("openrouter/owl-alpha"),
+        "a hidden OpenRouter row is not offered:\n{minimax_popup}"
     );
     move_model_picker_selection_to(&mut minimax_chat, "moonshotai/kimi-k3");
     let kimi_openrouter_popup =
@@ -4217,8 +4252,12 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     let openai_popup =
         render_bottom_popup_with_height(&openai_chat, /*width*/ 140, /*height*/ 28);
     assert!(
-        openai_popup.contains("[OpenAI]") && openai_popup.contains("gpt-5.5"),
-        "expected GPT-5.5 in the OpenAI tab:\n{openai_popup}"
+        openai_popup.contains("[OpenAI]") && openai_popup.contains("gpt-6-sol"),
+        "expected GPT-6 Sol in the OpenAI tab:\n{openai_popup}"
+    );
+    assert!(
+        !openai_popup.contains("Model: gpt-5.5."),
+        "expected retired GPT-5.5 to be hidden from /model picker:\n{openai_popup}"
     );
     assert!(
         !openai_popup.contains("gpt-5.4"),

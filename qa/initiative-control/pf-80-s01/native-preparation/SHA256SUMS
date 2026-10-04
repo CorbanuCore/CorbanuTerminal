@@ -1,0 +1,6 @@
+0661881c88bb5bbfadd496521f05c54e0c13c0635d83a9f866d12d8205017369  codex-rs/tasknode-session/src/delivery_goal.rs
+e3f77fc67b505c2899f30981f9980ec58a7335b1bb178b3a974de2f7c33ff4e6  codex-rs/tasknode-session/src/delivery_goal_tests.rs
+f6790578b2524b3f24c06b548e52bda22ec573b5d75f99a0f15435de20cf001b  codex-rs/tasknode-session/src/lib.rs
+5c041b5ad7d60860e0d87b766ff921074abc3a3934b3e675ee6b45a44f921f75  qa/initiative-control/pf-80-s01/native-preparation/verify_goldens.py
+89c448868be3e9b839a80b91de99d6c0ec1b3d345cd92055cd475891e44b776a  qa/initiative-control/pf-80-s01/native-preparation/handoff.md
+e7a0cb076d2a40307d40108b5083865882c02a3244bd19e718f370285df19dfe  qa/initiative-control/pf-80-s01/native-preparation/tests.log

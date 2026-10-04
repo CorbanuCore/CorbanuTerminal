@@ -25,7 +25,7 @@ Store the key through onboarding or `/vault`; temporary shell fallback:
 export AMBIENT_API_KEY="..."
 ```
 
-## Z.AI Coding Plan
+## Z.AI API (pay per use)
 
 ```toml
 model_provider = "zai"

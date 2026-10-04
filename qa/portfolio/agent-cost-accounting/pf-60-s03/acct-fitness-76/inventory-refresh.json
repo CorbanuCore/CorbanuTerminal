@@ -1,0 +1,83 @@
+{
+  "base": "1aadfc123592530f657794489249e954f5e3885a",
+  "inventories": [
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/scope.json",
+      "entries_checked": 55,
+      "changes": [
+        {
+          "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/RETURN.md",
+          "before": {
+            "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/RETURN.md",
+            "bytes": 5417,
+            "lines": 90,
+            "sha256": "193f2c54a13ddc553d63e1d9c8d1c6bceffaffa7e70ef654dd4f3a93c9f7c35b"
+          },
+          "after": {
+            "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/RETURN.md",
+            "bytes": 6251,
+            "lines": 102,
+            "sha256": "55c761960422d9abcb9f900f2f911b5b5d90a593721547a1dbb30d8c8511c103"
+          },
+          "reason": "Round 75 corrected qualifying-mode independence and precise subtotal-page coverage."
+        },
+        {
+          "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/acceptance-gap.md",
+          "before": {
+            "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/acceptance-gap.md",
+            "bytes": 6102,
+            "lines": 39,
+            "sha256": "19c9e2783fdf332660647692cf1f1caf276391cc75a97a92b0ecc1f66f3e762f"
+          },
+          "after": {
+            "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/acceptance-gap.md",
+            "bytes": 6357,
+            "lines": 43,
+            "sha256": "21ce106cc0f1d4267a56d672981e8a6279fe8427bf21de45870b8a4e3f6c650a"
+          },
+          "reason": "Round 75 added a link to its owner acceptance work order."
+        },
+        {
+          "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/summarize.py",
+          "before": {
+            "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/summarize.py",
+            "bytes": 3569,
+            "lines": 76,
+            "sha256": "f6f574e5b17695c4ab8fee47b1aba2a73dd2fcda0ed4205118a59c0d602b0f5b"
+          },
+          "after": {
+            "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/summarize.py",
+            "bytes": 4105,
+            "lines": 85,
+            "sha256": "420e4a31be49b7f182bb0228006d9ec5f085f368921b4b5c66562da20b179616"
+          },
+          "reason": "Round 75 replaced literals with hash-checked derived lane/mutation/viewport counts."
+        }
+      ],
+      "sha256": "613c7ab5a2e0ce9b3ab94e338b6343b650294336328ccd15c7e91186ca584b84"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/scope.json",
+      "entries_checked": 18,
+      "changes": [
+        {
+          "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md",
+          "before": {
+            "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md",
+            "bytes": 6252,
+            "sha256": "a901ced9deebb402025031ac621b53f0e017a8ca63a2e11ea92dce1ccc675251",
+            "lines": 57
+          },
+          "after": {
+            "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md",
+            "bytes": 4772,
+            "sha256": "8e29bfa03f76d2e1b3d1848150abdc4d5b3443ecafb603f2b22a4a58c964d5f5",
+            "lines": 71
+          },
+          "reason": "Round 76 names scope-zero beside fitness, preserves timeout status, and separates engineering from owner authorizations."
+        }
+      ],
+      "sha256": "f17b4def971f7adc3c3cf6f1ff817b0cdc5b8e9a5184da15dc523ebaa358091b"
+    }
+  ]
+}

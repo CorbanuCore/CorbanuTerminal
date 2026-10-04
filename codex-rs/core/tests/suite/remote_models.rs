@@ -1228,11 +1228,9 @@ fn bundled_model_slug() -> String {
 }
 
 fn bundled_default_model_slug() -> String {
-    // Every caller constructs an OpenAI provider-specific models manager. Do
-    // not use the product-wide preset default here: PFTerminal's product
-    // default is Ambient, while this fixture is explicitly testing OpenAI's
-    // bundled fallback behavior.
-    "gpt-5.6-sol".to_string()
+    // Every caller constructs an OpenAI provider-specific models manager and
+    // tests OpenAI's bundled default, which is also the product default.
+    "gpt-6-sol".to_string()
 }
 
 fn test_remote_model(slug: &str, visibility: ModelVisibility, priority: i32) -> ModelInfo {

@@ -1,0 +1,15 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+────────────
+ Nextest run ID bc7a7fac-8005-4196-b8f4-2939c1ecfafd with nextest profile: local
+    Starting 8 tests across 7 binaries (62 tests skipped)
+        PASS [   0.003s] (1/8) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_worker_lost_success_receiver
+        PASS [   0.003s] (2/8) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_late_success_and_lost_receiver_close_channels
+        PASS [   0.049s] (3/8) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_uid_mismatch_and_unrelated_process
+        PASS [   0.071s] (4/8) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_roles_reverse_duplicate_parent_old_and_dead
+        PASS [   0.103s] (5/8) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_kernel_faults_and_pre_delivery_cancellation
+        PASS [   0.104s] (6/8) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_bounded_queue_cancel_deadline_and_lost_ticket
+        PASS [   0.195s] (7/8) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_peer_eof_death_receipt_drop_and_caller_drop
+        PASS [   1.021s] (8/8) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_pending_ticket_and_deadline_reap_both
+────────────
+     Summary [   1.021s] 8 tests run: 8 passed, 62 skipped

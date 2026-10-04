@@ -1,0 +1,132 @@
+{
+  "base": "270a6644e01d780ef93f8715dd0051481643dc7d",
+  "lanes": [
+    {
+      "lane": "prerequisites",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "-p",
+        "codex-cli",
+        "--bin",
+        "codex",
+        "-p",
+        "codex-rmcp-client",
+        "--bins"
+      ],
+      "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+      "environment": {
+        "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_INCREMENTAL": "0",
+        "NEXTEST_TEST_THREADS": "4",
+        "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+        "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+      },
+      "exit": 0,
+      "elapsed_seconds": 5.799369812011719,
+      "log_sha256": "59051b466a9da31f5d2fcba767631f400489961b430028aa13ebd4a785dd2663",
+      "failure_lines": []
+    },
+    {
+      "lane": "core-default",
+      "command": [
+        "just",
+        "test",
+        "-p",
+        "codex-core",
+        "accounting"
+      ],
+      "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+      "environment": {
+        "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_INCREMENTAL": "0",
+        "NEXTEST_TEST_THREADS": "4",
+        "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+        "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+      },
+      "exit": 0,
+      "elapsed_seconds": 90.43635201454163,
+      "log_sha256": "5b8984318db6a922efe3bb0a2c5fb80e1f9ec5aba1ce42d18513775eb64f3f4c",
+      "failure_lines": [],
+      "run": 124,
+      "passed": 124,
+      "summary": "124 passed (1 slow), 3545 skipped",
+      "failed": 0,
+      "timed_out": 0,
+      "flaky": 0
+    },
+    {
+      "lane": "core-feature",
+      "command": [
+        "just",
+        "test",
+        "-p",
+        "codex-core",
+        "accounting",
+        "--features",
+        "codex-core/developer-accounting"
+      ],
+      "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+      "environment": {
+        "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_INCREMENTAL": "0",
+        "NEXTEST_TEST_THREADS": "4",
+        "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+        "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+      },
+      "exit": 100,
+      "elapsed_seconds": 186.6189148426056,
+      "log_sha256": "9d882957251ce791fd6a7cd78c6fba0f46d7bb8f111d182effbd2ecda75d015a",
+      "failure_lines": [
+        "TRY 1 TMT [  60.013s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity",
+        "TRY 2 TMT [  60.012s] (127/127) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity"
+      ],
+      "run": 127,
+      "passed": 126,
+      "summary": "126 passed, 1 timed out, 3545 skipped",
+      "failed": 0,
+      "timed_out": 1,
+      "flaky": 0
+    },
+    {
+      "lane": "tui",
+      "command": [
+        "just",
+        "test",
+        "-p",
+        "codex-tui",
+        "usage"
+      ],
+      "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/codex-rs",
+      "environment": {
+        "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+        "CARGO_BUILD_JOBS": "2",
+        "CARGO_INCREMENTAL": "0",
+        "NEXTEST_TEST_THREADS": "4",
+        "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+        "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+      },
+      "exit": 0,
+      "elapsed_seconds": 8.220509052276611,
+      "log_sha256": "3e0569a493a4886de6383b59d8792a5806345ffdda7060d4268ac68c59caf0aa",
+      "failure_lines": [],
+      "run": 91,
+      "passed": 91,
+      "summary": "91 passed, 4078 skipped",
+      "failed": 0,
+      "timed_out": 0,
+      "flaky": 0
+    }
+  ],
+  "total_executions": 342,
+  "passed": 341,
+  "failed": 0,
+  "timed_out": 1,
+  "flaky": 0,
+  "interpretation": "Overlapping default/feature lane test counts; retry attempts are preserved in logs and failure_lines, not added to these counts."
+}

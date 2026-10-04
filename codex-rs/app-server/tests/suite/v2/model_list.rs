@@ -38,7 +38,8 @@ use wiremock::matchers::path_regex;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 const INVALID_REQUEST_ERROR_CODE: i64 = -32600;
-const SOL_DEFAULT_MODEL: &str = "gpt-5.6-sol";
+// The OpenAI default, which is also the product default.
+const SOL_DEFAULT_MODEL: &str = "gpt-6-sol";
 
 fn mark_expected_default(presets: &mut [ModelPreset]) {
     ModelPreset::mark_default_by_picker_visibility(presets);

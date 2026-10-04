@@ -1,0 +1,44 @@
+cargo clippy --tests {args}
+    Checking codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-owner-20260912/codex-rs/secret-broker-service)
+error: used `expect()` on an `Option` value
+  --> secret-broker-service/src/launch/manifest/spawn.rs:97:33
+   |
+97 |         let permit = Arc::clone(self.permit.as_ref().expect("reservation owns permit"));
+   |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is `None`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+   = note: requested on the command line with `-D clippy::expect-used`
+
+error: used `expect()` on an `Option` value
+   --> secret-broker-service/src/launch/manifest/spawn.rs:103:29
+    |
+103 |                   let image = worker_pending
+    |  _____________________________^
+104 | |                     .lock()
+105 | |                     .unwrap_or_else(std::sync::PoisonError::into_inner)
+106 | |                     .take()
+107 | |                     .expect("one worker owns the pending image");
+    | |________________________________________________________________^
+    |
+    = note: if this value is `None`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+error: used `expect()` on an `Option` value
+   --> secret-broker-service/src/launch/manifest/spawn.rs:123:25
+    |
+123 |               let image = pending
+    |  _________________________^
+124 | |                 .lock()
+125 | |                 .unwrap_or_else(std::sync::PoisonError::into_inner)
+126 | |                 .take()
+127 | |                 .expect("failed worker creation did not run job");
+    | |_________________________________________________________________^
+    |
+    = note: if this value is `None`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+error: could not compile `codex-secret-broker-service` (lib) due to 3 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `codex-secret-broker-service` (lib test) due to 3 previous errors
+error: recipe `clippy` failed on line 55 with exit code 101

@@ -337,7 +337,15 @@ fn test_inherit_none() {
 async fn tasknode_profile_env_replaces_stale_scope_and_home() {
     let (_, context) = crate::session::tests::make_session_and_context().await;
     let mut config = (*context.config).clone();
-    for profile in [Some("alice"), Some("bob"), None] {
+    for (profile, encoded) in [
+        (Some("alice"), r#""alice""#),
+        (Some("bob"), r#""bob""#),
+        (None, "null"),
+        (Some(""), r#""""#),
+        (Some("quote\"slash\\"), r#""quote\"slash\\""#),
+        (Some("\n\r\t\0"), r#""\n\r\t\u0000""#),
+        (Some("雪🦀"), r#""雪🦀""#),
+    ] {
         config.config_layer_stack = codex_config::ConfigLayerStack::new(
             vec![codex_config::ConfigLayerEntry::new(
                 codex_config::ConfigLayerSource::User {
@@ -367,13 +375,17 @@ async fn tasknode_profile_env_replaces_stale_scope_and_home() {
             HashMap::from([
                 (
                     CORBANU_TASKNODE_PROFILE_ENV_VAR.to_string(),
-                    serde_json::to_string(&profile).unwrap()
+                    encoded.to_string()
                 ),
                 (
                     "CODEX_HOME".to_string(),
                     config.codex_home.to_string_lossy().into_owned()
                 ),
             ])
+        );
+        assert_eq!(
+            serde_json::from_str::<Option<String>>(&env[CORBANU_TASKNODE_PROFILE_ENV_VAR]).unwrap(),
+            profile.map(str::to_owned)
         );
     }
 }

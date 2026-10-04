@@ -1,0 +1,13 @@
+    Checking rama-http-backend v0.3.0-alpha.4
+    Checking codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/linux-pidfd-spawn)
+    Checking codex-network-proxy v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/network-proxy)
+    Checking codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/protocol)
+    Checking codex-api v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/codex-api)
+    Checking codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/file-system)
+    Checking codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/git-utils)
+    Checking codex-otel v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/otel)
+    Checking codex-model-provider-info v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/model-provider-info)
+    Checking codex-features v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/features)
+    Checking codex-config v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/config)
+    Checking codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/protected-state)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.17s

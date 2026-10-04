@@ -1,0 +1,12 @@
+{
+  "commit": "c02865ef6c3e862f93ed687039e187ffe00355e0",
+  "binary": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target/debug/codex",
+  "binary_sha256": "f78a1cc8a433030d3f50d91cfd415946e5fe3dd4e08e69d5c9644244c0d018bb",
+  "driver_sha256": "8e8999fab3a6d0424df0523ce4d28a53d26edf9679a1b4e7de88435805edbd20",
+  "helper_sha256": "6d216c6470d3b08e525a3886b2fe178c5773ff1c5b3f1202a13f4bc6effa38b6",
+  "clock_source_sha256": "8ddbe16f59f33477e120cd6111a11512e7c446a0eaddcf49d55ec111141f98ae",
+  "clock_binary_sha256": "a640d2dd61151b923b21558d6d4ee5cc0adfe8098678563c558eb1d0d17e3615",
+  "qualification": "code-aware developer evidence, not independent acceptance",
+  "clock": "fixed exact wall-clock per stopped-process launch; monotonic timers remain real",
+  "isolation": "synthetic HOME and all profile aliases; debug keyring denial; loopback-only OS network rule"
+}

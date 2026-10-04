@@ -1,0 +1,21 @@
+{
+  "core-default": {
+    "summary": "Summary [  97.512s] 124 tests run: 124 passed (1 slow), 3545 skipped",
+    "failure_lines": [],
+    "slow_lines": [
+      "        SLOW [> 30.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity"
+    ]
+  },
+  "core-feature": {
+    "summary": "Summary [  98.428s] 127 tests run: 127 passed (1 slow), 3545 skipped",
+    "failure_lines": [],
+    "slow_lines": [
+      "        SLOW [> 30.000s] (\u2500\u2500\u2500\u2500\u2500\u2500\u2500) codex-core::all suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity"
+    ]
+  },
+  "tui": {
+    "summary": "Summary [   3.486s] 91 tests run: 91 passed, 4078 skipped",
+    "failure_lines": [],
+    "slow_lines": []
+  }
+}

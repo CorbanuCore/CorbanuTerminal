@@ -196,7 +196,6 @@ nav:
               - Overview: plans/portfolio-2026-09-09.md
               - "PF-60 — Unified agent cost and usage accounting":
                   - Plan: plans/active/portfolio-agent-cost-accounting.md
-                  - "PF-60-S01 — Accounting contract and golden fixtures": sprints/current/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md
                   - "PF-60-S02 — Idempotent usage persistence and replay": sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md
                   - "PF-60-S03 — Inspectable run and campaign totals": sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md
                   - "PF-60-S04 — Cost-accounting acceptance and handoff": sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md
@@ -280,6 +279,7 @@ nav:
                   - "PF-75-S04 — Two-week pilot operating decision": sprints/current/portfolio-agent-management-pilot/pf-75-s04-two-week-pilot-operating-decision.md
           - Sprint Template: sprints/SPRINT_TEMPLATE.md
           - "PF-80 — Task Node delivery control": sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md
+          - "PF-81 — Visual QA harness (draft)": sprints/current/initiative-delivery-control/pf-81-s01-visual-test-harness.md
           - "PF-79 — Desktop beta program":
               - "S01 — Beta channel and test contract": sprints/current/initiative-delivery-control/pf-79-s01-beta-channel-and-test-contract.md
               - "S02 — Public beta pilot": sprints/current/initiative-delivery-control/pf-79-s02-public-beta-pilot.md

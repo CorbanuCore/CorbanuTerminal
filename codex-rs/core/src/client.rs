@@ -133,7 +133,9 @@ use tracing::instrument;
 use tracing::trace;
 use tracing::warn;
 
+use crate::anthropic_payload::ImageDimensionReport;
 use crate::anthropic_payload::enforce_anthropic_payload_budget;
+use crate::anthropic_payload::fit_anthropic_image_dimensions;
 use crate::anthropic_payload::is_anthropic_payload_too_large;
 use crate::attestation::AttestationContext;
 use crate::attestation::AttestationProvider;
@@ -162,6 +164,8 @@ use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_UPSTREAM_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL;
+use codex_model_provider_info::CLAUDE_OPUS_5_5_PLAN_MODEL;
+use codex_model_provider_info::CLAUDE_OPUS_5_5_PLAN_UPSTREAM_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_UPSTREAM_MODEL;
@@ -209,6 +213,7 @@ const RESPONSES_COMPACT_ENDPOINT: &str = "/responses/compact";
 // `/responses/compact` is unary, so the timeout covers the full response rather than one idle
 // period between stream events.
 const COMPACT_REQUEST_TIMEOUT_IDLE_MULTIPLIER: u32 = 4;
+#[cfg_attr(not(test), allow(dead_code))]
 const MEMORIES_SUMMARIZE_ENDPOINT: &str = "/memories/trace_summarize";
 #[cfg(test)]
 pub(crate) const WEBSOCKET_CONNECT_TIMEOUT: Duration =
@@ -262,6 +267,17 @@ struct ModelClientState {
     agent_identity_session_fallback: AgentIdentitySessionFallback,
     cached_websocket_session: StdMutex<WebsocketSession>,
     server_conversation_state: SharedServerConversationState,
+    /// Set once the gateway rejects a `previous_response_id` continuation for
+    /// this session. Some upstream models (Kimi K3 on Vercel) reject every
+    /// incremental continuation; retrying it each turn doubles the requests.
+    http_server_state_rejected: AtomicBool,
+    /// Set once the Vercel gateway refuses the pinned Z.AI upstream because an
+    /// account policy (for example zero data retention) excludes it. The
+    /// session then uses the gateway's own routing.
+    vercel_vendor_pin_rejected: AtomicBool,
+    /// Set once a provider rejects a tool continuation that ends in tool output after an
+    /// assistant message. The session then restores the legacy synthetic `Continue.` turn.
+    legacy_synthetic_continuation: AtomicBool,
 }
 
 /// Resolved API client setup for a single request attempt.
@@ -306,7 +322,8 @@ pub struct ModelClient {
     // Restrictive configured intent, not an assertion of protected readiness.
     ingress_level: codex_security_policy::SecurityLevel,
     ingress_policy: Option<crate::security::ingress::BoundIngressPolicy>,
-    stage_one_memory_binding: Option<Arc<crate::memory_stage_one::StageOneMemoryBinding>>,
+    pub(crate) stage_one_memory_binding:
+        Arc<OnceLock<Arc<crate::memory_stage_one::StageOneMemoryBinding>>>,
     ingress_items: Arc<StdMutex<crate::security::ingress::NativeIngress>>,
 }
 
@@ -324,6 +341,9 @@ pub struct ModelClient {
 /// the previous turn's sticky-routing token into the next turn, which violates the client/server
 /// contract and can cause routing bugs.
 pub struct ModelClientSession {
+    pub(crate) accounting: crate::accounting::Slot,
+    pub(crate) responses_accounting: crate::accounting::responses::Slot,
+    pub(crate) chat_accounting: crate::accounting::chat::Slot,
     client: ModelClient,
     websocket_session: WebsocketSession,
     /// Turn state for sticky routing.
@@ -356,6 +376,7 @@ type SharedServerConversationState = Arc<StdMutex<Option<ServerConversationState
 #[derive(Debug, Default)]
 struct WebsocketSession {
     connection: Option<ApiWebSocketConnection>,
+    provenance: Option<crate::accounting::websocket::Provenance>,
     last_request: Option<ResponsesApiRequest>,
     last_response_rx: Option<oneshot::Receiver<LastResponse>>,
     last_response_from_untraced_warmup: bool,
@@ -506,10 +527,12 @@ fn items_after_last_model_output(input: &[ResponseItem]) -> Option<Vec<ResponseI
 /// Prevent a completed assistant message from becoming an accidental prefill on the next model
 /// request.
 ///
-/// Responses requests can contain tool activity after a visible assistant message. Some upstream
-/// models ignore those non-message items when validating conversation shape and reject the request
-/// because its latest message is still `assistant`. The continuation is request-only: it does not
-/// rewrite the durable conversation history.
+/// Only a request whose conversation genuinely ends with assistant output is a prefill; some
+/// upstream models reject that shape (Claude via Vercel: "This model does not support assistant
+/// message prefill"). Tool results after an assistant message are an ordinary tool continuation
+/// and are accepted by Kimi K3, GLM 5.3, Claude and DeepSeek V4 on the Vercel Responses route.
+/// Appending `Continue.` there made models read a user interjection after every tool result.
+/// The continuation is request-only: it does not rewrite the durable conversation history.
 fn responses_input_needs_synthetic_user_turn(input: &[ResponseItem]) -> bool {
     // A compaction trigger is itself the terminal request control. Appending anything after it is
     // invalid, and it does not need the user-message continuation used for ordinary sampling.
@@ -520,16 +543,58 @@ fn responses_input_needs_synthetic_user_turn(input: &[ResponseItem]) -> bool {
         return false;
     }
 
+    input
+        .iter()
+        .rev()
+        .find_map(terminal_item_is_assistant_output)
+        == Some(true)
+}
+
+/// Legacy session fallback: treat the conversation as a prefill whenever the latest *message* is
+/// assistant, even when tool activity follows. Used only after a provider rejects the narrower
+/// shape in this session.
+fn responses_input_latest_message_is_assistant(input: &[ResponseItem]) -> bool {
+    if input
+        .iter()
+        .any(|item| matches!(item, ResponseItem::CompactionTrigger { .. }))
+    {
+        return false;
+    }
     let latest_message_is_assistant = input.iter().rev().find_map(|item| match item {
         ResponseItem::Message { role, .. } => Some(role == "assistant"),
         // Incoming collaboration mail is serialized as an assistant-originated message by the
-        // Responses adapters. Treat it as message-shaped here as well; otherwise child completion
-        // mail arriving after a turn leaves the next request in the same invalid prefill shape as
-        // a trailing ordinary assistant message.
+        // Responses adapters. Treat it as message-shaped here as well.
         ResponseItem::AgentMessage { .. } => Some(true),
         _ => None,
     });
     latest_message_is_assistant == Some(true)
+}
+
+/// Classifies the item that ends a request: `Some(true)` for assistant output (a prefill),
+/// `Some(false)` for user input or tool activity, `None` for items that do not reach the model as
+/// conversation turns and are skipped.
+fn terminal_item_is_assistant_output(item: &ResponseItem) -> Option<bool> {
+    match item {
+        ResponseItem::Message { role, .. } => Some(role == "assistant"),
+        // Incoming collaboration mail is serialized as an assistant-originated message by the
+        // Responses adapters; child completion mail arriving after a turn is a prefill shape.
+        ResponseItem::AgentMessage { .. } => Some(true),
+        ResponseItem::LocalShellCall { .. }
+        | ResponseItem::FunctionCall { .. }
+        | ResponseItem::ToolSearchCall { .. }
+        | ResponseItem::FunctionCallOutput { .. }
+        | ResponseItem::CustomToolCall { .. }
+        | ResponseItem::CustomToolCallOutput { .. }
+        | ResponseItem::ToolSearchOutput { .. }
+        | ResponseItem::WebSearchCall { .. }
+        | ResponseItem::ImageGenerationCall { .. }
+        | ResponseItem::Compaction { .. }
+        | ResponseItem::ContextCompaction { .. } => Some(false),
+        ResponseItem::AdditionalTools { .. }
+        | ResponseItem::Reasoning { .. }
+        | ResponseItem::CompactionTrigger { .. }
+        | ResponseItem::Other => None,
+    }
 }
 
 fn append_synthetic_responses_user_turn(input: &mut Vec<ResponseItem>) {
@@ -757,25 +822,30 @@ impl ModelClient {
                 agent_identity_session_fallback: AgentIdentitySessionFallback::default(),
                 cached_websocket_session: StdMutex::new(WebsocketSession::default()),
                 server_conversation_state: Arc::new(StdMutex::new(None)),
+                http_server_state_rejected: AtomicBool::new(false),
+                vercel_vendor_pin_rejected: AtomicBool::new(false),
+                legacy_synthetic_continuation: AtomicBool::new(false),
             }),
             agent_identity_policy,
             prompt_cache_key_override: None,
             http_client_factory,
             ingress_level: codex_security_policy::SecurityLevel::Permissive,
             ingress_policy: None,
-            stage_one_memory_binding: None,
+            stage_one_memory_binding: Arc::new(OnceLock::new()),
             ingress_items: Arc::new(StdMutex::new(
                 crate::security::ingress::NativeIngress::default(),
             )),
         }
     }
 
+    /// Install a denial binding once for this client and every existing/future clone.
     pub(crate) fn with_stage_one_memory_binding(
-        mut self,
+        &self,
         binding: Arc<crate::memory_stage_one::StageOneMemoryBinding>,
-    ) -> Self {
-        self.stage_one_memory_binding = Some(binding);
-        self
+    ) -> std::result::Result<(), crate::memory_stage_one::StageOneMemoryDenial> {
+        self.stage_one_memory_binding
+            .set(binding)
+            .map_err(|_| crate::memory_stage_one::StageOneMemoryDenial::PolicyUnavailable)
     }
 
     #[cfg(test)]
@@ -956,6 +1026,9 @@ impl ModelClient {
     /// when the first stream request is issued.
     pub fn new_session(&self) -> ModelClientSession {
         ModelClientSession {
+            accounting: Default::default(),
+            responses_accounting: Default::default(),
+            chat_accounting: Default::default(),
             client: self.clone(),
             websocket_session: self.take_cached_websocket_session(),
             turn_state: Arc::new(OnceLock::new()),
@@ -1012,6 +1085,9 @@ impl ModelClient {
                 agent_identity_session_fallback: self.state.agent_identity_session_fallback.clone(),
                 cached_websocket_session: StdMutex::new(WebsocketSession::default()),
                 server_conversation_state: Arc::new(StdMutex::new(None)),
+                http_server_state_rejected: AtomicBool::new(false),
+                vercel_vendor_pin_rejected: AtomicBool::new(false),
+                legacy_synthetic_continuation: AtomicBool::new(false),
             }),
             agent_identity_policy: self.agent_identity_policy,
             prompt_cache_key_override: self.prompt_cache_key_override.clone(),
@@ -1034,7 +1110,6 @@ impl ModelClient {
         self.state.provider.auth_manager()
     }
 
-    #[cfg(test)]
     pub(crate) fn provider_info(&self) -> &ModelProviderInfo {
         self.state.provider.info()
     }
@@ -1084,7 +1159,7 @@ impl ModelClient {
     ///
     /// The model selection and telemetry context are passed explicitly to keep `ModelClient`
     /// session-scoped.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub(crate) async fn compact_conversation_history(
         &self,
         prompt: &Prompt,
@@ -1094,13 +1169,51 @@ impl ModelClient {
         session_telemetry: &SessionTelemetry,
         compaction_trace: &CompactionTraceContext,
         responses_metadata: &CodexResponsesMetadata,
+        accounting: &crate::accounting::responses::Slot,
     ) -> Result<Vec<ResponseItem>> {
         if prompt.input.is_empty() {
             return Ok(Vec::new());
         }
         let client_setup = self.current_client_setup().await?;
-        let transport =
-            self.build_api_transport(&client_setup.api_provider, RESPONSES_COMPACT_ENDPOINT)?;
+        // The legacy compaction endpoint is a model request the operator paid
+        // for. It answers with one JSON body rather than a stream, so it never
+        // met the streaming collector; it is collected here instead.
+        let sampling = match crate::accounting::responses::read(accounting)? {
+            Some(deferred) => {
+                deferred
+                    .resolve_path(
+                        self.state.provider.info(),
+                        client_setup.auth.as_ref(),
+                        &client_setup
+                            .api_provider
+                            .url_for_path(RESPONSES_COMPACT_ENDPOINT),
+                        RESPONSES_COMPACT_ENDPOINT.trim_start_matches('/'),
+                    )
+                    .await?
+            }
+            None => None,
+        };
+        let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+        // A collected request must not be able to follow a redirect: the
+        // streaming paths build a no-redirect client whenever evidence exists,
+        // so that a response from somewhere else can never be attributed to the
+        // approved endpoint. This endpoint needs the same rule.
+        let transport = if evidence.is_some() {
+            let client = codex_login::default_client::create_client_for_route_without_redirects(
+                &self.http_client_factory,
+                &client_setup
+                    .api_provider
+                    .url_for_path(RESPONSES_COMPACT_ENDPOINT),
+                ClientRouteClass::Api,
+            )
+            .map_err(std::io::Error::from)?;
+            crate::memory_stage_one::StageOneGuardedTransport::new(
+                ReqwestTransport::from_http_client(client),
+                self.stage_one_memory_binding.get().cloned(),
+            )
+        } else {
+            self.build_api_transport(&client_setup.api_provider, RESPONSES_COMPACT_ENDPOINT)?
+        };
         let request_telemetry = Self::build_request_telemetry(
             session_telemetry,
             AuthRequestTelemetryContext::new(
@@ -1171,6 +1284,14 @@ impl ModelClient {
             .api_provider
             .stream_idle_timeout
             .saturating_mul(COMPACT_REQUEST_TIMEOUT_IDLE_MULTIPLIER);
+        let transport = transport.map_inner(|inner| {
+            crate::accounting::transport::AccountingTransport::new(
+                inner,
+                evidence.clone(),
+                model.clone(),
+            )
+            .with_tier(service_tier.clone())
+        });
         let client =
             ApiCompactClient::new(transport, client_setup.api_provider, client_setup.api_auth)
                 .with_telemetry(Some(request_telemetry));
@@ -1194,6 +1315,7 @@ impl ModelClient {
         session_config: ApiRealtimeSessionConfig,
         mut extra_headers: ApiHeaderMap,
         api_provider_override: Option<ApiProvider>,
+        accounting: &crate::accounting::responses::Slot,
     ) -> Result<RealtimeWebrtcCallStart> {
         self.check_source_admission(&Prompt::default())?;
         // Create the media call over HTTP first, then retain matching auth so realtime can attach
@@ -1207,7 +1329,52 @@ impl ModelClient {
             client_setup.api_auth.as_ref(),
         ));
         let api_provider = api_provider_override.unwrap_or(client_setup.api_provider);
-        let transport = self.build_api_transport(&api_provider, REALTIME_CALLS_ENDPOINT)?;
+        // Creating the call is a model request the operator paid for, so it is
+        // recorded. Its response carries no usage - the realtime protocol this
+        // client parses carries none anywhere - so the attempt lands with its
+        // tokens unknown, which is what the provider actually said.
+        //
+        // The route is read from the API client rather than restated: call
+        // creation picks its path from the session's parser and appends the
+        // pairs that select its architecture, and a pin missing those would
+        // refuse every call it was meant to record.
+        let call_url = codex_api::realtime_call_url(&api_provider, &session_config);
+        let call_route = codex_api::realtime_call_route(&api_provider, &session_config);
+        let sampling = match crate::accounting::responses::read(accounting)? {
+            Some(deferred) => {
+                deferred
+                    .resolve_path(
+                        self.state.provider.info(),
+                        client_setup.auth.as_ref(),
+                        &call_url,
+                        &call_route,
+                    )
+                    .await?
+            }
+            None => None,
+        };
+        let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+        let transport = if evidence.is_some() {
+            let client = codex_login::default_client::create_client_for_route_without_redirects(
+                &self.http_client_factory,
+                &call_url,
+                ClientRouteClass::Api,
+            )
+            .map_err(std::io::Error::from)?;
+            crate::memory_stage_one::StageOneGuardedTransport::new(
+                ReqwestTransport::from_http_client(client),
+                self.stage_one_memory_binding.get().cloned(),
+            )
+        } else {
+            self.build_api_transport(&api_provider, REALTIME_CALLS_ENDPOINT)?
+        };
+        let transport = transport.map_inner(|inner| {
+            crate::accounting::transport::AccountingTransport::new(
+                inner,
+                evidence.clone(),
+                session_config.model.clone().unwrap_or_default(),
+            )
+        });
         let response = ApiRealtimeCallClient::new(transport, api_provider, client_setup.api_auth)
             .create_with_session_and_headers(sdp, session_config, extra_headers)
             .await
@@ -1219,18 +1386,20 @@ impl ModelClient {
         })
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     /// Builds memory summaries for each provided normalized raw memory.
     ///
     /// This is a unary call (no streaming) to `/v1/memories/trace_summarize`.
     ///
     /// The model selection, reasoning effort, and telemetry context are passed explicitly to keep
     /// `ModelClient` session-scoped.
-    pub async fn summarize_memories(
+    pub(crate) async fn summarize_memories(
         &self,
         raw_memories: Vec<ApiRawMemory>,
         model_info: &ModelInfo,
         effort: Option<ReasoningEffortConfig>,
         session_telemetry: &SessionTelemetry,
+        accounting: &crate::accounting::responses::Slot,
     ) -> Result<Vec<ApiMemorySummarizeOutput>> {
         if raw_memories.is_empty() {
             return Ok(Vec::new());
@@ -1239,8 +1408,53 @@ impl ModelClient {
         self.check_source_admission(&Prompt::default())?;
 
         let client_setup = self.current_client_setup().await?;
-        let transport =
-            self.build_api_transport(&client_setup.api_provider, MEMORIES_SUMMARIZE_ENDPOINT)?;
+        // Summarising memories names a model and a reasoning effort: it is
+        // inference the operator paid for, answered with one JSON body rather
+        // than a stream, so it is collected the way the legacy compaction
+        // endpoint is. The slot is a parameter because this client is
+        // session-scoped by design - which is also why this call could be
+        // written with no way to record it at all.
+        let sampling = match crate::accounting::responses::read(accounting)? {
+            Some(deferred) => {
+                deferred
+                    .resolve_path(
+                        self.state.provider.info(),
+                        client_setup.auth.as_ref(),
+                        &client_setup
+                            .api_provider
+                            .url_for_path(MEMORIES_SUMMARIZE_ENDPOINT),
+                        MEMORIES_SUMMARIZE_ENDPOINT.trim_start_matches('/'),
+                    )
+                    .await?
+            }
+            None => None,
+        };
+        let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+        // A collected request must not be able to follow a redirect, for the
+        // same reason every other collected route may not.
+        let transport = if evidence.is_some() {
+            let client = codex_login::default_client::create_client_for_route_without_redirects(
+                &self.http_client_factory,
+                &client_setup
+                    .api_provider
+                    .url_for_path(MEMORIES_SUMMARIZE_ENDPOINT),
+                ClientRouteClass::Api,
+            )
+            .map_err(std::io::Error::from)?;
+            crate::memory_stage_one::StageOneGuardedTransport::new(
+                ReqwestTransport::from_http_client(client),
+                self.stage_one_memory_binding.get().cloned(),
+            )
+        } else {
+            self.build_api_transport(&client_setup.api_provider, MEMORIES_SUMMARIZE_ENDPOINT)?
+        };
+        let transport = transport.map_inner(|inner| {
+            crate::accounting::transport::AccountingTransport::new(
+                inner,
+                evidence.clone(),
+                model_info.slug.clone(),
+            )
+        });
         let request_telemetry = Self::build_request_telemetry(
             session_telemetry,
             AuthRequestTelemetryContext::new(
@@ -1277,6 +1491,7 @@ impl ModelClient {
             .map_err(|error| self.state.provider.map_api_error(error))
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     fn build_subagent_headers(&self) -> ApiHeaderMap {
         let mut extra_headers = ApiHeaderMap::new();
         add_originator_header(&mut extra_headers, self.state.originator.as_str());
@@ -1661,7 +1876,7 @@ impl ModelClient {
             &model_info.slug
         };
         let vercel_provider_options = is_vercel_gateway
-            .then(|| vercel_gateway_provider_options(upstream_model))
+            .then(|| self.vercel_gateway_provider_options(upstream_model))
             .flatten();
         let (instructions, tools) = if model_info.use_responses_lite {
             let tools = create_tools_json_for_responses_api(&prompt.tools)?;
@@ -1885,7 +2100,7 @@ impl ModelClient {
             .provider
             .info()
             .is_vercel_gateway()
-            .then(|| vercel_gateway_provider_options(upstream_model))
+            .then(|| self.vercel_gateway_provider_options(upstream_model))
             .flatten();
         let provider_reasoning = if self.state.provider.info().is_openrouter() {
             Self::openrouter_reasoning(model_info, effort.as_ref())?
@@ -2011,7 +2226,7 @@ impl ModelClient {
             .provider
             .info()
             .is_vercel_gateway()
-            .then(|| vercel_gateway_provider_options(upstream_model))
+            .then(|| self.vercel_gateway_provider_options(upstream_model))
             .flatten();
         // Third-party slugs on this wire think by default, so an omitted
         // `thinking` block is not the same as thinking off. Only Anthropic's
@@ -2037,6 +2252,14 @@ impl ModelClient {
             output_config,
             provider_options,
         };
+        let image_report = fit_anthropic_image_dimensions(&mut request);
+        if image_report != ImageDimensionReport::default() {
+            warn!(
+                resized_images = image_report.resized_images,
+                omitted_images = image_report.omitted_images,
+                "fitted Anthropic request images to the provider's dimension limits"
+            );
+        }
         let payload_report = enforce_anthropic_payload_budget(
             &mut request,
             self.state
@@ -2085,12 +2308,61 @@ impl ModelClient {
         }
     }
 
+    fn vercel_gateway_provider_options(&self, upstream_model: &str) -> Option<Value> {
+        if self
+            .state
+            .vercel_vendor_pin_rejected
+            .load(Ordering::Relaxed)
+        {
+            return None;
+        }
+        vercel_gateway_provider_options(upstream_model)
+    }
+
+    /// Records a policy exclusion of the pinned Vercel upstream. Returns true
+    /// when this is the first one for the session, so the caller retries the
+    /// request once with the gateway's own routing.
+    fn drop_vercel_vendor_pin_after_policy_exclusion(&self, err: &ApiError) -> bool {
+        if !self.state.provider.info().is_vercel_gateway()
+            || !is_vercel_gateway_policy_exclusion(err)
+        {
+            return false;
+        }
+        let first = !self
+            .state
+            .vercel_vendor_pin_rejected
+            .swap(true, Ordering::Relaxed);
+        if first {
+            warn!(
+                "Vercel gateway skipped every provider for the pinned upstream under this \
+                 account's policy; using gateway routing for the rest of this session"
+            );
+        }
+        first
+    }
+
     fn responses_input_needs_synthetic_user_turn(&self, input: &[ResponseItem]) -> bool {
         // This is conversation-shape normalization, not a provider-specific compatibility hack.
         // Collaboration mail and completed assistant output are model output for every Responses
         // endpoint; when either is terminal, append a request-only user continuation so the next
         // sample cannot be interpreted as an assistant prefill.
         responses_input_needs_synthetic_user_turn(input)
+            || (self
+                .state
+                .legacy_synthetic_continuation
+                .load(Ordering::Relaxed)
+                && responses_input_latest_message_is_assistant(input))
+    }
+
+    /// True when this request omits the synthetic turn only because of the narrower prefill
+    /// rule, so a 400 may come from a provider that still needs the legacy shape.
+    fn responses_input_omits_legacy_synthetic_turn(&self, input: &[ResponseItem]) -> bool {
+        !self
+            .state
+            .legacy_synthetic_continuation
+            .load(Ordering::Relaxed)
+            && responses_input_latest_message_is_assistant(input)
+            && !responses_input_needs_synthetic_user_turn(input)
     }
 
     /// Returns whether the Responses-over-WebSocket transport is active for this session.
@@ -2144,7 +2416,7 @@ impl ModelClient {
         .map_err(std::io::Error::from)?;
         Ok(crate::memory_stage_one::StageOneGuardedTransport::new(
             ReqwestTransport::from_http_client(client),
-            self.stage_one_memory_binding.clone(),
+            self.stage_one_memory_binding.get().cloned(),
         ))
     }
 
@@ -2356,6 +2628,7 @@ impl ModelClientSession {
 
     fn reset_websocket_session(&mut self) {
         self.websocket_session.connection = None;
+        self.websocket_session.provenance = None;
         self.websocket_session.last_request = None;
         self.websocket_session.last_response_rx = None;
         self.websocket_session.last_response_from_untraced_warmup = false;
@@ -2489,6 +2762,7 @@ impl ModelClientSession {
     ) -> Result<ResponseStream> {
         let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
+        let mut transient_rate_limit_retries = 0;
         let mut signed_thinking_history_retry_used = false;
         let mut payload_retry_used = false;
         loop {
@@ -2502,9 +2776,26 @@ impl ModelClientSession {
                 "anthropic_http_after_client_setup",
                 provider_request_started_at,
             );
-            let transport = self
-                .client
-                .build_api_transport(&client_setup.api_provider, ANTHROPIC_MESSAGES_ENDPOINT)?;
+            let evidence = crate::accounting::read_slot(&self.accounting)?
+                .map(crate::accounting::transport::ResponseEvidence::new);
+            let transport = if evidence.is_some() {
+                let client =
+                    codex_login::default_client::create_client_for_route_without_redirects(
+                        &self.client.http_client_factory,
+                        &client_setup
+                            .api_provider
+                            .url_for_path(ANTHROPIC_MESSAGES_ENDPOINT),
+                        ClientRouteClass::Api,
+                    )
+                    .map_err(std::io::Error::from)?;
+                crate::memory_stage_one::StageOneGuardedTransport::new(
+                    ReqwestTransport::from_http_client(client),
+                    self.client.stage_one_memory_binding.get().cloned(),
+                )
+            } else {
+                self.client
+                    .build_api_transport(&client_setup.api_provider, ANTHROPIC_MESSAGES_ENDPOINT)?
+            };
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),
                 client_setup.api_auth.as_ref(),
@@ -2557,12 +2848,39 @@ impl ModelClientSession {
             inference_trace_attempt.add_request_headers(&mut options.extra_headers);
             inference_trace_attempt.record_started(&request);
             maybe_dump_anthropic_messages_request(&request);
+            let transport = transport.map_inner(|inner| {
+                crate::accounting::transport::AccountingTransport::new(
+                    inner,
+                    evidence.clone(),
+                    accounting_model_identity(&model_info.slug),
+                )
+                .with_configured_routing(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .chat_completions_provider
+                        .clone(),
+                )
+                .with_configured_routing_options(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .is_vercel_gateway()
+                        .then(|| vercel_gateway_provider_options(&request.model))
+                        .flatten(),
+                )
+            });
             let client = ApiAnthropicMessagesClient::new(
                 transport,
                 client_setup.api_provider,
                 client_setup.api_auth,
             )
-            .with_telemetry(Some(request_telemetry), Some(sse_telemetry));
+            .with_telemetry(Some(request_telemetry), Some(sse_telemetry))
+            .with_usage_observer(
+                evidence.map(|value| value as Arc<dyn codex_api::AnthropicUsageObserver>),
+            );
             trace_stream_timing(
                 "anthropic_http_before_stream_request",
                 provider_request_started_at,
@@ -2642,6 +2960,43 @@ impl ModelClientSession {
                          images and retrying once"
                     );
                     payload_retry_used = true;
+                    continue;
+                }
+                Err(err)
+                    if transient_rate_limit_retries < MAX_TRANSIENT_RATE_LIMIT_RETRIES
+                        && is_transient_upstream_rate_limit(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let delay = transient_rate_limit_delay(&err, transient_rate_limit_retries);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    transient_rate_limit_retries += 1;
+                    warn!(
+                        attempt = transient_rate_limit_retries,
+                        delay_ms = delay.as_millis() as u64,
+                        "gateway reported a transient shared upstream rate limit; retrying"
+                    );
+                    tokio::time::sleep(delay).await;
+                    continue;
+                }
+                Err(err)
+                    if self
+                        .client
+                        .drop_vercel_vendor_pin_after_policy_exclusion(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
                     continue;
                 }
                 Err(err) => {
@@ -2830,6 +3185,11 @@ impl ModelClientSession {
             client_setup.agent_identity_telemetry.clone(),
             PendingUnauthorizedRetry::default(),
         );
+        let provenance = crate::accounting::websocket::Provenance::capture(
+            self.client.state.provider.info(),
+            client_setup.auth.as_ref(),
+            &client_setup.api_provider,
+        );
         let connection = self
             .client
             .connect_websocket(
@@ -2842,6 +3202,7 @@ impl ModelClientSession {
             )
             .await?;
         self.websocket_session.connection = Some(connection);
+        self.websocket_session.provenance = Some(provenance);
         self.websocket_session
             .set_connection_reused(/*connection_reused*/ false);
         Ok(())
@@ -2864,6 +3225,7 @@ impl ModelClientSession {
         params: WebsocketConnectParams<'_>,
     ) -> std::result::Result<&ApiWebSocketConnection, ApiError> {
         let WebsocketConnectParams {
+            provenance,
             session_telemetry,
             api_provider,
             api_auth,
@@ -2901,6 +3263,7 @@ impl ModelClientSession {
                 }
             };
             self.websocket_session.connection = Some(new_conn);
+            self.websocket_session.provenance = Some(provenance);
             self.websocket_session
                 .set_connection_reused(/*connection_reused*/ false);
         } else {
@@ -2961,14 +3324,12 @@ impl ModelClientSession {
             .then(|| uuid::Uuid::new_v4().to_string());
         let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
+        let mut transient_rate_limit_retries = 0;
         loop {
             let provider_request_started_at = Instant::now();
             trace_stream_timing("chat_http_before_client_setup", provider_request_started_at);
             let client_setup = self.client.current_client_setup().await?;
             trace_stream_timing("chat_http_after_client_setup", provider_request_started_at);
-            let transport = self
-                .client
-                .build_api_transport(&client_setup.api_provider, CHAT_COMPLETIONS_ENDPOINT)?;
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),
                 client_setup.api_auth.as_ref(),
@@ -3003,6 +3364,76 @@ impl ModelClientSession {
                 responses_metadata,
             )?;
             trace_stream_timing("chat_http_after_build_request", provider_request_started_at);
+            // Agent-identity sessions collect like any other. Excluding them here
+            // meant a whole class of sessions recorded nothing at all on every
+            // provider, while the policy that decides their economics already
+            // treats an agent identity as subscription capacity.
+            let sampling = match crate::accounting::chat::read(&self.chat_accounting)? {
+                Some(deferred) => {
+                    deferred
+                        .resolve(
+                            self.client.state.provider.info(),
+                            client_setup.auth.as_ref(),
+                            &client_setup
+                                .api_provider
+                                .url_for_path(CHAT_COMPLETIONS_ENDPOINT),
+                            &request,
+                        )
+                        .await?
+                }
+                None => None,
+            };
+            let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+            let transport = if evidence.is_some() {
+                let client =
+                    codex_login::default_client::create_client_for_route_without_redirects(
+                        &self.client.http_client_factory,
+                        &client_setup
+                            .api_provider
+                            .url_for_path(CHAT_COMPLETIONS_ENDPOINT),
+                        ClientRouteClass::Api,
+                    )
+                    .map_err(std::io::Error::from)?;
+                crate::memory_stage_one::StageOneGuardedTransport::new(
+                    ReqwestTransport::from_http_client(client),
+                    self.client.stage_one_memory_binding.get().cloned(),
+                )
+            } else {
+                self.client
+                    .build_api_transport(&client_setup.api_provider, CHAT_COMPLETIONS_ENDPOINT)?
+            };
+            let transport = transport.map_inner(|inner| {
+                crate::accounting::transport::AccountingTransport::new(
+                    inner,
+                    evidence.clone(),
+                    accounting_model_identity(&model_info.slug),
+                )
+                .with_configured_routing(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .chat_completions_provider
+                        .clone(),
+                )
+                .with_configured_routing_options(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .is_vercel_gateway()
+                        .then(|| vercel_gateway_provider_options(&request.model))
+                        .flatten(),
+                )
+                .with_configured_plugins(
+                    // Only the Chat request type carries `plugins`; OpenRouter web
+                    // search rides it, emitted by this client from the provider and
+                    // the session's tool set.
+                    serde_json::to_value(request.plugins.clone())
+                        .ok()
+                        .filter(|value| !value.is_null()),
+                )
+            });
             let inference_trace_attempt = inference_trace.start_attempt();
             inference_trace_attempt.add_request_headers(&mut options.extra_headers);
             inference_trace_attempt.record_started(&request);
@@ -3012,7 +3443,10 @@ impl ModelClientSession {
                 client_setup.api_provider,
                 client_setup.api_auth,
             )
-            .with_telemetry(Some(request_telemetry), Some(sse_telemetry));
+            .with_telemetry(Some(request_telemetry), Some(sse_telemetry))
+            .with_usage_observer(
+                evidence.map(|value| value as Arc<dyn codex_api::ChatUsageObserver>),
+            );
             trace_stream_timing(
                 "chat_http_before_stream_request",
                 provider_request_started_at,
@@ -3056,6 +3490,43 @@ impl ModelClientSession {
                             &self.client.state.provider,
                         )
                         .await?,
+                    );
+                    continue;
+                }
+                Err(err)
+                    if transient_rate_limit_retries < MAX_TRANSIENT_RATE_LIMIT_RETRIES
+                        && is_transient_upstream_rate_limit(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let delay = transient_rate_limit_delay(&err, transient_rate_limit_retries);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    transient_rate_limit_retries += 1;
+                    warn!(
+                        attempt = transient_rate_limit_retries,
+                        delay_ms = delay.as_millis() as u64,
+                        "gateway reported a transient shared upstream rate limit; retrying"
+                    );
+                    tokio::time::sleep(delay).await;
+                    continue;
+                }
+                Err(err)
+                    if self
+                        .client
+                        .drop_vercel_vendor_pin_after_policy_exclusion(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
                     );
                     continue;
                 }
@@ -3104,7 +3575,9 @@ impl ModelClientSession {
     ) -> Result<ResponseStream> {
         let mut auth_recovery = self.client.unauthorized_recovery();
         let mut pending_retry = PendingUnauthorizedRetry::default();
+        let mut transient_rate_limit_retries = 0;
         let mut server_state_retry_used = false;
+        let mut legacy_continuation_retry_used = false;
         loop {
             let provider_request_started_at = Instant::now();
             trace_stream_timing(
@@ -3112,9 +3585,35 @@ impl ModelClientSession {
                 provider_request_started_at,
             );
             let client_setup = self.client.current_client_setup().await?;
-            let transport = self
-                .client
-                .build_api_transport(&client_setup.api_provider, RESPONSES_ENDPOINT)?;
+            let sampling = match crate::accounting::responses::read(&self.responses_accounting)? {
+                Some(deferred) => {
+                    deferred
+                        .resolve(
+                            self.client.state.provider.info(),
+                            client_setup.auth.as_ref(),
+                            &client_setup.api_provider.url_for_path(RESPONSES_ENDPOINT),
+                        )
+                        .await?
+                }
+                None => None,
+            };
+            let evidence = sampling.map(crate::accounting::transport::ResponseEvidence::new);
+            let transport = if evidence.is_some() {
+                let client =
+                    codex_login::default_client::create_client_for_route_without_redirects(
+                        &self.client.http_client_factory,
+                        &client_setup.api_provider.url_for_path(RESPONSES_ENDPOINT),
+                        ClientRouteClass::Api,
+                    )
+                    .map_err(std::io::Error::from)?;
+                crate::memory_stage_one::StageOneGuardedTransport::new(
+                    ReqwestTransport::from_http_client(client),
+                    self.client.stage_one_memory_binding.get().cloned(),
+                )
+            } else {
+                self.client
+                    .build_api_transport(&client_setup.api_provider, RESPONSES_ENDPOINT)?
+            };
             let request_auth_context = AuthRequestTelemetryContext::new(
                 client_setup.auth.as_ref().map(CodexAuth::auth_mode),
                 client_setup.api_auth.as_ref(),
@@ -3146,10 +3645,18 @@ impl ModelClientSession {
                 responses_metadata,
             )?;
             let logical_request = request.clone();
-            let uses_http_server_state = self.client.state.provider.info().is_vercel();
+            let uses_http_server_state = self.client.state.provider.info().is_vercel()
+                && !self
+                    .client
+                    .state
+                    .http_server_state_rejected
+                    .load(Ordering::Relaxed);
             let append_user_turn = self
                 .client
                 .responses_input_needs_synthetic_user_turn(&logical_request.input);
+            let omitted_legacy_synthetic_turn = self
+                .client
+                .responses_input_omits_legacy_synthetic_turn(&logical_request.input);
             if uses_http_server_state {
                 self.prepare_http_server_state_request(
                     &mut request,
@@ -3169,12 +3676,40 @@ impl ModelClientSession {
             inference_trace_attempt.add_request_headers(&mut options.extra_headers);
             inference_trace_attempt.record_started(&request);
             maybe_dump_responses_request(&request);
+            let transport = transport.map_inner(|inner| {
+                crate::accounting::transport::AccountingTransport::new(
+                    inner,
+                    evidence.clone(),
+                    accounting_model_identity(&model_info.slug),
+                )
+                .with_configured_routing(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .chat_completions_provider
+                        .clone(),
+                )
+                .with_configured_routing_options(
+                    self.client
+                        .state
+                        .provider
+                        .info()
+                        .is_vercel_gateway()
+                        .then(|| vercel_gateway_provider_options(&request.model))
+                        .flatten(),
+                )
+                .with_tier(request.service_tier.clone())
+            });
             let client = ApiResponsesClient::new(
                 transport,
                 client_setup.api_provider,
                 client_setup.api_auth,
             )
-            .with_telemetry(Some(request_telemetry), Some(sse_telemetry));
+            .with_telemetry(Some(request_telemetry), Some(sse_telemetry))
+            .with_usage_observer(
+                evidence.map(|value| value as Arc<dyn codex_api::ResponsesUsageObserver>),
+            );
             trace_stream_timing(
                 "responses_http_before_stream_request",
                 provider_request_started_at,
@@ -3241,10 +3776,75 @@ impl ModelClientSession {
                         /*output_items*/ &[],
                     );
                     warn!(
-                        "server-state responses continuation rejected with 400; clearing server conversation state and retrying with full context"
+                        "server-state responses continuation rejected with 400; using full-context requests for the rest of this session"
                     );
+                    self.client
+                        .state
+                        .http_server_state_rejected
+                        .store(true, Ordering::Relaxed);
                     self.clear_http_server_conversation_state();
                     server_state_retry_used = true;
+                    continue;
+                }
+                Err(ApiError::Transport(
+                    bad_request_transport @ TransportError::Http { status, .. },
+                )) if status == StatusCode::BAD_REQUEST
+                    && !request_used_server_state
+                    && omitted_legacy_synthetic_turn
+                    && !legacy_continuation_retry_used =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context(&bad_request_transport);
+                    inference_trace_attempt.record_failed(
+                        &bad_request_transport,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    warn!(
+                        "provider rejected a tool continuation without a synthetic user turn; restoring it for this session"
+                    );
+                    self.client
+                        .state
+                        .legacy_synthetic_continuation
+                        .store(true, Ordering::Relaxed);
+                    legacy_continuation_retry_used = true;
+                    continue;
+                }
+                Err(err)
+                    if transient_rate_limit_retries < MAX_TRANSIENT_RATE_LIMIT_RETRIES
+                        && is_transient_upstream_rate_limit(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let delay = transient_rate_limit_delay(&err, transient_rate_limit_retries);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
+                    transient_rate_limit_retries += 1;
+                    warn!(
+                        attempt = transient_rate_limit_retries,
+                        delay_ms = delay.as_millis() as u64,
+                        "gateway reported a transient shared upstream rate limit; retrying"
+                    );
+                    tokio::time::sleep(delay).await;
+                    continue;
+                }
+                Err(err)
+                    if self
+                        .client
+                        .drop_vercel_vendor_pin_after_policy_exclusion(&err) =>
+                {
+                    let response_debug_context =
+                        extract_response_debug_context_from_api_error(&err);
+                    let mapped_err = self.client.state.provider.map_api_error(err);
+                    inference_trace_attempt.record_failed(
+                        &mapped_err,
+                        response_debug_context.request_id.as_deref(),
+                        /*output_items*/ &[],
+                    );
                     continue;
                 }
                 Err(err) => {
@@ -3309,6 +3909,45 @@ impl ModelClientSession {
                 service_tier.clone(),
                 responses_metadata,
             )?;
+            // Warmup is collected too. Skipping it here meant the prompt this
+            // client sends to prime the cache - and the cache writes the provider
+            // charges for - never reached the ledger on any provider.
+            let deferred = crate::accounting::responses::read(&self.responses_accounting)?
+                .filter(|value| !matches!(value.websocket_endpoint(), Ok(None)));
+            let provenance = crate::accounting::websocket::Provenance::capture(
+                self.client.state.provider.info(),
+                client_setup.auth.as_ref(),
+                &client_setup.api_provider,
+            );
+            let sampling = if let Some(deferred) = &deferred {
+                let cached = if self.websocket_session.connection.is_some() {
+                    Some(self.websocket_session.provenance.as_ref().ok_or_else(|| {
+                        deferred.reject();
+                        CodexErr::Fatal(
+                            crate::accounting::failure(
+                                "websocket admission",
+                                "open connection has no recorded provenance",
+                            )
+                            .into(),
+                        )
+                    })?)
+                } else {
+                    None
+                };
+                if provenance.validate(deferred, cached)? {
+                    deferred
+                        .resolve(
+                            self.client.state.provider.info(),
+                            client_setup.auth.as_ref(),
+                            &client_setup.api_provider.url_for_path(RESPONSES_ENDPOINT),
+                        )
+                        .await?
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             let request_session_telemetry = if warmup {
                 // `generate=false` prewarm is connection setup, not an inference request.
                 session_telemetry.clone()
@@ -3323,6 +3962,7 @@ impl ModelClientSession {
             }
             match self
                 .websocket_connection(WebsocketConnectParams {
+                    provenance,
                     session_telemetry,
                     api_provider: client_setup.api_provider,
                     api_auth: client_setup.api_auth,
@@ -3335,6 +3975,20 @@ impl ModelClientSession {
                 .await
             {
                 Ok(_) => {}
+                Err(ApiError::Transport(TransportError::Http { status, .. }))
+                    if status.is_redirection() && sampling.is_some() =>
+                {
+                    if let Some(deferred) = &deferred {
+                        deferred.reject();
+                    }
+                    return Err(CodexErr::Fatal(
+                        crate::accounting::failure(
+                            "websocket connect",
+                            format_args!("provider redirected the connection ({status})"),
+                        )
+                        .into(),
+                    ));
+                }
                 Err(ApiError::Transport(TransportError::Http { status, .. }))
                     if status == StatusCode::UPGRADE_REQUIRED =>
                 {
@@ -3413,17 +4067,50 @@ impl ModelClientSession {
                         "websocket connection is unavailable".to_string(),
                     ))
                 })?;
-            if let Some(binding) = &self.client.stage_one_memory_binding {
+            if let Some(binding) = self.client.stage_one_memory_binding.get() {
                 binding
                     .check()
                     .await
                     .map_err(|reason| CodexErr::InvalidRequest(reason.to_string()))?;
             }
+            let admission = match (sampling, deferred.as_ref()) {
+                (Some(sampling), Some(deferred)) => {
+                    let established =
+                        self.websocket_session.provenance.clone().ok_or_else(|| {
+                            deferred.reject();
+                            CodexErr::Fatal(
+                                crate::accounting::failure(
+                                    "websocket admission",
+                                    "connection has no recorded provenance",
+                                )
+                                .into(),
+                            )
+                        })?;
+                    let expected = deferred.websocket_endpoint()?.ok_or_else(|| {
+                        deferred.reject();
+                        CodexErr::Fatal(
+                            crate::accounting::failure(
+                                "websocket admission",
+                                "turn has no approved websocket endpoint",
+                            )
+                            .into(),
+                        )
+                    })?;
+                    Some(crate::accounting::websocket::Admission::new(
+                        sampling,
+                        established,
+                        expected,
+                        self.client.stage_one_memory_binding.clone(),
+                    ))
+                }
+                _ => None,
+            };
             let stream_result = websocket_connection
-                .stream_request(
+                .stream_request_with_accounting(
                     ws_request,
                     self.websocket_session.connection_reused(),
                     Some(Arc::clone(&self.turn_state)),
+                    admission,
                 )
                 .await;
             if let Some(original_item_ids) = original_item_ids {
@@ -3698,20 +4385,45 @@ fn chat_model_supports_vercel_cache_control(model_slug: &str) -> bool {
     model_slug.starts_with("anthropic/") || model_slug.starts_with("minimax/")
 }
 
+/// Rolling conversation breakpoints for explicit prompt caching.
+const CHAT_CACHE_ROLLING_BREAKPOINTS: usize = 2;
+
 fn apply_chat_cache_control(messages: &mut [ChatMessage]) {
     if let Some(system_message) = messages.iter_mut().find(|message| message.role == "system") {
         mark_chat_message_cache_control(system_message);
     }
 
-    let mut marked_user_messages = 0usize;
-    for index in (0..messages.len()).rev() {
-        if messages[index].role == "user" {
-            mark_chat_message_cache_control(&mut messages[index]);
-            marked_user_messages += 1;
-            if marked_user_messages >= 2 {
-                break;
-            }
+    // The breakpoints must follow the newest turn. An agent loop grows the
+    // transcript with assistant tool calls and `tool` results, not new user
+    // messages, so anchoring on user messages froze the cached prefix at the
+    // first request and re-billed every later turn at the uncached rate.
+    let mut marked = 0usize;
+    for message in messages.iter_mut().rev() {
+        if marked >= CHAT_CACHE_ROLLING_BREAKPOINTS {
+            break;
         }
+        if message.role != "system"
+            && chat_message_has_cacheable_text(message)
+            && mark_chat_message_cache_control(message)
+        {
+            marked += 1;
+        }
+    }
+}
+
+/// Anthropic rejects cache breakpoints on empty text blocks, and a
+/// tool-call-only assistant message has no text to mark.
+fn chat_message_has_cacheable_text(message: &ChatMessage) -> bool {
+    match &message.content {
+        Some(ChatMessageContent::Text(text)) => !text.trim().is_empty(),
+        Some(ChatMessageContent::Parts(parts)) => parts.iter().any(|part| {
+            part.kind == "text"
+                && part
+                    .text
+                    .as_deref()
+                    .is_some_and(|text| !text.trim().is_empty())
+        }),
+        None => false,
     }
 }
 
@@ -3740,6 +4452,58 @@ fn mark_chat_message_cache_control(message: &mut ChatMessage) -> bool {
 
     message.content = Some(marked_content);
     true
+}
+
+/// Largest slice of malformed tool-call arguments replayed to the model.
+const MALFORMED_CHAT_ARGUMENTS_REPLAY_CHARS: usize = 4_000;
+
+/// Chat Completions providers reject tool calls whose arguments are not JSON.
+/// Rather than dropping such a call and the error it produced, which leaves the
+/// model unaware that its call failed, replay the raw text inside a JSON
+/// object so the call and its error output stay visible.
+fn chat_replay_function_arguments(arguments: String) -> String {
+    if serde_json::from_str::<Value>(&arguments).is_ok() {
+        return arguments;
+    }
+    let total_chars = arguments.chars().count();
+    let mut raw: String = arguments
+        .chars()
+        .take(MALFORMED_CHAT_ARGUMENTS_REPLAY_CHARS)
+        .collect();
+    if total_chars > MALFORMED_CHAT_ARGUMENTS_REPLAY_CHARS {
+        raw.push_str(&format!(
+            "…[{} more characters omitted]",
+            total_chars - MALFORMED_CHAT_ARGUMENTS_REPLAY_CHARS
+        ));
+    }
+    json!({ "malformed_arguments": raw }).to_string()
+}
+
+fn push_chat_tool_call(
+    messages: &mut Vec<ChatMessage>,
+    call_id: String,
+    name: String,
+    arguments: String,
+) {
+    let tool_call = ChatToolCall {
+        id: call_id,
+        kind: "function".to_string(),
+        function: ChatToolFunction { name, arguments },
+    };
+    if let Some(message) = messages
+        .last_mut()
+        .filter(|message| message.role == "assistant" && message.tool_call_id.is_none())
+    {
+        message.tool_calls.push(tool_call);
+    } else {
+        messages.push(ChatMessage {
+            role: "assistant".to_string(),
+            content: None,
+            reasoning_content: None,
+            tool_call_id: None,
+            tool_calls: vec![tool_call],
+        });
+    }
 }
 
 fn append_chat_messages_for_response_items(
@@ -3859,41 +4623,20 @@ fn append_chat_message_for_response_item(
             arguments,
             call_id,
             ..
+        } => {
+            let arguments = chat_replay_function_arguments(arguments);
+            push_chat_tool_call(messages, call_id, name, arguments);
         }
-        | ResponseItem::CustomToolCall {
+        ResponseItem::CustomToolCall {
             name,
-            input: arguments,
+            input,
             call_id,
             ..
         } => {
-            if serde_json::from_str::<Value>(&arguments).is_err() {
-                debug!(
-                    call_id = %call_id,
-                    name = %name,
-                    "skipping malformed historical chat tool call arguments during replay"
-                );
-                skipped_tool_call_ids.insert(call_id);
-                return;
-            }
-            let tool_call = ChatToolCall {
-                id: call_id,
-                kind: "function".to_string(),
-                function: ChatToolFunction { name, arguments },
-            };
-            if let Some(message) = messages
-                .last_mut()
-                .filter(|message| message.role == "assistant" && message.tool_call_id.is_none())
-            {
-                message.tool_calls.push(tool_call);
-            } else {
-                messages.push(ChatMessage {
-                    role: "assistant".to_string(),
-                    content: None,
-                    reasoning_content: None,
-                    tool_call_id: None,
-                    tool_calls: vec![tool_call],
-                });
-            }
+            // Chat Completions exposes freeform tools as `{"input": string}`
+            // functions, so replay custom calls in that same shape.
+            let arguments = json!({ "input": input }).to_string();
+            push_chat_tool_call(messages, call_id, name, arguments);
         }
         ResponseItem::FunctionCallOutput {
             call_id, output, ..
@@ -4594,6 +5337,26 @@ fn anthropic_reasoning_for_model_and_effort(
     (anthropic_thinking_for_effort(effort), None)
 }
 
+/// The identity an accounting attempt records.
+///
+/// Pricing is a catalogue lookup keyed by (slug, provider), so the ledger must
+/// record the identity the catalogue keys rather than the name this client puts
+/// on the wire. Those two differ wherever the client maps one to the other, and
+/// for every Claude Plan model and every gateway-prefixed model the catalogue
+/// keys the selected slug - which is why recording the wire name left those
+/// turns unpriceable.
+///
+/// Ambient's retired `zai-org/GLM-5.2-FP8` alias is the one mapping that runs
+/// the other way: it has no catalogue row of its own, and the priced Ambient row
+/// is the name it maps to. Following the mapping there is not a return to the
+/// wire name, it is the same rule - use whatever string the catalogue keys.
+fn accounting_model_identity(slug: &str) -> String {
+    match slug.trim() {
+        AMBIENT_LEGACY_GLM_5_2_FP8_MODEL => AMBIENT_DEFAULT_MODEL.to_string(),
+        _ => slug.to_string(),
+    }
+}
+
 fn chat_completions_upstream_model<'a>(model: &'a str, provider: &ModelProviderInfo) -> &'a str {
     if provider.is_ambient() && model.trim() == AMBIENT_LEGACY_GLM_5_2_FP8_MODEL {
         AMBIENT_DEFAULT_MODEL
@@ -4608,6 +5371,7 @@ fn anthropic_upstream_model(model: &str) -> &str {
     match model.trim() {
         CLAUDE_FABLE_5_1_PLAN_MODEL => CLAUDE_FABLE_5_1_PLAN_UPSTREAM_MODEL,
         CLAUDE_PLAN_MODEL => CLAUDE_PLAN_UPSTREAM_MODEL,
+        CLAUDE_OPUS_5_5_PLAN_MODEL => CLAUDE_OPUS_5_5_PLAN_UPSTREAM_MODEL,
         CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL => ANTHROPIC_LEGACY_OPUS_4_8_MODEL,
         CLAUDE_FABLE_5_PLAN_MODEL => CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL,
         _ => model,
@@ -4618,6 +5382,7 @@ fn is_claude_plan_model_slug(model: &str) -> bool {
     matches!(
         model.trim(),
         CLAUDE_PLAN_MODEL
+            | CLAUDE_OPUS_5_5_PLAN_MODEL
             | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
             | CLAUDE_FABLE_5_1_PLAN_MODEL
             | CLAUDE_FABLE_5_PLAN_MODEL
@@ -4666,6 +5431,83 @@ fn vercel_gateway_vendor_pin(model: &str) -> Option<&'static str> {
         "zai" => Some("zai"),
         _ => None,
     }
+}
+
+/// Retries allowed for one request when the gateway reports a transient limit
+/// of a shared upstream pool, with exponential backoff from
+/// `TRANSIENT_RATE_LIMIT_BASE_DELAY` (about 30 seconds in total).
+const MAX_TRANSIENT_RATE_LIMIT_RETRIES: u32 = 4;
+const TRANSIENT_RATE_LIMIT_BASE_DELAY: Duration = Duration::from_secs(2);
+const TRANSIENT_RATE_LIMIT_MAX_DELAY: Duration = Duration::from_secs(60);
+
+/// True for a 429 that the gateway marks, in its structured error metadata, as
+/// a temporary limit of a shared upstream provider pool rather than the
+/// caller's own quota. OpenRouter reports these as
+/// `error.metadata.limit_source = "upstream_provider_shared_pool"` and asks the
+/// caller to retry shortly. Other 429s keep the no-retry behavior.
+fn is_transient_upstream_rate_limit(err: &ApiError) -> bool {
+    let ApiError::Transport(TransportError::Http {
+        status,
+        body: Some(body),
+        ..
+    }) = err
+    else {
+        return false;
+    };
+    if *status != StatusCode::TOO_MANY_REQUESTS {
+        return false;
+    }
+    serde_json::from_str::<Value>(body).is_ok_and(|body| {
+        body.pointer("/error/metadata/limit_source")
+            .and_then(Value::as_str)
+            == Some("upstream_provider_shared_pool")
+    })
+}
+
+/// Backoff before retry `attempt` (0-based), honoring a `Retry-After` header in
+/// seconds when the gateway sends one.
+fn transient_rate_limit_delay(err: &ApiError, attempt: u32) -> Duration {
+    let retry_after = match err {
+        ApiError::Transport(TransportError::Http {
+            headers: Some(headers),
+            ..
+        }) => headers
+            .get(http::header::RETRY_AFTER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.trim().parse::<u64>().ok())
+            .map(Duration::from_secs),
+        _ => None,
+    };
+    retry_after
+        .unwrap_or_else(|| TRANSIENT_RATE_LIMIT_BASE_DELAY.saturating_mul(1 << attempt.min(8)))
+        .min(TRANSIENT_RATE_LIMIT_MAX_DELAY)
+}
+
+/// True when the Vercel gateway rejected a request without attempting any
+/// upstream because an account policy skipped every candidate, as reported in
+/// its structured routing metadata. With a vendor pin in place the pinned
+/// upstream is the only candidate, so zero-data-retention accounts get this
+/// for every Z.AI-pinned request while unpinned routing succeeds.
+fn is_vercel_gateway_policy_exclusion(err: &ApiError) -> bool {
+    let ApiError::Transport(TransportError::Http {
+        status,
+        body: Some(body),
+        ..
+    }) = err
+    else {
+        return false;
+    };
+    if *status != StatusCode::BAD_REQUEST {
+        return false;
+    }
+    let Ok(body) = serde_json::from_str::<Value>(body) else {
+        return false;
+    };
+    let routing = &body["providerMetadata"]["gateway"]["routing"];
+    routing["totalProviderAttemptCount"].as_u64() == Some(0)
+        && routing["skippedProviderAttempts"]
+            .as_array()
+            .is_some_and(|skipped| !skipped.is_empty())
 }
 
 fn vercel_gateway_provider_options(model: &str) -> Option<Value> {
@@ -4816,7 +5658,7 @@ fn responses_tool_to_anthropic_tool(mut tool: Value) -> Option<Value> {
 }
 
 fn freeform_tool_to_anthropic_tool(tool: &codex_tools::FreeformTool) -> Value {
-    let chat_tool = freeform_tool_to_chat_tool(tool, /*strip_strict*/ true);
+    let chat_tool = freeform_tool_to_chat_tool(tool);
     let function = chat_tool
         .get("function")
         .and_then(Value::as_object)
@@ -4859,7 +5701,7 @@ fn tool_spec_to_chat_tool(
                 })
             },
         )),
-        ToolSpec::Freeform(tool) => Some(Ok(freeform_tool_to_chat_tool(tool, strip_strict))),
+        ToolSpec::Freeform(tool) => Some(Ok(freeform_tool_to_chat_tool(tool))),
         ToolSpec::WebSearch { .. } if zai_native_web_search => Some(Ok(zai_web_search_tool())),
         ToolSpec::Namespace(_) | ToolSpec::ToolSearch { .. } | ToolSpec::WebSearch { .. } => None,
     }
@@ -4926,13 +5768,19 @@ fn responses_tool_to_chat_tool(mut tool: Value, strip_strict: bool) -> Option<Va
     }))
 }
 
-fn freeform_tool_to_chat_tool(tool: &codex_tools::FreeformTool, strip_strict: bool) -> Value {
+/// Wraps a freeform tool as a Chat Completions function with one `input`
+/// string. The wrapper is never `strict`: constrained decoding cannot recover
+/// from an unescaped quote in the raw input, because once the string closes the
+/// schema only permits whitespace. GPT-6 Sol spent 65,536 completion tokens on
+/// whitespace that way. Without `strict`, the same slip yields malformed
+/// arguments that the tool rejects with a correctable error.
+fn freeform_tool_to_chat_tool(tool: &codex_tools::FreeformTool) -> Value {
     let description = chat_completions_freeform_tool_description(tool);
     let input_description = format!(
         "Raw {} input. Put the tool payload directly in this string; do not nest JSON, shell commands, or heredocs inside it.",
         tool.name.as_str()
     );
-    let mut value = json!({
+    json!({
         "type": "function",
         "function": {
             "name": tool.name.as_str(),
@@ -4948,14 +5796,8 @@ fn freeform_tool_to_chat_tool(tool: &codex_tools::FreeformTool, strip_strict: bo
                 "required": ["input"],
                 "additionalProperties": false,
             },
-            "strict": true,
         },
-    });
-    if strip_strict && let Some(function) = value.get_mut("function").and_then(Value::as_object_mut)
-    {
-        function.remove("strict");
-    }
-    value
+    })
 }
 
 fn chat_completions_freeform_tool_description(tool: &codex_tools::FreeformTool) -> String {
@@ -5318,6 +6160,7 @@ impl AuthRequestTelemetryContext {
 }
 
 struct WebsocketConnectParams<'a> {
+    provenance: crate::accounting::websocket::Provenance,
     session_telemetry: &'a SessionTelemetry,
     api_provider: codex_api::Provider,
     api_auth: SharedAuthProvider,

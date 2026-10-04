@@ -183,8 +183,7 @@ impl std::fmt::Display for PlatformLoginHealthCheckError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ClaudeCodePlanStatus {
-    // Only built by the unreachable provider-credentials status refresh.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Shown while a status probe runs; no caller probes asynchronously yet.
     Checking,
     ManagedToken {
         stored: bool,

@@ -1,0 +1,18 @@
+{
+  "findings": [
+    {
+      "title": "Committed evidence omits bazel-parity.exit while README claims all 17 per-command exits are recorded",
+      "body": "The runner's `run bazel-parity ...` step writes `rtx/final-tmux/bazel-parity.exit`, and the README states \"All 17 per-command exits and the enclosing suite exit are zero\" (review-budget.md likewise says \"all18 final TMUX/command exits0\"). Only 16 `.exit` receipts are actually tracked under `rtx/final-tmux/` (`git ls-files` count = 16); `bazel-parity.exit` exists in the working tree with value `0` but is swallowed by the root `.gitignore` `bazel-*` pattern (`git status --ignored` shows `!! rtx/final-tmux/bazel-parity.exit`), whereas `bazel-parity.log` was force-added. The Stage A runner avoided this by naming the receipt `stage-a-bazel-parity.exit`. Under the repository rule that missing evidence must never be represented as a pass, the committed record does not match the README's claim. Smallest fix: force-add the existing `bazel-parity.exit` (or rename the label to dodge the ignore pattern and re-run/record) so the 17th receipt is part of the frozen evidence, or amend the README/ledger counts to state the receipt is not committed.",
+      "priority": "P3",
+      "confidence": 0.85,
+      "category": "maintainability",
+      "code_location": {
+        "file_path": "qa/security-levels/sprints/PF-27-S04/descriptor-admission-20260912/README.md",
+        "line": 33
+      }
+    }
+  ],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "The runtime admission module is sound for its stated private scope: admission runs on the existing pair supervisor thread with only non-blocking calls (try_recv, getsockopt, zero-timeout poll, MSG_PEEK|MSG_DONTWAIT, try_clone); UID is taken from real SO_PEERCRED and compared to an expected UID that must equal the current non-root uid; role is derived solely from pidfs-inode identity against the retained OwnedChild pidfds (which return false once reaped); duplicates/stale/dead/unrelated peers are rejected without fencing the pair, while ticket/receipt/receiver loss, cancellation, deadline, child exit, peer EOF and socket errors all set sticky cancellation and shut down the retained clones so blocked readers wake. Field drop order (children before admission) and the PairBackend spawn-failure path preserve Stage A cleanup/permit guarantees; a full/disconnected queue returns the caller's stream. The bounded sync_channel(2)/(1) reply design cannot deliver a stale success because take_result re-checks cancellation and drop of a buffered AdmittedPeer cancels. No dependency, lock, or unsafe changes; the module is gated gnu-only and dead_code-allowed with no production caller. The only actionable issue is an evidence-record gap: the bazel-parity exit receipt was ignored by `.gitignore` and not committed although the README counts it, which should be corrected before the record is treated as complete.",
+  "overall_confidence": 0.8
+}

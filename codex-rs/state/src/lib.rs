@@ -9,6 +9,9 @@ const _: () = assert!(
     "bundled SQLite must include the WAL-reset corruption fix",
 );
 
+/// Explicit opt-in accounting storage; ordinary startup does not install or collect.
+pub use runtime::accounting::store as accounting;
+
 mod audit;
 mod extract;
 pub mod log_db;

@@ -1,0 +1,34 @@
+{
+  "base": "dc8dbf5cffce83ac773c92571901f704cfa0366d",
+  "package_digest": "5ef549dd372f026ba38678446873d2146c9cfe0a3ae7773fcb5bbedc4f4f7aba",
+  "files": {
+    "qa/initiative-control/management-bootstrap/owner-handoff-80-promotion.md": {
+      "sha256": "3f1528bb0cc701b66e9471032251ae538f4c5e9e38bf1972a8575832125284b9",
+      "lines": 389
+    },
+    "qa/initiative-control/management-bootstrap/owner_handoff_80_promotion_rehearsal.py": {
+      "sha256": "cff65893d239e9d99b100ff1f7bafcafdaef400ec2bc85c4a904c2dd440e8b1f",
+      "lines": 124
+    },
+    "scripts/initiative_control/owner_daemon.py": {
+      "sha256": "59a7e2e4d2423af43bc28e8da5cfe2f315be8de1c99d09a6e944b3d11b1c61ce",
+      "lines": 1268
+    },
+    "scripts/initiative_control/owner_tmux.py": {
+      "sha256": "882153991bbbdda5cfea41b591b41fe118fb5207d9d6c833acdc2116c6bd6a16",
+      "lines": 588
+    },
+    "scripts/initiative_control/test_owner_daemon.py": {
+      "sha256": "91654ead0b77a488f8e78e935a177c24316f1822832a3eb565e0608cf7526856",
+      "lines": 2325
+    },
+    "scripts/initiative_control/test_owner_tmux.py": {
+      "sha256": "a6458c71696a10671ecb3a34bdcd0f977740d75c3ea660c380b3c3aff2113f15",
+      "lines": 1083
+    },
+    "qa/initiative-control/management-bootstrap/owner_shape_93_preflight.py": {
+      "sha256": "606c973b88f0a0f824608d4d47d3eed9e89394385517561526e93620538ab039",
+      "lines": 92
+    }
+  }
+}

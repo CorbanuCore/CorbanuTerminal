@@ -60,9 +60,19 @@ async fn model_migration_prompt_skips_hidden_gpt_targets() {
     let seen = BTreeMap::new();
     let presets = model_presets_with_test_upgrades();
     assert!(should_show_model_migration_prompt(
-        "gpt-5.2", "gpt-5.5", &seen, &presets
+        "gpt-5.2",
+        "gpt-6-sol",
+        &seen,
+        &presets
     ));
     assert!(should_show_model_migration_prompt(
+        "gpt-5.4",
+        "gpt-6-sol",
+        &seen,
+        &presets
+    ));
+    // GPT-5.5 is hidden from the picker, so it is never offered as a target.
+    assert!(!should_show_model_migration_prompt(
         "gpt-5.4", "gpt-5.5", &seen, &presets
     ));
     assert!(!should_show_model_migration_prompt(

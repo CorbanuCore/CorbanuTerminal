@@ -60,22 +60,15 @@ impl<T: HttpTransport> RealtimeCallClient<T> {
     }
 
     fn path() -> &'static str {
-        "realtime/calls"
+        REALTIME_CALL_PATH
     }
 
     fn path_for_session(&self, event_parser: RealtimeEventParser) -> &'static str {
-        if self.uses_backend_request_shape() {
-            return Self::path();
-        }
-
-        match event_parser {
-            RealtimeEventParser::FramelessBidi => "live",
-            RealtimeEventParser::V1 | RealtimeEventParser::RealtimeV2 => Self::path(),
-        }
+        path_for_session(event_parser, self.uses_backend_request_shape())
     }
 
     fn uses_backend_request_shape(&self) -> bool {
-        self.session.provider().base_url.contains("/backend-api")
+        uses_backend_request_shape(&self.session.provider().base_url)
     }
 
     #[instrument(
@@ -215,12 +208,70 @@ fn configure_realtime_call_request(
     event_parser: RealtimeEventParser,
     uses_backend_request_shape: bool,
 ) {
+    for (key, value) in realtime_call_query_pairs(event_parser, uses_backend_request_shape) {
+        append_query_pair(&mut request.url, key, value);
+    }
+}
+
+const REALTIME_CALL_PATH: &str = "realtime/calls";
+
+fn uses_backend_request_shape(base_url: &str) -> bool {
+    base_url.contains("/backend-api")
+}
+
+fn path_for_session(
+    event_parser: RealtimeEventParser,
+    uses_backend_request_shape: bool,
+) -> &'static str {
+    if uses_backend_request_shape {
+        return REALTIME_CALL_PATH;
+    }
+    match event_parser {
+        RealtimeEventParser::FramelessBidi => "live",
+        RealtimeEventParser::V1 | RealtimeEventParser::RealtimeV2 => REALTIME_CALL_PATH,
+    }
+}
+
+/// The query pairs call creation appends for the AVAS architecture.
+fn realtime_call_query_pairs(
+    event_parser: RealtimeEventParser,
+    uses_backend_request_shape: bool,
+) -> &'static [(&'static str, &'static str)] {
     if event_parser == RealtimeEventParser::V1
         || (uses_backend_request_shape && event_parser == RealtimeEventParser::FramelessBidi)
     {
-        append_query_pair(&mut request.url, "intent", "quicksilver");
-        append_query_pair(&mut request.url, "architecture", "avas");
+        &[("intent", "quicksilver"), ("architecture", "avas")]
+    } else {
+        &[]
     }
+}
+
+/// The exact URL this client will send call creation to, including the query
+/// pairs it appends.
+///
+/// A caller that has to know the route before the request exists - accounting
+/// pins the route it is about to spend on - would otherwise restate the path
+/// and query rules here, and drift from them the next time they change. One
+/// source of truth instead.
+pub fn realtime_call_url(provider: &Provider, session_config: &RealtimeSessionConfig) -> String {
+    let backend_shape = uses_backend_request_shape(&provider.base_url);
+    let mut url =
+        provider.url_for_path(path_for_session(session_config.event_parser, backend_shape));
+    for (key, value) in realtime_call_query_pairs(session_config.event_parser, backend_shape) {
+        append_query_pair(&mut url, key, value);
+    }
+    url
+}
+
+/// The same route relative to the provider's base URL: `path` or
+/// `path?query`, for callers that pin a path under an approved endpoint.
+pub fn realtime_call_route(provider: &Provider, session_config: &RealtimeSessionConfig) -> String {
+    let backend_shape = uses_backend_request_shape(&provider.base_url);
+    let mut route = path_for_session(session_config.event_parser, backend_shape).to_string();
+    for (key, value) in realtime_call_query_pairs(session_config.event_parser, backend_shape) {
+        append_query_pair(&mut route, key, value);
+    }
+    route
 }
 
 fn validate_avas_session_config(session_config: &RealtimeSessionConfig) -> Result<(), ApiError> {

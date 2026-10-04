@@ -1,0 +1,4 @@
+[
+  "   0: \u001b[91mFailed to start a fresh session through the app server: thread/start failed during TUI bootstrap: thread/start transport error: in-process app-server request timed out after 30 seconds\u001b[0m",
+  "2026-08-30T23:00:00.000000Z  WARN codex_tui::app::thread_routing: failed to load skills on startup: skills/list failed in TUI: skills/list transport error: in-process app-server request timed out after 30 seconds: in-process app-server request timed out after 30 seconds"
+]

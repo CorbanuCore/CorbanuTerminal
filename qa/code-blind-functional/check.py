@@ -75,9 +75,42 @@ def read_json(path):
     return value
 
 
+def execution(case, root, implementer, designer, design_hash, candidate_hash):
+    run = case.get("execution")
+    require(isinstance(run, dict), "independent execution required")
+    for field in ("agent", "run_id", "model", "machine", "profile", "launcher"):
+        text(run.get(field), f"execution {field}")
+    require(run["agent"] not in {implementer, designer},
+            "executor must differ from implementer and designer")
+    for field in ("fresh_context", "code_blind", "results_blind"):
+        require(run.get(field) is True, f"execution must attest {field}")
+    for field in ("packet", "access_record", "actions"):
+        artifact(run.get(field), root)
+    reference = run.get("isolation_record")
+    artifact(reference, root)
+    isolation = read_json(root / reference["path"])
+    require(isolation.get("enforcement") == "os-enforced",
+            "execution requires OS-enforced isolation")
+    for field, expected in (("agent", run["agent"]), ("run_id", run["run_id"]),
+                            ("case_id", case["id"]), ("design_sha256", design_hash),
+                            ("candidate_sha256", candidate_hash)):
+        require(isolation.get(field) == expected, f"isolation binding mismatch: {field}")
+    for field in ("policy", "tool_inventory", "probe_evidence"):
+        artifact(isolation.get(field), root)
+    # These are auditable claims, never a substitute for inspecting actual probes.
+    for field in ("source_denied", "history_denied", "symlink_escape_denied",
+                  "credentials_denied", "cross_run_ipc_denied", "network_restricted",
+                  "package_readonly", "children_confined", "packet_readable",
+                  "candidate_launchable", "actual_input_available"):
+        require(isolation.get(field) is True, f"isolation prerequisite missing: {field}")
+    return run["agent"]
+
+
 def check(design_path, results_path, candidate_path):
     design, results = read_json(design_path), read_json(results_path)
     source_root, result_root = design_path.parent, results_path.parent
+    require(type(results.get("schema_version")) is int and results["schema_version"] == 2,
+            "schema 2 required; legacy evidence cannot qualify isolated execution")
     for field in ("feature", "designer"):
         text(design.get(field), field)
     for field in ("fresh_context", "code_blind", "results_blind"):
@@ -110,6 +143,7 @@ def check(design_path, results_path, candidate_path):
     artifact(candidate.get("package_manifest"), result_root)
     outcomes = indexed(results.get("cases"))
     require(proposals.keys() == outcomes.keys(), "missing or unproposed case IDs")
+    executors = set()
     for case in outcomes.values():
         text(case.get("summary"), "case outcome summary")
         disposition = case.get("disposition")
@@ -118,6 +152,8 @@ def check(design_path, results_path, candidate_path):
             continue
         require(disposition == "passed", f"unresolved {case['id']}: {disposition}")
         require(case.get("candidate_sha256") == actual_hash, f"stale case: {case['id']}")
+        executors.add(execution(case, result_root, results["implementer"],
+                                design["designer"], digest(design_path), actual_hash))
         require(case.get("method") in {"tmux", "native-ui", "automated", "manual"}, "unknown method")
         evidence = case.get("evidence")
         require(isinstance(evidence, list) and evidence, "passed case needs execution evidence")
@@ -127,6 +163,7 @@ def check(design_path, results_path, candidate_path):
     require(isinstance(review, dict), "independent evidence check required")
     text(review.get("agent"), "evidence-check agent")
     require(review["agent"] != results["implementer"], "implementer cannot self-approve evidence")
+    require(review["agent"] not in executors, "executor cannot self-approve evidence")
     require(review.get("verdict") == "pass", "evidence check did not pass")
     artifact(review.get("artifact"), result_root)
     budget = results.get("review_budget")

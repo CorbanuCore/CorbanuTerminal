@@ -153,10 +153,12 @@ fn render_lines(lines: &[Line<'static>]) -> Vec<String> {
     lines
         .iter()
         .map(|line| {
-            line.spans
+            let rendered = line
+                .spans
                 .iter()
                 .map(|span| span.content.as_ref())
-                .collect::<String>()
+                .collect::<String>();
+            crate::status::snapshot_helpers::normalize_snapshot_version(&rendered)
         })
         .collect()
 }
@@ -1672,7 +1674,10 @@ fn session_header_aligns_halfwidth_sound_marks() {
     let mut buf = Buffer::empty(area);
     cell.render(area, &mut buf);
 
-    insta::assert_snapshot!("session_header_halfwidth_sound_marks", format!("{buf:?}"));
+    insta::assert_snapshot!(
+        "session_header_halfwidth_sound_marks",
+        crate::status::snapshot_helpers::normalize_snapshot_version(&format!("{buf:?}"))
+    );
 }
 
 #[test]
@@ -1691,7 +1696,10 @@ fn session_header_truncates_halfwidth_directory() {
     let mut buf = Buffer::empty(area);
     cell.render(area, &mut buf);
 
-    insta::assert_snapshot!("session_header_halfwidth_directory", format!("{buf:?}"));
+    insta::assert_snapshot!(
+        "session_header_halfwidth_directory",
+        crate::status::snapshot_helpers::normalize_snapshot_version(&format!("{buf:?}"))
+    );
 }
 
 #[test]

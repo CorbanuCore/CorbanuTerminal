@@ -1,0 +1,62 @@
+{
+  "build-attestation.json": {
+    "mode": 292,
+    "sha256": "9d33fcc21788a84c61011fe64a3607fc7569b390a260e5c19a7b9d3e6582ce27"
+  },
+  "build-provenance.json": {
+    "mode": 292,
+    "sha256": "349ecadeae3d1d57125acc012103aa6bb92acf1eec42678669a817aaec162d53"
+  },
+  "package-manifest.json": {
+    "mode": 292,
+    "sha256": "32529d0a894503c021ff756ebc27a75555ab05ed2ec63dc47dc0d9d7bb878024"
+  },
+  "package/codex-code-mode-host": {
+    "mode": 365,
+    "sha256": "ae25bd69782ecf167a2588d0b8368b53b9bae68d9ec2bed200f55e6598ef810c"
+  },
+  "package/corbanu": {
+    "mode": 365,
+    "sha256": "483031eee7d1b4f978aa782b89164e4072f1533f2eea72a02e1428857254d6de"
+  },
+  "package/corbanu-acp": {
+    "mode": 365,
+    "sha256": "36a35e03f3816bb067867eb46933da18c25662a2be81cd6bb138248b687ccea5"
+  },
+  "package/corbanu-walletd": {
+    "mode": 365,
+    "sha256": "3ec7539bcb6bdb0543e4c933f059a624b411dc5cc3895c730ed101a19e19066d"
+  },
+  "packet/navigation.md": {
+    "mode": 292,
+    "sha256": "ceb2efa7bee7c5c0f4db0f409ae342622cb6a5340193b1f013eabb4e44bcf947"
+  },
+  "packet/original-F01-F11.md": {
+    "mode": 292,
+    "sha256": "c97bf701cd7aff2e26f08884f35dbc9a4fc33b1eef14eee6328d2ea1f1411726"
+  },
+  "runtime/macos_boundary.py": {
+    "mode": 292,
+    "sha256": "0b7895965bd9a510497959b1158ec0518c46ede8dad28244bd8c90740574cdf4"
+  },
+  "runtime/macos_bridge.sbpl": {
+    "mode": 292,
+    "sha256": "859a65f0fd2b70694a813378d1f5bc42002d5c9358316af9d904a0a9f5e8359d"
+  },
+  "runtime/macos_preflight.py": {
+    "mode": 292,
+    "sha256": "455328165961fd24861cbc59c1df092040ab84e3a52c688d37dea2a655bc82ae"
+  },
+  "runtime/native_guest.py": {
+    "mode": 292,
+    "sha256": "8120cca269c711b3187393e754b60c4b298cebc9abc2ac2c17c25fd0e70c0ca8"
+  },
+  "runtime/native_prompt_guard.py": {
+    "mode": 292,
+    "sha256": "3aa0a99885458c02129fa75f7d45487c92cc383f5485e16e12794e6088265496"
+  },
+  "runtime/verify_bundle.py": {
+    "mode": 292,
+    "sha256": "cdfb25adbdba37c66021764fa4309e423488308d54c6706b093844ad6fbc6772"
+  }
+}

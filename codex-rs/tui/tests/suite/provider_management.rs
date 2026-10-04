@@ -19,6 +19,7 @@ use wiremock::ResponseTemplate;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
+use crate::support::secret_scan;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
 use crate::support::tmux::TerminalSize;
@@ -1165,42 +1166,14 @@ fn capture_success(
 fn tree_contains_except_custody(root: &Path, needle: &[u8]) -> Result<bool> {
     // These exact home-level files are credential custody, not transcripts.
     // Files with the same names elsewhere remain subject to the leak scan.
-    for entry in fs::read_dir(root)? {
-        let path = entry?.path();
-        if path == root.join("provider_auth.json") || path == root.join("auth.json") {
-            continue;
-        }
-        if tree_contains(&path, needle)? {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    let custody = [root.join("provider_auth.json"), root.join("auth.json")];
+    secret_scan::tree_contains(root, needle, &|path| {
+        custody.iter().any(|file| path == file)
+    })
 }
 
 fn tree_contains(root: &Path, needle: &[u8]) -> Result<bool> {
-    let metadata = match fs::symlink_metadata(root) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(error) => return Err(error.into()),
-    };
-    let file_type = metadata.file_type();
-    if file_type.is_symlink() {
-        return Ok(false);
-    }
-    if file_type.is_file() {
-        let bytes = fs::read(root)?;
-        return Ok(bytes.windows(needle.len()).any(|window| window == needle));
-    }
-    if !file_type.is_dir() {
-        return Ok(false);
-    }
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        if tree_contains(&entry.path(), needle)? {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    secret_scan::tree_contains(root, needle, &|_| false)
 }
 
 fn synthetic_canary(label: &str) -> String {

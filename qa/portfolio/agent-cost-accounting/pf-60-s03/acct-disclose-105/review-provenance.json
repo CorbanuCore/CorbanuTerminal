@@ -1,0 +1,17 @@
+{
+  "source": "Manager-reported history only; not independent certification of runtime, reviewer independence, complete review roster, execution, or owner approval.",
+  "model": "claude-opus-5-plan",
+  "effort": "high",
+  "rounds": [
+    95,
+    96,
+    97,
+    100,
+    102
+  ],
+  "citation_withdrawal": {
+    "allocation": "acct-reconcile-107",
+    "source_commit": "6a7128ccc4e10c92dd583ca65b62e70d84483012",
+    "reason": "Ephemeral launch scripts had no retained contents or contemporaneous hashes. Their paths are no longer cited as inspectable evidence. The earlier citation remains in Git history; no script execution or runtime is independently established by this record."
+  }
+}

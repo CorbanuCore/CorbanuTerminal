@@ -1,0 +1,11 @@
+{
+  "exit": 1,
+  "case": {
+    "kind": "exact",
+    "page": "narrow"
+  },
+  "harness_assertion": "assert old.returncode == 0 and old_target.exists(), (kind, name, old.stderr)",
+  "old_audit_error": "Traceback (most recent call last):\n  File \"/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-scope-62/coverage-run-02/pre-revision-audit.py\", line 81, in <module>\n    assert \"Known subtotal exact USD: 0.00071\" in ntext\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n",
+  "provenance": "Exact old-audit traceback preserved from the failed tool result; this is a harness expectation defect, not a product failure.",
+  "disposition": "Retained failed run. Separate coverage-run-03 evaluates and records this existing narrow-case rejection correctly."
+}

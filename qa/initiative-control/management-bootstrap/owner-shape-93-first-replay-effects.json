@@ -1,0 +1,80 @@
+{
+  "synthetic_only": true,
+  "action_status": "returned",
+  "claim": "a59a9f19-940c-4fa2-95ab-cc878ddeb02e",
+  "allocation_digest": "6e55dc8c03a13b46640f087be0a3a18885af31af0591768a6461ad703167fc86",
+  "inputs": {
+    "allocation": "promotion",
+    "base_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "brief_file": "/private/tmp/op80-5zawflfe/brief.json",
+    "brief_sha256": "742b98d055c7199061ae7eb310b7bc03a7dafe335c4fbafd59f05dfc2b662356",
+    "model": "fixture-model",
+    "reasoning_effort": "high",
+    "task": "Read the frozen brief",
+    "worker": {
+      "effort": "high",
+      "model": "fixture-model",
+      "policy": "--yolo",
+      "provider": "fixture",
+      "worktree": "/private/tmp/op80-5zawflfe/worktree"
+    },
+    "worktree": "/private/tmp/op80-5zawflfe/worktree"
+  },
+  "effects": [
+    [
+      "ack",
+      "applied",
+      1
+    ],
+    [
+      "acknowledged",
+      "applied",
+      1
+    ],
+    [
+      "claim",
+      "applied",
+      1
+    ],
+    [
+      "dispatched",
+      "applied",
+      1
+    ],
+    [
+      "launch",
+      "applied",
+      1
+    ],
+    [
+      "prepare",
+      "applied",
+      1
+    ],
+    [
+      "prompt",
+      "applied",
+      1
+    ],
+    [
+      "return_observed",
+      "applied",
+      1
+    ],
+    [
+      "returned",
+      "applied",
+      1
+    ],
+    [
+      "start",
+      "applied",
+      1
+    ],
+    [
+      "working",
+      "applied",
+      1
+    ]
+  ]
+}

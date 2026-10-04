@@ -227,6 +227,7 @@ mod history_ui;
 mod input;
 mod loaded_threads;
 mod pending_interactive_replay;
+mod permission_confirmation;
 mod pets;
 mod platform_actions;
 mod plugin_mentions;
@@ -235,6 +236,7 @@ mod provider_management_auth;
 mod provider_management_status;
 mod replay_filter;
 mod resize_reflow;
+mod resume_defaults;
 mod safety_buffering;
 mod session_lifecycle;
 mod side;
@@ -336,6 +338,36 @@ fn spawn_tui_event_drainer(mut tui_events: BoxedTuiEventStream) -> DrainedTuiEve
     });
 
     DrainedTuiEvents { rx, watchdog }
+}
+
+/// Lend the single input queue to a modal without losing watchdog accounting.
+fn modal_tui_events<'a>(
+    rx: &'a mut mpsc::UnboundedReceiver<TuiEvent>,
+    watchdog: &'a TuiInputDrainWatchdog,
+) -> impl Stream<Item = TuiEvent> + Send + Unpin + 'a {
+    ModalTuiEvents { rx, watchdog }
+}
+
+struct ModalTuiEvents<'a> {
+    rx: &'a mut mpsc::UnboundedReceiver<TuiEvent>,
+    watchdog: &'a TuiInputDrainWatchdog,
+}
+
+impl Stream for ModalTuiEvents<'_> {
+    type Item = TuiEvent;
+
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        this.rx.poll_recv(cx).map(|event| {
+            if event.is_some() {
+                this.watchdog.note_handled();
+            }
+            event
+        })
+    }
 }
 
 fn spawn_tui_input_watchdog(
@@ -728,6 +760,7 @@ pub(crate) struct App {
     cloud_config_bundle: CloudConfigBundleLoader,
     runtime_approval_policy_override: Option<AskForApproval>,
     runtime_permission_profile_override: Option<RuntimePermissionProfileOverride>,
+    pending_permission_confirmation: Option<permission_confirmation::PendingPermissionConfirmation>,
 
     pub(crate) file_search: FileSearchManager,
 
@@ -1340,6 +1373,28 @@ impl App {
                     )
                     .await
                     .map_err(|err| session_start_error("resume", &target_session, err))?;
+                apply_persisted_resume_runtime(
+                    &mut config,
+                    Some(&resumed.session.model),
+                    &resumed.session.model_provider_id,
+                    resumed.session.reasoning_effort.clone(),
+                );
+                config.service_tier = resumed.session.service_tier.clone();
+                if !resumed.blocks_direct_input
+                    && let Err(error) = resume_defaults::remember_resumed_model(
+                        &app_server,
+                        &config,
+                        model_settings,
+                        &resumed.session,
+                    )
+                    .await
+                {
+                    app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+                        history_cell::new_error_event(format!(
+                            "Session restored, but failed to save its startup model: {error}"
+                        )),
+                    )));
+                }
                 let init = crate::chatwidget::ChatWidgetInit {
                     config: config.clone(),
                     frame_requester: tui.frame_requester(),
@@ -1578,6 +1633,7 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
             cloud_config_bundle,
             runtime_approval_policy_override: None,
             runtime_permission_profile_override: None,
+            pending_permission_confirmation: None,
             file_search,
             enhanced_keys_supported,
             keymap: runtime_keymap,
@@ -1839,7 +1895,15 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
                             .await;
                             AppRunControl::Continue
                         } else {
-                            match Box::pin(app.handle_event(tui, &mut app_server, event)).await {
+                            let result = if matches!(event, AppEvent::OpenResumePicker) {
+                                // Keep a single reader of the terminal. Lend its queue to
+                                // the modal, including watchdog accounting, until it closes.
+                                let mut events = modal_tui_events(&mut tui_event_rx, &tui_input_watchdog_state);
+                                app.handle_resume_picker_event(tui, &mut app_server, &mut events).await
+                            } else {
+                                Box::pin(app.handle_event(tui, &mut app_server, event)).await
+                            };
+                            match result {
                                 Ok(control) => control,
                                 Err(err) => {
                                     tracing::error!(error = ?err, "contained app event handler failure");

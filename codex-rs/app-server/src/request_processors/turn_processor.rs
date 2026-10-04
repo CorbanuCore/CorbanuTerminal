@@ -2,6 +2,9 @@ use super::*;
 use codex_agent_extension::AgentInvocation;
 use codex_agent_extension::AgentRun;
 use codex_agent_extension::AgentRunner;
+use codex_core::accounting_extensions::SentModelRequest;
+use codex_model_provider_info::WireApi;
+use codex_model_provider_info::built_in_model_providers;
 use codex_protocol::crew::AgentClass;
 use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::models::ContentItem;
@@ -19,6 +22,42 @@ use crate::image_url::is_remote_image_url;
 
 const DIRECT_INPUT_TO_MULTI_AGENT_V2_SUBAGENT_ERROR: &str =
     "direct app-server input is not allowed for multi-agent v2 sub-agents";
+
+/// The route a reported send may be recorded against, canonically.
+///
+/// A client reports the account it believes it billed; this server only agrees
+/// when that account is one it ships and the reported route is that account's
+/// own route in its own dialect. A provider this build does not know, or a
+/// known provider on a route it does not serve, is not recorded.
+///
+/// This is a well-formedness check and not an authorisation boundary, and the
+/// difference matters: the caller still names the account, and the accepted
+/// base URLs are public constants, so a client that can reach this request can
+/// name any built-in provider whose own route it quotes correctly - including
+/// two providers that share a route, which this cannot tell apart. What it
+/// does guarantee is that nothing lands under a route its named provider does
+/// not serve, and that the endpoint recorded is the catalogue's string rather
+/// than however the caller spelled it. Nothing monetary rides on the name:
+/// `record_sent_request` claims no economics for a reported send.
+fn recognised_reported_route(
+    provider_id: &str,
+    base_url: &str,
+    path: &str,
+) -> Option<(String, String, WireApi)> {
+    let provider = built_in_model_providers(/*openai_base_url*/ None).remove(provider_id)?;
+    let api = provider.to_api_provider(/*auth_mode*/ None).ok()?;
+    let route = api.base_url.trim_end_matches('/').to_string();
+    if route != base_url.trim_end_matches('/') {
+        return None;
+    }
+    let dialect_path = match provider.wire_api {
+        WireApi::Anthropic => "messages",
+        WireApi::Responses => "responses",
+        WireApi::Chat => "chat/completions",
+    };
+    (path.trim_start_matches('/') == dialect_path)
+        .then(|| (route, dialect_path.to_string(), provider.wire_api))
+}
 
 /// Mirrors the direct-input policy in both request validation and thread capability responses.
 pub(super) fn can_accept_direct_input(
@@ -242,6 +281,15 @@ impl TurnRequestProcessor {
             .map(|response| Some(response.into()))
     }
 
+    pub(crate) async fn thread_record_sent_model_request(
+        &self,
+        params: ThreadRecordSentModelRequestParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.thread_record_sent_model_request_inner(params)
+            .await
+            .map(|response| Some(response.into()))
+    }
+
     pub(crate) async fn thread_settings_update(
         &self,
         request_id: &ConnectionRequestId,
@@ -249,7 +297,7 @@ impl TurnRequestProcessor {
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         self.thread_settings_update_inner(request_id, params)
             .await
-            .map(|response| Some(response.into()))
+            .map(|response| response.map(Into::into))
     }
 
     pub(crate) async fn turn_steer(
@@ -761,9 +809,8 @@ impl TurnRequestProcessor {
         let collaboration_mode =
             collaboration_mode.map(|mode| self.normalize_collaboration_mode(mode));
         let has_environment_override = environments.is_some();
-        // `thread/settings/update` only acknowledges that the update was queued.
-        // Clients that send dependent partial updates should wait for
-        // `thread/settings/updated` or combine the fields in one request.
+        // Legacy requests only acknowledge queueing. Dependent partial updates
+        // should opt into confirmation or combine their fields in one request.
         let snapshot = if permissions.is_some() {
             Some(thread.config_snapshot().await)
         } else {
@@ -891,8 +938,8 @@ impl TurnRequestProcessor {
         &self,
         request_id: &ConnectionRequestId,
         params: ThreadSettingsUpdateParams,
-    ) -> Result<ThreadSettingsUpdateResponse, JSONRPCErrorError> {
-        let (_, thread) = self.load_thread(&params.thread_id).await?;
+    ) -> Result<Option<ThreadSettingsUpdateResponse>, JSONRPCErrorError> {
+        let (thread_id, thread) = self.load_thread(&params.thread_id).await?;
         let cwd = resolve_request_cwd(params.cwd)?;
         let environments = self
             .build_environment_override(
@@ -923,6 +970,49 @@ impl TurnRequestProcessor {
             )
             .await?;
 
+        if params.confirm {
+            let trace = self.request_trace_context(request_id).await;
+            let operation_id = uuid::Uuid::new_v4().to_string();
+            let (state, completion) = self
+                .thread_state_manager
+                .register_settings_confirmation(
+                    thread_id,
+                    &thread,
+                    operation_id.clone(),
+                    request_id.clone(),
+                )
+                .await
+                .ok_or_else(|| {
+                    invalid_request(
+                        "settings confirmation requires a live thread listener and connection",
+                    )
+                })?;
+            let submission = codex_protocol::protocol::Submission {
+                id: operation_id.clone(),
+                op: Op::ThreadSettings { thread_settings },
+                client_user_message_id: None,
+                parent_turn_id: None,
+                trace,
+            };
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+            tokio::spawn(crate::settings_confirmation::complete_settings_submission(
+                state.clone(),
+                operation_id.clone(),
+                request_id.clone(),
+                completion,
+                self.outgoing.clone(),
+                deadline,
+            ));
+            // Keep enqueue order under the native per-thread request serializer.
+            // The deferred owner already exists if this handler is cancelled.
+            if !matches!(
+                tokio::time::timeout_at(deadline, thread.submit_with_id(submission)).await,
+                Ok(Ok(()))
+            ) {
+                state.lock().await.pending_settings.remove(&operation_id);
+            }
+            return Ok(None);
+        }
         if thread_settings != codex_protocol::protocol::ThreadSettingsOverrides::default() {
             self.submit_core_op(
                 request_id,
@@ -933,7 +1023,7 @@ impl TurnRequestProcessor {
             .map_err(|err| internal_error(format!("failed to update thread settings: {err}")))?;
         }
 
-        Ok(ThreadSettingsUpdateResponse {})
+        Ok(Some(ThreadSettingsUpdateResponse::Accepted {}))
     }
 
     async fn thread_inject_items_response_inner(
@@ -962,6 +1052,48 @@ impl TurnRequestProcessor {
                 _ => internal_error(format!("failed to inject response items: {err}")),
             })?;
         Ok(ThreadInjectItemsResponse {})
+    }
+
+    /// Record a model request a client sent itself.
+    ///
+    /// The Claude panes bridge posts to a provider from inside the TUI, which
+    /// does not run the model client, so those requests reached no ledger at
+    /// all. The client reports the send; the server decides what it means.
+    ///
+    /// The client names the account it billed and the route it took; this
+    /// server records it only when the two agree with a provider it ships, and
+    /// records the catalogue's strings rather than the caller's. See
+    /// `recognised_reported_route` for what that does and does not guarantee.
+    /// The numbers still come from the provider's own response body, parsed by
+    /// the dialect's own parser.
+    async fn thread_record_sent_model_request_inner(
+        &self,
+        params: ThreadRecordSentModelRequestParams,
+    ) -> Result<ThreadRecordSentModelRequestResponse, JSONRPCErrorError> {
+        let (_, thread) = self.load_thread(&params.thread_id).await?;
+        let Some((endpoint, path, wire_api)) =
+            recognised_reported_route(&params.provider_id, &params.base_url, &params.path)
+        else {
+            tracing::warn!(
+                provider_id = %params.provider_id,
+                base_url = %params.base_url,
+                path = %params.path,
+                "accounting: reported send is not a known provider's own route"
+            );
+            return Ok(ThreadRecordSentModelRequestResponse { recorded: false });
+        };
+        let recorded = thread
+            .record_sent_model_request(SentModelRequest {
+                provider_id: params.provider_id,
+                endpoint,
+                path,
+                wire_api,
+                model: params.model,
+                label: "pane".to_string(),
+                usage: params.usage,
+            })
+            .await;
+        Ok(ThreadRecordSentModelRequestResponse { recorded })
     }
 
     async fn set_app_server_client_info(
@@ -1013,6 +1145,7 @@ impl TurnRequestProcessor {
             return Err(error);
         }
 
+        let returned_input = params.input.clone();
         let mapped_items: Vec<CoreInputItem> = params
             .input
             .into_iter()
@@ -1077,6 +1210,22 @@ impl TurnRequestProcessor {
                             message,
                             data,
                             Some(AnalyticsJsonRpcError::TurnSteer(turn_steer_error)),
+                        )
+                    }
+                    SteerInputError::AuthorizationChanged(_) => {
+                        tracing::info!(
+                            boundary = "authorizationChanged",
+                            input_disposition = "returned",
+                            "turn/steer admission refused"
+                        );
+                        (
+                            "Permissions changed since this turn started. Wait for it to finish or stop it, then submit your message again.".to_string(),
+                            Some(serde_json::json!({
+                                "code": "authorizationChanged",
+                                "inputDisposition": "returned",
+                                "input": returned_input,
+                            })),
+                            None,
                         )
                     }
                     SteerInputError::EmptyInput => (
@@ -1686,5 +1835,54 @@ mod tests {
             &source,
             Some("another-client"),
         ));
+    }
+
+    /// Which account a reported send bills is decided here, from the route,
+    /// and not by the client that reports it.
+    #[test]
+    fn only_a_known_provider_s_own_route_is_recorded() {
+        // The bridge's upstreams, canonicalised by the catalogue rather than
+        // by however the caller spelled them.
+        assert_eq!(
+            recognised_reported_route(
+                "ambient",
+                "https://api.ambient.xyz/v1/",
+                "/chat/completions"
+            ),
+            Some((
+                "https://api.ambient.xyz/v1".to_string(),
+                "chat/completions".to_string(),
+                WireApi::Chat
+            ))
+        );
+        assert_eq!(
+            recognised_reported_route(
+                "vercel-anthropic",
+                "https://ai-gateway.vercel.sh/v1",
+                "messages"
+            ),
+            Some((
+                "https://ai-gateway.vercel.sh/v1".to_string(),
+                "messages".to_string(),
+                WireApi::Anthropic
+            ))
+        );
+        // A provider this build does not ship.
+        assert_eq!(
+            recognised_reported_route("evil", "https://evil.example.com/v1", "messages"),
+            None
+        );
+        // A known provider, on a route it does not serve: the gateway's spend
+        // cannot be moved onto Anthropic's route, nor Anthropic's onto the
+        // gateway's.
+        assert_eq!(
+            recognised_reported_route("anthropic", "https://ai-gateway.vercel.sh/v1", "messages"),
+            None
+        );
+        // A known provider, on its own route but in another dialect.
+        assert_eq!(
+            recognised_reported_route("ambient", "https://api.ambient.xyz/v1", "responses"),
+            None
+        );
     }
 }

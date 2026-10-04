@@ -1,0 +1,15 @@
+{
+  "exit_code": 0,
+  "counts": {
+    "F05": 8,
+    "F06": 8,
+    "F07": 16,
+    "F08": 40,
+    "F09": 216
+  },
+  "total": 288,
+  "inventories_byte_identical": true,
+  "harness_argument": "/Volumes/CorbanuDrive/Corbanu/.codex-work/functional-pf83.20260915",
+  "guest_contact": false,
+  "product_staged": false
+}

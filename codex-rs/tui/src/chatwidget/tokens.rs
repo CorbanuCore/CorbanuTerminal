@@ -14,6 +14,7 @@
 //! `ChatWidget` history insertion.
 
 mod chart;
+mod scope;
 
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -278,11 +279,1850 @@ impl ChatWidget {
     /// Late background responses cannot mutate cards after a transcript reset,
     /// backtrack, or replacement flow clears this widget-owned state.
     pub(crate) fn clear_pending_token_activity_refreshes(&mut self) {
+        self.accounting_inspector = None;
+        self.bottom_pane.dismiss_view_by_id(INSPECTOR_VIEW);
         let cleared_refresh = self.refreshing_token_activity_output.take().is_some();
         let cleared_completed = self.completed_token_activity_output.take().is_some();
         if cleared_refresh || cleared_completed {
             self.bump_active_cell_revision();
             self.request_redraw();
+        }
+    }
+}
+
+// Inspector pages contain local evidence only; never insert them into history.
+use crate::bottom_pane::SelectionItem;
+use crate::bottom_pane::SelectionViewParams;
+use codex_protocol::ThreadId;
+use codex_state::accounting::BucketQuote;
+use codex_state::accounting::Decimal;
+use codex_state::accounting::InspectionDay;
+use codex_state::accounting::InspectionGrouping;
+use codex_state::accounting::InspectionRange;
+use codex_state::accounting::ObservationQuote;
+use uuid::Uuid;
+
+const INSPECTOR_VIEW: &str = "recorded-requests";
+
+pub(super) struct Inspector {
+    generation: Uuid,
+    thread: Option<ThreadId>,
+    day: i64,
+    range: Option<InspectionRange>,
+    pages: Vec<InspectorPage>,
+    page: usize,
+    /// Pages opened before the current one, so Back and Esc return the way
+    /// the user came rather than to a page's fixed parent.
+    history: Vec<usize>,
+    alive: Arc<std::sync::atomic::AtomicBool>,
+}
+
+struct InspectorPage {
+    title: String,
+    text: Vec<String>,
+    links: Vec<(String, usize)>,
+    parent: Option<usize>,
+    selected: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+fn money(value: Decimal) -> String {
+    let display = value.display();
+    format!(
+        "${}{}{}",
+        display.text,
+        if display.rounded { " (rounded)" } else { "" },
+        if display.nonzero_sub_micro {
+            " (nonzero, less than $0.000001)"
+        } else {
+            ""
+        }
+    )
+}
+
+fn exact(value: Decimal) -> String {
+    serde_json::to_value(value)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_else(|| "unavailable".to_string())
+}
+
+/// The provider and model of every attempt that recorded tokens and no price
+/// for any of them.
+///
+/// A blank money figure leaves an operator unable to tell a collector that
+/// recorded nothing from a request whose tokens were recorded with no rate to
+/// price them, and those are different problems. This names the second kind,
+/// and only that kind: a row appears when at least one bucket carries usage
+/// with no rate (`MissingRate`) and none could be priced. An attempt that
+/// recorded no usage at all is a different gap and is counted elsewhere as an
+/// incomplete attempt, not named here.
+///
+/// What it must not do is say WHY there was no rate. The ledger does not know:
+/// a missing price can mean the catalogue states no rate for the row, or that
+/// the route's credential could not be attributed to the account a rate is
+/// quoted for, or that the turn ran on a service tier the rates are not quoted
+/// for. Naming the rows is actionable; guessing the cause would send the
+/// operator to fix the wrong thing.
+fn unpriced_rows<'a>(quotes: impl IntoIterator<Item = &'a ObservationQuote>) -> Vec<String> {
+    let mut rows: Vec<(String, u64)> = Vec::new();
+    for quote in quotes.into_iter().filter(|quote| has_no_price(quote)) {
+        let attributed = |value: &str| {
+            if value.trim().is_empty() {
+                "unknown (attribution absent)".to_string()
+            } else {
+                value.to_string()
+            }
+        };
+        let row = format!(
+            "{} ({}/{})",
+            route_name(quote),
+            attributed(&quote.attempt.provider),
+            attributed(&quote.attempt.model)
+        );
+        match rows.iter_mut().find(|(named, _)| *named == row) {
+            Some((_, attempts)) => *attempts += 1,
+            None => rows.push((row, 1)),
+        }
+    }
+    rows.sort();
+    if rows.is_empty() {
+        Vec::new()
+    } else {
+        vec![format!(
+            "Attempts with no price for any recorded tokens: {}. No money is stated for those attempts, which is not a zero-cost claim, and says nothing about the other attempts on the same model. A price can be absent because the catalogue states no rate for the row, because this route's credential or service tier is not one the quoted rates apply to, or because no rate was in effect at dispatch.",
+            rows.iter()
+                .map(|(row, attempts)| format!("{attempts} on {row}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )]
+    }
+}
+
+/// An attempt that recorded tokens and has no price for any of them.
+fn has_no_price(quote: &ObservationQuote) -> bool {
+    // Subscription work is not billed per token, so it has no money to be
+    // missing. Its own gap - an API equivalent the catalogue does not state -
+    // is already stated as such beside the plan rate that applied, and naming
+    // it here would assert unstated money next to a line saying the turn was
+    // never billed that way.
+    if quote.is_plan() {
+        return false;
+    }
+    let usage = &quote.usage;
+    // Only tokens that were actually recorded and are not zero count here.
+    // Zero tokens cost nothing whatever the rate, and a bucket priced at zero
+    // because its count was zero says nothing about whether a rate exists -
+    // which is why this reads the counts rather than the bucket variants
+    // alone, and why money is not the test either: a bucket priced by a real
+    // rate of zero states a price, and states no money.
+    let recorded = [usage.noncached, usage.read, usage.write, usage.output]
+        .into_iter()
+        .zip(quote.buckets)
+        .filter(|(count, _)| count.is_some_and(|count| count > 0));
+    let mut priced = false;
+    let mut unpriced = false;
+    for (_, bucket) in recorded {
+        match bucket {
+            BucketQuote::Priced(_) => priced = true,
+            BucketQuote::MissingRate => unpriced = true,
+            BucketQuote::MissingUsage => {}
+        }
+    }
+    unpriced && !priced
+}
+
+fn estimate(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
+    if totals.attempts == 0 {
+        return vec!["No recorded attempts; collection coverage unknown.".into()];
+    }
+    // Count the per-token-billed population on its own. A plan attempt has no
+    // billed price by construction - `all_buckets_priced` is `Some` only when
+    // the attempt is complete and not plan work - so every plan attempt adds
+    // one to `unknown_estimates`. Reporting that against every attempt made a
+    // day of pure subscription work read as "2 of 2 attempts incomplete"
+    // directly above the lines stating that day's consumption exactly. Both
+    // subtractions are exact rather than defensive, and compacted days carry
+    // all three figures.
+    let known = totals.known_usd;
+    let attempts = totals.attempts.saturating_sub(totals.plan_attempts);
+    let unknown = totals
+        .unknown_estimates
+        .saturating_sub(totals.plan_attempts);
+    // Nothing in these totals was billed per token. Saying the cost is
+    // "unknown" here was false and read as a failure: the plan lines below state
+    // it exactly, and there is no per-token spend that went missing. The same
+    // totals back a whole day and a single attempt's page, so the sentence speaks
+    // only for the attempts it was computed from, never for the day around them.
+    if attempts == 0 {
+        let mut lines = vec!["No recorded attempt here was billed per token.".to_string()];
+        lines.extend(plan(totals));
+        return lines;
+    }
+    let incomplete = format!(
+        "Full recorded estimate: unavailable ({unknown} of {attempts} billed attempts incomplete)"
+    );
+    // A known part of zero is not a figure worth stating beside an unknown
+    // estimate: "$0.000000 + unknown" reads as a zero-cost claim.
+    let mut lines = if unknown == 0 {
+        vec![format!(
+            "Estimated token cost for recorded attempts: {}",
+            money(known)
+        )]
+    } else if known == Decimal::default() {
+        vec!["Estimated token cost: unknown".into(), incomplete]
+    } else {
+        vec![
+            format!(
+                "Known estimated token cost: {} + unknown costs",
+                money(known)
+            ),
+            incomplete,
+        ]
+    };
+    lines.extend(plan(totals));
+    lines
+}
+
+/// Plan work stated as plan work: the rate that applied, the consumption it
+/// implies, and what the same tokens would have cost on the API side.
+///
+/// None of this is money spent, and it is never folded into the cost above.
+fn plan(totals: &codex_state::accounting::DayTotals) -> Vec<String> {
+    if totals.plan_attempts == 0 {
+        return Vec::new();
+    }
+    let burn = &totals.plan_burn_milli_tokens;
+    let mut lines = vec![format!(
+        "Subscription capacity: {} of {} attempts, not billed per token",
+        totals.plan_attempts, totals.attempts
+    )];
+    lines.push(if burn.unknown == 0 {
+        format!(
+            "Plan consumption: {} tokens at the plan rate that applied",
+            rate_scaled(burn.known)
+        )
+    } else if burn.known == 0 {
+        format!(
+            "Plan consumption: unavailable — no plan rate or token total for {} of {} plan attempts",
+            burn.unknown, totals.plan_attempts
+        )
+    } else {
+        format!(
+            "Plan consumption: {} tokens at the plan rate, plus {} attempts with no stateable figure",
+            rate_scaled(burn.known),
+            burn.unknown
+        )
+    });
+    lines.push(if totals.unknown_equivalents == 0 {
+        format!(
+            "Same tokens at API rates: {}",
+            money(totals.equivalent_usd)
+        )
+    } else if totals.equivalent_usd == Decimal::default() {
+        format!(
+            "Same tokens at API rates: unavailable — the catalogue states no API price for {} of {} plan attempts",
+            totals.unknown_equivalents, totals.plan_attempts
+        )
+    } else {
+        format!(
+            "Same tokens at API rates: {} known, plus {} of {} plan attempts the catalogue does not price",
+            money(totals.equivalent_usd),
+            totals.unknown_equivalents,
+            totals.plan_attempts
+        )
+    });
+    lines
+}
+
+/// Plan consumption is carried as tokens scaled by a rate in thousandths, so a
+/// 1.0x turn reads back as exactly its own token count.
+fn rate_scaled(milli_tokens: i64) -> String {
+    let whole = grouped(milli_tokens / 1000);
+    let fraction = milli_tokens % 1000;
+    if fraction == 0 {
+        whole
+    } else {
+        format!("{whole}.{fraction:03}")
+    }
+}
+
+/// The exact known subtotal, or "none" when nothing billed per token was
+/// priced: a bare `0` beside an unknown estimate reads as a zero-cost claim.
+fn known_exact(t: &codex_state::accounting::DayTotals) -> String {
+    if t.attempts == 0 {
+        "none — no recorded attempts in this conversation".to_string()
+    } else if t.plan_attempts == t.attempts {
+        "none — subscription work is not billed per token".to_string()
+    } else if t.known_usd == Decimal::default() && t.unknown_estimates > t.plan_attempts {
+        "none — no price for these attempts".to_string()
+    } else {
+        exact(t.known_usd)
+    }
+}
+
+/// One token counter across attempts: the known count, and how many attempts
+/// did not report it.
+fn metric_text(m: &codex_state::accounting::Metric) -> String {
+    let attempts = |n: i64| format!("{n} {}", if n == 1 { "attempt" } else { "attempts" });
+    match (m.known, m.unknown) {
+        (known, 0) => grouped(known),
+        (0, unknown) => format!("not reported ({})", attempts(unknown)),
+        (known, unknown) => format!("{} + not reported by {}", grouped(known), attempts(unknown)),
+    }
+}
+
+const METRICS: [&str; 7] = [
+    "Input",
+    "Noncached input (derived for inclusive input)",
+    "Cache read",
+    "Cache write",
+    "Output",
+    "Reasoning (subset, not separately billed)",
+    "Total (not separately billed)",
+];
+const BUCKETS: [&str; 4] = ["Noncached input", "Cache read", "Cache write", "Output"];
+
+fn attempt_text(q: &ObservationQuote) -> Vec<String> {
+    let a = &q.attempt;
+    let mut lines = vec![
+        format!("Request: {}", a.request_id),
+        format!("Attempt: {}", a.attempt_id),
+        format!("Thread: {}", a.thread_id),
+        format!("Turn: {}", a.turn),
+        format!("Provider: {}", a.provider),
+        format!("Model: {}", a.model),
+        format!("Opaque scope: {}", a.scope),
+        format!("Arithmetic dialect: {:?}", a.dialect),
+        format!(
+            "Admission time: {}",
+            utc_instant(i64::from(a.dispatched_at_ms))
+        ),
+        format!(
+            "Retry predecessor: {}",
+            a.retry_of.map_or("none".into(), |v| v.to_string())
+        ),
+        "Completion/billing status: not recorded. Literal wire/endpoint and usage observation wall time: unavailable"
+            .into(),
+    ];
+    if q.snapshot.is_none()
+        && !q
+            .buckets
+            .iter()
+            .any(|bucket| matches!(bucket, BucketQuote::Priced(_)))
+    {
+        lines.push("Token cost: unavailable — no applicable price; recorded usage is not a zero-cost claim.".into());
+    } else {
+        match codex_state::accounting::DayTotals::from_quotes([q]) {
+            Ok(attempt_totals) => lines.extend(estimate(&attempt_totals)),
+            Err(_) => lines.push("Token cost: unavailable — exact arithmetic overflow".into()),
+        }
+    }
+    if let Some(burn) = q.plan_burn_millis {
+        lines.push(format!(
+            "Plan rate at dispatch: {}x",
+            rate_scaled(i64::from(burn))
+        ));
+    } else if q.is_plan() {
+        lines.push("Plan rate at dispatch: not stated by the vendor".into());
+    }
+    if let Some(billed) = billed_figure(&[q]) {
+        lines.push(billed_detail(&billed));
+    }
+    let u = &q.usage;
+    for (index, (label, value)) in METRICS
+        .iter()
+        .zip([
+            u.input,
+            u.noncached,
+            u.read,
+            u.write,
+            u.output,
+            u.reasoning,
+            u.total,
+        ])
+        .enumerate()
+    {
+        let derived = match a.dialect {
+            codex_state::accounting::Dialect::Inclusive => index == 1,
+            codex_state::accounting::Dialect::NativeAnthropic => index == 0 || index == 6,
+            codex_state::accounting::Dialect::UnknownCompatible => false,
+        };
+        lines.push(format!(
+            "{label}: {}",
+            value.map_or("unknown — no retained numeric evidence".into(), |n| {
+                if n == 0 {
+                    if derived {
+                        "0 (derived)"
+                    } else {
+                        "0 (reported)"
+                    }
+                    .into()
+                } else {
+                    format!("{n}{}", if derived { " (derived)" } else { "" })
+                }
+            })
+        ));
+    }
+    for (label, bucket) in BUCKETS.iter().zip(q.buckets) {
+        lines.push(format!(
+            "{label} cost: {}",
+            match bucket {
+                BucketQuote::Priced(v) => format!("{}; exact USD {}", money(v), exact(v)),
+                BucketQuote::MissingUsage => "unknown — no retained numeric evidence".into(),
+                BucketQuote::MissingRate => "unknown — rate unavailable".into(),
+            }
+        ));
+    }
+    lines.push(format!(
+        "Known subtotal exact USD: {}",
+        codex_state::accounting::DayTotals::from_quotes([q])
+            .map_or_else(|_| exact(q.known_subtotal), |t| known_exact(&t))
+    ));
+    if let Some(s) = &q.snapshot {
+        lines.extend([
+            format!("Price ID: {}", s.id),
+            format!(
+                "Price source: {:?}; reference {}",
+                s.source_kind, s.source_reference
+            ),
+            format!("Price currency/unit: {:?} / {:?}", s.currency, s.unit),
+            format!(
+                "Price observed/approved: {} / {}",
+                utc_instant(i64::from(s.observed_at_ms)),
+                utc_instant(i64::from(s.approved_at_ms))
+            ),
+            format!(
+                "Price effective interval: [{}, {})",
+                utc_instant(i64::from(s.effective_from_ms)),
+                s.effective_end_ms
+                    .map_or("unbounded".into(), |n| utc_instant(i64::from(n)))
+            ),
+        ]);
+        for (label, rate) in BUCKETS.iter().zip([
+            s.rates.noncached,
+            s.rates.read,
+            s.rates.write,
+            s.rates.output,
+        ]) {
+            lines.push(rate.map_or_else(
+                || format!("Rate unavailable for {label}"),
+                |r| format!("{label} rate: {} USD per million tokens", exact(r)),
+            ));
+        }
+    } else {
+        lines.push("Price: unavailable — no dispatch-time price snapshot".into());
+    }
+    for o in &q.observations {
+        lines.push(format!(
+            "Evidence revision {}; source {}; sequence {}; presence patch {}",
+            i64::from(o.revision),
+            o.source,
+            i64::from(o.sequence),
+            serde_json::to_string(&o.patch).unwrap_or_default()
+        ));
+    }
+    lines
+}
+
+fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage> {
+    inspection_pages_for(result, /*period*/ None)
+}
+
+/// `period` names the span a merged multi-day view covers; `None` means the
+/// view is the single UTC day it states.
+fn inspection_pages_for(
+    result: Result<InspectionDay, String>,
+    period: Option<String>,
+) -> Vec<InspectorPage> {
+    if let Ok(InspectionDay::Range {
+        requested,
+        oldest_aggregate_day,
+        read_at_ms,
+        buckets,
+    }) = result
+    {
+        return range_pages(requested, oldest_aggregate_day, read_at_ms, buckets);
+    }
+    let mut pages = vec![InspectorPage { title: "Cost — this conversation".into(), text: vec![
+        "Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.".into(),
+        "Billed cost: unavailable — no settlement evidence".into(),
+        "Logical requests may have attempts on other days; this UTC day is not their complete lifetime.".into(),
+    ], links: Vec::new(), parent: None, selected: Arc::default() }];
+    let ready = match result {
+        Ok(InspectionDay::Ready(view)) => view,
+        other => {
+            pages[0].text.insert(0, match other {
+                Ok(InspectionDay::Absent) => "Unavailable — accounting ledger not installed. Collection remains off.".into(),
+                Ok(InspectionDay::MissingThread) => "Unavailable — native thread no longer exists.".into(),
+                Ok(InspectionDay::CheckpointLag) => "Snapshot is not current; newer activity is unverified".into(),
+                Ok(InspectionDay::NeedsRefresh) => "Recorded totals unavailable — stored contributions need refresh. Retry rereads only; no repair performed.".into(),
+                Ok(InspectionDay::TooLarge) => "Range too large for this inspector. No total shown.".into(),
+                Ok(InspectionDay::DetailUnavailable { coverage, read_at_ms, compact }) => format!(
+                    "Request detail unavailable for this whole UTC day — {}. No total shown. Ledger current to: {}; {}.",
+                    if compact { "compacted history lost request/provider attribution" } else { "day touches expired detail or aggregate history" },
+                    utc_instant(coverage.completed_as_of_ms), retention(read_at_ms, coverage.aggregate_day_floor, coverage.oldest_recorded_day)),
+                Err(message) => message,
+                Ok(InspectionDay::Ready(_) | InspectionDay::Range { .. }) => unreachable!(),
+            });
+            return pages;
+        }
+    };
+    if ready.read_at_ms > ready.coverage.completed_as_of_ms {
+        pages[0]
+            .text
+            .push("Snapshot is not current; newer activity is unverified".into());
+    }
+    let freshness = pages[0].text.clone();
+    let t = &ready.totals;
+    pages[0].text.splice(
+        0..0,
+        if t.attempts == 0 {
+            vec!["No recorded attempts in this conversation or its subagents; collection coverage unknown.".into()]
+        } else {
+            estimate(t)
+        },
+    );
+    pages[0]
+        .text
+        .extend(unpriced_rows(ready.requests.values().flatten()));
+    pages[0].text.extend([
+        format!(
+            "{DAY_COVERED} {}",
+            interval(ready.utc_day * 86_400_000, (ready.utc_day + 1) * 86_400_000)
+        ),
+        format!(
+            "Read at: {}; ledger current to: {} ({} ms behind)",
+            utc_instant(ready.read_at_ms),
+            utc_instant(ready.coverage.completed_as_of_ms),
+            ready.read_at_ms - ready.coverage.completed_as_of_ms
+        ),
+        format!(
+            "Retention: {}",
+            retention(
+                ready.read_at_ms,
+                ready.coverage.aggregate_day_floor,
+                ready.coverage.oldest_recorded_day
+            )
+        ),
+        format!("Known subtotal exact USD: {}", known_exact(t)),
+    ]);
+    for (label, m) in METRICS.iter().zip(&t.measured) {
+        pages[0].text.push(format!("{label}: {}", metric_text(m)));
+    }
+    let context = pages[0].text.clone();
+    let mut request_pages = std::collections::BTreeMap::new();
+    for (request, quotes) in &ready.requests {
+        let request_page = pages.len();
+        request_pages.insert(*request, request_page);
+        let number = pages[0].links.len() + 1;
+        let attempts: Vec<&ObservationQuote> = quotes.iter().collect();
+        let label = match request_route(quotes) {
+            Some(route) => format!("Request {number} · {route} · {}", short_cost(&attempts)),
+            None => format!("Request {number}"),
+        };
+        pages[0].links.push((label, request_page));
+        let mut text = plain_header(&attempts);
+        text.push(format!("Request: {request}"));
+        pages.push(InspectorPage {
+            title: "Request".into(),
+            text,
+            links: Vec::new(),
+            parent: Some(0),
+            selected: Arc::default(),
+        });
+        for (index, quote) in quotes.iter().enumerate() {
+            let target = pages.len();
+            pages[request_page]
+                .links
+                .push((format!("Technical details (attempt {})", index + 1), target));
+            let mut text = plain_header(&[quote]);
+            text.extend(
+                attempt_text(quote)
+                    .into_iter()
+                    .filter(|line| !line.starts_with("Billed cost:")),
+            );
+            pages.push(InspectorPage {
+                title: "Attempt, components and original price".into(),
+                text,
+                links: Vec::new(),
+                parent: Some(request_page),
+                selected: Arc::default(),
+            });
+        }
+    }
+    // All navigation is over this one immutable packet; no second read.
+    let root_groups = [
+        (
+            "Root's own attempts".to_owned(),
+            ready
+                .requests
+                .values()
+                .flatten()
+                .filter(|q| q.attempt.thread_id == ready.owner)
+                .collect::<Vec<_>>(),
+        ),
+        (
+            "Descendant attempts".to_owned(),
+            ready
+                .requests
+                .values()
+                .flatten()
+                .filter(|q| q.attempt.thread_id != ready.owner)
+                .collect::<Vec<_>>(),
+        ),
+    ];
+    let mut providers = std::collections::BTreeMap::new();
+    for quote in ready.requests.values().flatten() {
+        let key = (&quote.attempt.provider, &quote.attempt.model);
+        providers.entry(key).or_insert_with(Vec::new).push(quote);
+    }
+    let mut groups = root_groups.to_vec();
+    for ((provider, model), quotes) in providers {
+        let provider = if provider.trim().is_empty() {
+            "unknown (attribution absent)"
+        } else {
+            provider
+        };
+        let model = if model.trim().is_empty() {
+            "unknown (attribution absent)"
+        } else {
+            model
+        };
+        groups.push((format!("Provider: {provider}; Model: {model}"), quotes));
+    }
+    // Keep missing attribution visible even when this schema has no such rows.
+    if !ready
+        .requests
+        .values()
+        .flatten()
+        .any(|q| q.attempt.provider.trim().is_empty() || q.attempt.model.trim().is_empty())
+    {
+        groups.push(("Unknown provider/model attribution".into(), Vec::new()));
+    }
+    for (title, quotes) in groups {
+        let provider_group = title.starts_with("Provider: ") && !quotes.is_empty();
+        let mut text = if provider_group {
+            plain_header(&quotes)
+        } else {
+            Vec::new()
+        };
+        text.extend(freshness.iter().cloned());
+        text.extend(
+            context
+                .iter()
+                .filter(|s| s.starts_with("Read at:") || s.starts_with(DAY_COVERED))
+                .cloned(),
+        );
+        match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
+            Ok(t) => {
+                text.extend(estimate(&t));
+                text.push(format!("Recorded attempts: {}", t.attempts));
+                if t.attempts > 0 {
+                    text.push(format!("Known estimate exact USD: {}", known_exact(&t)));
+                }
+            }
+            Err(_) => text.push("Estimate unavailable — exact arithmetic overflow".into()),
+        }
+        let links = quotes
+            .iter()
+            .map(|q| {
+                (
+                    format!("Request {}", q.attempt.request_id),
+                    request_pages[&q.attempt.request_id],
+                )
+            })
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let target = pages.len();
+        let label = if provider_group {
+            format!(
+                "{} — {} ({})",
+                route_name(quotes[0]),
+                short_cost(&quotes),
+                request_count(&quotes)
+            )
+        } else {
+            format!("{title} ({})", attempt_count(quotes.len()))
+        };
+        pages[0].links.push((label, target));
+        pages.push(InspectorPage {
+            title,
+            text,
+            links,
+            parent: Some(0),
+            selected: Arc::default(),
+        });
+    }
+    let unknown_page = pages.len();
+    let u = &ready.unknown_parent_totals;
+    pages[0].links.push((
+        format!(
+            "Unknown parent population ({})",
+            attempt_count(usize::try_from(u.attempts).unwrap_or(0))
+        ),
+        unknown_page,
+    ));
+    let mut text = vec![
+        "Membership in this root is unknown. These attempts are separate from root and descendant totals; they may belong to other runs.".into(),
+        format!("Recorded attempts with unresolved ancestry: {}", u.attempts),
+    ];
+    if ready.unknown_parent_unavailable_threads > 0 {
+        let note = format!(
+            "Unresolved ancestry: {} threads have unavailable day detail; their costs and retention coverage are unknown and excluded from this root.",
+            ready.unknown_parent_unavailable_threads
+        );
+        pages[0].text.push(note.clone());
+        text.push(note);
+        text.push("Estimates below cover inspectable attempts only; unavailable threads may have additional unknown costs.".into());
+    }
+    text.extend(estimate(u));
+    text.extend(
+        context
+            .iter()
+            .filter(|s| s.starts_with("Read at:") || s.starts_with(DAY_COVERED))
+            .cloned(),
+    );
+    text.extend(freshness);
+    pages.push(InspectorPage {
+        title: "Unknown parent population".into(),
+        text,
+        links: Vec::new(),
+        parent: Some(0),
+        selected: Arc::default(),
+    });
+    for (request, quotes) in &ready.unknown_parent_requests {
+        for quote in quotes {
+            let target = pages.len();
+            pages[unknown_page].links.push((
+                format!("Request {request}; attempt {}", quote.attempt.attempt_id),
+                target,
+            ));
+            pages.push(InspectorPage {
+                title: "Unknown parent attempt".into(),
+                text: attempt_text(quote),
+                links: Vec::new(),
+                parent: Some(unknown_page),
+                selected: Arc::default(),
+            });
+        }
+    }
+    pages[0].text.push("Root total = own attempts + resolved descendant attempts. Provider/model groups partition the same root total. Compare exact USD, not rounded displays.".into());
+    pages[0].text.push(format!(
+        "Unknown parent population: {} attempts, excluded from root total",
+        u.attempts
+    ));
+    for page in &mut pages {
+        let stated = page
+            .text
+            .iter()
+            .any(|s| s.starts_with("Billed cost:") && s.ends_with("with each response"));
+        if !stated {
+            page.text
+                .push("Estimate versus billed difference: unknown — no settlement evidence".into());
+        }
+        if !page.text.iter().any(|s| s.starts_with("Billed cost:")) {
+            page.text
+                .push("Billed cost: unavailable — no settlement evidence".into());
+        }
+        if ready.read_at_ms > ready.coverage.completed_as_of_ms
+            && !page
+                .text
+                .iter()
+                .any(|s| s == "Snapshot is not current; newer activity is unverified")
+        {
+            page.text
+                .push("Snapshot is not current; newer activity is unverified".into());
+        }
+    }
+    // Plain first screen: the total stays first, then one line per provider
+    // and model, then the auditing detail below a divider.
+    let heading = period.map_or_else(
+        || day_heading(ready.utc_day, Utc::now().timestamp() / 86_400),
+        |period| format!("This conversation, {period} (UTC):"),
+    );
+    let all: Vec<&ObservationQuote> = ready.requests.values().flatten().collect();
+    if let Some(billed) = billed_figure(&all)
+        && let Some(line) = pages[0]
+            .text
+            .iter_mut()
+            .find(|line| line.as_str() == "Billed cost: unavailable — no settlement evidence")
+    {
+        *line = billed_detail(&billed);
+    }
+    let outside = scope::other_conversations_lines(ready.other_conversations.as_ref());
+    let next_step = scope::no_price_next_step(
+        ready.requests.values().flatten().chain(
+            ready
+                .other_conversations
+                .iter()
+                .flat_map(|others| others.requests.values().flatten()),
+        ),
+    );
+    let overview = plain_overview(
+        heading,
+        ready.requests.values().flatten(),
+        outside,
+        next_step,
+    );
+    pages[0].text.splice(0..0, overview);
+    // Provider/model groups first, then each request, then the auditing
+    // groups (own/descendant attempts, attribution, unknown parents).
+    let mut links = std::mem::take(&mut pages[0].links);
+    links.sort_by_key(|(label, target)| {
+        if pages[*target].title.starts_with("Provider: ") {
+            0
+        } else if label.starts_with("Request ") {
+            1
+        } else {
+            2
+        }
+    });
+    pages[0].links = links;
+    pages
+}
+
+/// The provider's display name ("Claude Account", "DeepSeek"), else its id.
+fn provider_name(id: &str) -> String {
+    static NAMES: std::sync::OnceLock<std::collections::HashMap<String, String>> =
+        std::sync::OnceLock::new();
+    if id.trim().is_empty() {
+        return "Unknown provider".to_string();
+    }
+    // The built-in keeps its legacy brand name as an identity; the product,
+    // and /providers, call it the Corbanu API.
+    if id == codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID {
+        return "Corbanu API".to_string();
+    }
+    NAMES
+        .get_or_init(|| {
+            codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)
+                .into_iter()
+                .map(|(id, info)| (id, info.name))
+                .collect()
+        })
+        .get(id)
+        .cloned()
+        .unwrap_or_else(|| id.to_string())
+}
+
+/// The model's catalogue display name ("GPT-6 Sol"), else its slug.
+fn model_name(slug: &str) -> String {
+    static NAMES: std::sync::OnceLock<std::collections::HashMap<String, String>> =
+        std::sync::OnceLock::new();
+    if slug.trim().is_empty() {
+        return "unknown model".to_string();
+    }
+    NAMES
+        .get_or_init(|| {
+            codex_models_manager::bundled_models_response()
+                .map(|catalog| {
+                    catalog
+                        .models
+                        .into_iter()
+                        .map(|model| (model.slug, model.display_name))
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+        .get(slug)
+        .cloned()
+        .unwrap_or_else(|| slug.to_string())
+}
+
+fn route_name(quote: &ObservationQuote) -> String {
+    format!(
+        "{} · {}",
+        provider_name(&quote.attempt.provider),
+        model_name(&quote.attempt.model)
+    )
+}
+
+/// The route of a request's attempts, or every distinct route when a retry
+/// moved to another one.
+fn request_route(quotes: &[ObservationQuote]) -> Option<String> {
+    let mut routes: Vec<String> = Vec::new();
+    for route in quotes.iter().map(route_name) {
+        if !routes.contains(&route) {
+            routes.push(route);
+        }
+    }
+    match routes.len() {
+        0 => None,
+        1 => routes.pop(),
+        _ => Some(format!("several routes ({})", routes.join(", "))),
+    }
+}
+
+/// `12345` as `12,345`.
+fn grouped(n: i64) -> String {
+    let digits = n.unsigned_abs().to_string();
+    let mut out = String::new();
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(digit);
+    }
+    if n < 0 { format!("-{out}") } else { out }
+}
+
+const COVERED: &str = "Covered by your subscription (not billed per request)";
+const PAY_PER_USE: &str = "Pay per use";
+const NO_PRICE: &str = "Estimated cost: no price available";
+const DAY_COVERED: &str = "Day covered (UTC):";
+
+/// How a set of attempts is paid for, and the one money figure that goes
+/// with it. Subscription work is never stated as money spent: its figure is
+/// what the same work would cost at API prices.
+fn plain_billing(t: &codex_state::accounting::DayTotals) -> (&'static str, String) {
+    let billed = t.attempts.saturating_sub(t.plan_attempts);
+    let unknown = t.unknown_estimates.saturating_sub(t.plan_attempts);
+    let per_use = (billed > 0).then(|| {
+        if unknown == 0 {
+            format!("Estimated cost: {}", money(t.known_usd))
+        } else if t.known_usd == Decimal::default() {
+            NO_PRICE.to_string()
+        } else {
+            format!(
+                "Estimated cost: at least {} ({unknown} {} had no price)",
+                money(t.known_usd),
+                if unknown == 1 { "attempt" } else { "attempts" }
+            )
+        }
+    });
+    let covered = (t.plan_attempts > 0).then(|| {
+        if t.unknown_equivalents == 0 {
+            format!("Same work at API prices: {}", money(t.equivalent_usd))
+        } else if t.equivalent_usd == Decimal::default() {
+            "Same work at API prices: not available".to_string()
+        } else {
+            format!(
+                "Same work at API prices: at least {}",
+                money(t.equivalent_usd)
+            )
+        }
+    });
+    match (per_use, covered) {
+        (Some(per_use), None) => (PAY_PER_USE, per_use),
+        (None, Some(covered)) => (COVERED, covered),
+        (Some(per_use), Some(covered)) => (
+            "Partly subscription, partly pay per use",
+            format!("{per_use}; subscription part — {}", lower_first(&covered)),
+        ),
+        (None, None) => (PAY_PER_USE, "No requests".to_string()),
+    }
+}
+
+/// Total tokens, or input plus output where a provider reports no total.
+fn plain_tokens(t: &codex_state::accounting::DayTotals) -> String {
+    let [input, _, _, _, output, _, total] = &t.measured;
+    let (known, unknown) = if total.unknown == 0 {
+        (total.known, 0)
+    } else {
+        (
+            input.known.saturating_add(output.known),
+            input.unknown.max(output.unknown),
+        )
+    };
+    match (known, unknown) {
+        (0, unknown) if unknown > 0 => "tokens not reported".to_string(),
+        (known, 0) => format!("{} tokens", grouped(known)),
+        (known, _) => format!("{}+ tokens", grouped(known)),
+    }
+}
+
+/// "Same work at API prices" as "same work at API prices".
+fn lower_first(text: &str) -> String {
+    let mut chars = text.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_lowercase().chain(chars).collect()
+    })
+}
+
+fn request_count(quotes: &[&ObservationQuote]) -> String {
+    let requests = quotes
+        .iter()
+        .map(|q| q.attempt.request_id)
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+    format!(
+        "{requests} {}",
+        if requests == 1 { "request" } else { "requests" }
+    )
+}
+
+/// The charges the provider stated for a group of pay-per-use attempts.
+struct BilledCharge {
+    sum: Decimal,
+    /// Attempts whose charge the provider stated.
+    stated: usize,
+    /// Attempts that recorded no usage at all: a refused request, or one that
+    /// failed before any report. Neither stated a charge, and a failed one may
+    /// still have been billed, so a total that excludes them stays "at least".
+    silent: usize,
+    attempts: usize,
+}
+
+impl BilledCharge {
+    /// Every attempt that reported usage also stated its charge.
+    fn answered_all_stated(&self) -> bool {
+        self.stated + self.silent == self.attempts
+    }
+
+    fn text(&self) -> String {
+        let sum = money(self.sum);
+        if self.stated == self.attempts {
+            sum
+        } else if self.answered_all_stated() {
+            format!(
+                "at least {sum} ({} {} reported no usage; a refused request is normally not charged)",
+                self.silent,
+                if self.silent == 1 {
+                    "failed attempt"
+                } else {
+                    "failed attempts"
+                }
+            )
+        } else {
+            format!(
+                "at least {sum} ({} of {} attempts stated a charge)",
+                self.stated, self.attempts
+            )
+        }
+    }
+}
+
+/// What the provider itself stated it charged for the pay-per-use attempts here,
+/// or None when none stated anything. Plan work is never billed per request.
+fn billed_charge(quotes: &[&ObservationQuote]) -> Option<BilledCharge> {
+    let per_use: Vec<&&ObservationQuote> = quotes.iter().filter(|q| !q.is_plan()).collect();
+    let mut charge = BilledCharge {
+        sum: Decimal::default(),
+        stated: 0,
+        silent: 0,
+        attempts: per_use.len(),
+    };
+    for quote in &per_use {
+        if let Some(billed) = quote.usage.billed_usd {
+            charge.sum = charge.sum.add(billed).ok()?;
+            charge.stated += 1;
+        } else if quote.usage == codex_state::accounting::Usage::default() {
+            charge.silent += 1;
+        }
+    }
+    (charge.stated > 0).then_some(charge)
+}
+
+fn billed_figure(quotes: &[&ObservationQuote]) -> Option<String> {
+    billed_charge(quotes).map(|charge| charge.text())
+}
+
+fn billed_detail(figure: &str) -> String {
+    format!("Billed cost: {figure} — as stated by the provider with each response")
+}
+
+/// A short link label figure: the cost, or that a subscription covered it.
+fn short_cost(quotes: &[&ObservationQuote]) -> String {
+    match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
+        Ok(t) => match (plain_billing(&t), leading_charge(quotes, &t)) {
+            ((COVERED, _), _) => "covered by subscription".to_string(),
+            (_, Some(billed)) => format!("billed {}", billed.text()),
+            ((_, cost), None) if cost == NO_PRICE => "no price available".to_string(),
+            ((_, cost), None) => cost.replacen("Estimated cost: ", "estimated ", 1),
+        },
+        Err(_) => "cost unavailable".to_string(),
+    }
+}
+
+/// The provider's own charge when it is the figure to lead with: every
+/// attempt that reported usage stated one, and published prices cannot
+/// reproduce it.
+fn leading_charge(
+    quotes: &[&ObservationQuote],
+    t: &codex_state::accounting::DayTotals,
+) -> Option<BilledCharge> {
+    billed_charge(quotes)
+        .filter(|billed| billed.answered_all_stated() && t.unknown_estimates > t.plan_attempts)
+}
+
+/// The plain header of a provider, request or attempt page: what served the
+/// work, how it is paid for and what it cost, then a divider above the
+/// auditing detail.
+fn plain_header(quotes: &[&ObservationQuote]) -> Vec<String> {
+    let mut routes: Vec<(String, String)> = Vec::new();
+    for quote in quotes {
+        let route = (
+            provider_name(&quote.attempt.provider),
+            model_name(&quote.attempt.model),
+        );
+        if !routes.contains(&route) {
+            routes.push(route);
+        }
+    }
+    let mut lines = match routes.as_slice() {
+        [(provider, model)] => vec![format!("Provider: {provider}"), format!("Model: {model}")],
+        _ => vec![format!(
+            "Providers and models: {}",
+            routes
+                .iter()
+                .map(|(provider, model)| format!("{provider} · {model}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )],
+    };
+    match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
+        Ok(t) => {
+            let (billing, cost) = plain_billing(&t);
+            lines.push(format!("Billing: {billing}"));
+            lines.push(cost);
+            lines.extend(scope::no_price_next_step(quotes.iter().copied()));
+            if let Some(billed) = billed_figure(quotes) {
+                lines.push(format!("Billed by provider: {billed}"));
+            }
+            lines.push(format!("Tokens: {}", plain_tokens(&t)));
+        }
+        Err(_) => lines.push("Cost unavailable".to_string()),
+    }
+    lines.push("—— Details ——".to_string());
+    if let Some(billed) = billed_figure(quotes) {
+        lines.push(billed_detail(&billed));
+    }
+    lines
+}
+
+/// "Today (UTC) in this conversation:" for the current UTC day, else the
+/// inspected date: `/usage requests YYYY-MM-DD` opens any past day.
+fn day_heading(utc_day: i64, today: i64) -> String {
+    if utc_day == today {
+        return "Today (UTC) in this conversation:".to_string();
+    }
+    chrono::DateTime::from_timestamp(utc_day * 86_400, 0).map_or_else(
+        || format!("This conversation on UTC day {utc_day}:"),
+        |date| format!("This conversation on {} (UTC):", date.date_naive()),
+    )
+}
+
+/// Attempts grouped by provider and model, in a stable order.
+fn by_route<'a>(
+    quotes: impl IntoIterator<Item = &'a ObservationQuote>,
+) -> std::collections::BTreeMap<(String, String), Vec<&'a ObservationQuote>> {
+    let mut groups: std::collections::BTreeMap<(String, String), Vec<&ObservationQuote>> =
+        std::collections::BTreeMap::new();
+    for quote in quotes {
+        groups
+            .entry((quote.attempt.provider.clone(), quote.attempt.model.clone()))
+            .or_default()
+            .push(quote);
+    }
+    groups
+}
+
+/// One provider and model on a first screen: how it is paid for, then its
+/// requests, tokens and cost.
+fn route_line(quotes: &[&ObservationQuote]) -> String {
+    let route = route_name(quotes[0]);
+    match codex_state::accounting::DayTotals::from_quotes(quotes.iter().copied()) {
+        Ok(t) => {
+            let (billing, cost) = plain_billing(&t);
+            let provider = provider_name(&quotes[0].attempt.provider);
+            match leading_charge(quotes, &t).ok_or_else(|| billed_charge(quotes)) {
+                // Every request carries the provider's own charge, but the
+                // published prices cannot reproduce it (the provider omits a
+                // counter the estimate needs): the charge is the figure, and a
+                // partial estimate would only mislead.
+                Ok(billed) => format!(
+                    "• {route} — {billing}. {}, {}. Billed by {provider}: {}.",
+                    request_count(quotes),
+                    plain_tokens(&t),
+                    billed.text()
+                ),
+                Err(billed) => format!(
+                    "• {route} — {billing}. {}, {}. {cost}.{}",
+                    request_count(quotes),
+                    plain_tokens(&t),
+                    billed.map_or_else(String::new, |billed| format!(
+                        " Billed by {provider}: {}.",
+                        billed.text()
+                    ))
+                ),
+            }
+        }
+        Err(_) => format!("• {route} — cost unavailable."),
+    }
+}
+
+/// The first screen: one line per provider and model, stating how it is paid
+/// for before anything else, then the totals by billing type. `outside` says
+/// what this view leaves out; an empty conversation says so in its heading
+/// rather than showing nothing, so it never reads as a zero-cost day.
+fn plain_overview<'a>(
+    heading: String,
+    quotes: impl IntoIterator<Item = &'a ObservationQuote>,
+    outside: Vec<String>,
+    next_step: Option<String>,
+) -> Vec<String> {
+    let groups = by_route(quotes);
+    let mut lines = if groups.is_empty() {
+        vec![format!("{heading} no recorded requests.")]
+    } else {
+        vec![heading]
+    };
+    lines.extend(groups.values().map(|quotes| route_line(quotes)));
+    let all: Vec<&ObservationQuote> = groups.values().flatten().copied().collect();
+    if let Ok(t) = codex_state::accounting::DayTotals::from_quotes(all.iter().copied()) {
+        let billed = t.attempts.saturating_sub(t.plan_attempts);
+        if billed > 0 && t.plan_attempts > 0 {
+            let per_use = codex_state::accounting::DayTotals::from_quotes(
+                all.iter().copied().filter(|q| !q.is_plan()),
+            );
+            let covered = codex_state::accounting::DayTotals::from_quotes(
+                all.iter().copied().filter(|q| q.is_plan()),
+            );
+            if let (Ok(per_use), Ok(covered)) = (per_use, covered) {
+                let billed = billed_figure(&all)
+                    .map_or_else(String::new, |billed| format!("; billed: {billed}"));
+                lines.push(format!(
+                    "Pay-per-use total — {}{billed}",
+                    lower_first(&plain_billing(&per_use).1)
+                ));
+                lines.push(format!(
+                    "Subscription work — {}",
+                    lower_first(&plain_billing(&covered).1)
+                ));
+            }
+        }
+    }
+    lines.extend(outside);
+    lines.extend(next_step);
+    lines.push(
+        if billed_figure(&all).is_some() {
+            "Estimates use published prices; billed figures are what the provider stated with each response."
+        } else {
+            "Costs are estimates from published prices; your provider's bill is the final amount."
+        }
+        .to_string(),
+    );
+    if !all.is_empty() {
+        lines.push("Select a provider below to see its requests.".to_string());
+    }
+    lines.push("—— Details ——".to_string());
+    lines
+}
+
+/// A UTC instant in milliseconds as RFC 3339, else the raw count.
+fn utc_instant(ms: i64) -> String {
+    chrono::DateTime::from_timestamp_millis(ms).map_or_else(
+        || format!("{ms} ms"),
+        |at| at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+    )
+}
+
+/// A day counted from the Unix epoch as its UTC date, else the raw count.
+fn utc_date(day: i64) -> String {
+    chrono::DateTime::from_timestamp(day.saturating_mul(86_400), 0)
+        .map_or_else(|| format!("day {day}"), |at| at.date_naive().to_string())
+}
+
+/// What the ledger still holds: per-request detail for 90 days of wall-clock
+/// time, daily totals from the aggregate floor on.
+fn retention(
+    read_at_ms: i64,
+    aggregate_day_floor: i64,
+    oldest_recorded_day: Option<i64>,
+) -> String {
+    format!(
+        "request detail kept since {}; daily totals kept since {}; oldest recorded day in this conversation {}",
+        read_at_ms
+            .checked_sub(90 * 86_400_000)
+            .filter(|n| *n >= 0)
+            .map_or_else(|| "the start".to_string(), utc_instant),
+        utc_date(aggregate_day_floor),
+        oldest_recorded_day.map_or_else(|| "none".to_string(), utc_date)
+    )
+}
+
+fn attempt_count(n: usize) -> String {
+    match n {
+        0 => "none".to_string(),
+        1 => "1 attempt".to_string(),
+        n => format!("{n} attempts"),
+    }
+}
+
+fn interval(start: i64, end: i64) -> String {
+    format!("[{}, {})", utc_instant(start), utc_instant(end))
+}
+
+fn range_pages(
+    requested: InspectionRange,
+    oldest: Option<i64>,
+    read_at: i64,
+    buckets: Vec<codex_state::accounting::InspectionBucket>,
+) -> Vec<InspectorPage> {
+    let mut context = vec![
+        format!(
+            "Requested: {}; timezone: UTC; grouping: {:?}",
+            interval(requested.start_ms, requested.end_ms),
+            requested.grouping
+        ),
+        format!(
+            "Retention: request detail kept since {}; oldest daily total kept {}",
+            read_at
+                .checked_sub(90 * 86_400_000)
+                .filter(|v| *v >= 0)
+                .map_or_else(|| "the start".to_string(), utc_instant),
+            oldest.map_or_else(|| "none".to_string(), utc_date)
+        ),
+        "Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable — no settlement evidence.".into(),
+    ];
+    let states = buckets.iter().flat_map(|b| &b.days).collect::<Vec<_>>();
+    if states
+        .iter()
+        .any(|s| matches!(s, InspectionDay::NeedsRefresh))
+    {
+        context.push("Recorded totals unavailable — stored contributions need refresh".into());
+    } else if states.iter().any(|s| match s {
+        InspectionDay::CheckpointLag => true,
+        InspectionDay::Ready(v) => v.read_at_ms > v.coverage.completed_as_of_ms,
+        InspectionDay::DetailUnavailable {
+            coverage,
+            read_at_ms,
+            ..
+        } => *read_at_ms > coverage.completed_as_of_ms,
+        _ => false,
+    }) {
+        context.push("Snapshot is not current; newer activity is unverified".into());
+    }
+    let (unknown_attempts, unavailable_entries) = states
+        .iter()
+        .filter_map(|state| match state {
+            InspectionDay::Ready(view) => Some(view),
+            _ => None,
+        })
+        .fold((0, 0), |(attempts, unavailable), view| {
+            (
+                attempts + view.unknown_parent_totals.attempts,
+                unavailable + view.unknown_parent_unavailable_threads,
+            )
+        });
+    context.push(format!(
+        "Range: Unknown parent population: {unknown_attempts} inspectable attempts, excluded from range total"
+    ));
+    if unavailable_entries > 0 {
+        context.push(format!(
+            "Range: Unresolved ancestry: {unavailable_entries} thread-slice entries have unavailable detail; their costs and retention coverage are unknown and excluded from this root."
+        ));
+    }
+    if states.iter().any(|s| !matches!(s, InspectionDay::Ready(_))) {
+        context.push("Ancestry counts cover inspectable slices only; unavailable slices may contain additional unknown ancestry.".into());
+    }
+    let mut pages = vec![InspectorPage {
+        title: "Recorded request range".into(),
+        text: context.clone(),
+        links: vec![],
+        parent: None,
+        selected: Arc::default(),
+    }];
+    pages[0]
+        .text
+        .extend(scope::other_conversations_lines(/*others*/ None));
+    let complete = buckets
+        .iter()
+        .all(|b| !b.partial && b.days.iter().all(|d| matches!(d, InspectionDay::Ready(_))));
+    if complete {
+        let quotes = buckets
+            .iter()
+            .flat_map(|b| &b.days)
+            .filter_map(|d| match d {
+                InspectionDay::Ready(v) => Some(v),
+                _ => None,
+            })
+            .flat_map(|v| v.requests.values().flatten());
+        let mut named = unpriced_rows(quotes.clone());
+        named.extend(scope::no_price_next_step(quotes.clone()));
+        match codex_state::accounting::DayTotals::from_quotes(quotes) {
+            Ok(total) => {
+                pages[0].text.extend(estimate(&total));
+                pages[0].text.extend(named);
+            }
+            // A total this client cannot compute does not unsay which attempts
+            // went unpriced; that is a separate statement about the same rows.
+            Err(_) => {
+                pages[0]
+                    .text
+                    .push("Range total unavailable — arithmetic overflow".into());
+                pages[0].text.extend(named);
+            }
+        }
+    } else {
+        pages[0].text.push(
+            "Range total unavailable — partial or unavailable buckets excluded; no partial total."
+                .into(),
+        );
+    }
+    for bucket in buckets {
+        let bounds = interval(bucket.start_ms, bucket.end_ms);
+        let effective = bucket
+            .effective
+            .map(|(s, e)| interval(s, e))
+            .unwrap_or_else(|| "unavailable".into());
+        let mut header = context.clone();
+        header.push(format!(
+            "Bucket: {bounds}; effective coverage (requested ∩ aggregate retention ∩ snapshot): {effective}"
+        ));
+        header.push(
+            if bucket.partial {
+                "Partial bucket — excluded from totals"
+            } else {
+                "Whole bucket within aggregate retention coverage; detail availability checked separately"
+            }
+            .into(),
+        );
+        pages[0].text.push(format!(
+            "Effective coverage (requested ∩ aggregate retention ∩ snapshot) for {bounds}: {effective}"
+        ));
+        let mut merged: Option<codex_state::accounting::Inspection> = None;
+        let mut diagnostics = Vec::new();
+        let mut detail_unavailable = false;
+        for day in bucket.days {
+            match day {
+                InspectionDay::Ready(view) => {
+                    if let Some(target) = &mut merged {
+                        for (id, quotes) in view.requests {
+                            target.requests.entry(id).or_default().extend(quotes);
+                        }
+                        for (id, quotes) in view.unknown_parent_requests {
+                            target
+                                .unknown_parent_requests
+                                .entry(id)
+                                .or_default()
+                                .extend(quotes);
+                        }
+                        target.unknown_parent_unavailable_threads +=
+                            view.unknown_parent_unavailable_threads;
+                    } else {
+                        merged = Some(view);
+                    }
+                }
+                other => {
+                    detail_unavailable |= matches!(other, InspectionDay::DetailUnavailable { .. });
+                    diagnostics.extend(inspection_pages(Ok(other)).remove(0).text);
+                }
+            }
+        }
+        let available = diagnostics.is_empty();
+        header.extend(diagnostics);
+        if detail_unavailable {
+            header.push(format!("Precision unsupported outside retained raw detail; compacted days lost request/provider attribution. No bucket total. Whole UTC-day bounds offered: {}; this does not restore attribution.", interval(requested.start_ms / 86_400_000 * 86_400_000, ((requested.end_ms - 1) / 86_400_000 + 1) * 86_400_000)));
+        }
+        let offset = pages.len();
+        pages[0]
+            .links
+            .push((format!("{:?} {bounds}", requested.grouping), offset));
+        let mut children = if !bucket.partial && available {
+            if let Some(mut view) = merged {
+                let recalculate = (|| -> anyhow::Result<()> {
+                    view.totals = codex_state::accounting::DayTotals::from_quotes(
+                        view.requests.values().flatten(),
+                    )?;
+                    view.own_totals = codex_state::accounting::DayTotals::from_quotes(
+                        view.requests
+                            .values()
+                            .flatten()
+                            .filter(|q| q.attempt.thread_id == view.owner),
+                    )?;
+                    view.descendant_totals = codex_state::accounting::DayTotals::from_quotes(
+                        view.requests
+                            .values()
+                            .flatten()
+                            .filter(|q| q.attempt.thread_id != view.owner),
+                    )?;
+                    view.unknown_parent_totals = codex_state::accounting::DayTotals::from_quotes(
+                        view.unknown_parent_requests.values().flatten(),
+                    )?;
+                    Ok(())
+                })();
+                match recalculate {
+                    // The merged view keeps its first day's `utc_day`;
+                    // the heading names the whole bucket instead.
+                    Ok(()) => {
+                        inspection_pages_for(Ok(InspectionDay::Ready(view)), Some(bounds.clone()))
+                    }
+                    Err(_) => inspection_pages(Err(
+                        "Bucket total unavailable — arithmetic overflow".into(),
+                    )),
+                }
+            } else {
+                inspection_pages(Err("Effective detail unavailable".into()))
+            }
+        } else {
+            vec![InspectorPage {
+                title: "Bucket unavailable".into(),
+                text: vec![],
+                links: vec![],
+                parent: None,
+                selected: Arc::default(),
+            }]
+        };
+        for child in &mut children {
+            child.text.retain(|t| !t.starts_with(DAY_COVERED));
+            child.text.splice(0..0, header.clone());
+            for text in &mut child.text {
+                *text = text
+                    .replace(
+                        "this UTC day",
+                        if requested.grouping == InspectionGrouping::Hour {
+                            "this UTC hour"
+                        } else {
+                            "this bucket"
+                        },
+                    )
+                    .replace("attempts on other days", "attempts outside this bucket")
+                    .replace(
+                        "threads have unavailable day detail",
+                        "thread-day entries have unavailable detail",
+                    );
+                if text.starts_with("Unknown parent population:")
+                    || text.starts_with("Unresolved ancestry:")
+                {
+                    *text = format!("Bucket: {text}");
+                }
+            }
+            child.parent = Some(child.parent.map_or(0, |p| p + offset));
+            for (_, target) in &mut child.links {
+                *target += offset;
+            }
+        }
+        pages.extend(children);
+    }
+    pages
+}
+
+impl Inspector {
+    fn params(&self, width: usize) -> SelectionViewParams {
+        let page = &self.pages[self.page];
+        let generation = self.generation;
+        // Selectable wrapped lines keep long fields reachable at the current terminal width.
+        let mut items: Vec<SelectionItem> = page
+            .text
+            .iter()
+            .flat_map(|text| {
+                let clean: String = text.chars().filter(|c| !c.is_control()).collect();
+                textwrap::wrap(&clean, width.saturating_sub(6).max(1))
+                    .into_iter()
+                    .map(|part| SelectionItem {
+                        name: part.into_owned(),
+                        ..Default::default()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        if !page.links.is_empty() {
+            items.push(SelectionItem {
+                name: "—— Open ——".into(),
+                ..Default::default()
+            });
+        }
+        for (label, target) in &page.links {
+            let page = *target;
+            items.push(SelectionItem {
+                name: label.clone(),
+                name_prefix_spans: vec!["→ ".cyan()],
+                actions: vec![Box::new(move |tx| {
+                    tx.send(AppEvent::NavigateAccountingInspector { generation, page })
+                })],
+                ..Default::default()
+            });
+        }
+        let back = self.history.last().copied().or(page.parent);
+        if let Some(page) = back {
+            items.push(SelectionItem {
+                name: "Back".into(),
+                actions: vec![Box::new(move |tx| {
+                    tx.send(AppEvent::NavigateAccountingInspector { generation, page })
+                })],
+                ..Default::default()
+            });
+        }
+        items.push(SelectionItem {
+            name: "Refresh".into(),
+            actions: vec![Box::new(move |tx| {
+                tx.send(AppEvent::RefreshAccountingInspector { generation })
+            })],
+            ..Default::default()
+        });
+        let close_alive = self.alive.clone();
+        items.push(SelectionItem {
+            name: "Close".into(),
+            dismiss_on_select: true,
+            actions: vec![Box::new(move |tx| {
+                close_alive.store(false, std::sync::atomic::Ordering::Release);
+                tx.send(AppEvent::CloseAccountingInspector { generation });
+            })],
+            ..Default::default()
+        });
+        let alive = self.alive.clone();
+        let parent = back;
+        let selected = page.selected.clone();
+        SelectionViewParams {
+            initial_selected_idx: Some(selected.load(std::sync::atomic::Ordering::Relaxed)),
+            on_selection_changed: Some(Box::new(move |index, _| {
+                selected.store(index, std::sync::atomic::Ordering::Relaxed);
+            })),
+            view_id: Some(INSPECTOR_VIEW),
+            title: Some(page.title.clone()),
+            subtitle: self.range.is_none().then(|| {
+                chrono::DateTime::from_timestamp(self.day * 86_400, 0).map_or_else(
+                    || format!("Requested UTC day: day {} since the epoch", self.day),
+                    |date| format!("Requested UTC day: {}", date.date_naive()),
+                )
+            }),
+            items,
+            allow_number_shortcuts: false,
+            footer_hint: Some("↑↓ scroll · Enter open · Esc back/close".into()),
+            on_cancel: Some(Box::new(move |tx| {
+                if let Some(page) = parent {
+                    tx.send(AppEvent::NavigateAccountingInspector { generation, page });
+                } else {
+                    alive.store(false, std::sync::atomic::Ordering::Release);
+                    tx.send(AppEvent::CloseAccountingInspector { generation });
+                }
+            })),
+            ..Default::default()
+        }
+    }
+}
+
+impl ChatWidget {
+    pub(super) fn reflow_accounting_inspector(&mut self, width: u16) {
+        if let Some(view) = &self.accounting_inspector {
+            self.bottom_pane
+                .replace_selection_view_if_present(INSPECTOR_VIEW, view.params(usize::from(width)));
+        }
+    }
+
+    pub(super) fn invalidate_accounting_inspector_for_thread(&mut self) {
+        if self
+            .accounting_inspector
+            .as_ref()
+            .is_some_and(|v| v.thread != self.thread_id())
+        {
+            self.accounting_inspector = None;
+            self.bottom_pane.dismiss_view_by_id(INSPECTOR_VIEW);
+        }
+    }
+
+    pub(super) fn open_accounting_command(&mut self, args: &str, today: NaiveDate) {
+        let parts: Vec<_> = args.split_whitespace().collect();
+        if let ["requests", start, end, grouping] = parts.as_slice() {
+            let parsed = (|| -> anyhow::Result<InspectionRange> {
+                let parse = |value: &str| -> anyhow::Result<i64> {
+                    if value.len() == 10 {
+                        let date = NaiveDate::parse_from_str(value, "%Y-%m-%d")?;
+                        anyhow::ensure!(date.to_string() == value, "invalid UTC date");
+                        return Ok(date
+                            .and_hms_opt(0, 0, 0)
+                            .ok_or_else(|| anyhow::anyhow!("invalid UTC date"))?
+                            .and_utc()
+                            .timestamp_millis());
+                    }
+                    anyhow::ensure!(value.ends_with('Z'), "timestamps must use UTC Z");
+                    let time = chrono::DateTime::parse_from_rfc3339(value)?;
+                    anyhow::ensure!(
+                        time.timestamp_subsec_nanos() < 1_000_000_000
+                            && time.timestamp_subsec_nanos() % 1_000_000 == 0,
+                        "precision finer than milliseconds is unsupported"
+                    );
+                    Ok(time.timestamp_millis())
+                };
+                let range = InspectionRange {
+                    start_ms: parse(start)?,
+                    end_ms: parse(end)?,
+                    grouping: match *grouping {
+                        "hour" => InspectionGrouping::Hour,
+                        "day" => InspectionGrouping::Day,
+                        "week" => InspectionGrouping::Week,
+                        "month" => InspectionGrouping::Month,
+                        _ => anyhow::bail!("grouping must be hour, day, week or month"),
+                    },
+                };
+                range.validate()?;
+                let today_start = today
+                    .and_hms_opt(0, 0, 0)
+                    .ok_or_else(|| anyhow::anyhow!("invalid UTC date"))?;
+                anyhow::ensure!(
+                    range.start_ms / 86_400_000 <= today_start.and_utc().timestamp() / 86_400,
+                    "future start is unavailable"
+                );
+                Ok(range)
+            })();
+            match parsed {
+                Ok(range) => self.open_accounting_range(range.start_ms / 86_400_000, Some(range)),
+                Err(error) => self.add_error_message(format!("Range refused: {error}")),
+            }
+            return;
+        }
+        let date = match parts.as_slice() {
+            ["requests"] => Some(today),
+            ["requests", date] if date.len() == 10 => NaiveDate::parse_from_str(date, "%Y-%m-%d")
+                .ok()
+                .filter(|d| d.to_string() == *date),
+            _ => None,
+        };
+        if let Some(date) = date.filter(|d| *d <= today)
+            && let Some(time) = date.and_hms_opt(0, 0, 0)
+            && time.and_utc().timestamp() >= 0
+        {
+            self.open_accounting_inspector(time.and_utc().timestamp() / 86_400);
+        } else {
+            self.add_error_message(
+                "Usage: /usage requests [YYYY-MM-DD] (UTC, no future dates). Custom: /usage requests START END hour|day|week|month; dates or UTC timestamps ending Z; end exclusive.".into(),
+            );
+        }
+    }
+
+    pub(crate) fn open_accounting_inspector(&mut self, day: i64) {
+        self.open_accounting_range(day, /*range*/ None);
+    }
+
+    fn open_accounting_range(&mut self, day: i64, range: Option<InspectionRange>) {
+        let generation = Uuid::new_v4();
+        let thread = self.thread_id();
+        let inspector = Inspector {
+            generation,
+            thread,
+            day,
+            range,
+            pages: vec![InspectorPage {
+                title: "Cost — this conversation".into(),
+                text: vec![match range {
+                    Some(r) => format!(
+                        "Loading recorded requests… Requested: {}; timezone: UTC; grouping: {:?}; effective coverage and bucket boundaries pending",
+                        interval(r.start_ms, r.end_ms),
+                        r.grouping
+                    ),
+                    None => "Loading recorded requests…".into(),
+                }],
+                links: Vec::new(),
+                parent: None,
+                selected: Arc::default(),
+            }],
+            page: 0,
+            history: Vec::new(),
+            alive: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        };
+        let params = inspector.params(self.last_rendered_width.get().unwrap_or(80));
+        if !self.bottom_pane.replace_selection_view_if_present(
+            INSPECTOR_VIEW,
+            inspector.params(self.last_rendered_width.get().unwrap_or(80)),
+        ) {
+            self.bottom_pane.show_selection_view(params);
+        }
+        self.accounting_inspector = Some(inspector);
+        self.app_event_tx.send(AppEvent::LoadAccountingInspector {
+            generation,
+            thread,
+            day,
+            range,
+        });
+        self.request_redraw();
+    }
+
+    pub(crate) fn finish_accounting_inspector(
+        &mut self,
+        generation: Uuid,
+        thread: Option<ThreadId>,
+        day: i64,
+        result: Result<InspectionDay, String>,
+    ) {
+        let current_thread = self.thread_id();
+        let Some(view) = self.accounting_inspector.as_mut().filter(|v| {
+            v.generation == generation
+                && v.thread == thread
+                && v.day == day
+                && v.thread == current_thread
+                && v.alive.load(std::sync::atomic::Ordering::Acquire)
+        }) else {
+            return;
+        };
+        let is_range = matches!(result, Ok(InspectionDay::Range { .. }));
+        view.pages = inspection_pages(result);
+        if let Some(range) = view.range
+            && !is_range
+        {
+            view.pages[0].text.insert(1, format!("Requested: {}; timezone: UTC; grouping: {:?}; effective coverage: unavailable; bucket boundaries unavailable", interval(range.start_ms, range.end_ms), range.grouping));
+            let scope = if range.end_ms - range.start_ms == 3_600_000 {
+                "this UTC hour"
+            } else {
+                "the selected UTC interval"
+            };
+            for text in &mut view.pages[0].text {
+                if text.starts_with("Logical requests may have attempts") {
+                    *text = format!(
+                        "Logical requests may have attempts outside the selected interval; {scope} is not their complete lifetime."
+                    );
+                }
+            }
+        }
+        view.page = 0;
+        view.history.clear();
+        if !self.bottom_pane.replace_selection_view_if_present(
+            INSPECTOR_VIEW,
+            view.params(self.last_rendered_width.get().unwrap_or(80)),
+        ) {
+            self.accounting_inspector = None;
+        }
+        self.request_redraw();
+    }
+
+    pub(crate) fn navigate_accounting_inspector(&mut self, generation: Uuid, page: usize) {
+        let thread = self.thread_id();
+        let Some(view) = self.accounting_inspector.as_mut().filter(|v| {
+            v.thread == thread
+                && v.generation == generation
+                && v.alive.load(std::sync::atomic::Ordering::Acquire)
+        }) else {
+            return;
+        };
+        if page >= view.pages.len() {
+            return;
+        }
+        // Returning to the page we came from unwinds one step; anything else
+        // is a step forward.
+        if view.history.last() == Some(&page) {
+            view.history.pop();
+        } else if page != view.page {
+            view.history.push(view.page);
+        }
+        view.page = page;
+        if !self.bottom_pane.replace_selection_view_if_present(
+            INSPECTOR_VIEW,
+            view.params(self.last_rendered_width.get().unwrap_or(80)),
+        ) {
+            self.bottom_pane
+                .show_selection_view(view.params(self.last_rendered_width.get().unwrap_or(80)));
+        }
+        self.request_redraw();
+    }
+
+    pub(crate) fn close_accounting_inspector(&mut self, generation: Uuid) {
+        if self
+            .accounting_inspector
+            .as_ref()
+            .is_some_and(|v| v.generation == generation)
+        {
+            self.accounting_inspector = None;
+            self.bottom_pane.dismiss_view_by_id(INSPECTOR_VIEW);
+        }
+    }
+
+    pub(crate) fn refresh_accounting_inspector(&mut self, generation: Uuid) {
+        if let Some(view) = &self.accounting_inspector
+            && view.generation == generation
+            && view.alive.load(std::sync::atomic::Ordering::Acquire)
+        {
+            self.open_accounting_range(view.day, view.range);
         }
     }
 }

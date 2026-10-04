@@ -2,7 +2,9 @@
 
 Main integration status: this contract is imported from the reviewed operations
 source. The referenced `scripts/initiative_control/` tooling is not yet ported
-to main; PF-80-S01 owns that bounded port and final-tree qualification. Until
+to remote main; it is integrated and tested on the local receiving branch at
+`0415a00dc3d3ee55a96662920c3eedbc0f0d4838`. PF-80-S01 owns the remaining
+native and human/live qualification. Until a separately authorized main landing,
 then, references below are a contract, not runnable-main evidence or approval.
 
 Travis Good's 2026-09-10 delivery decision supplements, but never replaces,

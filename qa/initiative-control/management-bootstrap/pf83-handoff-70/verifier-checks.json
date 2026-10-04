@@ -1,0 +1,64 @@
+{
+  "negative_cases": {
+    "absolute-path": {
+      "reason": "unsafe relative path",
+      "rejected": true
+    },
+    "changed-attestation": {
+      "reason": "attestation digest mismatch",
+      "rejected": true
+    },
+    "changed-binary": {
+      "reason": "binary digest mismatch: corbanu",
+      "rejected": true
+    },
+    "changed-manifest": {
+      "reason": "manifest digest mismatch",
+      "rejected": true
+    },
+    "extra-file": {
+      "reason": "package inventory mismatch",
+      "rejected": true
+    },
+    "parent-path": {
+      "reason": "unsafe relative path",
+      "rejected": true
+    },
+    "symlink": {
+      "reason": "symlink member",
+      "rejected": true
+    },
+    "wrong-mode": {
+      "reason": "binary mode mismatch: corbanu",
+      "rejected": true
+    }
+  },
+  "original_still_verified": {
+    "attestation_sha256": "9d33fcc21788a84c61011fe64a3607fc7569b390a260e5c19a7b9d3e6582ce27",
+    "files": {
+      "codex-code-mode-host": {
+        "mode": 365,
+        "sha256": "ae25bd69782ecf167a2588d0b8368b53b9bae68d9ec2bed200f55e6598ef810c"
+      },
+      "corbanu": {
+        "mode": 365,
+        "sha256": "483031eee7d1b4f978aa782b89164e4072f1533f2eea72a02e1428857254d6de"
+      },
+      "corbanu-acp": {
+        "mode": 365,
+        "sha256": "36a35e03f3816bb067867eb46933da18c25662a2be81cd6bb138248b687ccea5"
+      },
+      "corbanu-walletd": {
+        "mode": 365,
+        "sha256": "3ec7539bcb6bdb0543e4c933f059a624b411dc5cc3895c730ed101a19e19066d"
+      }
+    },
+    "manifest_sha256": "32529d0a894503c021ff756ebc27a75555ab05ed2ec63dc47dc0d9d7bb878024",
+    "packaged_binary_executed": false,
+    "source_commit": "ae5981d2d7d762dfd6d54e0ac0967729bf88f082",
+    "source_tree": "834f57388066d33c27fdee6e3b234dec7fa0b0e6",
+    "verified_binaries": 4
+  },
+  "packaged_execution": false,
+  "rejected": 8
+}

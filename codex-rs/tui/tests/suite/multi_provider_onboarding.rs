@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -20,6 +22,7 @@ use wiremock::ResponseTemplate;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
+use crate::support::secret_scan;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
 use crate::support::tmux::TerminalSize;
@@ -761,10 +764,16 @@ fn canary_tree_scan_skips_unix_sockets_and_scans_regular_files() -> Result<()> {
     let canary = synthetic_canary("walker");
     let _socket = UnixListener::bind(directory.path().join("wallet-daemon.sock"))?;
 
-    assert!(!tree_contains(directory.path(), canary.as_bytes())?);
+    assert!(!tree_contains_except_custody(
+        directory.path(),
+        canary.as_bytes()
+    )?);
 
     fs::write(directory.path().join("observable.log"), canary.as_bytes())?;
-    assert!(tree_contains(directory.path(), canary.as_bytes())?);
+    assert!(tree_contains_except_custody(
+        directory.path(),
+        canary.as_bytes()
+    )?);
     Ok(())
 }
 
@@ -1223,7 +1232,7 @@ async fn capture_success_evidence(
             "secret canary appeared in observable isolated-home files"
         );
         ensure!(
-            !tree_contains(&directory, needle)?,
+            !tree_contains_except_custody(&directory, needle)?,
             "secret canary appeared in emitted success artifacts"
         );
     }
@@ -1234,37 +1243,11 @@ fn synthetic_canary(label: &str) -> String {
     format!("pf53-{label}-{}", Uuid::new_v4())
 }
 
+/// Custody files keep their secret by design; every other file must not contain it.
 fn tree_contains_except_custody(root: &Path, needle: &[u8]) -> Result<bool> {
-    if root.file_name().and_then(|name| name.to_str()) == Some("provider_auth.json") {
-        return Ok(false);
-    }
-    tree_contains(root, needle)
-}
-
-fn tree_contains(root: &Path, needle: &[u8]) -> Result<bool> {
-    let metadata = match fs::symlink_metadata(root) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(error) => return Err(error.into()),
-    };
-    let file_type = metadata.file_type();
-    if file_type.is_symlink() {
-        return Ok(false);
-    }
-    if file_type.is_file() {
-        let bytes = fs::read(root)?;
-        return Ok(bytes.windows(needle.len()).any(|window| window == needle));
-    }
-    if !file_type.is_dir() {
-        return Ok(false);
-    }
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        if tree_contains_except_custody(&entry.path(), needle)? {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    secret_scan::tree_contains(root, needle, &|path| {
+        path.file_name().and_then(|name| name.to_str()) == Some("provider_auth.json")
+    })
 }
 
 fn response(text: &str) -> String {

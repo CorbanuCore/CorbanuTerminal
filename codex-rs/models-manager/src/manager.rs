@@ -8,6 +8,7 @@ use codex_protocol::config_types::CollaborationModeMask;
 use codex_protocol::error::Result as CoreResult;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelPreset;
+use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::ModelsResponse;
 use std::fmt;
 use std::future::Future;
@@ -20,6 +21,11 @@ use tokio::sync::TryLockError;
 use tracing::Instrument as _;
 use tracing::error;
 use tracing::info;
+
+/// OpenAI's default model, and so the overall default.
+pub const OPENAI_DEFAULT_MODEL: &str = "gpt-6-sol";
+/// OpenAI default used when the catalog does not offer `gpt-6-sol`.
+pub const OPENAI_FALLBACK_DEFAULT_MODEL: &str = "gpt-5.6-sol";
 
 const MODEL_CACHE_FILE: &str = "models_cache.json";
 const DEFAULT_MODEL_CACHE_TTL: Duration = Duration::from_secs(300);
@@ -117,6 +123,13 @@ pub trait ModelsManager: fmt::Debug + Send + Sync {
     /// Return the auth manager used for picker filtering.
     fn auth_manager(&self) -> Option<&AuthManager>;
 
+    /// Slugs the provider's `/models` response (or its cache) advertised, if one
+    /// was applied. A model the bundled catalogue keeps but the server did not
+    /// advertise stays selectable, but is not chosen as the default.
+    fn server_advertised_models(&self) -> Option<Vec<String>> {
+        None
+    }
+
     /// Build picker-ready presets from the active catalog snapshot.
     fn build_available_models(&self, mut remote_models: Vec<ModelInfo>) -> Vec<ModelPreset> {
         remote_models.sort_by_key(|model| model.priority);
@@ -128,10 +141,27 @@ pub trait ModelsManager: fmt::Debug + Send + Sync {
         presets = ModelPreset::filter_by_auth(presets, uses_codex_backend);
 
         ModelPreset::mark_default_by_picker_visibility(&mut presets);
-        if let Some(sol_index) = presets
-            .iter()
-            .position(|preset| preset.model == "gpt-5.6-sol" && preset.show_in_picker)
-        {
+        let candidates = [OPENAI_DEFAULT_MODEL, OPENAI_FALLBACK_DEFAULT_MODEL];
+        let pick = |advertised: Option<&[String]>| {
+            candidates
+                .iter()
+                .filter(|slug| {
+                    advertised
+                        .is_none_or(|advertised| advertised.iter().any(|model| model == **slug))
+                })
+                .find_map(|slug| {
+                    presets
+                        .iter()
+                        .position(|preset| preset.model == *slug && preset.show_in_picker)
+                })
+        };
+        // Prefer a candidate the server advertised; a list that names neither
+        // (or no list at all) says nothing about them, so keep catalogue order.
+        let default_index = self
+            .server_advertised_models()
+            .and_then(|advertised| pick(Some(&advertised)))
+            .or_else(|| pick(None));
+        if let Some(sol_index) = default_index {
             for preset in &mut presets {
                 preset.is_default = false;
             }
@@ -225,6 +255,7 @@ pub struct OpenAiModelsManager {
     cache_manager: Option<ModelsCacheManager>,
     endpoint_client: SharedModelsEndpointClient,
     auth_manager: Option<Arc<AuthManager>>,
+    advertised: std::sync::RwLock<Option<Vec<String>>>,
 }
 
 /// Static model manager backed by an authoritative in-process catalog.
@@ -269,6 +300,7 @@ impl OpenAiModelsManager {
             cache_manager,
             endpoint_client,
             auth_manager,
+            advertised: std::sync::RwLock::new(None),
         }
     }
 }
@@ -306,6 +338,13 @@ impl ModelsManager for OpenAiModelsManager {
 
     fn auth_manager(&self) -> Option<&AuthManager> {
         self.auth_manager.as_deref()
+    }
+
+    fn server_advertised_models(&self) -> Option<Vec<String>> {
+        self.advertised
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     fn list_collaboration_modes(&self) -> Vec<CollaborationModeMask> {
@@ -427,6 +466,16 @@ impl OpenAiModelsManager {
 
     /// Replace the cached remote models and rebuild the derived presets list.
     async fn apply_remote_models(&self, models: Vec<ModelInfo>) {
+        *self
+            .advertised
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(
+            models
+                .iter()
+                .filter(|model| model.visibility != ModelVisibility::Hide)
+                .map(|model| model.slug.clone())
+                .collect(),
+        );
         let mut existing_models = load_remote_models_from_file().unwrap_or_default();
         for mut model in models {
             if let Some(existing_index) = existing_models
@@ -434,10 +483,11 @@ impl OpenAiModelsManager {
                 .position(|existing| existing.slug == model.slug)
             {
                 let bundled = &existing_models[existing_index];
-                // Keep the retired Ambient option hidden even with an older cache
-                // or discovery response. Retain metadata for existing sessions.
-                if model.slug == "moonshotai/kimi-k2.7-code" {
-                    model.visibility = bundled.visibility;
+                // A stale cache or discovery response must not resurrect options retired
+                // from the bundled picker. Keep their metadata for explicit selection and
+                // existing sessions; the server may still hide otherwise-visible models.
+                if bundled.visibility == ModelVisibility::Hide {
+                    model.visibility = ModelVisibility::Hide;
                 }
                 // Provider discovery owns availability and presentation. The bundled catalogue
                 // owns spend authorization, capability classification, and allowed effort. A

@@ -1,0 +1,164 @@
+"""Owner-run boundary probes inside the actual browser container; never model input."""
+import ctypes
+import errno
+import hashlib
+import json
+import os
+from pathlib import Path
+import socket
+import sys
+
+if os.uname().machine != 'aarch64':
+    raise RuntimeError('probe syscall numbers require pinned AArch64 image')
+
+FORBIDDEN = (
+    '/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911/AGENTS.md',
+    '/Users/Neo/.codex/auth.json',
+    '/Volumes/CorbanuDrive/Corbanu/.codex-work/transport-live.ZBeaq9/review01.json',
+    '/var/run/docker.sock',
+)
+
+
+def open_error(path, flags=os.O_RDONLY):
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        return exc.errno
+    else:
+        os.close(fd)
+        return 0
+
+
+def metadata(path):
+    try:
+        info = path.lstat()
+        return {'stat_errno': 0, 'mode': info.st_mode & 0o777, 'uid': info.st_uid}
+    except OSError as exc:
+        return {'stat_errno': exc.errno, 'mode': None, 'uid': None}
+
+
+def observations(label):
+    out = {'label': label, 'uid': os.getuid(), 'pid': os.getpid()}
+    status = dict(line.split(':', 1) for line in Path('/proc/self/status').read_text().splitlines())
+    out['process_flags'] = {key: status[key].strip() for key in ('CapEff', 'NoNewPrivs', 'Seccomp')}
+    out['missing_host_paths'] = {path: open_error(path) for path in FORBIDDEN}
+    # Existing, deliberately unreadable synthetic canaries distinguish permission
+    # denial from a convenient missing file. No real repository or secret mount.
+    out['canaries'] = {}
+    for name in ('source', 'history', 'auth'):
+        path = Path('/denied') / name
+        info = metadata(path)
+        try:
+            list(path.iterdir())
+            listing_errno = 0
+        except OSError as exc:
+            listing_errno = exc.errno
+        out['canaries'][name] = {**info,
+                                'read_errno': open_error(path / 'canary'), 'list_errno': listing_errno}
+    # Test the protected path, not macOS-to-Linux socket forwarding support.
+    # This synthetic fixture is not proof against another live agent's IPC.
+    info = metadata(Path('/denied/ipc'))
+    with socket.socket(socket.AF_UNIX) as client:
+        client.settimeout(1)
+        try:
+            client.connect('/denied/ipc/other.sock')
+            ipc_errno = 0
+        except OSError as exc:
+            ipc_errno = exc.errno
+    out['protected_ipc_path'] = {**info, 'errno': ipc_errno}
+    link = Path('/tmp') / (label + '-escape')
+    link.symlink_to(FORBIDDEN[1])
+    out['symlink_escape_errno'] = open_error(link)
+    out['root_write_errno'] = open_error('/root-write-probe', os.O_WRONLY | os.O_CREAT)
+    out['runtime_write_errno'] = open_error(sys.executable, os.O_WRONLY)
+    with open(sys.executable, 'rb') as stream:
+        out['interpreter_sha256'] = hashlib.file_digest(stream, 'sha256').hexdigest()
+    scratch = Path('/tmp') / (label + '-scratch')
+    scratch.write_text('synthetic')
+    out['scratch_ok'] = scratch.read_text() == 'synthetic'
+    libc = ctypes.CDLL(None, use_errno=True)
+    out['denied_syscalls'] = {}
+    for name, args in (('unshare', (0,)), ('ptrace', (0, 0, 0, 0)),
+                       ('mount', (None, None, None, 0, None))):
+        ctypes.set_errno(0)
+        result = getattr(libc, name)(*args)
+        out['denied_syscalls'][name] = {'return': result, 'errno': ctypes.get_errno()}
+    out['namespace_clone'] = {}
+    # AArch64 asm-generic clone=220. Reap any unexpectedly successful clone.
+    for flag in (0x20000, 0x2000000, 0x4000000, 0x8000000, 0x10000000, 0x20000000, 0x40000000):
+        ctypes.set_errno(0)
+        result = libc.syscall(220, flag | 17, 0, 0, 0, 0)
+        observed_errno = ctypes.get_errno()
+        if result == 0:
+            os._exit(0)
+        if result > 0:
+            os.waitpid(result, 0)
+        out['namespace_clone'][hex(flag)] = {'return': result, 'errno': observed_errno}
+    ctypes.set_errno(0)
+    result = libc.syscall(435, 0, 0)  # clone3; ENOSYS preserves libc fallback.
+    out['clone3'] = {'return': result, 'errno': ctypes.get_errno()}
+    with socket.socket() as client:
+        client.settimeout(1)
+        try:
+            client.connect(('198.51.100.1', 443))
+            out['external_connect_errno'] = 0
+        except OSError as exc:
+            out['external_connect_errno'] = exc.errno
+    with socket.socket() as server, socket.socket() as client:
+        server.settimeout(1)
+        client.settimeout(1)
+        server.bind(('127.0.0.1', 0))
+        server.listen(1)
+        client.connect(server.getsockname())
+        accepted, _ = server.accept()
+        accepted.close()
+        out['private_loopback_ok'] = True
+    out['cgroup_limits'] = {name: Path('/sys/fs/cgroup', name).read_text().strip()
+                            for name in ('memory.max', 'pids.max', 'cpu.max')}
+    out['browser_processes'] = []
+    for path in Path('/proc').glob('[0-9]*/status'):
+        try:
+            fields = dict(line.split(':', 1) for line in path.read_text().splitlines())
+            if fields['Name'].strip() in ('chrome', 'chrome_crashpad'):
+                out['browser_processes'].append({key: fields[key].strip()
+                    for key in ('Name', 'Pid', 'Uid', 'CapEff', 'NoNewPrivs', 'Seccomp')})
+        except OSError:
+            pass
+    out['passed'] = (out['uid'] == 65534 and out['process_flags'] ==
+        {'CapEff': '0000000000000000', 'NoNewPrivs': '1', 'Seccomp': '2'}
+        and all(v == errno.ENOENT for v in out['missing_host_paths'].values())
+        and all((v['stat_errno'], v['mode']) in ((0, 0), (errno.EACCES, None))
+                and v['read_errno'] == errno.EACCES and v['list_errno'] == errno.EACCES
+                for v in out['canaries'].values())
+        and (out['protected_ipc_path']['stat_errno'], out['protected_ipc_path']['mode']) in ((0, 0), (errno.EACCES, None))
+        and out['protected_ipc_path']['errno'] == errno.EACCES
+        and bool(out['browser_processes']) and all(v['CapEff'] == '0000000000000000'
+            and v['NoNewPrivs'] == '1' and v['Seccomp'] == '2' and set(v['Uid'].split()) == {'65534'}
+            for v in out['browser_processes'])
+        and out['symlink_escape_errno'] == errno.ENOENT
+        and out['root_write_errno'] == errno.EROFS
+        and out['runtime_write_errno'] in (errno.EROFS, errno.EACCES)
+        and all(v == {'return': -1, 'errno': errno.EPERM} for v in out['denied_syscalls'].values())
+        and all(v == {'return': -1, 'errno': errno.EPERM} for v in out['namespace_clone'].values())
+        and out['clone3'] == {'return': -1, 'errno': errno.ENOSYS}
+        and out['external_connect_errno'] == errno.ENETUNREACH
+        and out['scratch_ok'] and out['private_loopback_ok']
+        and out['cgroup_limits'] == {'memory.max': '536870912', 'pids.max': '128', 'cpu.max': '100000 100000'})
+    return out
+
+
+parent = observations('parent')
+read_fd, write_fd = os.pipe()
+child = os.fork()
+if child == 0:
+    os.close(read_fd)
+    result = observations('child')
+    os.write(write_fd, json.dumps(result).encode())
+    os.close(write_fd)
+    os._exit(0 if result['passed'] else 1)
+os.close(write_fd)
+child_bytes = os.read(read_fd, 8192)
+os.close(read_fd)
+_, child_status = os.waitpid(child, 0)
+print(json.dumps({'parent': parent, 'child': json.loads(child_bytes), 'child_status': child_status}))
+raise SystemExit(0 if parent['passed'] and child_status == 0 else 1)

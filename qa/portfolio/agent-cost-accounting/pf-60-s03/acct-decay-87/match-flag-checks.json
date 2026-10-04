@@ -1,0 +1,16 @@
+[
+  {
+    "case": "actual-current-tip",
+    "passed": true
+  },
+  {
+    "case": "stdout_matches_prior_replay",
+    "passed": true,
+    "rejection": "current integration output differs from pinned replay"
+  },
+  {
+    "case": "source_tip_after",
+    "passed": true,
+    "rejection": "integration tip advanced during replay"
+  }
+]

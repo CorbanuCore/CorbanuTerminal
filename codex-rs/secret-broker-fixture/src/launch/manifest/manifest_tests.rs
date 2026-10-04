@@ -14,13 +14,13 @@ fn image() -> Vec<u8> {
     b
 }
 
-fn document() -> String {
+pub(super) fn document() -> String {
     serde_json::json!({"schema_version":1,"purpose":"synthetic-identity-preparation",
         "source_commit":"a".repeat(40),"probe_sha256":files::image_digest(&mut image().as_slice(),IMAGE_LIMIT).unwrap(),
         "principals":{"journal":{"uid":2001,"gid":3001},"policy":{"uid":2002,"gid":3002},"worker":{"uid":2003,"gid":3003}},"anchor_gid":4000}).to_string()
 }
 
-fn fixture() -> tempfile::TempDir {
+pub(super) fn fixture() -> tempfile::TempDir {
     let t = tempfile::tempdir().unwrap();
     fs::set_permissions(t.path(), fs::Permissions::from_mode(0o700)).unwrap();
     for (p, mode) in [
@@ -45,13 +45,13 @@ fn fixture() -> tempfile::TempDir {
     t
 }
 
-fn image_path() -> String {
+pub(super) fn image_path() -> String {
     format!(
         "opt/corbanu-protected-test/{}/codex-protected-root-probe",
         "a".repeat(40)
     )
 }
-fn inspect(t: &tempfile::TempDir) -> io::Result<SyntheticManifestInspection> {
+pub(super) fn inspect(t: &tempfile::TempDir) -> io::Result<SyntheticManifestInspection> {
     let root = File::open(t.path())?;
     let m = root.metadata()?;
     inspect_at(&root, (m.uid(), m.gid()))

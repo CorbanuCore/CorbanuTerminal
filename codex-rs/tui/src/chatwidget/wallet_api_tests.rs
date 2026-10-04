@@ -287,3 +287,16 @@ async fn stale_non_key_completion_does_not_reopen_the_api_surface() {
 
     assert_eq!(chat.bottom_pane.active_view_id(), None);
 }
+
+#[test]
+fn only_a_lapsed_capability_falls_back_to_the_stored_key() {
+    assert!(lapsed_capability("capability_invalid"));
+    assert!(lapsed_capability("locked"));
+    for code in [
+        "corbanu_api_operation_failed",
+        "operation_in_progress",
+        "daemon_upgrade_required",
+    ] {
+        assert!(!lapsed_capability(code), "{code}");
+    }
+}

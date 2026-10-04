@@ -22,8 +22,8 @@ providers as first-class choices.
 | Ambient provider | Built-in provider named `ambient`, using `AMBIENT_API_KEY` and the Chat Completions wire shape. | `codex-rs/model-provider-info/src/lib.rs` |
 | Ambient default model | Bundled model `z-ai/glm-5.2`, displayed as `Ambient GLM 5.2`, is the only Ambient model option. | `codex-rs/models-manager/models.json` |
 | Kimi Code provider | Built-in provider `kimi-code` using `KIMI_API_KEY` and current model `k3`. | `codex-rs/model-provider-info/src/lib.rs` |
-| Z.AI provider | Built-in provider named `zai`, using `ZAI_API_KEY` and the Z.AI coding plan API base URL. | `codex-rs/model-provider-info/src/lib.rs` |
-| DeepSeek provider | Direct Responses routes `deepseek-v4-flash` and `deepseek-v4-pro`, backed by `DEEPSEEK_API_KEY`. | `codex-rs/model-provider-info/src/lib.rs` |
+| Z.AI provider | Built-in provider named `zai`, using `ZAI_API_KEY` and the Z.AI pay-as-you-go API base URL. | `codex-rs/model-provider-info/src/lib.rs` |
+| DeepSeek provider | Direct Responses routes `deepseek-flash` (V4.1 Flash), legacy `deepseek-v4-flash` and `deepseek-v4-pro`, backed by `DEEPSEEK_API_KEY`. | `codex-rs/model-provider-info/src/lib.rs` |
 | OpenRouter provider | Built-in metered provider including pinned `deepseek/deepseek-v4-flash-0731`, DeepSeek Pro, Kimi K3, Grok, MiniMax, Gemini, Owl, and Tencent routes. | `codex-rs/model-provider-info/src/lib.rs`, `codex-rs/models-manager/models.json` |
 | Meta provider | Built-in `meta` route using `MODEL_API_KEY` and Muse Spark 1.1. | `codex-rs/model-provider-info/src/lib.rs` |
 | Baseten provider | Built-in provider named `baseten`, using `BASETEN_API_KEY` and Baseten GLM 5.2. | `codex-rs/model-provider-info/src/lib.rs` |
@@ -52,7 +52,7 @@ Avoid spreading provider assumptions through prompts or docs-only instructions. 
 
 ## Reading Path
 
-1. [Ambient](ambient.md) for the default provider path.
+1. [Ambient](ambient.md) for the Ambient coding-plan path (the default provider is OpenAI).
 2. [Z.AI GLM 5.2](zai-glm-52.md) for the direct Z.AI coding-plan path.
 3. [OpenRouter](openrouter.md) for metered OpenRouter models.
 4. [Baseten](baseten.md) for metered Baseten GLM 5.2.
