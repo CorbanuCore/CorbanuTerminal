@@ -317,7 +317,10 @@ impl Journal<'_> {
         read_at_ms: i64,
     ) -> anyhow::Result<crate::accounting::InspectionDay> {
         let mut work = crate::runtime::accounting::store::InspectionWork::new(conn).await?;
-        Self::inspect_window_on_connection(conn, owner, day, read_at_ms, None, &mut work).await
+        Self::inspect_window_on_connection(
+            conn, owner, day, read_at_ms, /*window*/ None, &mut work,
+        )
+        .await
     }
 
     pub(in crate::runtime::accounting) async fn inspect_window_on_connection(

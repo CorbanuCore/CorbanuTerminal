@@ -42,7 +42,7 @@ async fn accounting_chat_custom_provider_collects_with_real_identity() -> anyhow
     let prices: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
     assert!(prices.is_empty());
     assert_eq!(observations(&db).await?.len(), 1);
-    posts(&server, 1).await;
+    posts(&server, /*expected*/ 1).await;
     stop(&test).await;
     Ok(())
 }
@@ -77,7 +77,7 @@ async fn accounting_chat_native_off_and_mode_isolation() -> anyhow::Result<()> {
             .build_with_auto_env(&server)
             .await?;
         test.submit_turn("fixture").await?;
-        posts(&server, 1).await;
+        posts(&server, /*expected*/ 1).await;
         if let Some(db) = test.codex.state_db() {
             absent(&db).await?;
         }
@@ -133,13 +133,16 @@ async fn accounting_chat_native_literal_partial_and_zero_goldens() -> anyhow::Re
             .build_with_auto_env(&server)
             .await?;
         test.submit_turn("fixture").await?;
-        posts(&server, 1).await;
+        posts(&server, /*expected*/ 1).await;
         let db = test.codex.state_db().unwrap();
         let rows = attempts(&db).await?;
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].thread_id, test.session_configured.thread_id);
         assert_eq!(rows[0].dialect, Dialect::Inclusive);
-        assert_eq!(totals(&db, &rows[0]).await?, golden(cached, zero, 1)?);
+        assert_eq!(
+            totals(&db, &rows[0]).await?,
+            golden(cached, zero, /*count*/ 1)?
+        );
         let patches = observations(&db).await?;
         assert_eq!(patches.len(), 1);
         assert_eq!(patches[0].patch.write, Presence::Missing);
@@ -172,11 +175,14 @@ async fn accounting_chat_native_cumulative_and_separate_usage() -> anyhow::Resul
         .build_with_auto_env(&server)
         .await?;
     test.submit_turn("fixture").await?;
-    posts(&server, 1).await;
+    posts(&server, /*expected*/ 1).await;
     let db = test.codex.state_db().unwrap();
     let rows = attempts(&db).await?;
     assert_eq!(rows.len(), 1);
-    assert_eq!(totals(&db, &rows[0]).await?, golden(true, false, 1)?);
+    assert_eq!(
+        totals(&db, &rows[0]).await?,
+        golden(/*cached*/ true, /*zero*/ false, /*count*/ 1)?
+    );
     let patches = observations(&db).await?;
     assert_eq!(
         patches
@@ -213,12 +219,15 @@ async fn accounting_chat_native_top_level_error_retains_usage() -> anyhow::Resul
                 .iter()
                 .any(|e| matches!(e, EventMsg::Error(_)))
         );
-        posts(&server, 1).await;
+        posts(&server, /*expected*/ 1).await;
         let db = test.codex.state_db().unwrap();
         let rows = attempts(&db).await?;
         assert_eq!(rows.len(), 1);
         assert_eq!(observations(&db).await?.len(), 1);
-        assert_eq!(totals(&db, &rows[0]).await?, golden(true, false, 1)?);
+        assert_eq!(
+            totals(&db, &rows[0]).await?,
+            golden(/*cached*/ true, /*zero*/ false, /*count*/ 1)?
+        );
         stop(&test).await;
     }
     Ok(())
@@ -334,7 +343,7 @@ async fn accounting_chat_native_missing_usage_and_correlation() -> anyhow::Resul
             submit(&test).await?;
             terminal(&test).await?;
         }
-        posts(&server, 2).await;
+        posts(&server, /*expected*/ 2).await;
         let db = test.codex.state_db().unwrap();
         let rows = attempts(&db).await?;
         assert_eq!(rows.len(), 2);

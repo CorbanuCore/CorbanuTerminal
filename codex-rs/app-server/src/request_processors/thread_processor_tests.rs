@@ -917,11 +917,11 @@ mod thread_processor_behavior_tests {
             };
             event.thread_settings.service_tier = tier.map(str::to_string);
             let mut overrides = ConfigOverrides::default();
-            merge_persisted_service_tier(&history, None, &mut overrides);
+            merge_persisted_service_tier(&history, /*request_overrides*/ None, &mut overrides);
             assert_eq!(overrides.service_tier, Some(tier.map(str::to_string)));
         }
         let mut overrides = ConfigOverrides::default();
-        merge_persisted_service_tier(&[], None, &mut overrides);
+        merge_persisted_service_tier(&[], /*request_overrides*/ None, &mut overrides);
         assert_eq!(overrides.service_tier, Some(None));
     }
 
@@ -944,7 +944,7 @@ mod thread_processor_behavior_tests {
             let before = overrides.service_tier.clone();
             merge_persisted_service_tier(
                 &persisted_workspace_permission_history(),
-                None,
+                /*request_overrides*/ None,
                 &mut overrides,
             );
             assert_eq!(overrides.service_tier, before);
@@ -984,7 +984,7 @@ mod thread_processor_behavior_tests {
             serde_json::to_value(checkpoint).unwrap()
         );
         let mut overrides = ConfigOverrides::default();
-        merge_persisted_service_tier(&suffix, None, &mut overrides);
+        merge_persisted_service_tier(&suffix, /*request_overrides*/ None, &mut overrides);
         assert_eq!(overrides.service_tier, Some(Some("priority".to_string())));
     }
 

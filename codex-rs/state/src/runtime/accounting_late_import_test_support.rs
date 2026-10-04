@@ -124,7 +124,7 @@ pub(super) async fn reject_unchanged(
     bundle: &[RetainedImport],
     as_of: i64,
 ) -> anyhow::Result<String> {
-    let store = AccountingStore::open(runtime, 0).await?;
+    let store = AccountingStore::open(runtime, /*as_of*/ 0).await?;
     let mut conn = connection(runtime).await?;
     let before = dump(&mut conn).await?;
     let owner = bundle

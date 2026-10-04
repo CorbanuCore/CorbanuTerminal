@@ -5,7 +5,7 @@ use pretty_assertions::assert_eq;
 fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
     let scope = Uuid::new_v4();
     let source = "openai-chat-api-key-bundled-v1";
-    let first = chat_original("gpt-5.6-sol", "openai", scope, 1000)?.remove(0);
+    let first = chat_original("gpt-5.6-sol", "openai", scope, /*accepted_at*/ 1000)?.remove(0);
     let tuple = serde_json::to_vec(&(
         source,
         "openai",
@@ -24,9 +24,9 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
     assert_eq!(
         first.rates,
         Rates {
-            noncached: Some(rate(5000)?),
-            output: Some(rate(30000)?),
-            read: Some(rate(500)?),
+            noncached: Some(rate(/*milli*/ 5000)?),
+            output: Some(rate(/*milli*/ 30000)?),
+            read: Some(rate(/*milli*/ 500)?),
             write: None
         }
     );
@@ -39,7 +39,7 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
         ),
         (1000.try_into()?, 1000.try_into()?, 1000.try_into()?, None)
     );
-    let second = chat_original("gpt-5.6-sol", "openai", scope, 2000)?.remove(0);
+    let second = chat_original("gpt-5.6-sol", "openai", scope, /*accepted_at*/ 2000)?.remove(0);
     assert_ne!(first.id, second.id);
     assert_eq!(first.source_reference, second.source_reference);
     for model in [
@@ -49,7 +49,7 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
         "openai/gpt-5.6-sol",
         "claude-opus-5",
     ] {
-        assert!(chat_original(model, "openai", scope, 1000)?.is_empty());
+        assert!(chat_original(model, "openai", scope, /*accepted_at*/ 1000)?.is_empty());
     }
     let catalog = codex_models_manager::bundled_models_response()?;
     let row = catalog
@@ -88,7 +88,12 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
             promotion_valid_through_utc: None,
         },
     ] {
-        assert!(billed("fixture", "openai", &billing, scope, 1000, source)?.is_empty());
+        assert!(
+            billed(
+                "fixture", "openai", &billing, scope, /*accepted_at*/ 1000, source
+            )?
+            .is_empty()
+        );
     }
     for read in [None, Some(0)] {
         let billing = ModelBilling::Metered {
@@ -96,7 +101,10 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
             output_milli_usd_per_million_tokens: 2,
             cached_input_milli_usd_per_million_tokens: read,
         };
-        let projected = billed("fixture", "openai", &billing, scope, 1000, source)?.remove(0);
+        let projected = billed(
+            "fixture", "openai", &billing, scope, /*accepted_at*/ 1000, source,
+        )?
+        .remove(0);
         assert_eq!(
             (projected.rates.read, projected.rates.write),
             (read.map(rate).transpose()?, None)
@@ -110,18 +118,30 @@ fn accounting_chat_prices_exact_source_and_unknown() -> anyhow::Result<()> {
 #[test]
 fn accounting_responses_prices_exact_and_unknown() {
     let scope = Uuid::new_v4();
-    let first = responses_original("gpt-5.6-sol", "openai", scope, 1000, None)
-        .unwrap()
-        .remove(0);
-    let later = responses_original("gpt-5.6-sol", "openai", scope, 2000, Some("default"))
-        .unwrap()
-        .remove(0);
+    let first = responses_original(
+        "gpt-5.6-sol",
+        "openai",
+        scope,
+        /*accepted_at*/ 1000,
+        /*tier*/ None,
+    )
+    .unwrap()
+    .remove(0);
+    let later = responses_original(
+        "gpt-5.6-sol",
+        "openai",
+        scope,
+        /*accepted_at*/ 2000,
+        Some("default"),
+    )
+    .unwrap()
+    .remove(0);
     assert_eq!(
         first.rates,
         Rates {
-            noncached: Some(rate(5000).unwrap()),
-            output: Some(rate(30000).unwrap()),
-            read: Some(rate(500).unwrap()),
+            noncached: Some(rate(/*milli*/ 5000).unwrap()),
+            output: Some(rate(/*milli*/ 30000).unwrap()),
+            read: Some(rate(/*milli*/ 500).unwrap()),
             write: None,
         }
     );
@@ -154,16 +174,24 @@ fn accounting_responses_prices_exact_and_unknown() {
         "claude-opus-5",
     ] {
         assert!(
-            responses_original(model, "openai", scope, 1000, None)
-                .unwrap()
-                .is_empty()
+            responses_original(
+                model, "openai", scope, /*accepted_at*/ 1000, /*tier*/ None
+            )
+            .unwrap()
+            .is_empty()
         );
     }
     for tier in ["priority", "flex", "auto", "unknown"] {
         assert!(
-            responses_original("gpt-5.6-sol", "openai", scope, 1000, Some(tier))
-                .unwrap()
-                .is_empty()
+            responses_original(
+                "gpt-5.6-sol",
+                "openai",
+                scope,
+                /*accepted_at*/ 1000,
+                Some(tier)
+            )
+            .unwrap()
+            .is_empty()
         );
     }
     for billing in [
@@ -173,7 +201,7 @@ fn accounting_responses_prices_exact_and_unknown() {
         },
     ] {
         assert!(
-            responses_project("fixture", scope, &billing, 1000)
+            responses_project("fixture", scope, &billing, /*accepted_at*/ 1000)
                 .unwrap()
                 .is_empty()
         );
@@ -184,15 +212,20 @@ fn accounting_responses_prices_exact_and_unknown() {
             output_milli_usd_per_million_tokens: 0,
             cached_input_milli_usd_per_million_tokens: read,
         };
-        let value = responses_project("fixture", scope, &billing, 1000)
+        let value = responses_project("fixture", scope, &billing, /*accepted_at*/ 1000)
             .unwrap()
             .remove(0);
         assert_eq!(value.rates.read, read.map(|value| rate(value).unwrap()));
         assert_eq!(value.rates.write, None);
     }
-    let anthropic = anthropic_original("claude-opus-5", "anthropic", scope, 1000)
-        .unwrap()
-        .remove(0);
+    let anthropic = anthropic_original(
+        "claude-opus-5",
+        "anthropic",
+        scope,
+        /*accepted_at*/ 1000,
+    )
+    .unwrap()
+    .remove(0);
     // Every billed projection now states provenance in one shape, including the
     // authentication and tier the rates are quoted for.
     let source = serde_json::to_vec(&(
@@ -223,21 +256,31 @@ fn accounting_responses_prices_exact_and_unknown() {
 #[test]
 fn accounting_bundled_prices_are_exact_prospective_and_content_identified() {
     let scope = Uuid::new_v4();
-    let first = anthropic_original("claude-opus-5", "anthropic", scope, 1000)
-        .unwrap()
-        .remove(0);
-    let second = anthropic_original("claude-opus-5", "anthropic", scope, 2000)
-        .unwrap()
-        .remove(0);
+    let first = anthropic_original(
+        "claude-opus-5",
+        "anthropic",
+        scope,
+        /*accepted_at*/ 1000,
+    )
+    .unwrap()
+    .remove(0);
+    let second = anthropic_original(
+        "claude-opus-5",
+        "anthropic",
+        scope,
+        /*accepted_at*/ 2000,
+    )
+    .unwrap()
+    .remove(0);
     assert_ne!(first.id, second.id);
     assert_eq!(first.source_reference, second.source_reference);
     assert_eq!(
         first.rates,
         Rates {
-            noncached: Some(rate(5000).unwrap()),
-            read: Some(rate(500).unwrap()),
-            output: Some(rate(25000).unwrap()),
-            write: Some(rate(6250).unwrap()),
+            noncached: Some(rate(/*milli*/ 5000).unwrap()),
+            read: Some(rate(/*milli*/ 500).unwrap()),
+            output: Some(rate(/*milli*/ 25000).unwrap()),
+            write: Some(rate(/*milli*/ 6250).unwrap()),
         }
     );
     assert_eq!(
@@ -267,17 +310,22 @@ fn accounting_bundled_prices_are_exact_prospective_and_content_identified() {
         ),
         (1000, 1000, 1000, None)
     );
-    let fable = anthropic_original("claude-fable-5-1", "anthropic", scope, 1000)
-        .unwrap()
-        .remove(0);
+    let fable = anthropic_original(
+        "claude-fable-5-1",
+        "anthropic",
+        scope,
+        /*accepted_at*/ 1000,
+    )
+    .unwrap()
+    .remove(0);
     assert_ne!(fable.source_reference, first.source_reference);
     assert_eq!(
         fable.rates,
         Rates {
-            noncached: Some(rate(10000).unwrap()),
-            read: Some(rate(250).unwrap()),
-            output: Some(rate(50000).unwrap()),
-            write: Some(rate(12500).unwrap()),
+            noncached: Some(rate(/*milli*/ 10000).unwrap()),
+            read: Some(rate(/*milli*/ 250).unwrap()),
+            output: Some(rate(/*milli*/ 50000).unwrap()),
+            write: Some(rate(/*milli*/ 12500).unwrap()),
         }
     );
 }
@@ -291,7 +339,7 @@ fn accounting_price_authority_rejects_aliases_remote_and_non_metered_rows() {
         "remote-only",
     ] {
         assert_eq!(
-            anthropic_original(model, "anthropic", Uuid::nil(), 10).unwrap(),
+            anthropic_original(model, "anthropic", Uuid::nil(), /*accepted_at*/ 10).unwrap(),
             vec![]
         );
     }
@@ -308,7 +356,7 @@ fn accounting_price_authority_rejects_aliases_remote_and_non_metered_rows() {
                 "anthropic",
                 &billing,
                 Uuid::nil(),
-                10,
+                /*accepted_at*/ 10,
                 "anthropic-bundled-v1"
             )
             .unwrap(),
@@ -329,14 +377,14 @@ fn accounting_price_authority_rejects_aliases_remote_and_non_metered_rows() {
         "anthropic",
         &auth_dependent,
         Uuid::nil(),
-        10,
+        /*accepted_at*/ 10,
         "anthropic-bundled-v1",
     )
     .unwrap()
     .remove(0);
     assert_eq!(priced.basis, Basis::Billed);
     assert_eq!(priced.plan_burn_millis, None);
-    assert_eq!(priced.rates.noncached, Some(rate(5000).unwrap()));
+    assert_eq!(priced.rates.noncached, Some(rate(/*milli*/ 5000).unwrap()));
 }
 
 #[test]
@@ -362,7 +410,7 @@ fn accounting_price_projection_retains_absent_read_and_write_and_exact_milli() {
         "anthropic",
         &billing,
         Uuid::nil(),
-        10,
+        /*accepted_at*/ 10,
         "anthropic-bundled-v1",
     )
     .unwrap()
@@ -383,7 +431,7 @@ fn accounting_price_projection_retains_absent_read_and_write_and_exact_milli() {
             "anthropic",
             &changed,
             Uuid::nil(),
-            10,
+            /*accepted_at*/ 10,
             "anthropic-bundled-v1"
         )
         .unwrap()[0]
@@ -395,7 +443,7 @@ fn accounting_price_projection_retains_absent_read_and_write_and_exact_milli() {
             "anthropic",
             &billing,
             Uuid::nil(),
-            -1,
+            /*accepted_at*/ -1,
             "anthropic-bundled-v1"
         )
         .is_err()
@@ -413,9 +461,15 @@ fn accounting_plan_projection_states_the_rate_and_only_stated_equivalents() {
     // A Claude subscription row states its plan rate, and its API equivalent
     // is the same model's Anthropic API row with the one-hour cache write
     // (2x input) the subscription route requests.
-    let plan = plan_original("claude-opus-5-plan", "claude-plan", scope, now, None)
-        .unwrap()
-        .remove(0);
+    let plan = plan_original(
+        "claude-opus-5-plan",
+        "claude-plan",
+        scope,
+        now,
+        /*tier*/ None,
+    )
+    .unwrap()
+    .remove(0);
     assert_eq!(plan.basis, Basis::PlanEquivalent);
     assert_eq!(plan.plan_burn_millis, Some(1000));
     assert_eq!(
@@ -426,19 +480,28 @@ fn accounting_plan_projection_states_the_rate_and_only_stated_equivalents() {
             plan.rates.write
         ),
         (
-            Some(rate(5000).unwrap()),
-            Some(rate(25000).unwrap()),
-            Some(rate(500).unwrap()),
-            Some(rate(10000).unwrap())
+            Some(rate(/*milli*/ 5000).unwrap()),
+            Some(rate(/*milli*/ 25000).unwrap()),
+            Some(rate(/*milli*/ 500).unwrap()),
+            Some(rate(/*milli*/ 10000).unwrap())
         )
     );
     assert_eq!(plan.provider, "claude-plan");
-    let opus_5_5 = plan_original("claude-opus-5-5-plan", "claude-plan", scope, now, None)
-        .unwrap()
-        .remove(0);
+    let opus_5_5 = plan_original(
+        "claude-opus-5-5-plan",
+        "claude-plan",
+        scope,
+        now,
+        /*tier*/ None,
+    )
+    .unwrap()
+    .remove(0);
     assert_eq!(
         (opus_5_5.rates.noncached, opus_5_5.rates.write),
-        (Some(rate(4000).unwrap()), Some(rate(8000).unwrap()))
+        (
+            Some(rate(/*milli*/ 4000).unwrap()),
+            Some(rate(/*milli*/ 8000).unwrap())
+        )
     );
 
     // An auth-dependent row states both: the plan rate that applied and the API
@@ -447,9 +510,9 @@ fn accounting_plan_projection_states_the_rate_and_only_stated_equivalents() {
         .unwrap()
         .remove(0);
     assert_eq!(both.plan_burn_millis, Some(200));
-    assert_eq!(both.rates.noncached, Some(rate(1000).unwrap()));
-    assert_eq!(both.rates.output, Some(rate(6000).unwrap()));
-    assert_eq!(both.rates.read, Some(rate(100).unwrap()));
+    assert_eq!(both.rates.noncached, Some(rate(/*milli*/ 1000).unwrap()));
+    assert_eq!(both.rates.output, Some(rate(/*milli*/ 6000).unwrap()));
+    assert_eq!(both.rates.read, Some(rate(/*milli*/ 100).unwrap()));
 
     // A metered row reached through a subscription: the vendor published API
     // rates and no plan figure, so the equivalent is stated and the plan rate
@@ -459,9 +522,9 @@ fn accounting_plan_projection_states_the_rate_and_only_stated_equivalents() {
         .remove(0);
     assert_eq!(metered.basis, Basis::PlanEquivalent);
     assert_eq!(metered.plan_burn_millis, None);
-    assert_eq!(metered.rates.noncached, Some(rate(2000).unwrap()));
-    assert_eq!(metered.rates.output, Some(rate(10000).unwrap()));
-    assert_eq!(metered.rates.read, Some(rate(200).unwrap()));
+    assert_eq!(metered.rates.noncached, Some(rate(/*milli*/ 2000).unwrap()));
+    assert_eq!(metered.rates.output, Some(rate(/*milli*/ 10000).unwrap()));
+    assert_eq!(metered.rates.read, Some(rate(/*milli*/ 200).unwrap()));
 
     // Nothing is stated for another vendor's metered row (its own API key may
     // pay for it), another provider's row, an unknown slug, or a tier the
@@ -494,7 +557,7 @@ fn accounting_provider_held_plan_login_takes_the_plan_side() {
         "fixture must be a command-auth provider"
     );
     let endpoint = provider
-        .to_api_provider(None)
+        .to_api_provider(/*auth_mode*/ None)
         .expect("claude-plan route")
         .base_url;
     let mode = AccountingMode::Provider {
@@ -524,13 +587,16 @@ fn accounting_provider_held_plan_login_takes_the_plan_side() {
         "claude-opus-5-plan",
         "claude-plan",
         Uuid::new_v4(),
-        10,
-        None,
+        /*accepted_at*/ 10,
+        /*tier*/ None,
     )
     .unwrap()
     .remove(0);
     assert_eq!(plan.plan_burn_millis, Some(1000));
-    assert_eq!(plan.rates.noncached, Some(super::rate(5000).unwrap()));
+    assert_eq!(
+        plan.rates.noncached,
+        Some(super::rate(/*milli*/ 5000).unwrap())
+    );
 }
 
 /// The wire name is not the catalogue identity, and pricing is a catalogue
@@ -552,7 +618,7 @@ fn pf_60_s03_claude_plan_prices_by_catalogue_identity_not_wire_name() {
         codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID,
         scope,
         now,
-        None,
+        /*tier*/ None,
     )
     .expect("the catalogue states a plan rate for this row");
     assert_eq!(priced.len(), 1, "the plan row is priced");
@@ -573,7 +639,7 @@ fn pf_60_s03_claude_plan_prices_by_catalogue_identity_not_wire_name() {
             codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID,
             scope,
             now,
-            None,
+            /*tier*/ None,
         )
         .expect("lookup succeeds")
         .is_empty(),
@@ -589,7 +655,14 @@ fn pf_60_s03_claude_plan_prices_by_catalogue_identity_not_wire_name() {
 fn accounting_baseten_states_a_free_cache_write() -> anyhow::Result<()> {
     let scope = Uuid::from_u128(8);
     let decimal = |text: &str| Decimal::try_from(text.to_owned());
-    let snapshot = original("zai-org/GLM-5.2", "baseten", scope, 1, "bundled-models-v1")?.remove(0);
+    let snapshot = original(
+        "zai-org/GLM-5.2",
+        "baseten",
+        scope,
+        /*accepted_at*/ 1,
+        "bundled-models-v1",
+    )?
+    .remove(0);
     assert_eq!(
         snapshot.rates,
         Rates {
@@ -600,7 +673,14 @@ fn accounting_baseten_states_a_free_cache_write() -> anyhow::Result<()> {
         }
     );
     // A provider not on the list keeps the unknown cache-write rate.
-    let routed = original("z-ai/glm-5.2", "ambient", scope, 1, "bundled-models-v1")?.remove(0);
+    let routed = original(
+        "z-ai/glm-5.2",
+        "ambient",
+        scope,
+        /*accepted_at*/ 1,
+        "bundled-models-v1",
+    )?
+    .remove(0);
     assert_eq!(routed.rates.write, None);
     Ok(())
 }
@@ -675,7 +755,7 @@ fn accounting_deepseek_states_the_rate_in_force_and_a_free_cache_write() -> anyh
     )?;
     assert_ne!(peak[0].source_reference, off_peak[0].source_reference);
 
-    let openai = chat_original("gpt-5.6-sol", "openai", scope, 1000)?.remove(0);
+    let openai = chat_original("gpt-5.6-sol", "openai", scope, /*accepted_at*/ 1000)?.remove(0);
     assert_eq!(openai.rates.write, None);
     Ok(())
 }

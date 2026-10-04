@@ -592,7 +592,9 @@ async fn accounting_actual_transport_retries_and_old_response_keep_distinct_owne
     );
     assert!(transport.stream(request()).await.is_err());
     transport.stream(request()).await?;
-    first.observe(1, Ok(usage(7))).await?;
+    first
+        .observe(/*position*/ 1, Ok(usage(/*value*/ 7)))
+        .await?;
     let second = ResponseEvidence::new(fixture.sampling.clone());
     AccountingTransport::new(
         Probe {
@@ -604,8 +606,12 @@ async fn accounting_actual_transport_retries_and_old_response_keep_distinct_owne
     )
     .stream(request())
     .await?;
-    second.observe(1, Ok(usage(11))).await?;
-    first.observe(2, Ok(usage(8))).await?;
+    second
+        .observe(/*position*/ 1, Ok(usage(/*value*/ 11)))
+        .await?;
+    first
+        .observe(/*position*/ 2, Ok(usage(/*value*/ 8)))
+        .await?;
     let attempts = fixture.attempts().await?;
     assert_eq!(attempts.len(), 3);
     assert_eq!(
@@ -798,10 +804,17 @@ async fn accounting_scope_drop_clears_cancelled_sampling_and_observation_failure
     )
     .stream(request())
     .await?;
-    evidence.observe(1, Ok(usage(7))).await?;
+    evidence
+        .observe(/*position*/ 1, Ok(usage(/*value*/ 7)))
+        .await?;
     sqlx::query("CREATE TRIGGER reject_observation BEFORE INSERT ON draft_accounting_observations BEGIN SELECT RAISE(ABORT, 'fixture-observation'); END")
         .execute(&mut fixture.connection().await?).await?;
-    assert!(evidence.observe(2, Ok(usage(9))).await.is_err());
+    assert!(
+        evidence
+            .observe(/*position*/ 2, Ok(usage(/*value*/ 9)))
+            .await
+            .is_err()
+    );
     assert!(!fixture.sampling.check().unwrap_err().is_retryable());
     let rows: Vec<String> = sqlx::query_scalar(
         "SELECT json_extract(payload, '$.patch') FROM draft_accounting_observations",
@@ -854,7 +867,11 @@ async fn accounting_waits_out_another_process_holding_the_state_db_past_its_busy
     let held = conn.begin_with("BEGIN IMMEDIATE").await?;
     let observing = {
         let evidence = evidence.clone();
-        tokio::spawn(async move { evidence.observe(1, Ok(usage(7))).await })
+        tokio::spawn(async move {
+            evidence
+                .observe(/*position*/ 1, Ok(usage(/*value*/ 7)))
+                .await
+        })
     };
     tokio::time::sleep(HELD).await;
     assert!(!observing.is_finished());

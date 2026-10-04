@@ -62,10 +62,10 @@ async fn accounting_load(
 }
 
 fn accounting_scroll(app: &mut App) -> String {
-    app.chat_widget.on_terminal_resize(40);
+    app.chat_widget.on_terminal_resize(/*width*/ 40);
     let mut output = String::new();
     for _ in 0..120 {
-        output.push_str(&render_bottom_popup(&app.chat_widget, 40));
+        output.push_str(&render_bottom_popup(&app.chat_widget, /*width*/ 40));
         app.chat_widget
             .handle_key_event(crossterm::event::KeyEvent::new(
                 crossterm::event::KeyCode::Down,
@@ -194,7 +194,9 @@ async fn accounting_inspect_app_thread_switch_stale_reply() -> anyhow::Result<()
         .handle_thread_session_quiet(test_thread_session(other, path.path().to_path_buf()));
     app.active_thread_id = Some(other);
     app.handle_accounting_inspector_event(held_result);
-    assert!(!render_bottom_popup(&app.chat_widget, 80).contains("Cost — this conversation"));
+    assert!(
+        !render_bottom_popup(&app.chat_widget, /*width*/ 80).contains("Cost — this conversation")
+    );
     let next = accounting_load(&mut app, &mut rx, day).await;
     assert!(matches!(next, AppEvent::AccountingInspectorLoaded {
         thread: Some(id), result: Ok(codex_state::accounting::InspectionDay::MissingThread), ..
@@ -246,7 +248,9 @@ async fn accounting_inspect_app_error_retry_and_timeout() -> anyhow::Result<()> 
             crossterm::event::KeyModifiers::NONE,
         ));
     app.handle_accounting_inspector_event(rx.recv().await.unwrap());
-    assert!(!render_bottom_popup(&app.chat_widget, 80).contains("Cost — this conversation"));
+    assert!(
+        !render_bottom_popup(&app.chat_widget, /*width*/ 80).contains("Cost — this conversation")
+    );
     Ok(())
 }
 
@@ -272,8 +276,10 @@ async fn accounting_inspect_app_restart_and_profile_isolation() -> anyhow::Resul
         matches!(reopened, AppEvent::AccountingInspectorLoaded { result: Ok(codex_state::accounting::InspectionDay::Ready(v)), .. } if v.owner == owner && v.totals.attempts == 1)
     );
     app.state_db.take().unwrap().close().await;
-    app.chat_widget
-        .update_account_state(None, None, false, false);
+    app.chat_widget.update_account_state(
+        /*status_account_display*/ None, /*plan_type*/ None,
+        /*has_chatgpt_account*/ false, /*has_codex_backend_auth*/ false,
+    );
     app.state_db = Some(
         codex_state::StateRuntime::init(
             codex_state::SqliteConfig::from_sqlite_home(fresh.path().abs()),
@@ -298,7 +304,7 @@ async fn accounting_inspect_app_restart_and_profile_isolation() -> anyhow::Resul
 #[tokio::test]
 async fn accounting_inspect_app_off_and_old_usage_routes() -> anyhow::Result<()> {
     let (mut app, mut rx, mut ops) = make_test_app_with_channels().await;
-    let event = accounting_load(&mut app, &mut rx, 0).await;
+    let event = accounting_load(&mut app, &mut rx, /*day*/ 0).await;
     assert!(
         matches!(&event, AppEvent::AccountingInspectorLoaded { result: Err(s), .. } if s.contains("no current native thread"))
     );

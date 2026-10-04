@@ -12489,7 +12489,7 @@ async fn interactive_fallback_recovers_persisted_incompatible_pairs() -> std::io
         // manager picks the catalogue default.
         assert_eq!(
             config.model,
-            codex_model_provider_info::resolve_model_for_provider(None, provider)
+            codex_model_provider_info::resolve_model_for_provider(/*model*/ None, provider)
         );
         assert!(config.startup_warnings.iter().any(|warning| {
             warning.contains(model)
@@ -12537,7 +12537,7 @@ async fn override_provider_with_stale_config_model_recovers_without_opt_in() -> 
         // manager picks the catalogue default.
         assert_eq!(
             config.model,
-            codex_model_provider_info::resolve_model_for_provider(None, provider)
+            codex_model_provider_info::resolve_model_for_provider(/*model*/ None, provider)
         );
         assert!(config.startup_warnings.iter().any(|warning| {
             warning.contains(stale_model) && warning.contains("using the provider's default model")

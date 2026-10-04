@@ -208,13 +208,13 @@ async fn pending_selection_case(decision: &str, expected_old_effects: usize) -> 
     assert!(!old.exists());
     start_text_turn(&mut mcp, thread.clone()).await?;
     let approval = pending_permission_probe(&mut mcp, "old").await?;
-    assert_permission_effects(&old, 0)?;
+    assert_permission_effects(&old, /*count*/ 0)?;
     confirm_permission(&mut mcp, &thread, AskForApproval::Never).await?;
     // A round trip after Applied establishes live backend progress while the
     // original decision remains withheld. Any extra approvals remain buffered.
     read_thread_with_turns(&mut mcp, &thread).await?;
     assert_eq!(received_response_bodies(&server).await?.len(), 1);
-    assert_permission_effects(&old, 0)?;
+    assert_permission_effects(&old, /*count*/ 0)?;
     mcp.send_response(approval, serde_json::json!({"decision": decision}))
         .await?;
     assert_eq!(
@@ -226,7 +226,7 @@ async fn pending_selection_case(decision: &str, expected_old_effects: usize) -> 
     assert_eq!(received_response_bodies(&server).await?.len(), 2);
     start_text_turn(&mut mcp, thread).await?;
     assert_eq!(finish_probe(&mut mcp, "new").await?, 0);
-    assert_permission_effects(&new, 1)?;
+    assert_permission_effects(&new, /*count*/ 1)?;
     assert_permission_effects(&old, expected_old_effects)?;
     assert_eq!(received_response_bodies(&server).await?.len(), 4);
     Ok(())
@@ -261,8 +261,8 @@ async fn wait_permission_barrier(fixture: &std::path::Path) -> Result<()> {
     })
     .await
     .context("real operation did not start")?;
-    assert_permission_effects(&fixture.join("started"), 1)?;
-    assert_permission_effects(&fixture.join("finished"), 0)
+    assert_permission_effects(&fixture.join("started"), /*count*/ 1)?;
+    assert_permission_effects(&fixture.join("finished"), /*count*/ 0)
 }
 
 #[tokio::test]
@@ -308,15 +308,15 @@ async fn inflight_permission_case(
     };
     confirm_permission(&mut mcp, &thread, selected).await?;
     read_thread_with_turns(&mut mcp, &thread).await?;
-    assert_permission_effects(&fixture.path().join("started"), 1)?;
-    assert_permission_effects(&fixture.path().join("finished"), 0)?;
+    assert_permission_effects(&fixture.path().join("started"), /*count*/ 1)?;
+    assert_permission_effects(&fixture.path().join("finished"), /*count*/ 0)?;
     std::fs::write(fixture.path().join("release"), "continue")?;
     let old_approvals = finish_probe(&mut mcp, "continuation").await?;
     assert_eq!(
         old_approvals,
         usize::from(initial == AskForApproval::UnlessTrusted)
     );
-    assert_permission_effects(&fixture.path().join("finished"), 1)?;
+    assert_permission_effects(&fixture.path().join("finished"), /*count*/ 1)?;
     assert_permission_effects(&continuation, usize::from(initial == AskForApproval::Never))?;
     start_text_turn(&mut mcp, thread).await?;
     let next_approvals = finish_probe(&mut mcp, "next").await?;
@@ -325,8 +325,8 @@ async fn inflight_permission_case(
         usize::from(selected == AskForApproval::UnlessTrusted)
     );
     assert_permission_effects(&next, usize::from(selected == AskForApproval::Never))?;
-    assert_permission_effects(&fixture.path().join("started"), 1)?;
-    assert_permission_effects(&fixture.path().join("finished"), 1)?;
+    assert_permission_effects(&fixture.path().join("started"), /*count*/ 1)?;
+    assert_permission_effects(&fixture.path().join("finished"), /*count*/ 1)?;
     assert_eq!(received_response_bodies(&server).await?.len(), 5);
     Ok(())
 }
@@ -402,8 +402,8 @@ async fn rapid_permission_case(
             }
         );
     }
-    assert_permission_effects(&fixture.path().join("started"), 1)?;
-    assert_permission_effects(&fixture.path().join("finished"), 0)?;
+    assert_permission_effects(&fixture.path().join("started"), /*count*/ 1)?;
+    assert_permission_effects(&fixture.path().join("finished"), /*count*/ 0)?;
     std::fs::write(fixture.path().join("release"), "continue")?;
     assert_eq!(finish_probe(&mut mcp, "in-flight").await?, 0);
     start_text_turn(&mut mcp, thread).await?;
@@ -412,8 +412,8 @@ async fn rapid_permission_case(
         usize::from(final_policy == AskForApproval::UnlessTrusted)
     );
     assert_permission_effects(&probe, usize::from(final_policy == AskForApproval::Never))?;
-    assert_permission_effects(&fixture.path().join("started"), 1)?;
-    assert_permission_effects(&fixture.path().join("finished"), 1)?;
+    assert_permission_effects(&fixture.path().join("started"), /*count*/ 1)?;
+    assert_permission_effects(&fixture.path().join("finished"), /*count*/ 1)?;
     assert_eq!(received_response_bodies(&server).await?.len(), 4);
     Ok(())
 }
@@ -532,13 +532,13 @@ async fn thread_settings_f10_restart_does_not_accept_pending_approval() -> Resul
     confirm_permission(&mut mcp, &thread, AskForApproval::UnlessTrusted).await?;
     start_text_turn(&mut mcp, thread.clone()).await?;
     let _withheld = pending_permission_probe(&mut mcp, "old").await?;
-    assert_permission_effects(&old, 0)?;
+    assert_permission_effects(&old, /*count*/ 0)?;
     assert!(
         timeout(DEFAULT_TIMEOUT, mcp.shutdown_gracefully())
             .await??
             .success()
     );
-    assert_permission_effects(&old, 0)?;
+    assert_permission_effects(&old, /*count*/ 0)?;
     assert_eq!(received_response_bodies(&server).await?.len(), 1);
     server.reset().await;
     responses::mount_sse_sequence(
@@ -569,7 +569,7 @@ async fn thread_settings_f10_restart_does_not_accept_pending_approval() -> Resul
         AskForApproval::Never,
         "recovery from an unresolved restricted approval must not silently increase authority"
     );
-    assert_permission_effects(&old, 0)?;
+    assert_permission_effects(&old, /*count*/ 0)?;
     assert_eq!(
         received_response_bodies(&server).await?.len(),
         0,
@@ -577,8 +577,8 @@ async fn thread_settings_f10_restart_does_not_accept_pending_approval() -> Resul
     );
     start_text_turn(&mut restarted, thread).await?;
     assert_eq!(finish_probe(&mut restarted, "resumed").await?, 1);
-    assert_permission_effects(&next, 0)?;
-    assert_permission_effects(&old, 0)?;
+    assert_permission_effects(&next, /*count*/ 0)?;
+    assert_permission_effects(&old, /*count*/ 0)?;
     assert_eq!(received_response_bodies(&server).await?.len(), 2);
     Ok(())
 }

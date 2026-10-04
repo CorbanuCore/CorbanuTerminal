@@ -232,7 +232,7 @@ impl Fixture {
         for child in [12, 13] {
             runtime
                 .upsert_thread_spawn_edge(
-                    owner(11)?,
+                    owner(/*value*/ 11)?,
                     owner(child)?,
                     DirectionalThreadSpawnEdgeStatus::Open,
                 )
@@ -301,40 +301,58 @@ fn expected_days() -> anyhow::Result<Vec<(ThreadId, i64, DayTotals)>> {
     let day = at("2026-09-11T00:00:00Z")? / DAY;
     Ok(vec![
         (
-            owner(11)?,
+            owner(/*value*/ 11)?,
             day,
-            totals([100, 60, 40, 0, 20, 8, 120], [0; 7], "0.000220", 0, 1)?,
+            totals(
+                [100, 60, 40, 0, 20, 8, 120],
+                [0; 7],
+                "0.000220",
+                /*unknown_estimates*/ 0,
+                /*attempts*/ 1,
+            )?,
         ),
         (
-            owner(12)?,
+            owner(/*value*/ 12)?,
             day,
             totals(
                 [240, 150, 30, 60, 30, 0, 190],
                 [0, 0, 0, 0, 1, 2, 1],
                 "0.000864",
-                1,
-                2,
+                /*unknown_estimates*/ 1,
+                /*attempts*/ 2,
             )?,
         ),
         (
-            owner(13)?,
+            owner(/*value*/ 13)?,
             day,
-            totals([80, 0, 20, 0, 10, 0, 90], [0, 1, 0, 1, 0, 0, 0], "0", 1, 1)?,
+            totals(
+                [80, 0, 20, 0, 10, 0, 90],
+                [0, 1, 0, 1, 0, 0, 0],
+                "0",
+                /*unknown_estimates*/ 1,
+                /*attempts*/ 1,
+            )?,
         ),
         (
-            owner(14)?,
+            owner(/*value*/ 14)?,
             at("2026-08-31T00:00:00Z")? / DAY,
-            totals([100, 60, 40, 0, 20, 8, 120], [0; 7], "0.000110", 0, 1)?,
+            totals(
+                [100, 60, 40, 0, 20, 8, 120],
+                [0; 7],
+                "0.000110",
+                /*unknown_estimates*/ 0,
+                /*attempts*/ 1,
+            )?,
         ),
         (
-            owner(14)?,
+            owner(/*value*/ 14)?,
             at("2026-09-02T00:00:00Z")? / DAY,
             totals(
                 [50, 0, 0, 0, 10, 0, 60],
                 [0, 1, 1, 1, 0, 1, 0],
                 "0.000040",
-                1,
-                1,
+                /*unknown_estimates*/ 1,
+                /*attempts*/ 1,
             )?,
         ),
     ])
@@ -344,7 +362,7 @@ async fn assert_days(runtime: &StateRuntime, time: i64) -> anyhow::Result<Vec<Da
     let store = AccountingStore::open(runtime, time).await?;
     let mut actual = Vec::new();
     for (thread, day, expected) in expected_days()? {
-        let oldest = if thread == owner(14)? {
+        let oldest = if thread == owner(/*value*/ 14)? {
             at("2026-08-31T00:00:00Z")? / DAY
         } else {
             at("2026-09-11T00:00:00Z")? / DAY
@@ -503,9 +521,14 @@ async fn accounting_contract_golden_original_price_and_native_family() -> anyhow
     fixture.admit(&runtime).await?;
     fixture.deliver(&runtime, &REPLAY).await?;
     assert_raw(&runtime, &fixture).await?;
-    let descendants = runtime.list_thread_spawn_descendants(owner(11)?).await?;
-    assert_eq!(descendants, vec![owner(12)?, owner(13)?]);
-    let mut family = HashSet::from([owner(11)?]);
+    let descendants = runtime
+        .list_thread_spawn_descendants(owner(/*value*/ 11)?)
+        .await?;
+    assert_eq!(
+        descendants,
+        vec![owner(/*value*/ 12)?, owner(/*value*/ 13)?]
+    );
+    let mut family = HashSet::from([owner(/*value*/ 11)?]);
     family.extend(descendants);
     let mut conn = connection(&runtime).await?;
     let payloads: Vec<String> =
@@ -587,8 +610,8 @@ async fn accounting_contract_golden_original_price_and_native_family() -> anyhow
                 [420, 210, 90, 60, 60, 8, 400],
                 [0, 1, 0, 1, 1, 2, 1],
                 "0.001084",
-                2,
-                4
+                /*unknown_estimates*/ 2,
+                /*attempts*/ 4
             )?
             .measured,
             1084,
@@ -633,22 +656,22 @@ async fn assert_compact(
         refs,
         vec![
             (
-                owner(11)?.to_string(),
+                owner(/*value*/ 11)?.to_string(),
                 day,
                 Uuid::from_u128(202).to_string()
             ),
             (
-                owner(12)?.to_string(),
+                owner(/*value*/ 12)?.to_string(),
                 day,
                 Uuid::from_u128(203).to_string()
             ),
             (
-                owner(14)?.to_string(),
+                owner(/*value*/ 14)?.to_string(),
                 at("2026-08-31T00:00:00Z")? / DAY,
                 Uuid::from_u128(201).to_string()
             ),
             (
-                owner(14)?.to_string(),
+                owner(/*value*/ 14)?.to_string(),
                 at("2026-09-02T00:00:00Z")? / DAY,
                 Uuid::from_u128(202).to_string()
             ),
@@ -746,7 +769,7 @@ async fn accounting_contract_golden_compact_original_bundle_parity() -> anyhow::
             assert_eq!(dump(&mut conn).await?, before);
             assert_eq!(
                 store
-                    .read_day(owner(11)?, fixture.young / DAY, time + DAY)
+                    .read_day(owner(/*value*/ 11)?, fixture.young / DAY, time + DAY)
                     .await?,
                 RetainedDay::NeedsMaintenance {
                     completed_as_of_ms: time

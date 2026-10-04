@@ -112,7 +112,7 @@ async fn exact_cases_survive_two_disk_reopens() -> anyhow::Result<()> {
         let runtime =
             StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
         let store = EstimateStore::create_for_tests(&runtime).await?;
-        let rows = vec![row(1, patch)];
+        let rows = vec![row(/*revision*/ 1, patch)];
         store.journal.append_observation(&attempt(), &rows).await?;
         let candidates: Vec<_> = rate
             .map(|r| {
@@ -183,12 +183,12 @@ async fn late_revisions_preserve_versions_and_unavailable_binding() -> anyhow::R
         let a = attempt();
         store
             .journal
-            .append_observation(&a, &[row(3, json!({"input":50,"read":10}))])
+            .append_observation(&a, &[row(/*revision*/ 3, json!({"input":50,"read":10}))])
             .await?;
         let first = store.persist_current(a.attempt_id, &candidates).await?;
         store
             .journal
-            .append_observation(&a, &[row(1, json!({"input":40}))])
+            .append_observation(&a, &[row(/*revision*/ 1, json!({"input":40}))])
             .await?;
         let mut later = snapshot("9");
         later.id = Uuid::from_u128(90);
@@ -201,7 +201,13 @@ async fn late_revisions_preserve_versions_and_unavailable_binding() -> anyhow::R
         later.effective_end_ms = None;
         store
             .journal
-            .append_observation(&a, &[row(4, json!({"input":60,"write":0,"output":0}))])
+            .append_observation(
+                &a,
+                &[row(
+                    /*revision*/ 4,
+                    json!({"input":60,"write":0,"output":0}),
+                )],
+            )
             .await?;
         let third = store.persist_current(a.attempt_id, &[later]).await?;
         assert_eq!(third.snapshot, first.snapshot);
@@ -285,7 +291,7 @@ async fn validation_and_sql_failure_roll_back_all_estimate_writes() -> anyhow::R
     assert_eq!(store.read_estimate(a.attempt_id, "unknown").await?, None);
     store
         .journal
-        .append_observation(&a, &[row(1, json!({"input":4}))])
+        .append_observation(&a, &[row(/*revision*/ 1, json!({"input":4}))])
         .await?;
     let before = store.journal.read_observations(a.attempt_id).await?;
     let mut invalid = snapshot("3");
@@ -345,7 +351,7 @@ async fn forged_quote_fields_and_snapshot_content_are_rejected() -> anyhow::Resu
     let a = attempt();
     store
         .journal
-        .append_observation(&a, &[row(1, json!({"input":50,"read":10}))])
+        .append_observation(&a, &[row(/*revision*/ 1, json!({"input":50,"read":10}))])
         .await?;
     let quote = store
         .persist_current(a.attempt_id, &[snapshot("3")])
@@ -427,7 +433,7 @@ async fn retained_journal_keys_payload_and_evidence_are_checked() -> anyhow::Res
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = EstimateStore::create_for_tests(&runtime).await?;
     let a = attempt();
-    let rows = vec![row(1, json!({"input":50,"read":10}))];
+    let rows = vec![row(/*revision*/ 1, json!({"input":50,"read":10}))];
     store.journal.append_observation(&a, &rows).await?;
     let quote = store
         .persist_current(a.attempt_id, &[snapshot("3")])
@@ -478,7 +484,7 @@ async fn retained_journal_keys_payload_and_evidence_are_checked() -> anyhow::Res
         json!({"input":null,"read":10}),
     ] {
         sqlx::query("UPDATE draft_accounting_observations SET payload = ?")
-            .bind(serde_json::to_string(&row(1, patch))?)
+            .bind(serde_json::to_string(&row(/*revision*/ 1, patch))?)
             .execute(runtime.pool.as_ref())
             .await?;
         assert!(store.read_estimate(a.attempt_id, &evidence).await.is_err());
@@ -526,7 +532,7 @@ async fn estimates_from_newer_rules_are_named_and_current_ones_stand() -> anyhow
     let a = attempt();
     store
         .journal
-        .append_observation(&a, &[row(1, json!({"input":50,"read":10}))])
+        .append_observation(&a, &[row(/*revision*/ 1, json!({"input":50,"read":10}))])
         .await?;
     let quote = store
         .persist_current(a.attempt_id, &[snapshot("3")])
@@ -599,7 +605,8 @@ async fn day_quotes_match_the_verified_latest_quote() -> anyhow::Result<()> {
         tx.commit().await?;
         authority
     };
-    let version_one = quote_observations_under(1, &attempt, &rows, &[snapshot("3")])?;
+    let version_one =
+        quote_observations_under(/*rules*/ 1, &attempt, &rows, &[snapshot("3")])?;
     sqlx::query("UPDATE draft_accounting_estimates SET payload = ? WHERE attempt_id = ?")
         .bind(serde_json::to_string(&version_one)?)
         .bind(first.attempt_id.to_string())
@@ -608,7 +615,10 @@ async fn day_quotes_match_the_verified_latest_quote() -> anyhow::Result<()> {
     // Second: newer evidence than its recorded estimate.
     store
         .journal
-        .append_observation(&second, &[row(4, json!({"input":70,"read":10}))])
+        .append_observation(
+            &second,
+            &[row(/*revision*/ 4, json!({"input":70,"read":10}))],
+        )
         .await?;
 
     let mut tx = runtime.pool.begin().await?;
@@ -619,8 +629,8 @@ async fn day_quotes_match_the_verified_latest_quote() -> anyhow::Result<()> {
     let day = EstimateStore::day_quotes_on_connection(
         &mut tx,
         &first.thread_id.to_string(),
-        0,
-        86_400_000,
+        /*start*/ 0,
+        /*end*/ 86_400_000,
     )
     .await?;
     assert_eq!(binding(&mut tx, unpriced.attempt_id).await?, Some(None));

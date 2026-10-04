@@ -162,7 +162,7 @@ async fn accounting_admission_matrix_agrees_at_all_three_gates() -> Result<()> {
 fn accounting_chat_request_overrides_are_unattributable() -> Result<()> {
     use codex_model_provider_info::ModelProviderInfo;
     use codex_model_provider_info::WireApi;
-    let mut provider = ModelProviderInfo::create_openai_provider(None);
+    let mut provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
     provider.wire_api = WireApi::Chat;
     for field in ["provider", "provider_options", "plugins"] {
         let mut value =
@@ -175,7 +175,10 @@ fn accounting_chat_request_overrides_are_unattributable() -> Result<()> {
         let http =
             codex_http_client::Request::new(http::Method::POST, ENDPOINT.into()).with_json(&value);
         assert_eq!(
-            transport::request_refusal(&http, None, None, None),
+            transport::request_refusal(
+                &http, /*configured_routing*/ None, /*configured_routing_options*/ None,
+                /*configured_plugins*/ None
+            ),
             Some(field)
         );
         let mut request = chat_body();
@@ -208,7 +211,10 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
             .into_prepared()
             .map_err(anyhow::Error::msg)?;
         assert_eq!(
-            transport::request_refusal(&prepared, None, None, None),
+            transport::request_refusal(
+                &prepared, /*configured_routing*/ None,
+                /*configured_routing_options*/ None, /*configured_plugins*/ None
+            ),
             None,
             "an ordinary prepared body must remain collectable under {compression:?}"
         );
@@ -225,7 +231,10 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
                 .into_prepared()
                 .map_err(anyhow::Error::msg)?;
             assert_eq!(
-                transport::request_refusal(&prepared, None, None, None),
+                transport::request_refusal(
+                    &prepared, /*configured_routing*/ None,
+                    /*configured_routing_options*/ None, /*configured_plugins*/ None
+                ),
                 Some(field),
                 "{field} must stay unattributable under {compression:?}"
             );
@@ -243,7 +252,10 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
             .into_prepared()
             .map_err(anyhow::Error::msg)?;
         assert_eq!(
-            transport::request_refusal(&prepared, None, None, None),
+            transport::request_refusal(
+                &prepared, /*configured_routing*/ None,
+                /*configured_routing_options*/ None, /*configured_plugins*/ None
+            ),
             Some("providerOptions"),
             "a serialized gateway pin must be refused under {compression:?}"
         );
@@ -253,7 +265,10 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
             .into_prepared()
             .map_err(anyhow::Error::msg)?;
         assert_eq!(
-            transport::request_refusal(&prepared, None, None, None),
+            transport::request_refusal(
+                &prepared, /*configured_routing*/ None,
+                /*configured_routing_options*/ None, /*configured_plugins*/ None
+            ),
             None,
             "an ordinary serialized request must remain collectable under {compression:?}"
         );
@@ -279,7 +294,9 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
             (None, Some(&configured))
         };
         assert_eq!(
-            transport::request_refusal(&prepared, routing, options, None),
+            transport::request_refusal(
+                &prepared, routing, options, /*configured_plugins*/ None
+            ),
             None,
             "{key} exactly as configured must stay collectable"
         );
@@ -290,7 +307,9 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
             (None, Some(&foreign))
         };
         assert_eq!(
-            transport::request_refusal(&prepared, routing, options, None),
+            transport::request_refusal(
+                &prepared, routing, options, /*configured_plugins*/ None
+            ),
             Some(key),
             "{key} that configuration did not ask for must be refused"
         );
@@ -298,7 +317,10 @@ fn accounting_prepared_bodies_are_inspected_not_refused() -> Result<()> {
     let opaque = Request::new(http::Method::POST, ENDPOINT.into())
         .with_raw_body(vec![0x00, 0x01, 0x02, 0x03]);
     assert_eq!(
-        transport::request_refusal(&opaque, None, None, None),
+        transport::request_refusal(
+            &opaque, /*configured_routing*/ None, /*configured_routing_options*/ None,
+            /*configured_plugins*/ None
+        ),
         Some("uninspectable request body"),
         "a body whose routing keys cannot be read must still be refused"
     );
@@ -320,7 +342,7 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
     for (id, provider, endpoint) in [
         (
             "openai",
-            ModelProviderInfo::create_openai_provider(None),
+            ModelProviderInfo::create_openai_provider(/*base_url*/ None),
             "https://api.openai.com/v1",
         ),
         (
@@ -371,7 +393,7 @@ fn accounting_pricing_authority_follows_auth_mode_at_the_default_endpoint() {
             "{id} off its own route must state no economics"
         );
     }
-    let provider = ModelProviderInfo::create_openai_provider(None);
+    let provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
     assert_eq!(provider.wire_api, WireApi::Responses);
     let scope = uuid::Uuid::new_v4();
     let mode = crate::config::AccountingMode::Provider {
@@ -422,7 +444,7 @@ fn accounting_chat_collects_the_fields_the_client_itself_emits() {
     use codex_model_provider_info::ModelProviderInfo;
     use codex_model_provider_info::WireApi;
     let plain = {
-        let mut provider = ModelProviderInfo::create_openai_provider(None);
+        let mut provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
         provider.wire_api = WireApi::Chat;
         provider
     };
@@ -451,10 +473,11 @@ fn accounting_chat_collects_the_fields_the_client_itself_emits() {
     let openrouter = {
         // `is_openrouter` keys off the provider NAME, so take the real builder
         // rather than an OpenAI provider pointed at OpenRouter's URL.
-        let mut provider = codex_model_provider_info::built_in_model_providers(None)
-            .into_values()
-            .find(ModelProviderInfo::is_openrouter)
-            .expect("built-in OpenRouter provider");
+        let mut provider =
+            codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)
+                .into_values()
+                .find(ModelProviderInfo::is_openrouter)
+                .expect("built-in OpenRouter provider");
         provider.wire_api = WireApi::Chat;
         provider
     };
@@ -749,17 +772,21 @@ async fn accounting_unattributable_request_is_served_without_evidence() -> Resul
     // code shapes and a future edit could drop the guard from one of them.
     codex_api::ResponsesUsageObserver::observe(
         &*evidence,
-        0,
+        /*position*/ 0,
         Ok(codex_api::ResponsesUsagePatch::default()),
     )
     .await
     .map_err(|error| anyhow::anyhow!("excluded responses usage must not fail: {error}"))?;
-    codex_api::ChatUsageObserver::observe(&*evidence, 0, Ok(codex_api::ChatUsagePatch::default()))
-        .await
-        .map_err(|error| anyhow::anyhow!("excluded chat usage must not fail: {error}"))?;
+    codex_api::ChatUsageObserver::observe(
+        &*evidence,
+        /*position*/ 0,
+        Ok(codex_api::ChatUsagePatch::default()),
+    )
+    .await
+    .map_err(|error| anyhow::anyhow!("excluded chat usage must not fail: {error}"))?;
     codex_api::AnthropicUsageObserver::observe(
         &*evidence,
-        0,
+        /*position*/ 0,
         Ok(codex_api::AnthropicUsagePatch::default()),
     )
     .await
@@ -957,7 +984,7 @@ async fn accounting_policy_observe_wait_cancel_and_start_cancel_publish_nothing(
     let mut waiting = Box::pin(fixture.sampling.observe(
         &attempt,
         Uuid::new_v4(),
-        0,
+        /*position*/ 0,
         AnthropicUsagePatch::default(),
     ));
     assert!(poll!(&mut waiting).is_pending());
@@ -1012,7 +1039,7 @@ async fn accounting_policy_cancel_in_operation_rejects_and_releases_capacity() -
                     .observe(
                         &attempt,
                         Uuid::new_v4(),
-                        0,
+                        /*position*/ 0,
                         AnthropicUsagePatch {
                             input_tokens: AnthropicTokenPresence::Number(7),
                             ..Default::default()
@@ -1137,7 +1164,7 @@ async fn accounting_policy_slot_poison_rejects_stale_and_incoming_without_disabl
         assert!(slot.is_poisoned());
         assert!(slot.lock().err().unwrap().into_inner().is_none());
         assert!(read_slot(&slot).is_err(), "empty poison must not look OFF");
-        assert!(SamplingScope::attach(slot.clone(), None).is_err());
+        assert!(SamplingScope::attach(slot.clone(), /*sampling*/ None).is_err());
         assert!(fixture.attempts().await?.is_empty());
         fixture.db.close().await;
     }
@@ -1154,7 +1181,7 @@ fn a_pinned_route_carries_both_the_configured_query_and_the_path_s_own() {
     use super::pinned_route;
 
     assert_eq!(
-        pinned_route("https://example.com/v1", None, "responses"),
+        pinned_route("https://example.com/v1", /*query*/ None, "responses"),
         "https://example.com/v1/responses"
     );
     assert_eq!(
@@ -1164,7 +1191,7 @@ fn a_pinned_route_carries_both_the_configured_query_and_the_path_s_own() {
     assert_eq!(
         pinned_route(
             "https://example.com/v1",
-            None,
+            /*query*/ None,
             "realtime/calls?intent=quicksilver&architecture=avas"
         ),
         "https://example.com/v1/realtime/calls?intent=quicksilver&architecture=avas"
@@ -1199,13 +1226,13 @@ fn claude_plan_states_the_plan_side_whatever_openai_credential_exists() {
     use codex_model_provider_info::built_in_model_providers;
     use codex_protocol::auth::AuthMode;
 
-    let providers = built_in_model_providers(None);
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
     let provider = providers
         .get(CLAUDE_PLAN_PROVIDER_ID)
         .expect("built-in claude-plan provider")
         .clone();
     let endpoint = provider
-        .to_api_provider(None)
+        .to_api_provider(/*auth_mode*/ None)
         .expect("claude-plan route")
         .base_url;
     // Seeded literally rather than through `developer_accounting_mode`, which

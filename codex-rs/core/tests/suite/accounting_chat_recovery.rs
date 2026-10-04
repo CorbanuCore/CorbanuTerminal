@@ -146,7 +146,7 @@ async fn accounting_chat_native_outer_retry_prefix_and_ids() -> anyhow::Result<(
     let first = gate.next().await?;
     first.chunks.send(event(usage())).await?;
     let db = test.codex.state_db().unwrap();
-    wait_observations(&db, 1).await?;
+    wait_observations(&db, /*count*/ 1).await?;
     drop(first);
     let second = gate.next().await?;
     second.chunks.send(success(usage())).await?;
@@ -158,7 +158,7 @@ async fn accounting_chat_native_outer_retry_prefix_and_ids() -> anyhow::Result<(
     let patches = observations(&db).await?;
     assert_ne!(patches[0].source, patches[1].source);
     let day = totals(&db, &records[0]).await?;
-    assert_eq!(day, golden(true, false, 2)?);
+    assert_eq!(day, golden(/*cached*/ true, /*zero*/ false, /*count*/ 2)?);
     assert_eq!(
         day.measured[6],
         Metric {
@@ -182,7 +182,7 @@ async fn accounting_chat_native_observation_failure_no_repair() -> anyhow::Resul
     let held = gate.next().await?;
     let db = test.codex.state_db().unwrap();
     held.chunks.send(event(usage())).await?;
-    wait_observations(&db, 1).await?;
+    wait_observations(&db, /*count*/ 1).await?;
     let before = observations(&db).await?;
     sqlx::query("CREATE TRIGGER reject_responses_observation BEFORE INSERT ON draft_accounting_observations BEGIN SELECT RAISE(ABORT, 'fixture'); END")
         .execute(&mut connection(&db).await?).await?;
@@ -271,7 +271,7 @@ async fn accounting_chat_native_cancellation_and_two_reopens() -> anyhow::Result
         let db = test.codex.state_db().unwrap();
         if prefix {
             held.chunks.send(event(usage())).await?;
-            wait_observations(&db, 1).await?;
+            wait_observations(&db, /*count*/ 1).await?;
         }
         test.codex.submit(Op::Interrupt).await?;
         assert!(
@@ -452,7 +452,7 @@ async fn accounting_chat_native_spawned_role_children_and_fork() -> anyhow::Resu
         .expect("reloaded role instructions in a native child request");
     let role = held.remove(role_index);
     role.chunks.send(event(usage())).await?;
-    wait_observations(&db, 2).await?;
+    wait_observations(&db, /*count*/ 2).await?;
     drop(role); // EOF forces the role child's native stream retry.
     let retried = gate.next().await?;
     assert!(retried.body.to_string().contains("responses role fixture"));
@@ -474,15 +474,15 @@ async fn accounting_chat_native_spawned_role_children_and_fork() -> anyhow::Resu
         held.chunks.send(success(usage())).await?;
     }
     terminal(&test).await?;
-    wait_observations(&db, 5).await?;
+    wait_observations(&db, /*count*/ 5).await?;
     let before = attempts(&db).await?;
     test.thread_manager
         .fork_thread(
             codex_core::ForkSnapshot::Interrupted,
             test.config.clone(),
             test.codex.rollout_path().unwrap(),
-            None,
-            None,
+            /*thread_source*/ None,
+            /*parent_trace*/ None,
         )
         .await?;
     assert_eq!(attempts(&db).await?, before);
@@ -505,7 +505,7 @@ async fn accounting_chat_native_invalid_evidence_no_repair() -> anyhow::Result<(
         let held = gate.next().await?;
         held.chunks.send(event(usage())).await?;
         let db = test.codex.state_db().unwrap();
-        wait_observations(&db, 1).await?;
+        wait_observations(&db, /*count*/ 1).await?;
         let before = observations(&db).await?;
         held.chunks.send(format!("data: {bad}\n\ndata: [DONE]\n\n")).await?;
         let events = terminal(&test).await?;

@@ -415,7 +415,7 @@ async fn accounting_anthropic_native_spawned_children_role_reload_and_fork_own_o
             .any(|event| matches!(event, EventMsg::Error(_))),
         "{events:?}"
     );
-    wait_observations(&db, 8).await?;
+    wait_observations(&db, /*count*/ 8).await?;
     let edges: Vec<(String, String)> = sqlx::query_as(
         "SELECT parent_thread_id, child_thread_id FROM thread_spawn_edges ORDER BY child_thread_id",
     )
@@ -823,7 +823,7 @@ async fn role_override_native(case: RoleOverride) -> anyhow::Result<()> {
                 .chunks
                 .send(sse(&[start(json!({"input_tokens":9}))]))
                 .await?;
-            wait_observations(&db, 5).await?;
+            wait_observations(&db, /*count*/ 5).await?;
             drop(request); // EOF after durable usage must not cause a role-disabled retry.
         }
         RoleOverride::IdleTimeout => {

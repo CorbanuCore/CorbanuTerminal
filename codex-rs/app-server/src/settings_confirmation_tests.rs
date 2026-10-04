@@ -5,7 +5,7 @@ use pretty_assertions::assert_eq;
 #[tokio::test]
 async fn settings_confirmation_correlates_failure_once_and_rejects_stale_generation() {
     let mut state = ThreadState::default();
-    let mut receiver = pending(&mut state, 1, "request-op");
+    let mut receiver = pending(&mut state, /*connection*/ 1, "request-op");
     state.finish_settings_confirmation("unrelated-op", Ok(()));
     assert_eq!(
         receiver.try_recv(),
@@ -15,7 +15,7 @@ async fn settings_confirmation_correlates_failure_once_and_rejects_stale_generat
     state.finish_settings_confirmation("request-op", Err(error.clone()));
     state.finish_settings_confirmation("request-op", Ok(()));
     assert_eq!(receiver.await.unwrap(), Err(error));
-    let stale = pending(&mut state, 1, "stale-op");
+    let stale = pending(&mut state, /*connection*/ 1, "stale-op");
     state.listener_generation += 1;
     state.finish_settings_confirmation("stale-op", Ok(()));
     assert!(stale.await.is_err());
@@ -49,8 +49,8 @@ async fn settings_confirmation_disconnect_only_clears_its_connection() {
     let (first, mut second) = {
         let mut state = state.lock().await;
         (
-            pending(&mut state, 1, "first"),
-            pending(&mut state, 2, "second"),
+            pending(&mut state, /*connection*/ 1, "first"),
+            pending(&mut state, /*connection*/ 2, "second"),
         )
     };
     manager.remove_connection(ConnectionId(1)).await;
@@ -66,7 +66,7 @@ async fn settings_confirmation_listener_teardown_is_terminal() {
     let manager = ThreadStateManager::new();
     let thread_id = ThreadId::new();
     let state = manager.thread_state(thread_id).await;
-    let receiver = pending(&mut *state.lock().await, 1, "operation");
+    let receiver = pending(&mut *state.lock().await, /*connection*/ 1, "operation");
     manager.remove_thread_state(thread_id).await;
     assert!(receiver.await.is_err());
     assert!(state.lock().await.pending_settings.is_empty());
@@ -79,7 +79,11 @@ async fn settings_confirmation_terminal_reply_cleans_up_and_never_replies_twice(
     use crate::outgoing_message::OutgoingMessageSender;
     for terminal in ["applied", "failed", "dropped", "timeout", "generation"] {
         let state = Arc::new(Mutex::new(ThreadState::default()));
-        let completion = pending(&mut *state.lock().await, 42, "operation");
+        let completion = pending(
+            &mut *state.lock().await,
+            /*connection*/ 42,
+            "operation",
+        );
         let request_id = state.lock().await.pending_settings["operation"]
             .request_id
             .clone();

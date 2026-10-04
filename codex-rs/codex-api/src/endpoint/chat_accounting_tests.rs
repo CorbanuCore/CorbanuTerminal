@@ -54,9 +54,9 @@ fn launch(stream: ByteStream, sink: Option<Arc<Sink>>) -> (Receiver, tokio::task
         tx,
         Duration::from_millis(100),
         Duration::from_millis(50),
-        None,
+        /*telemetry*/ None,
         Some("fixture".into()),
-        None,
+        /*metrics*/ None,
         sink.map(|s| s as Arc<dyn ChatUsageObserver>),
     ));
     (rx, task)
@@ -278,7 +278,10 @@ async fn chat_accounting_done_and_finish_reason_are_not_usage() {
         let output = drain(rx).await;
         task.await.unwrap();
         assert!(sink.values.lock().unwrap().is_empty());
-        let (legacy, task) = launch(bytes(finish(reason) + "data: [DONE]\n\n"), None);
+        let (legacy, task) = launch(
+            bytes(finish(reason) + "data: [DONE]\n\n"),
+            /*sink*/ None,
+        );
         assert_eq!(format!("{output:?}"), format!("{:?}", drain(legacy).await));
         task.await.unwrap();
     }
@@ -416,7 +419,7 @@ async fn chat_accounting_none_preserves_legacy() {
         "data: malformed\n\n: keepalive\n\ndata: [DONE]\n\n".into(),
         data(json!({"error":{"message":"fixture"}})),
     ] {
-        let (rx, task) = launch(bytes(input.clone()), None);
+        let (rx, task) = launch(bytes(input.clone()), /*sink*/ None);
         let observed = drain(rx).await;
         task.await.unwrap();
         let (tx, rx) = mpsc::channel(100);
@@ -425,9 +428,9 @@ async fn chat_accounting_none_preserves_legacy() {
             tx,
             Duration::from_millis(100),
             Duration::from_millis(50),
-            None,
+            /*telemetry*/ None,
             Some("fixture".into()),
-            None,
+            /*metrics*/ None,
         )
         .await;
         assert_eq!(format!("{observed:?}"), format!("{:?}", drain(rx).await));

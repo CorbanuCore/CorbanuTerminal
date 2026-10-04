@@ -111,7 +111,7 @@ async fn accounting_responses_bootstrap_is_lazy_and_once() -> anyhow::Result<()>
 #[tokio::test]
 async fn accounting_responses_auth_route_eligibility() -> anyhow::Result<()> {
     assert!(legacy_eligible(&provider(), Some(&auth())));
-    assert!(!legacy_eligible(&provider(), None));
+    assert!(!legacy_eligible(&provider(), /*auth*/ None));
     for kind in 0..4 {
         let mut provider = provider();
         match kind {
@@ -133,7 +133,11 @@ async fn accounting_responses_auth_route_eligibility() -> anyhow::Result<()> {
     assert!(
         fixture
             .deferred
-            .resolve(&provider(), None, &format!("{ENDPOINT}/responses"))
+            .resolve(
+                &provider(),
+                /*auth*/ None,
+                &format!("{ENDPOINT}/responses")
+            )
             .await
             .is_err()
     );
@@ -187,7 +191,7 @@ async fn accounting_responses_auth_and_guard_precede_admission() -> anyhow::Resu
             Some(evidence.clone()),
             "gpt-5.6-sol".into(),
         ),
-        None,
+        /*binding*/ None,
     );
     let api_provider = provider().to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?;
     let client = codex_api::ResponsesClient::new(transport, api_provider, Arc::new(Denied))
@@ -198,7 +202,7 @@ async fn accounting_responses_auth_and_guard_precede_admission() -> anyhow::Resu
                 serde_json::json!({"model":"gpt-5.6-sol"}),
                 Default::default(),
                 codex_api::Compression::None,
-                None
+                /*turn_state*/ None
             )
             .await
             .is_err()
@@ -259,7 +263,7 @@ async fn accounting_responses_scope_cleanup_and_failure_latch() -> anyhow::Resul
     let evidence = ResponseEvidence::new(fixture.resolve().await?);
     assert!(
         evidence
-            .observe(1, Err(codex_api::InvalidResponsesUsage))
+            .observe(/*position*/ 1, Err(codex_api::InvalidResponsesUsage))
             .await
             .is_err()
     );
@@ -288,7 +292,7 @@ async fn accounting_responses_response_local_identity() -> anyhow::Result<()> {
     for (evidence, count) in [(&new, 7), (&old, 3)] {
         evidence
             .observe(
-                1,
+                /*position*/ 1,
                 Ok(ResponsesUsagePatch {
                     input_tokens: ResponsesTokenPresence::Number(count),
                     ..Default::default()

@@ -84,7 +84,7 @@ async fn live_binding_denial(prime_denial: bool) -> anyhow::Result<()> {
         if prefix {
             held.send(vec![event("response.usage", usage(Some(0)))])
                 .await?;
-            wait_turn_observations(&db, 1).await?;
+            wait_turn_observations(&db, /*count*/ 1).await?;
         }
         let records = turn_attempts(&db).await?;
         let before = turn_observations(&db).await?;
@@ -151,7 +151,7 @@ async fn accounting_responses_ws_native_observation_failure_no_repair() -> anyho
     let db = test.codex.state_db().unwrap();
     held.send(vec![event("response.usage", usage(Some(0)))])
         .await?;
-    wait_turn_observations(&db, 1).await?;
+    wait_turn_observations(&db, /*count*/ 1).await?;
     let before = turn_observations(&db).await?;
     sqlx::query("CREATE TRIGGER reject_ws_observation BEFORE INSERT ON draft_accounting_observations BEGIN SELECT RAISE(ABORT, 'fixture'); END").execute(&mut connection(&db).await?).await?;
     held.complete().await?;
@@ -237,7 +237,7 @@ async fn accounting_responses_ws_native_two_reopens_and_original_prices() -> any
                 event("response.usage", usage(Some(0))),
             ])
             .await?;
-            wait_turn_observations(&db, 2).await?;
+            wait_turn_observations(&db, /*count*/ 2).await?;
         }
         test.codex.submit(Op::Interrupt).await?;
         terminal(&test).await?;
@@ -416,15 +416,15 @@ async fn accounting_responses_ws_native_spawned_role_children_and_fork() -> anyh
         held.complete().await?;
     }
     terminal(&test).await?;
-    wait_observations(&db, 4).await?;
+    wait_observations(&db, /*count*/ 4).await?;
     let before = turn_attempts(&db).await?;
     test.thread_manager
         .fork_thread(
             codex_core::ForkSnapshot::Interrupted,
             test.config.clone(),
             test.codex.rollout_path().unwrap(),
-            None,
-            None,
+            /*thread_source*/ None,
+            /*parent_trace*/ None,
         )
         .await?;
     assert_eq!(turn_attempts(&db).await?, before);

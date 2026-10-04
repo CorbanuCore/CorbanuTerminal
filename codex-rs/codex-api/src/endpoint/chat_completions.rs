@@ -1153,7 +1153,7 @@ async fn process_chat_sse(
         telemetry,
         response_id_hint,
         metrics,
-        None,
+        /*observer*/ None,
     )
     .await;
 }

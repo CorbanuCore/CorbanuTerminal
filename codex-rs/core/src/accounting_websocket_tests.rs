@@ -16,8 +16,12 @@ use uuid::Uuid;
 #[tokio::test]
 async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api_prices()
 -> anyhow::Result<()> {
-    let provider = ModelProviderInfo::create_openai_provider(None);
-    let auth = CodexAuth::from_external_chatgpt_tokens("header.e30.synthetic", "fixture", None)?;
+    let provider = ModelProviderInfo::create_openai_provider(/*base_url*/ None);
+    let auth = CodexAuth::from_external_chatgpt_tokens(
+        "header.e30.synthetic",
+        "fixture",
+        /*chatgpt_plan_type*/ None,
+    )?;
     let api = provider.to_api_provider(Some(auth.auth_mode()))?;
     assert_eq!(
         api.base_url,
@@ -33,7 +37,7 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
     };
     let fixture = Fixture::new(mode).await?;
     let provenance = Provenance::capture(&provider, Some(&auth), &api);
-    assert!(provenance.validate(&fixture.deferred, None)?);
+    assert!(provenance.validate(&fixture.deferred, /*cached*/ None)?);
     let sampling = fixture
         .deferred
         .resolve(&provider, Some(&auth), &api.url_for_path("responses"))
@@ -76,7 +80,7 @@ async fn accounting_responses_ws_subscription_uses_resolved_endpoint_without_api
         Some(&auth),
         &provider.to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?,
     );
-    assert!(wrong.validate(&fixture.deferred, None).is_err());
+    assert!(wrong.validate(&fixture.deferred, /*cached*/ None).is_err());
     Ok(())
 }
 
@@ -169,7 +173,7 @@ impl Fixture {
         Ok(Admission::new(
             self.resolve().await?,
             provenance(),
-            endpoint(BASE, None)?,
+            endpoint(BASE, /*query*/ None)?,
             Default::default(),
         ))
     }
@@ -204,7 +208,7 @@ async fn accounting_responses_ws_stream_guard_checks_live_policy_with_session_st
     let admission = Admission::new(
         fixture.resolve().await?,
         provenance(),
-        endpoint(BASE, None)?,
+        endpoint(BASE, /*query*/ None)?,
         client.stage_one_memory_binding.clone(),
     );
     admission.admit("gpt-5.6-sol".into(), /*tier*/ None).await?;
@@ -283,7 +287,7 @@ async fn accounting_responses_ws_mode_scope_and_lazy_bootstrap() -> anyhow::Resu
 #[tokio::test]
 async fn accounting_responses_ws_auth_route_eligibility() -> anyhow::Result<()> {
     let fixture = Fixture::new(mode()).await?;
-    assert!(provenance().validate(&fixture.deferred, None)?);
+    assert!(provenance().validate(&fixture.deferred, /*cached*/ None)?);
     let api = provider().to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?;
     // Eight shapes that disqualify a route. An agent identity is no longer one of
     // them: it is a credential whose economics `turn_mode` decides, and refusing
@@ -312,7 +316,7 @@ async fn accounting_responses_ws_auth_route_eligibility() -> anyhow::Result<()> 
             CodexAuth::from_external_chatgpt_tokens(
                 "header.e30.synthetic",
                 "synthetic-account",
-                None,
+                /*chatgpt_plan_type*/ None,
             )?
         } else {
             auth()
@@ -322,12 +326,16 @@ async fn accounting_responses_ws_auth_route_eligibility() -> anyhow::Result<()> 
             if variant == 5 { None } else { Some(&auth) },
             &api,
         );
-        assert!(!current.validate(&fixture.deferred, None)?);
+        assert!(!current.validate(&fixture.deferred, /*cached*/ None)?);
     }
     fixture.resolve().await?;
     let mut current = provenance();
     current.api_key = false;
-    assert!(current.validate(&fixture.deferred, None).is_err());
+    assert!(
+        current
+            .validate(&fixture.deferred, /*cached*/ None)
+            .is_err()
+    );
     assert!(fixture.deferred.check().is_err());
     Ok(())
 }
@@ -340,7 +348,7 @@ async fn accounting_responses_ws_exact_endpoint_binding() -> anyhow::Result<()> 
             "wss://api.openai.com/v1/responses",
         ),
     ] {
-        assert_eq!(endpoint(http, None)?, ws);
+        assert_eq!(endpoint(http, /*query*/ None)?, ws);
     }
     for bad in [
         "http://user@127.0.0.1/v1",
@@ -348,7 +356,7 @@ async fn accounting_responses_ws_exact_endpoint_binding() -> anyhow::Result<()> 
         "http://127.0.0.1/v1#fragment",
         "ftp://127.0.0.1/v1",
     ] {
-        assert!(endpoint(bad, None).is_err());
+        assert!(endpoint(bad, /*query*/ None).is_err());
     }
     for bad in [
         "ws://127.0.0.1:12346/v1/responses",
@@ -359,7 +367,11 @@ async fn accounting_responses_ws_exact_endpoint_binding() -> anyhow::Result<()> 
         let fixture = Fixture::new(mode()).await?;
         let mut current = provenance();
         current.endpoint = Some(bad.into());
-        assert!(current.validate(&fixture.deferred, None).is_err());
+        assert!(
+            current
+                .validate(&fixture.deferred, /*cached*/ None)
+                .is_err()
+        );
         assert!(
             fixture
                 .rows::<Attempt>("draft_accounting_attempts")
@@ -392,13 +404,17 @@ async fn accounting_responses_ws_cached_connection_provenance() -> anyhow::Resul
 async fn accounting_responses_ws_fallback_keeps_request_and_predecessor() -> anyhow::Result<()> {
     let fixture = Fixture::new(mode()).await?;
     let ws = fixture.admission().await?;
-    let old = ws.admit("gpt-5.6-sol".into(), None).await?;
+    let old = ws.admit("gpt-5.6-sol".into(), /*tier*/ None).await?;
     let sampling = fixture.resolve().await?;
     let http = sampling
-        .admit_with_tier("gpt-5.6-sol", &format!("{BASE}/responses"), None)
+        .admit_with_tier(
+            "gpt-5.6-sol",
+            &format!("{BASE}/responses"),
+            /*tier*/ None,
+        )
         .await?;
     old.observe(
-        2,
+        /*position*/ 2,
         Ok(codex_api::ResponsesUsagePatch {
             input_tokens: codex_api::ResponsesTokenPresence::Number(7),
             ..Default::default()
@@ -463,7 +479,7 @@ async fn accounting_responses_ws_original_price_binding() -> anyhow::Result<()> 
             .len(),
         5
     );
-    admission.admit("gpt-5.6-sol".into(), None).await?;
+    admission.admit("gpt-5.6-sol".into(), /*tier*/ None).await?;
     let later = fixture
         .rows::<Snapshot>("draft_accounting_price_snapshots")
         .await?;
@@ -475,21 +491,26 @@ async fn accounting_responses_ws_failure_and_cancellation_latch() -> anyhow::Res
     let fixture = Fixture::new(mode()).await?;
     let admission = fixture.admission().await?;
     let permit = crate::accounting::WRITES.acquire().await?;
-    let mut pending = admission.admit("gpt-5.6-sol".into(), None);
+    let mut pending = admission.admit("gpt-5.6-sol".into(), /*tier*/ None);
     assert!(poll!(&mut pending).is_pending());
     drop(pending);
     drop(permit);
     // Cancellation before the write permit cannot have committed an intent.
     assert!(fixture.deferred.check().is_ok());
-    let observer = admission.admit("gpt-5.6-sol".into(), None).await?;
+    let observer = admission.admit("gpt-5.6-sol".into(), /*tier*/ None).await?;
     assert!(
         observer
-            .observe(1, Err(codex_api::InvalidResponsesUsage))
+            .observe(/*position*/ 1, Err(codex_api::InvalidResponsesUsage))
             .await
             .is_err()
     );
     assert!(fixture.deferred.check().is_err());
-    assert!(admission.admit("gpt-5.6-sol".into(), None).await.is_err());
+    assert!(
+        admission
+            .admit("gpt-5.6-sol".into(), /*tier*/ None)
+            .await
+            .is_err()
+    );
     let slot = super::super::responses::Slot::default();
     let scope =
         super::super::responses::Scope::attach(slot.clone(), Some(fixture.deferred.clone()))?;
@@ -574,7 +595,7 @@ fn accounting_websocket_pin_matches_the_client_route() -> anyhow::Result<()> {
         ("api-version".to_string(), "2025-04-01".to_string()),
         ("deployment".to_string(), "fixture".to_string()),
     ]));
-    let api = provider.to_api_provider(None)?;
+    let api = provider.to_api_provider(/*auth_mode*/ None)?;
     let requested = api.websocket_url_for_path("responses")?.to_string();
     let pinned = endpoint(
         "https://example.invalid/v1",
@@ -586,7 +607,7 @@ fn accounting_websocket_pin_matches_the_client_route() -> anyhow::Result<()> {
         "the pin must be the route the client opens"
     );
     assert!(
-        endpoint("https://example.invalid/v1?stray=1", None).is_err(),
+        endpoint("https://example.invalid/v1?stray=1", /*query*/ None).is_err(),
         "a query the configuration did not declare must be refused"
     );
     Ok(())

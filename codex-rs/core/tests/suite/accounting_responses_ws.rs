@@ -188,7 +188,7 @@ async fn accounting_responses_ws_native_ws_prefix_then_http_fallback() -> anyhow
         .send(vec![event("response.usage", usage(Some(0)))])
         .await?;
     let db = test.codex.state_db().unwrap();
-    wait_turn_observations(&db, 1).await?;
+    wait_turn_observations(&db, /*count*/ 1).await?;
     drop(first);
     let http = gate.next().await?;
     assert!(http.http);
@@ -428,7 +428,7 @@ async fn accounting_responses_ws_native_endpoint_and_cached_auth_mismatch() -> a
     let subscription = codex_login::CodexAuth::from_external_chatgpt_tokens(
         "header.e30.synthetic",
         "synthetic-account",
-        None,
+        /*chatgpt_plan_type*/ None,
     )?;
     let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
         .with_auth(subscription)

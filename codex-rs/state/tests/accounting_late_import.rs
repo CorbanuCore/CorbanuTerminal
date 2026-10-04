@@ -21,7 +21,7 @@ async fn accounting_late_import_public_native_delete_serialized_outcomes() -> an
         let runtime = open(&path).await?;
         let other = open(&path).await?;
         let now = chrono::Utc::now().timestamp_millis();
-        let e = entry(1, now - 100 * DAY)?;
+        let e = entry(/*id*/ 1, now - 100 * DAY)?;
         native(&runtime, e.attempt.thread_id).await?;
         let store = AccountingStore::open(&runtime, now).await?;
         let mut conn = connection(&runtime).await?;
@@ -104,7 +104,7 @@ async fn accounting_late_import_public_native_delete_contends_without_winner_ass
     let runtime = open(&path).await?;
     let other = open(&path).await?;
     let now = chrono::Utc::now().timestamp_millis();
-    let e = entry(1, now - 100 * DAY)?;
+    let e = entry(/*id*/ 1, now - 100 * DAY)?;
     native(&runtime, e.attempt.thread_id).await?;
     let store = AccountingStore::open(&runtime, now).await?;
     let mut conn = connection(&runtime).await?;
@@ -170,14 +170,14 @@ async fn accounting_late_import_native_family_literal_golden_and_young_reconstru
     let raw_home = home();
     let mut entries = Vec::new();
     for id in 1..=4 {
-        let mut e = entry(id, 0)?;
+        let mut e = entry(id, /*time*/ 0)?;
         e.attempt.thread_id = ThreadId::from_string(&Uuid::from_u128(id + 6).to_string())?;
         if id == 3 {
             e.original_price = OriginalPriceEvidence::Unpriced;
         }
         entries.push(e);
     }
-    let mut young = entry(5, 100 * DAY)?;
+    let mut young = entry(/*id*/ 5, 100 * DAY)?;
     young.attempt.thread_id = entries[0].attempt.thread_id;
     for (path, direct) in [(&*direct_home, true), (&*raw_home, false)] {
         let runtime = open(path).await?;
@@ -202,7 +202,7 @@ async fn accounting_late_import_native_family_literal_golden_and_young_reconstru
                 )
                 .await?;
         }
-        let store = AccountingStore::open(&runtime, 0).await?;
+        let store = AccountingStore::open(&runtime, /*as_of*/ 0).await?;
         if !direct {
             for e in &entries {
                 let prices = match &e.original_price {
@@ -210,10 +210,15 @@ async fn accounting_late_import_native_family_literal_golden_and_young_reconstru
                     OriginalPriceEvidence::Unpriced => &[],
                 };
                 store
-                    .admit(e.attempt.thread_id, &e.attempt, prices, 0)
+                    .admit(e.attempt.thread_id, &e.attempt, prices, /*as_of*/ 0)
                     .await?;
                 store
-                    .observe(e.attempt.thread_id, &e.attempt, &e.observations, 0)
+                    .observe(
+                        e.attempt.thread_id,
+                        &e.attempt,
+                        &e.observations,
+                        /*as_of*/ 0,
+                    )
                     .await?;
             }
         }
@@ -242,7 +247,8 @@ async fn accounting_late_import_native_family_literal_golden_and_young_reconstru
             }
         }
         for (index, e) in entries.iter().enumerate() {
-            let mut expected = expected_day(true, 100 * DAY, 1)?;
+            let mut expected =
+                expected_day(/*owner_has_data*/ true, 100 * DAY, /*attempts*/ 1)?;
             if index == 2
                 && let RetainedDay::Available {
                     totals: Current::Ready(ref mut totals),
@@ -252,7 +258,9 @@ async fn accounting_late_import_native_family_literal_golden_and_young_reconstru
                 totals.known_usd = Decimal::default();
             }
             assert_eq!(
-                store.read_day(e.attempt.thread_id, 0, 100 * DAY).await?,
+                store
+                    .read_day(e.attempt.thread_id, /*utc_day*/ 0, 100 * DAY)
+                    .await?,
                 expected
             );
         }
@@ -330,8 +338,8 @@ async fn accounting_late_import_public_delete_off_recreated_owner_and_snapshot_g
     let path = home();
     let runtime = open(&path).await?;
     let now = chrono::Utc::now().timestamp_millis();
-    let e = entry(1, now - 100 * DAY)?;
-    let mut other = entry(2, now - 100 * DAY)?;
+    let e = entry(/*id*/ 1, now - 100 * DAY)?;
+    let mut other = entry(/*id*/ 2, now - 100 * DAY)?;
     other.attempt.thread_id = ThreadId::new();
     for owner in [e.attempt.thread_id, other.attempt.thread_id] {
         native(&runtime, owner).await?;

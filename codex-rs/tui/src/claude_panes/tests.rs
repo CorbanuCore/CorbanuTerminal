@@ -4240,7 +4240,8 @@ fn every_pane_profile_reports_its_provider_s_own_route() {
     use super::bridge::AMBIENT_CHAT_BASE_URL;
     use super::provider::ClaudeProviderTransport;
 
-    let catalogue = codex_model_provider_info::built_in_model_providers(None);
+    let catalogue =
+        codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None);
     for kind in ClaudeProviderProfileKind::restoration_options() {
         let profile = kind.profile();
         // What the bridge will report, built the way the bridge builds it.
@@ -4278,7 +4279,7 @@ fn every_pane_profile_reports_its_provider_s_own_route() {
             panic!("{kind:?} names `{provider_id}`, which this build does not ship")
         });
         let api = provider
-            .to_api_provider(None)
+            .to_api_provider(/*auth_mode*/ None)
             .unwrap_or_else(|_| panic!("{provider_id} resolves to an API provider"));
         assert_eq!(
             api.base_url.trim_end_matches('/'),

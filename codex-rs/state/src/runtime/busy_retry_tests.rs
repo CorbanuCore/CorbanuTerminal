@@ -52,7 +52,7 @@ async fn a_write_outlasts_a_lock_held_past_the_busy_timeout() -> anyhow::Result<
     });
     let started = Instant::now();
     let throttle = runtime
-        .check_provider_request_cooldown(&key(), &preflight(), 1)
+        .check_provider_request_cooldown(&key(), &preflight(), /*now_ms*/ 1)
         .await;
     let waited = started.elapsed();
     release.await??;

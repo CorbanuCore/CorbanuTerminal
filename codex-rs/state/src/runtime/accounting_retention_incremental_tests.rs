@@ -20,27 +20,33 @@ fn owned(id: u128, dispatch: i64, owner: u128) -> Attempt {
 async fn ledger(runtime: &StateRuntime) -> anyhow::Result<Lifecycle<'_>> {
     let store = install(runtime).await?;
     for (a, prices) in [
-        (attempt(1, 0), vec![snapshot()]),
-        (attempt(2, 1), vec![snapshot()]),
-        (owned(3, DAY_MS, 8), vec![snapshot()]),
-        (attempt(4, 2 * DAY_MS + 5), vec![]),
-        (owned(5, DAY_MS + 7, 8), vec![snapshot()]),
-        (attempt(6, 3 * DAY_MS), vec![snapshot()]),
-        (attempt(7, 3 * DAY_MS + 1), vec![snapshot()]),
+        (attempt(/*id*/ 1, /*dispatch*/ 0), vec![snapshot()]),
+        (attempt(/*id*/ 2, /*dispatch*/ 1), vec![snapshot()]),
+        (owned(/*id*/ 3, DAY_MS, /*owner*/ 8), vec![snapshot()]),
+        (attempt(/*id*/ 4, 2 * DAY_MS + 5), vec![]),
+        (owned(/*id*/ 5, DAY_MS + 7, /*owner*/ 8), vec![snapshot()]),
+        (attempt(/*id*/ 6, 3 * DAY_MS), vec![snapshot()]),
+        (attempt(/*id*/ 7, 3 * DAY_MS + 1), vec![snapshot()]),
     ] {
         save(&store, &a, &prices).await?;
     }
     // Newer evidence than the recorded contribution.
-    let stale = attempt(6, 3 * DAY_MS);
+    let stale = attempt(/*id*/ 6, 3 * DAY_MS);
     store
         .estimates
         .journal
-        .append_observation(&stale, &[row(&stale, 2, 5)])
+        .append_observation(&stale, &[row(&stale, /*revision*/ 2, /*input*/ 5)])
         .await?;
     let mut conn = runtime.pool.acquire().await?;
-    let partial = values([0, 1, 0, 0, 0, 0, 0], [1, 0, 1, 1, 1, 1, 1], "0.5", 1, 1);
-    compact(&mut conn, 0, &partial.encode()?).await?;
-    compact(&mut conn, 2, &partial.encode()?).await?;
+    let partial = values(
+        [0, 1, 0, 0, 0, 0, 0],
+        [1, 0, 1, 1, 1, 1, 1],
+        "0.5",
+        /*missing*/ 1,
+        /*count*/ 1,
+    );
+    compact(&mut conn, /*day*/ 0, &partial.encode()?).await?;
+    compact(&mut conn, /*day*/ 2, &partial.encode()?).await?;
     drop(conn);
     store.maintain_retention(3 * DAY_MS + 1).await?;
     Ok(store)
@@ -48,7 +54,7 @@ async fn ledger(runtime: &StateRuntime) -> anyhow::Result<Lifecycle<'_>> {
 
 async fn batch(runtime: &StateRuntime, time: i64, commit: bool) -> anyhow::Result<bool> {
     let mut tx = runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
-    let more = expire_batch_on_connection(&mut tx, time, 1).await?;
+    let more = expire_batch_on_connection(&mut tx, time, /*limit*/ 1).await?;
     if commit {
         tx.commit().await?;
     } else {
@@ -84,13 +90,13 @@ async fn batches_leave_exactly_what_the_full_sweep_leaves() -> anyhow::Result<()
     ] {
         full_store.maintain_retention(time).await?;
         let before = rows(&runtime).await?;
-        batch(&runtime, time, false).await?;
+        batch(&runtime, time, /*commit*/ false).await?;
         assert_eq!(
             rows(&runtime).await?,
             before,
             "an uncommitted batch left nothing"
         );
-        while batch(&runtime, time, true).await? {
+        while batch(&runtime, time, /*commit*/ true).await? {
             restarts += 1;
             // A restart between batches carries on where the last one stopped.
             runtime.close().await;
@@ -136,7 +142,7 @@ async fn a_batch_fails_visibly_on_a_corrupt_record_and_keeps_nothing() -> anyhow
             .execute(&mut *tx)
             .await?;
         assert_error(
-            expire_batch_on_connection(&mut tx, DETAIL_MS + 1, 32)
+            expire_batch_on_connection(&mut tx, DETAIL_MS + 1, /*limit*/ 32)
                 .await
                 .unwrap_err(),
             marker,
@@ -163,7 +169,7 @@ async fn a_batch_fails_visibly_on_a_corrupt_record_and_keeps_nothing() -> anyhow
         let mut tx = runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
         sqlx::query(sql).execute(&mut *tx).await?;
         assert_error(
-            expire_batch_on_connection(&mut tx, REPLAY_MS + 4 * DAY_MS, 32)
+            expire_batch_on_connection(&mut tx, REPLAY_MS + 4 * DAY_MS, /*limit*/ 32)
                 .await
                 .unwrap_err(),
             marker,
@@ -174,7 +180,7 @@ async fn a_batch_fails_visibly_on_a_corrupt_record_and_keeps_nothing() -> anyhow
     // Nothing applies before the checkpoint or to an inactive ledger.
     let mut tx = runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
     assert_error(
-        expire_batch_on_connection(&mut tx, 3 * DAY_MS, 32)
+        expire_batch_on_connection(&mut tx, 3 * DAY_MS, /*limit*/ 32)
             .await
             .unwrap_err(),
         "backward retention expiry",
@@ -183,7 +189,7 @@ async fn a_batch_fails_visibly_on_a_corrupt_record_and_keeps_nothing() -> anyhow
         .execute(&mut *tx)
         .await?;
     assert_error(
-        expire_batch_on_connection(&mut tx, DETAIL_MS + 1, 32)
+        expire_batch_on_connection(&mut tx, DETAIL_MS + 1, /*limit*/ 32)
             .await
             .unwrap_err(),
         "requires active retention",
@@ -222,7 +228,13 @@ async fn the_write_leaves_this_hours_leftovers_as_checkpoint_lag() -> anyhow::Re
     assert!((8..count).contains(&left), "{left}");
     let mut conn = runtime.pool.acquire().await?;
     assert_eq!(
-        read_retained_on_connection(&mut conn, attempt(1, 0).thread_id, 0, now).await?,
+        read_retained_on_connection(
+            &mut conn,
+            attempt(/*id*/ 1, /*dispatch*/ 0).thread_id,
+            /*day*/ 0,
+            now
+        )
+        .await?,
         RetainedDay::NeedsMaintenance {
             completed_as_of_ms: now
         }
@@ -235,7 +247,13 @@ async fn the_write_leaves_this_hours_leftovers_as_checkpoint_lag() -> anyhow::Re
     }
     let mut conn = runtime.pool.acquire().await?;
     assert!(matches!(
-        read_retained_on_connection(&mut conn, attempt(1, 0).thread_id, 0, now + 1).await?,
+        read_retained_on_connection(
+            &mut conn,
+            attempt(/*id*/ 1, /*dispatch*/ 0).thread_id,
+            /*day*/ 0,
+            now + 1
+        )
+        .await?,
         RetainedDay::Available { .. }
     ));
     drop(conn);

@@ -28,19 +28,38 @@ fn ready(result: InspectionDay) -> Inspection {
 async fn accounting_inspect_public_reopens_twice() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let a = attempt(1, 0)?;
+    let a = attempt(/*id*/ 1, /*time*/ 0)?;
     native(&runtime, a.thread_id).await?;
-    let store = AccountingStore::open(&runtime, 0).await?;
-    store.admit(a.thread_id, &a, &[snapshot()?], 0).await?;
+    let store = AccountingStore::open(&runtime, /*as_of*/ 0).await?;
     store
-        .observe(a.thread_id, &a, &[observation(&a, 1, 4)?], 0)
+        .admit(a.thread_id, &a, &[snapshot()?], /*as_of*/ 0)
         .await?;
-    let expected = AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?;
+    store
+        .observe(
+            a.thread_id,
+            &a,
+            &[observation(&a, /*revision*/ 1, /*input*/ 4)?],
+            /*as_of*/ 0,
+        )
+        .await?;
+    let expected = AccountingStore::inspect_day(
+        &runtime,
+        a.thread_id,
+        /*utc_day*/ 0,
+        /*read_at_ms*/ 0,
+    )
+    .await?;
     runtime.close().await;
     for _ in 0..2 {
         let runtime = open(&path).await?;
         assert_eq!(
-            AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?,
+            AccountingStore::inspect_day(
+                &runtime,
+                a.thread_id,
+                /*utc_day*/ 0,
+                /*read_at_ms*/ 0
+            )
+            .await?,
             expected
         );
         runtime.close().await;
@@ -86,33 +105,57 @@ async fn inspection_tables(conn: &mut SqliteConnection) -> anyhow::Result<Vec<Ve
 async fn accounting_inspect_public_reads_do_not_write() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let a = attempt(1, 0)?;
+    let a = attempt(/*id*/ 1, /*time*/ 0)?;
     native(&runtime, a.thread_id).await?;
     let mut conn = connection(&runtime).await?;
     let before = inspection_tables(&mut conn).await?;
     assert_eq!(
-        AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?,
+        AccountingStore::inspect_day(
+            &runtime,
+            a.thread_id,
+            /*utc_day*/ 0,
+            /*read_at_ms*/ 0
+        )
+        .await?,
         InspectionDay::Absent
     );
     assert_eq!(inspection_tables(&mut conn).await?, before);
-    AccountingStore::open(&runtime, 0)
+    AccountingStore::open(&runtime, /*as_of*/ 0)
         .await?
-        .admit(a.thread_id, &a, &[], 0)
+        .admit(a.thread_id, &a, &[], /*as_of*/ 0)
         .await?;
     let before = inspection_tables(&mut conn).await?;
     assert_eq!(
-        ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 1).await?)
-            .totals
-            .attempts,
+        ready(
+            AccountingStore::inspect_day(
+                &runtime,
+                a.thread_id,
+                /*utc_day*/ 0,
+                /*read_at_ms*/ 1
+            )
+            .await?
+        )
+        .totals
+        .attempts,
         1
     );
     assert!(
-        AccountingStore::inspect_day(&runtime, a.thread_id, -1, 0)
-            .await
-            .is_err()
+        AccountingStore::inspect_day(
+            &runtime,
+            a.thread_id,
+            /*utc_day*/ -1,
+            /*read_at_ms*/ 0
+        )
+        .await
+        .is_err()
     );
     // Drop a polled read at its first asynchronous database boundary.
-    let mut read = Box::pin(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0));
+    let mut read = Box::pin(AccountingStore::inspect_day(
+        &runtime,
+        a.thread_id,
+        /*utc_day*/ 0,
+        /*read_at_ms*/ 0,
+    ));
     std::future::poll_fn(|cx| {
         assert!(std::future::Future::poll(read.as_mut(), cx).is_pending());
         std::task::Poll::Ready(())
@@ -129,12 +172,12 @@ async fn accounting_inspect_public_reads_do_not_write() -> anyhow::Result<()> {
 async fn accounting_inspect_public_identity_retry_scope() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let a = attempt(1, DAY - 1)?;
-    let mut retry = attempt(2, DAY)?;
+    let a = attempt(/*id*/ 1, DAY - 1)?;
+    let mut retry = attempt(/*id*/ 2, DAY)?;
     retry.request_id = a.request_id;
     retry.retry_of = Some(a.attempt_id);
-    let separate = attempt(3, DAY)?;
-    let mut other = attempt(4, DAY)?;
+    let separate = attempt(/*id*/ 3, DAY)?;
+    let mut other = attempt(/*id*/ 4, DAY)?;
     other.thread_id = ThreadId::new();
     for owner in [a.thread_id, other.thread_id] {
         native(&runtime, owner).await?;
@@ -149,7 +192,8 @@ async fn accounting_inspect_public_identity_retry_scope() -> anyhow::Result<()> 
     retry2.attempt_id = Uuid::from_u128(5);
     retry2.retry_of = Some(retry.attempt_id);
     store.admit(a.thread_id, &retry2, &[], DAY).await?;
-    let view = ready(AccountingStore::inspect_day(&runtime, a.thread_id, 1, DAY).await?);
+    let view =
+        ready(AccountingStore::inspect_day(&runtime, a.thread_id, /*utc_day*/ 1, DAY).await?);
     let members: std::collections::BTreeMap<_, Vec<_>> = view
         .requests
         .iter()
@@ -164,7 +208,7 @@ async fn accounting_inspect_public_identity_retry_scope() -> anyhow::Result<()> 
     );
     assert_eq!(view.totals.attempts, 3);
     assert_eq!(
-        ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, DAY).await?)
+        ready(AccountingStore::inspect_day(&runtime, a.thread_id, /*utc_day*/ 0, DAY).await?)
             .totals
             .attempts,
         1
@@ -209,13 +253,13 @@ async fn accounting_inspect_public_literal_partial_goldens() -> anyhow::Result<(
     ] {
         let path = home();
         let runtime = open(&path).await?;
-        let mut a = attempt(1, 0)?;
+        let mut a = attempt(/*id*/ 1, /*time*/ 0)?;
         a.dialect = Dialect::Inclusive;
         native(&runtime, a.thread_id).await?;
         let mut price = snapshot()?;
         price.rates =
             serde_json::from_value(json!({"noncached":"1","read":"1","write":"2","output":"4"}))?;
-        let store = AccountingStore::open(&runtime, 0).await?;
+        let store = AccountingStore::open(&runtime, /*as_of*/ 0).await?;
         store
             .admit(
                 a.thread_id,
@@ -225,13 +269,21 @@ async fn accounting_inspect_public_literal_partial_goldens() -> anyhow::Result<(
                 } else {
                     &[]
                 },
-                0,
+                /*as_of*/ 0,
             )
             .await?;
-        let mut o = observation(&a, 1, 0)?;
+        let mut o = observation(&a, /*revision*/ 1, /*input*/ 0)?;
         o.patch = serde_json::from_value(patch)?;
-        store.observe(a.thread_id, &a, &[o], 0).await?;
-        let view = ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?);
+        store.observe(a.thread_id, &a, &[o], /*as_of*/ 0).await?;
+        let view = ready(
+            AccountingStore::inspect_day(
+                &runtime,
+                a.thread_id,
+                /*utc_day*/ 0,
+                /*read_at_ms*/ 0,
+            )
+            .await?,
+        );
         assert_eq!(
             serde_json::to_value(view.totals.known_usd)?,
             json!(expected_cost)
@@ -251,7 +303,7 @@ async fn accounting_inspect_public_delete_and_empty() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
     let now = chrono::Utc::now().timestamp_millis();
-    let a = attempt(1, now)?;
+    let a = attempt(/*id*/ 1, now)?;
     native(&runtime, a.thread_id).await?;
     assert_eq!(
         AccountingStore::inspect_day(&runtime, a.thread_id, now / DAY, now).await?,
@@ -264,7 +316,7 @@ async fn accounting_inspect_public_delete_and_empty() -> anyhow::Result<()> {
             .attempts,
         0
     );
-    let mut other = attempt(2, now)?;
+    let mut other = attempt(/*id*/ 2, now)?;
     other.thread_id = ThreadId::new();
     native(&runtime, other.thread_id).await?;
     for a in [&a, &other] {
@@ -300,9 +352,11 @@ async fn accounting_inspect_public_delete_and_empty() -> anyhow::Result<()> {
 
 // Populate valid unrelated history without invoking maintenance for every clone.
 async fn unrelated_population(runtime: &StateRuntime, count: u128) -> anyhow::Result<()> {
-    let store = AccountingStore::open(runtime, 0).await?;
-    let owner = attempt(1, 0)?;
-    let quote = store.admit(owner.thread_id, &owner, &[], 0).await?;
+    let store = AccountingStore::open(runtime, /*as_of*/ 0).await?;
+    let owner = attempt(/*id*/ 1, /*time*/ 0)?;
+    let quote = store
+        .admit(owner.thread_id, &owner, &[], /*as_of*/ 0)
+        .await?;
     let threads: Vec<_> = (0..600)
         .map(|id| ThreadId::from_string(&Uuid::from_u128(100_000 + id).to_string()))
         .collect::<Result<_, _>>()?;
@@ -312,7 +366,7 @@ async fn unrelated_population(runtime: &StateRuntime, count: u128) -> anyhow::Re
     let mut conn = connection(runtime).await?;
     sqlx::query("BEGIN").execute(&mut conn).await?;
     for id in 2..=count {
-        let mut a = attempt(id, 0)?;
+        let mut a = attempt(id, /*time*/ 0)?;
         a.thread_id = threads[(id as usize - 2) % threads.len()];
         let mut q = quote.clone();
         q.attempt = a.clone();
@@ -346,10 +400,18 @@ async fn unrelated_population(runtime: &StateRuntime, count: u128) -> anyhow::Re
 async fn accounting_inspect_small_day_on_busy_host() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let a = attempt(1, 0)?;
+    let a = attempt(/*id*/ 1, /*time*/ 0)?;
     native(&runtime, a.thread_id).await?;
-    unrelated_population(&runtime, 12_001).await?;
-    let mut view = ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?);
+    unrelated_population(&runtime, /*count*/ 12_001).await?;
+    let mut view = ready(
+        AccountingStore::inspect_day(
+            &runtime,
+            a.thread_id,
+            /*utc_day*/ 0,
+            /*read_at_ms*/ 0,
+        )
+        .await?,
+    );
     // All 600 other conversations are counted even though the work budget
     // cannot read every one; the unread ones are stated, never zeroed.
     let others = view
@@ -389,7 +451,7 @@ async fn accounting_inspect_small_day_on_busy_host() -> anyhow::Result<()> {
             end_ms: DAY,
             grouping: InspectionGrouping::Day,
         },
-        0,
+        /*read_at_ms*/ 0,
     )
     .await?;
     let InspectionDay::Range { buckets, .. } = range else {
@@ -404,11 +466,11 @@ async fn accounting_inspect_small_day_on_busy_host() -> anyhow::Result<()> {
     assert_eq!(bucket_view, &view);
     // The unrelated attempt's observation cap must not become the owner's cap.
     let mut other = view.requests[&a.request_id][0].clone();
-    other.attempt = attempt(2, 0)?;
+    other.attempt = attempt(/*id*/ 2, /*time*/ 0)?;
     other.attempt.thread_id = ThreadId::from_string(&Uuid::from_u128(100_000).to_string())?;
     other.observations = (1..=4097)
         .map(|revision| {
-            let mut row = observation(&other.attempt, revision, 0)?;
+            let mut row = observation(&other.attempt, revision, /*input*/ 0)?;
             row.patch = Patch::default();
             Ok(row)
         })
@@ -438,7 +500,15 @@ async fn accounting_inspect_small_day_on_busy_host() -> anyhow::Result<()> {
         .execute(&mut conn)
         .await?;
     sqlx::query("COMMIT").execute(&mut conn).await?;
-    let mut after = ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?);
+    let mut after = ready(
+        AccountingStore::inspect_day(
+            &runtime,
+            a.thread_id,
+            /*utc_day*/ 0,
+            /*read_at_ms*/ 0,
+        )
+        .await?,
+    );
     // An oversized other conversation is at most unread, never this day's failure.
     let after_others = after
         .other_conversations
@@ -447,7 +517,13 @@ async fn accounting_inspect_small_day_on_busy_host() -> anyhow::Result<()> {
     assert_eq!(after_others.conversations, others.conversations);
     assert_eq!(after, view);
     assert_eq!(
-        AccountingStore::inspect_day(&runtime, other.attempt.thread_id, 0, 0).await?,
+        AccountingStore::inspect_day(
+            &runtime,
+            other.attempt.thread_id,
+            /*utc_day*/ 0,
+            /*read_at_ms*/ 0
+        )
+        .await?,
         InspectionDay::TooLarge
     );
     conn.close().await?;
@@ -459,9 +535,9 @@ async fn accounting_inspect_small_day_on_busy_host() -> anyhow::Result<()> {
 async fn accounting_inspect_work_budget_refuses_unknown_busy_host() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let a = attempt(1, 0)?;
+    let a = attempt(/*id*/ 1, /*time*/ 0)?;
     native(&runtime, a.thread_id).await?;
-    unrelated_population(&runtime, 12_001).await?;
+    unrelated_population(&runtime, /*count*/ 12_001).await?;
     let mut conn = connection(&runtime).await?;
     // The same 12,001 rows / 600 unrelated roots pass the existing busy-host test.
     // Missing lineage plus stale contributions requires repeated candidate scans;
@@ -477,7 +553,12 @@ async fn accounting_inspect_work_budget_refuses_unknown_busy_host() -> anyhow::R
     assert_eq!(
         tokio::time::timeout(
             std::time::Duration::from_secs(30),
-            AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0)
+            AccountingStore::inspect_day(
+                &runtime,
+                a.thread_id,
+                /*utc_day*/ 0,
+                /*read_at_ms*/ 0
+            )
         )
         .await??,
         InspectionDay::TooLarge
@@ -493,7 +574,7 @@ async fn accounting_inspect_work_budget_refuses_unknown_busy_host() -> anyhow::R
                     end_ms: DAY,
                     grouping: InspectionGrouping::Day,
                 },
-                0
+                /*read_at_ms*/ 0
             )
         )
         .await??,
@@ -508,9 +589,9 @@ async fn accounting_inspect_work_budget_refuses_unknown_busy_host() -> anyhow::R
 async fn accounting_inspect_work_budget_spans_range_buckets() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let a = attempt(1, 0)?;
+    let a = attempt(/*id*/ 1, /*time*/ 0)?;
     native(&runtime, a.thread_id).await?;
-    unrelated_population(&runtime, 12_001).await?;
+    unrelated_population(&runtime, /*count*/ 12_001).await?;
     let mut conn = connection(&runtime).await?;
     sqlx::query("UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = ?")
         .bind(3 * DAY)
@@ -573,14 +654,14 @@ async fn accounting_inspect_work_budget_spans_range_buckets() -> anyhow::Result<
 async fn accounting_inspect_whole_store_denominator_thresholds() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let store = AccountingStore::open(&runtime, 0).await?;
+    let store = AccountingStore::open(&runtime, /*as_of*/ 0).await?;
     // Obtain a genuine compact payload from an unrelated, expired raw attempt.
-    let mut old = attempt(1000, 0)?;
+    let mut old = attempt(/*id*/ 1000, /*time*/ 0)?;
     old.thread_id = ThreadId::from_string(&Uuid::from_u128(1000).to_string())?;
     native(&runtime, old.thread_id).await?;
-    store.admit(old.thread_id, &old, &[], 0).await?;
+    store.admit(old.thread_id, &old, &[], /*as_of*/ 0).await?;
     store.maintain(92 * DAY).await?;
-    let owner = attempt(1, 91 * DAY)?.thread_id;
+    let owner = attempt(/*id*/ 1, 91 * DAY)?.thread_id;
     for id in 1..=8 {
         let mut a = attempt(id, 91 * DAY)?;
         a.thread_id = ThreadId::from_string(&Uuid::from_u128(id + 6).to_string())?;
@@ -649,9 +730,9 @@ async fn accounting_inspect_whole_store_denominator_thresholds() -> anyhow::Resu
 async fn accounting_inspect_valid_ten_thousand_retained_rows() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let a = attempt(1, 0)?;
+    let a = attempt(/*id*/ 1, /*time*/ 0)?;
     native(&runtime, a.thread_id).await?;
-    unrelated_population(&runtime, 10_000).await?;
+    unrelated_population(&runtime, /*count*/ 10_000).await?;
     let mut conn = connection(&runtime).await?;
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM draft_accounting_attempts")
@@ -659,7 +740,15 @@ async fn accounting_inspect_valid_ten_thousand_retained_rows() -> anyhow::Result
             .await?,
         10_000
     );
-    let view = ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?);
+    let view = ready(
+        AccountingStore::inspect_day(
+            &runtime,
+            a.thread_id,
+            /*utc_day*/ 0,
+            /*read_at_ms*/ 0,
+        )
+        .await?,
+    );
     assert_eq!(
         (
             view.totals.attempts,
@@ -678,22 +767,27 @@ async fn accounting_inspect_maximal_valid_packet() -> anyhow::Result<()> {
     const CEILING: usize = 4 * 1024 * 1024;
     let path = home();
     let runtime = open(&path).await?;
-    let a = attempt(1, 0)?;
+    let a = attempt(/*id*/ 1, /*time*/ 0)?;
     native(&runtime, a.thread_id).await?;
-    let store = AccountingStore::open(&runtime, 0).await?;
-    store.admit(a.thread_id, &a, &[], 0).await?;
+    let store = AccountingStore::open(&runtime, /*as_of*/ 0).await?;
+    store.admit(a.thread_id, &a, &[], /*as_of*/ 0).await?;
     let template = store
-        .observe(a.thread_id, &a, &[observation(&a, 1, 1)?], 0)
+        .observe(
+            a.thread_id,
+            &a,
+            &[observation(&a, /*revision*/ 1, /*input*/ 1)?],
+            /*as_of*/ 0,
+        )
         .await?;
     let mut quotes: Vec<ObservationQuote> = Vec::new();
     let mut packet = 8192;
     loop {
         let mut q = template.clone();
-        q.attempt = attempt(quotes.len() as u128 + 1, 0)?;
+        q.attempt = attempt(quotes.len() as u128 + 1, /*time*/ 0)?;
         q.observations.clear();
         let mut size = serde_json::to_vec(&q)?.len() + 2048;
         for revision in 1..=4096 {
-            let row = observation(&q.attempt, revision, 1)?;
+            let row = observation(&q.attempt, revision, /*input*/ 1)?;
             let extra = serde_json::to_vec(&row)?.len() + usize::from(revision > 1);
             if packet + size + extra > CEILING - 1 {
                 break;
@@ -805,7 +899,15 @@ async fn accounting_inspect_maximal_valid_packet() -> anyhow::Result<()> {
     }
     assert!(history_bytes > CEILING);
     sqlx::query("COMMIT").execute(&mut conn).await?;
-    let view = ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?);
+    let view = ready(
+        AccountingStore::inspect_day(
+            &runtime,
+            a.thread_id,
+            /*utc_day*/ 0,
+            /*read_at_ms*/ 0,
+        )
+        .await?,
+    );
     assert_eq!(view.totals, DayTotals::from_quotes(&quotes)?);
     assert_eq!(
         view.requests
@@ -829,7 +931,13 @@ async fn accounting_inspect_maximal_valid_packet() -> anyhow::Result<()> {
         .execute(&mut conn)
         .await?;
     assert_eq!(
-        AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?,
+        AccountingStore::inspect_day(
+            &runtime,
+            a.thread_id,
+            /*utc_day*/ 0,
+            /*read_at_ms*/ 0
+        )
+        .await?,
         InspectionDay::TooLarge
     );
     conn.close().await?;
@@ -841,17 +949,25 @@ async fn accounting_inspect_maximal_valid_packet() -> anyhow::Result<()> {
 async fn accounting_inspect_public_limits_no_truncation() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let a = attempt(1, 0)?;
+    let a = attempt(/*id*/ 1, /*time*/ 0)?;
     native(&runtime, a.thread_id).await?;
-    let store = AccountingStore::open(&runtime, 0).await?;
-    store.admit(a.thread_id, &a, &[], 0).await?;
+    let store = AccountingStore::open(&runtime, /*as_of*/ 0).await?;
+    store.admit(a.thread_id, &a, &[], /*as_of*/ 0).await?;
     // Clone legitimately admitted, all-unknown intent and its original NULL evidence.
     let mut conn = connection(&runtime).await?;
-    let quote = ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?).requests
-        [&a.request_id][0]
+    let quote = ready(
+        AccountingStore::inspect_day(
+            &runtime,
+            a.thread_id,
+            /*utc_day*/ 0,
+            /*read_at_ms*/ 0,
+        )
+        .await?,
+    )
+    .requests[&a.request_id][0]
         .clone();
     for id in 2..=513 {
-        let a = attempt(id, 0)?;
+        let a = attempt(id, /*time*/ 0)?;
         let mut q = quote.clone();
         q.attempt = a.clone();
         sqlx::query("INSERT INTO draft_accounting_attempts VALUES (?, ?, ?)")
@@ -876,15 +992,29 @@ async fn accounting_inspect_public_limits_no_truncation() -> anyhow::Result<()> 
             .await?;
         if id == 512 {
             assert_eq!(
-                ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?)
-                    .totals
-                    .attempts,
+                ready(
+                    AccountingStore::inspect_day(
+                        &runtime,
+                        a.thread_id,
+                        /*utc_day*/ 0,
+                        /*read_at_ms*/ 0
+                    )
+                    .await?
+                )
+                .totals
+                .attempts,
                 512
             );
         }
     }
     assert_eq!(
-        AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?,
+        AccountingStore::inspect_day(
+            &runtime,
+            a.thread_id,
+            /*utc_day*/ 0,
+            /*read_at_ms*/ 0
+        )
+        .await?,
         InspectionDay::TooLarge
     );
     conn.close().await?;
@@ -896,58 +1026,89 @@ async fn accounting_inspect_public_limits_no_truncation() -> anyhow::Result<()> 
 async fn inspection_limit_edges() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let a = attempt(1, 0)?;
+    let a = attempt(/*id*/ 1, /*time*/ 0)?;
     native(&runtime, a.thread_id).await?;
-    let store = AccountingStore::open(&runtime, 0).await?;
-    store.admit(a.thread_id, &a, &[], 0).await?;
+    let store = AccountingStore::open(&runtime, /*as_of*/ 0).await?;
+    store.admit(a.thread_id, &a, &[], /*as_of*/ 0).await?;
     let observations: Vec<_> = (1..=4096)
         .map(|r| observation(&a, r, r))
         .collect::<anyhow::Result<_>>()?;
     let mut conn = connection(&runtime).await?;
     for batch in observations.chunks(256) {
-        store.observe(a.thread_id, &a, batch, 0).await?;
+        store.observe(a.thread_id, &a, batch, /*as_of*/ 0).await?;
         // This fixture retains one estimate version to isolate the observation cap.
         sqlx::query("DELETE FROM draft_accounting_estimates WHERE evidence NOT IN (SELECT evidence FROM draft_accounting_contributions)")
             .execute(&mut conn).await?;
     }
     conn.close().await?;
     assert_eq!(
-        ready(AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?).requests
-            [&a.request_id][0]
+        ready(
+            AccountingStore::inspect_day(
+                &runtime,
+                a.thread_id,
+                /*utc_day*/ 0,
+                /*read_at_ms*/ 0
+            )
+            .await?
+        )
+        .requests[&a.request_id][0]
             .observations
             .len(),
         4096
     );
     store
-        .observe(a.thread_id, &a, &[observation(&a, 4097, 4097)?], 0)
+        .observe(
+            a.thread_id,
+            &a,
+            &[observation(
+                &a, /*revision*/ 4097, /*input*/ 4097,
+            )?],
+            /*as_of*/ 0,
+        )
         .await?;
     assert_eq!(
-        AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await?,
+        AccountingStore::inspect_day(
+            &runtime,
+            a.thread_id,
+            /*utc_day*/ 0,
+            /*read_at_ms*/ 0
+        )
+        .await?,
         InspectionDay::TooLarge
     );
     runtime.close().await;
     let path = home();
     let runtime = open(&path).await?;
     native(&runtime, a.thread_id).await?;
-    AccountingStore::open(&runtime, 0).await?;
+    AccountingStore::open(&runtime, /*as_of*/ 0).await?;
     let mut conn = connection(&runtime).await?;
     // Deliberately invalid small rows prove the cap precedes materialization.
     sqlx::raw_sql("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<10000)
         INSERT INTO draft_accounting_attempts SELECT CAST(x AS TEXT), CAST(x AS TEXT), 'null' FROM n")
         .execute(&mut conn).await?;
     assert!(
-        AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0)
-            .await
-            .is_err()
+        AccountingStore::inspect_day(
+            &runtime,
+            a.thread_id,
+            /*utc_day*/ 0,
+            /*read_at_ms*/ 0
+        )
+        .await
+        .is_err()
     );
     sqlx::raw_sql("INSERT INTO draft_accounting_attempts VALUES ('extra','extra','null')")
         .execute(&mut conn)
         .await?;
     // Malformed ownership remains an error at any unrelated population size.
     assert!(
-        AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0)
-            .await
-            .is_err()
+        AccountingStore::inspect_day(
+            &runtime,
+            a.thread_id,
+            /*utc_day*/ 0,
+            /*read_at_ms*/ 0
+        )
+        .await
+        .is_err()
     );
     sqlx::raw_sql("DELETE FROM draft_accounting_attempts")
         .execute(&mut conn)
@@ -958,7 +1119,13 @@ async fn inspection_limit_edges() -> anyhow::Result<()> {
             .bind(payload)
             .execute(&mut conn)
             .await?;
-        let result = AccountingStore::inspect_day(&runtime, a.thread_id, 0, 0).await;
+        let result = AccountingStore::inspect_day(
+            &runtime,
+            a.thread_id,
+            /*utc_day*/ 0,
+            /*read_at_ms*/ 0,
+        )
+        .await;
         assert!(result.is_err());
     }
     conn.close().await?;
@@ -1062,7 +1229,7 @@ async fn ordinary(conn: &mut SqliteConnection) -> anyhow::Result<Vec<(i64, Vec<u
 async fn normal_default_profiles_do_not_install_and_opt_in_keeps_ordinary_history()
 -> anyhow::Result<()> {
     let path = home();
-    let a = attempt(1, 0)?;
+    let a = attempt(/*id*/ 1, /*time*/ 0)?;
     let runtime = open(&path).await?;
     let mut conn = connection(&runtime).await?;
     let history = ordinary(&mut conn).await?;
@@ -1075,7 +1242,7 @@ async fn normal_default_profiles_do_not_install_and_opt_in_keeps_ordinary_histor
         ).fetch_one(&mut conn).await?, 0);
     }
     let native_before = runtime.get_thread(a.thread_id).await?;
-    let store = AccountingStore::open(&runtime, 0).await?;
+    let store = AccountingStore::open(&runtime, /*as_of*/ 0).await?;
     assert_eq!(runtime.get_thread(a.thread_id).await?, native_before);
     assert_eq!(ordinary(&mut conn).await?, history);
     assert_eq!(
@@ -1098,11 +1265,15 @@ async fn normal_default_profiles_do_not_install_and_opt_in_keeps_ordinary_histor
             .await?,
         "ok"
     );
-    let intent = store.admit(a.thread_id, &a, &[snapshot()?], 0).await?;
+    let intent = store
+        .admit(a.thread_id, &a, &[snapshot()?], /*as_of*/ 0)
+        .await?;
     assert_eq!(intent.usage, Usage::default());
     assert_eq!(intent.all_buckets_priced, None);
     assert_eq!(intent.snapshot, Some(snapshot()?));
-    let totals = store.read_day(a.thread_id, 0, 0).await?;
+    let totals = store
+        .read_day(a.thread_id, /*utc_day*/ 0, /*as_of_ms*/ 0)
+        .await?;
     assert_eq!(
         totals,
         RetainedDay::Available {
@@ -1128,8 +1299,13 @@ async fn normal_default_profiles_do_not_install_and_opt_in_keeps_ordinary_histor
     runtime.close().await;
     for _ in 0..2 {
         let reopened = open(&path).await?;
-        let store = AccountingStore::open(&reopened, 0).await?;
-        assert_eq!(store.read_day(a.thread_id, 0, 0).await?, totals);
+        let store = AccountingStore::open(&reopened, /*as_of*/ 0).await?;
+        assert_eq!(
+            store
+                .read_day(a.thread_id, /*utc_day*/ 0, /*as_of_ms*/ 0)
+                .await?,
+            totals
+        );
         let mut conn = connection(&reopened).await?;
         assert_eq!(ordinary(&mut conn).await?, history);
         conn.close().await?;
@@ -1143,15 +1319,24 @@ async fn original_price_null_unknown_zero_and_reordered_replay_survive_restart()
 -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let a = attempt(1, 0)?;
-    let missing = attempt(2, 0)?;
+    let a = attempt(/*id*/ 1, /*time*/ 0)?;
+    let missing = attempt(/*id*/ 2, /*time*/ 0)?;
     native(&runtime, a.thread_id).await?;
-    let store = AccountingStore::open(&runtime, 0).await?;
-    store.admit(a.thread_id, &a, &[snapshot()?], 0).await?;
-    store.admit(missing.thread_id, &missing, &[], 0).await?;
-    let patch = observation(&a, 2, 1)?;
+    let store = AccountingStore::open(&runtime, /*as_of*/ 0).await?;
+    store
+        .admit(a.thread_id, &a, &[snapshot()?], /*as_of*/ 0)
+        .await?;
+    store
+        .admit(missing.thread_id, &missing, &[], /*as_of*/ 0)
+        .await?;
+    let patch = observation(&a, /*revision*/ 2, /*input*/ 1)?;
     let quote = store
-        .observe(a.thread_id, &a, std::slice::from_ref(&patch), 0)
+        .observe(
+            a.thread_id,
+            &a,
+            std::slice::from_ref(&patch),
+            /*as_of*/ 0,
+        )
         .await?;
     assert_eq!(
         serde_json::to_value(quote.known_subtotal)?,
@@ -1166,49 +1351,80 @@ async fn original_price_null_unknown_zero_and_reordered_replay_survive_restart()
     );
     assert_eq!(quote.all_buckets_priced, None);
     store
-        .observe(a.thread_id, &a, &[observation(&a, 1, 0)?], 0)
+        .observe(
+            a.thread_id,
+            &a,
+            &[observation(&a, /*revision*/ 1, /*input*/ 0)?],
+            /*as_of*/ 0,
+        )
         .await?;
-    let expected = store.observe(a.thread_id, &a, &[patch], 0).await?;
+    let expected = store
+        .observe(a.thread_id, &a, &[patch], /*as_of*/ 0)
+        .await?;
     let null = store
-        .admit(missing.thread_id, &missing, &[snapshot()?], 0)
+        .admit(
+            missing.thread_id,
+            &missing,
+            &[snapshot()?],
+            /*as_of*/ 0,
+        )
         .await?;
     assert_eq!(null.snapshot, None);
-    let mut zero = observation(&missing, 1, 0)?;
+    let mut zero = observation(&missing, /*revision*/ 1, /*input*/ 0)?;
     zero.patch = serde_json::from_value(
         json!({"input":0,"read":0,"write":0,"output":0,"reasoning":0,"total":0}),
     )?;
     let zero_quote = store
-        .observe(missing.thread_id, &missing, &[zero.clone()], 0)
+        .observe(
+            missing.thread_id,
+            &missing,
+            &[zero.clone()],
+            /*as_of*/ 0,
+        )
         .await?;
     // No price was bound, so even an all-zero attempt makes no zero-cost claim
     // (see 20034d7d2: an absent rate is not a zero cost).
     assert_eq!(zero_quote.all_buckets_priced, None);
     assert_eq!(zero_quote.snapshot, None);
-    let expected_day = store.read_day(a.thread_id, 0, 0).await?;
+    let expected_day = store
+        .read_day(a.thread_id, /*utc_day*/ 0, /*as_of_ms*/ 0)
+        .await?;
     runtime.close().await;
     for _ in 0..2 {
         let runtime = open(&path).await?;
-        let store = AccountingStore::open(&runtime, 0).await?;
+        let store = AccountingStore::open(&runtime, /*as_of*/ 0).await?;
         let mut later = snapshot()?;
         later.id = Uuid::from_u128(2000);
         later.rates.noncached = Some("99".to_owned().try_into()?);
         assert_eq!(
-            store.admit(a.thread_id, &a, &[later.clone()], 0).await?,
+            store
+                .admit(a.thread_id, &a, &[later.clone()], /*as_of*/ 0)
+                .await?,
             expected
         );
         assert_eq!(
             store
-                .admit(missing.thread_id, &missing, &[later], 0)
+                .admit(missing.thread_id, &missing, &[later], /*as_of*/ 0)
                 .await?,
             zero_quote
         );
         assert_eq!(
             store
-                .observe(missing.thread_id, &missing, &[zero.clone()], 0)
+                .observe(
+                    missing.thread_id,
+                    &missing,
+                    &[zero.clone()],
+                    /*as_of*/ 0
+                )
                 .await?,
             zero_quote
         );
-        assert_eq!(store.read_day(a.thread_id, 0, 0).await?, expected_day);
+        assert_eq!(
+            store
+                .read_day(a.thread_id, /*utc_day*/ 0, /*as_of_ms*/ 0)
+                .await?,
+            expected_day
+        );
         runtime.close().await;
     }
     Ok(())
@@ -1220,8 +1436,8 @@ async fn installed_deletion_without_store_handle_removes_raw_and_compact_in_norm
     let path = home();
     let runtime = open(&path).await?;
     let now = chrono::Utc::now().timestamp_millis();
-    let a = attempt(1, now - 90 * DAY)?;
-    let mut other = attempt(2, now - 1)?;
+    let a = attempt(/*id*/ 1, now - 90 * DAY)?;
+    let mut other = attempt(/*id*/ 2, now - 1)?;
     other.thread_id = ThreadId::new();
     for owner in [a.thread_id, other.thread_id] {
         native(&runtime, owner).await?;
@@ -1240,7 +1456,7 @@ async fn installed_deletion_without_store_handle_removes_raw_and_compact_in_norm
             .observe(
                 a.thread_id,
                 &a,
-                &[observation(&a, 1, 1)?],
+                &[observation(&a, /*revision*/ 1, /*input*/ 1)?],
                 i64::from(a.dispatched_at_ms),
             )
             .await?;
@@ -1306,7 +1522,7 @@ async fn normal_open_rejects_unversioned_partial_failed_checksum_and_newer_witho
     ] {
         let path = home();
         let runtime = open(&path).await?;
-        AccountingStore::open(&runtime, 0).await?;
+        AccountingStore::open(&runtime, /*as_of*/ 0).await?;
         let mut conn = connection(&runtime).await?;
         sqlx::raw_sql(mutation).execute(&mut conn).await?;
         let before: Vec<(String, Option<String>)> =
@@ -1316,7 +1532,7 @@ async fn normal_open_rejects_unversioned_partial_failed_checksum_and_newer_witho
         let history = ordinary(&mut conn).await?;
         for _ in 0..2 {
             assert!(
-                AccountingStore::open(&runtime, 1).await.is_err(),
+                AccountingStore::open(&runtime, /*as_of*/ 1).await.is_err(),
                 "{mutation}"
             );
             assert_eq!(
@@ -1334,7 +1550,7 @@ async fn normal_open_rejects_unversioned_partial_failed_checksum_and_newer_witho
         for _ in 0..2 {
             let runtime = open(&path).await?; // Ordinary migrator ignores independent ledger.
             assert!(
-                AccountingStore::open(&runtime, 1).await.is_err(),
+                AccountingStore::open(&runtime, /*as_of*/ 1).await.is_err(),
                 "{mutation}"
             );
             runtime.close().await;

@@ -192,7 +192,7 @@ impl InputQueue {
 
     #[cfg(test)]
     pub(crate) async fn drain_mailbox_input_items(&self) -> (Vec<TurnInput>, Option<String>) {
-        self.drain_mailbox_input_for_turn(None).await
+        self.drain_mailbox_input_for_turn(/*turn_id*/ None).await
     }
 
     async fn drain_mailbox_input_for_turn(

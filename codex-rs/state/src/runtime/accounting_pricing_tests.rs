@@ -77,7 +77,7 @@ fn partial_expected(observations: Vec<Observation>) -> ObservationQuote {
 
 #[test]
 fn native_partial_retains_exact_subtotal_and_provenance() {
-    let rows = vec![row(1, json!({"input":50,"read":10}))];
+    let rows = vec![row(/*revision*/ 1, json!({"input":50,"read":10}))];
     assert_eq!(
         quote_observations(&attempt(), &rows, &[snapshot()]).unwrap(),
         partial_expected(rows)
@@ -89,12 +89,15 @@ fn inclusive_revisions_replace_and_reasoning_is_not_charged_twice() {
     let mut a = attempt();
     a.dialect = Dialect::Inclusive;
     let rows = vec![
-        row(1, json!({"input":100,"read":20,"write":10,"output":5})),
         row(
-            3,
+            /*revision*/ 1,
+            json!({"input":100,"read":20,"write":10,"output":5}),
+        ),
+        row(
+            /*revision*/ 3,
             json!({"input":60,"read":10,"write":0,"output":2,"reasoning":2}),
         ),
-        row(7, json!({"input":null,"read":null})),
+        row(/*revision*/ 7, json!({"input":null,"read":null})),
     ];
     let mut s = snapshot();
     s.rates.output = Some(decimal("2"));
@@ -144,7 +147,7 @@ fn absent_null_zero_and_missing_rates_remain_distinct() {
         json!({}),
         json!({"input":null,"read":null,"write":null,"output":null}),
     ] {
-        let rows = vec![row(1, patch)];
+        let rows = vec![row(/*revision*/ 1, patch)];
         assert_eq!(
             quote_observations(&attempt(), &rows, &[s.clone()]).unwrap(),
             ObservationQuote {
@@ -164,13 +167,19 @@ fn absent_null_zero_and_missing_rates_remain_distinct() {
             }
         );
     }
-    let rows = [row(1, json!({"input":0,"read":0,"write":0,"output":0}))];
+    let rows = [row(
+        /*revision*/ 1,
+        json!({"input":0,"read":0,"write":0,"output":0}),
+    )];
     let q = quote_observations(&attempt(), &rows, &[]).unwrap();
     assert_eq!(
         (q.buckets, q.all_buckets_priced, q.snapshot),
         ([BucketQuote::MissingRate; 4], None, None)
     );
-    let rows = [row(1, json!({"input":1,"read":0,"write":1,"output":2}))];
+    let rows = [row(
+        /*revision*/ 1,
+        json!({"input":1,"read":0,"write":1,"output":2}),
+    )];
     assert_eq!(
         quote_observations(&attempt(), &rows, &[s]).unwrap().buckets,
         [
@@ -201,10 +210,16 @@ fn validates_attempt_and_replay_before_quoting() {
     a.provider = "\n".into();
     assert!(quote_observations(&a, &[], &[]).is_err());
     for rows in [
-        vec![row(0, json!({}))],
-        vec![row(1, json!({})), row(1, json!({}))],
-        vec![row(3, json!({})), row(1, json!({}))],
-        vec![row(1, json!({"output":1,"reasoning":2}))],
+        vec![row(/*revision*/ 0, json!({}))],
+        vec![
+            row(/*revision*/ 1, json!({})),
+            row(/*revision*/ 1, json!({})),
+        ],
+        vec![
+            row(/*revision*/ 3, json!({})),
+            row(/*revision*/ 1, json!({})),
+        ],
+        vec![row(/*revision*/ 1, json!({"output":1,"reasoning":2}))],
     ] {
         assert!(quote_observations(&attempt(), &rows, &[snapshot()]).is_err());
     }
@@ -220,7 +235,8 @@ fn exact_identity_and_half_open_dispatch_selection() {
         let mut raw = catalog();
         raw[field] = value;
         let s = serde_json::from_value(raw).unwrap();
-        let q = quote_observations(&attempt(), &[row(1, json!({"input":1}))], &[s]).unwrap();
+        let q = quote_observations(&attempt(), &[row(/*revision*/ 1, json!({"input":1}))], &[s])
+            .unwrap();
         assert_eq!(
             (q.snapshot, q.all_buckets_priced, q.buckets[0]),
             (None, None, BucketQuote::MissingRate)
@@ -244,7 +260,7 @@ fn exact_identity_and_half_open_dispatch_selection() {
 
 #[test]
 fn prospective_catalog_is_order_independent_and_return_is_owned() {
-    let rows = vec![row(1, json!({"input":50,"read":10}))];
+    let rows = vec![row(/*revision*/ 1, json!({"input":50,"read":10}))];
     let mut later = snapshot();
     later.id = Uuid::from_u128(20);
     later.source_kind = SourceKind::NativeCatalog;
@@ -360,7 +376,7 @@ fn decimal_syntax_and_representation_bounds() {
         }
     );
     assert_eq!(
-        decimal("0.000000000000000001").price(1).unwrap(),
+        decimal("0.000000000000000001").price(/*count*/ 1).unwrap(),
         Decimal {
             coefficient: 1,
             scale: 24
@@ -379,7 +395,7 @@ fn decimal_syntax_and_representation_bounds() {
 fn checked_product_alignment_and_sum_overflow_are_errors() {
     let huge = decimal("99999999999999999999999999999999999999");
     assert_eq!(
-        huge.price(4).unwrap_err().to_string(),
+        huge.price(/*count*/ 4).unwrap_err().to_string(),
         "price product overflow"
     );
     assert_eq!(
@@ -389,7 +405,7 @@ fn checked_product_alignment_and_sum_overflow_are_errors() {
     let mut s = snapshot();
     s.rates.noncached = Some(huge);
     s.rates.read = Some(huge);
-    let rows = [row(1, json!({"input":2,"read":2}))];
+    let rows = [row(/*revision*/ 1, json!({"input":2,"read":2}))];
     assert_eq!(
         quote_observations(&attempt(), &rows, &[s])
             .unwrap_err()
@@ -435,7 +451,10 @@ fn display_rounds_half_even_and_preserves_exact_values() {
     s.rates.read = Some(decimal("0.4"));
     let q = quote_observations(
         &attempt(),
-        &[row(1, json!({"input":1,"read":1,"write":0,"output":0}))],
+        &[row(
+            /*revision*/ 1,
+            json!({"input":1,"read":1,"write":0,"output":0}),
+        )],
         &[s],
     )
     .unwrap();
@@ -463,8 +482,8 @@ async fn closed_journal_reopens_and_quotes_without_changing_rows_or_positions() 
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let journal = Journal::create_for_tests(&runtime).await?;
     let rows = vec![
-        row(1, json!({"input":40})),
-        row(3, json!({"input":50,"read":10})),
+        row(/*revision*/ 1, json!({"input":40})),
+        row(/*revision*/ 3, json!({"input":50,"read":10})),
     ];
     journal.append_observation(&attempt(), &rows).await?;
     runtime.close().await;
@@ -496,7 +515,10 @@ async fn closed_journal_reopens_and_quotes_without_changing_rows_or_positions() 
 fn plan_basis_separates_plan_consumption_from_money_spent() {
     let attempt = attempt();
     // In this dialect the patch's `input` is the uncached bucket; total derives.
-    let rows = vec![row(1, json!({"input":100,"read":20,"write":0,"output":40}))];
+    let rows = vec![row(
+        /*revision*/ 1,
+        json!({"input":100,"read":20,"write":0,"output":40}),
+    )];
     let mut priced = snapshot();
     priced.basis = Basis::PlanEquivalent;
     priced.plan_burn_millis = Some(2000);
@@ -572,7 +594,7 @@ fn free_cache_write_prices_cache_miss_input_without_inventing_evidence() {
     };
     // The live turn: input 34331 of which 34176 were cache hits, 2 output.
     let rows = vec![row(
-        9,
+        /*revision*/ 9,
         json!({"input":34331,"read":34176,"output":2,"total":34333}),
     )];
 
@@ -604,7 +626,7 @@ fn free_cache_write_prices_cache_miss_input_without_inventing_evidence() {
 
     // A reported cache-write count is used as reported.
     let reported = vec![row(
-        9,
+        /*revision*/ 9,
         json!({"input":34331,"read":34176,"write":31,"output":2}),
     )];
     let q = quote_observations(&a, &reported, &[sheet(Some("0"))]).unwrap();
@@ -629,28 +651,35 @@ fn recorded_version_one_payloads_stay_byte_identical() {
     let mut inclusive = attempt();
     inclusive.dialect = Dialect::Inclusive;
     let rows = vec![row(
-        3,
+        /*revision*/ 3,
         json!({"input":60,"read":10,"write":0,"output":2,"reasoning":2}),
     )];
     let mut billed = snapshot();
     billed.rates.output = Some(decimal("2"));
-    let billed = quote_observations_under(1, &inclusive, &rows, &[billed]).unwrap();
+    let billed = quote_observations_under(/*rules*/ 1, &inclusive, &rows, &[billed]).unwrap();
     assert_eq!(serde_json::to_string(&billed).unwrap(), GOLDEN_BILLED);
 
     let mut plan = snapshot();
     plan.basis = Basis::PlanEquivalent;
     plan.plan_burn_millis = Some(2000);
-    let rows = vec![row(1, json!({"input":50,"read":10,"output":4}))];
-    let plan = quote_observations_under(1, &attempt(), &rows, &[plan]).unwrap();
+    let rows = vec![row(
+        /*revision*/ 1,
+        json!({"input":50,"read":10,"output":4}),
+    )];
+    let plan = quote_observations_under(/*rules*/ 1, &attempt(), &rows, &[plan]).unwrap();
     assert_eq!(serde_json::to_string(&plan).unwrap(), GOLDEN_PLAN);
 
     // The free-cache-write rule: an inclusive attempt with no reported write
     // count, bound to a sheet that states a zero cache-write rate.
-    let rows = vec![row(9, json!({"input":60,"read":10,"output":2}))];
+    let rows = vec![row(
+        /*revision*/ 9,
+        json!({"input":60,"read":10,"output":2}),
+    )];
     let mut free_write = snapshot();
     free_write.rates.write = Some(Decimal::default());
     free_write.rates.output = Some(decimal("2"));
-    let free_write = quote_observations_under(1, &inclusive, &rows, &[free_write]).unwrap();
+    let free_write =
+        quote_observations_under(/*rules*/ 1, &inclusive, &rows, &[free_write]).unwrap();
     assert_eq!(
         serde_json::to_string(&free_write).unwrap(),
         GOLDEN_FREE_WRITE

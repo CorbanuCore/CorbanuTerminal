@@ -72,7 +72,7 @@ async fn save(
     store
         .estimates
         .journal
-        .append_observation(a, &[row(a, 3, patch)])
+        .append_observation(a, &[row(a, /*revision*/ 3, patch)])
         .await?;
     store
         .estimates
@@ -88,9 +88,9 @@ async fn save(
 #[tokio::test]
 async fn exact_day_objects_and_two_disk_reopens() -> anyhow::Result<()> {
     let thread = ThreadId::new();
-    let a = attempt(1, thread);
-    let b = attempt(2, thread);
-    let other = attempt(3, ThreadId::new());
+    let a = attempt(/*id*/ 1, thread);
+    let b = attempt(/*id*/ 2, thread);
+    let other = attempt(/*id*/ 3, ThreadId::new());
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = Lifecycle::create_for_tests(&runtime).await?;
@@ -112,7 +112,7 @@ async fn exact_day_objects_and_two_disk_reopens() -> anyhow::Result<()> {
     let expected = Current::Ready(DayTotals {
         measured: [(1, 1), (51, 0), (10, 0), (0, 1), (0, 1), (0, 2), (1, 1)]
             .map(|(known, unknown)| Metric { known, unknown }),
-        known_usd: Decimal::canonical(153, 6),
+        known_usd: Decimal::canonical(/*coefficient*/ 153, /*scale*/ 6),
         unknown_estimates: 2,
         attempts: 2,
         ..Default::default()
@@ -125,8 +125,8 @@ async fn exact_day_objects_and_two_disk_reopens() -> anyhow::Result<()> {
         unknown_estimates: 1,
         ..DayTotals::default()
     });
-    assert_eq!(store.read_day(thread, 0).await?, expected);
-    assert_eq!(store.read_day(other.thread_id, 0).await?, zero);
+    assert_eq!(store.read_day(thread, /*day*/ 0).await?, expected);
+    assert_eq!(store.read_day(other.thread_id, /*day*/ 0).await?, zero);
     let before = dump(&runtime).await?;
     assert_eq!(
         store.refresh_current(a.attempt_id).await?,
@@ -138,8 +138,8 @@ async fn exact_day_objects_and_two_disk_reopens() -> anyhow::Result<()> {
         let runtime =
             StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
         let store = attached(&runtime);
-        assert_eq!(store.read_day(thread, 0).await?, expected);
-        assert_eq!(store.read_day(other.thread_id, 0).await?, zero);
+        assert_eq!(store.read_day(thread, /*day*/ 0).await?, expected);
+        assert_eq!(store.read_day(other.thread_id, /*day*/ 0).await?, zero);
         assert_eq!(dump(&runtime).await?, before);
         runtime.close().await;
         assert!(runtime.pool.is_closed());
@@ -150,8 +150,11 @@ async fn exact_day_objects_and_two_disk_reopens() -> anyhow::Result<()> {
 #[tokio::test]
 async fn sum_before_rounding_and_checked_overflow() -> anyhow::Result<()> {
     for (rate, exact) in [
-        ("0.4", Decimal::canonical(8, 7)),
-        ("0.000000000000000001", Decimal::canonical(2, 24)),
+        ("0.4", Decimal::canonical(/*coefficient*/ 8, /*scale*/ 7)),
+        (
+            "0.000000000000000001",
+            Decimal::canonical(/*coefficient*/ 2, /*scale*/ 24),
+        ),
     ] {
         let home = home();
         let runtime =
@@ -167,7 +170,7 @@ async fn sum_before_rounding_and_checked_overflow() -> anyhow::Result<()> {
             )
             .await?;
         }
-        let Current::Ready(totals) = store.read_day(thread, 0).await? else {
+        let Current::Ready(totals) = store.read_day(thread, /*day*/ 0).await? else {
             panic!("held")
         };
         assert_eq!(
@@ -210,8 +213,12 @@ async fn sum_before_rounding_and_checked_overflow() -> anyhow::Result<()> {
         let value = (metric.known != 0).then_some(1);
         assert!(metric.add(value).is_err());
     }
-    let a = attempt(1, ThreadId::new());
-    let quote = quote_observations(&a, &[row(&a, 1, json!({"input":1}))], &[snapshot("3")])?;
+    let a = attempt(/*id*/ 1, ThreadId::new());
+    let quote = quote_observations(
+        &a,
+        &[row(&a, /*revision*/ 1, json!({"input":1}))],
+        &[snapshot("3")],
+    )?;
     for mut total in [
         DayTotals {
             attempts: i64::MAX,
@@ -222,7 +229,7 @@ async fn sum_before_rounding_and_checked_overflow() -> anyhow::Result<()> {
             ..DayTotals::default()
         },
         DayTotals {
-            known_usd: Decimal::canonical(u128::MAX, 6),
+            known_usd: Decimal::canonical(u128::MAX, /*scale*/ 6),
             ..DayTotals::default()
         },
     ] {
@@ -236,13 +243,16 @@ async fn revisions_missing_estimates_and_corrupt_attribution() -> anyhow::Result
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = Lifecycle::create_for_tests(&runtime).await?;
-    let a = attempt(1, ThreadId::new());
+    let a = attempt(/*id*/ 1, ThreadId::new());
     store.estimates.journal.begin_attempt(&a).await?;
     assert_eq!(
         store.refresh_current(a.attempt_id).await?,
         Current::NeedsEstimate
     );
-    assert_eq!(store.read_day(a.thread_id, 0).await?, Current::NeedsRefresh);
+    assert_eq!(
+        store.read_day(a.thread_id, /*day*/ 0).await?,
+        Current::NeedsRefresh
+    );
     save(&store, &a, json!({"input":50,"read":10}), &[snapshot("3")]).await?;
     let first = store.estimates.persist_current(a.attempt_id, &[]).await?;
     for revision in [4, 1] {
@@ -255,16 +265,22 @@ async fn revisions_missing_estimates_and_corrupt_attribution() -> anyhow::Result
             store.refresh_current(a.attempt_id).await?,
             Current::NeedsEstimate
         );
-        assert_eq!(store.read_day(a.thread_id, 0).await?, Current::NeedsRefresh);
+        assert_eq!(
+            store.read_day(a.thread_id, /*day*/ 0).await?,
+            Current::NeedsRefresh
+        );
         store.estimates.persist_current(a.attempt_id, &[]).await?;
-        assert_eq!(store.read_day(a.thread_id, 0).await?, Current::NeedsRefresh);
+        assert_eq!(
+            store.read_day(a.thread_id, /*day*/ 0).await?,
+            Current::NeedsRefresh
+        );
         store.refresh_current(a.attempt_id).await?;
-        let Current::Ready(totals) = store.read_day(a.thread_id, 0).await? else {
+        let Current::Ready(totals) = store.read_day(a.thread_id, /*day*/ 0).await? else {
             panic!("held")
         };
         assert_eq!(
             (totals.attempts, totals.known_usd),
-            (1, Decimal::canonical(183, 6))
+            (1, Decimal::canonical(/*coefficient*/ 183, /*scale*/ 6))
         );
     }
     assert_eq!(
@@ -283,7 +299,7 @@ async fn revisions_missing_estimates_and_corrupt_attribution() -> anyhow::Result
         sqlx::query(sql).execute(&mut *tx).await?;
         tx.commit().await?;
         let before = dump(&runtime).await?;
-        assert!(store.read_day(a.thread_id, 0).await.is_err());
+        assert!(store.read_day(a.thread_id, /*day*/ 0).await.is_err());
         assert!(store.refresh_current(a.attempt_id).await.is_err());
         assert_eq!(dump(&runtime).await?, before);
         sqlx::query("UPDATE draft_accounting_contributions SET utc_day = 0, thread_id = ?")
@@ -301,9 +317,9 @@ async fn deletion_removes_all_versions_and_intentions_with_opaque_reopen_guard()
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = Lifecycle::create_for_tests(&runtime).await?;
-    let a = attempt(1, ThreadId::new());
-    let b = attempt(2, a.thread_id);
-    let other = attempt(3, ThreadId::new());
+    let a = attempt(/*id*/ 1, ThreadId::new());
+    let b = attempt(/*id*/ 2, a.thread_id);
+    let other = attempt(/*id*/ 3, ThreadId::new());
     for owner in [&a, &other] {
         save(&store, owner, json!({"input":50}), &[snapshot("3")]).await?;
     }
@@ -311,11 +327,13 @@ async fn deletion_removes_all_versions_and_intentions_with_opaque_reopen_guard()
     store
         .estimates
         .journal
-        .append_observation(&a, &[row(&a, 4, json!({"input":60}))])
+        .append_observation(&a, &[row(&a, /*revision*/ 4, json!({"input":60}))])
         .await?;
     store.estimates.persist_current(a.attempt_id, &[]).await?;
     let before = dump(&runtime).await?;
-    store.delete_recorded_thread(a.thread_id, 100).await?;
+    store
+        .delete_recorded_thread(a.thread_id, /*as_of_ms*/ 100)
+        .await?;
     let deleted = dump(&runtime).await?;
     for index in 0..6 {
         let expected: Vec<_> = before[index]
@@ -355,7 +373,7 @@ async fn deletion_removes_all_versions_and_intentions_with_opaque_reopen_guard()
                 .is_err()
         );
         assert_eq!(
-            store.read_day(a.thread_id, 0).await?,
+            store.read_day(a.thread_id, /*day*/ 0).await?,
             Current::Ready(DayTotals::default())
         );
         assert_eq!(dump(&runtime).await?, deleted);
@@ -363,7 +381,9 @@ async fn deletion_removes_all_versions_and_intentions_with_opaque_reopen_guard()
     }
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = attached(&runtime);
-    store.delete_recorded_thread(other.thread_id, 100).await?;
+    store
+        .delete_recorded_thread(other.thread_id, /*as_of_ms*/ 100)
+        .await?;
     assert_eq!(sizes(&runtime).await?, vec![0, 0, 0, 0, 0, 0, 3]);
     runtime.close().await;
     Ok(())
@@ -375,7 +395,7 @@ async fn deletion_abort_invalid_times_and_corrupt_source_roll_back_whole_rows() 
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = Lifecycle::create_for_tests(&runtime).await?;
-    let a = attempt(1, ThreadId::new());
+    let a = attempt(/*id*/ 1, ThreadId::new());
     save(&store, &a, json!({"input":50}), &[snapshot("3")]).await?;
     for (change, restore, as_of) in [
         ("SELECT 1", "SELECT 1", -1),
@@ -432,7 +452,7 @@ async fn deterministic_replay_refresh_delete_orders_and_reader_snapshot() -> any
         let runtime =
             StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
         let store = Lifecycle::create_for_tests(&runtime).await?;
-        let a = attempt(1, ThreadId::new());
+        let a = attempt(/*id*/ 1, ThreadId::new());
         save(&store, &a, json!({"input":50}), &[snapshot("3")]).await?;
         let mut reader = runtime.pool.begin().await?;
         let old: String = sqlx::query_scalar("SELECT payload FROM draft_accounting_attempts")
@@ -444,7 +464,9 @@ async fn deterministic_replay_refresh_delete_orders_and_reader_snapshot() -> any
                 if !delete_first {
                     barrier.wait().await;
                 }
-                let result = store.delete_recorded_thread(a.thread_id, 100).await;
+                let result = store
+                    .delete_recorded_thread(a.thread_id, /*as_of_ms*/ 100)
+                    .await;
                 if delete_first {
                     barrier.wait().await;
                 }
@@ -457,7 +479,7 @@ async fn deterministic_replay_refresh_delete_orders_and_reader_snapshot() -> any
                 let replay = store
                     .estimates
                     .journal
-                    .append_observation(&a, &[row(&a, 4, json!({"input":60}))])
+                    .append_observation(&a, &[row(&a, /*revision*/ 4, json!({"input":60}))])
                     .await;
                 let estimate = store.estimates.persist_current(a.attempt_id, &[]).await;
                 let refresh = store.refresh_current(a.attempt_id).await;

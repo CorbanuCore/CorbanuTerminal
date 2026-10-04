@@ -16,7 +16,7 @@ use crossterm::event::KeyModifiers;
 use pretty_assertions::assert_eq;
 
 async fn unavailable_inspector(width: u16, args: &str) -> ChatWidget {
-    let (mut chat, mut rx, mut ops) = make_chatwidget_manual(None).await;
+    let (mut chat, mut rx, mut ops) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.on_terminal_resize(width);
     chat.open_accounting_command(args, NaiveDate::from_ymd_opt(2026, 9, 16).unwrap());
     let AppEvent::LoadAccountingInspector {
@@ -40,8 +40,8 @@ async fn accounting_inspect_usability_unavailable_first_screen() {
         "requests 2026-09-16",
         "requests 2026-09-16T00:00:00Z 2026-09-16T01:00:00Z hour",
     ] {
-        let chat = unavailable_inspector(150, args).await;
-        let screen = render_bottom_popup_with_height(&chat, 150, 16);
+        let chat = unavailable_inspector(/*width*/ 150, args).await;
+        let screen = render_bottom_popup_with_height(&chat, /*width*/ 150, /*height*/ 16);
         assert!(
             screen.contains("Unavailable — accounting ledger not installed."),
             "{screen}"
@@ -52,8 +52,8 @@ async fn accounting_inspect_usability_unavailable_first_screen() {
 
 #[tokio::test]
 async fn accounting_inspect_usability_wrap_tracks_resize() {
-    let mut chat = unavailable_inspector(150, "requests 2026-09-16").await;
-    let wide = render_bottom_popup_with_height(&chat, 150, 16);
+    let mut chat = unavailable_inspector(/*width*/ 150, "requests 2026-09-16").await;
+    let wide = render_bottom_popup_with_height(&chat, /*width*/ 150, /*height*/ 16);
     let first_lines = wide
         .lines()
         .map(str::trim)
@@ -70,12 +70,15 @@ async fn accounting_inspect_usability_wrap_tracks_resize() {
         wide.contains("Collection coverage: unknown; recorded root and resolved descendants only."),
         "{wide}"
     );
-    chat.on_terminal_resize(40);
-    let narrow = render_bottom_popup_with_height(&chat, 40, 16);
+    chat.on_terminal_resize(/*width*/ 40);
+    let narrow = render_bottom_popup_with_height(&chat, /*width*/ 40, /*height*/ 16);
     assert!(!narrow.contains("Unavailable — accounting ledger not installed."));
     assert!(narrow.contains("Unavailable — accounting"), "{narrow}");
-    chat.on_terminal_resize(150);
-    assert_eq!(render_bottom_popup_with_height(&chat, 150, 16), wide);
+    chat.on_terminal_resize(/*width*/ 150);
+    assert_eq!(
+        render_bottom_popup_with_height(&chat, /*width*/ 150, /*height*/ 16),
+        wide
+    );
 }
 
 #[tokio::test]
@@ -85,8 +88,8 @@ async fn accounting_inspect_usability_short_day_visible_in_every_state() {
         ("requests", "2026-09-16"),
         ("requests 2026-09-15", "2026-09-15"),
     ] {
-        let (mut chat, mut rx, _ops) = make_chatwidget_manual(None).await;
-        chat.on_terminal_resize(150);
+        let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+        chat.on_terminal_resize(/*width*/ 150);
         chat.open_accounting_command(args, NaiveDate::from_ymd_opt(2026, 9, 16).unwrap());
         let AppEvent::LoadAccountingInspector {
             generation,
@@ -98,7 +101,9 @@ async fn accounting_inspect_usability_short_day_visible_in_every_state() {
             panic!("expected inspector load");
         };
         let label = format!("Requested UTC day: {date}");
-        assert!(render_bottom_popup_with_height(&chat, 150, 16).contains(&label));
+        assert!(
+            render_bottom_popup_with_height(&chat, /*width*/ 150, /*height*/ 16).contains(&label)
+        );
         for result in [
             Ok(InspectionDay::Absent),
             Ok(InspectionDay::MissingThread),
@@ -108,7 +113,8 @@ async fn accounting_inspect_usability_short_day_visible_in_every_state() {
             Err("Recorded requests unavailable — retry.".into()),
         ] {
             chat.finish_accounting_inspector(generation, thread, day, result);
-            let screen = render_bottom_popup_with_height(&chat, 150, 16);
+            let screen =
+                render_bottom_popup_with_height(&chat, /*width*/ 150, /*height*/ 16);
             assert!(screen.contains(&label), "{screen}");
             screens.push(screen);
         }
@@ -119,11 +125,11 @@ async fn accounting_inspect_usability_short_day_visible_in_every_state() {
 #[tokio::test]
 async fn accounting_inspect_usability_hour_lifetime_wording() {
     let chat = unavailable_inspector(
-        150,
+        /*width*/ 150,
         "requests 2026-09-16T00:00:00Z 2026-09-16T01:00:00Z hour",
     )
     .await;
-    let screen = render_bottom_popup_with_height(&chat, 150, 16);
+    let screen = render_bottom_popup_with_height(&chat, /*width*/ 150, /*height*/ 16);
     assert!(
         screen.contains("this UTC hour is not their complete lifetime"),
         "{screen}"
@@ -138,8 +144,8 @@ async fn accounting_inspect_usability_hour_lifetime_wording() {
         }
     }
 
-    let chat = unavailable_inspector(150, "requests 2026-09-15 2026-09-16 day").await;
-    let screen = render_bottom_popup_with_height(&chat, 150, 16);
+    let chat = unavailable_inspector(/*width*/ 150, "requests 2026-09-15 2026-09-16 day").await;
+    let screen = render_bottom_popup_with_height(&chat, /*width*/ 150, /*height*/ 16);
     assert!(
         screen.contains("the selected UTC interval is not their complete lifetime"),
         "{screen}"
@@ -147,8 +153,8 @@ async fn accounting_inspect_usability_hour_lifetime_wording() {
 }
 
 async fn rendered_hour_bucket_caveat(state: InspectionDay) -> String {
-    let (mut chat, mut rx, mut ops) = make_chatwidget_manual(None).await;
-    chat.on_terminal_resize(150);
+    let (mut chat, mut rx, mut ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.on_terminal_resize(/*width*/ 150);
     chat.open_accounting_command(
         "requests 1970-01-01T00:00:00Z 1970-01-01T01:00:00Z hour",
         NaiveDate::from_ymd_opt(2026, 9, 16).unwrap(),
@@ -162,10 +168,15 @@ async fn rendered_hour_bucket_caveat(state: InspectionDay) -> String {
     else {
         panic!("expected inspector load");
     };
-    chat.finish_accounting_inspector(generation, thread, day, Ok(range_packet(false, state)));
+    chat.finish_accounting_inspector(
+        generation,
+        thread,
+        day,
+        Ok(range_packet(/*partial*/ false, state)),
+    );
     // Reach and open the bucket using the rendered label, not InspectorPage text.
     for _ in 0..60 {
-        let screen = render_bottom_popup_with_height(&chat, 150, 16);
+        let screen = render_bottom_popup_with_height(&chat, /*width*/ 150, /*height*/ 16);
         if screen
             .lines()
             .any(|line| line.trim_start().starts_with("› → Hour ["))
@@ -181,7 +192,7 @@ async fn rendered_hour_bucket_caveat(state: InspectionDay) -> String {
         chat.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
     }
     for _ in 0..60 {
-        let screen = render_bottom_popup_with_height(&chat, 150, 16);
+        let screen = render_bottom_popup_with_height(&chat, /*width*/ 150, /*height*/ 16);
         if let Some(line) = screen
             .lines()
             .find(|line| line.contains("Logical requests may"))
@@ -194,7 +205,7 @@ async fn rendered_hour_bucket_caveat(state: InspectionDay) -> String {
     }
     panic!(
         "caveat not reachable: {}",
-        render_bottom_popup_with_height(&chat, 150, 16)
+        render_bottom_popup_with_height(&chat, /*width*/ 150, /*height*/ 16)
     );
 }
 
@@ -324,7 +335,10 @@ fn accounting_inspect_range_partial_no_amount_and_explicit_coverage() {
         panic!()
     };
     view.read_at_ms = view.coverage.completed_as_of_ms;
-    let pages = inspection_pages(Ok(range_packet(true, InspectionDay::Ready(view))));
+    let pages = inspection_pages(Ok(range_packet(
+        /*partial*/ true,
+        InspectionDay::Ready(view),
+    )));
     let text = pages
         .iter()
         .flat_map(|p| &p.text)
@@ -379,7 +393,7 @@ fn accounting_inspect_range_coverage_names_intersection_for_request_and_retentio
                 }],
             }],
         );
-        let bounds = interval(0, 31 * day_ms);
+        let bounds = interval(/*start*/ 0, 31 * day_ms);
         let effective = interval(effective_start, 31 * day_ms);
         assert!(pages[0].text.contains(&format!(
             "Effective coverage (requested ∩ aggregate retention ∩ snapshot) for {bounds}: {effective}"
@@ -426,8 +440,8 @@ fn accounting_inspect_range_bucket_ancestry_counts_have_explicit_scopes() {
             end_ms: 7_200_000,
             grouping: InspectionGrouping::Hour,
         },
-        None,
-        7_200_000,
+        /*oldest*/ None,
+        /*read_at*/ 7_200_000,
         buckets,
     );
     let bucket = &pages[pages[0].links[0].1];
@@ -460,7 +474,7 @@ fn accounting_inspect_range_aggregate_coverage_does_not_claim_raw_detail() {
         read_at_ms: 90 * 86_400_000 + 1_800_000,
         compact: true,
     };
-    let pages = inspection_pages(Ok(range_packet(false, day)));
+    let pages = inspection_pages(Ok(range_packet(/*partial*/ false, day)));
     let bucket = &pages[pages[0].links[0].1];
     assert_eq!(bucket.title, "Bucket unavailable");
     assert!(bucket.text.iter().any(|s| s == "Whole bucket within aggregate retention coverage; detail availability checked separately"));
@@ -496,7 +510,7 @@ fn accounting_inspect_range_overview_discloses_unknown_population_before_total()
             end_ms: 2 * 3_600_000,
             grouping: InspectionGrouping::Hour,
         },
-        None,
+        /*oldest*/ None,
         2 * 3_600_000,
         buckets,
     );
@@ -518,7 +532,7 @@ fn accounting_inspect_range_overview_discloses_unknown_population_before_total()
 
 #[test]
 fn accounting_inspect_range_breakdowns_and_navigation_reconcile() {
-    let pages = inspection_pages(Ok(range_packet(false, breakdown_packet())));
+    let pages = inspection_pages(Ok(range_packet(/*partial*/ false, breakdown_packet())));
     assert!(pages[0].text.iter().any(|t| t.contains("$0.000007")));
     let bucket = pages[0].links[0].1;
     assert_eq!(pages[bucket].parent, Some(0));
@@ -653,7 +667,7 @@ fn accounting_inspect_range_unavailable_precision_and_freshness() {
                 "Whole UTC-day bounds offered: [1970-01-01T00:00:00.000Z, 1970-01-02T00:00:00.000Z)"
             }
         };
-        let pages = inspection_pages(Ok(range_packet(false, state)));
+        let pages = inspection_pages(Ok(range_packet(/*partial*/ false, state)));
         let text = pages
             .iter()
             .flat_map(|p| &p.text)
@@ -663,7 +677,7 @@ fn accounting_inspect_range_unavailable_precision_and_freshness() {
         assert!(text.contains(expected));
         assert!(!text.contains('$'));
     }
-    let pages = inspection_pages(Ok(range_packet(false, packet())));
+    let pages = inspection_pages(Ok(range_packet(/*partial*/ false, packet())));
     assert!(
         pages[1..]
             .iter()
@@ -673,7 +687,7 @@ fn accounting_inspect_range_unavailable_precision_and_freshness() {
 
 #[tokio::test]
 async fn accounting_inspect_range_command_refresh_and_refusal() {
-    let (mut chat, mut rx, _ops) = make_chatwidget_manual(None).await;
+    let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
     let today = NaiveDate::from_ymd_opt(2026, 9, 16).unwrap();
     for grouping in ["hour", "day", "week", "month"] {
         chat.open_accounting_command(&format!("requests 2026-09-01 2026-09-02 {grouping}"), today);
@@ -713,7 +727,7 @@ async fn accounting_inspect_range_command_refresh_and_refusal() {
             panic!()
         };
         let text = cell
-            .display_lines(120)
+            .display_lines(/*width*/ 120)
             .iter()
             .map(ToString::to_string)
             .collect::<Vec<_>>()
@@ -755,7 +769,7 @@ fn plan_day(equivalent: Decimal, burn_milli_tokens: i64, unknown_equivalents: i6
 fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
     // Plan work with an API equivalent: the plan rate, what it consumed, and
     // what the same tokens would have cost - none of it spend.
-    insta::assert_snapshot!(estimate(&plan_day(decimal("0.00161"), 140_000, 0)).join("\n"), @"
+    insta::assert_snapshot!(estimate(&plan_day(decimal("0.00161"), /*burn_milli_tokens*/ 140_000, /*unknown_equivalents*/ 0)).join("\n"), @"
     No recorded attempt here was billed per token.
     Subscription capacity: 2 of 2 attempts, not billed per token
     Plan consumption: 140 tokens at the plan rate that applied
@@ -763,7 +777,7 @@ fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
     ");
     // A plan row the catalogue states no API price for says so, rather than
     // reporting zero.
-    insta::assert_snapshot!(estimate(&plan_day(Decimal::default(), 280_000, 2)).join("\n"), @"
+    insta::assert_snapshot!(estimate(&plan_day(Decimal::default(), /*burn_milli_tokens*/ 280_000, /*unknown_equivalents*/ 2)).join("\n"), @"
     No recorded attempt here was billed per token.
     Subscription capacity: 2 of 2 attempts, not billed per token
     Plan consumption: 280 tokens at the plan rate that applied
@@ -771,7 +785,11 @@ fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
     ");
     // A day with no plan work says nothing about plans at all.
     assert_eq!(
-        estimate(&money_day(decimal("0.00018"), 0, 1)),
+        estimate(&money_day(
+            decimal("0.00018"),
+            /*unknown*/ 0,
+            /*attempts*/ 1
+        )),
         vec!["Estimated token cost for recorded attempts: $0.000180"]
     );
     // A mixed day is the case the two populations exist for. Three attempts,
@@ -843,7 +861,7 @@ fn accounting_inspect_plan_work_is_never_reported_as_money_spent() {
 
 #[test]
 fn accounting_inspect_partial_and_unknown_copy() {
-    insta::assert_snapshot!(estimate(&money_day(decimal("0.00018"), 1, 1)).join("\n"), @"
+    insta::assert_snapshot!(estimate(&money_day(decimal("0.00018"), /*unknown*/ 1, /*attempts*/ 1)).join("\n"), @"
     Known estimated token cost: $0.000180 + unknown costs
     Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
     ");
@@ -868,12 +886,16 @@ fn accounting_inspect_partial_and_unknown_copy() {
 
 #[test]
 fn accounting_inspect_unpriced_zero_and_missing_rate() {
-    insta::assert_snapshot!(estimate(&money_day(Decimal::default(), 1, 1)).join("\n"), @"
+    insta::assert_snapshot!(estimate(&money_day(Decimal::default(), /*unknown*/ 1, /*attempts*/ 1)).join("\n"), @"
     Estimated token cost: unknown
     Full recorded estimate: unavailable (1 of 1 billed attempts incomplete)
     ");
     assert_eq!(
-        estimate(&money_day(Decimal::default(), 0, 1)),
+        estimate(&money_day(
+            Decimal::default(),
+            /*unknown*/ 0,
+            /*attempts*/ 1
+        )),
         vec!["Estimated token cost for recorded attempts: $0.000000"]
     );
     let mut q = quote();
@@ -942,7 +964,7 @@ fn accounting_inspect_request_attempt_price_detail() {
 #[tokio::test]
 async fn accounting_inspect_narrow_and_long_fields() {
     for width in [40, 80] {
-        let (mut chat, _rx, _ops) = make_chatwidget_manual(None).await;
+        let (mut chat, _rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
         let mut q = quote();
         q.attempt.provider = format!("provider\u{1b}[31m{}", "LONG".repeat(30));
         let page = InspectorPage {
@@ -968,7 +990,7 @@ async fn accounting_inspect_narrow_and_long_fields() {
         chat.bottom_pane.show_selection_view(params);
         // Every selectable fragment can actually be reached in a small viewport.
         for name in names {
-            let screen = render_bottom_popup_with_height(&chat, width, 12);
+            let screen = render_bottom_popup_with_height(&chat, width, /*height*/ 12);
             assert!(
                 screen.contains(&name),
                 "{name:?} missing at {width}: {screen}"
@@ -998,8 +1020,9 @@ async fn accounting_inspect_empty_day_after_checkpoint_renders_lag() -> anyhow::
         codex_protocol::protocol::SessionSource::Cli,
     );
     runtime.upsert_thread(&metadata.build("synthetic")).await?;
-    AccountingStore::open(&runtime, 0).await?;
-    let empty = AccountingStore::inspect_day(&runtime, owner, 0, 0).await?;
+    AccountingStore::open(&runtime, /*as_of*/ 0).await?;
+    let empty =
+        AccountingStore::inspect_day(&runtime, owner, /*utc_day*/ 0, /*read_at_ms*/ 0).await?;
     let InspectionDay::Ready(view) = &empty else {
         panic!("{empty:?}");
     };
@@ -1018,7 +1041,10 @@ async fn accounting_inspect_empty_day_after_checkpoint_renders_lag() -> anyhow::
 
     // The next UTC day has no requests and opening the inspector must not maintain it.
     for _ in 0..2 {
-        let lagged = AccountingStore::inspect_day(&runtime, owner, 1, 86_400_000).await?;
+        let lagged = AccountingStore::inspect_day(
+            &runtime, owner, /*utc_day*/ 1, /*read_at_ms*/ 86_400_000,
+        )
+        .await?;
         let text = inspection_pages(Ok(lagged))[0].text.join("\n");
         assert!(
             text.contains("Snapshot is not current; newer activity is unverified"),
@@ -1264,8 +1290,8 @@ fn accounting_inspect_coverage_never_claims_run_complete() {
 
 #[tokio::test]
 async fn accounting_inspect_snapshot_navigation_roundtrip() {
-    let (mut chat, mut rx, _ops) = make_chatwidget_manual(None).await;
-    chat.open_accounting_inspector(0);
+    let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.open_accounting_inspector(/*day*/ 0);
     let AppEvent::LoadAccountingInspector {
         generation,
         thread,
@@ -1288,14 +1314,14 @@ async fn accounting_inspect_snapshot_navigation_roundtrip() {
         chat.accounting_inspector.as_ref().unwrap().pages[0].text,
         original
     );
-    chat.navigate_accounting_inspector(generation, 2);
-    chat.navigate_accounting_inspector(generation, 0);
+    chat.navigate_accounting_inspector(generation, /*page*/ 2);
+    chat.navigate_accounting_inspector(generation, /*page*/ 0);
     assert_eq!(
         chat.bottom_pane
             .selected_index_for_active_view(INSPECTOR_VIEW),
         Some(1)
     );
-    assert!(render_bottom_popup(&chat, 40).contains("Cost — this conversation"));
+    assert!(render_bottom_popup(&chat, /*width*/ 40).contains("Cost — this conversation"));
 }
 
 fn breakdown_packet() -> InspectionDay {
@@ -1534,8 +1560,8 @@ fn accounting_inspect_breakdown_freshness_and_empty_attribution() {
 
 #[tokio::test]
 async fn accounting_inspect_breakdown_navigation_reuses_packet() {
-    let (mut chat, mut rx, _ops) = make_chatwidget_manual(None).await;
-    chat.open_accounting_inspector(0);
+    let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.open_accounting_inspector(/*day*/ 0);
     let AppEvent::LoadAccountingInspector {
         generation,
         thread,
@@ -1552,7 +1578,7 @@ async fn accounting_inspect_breakdown_navigation_reuses_packet() {
     for (_, target) in links {
         chat.navigate_accounting_inspector(generation, target);
         assert_eq!(chat.accounting_inspector.as_ref().unwrap().page, target);
-        chat.navigate_accounting_inspector(generation, 0);
+        chat.navigate_accounting_inspector(generation, /*page*/ 0);
     }
     assert!(!matches!(
         rx.try_recv(),
@@ -1851,7 +1877,10 @@ fn accounting_inspect_range_entry_page_names_rows_whose_tokens_have_no_price() {
     quote.known_subtotal = Decimal::default();
     quote.known_equivalent = Decimal::default();
 
-    let pages = inspection_pages(Ok(range_packet(false, InspectionDay::Ready(view))));
+    let pages = inspection_pages(Ok(range_packet(
+        /*partial*/ false,
+        InspectionDay::Ready(view),
+    )));
     let entry = pages[0].text.join("\n");
 
     assert!(
@@ -2022,11 +2051,11 @@ fn accounting_inspect_plain_wording_counts_attempts_and_names_every_route() {
 #[test]
 fn accounting_inspect_heading_names_the_inspected_day() {
     assert_eq!(
-        day_heading(20_000, 20_000),
+        day_heading(/*utc_day*/ 20_000, /*today*/ 20_000),
         "Today (UTC) in this conversation:"
     );
     assert_eq!(
-        day_heading(19_999, 20_000),
+        day_heading(/*utc_day*/ 19_999, /*today*/ 20_000),
         "This conversation on 2024-10-03 (UTC):"
     );
 }
@@ -2038,7 +2067,7 @@ fn accounting_inspect_multi_day_bucket_heading_names_the_whole_bucket() {
     };
     let pages = inspection_pages_for(
         Ok(InspectionDay::Ready(view)),
-        Some(interval(0, 2 * 86_400_000)),
+        Some(interval(/*start*/ 0, 2 * 86_400_000)),
     );
     assert_eq!(
         pages[0].text[0],
@@ -2288,8 +2317,8 @@ fn accounting_inspect_reads_plainly_for_every_provider() {
 /// parent (the overview).
 #[tokio::test]
 async fn accounting_inspect_back_returns_the_way_the_user_came() {
-    let (mut chat, mut rx, _ops) = make_chatwidget_manual(None).await;
-    chat.open_accounting_inspector(0);
+    let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.open_accounting_inspector(/*day*/ 0);
     let AppEvent::LoadAccountingInspector {
         generation,
         thread,
@@ -2318,7 +2347,10 @@ async fn accounting_inspect_back_returns_the_way_the_user_came() {
         let view = chat.accounting_inspector.as_ref().unwrap();
         (
             view.page,
-            view.params(80).items.iter().any(|i| i.name == "Back"),
+            view.params(/*width*/ 80)
+                .items
+                .iter()
+                .any(|i| i.name == "Back"),
         )
     };
     assert_eq!(back(&chat), (attempt, true));
@@ -2349,7 +2381,7 @@ async fn accounting_inspect_back_returns_the_way_the_user_came() {
 
 #[test]
 fn accounting_inspect_plan_consumption_groups_thousands() {
-    assert_eq!(rate_scaled(24_337_000), "24,337");
-    assert_eq!(rate_scaled(1_234_567_500), "1,234,567.500");
-    assert_eq!(rate_scaled(500), "0.500");
+    assert_eq!(rate_scaled(/*milli_tokens*/ 24_337_000), "24,337");
+    assert_eq!(rate_scaled(/*milli_tokens*/ 1_234_567_500), "1,234,567.500");
+    assert_eq!(rate_scaled(/*milli_tokens*/ 500), "0.500");
 }
