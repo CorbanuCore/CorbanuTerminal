@@ -62,7 +62,12 @@ fn public_consumer_contract_requires_intent_then_terminal_receipt() {
     let root_path = AbsolutePathBuf::from_absolute_path_checked(temp.path().join("journal"))
         .expect("absolute journal path");
     let producer = principal(PrincipalKind::Service, "producer-1");
-    let owner = JournalOwner::new(producer.clone(), 1, text("pf20-key-1")).expect("journal owner");
+    let owner = JournalOwner::new(
+        producer.clone(),
+        /*owner_generation*/ 1,
+        text("pf20-key-1"),
+    )
+    .expect("journal owner");
     let mut journal = ReferenceJournal::new(
         root_path,
         owner,
@@ -70,7 +75,13 @@ fn public_consumer_contract_requires_intent_then_terminal_receipt() {
         JournalConfig::default(),
     );
     assert_eq!(
-        journal.recover(0, 1, &RevocationState::new()).state,
+        journal
+            .recover(
+                /*expected_policy_generation*/ 0,
+                /*expected_run_generation*/ 1,
+                &RevocationState::new()
+            )
+            .state,
         RecoveryState::Empty
     );
     let request = AuthorizationRequest::new(
@@ -93,17 +104,20 @@ fn public_consumer_contract_requires_intent_then_terminal_receipt() {
         },
     )
     .expect("request");
-    let context = EventContext::new(producer, 0, 1).expect("event context");
+    let context = EventContext::new(
+        producer, /*policy_generation*/ 0, /*run_generation*/ 1,
+    )
+    .expect("event context");
     let (permit, intent) = journal
         .reserve_dispatch(
             context.clone(),
-            None,
+            /*causal_parent*/ None,
             &request,
             AuthorityIdentity::Grant {
                 grant_id: text("grant-1"),
             },
             text("attempt-1"),
-            11,
+            /*occurred_at_unix_seconds*/ 11,
         )
         .expect("durable intent");
     let receipt = journal
@@ -113,14 +127,20 @@ fn public_consumer_contract_requires_intent_then_terminal_receipt() {
             DispatchResolution::Unknown {
                 reason: UnknownOutcomeReason::TransportLost,
             },
-            12,
+            /*occurred_at_unix_seconds*/ 12,
         )
         .expect("terminal unknown receipt");
 
     assert_eq!(intent.sequence, 1);
     assert_eq!(receipt.sequence, 2);
     assert_eq!(
-        journal.recover(0, 1, &RevocationState::new()).state,
+        journal
+            .recover(
+                /*expected_policy_generation*/ 0,
+                /*expected_run_generation*/ 1,
+                &RevocationState::new()
+            )
+            .state,
         RecoveryState::Ready
     );
 }

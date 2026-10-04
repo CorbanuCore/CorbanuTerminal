@@ -5110,11 +5110,11 @@ async fn model_picker_runtime_refresh_keeps_claude_out_of_openai_tab() {
     );
     let presets = chat.model_catalog.try_list_models().unwrap();
     chat.open_all_models_popup(presets);
-    let claude = render_bottom_popup_with_height(&chat, 140, 36);
+    let claude = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 36);
     assert!(claude.contains("[Claude Plan]"), "{claude}");
     assert!(claude.contains(&format!("Model: {CLAUDE_FABLE_5_PLAN_MODEL}.")));
     for _ in 0..16 {
-        let popup = render_bottom_popup_with_height(&chat, 140, 36);
+        let popup = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 36);
         if popup.contains("[OpenAI]") {
             assert!(
                 !popup.contains(&format!("Model: {CLAUDE_FABLE_5_PLAN_MODEL}.")),

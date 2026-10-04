@@ -206,8 +206,8 @@ impl BoundedGrant {
             issued_at_unix_seconds,
             expires_at_unix_seconds,
             nonce,
-            None,
-            None,
+            /*parent_grant_id*/ None,
+            /*parent_scope_digest*/ None,
         )
     }
 

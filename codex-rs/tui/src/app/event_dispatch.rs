@@ -6433,11 +6433,15 @@ mod gpu_notification_tests {
     #[test]
     fn shared_provider_selection_uses_active_model_when_config_has_no_model() {
         assert_eq!(
-            resolve_shared_provider_selection_model(None, "active-custom-model", "custom"),
+            resolve_shared_provider_selection_model(
+                /*configured_model*/ None,
+                "active-custom-model",
+                "custom"
+            ),
             Some("active-custom-model".to_string())
         );
         assert_eq!(
-            resolve_shared_provider_selection_model(None, "", "custom"),
+            resolve_shared_provider_selection_model(/*configured_model*/ None, "", "custom"),
             None
         );
     }
@@ -6463,20 +6467,28 @@ mod gpu_notification_tests {
             Some(&deferred),
             &continuation
         ));
-        assert!(!wallet_unlock_continuation_is_current(None, &continuation));
+        assert!(!wallet_unlock_continuation_is_current(
+            /*active*/ None,
+            &continuation
+        ));
         assert!(corbanu_api_continuation_is_current(
             Some(&deferred),
             Some(&deferred)
         ));
-        assert!(!corbanu_api_continuation_is_current(Some(&deferred), None));
-        assert!(corbanu_api_continuation_is_current(None, None));
+        assert!(!corbanu_api_continuation_is_current(
+            Some(&deferred),
+            /*deferred*/ None
+        ));
+        assert!(corbanu_api_continuation_is_current(
+            /*active*/ None, /*deferred*/ None
+        ));
         let ordinary_continuation = WalletUnlockContinuation::OpenCorbanuApi { deferred: None };
         assert!(!wallet_unlock_continuation_is_current(
             Some(&deferred),
             &ordinary_continuation
         ));
         assert!(wallet_unlock_continuation_is_current(
-            None,
+            /*active*/ None,
             &ordinary_continuation
         ));
     }

@@ -19,8 +19,12 @@ async fn tmux_reauth_openai_environment_key_preserves_external_ownership() -> Re
         .arg("-C")
         .arg(&fixture.repo_root);
     let session = tmux.new_session(
-        SessionSpec::new("pf58-openai-env", TerminalSize::new(140, 44), command)
-            .current_dir(&fixture.repo_root),
+        SessionSpec::new(
+            "pf58-openai-env",
+            TerminalSize::new(/*columns*/ 140, /*rows*/ 44),
+            command,
+        )
+        .current_dir(&fixture.repo_root),
     )?;
     let pane = session.primary_pane();
     wait_chat_ready(pane)?;

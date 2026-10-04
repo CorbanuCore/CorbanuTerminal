@@ -371,7 +371,7 @@ fn controller_and_start_effect(
     method: OpenAiAccountMethod,
     context: OpenAiAccountLoginContext,
 ) -> (ProviderAuthController, OpenAiAccountEffect) {
-    let providers = built_in_model_providers(None);
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
     let catalog = ProviderCatalog::from_runtime_providers(&providers);
     let entry = catalog
         .get(OPENAI_PROVIDER_ID)

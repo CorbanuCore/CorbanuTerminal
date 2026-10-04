@@ -73,7 +73,7 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
             "openai".into(),
         )
         .await?;
-        db.mark_backfill_complete(None).await?;
+        db.mark_backfill_complete(/*last_watermark*/ None).await?;
         let source = ThreadId::new();
         let timestamp = chrono::Utc::now() - chrono::Duration::hours(2);
         let rollout = home.path().join(format!("rollout-{source}.jsonl"));
@@ -106,7 +106,7 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
         let session = tmux.new_session(
             SessionSpec::new(
                 level,
-                TerminalSize::new(120, 42),
+                TerminalSize::new(/*columns*/ 120, /*rows*/ 42),
                 CommandSpec::new(&binary)
                     .env("CODEX_HOME", home.path())
                     .env("CORBANU_HOME", home.path())
@@ -127,7 +127,10 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
         )?;
         let deadline = tokio::time::Instant::now() + TIMEOUT;
         loop {
-            let outputs = db.memories().list_stage1_outputs_for_global(10).await?;
+            let outputs = db
+                .memories()
+                .list_stage1_outputs_for_global(/*n*/ 10)
+                .await?;
             let log =
                 fs::read_to_string(home.path().join("logs/codex-tui.log")).unwrap_or_default();
             let done = if cancel_pending {
@@ -167,7 +170,7 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
         if level != "permissive" {
             ensure!(
                 db.memories()
-                    .list_stage1_outputs_for_global(10)
+                    .list_stage1_outputs_for_global(/*n*/ 10)
                     .await?
                     .is_empty(),
                 "denied output persisted"
@@ -193,7 +196,7 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
         if cancel_pending {
             ensure!(
                 db.memories()
-                    .list_stage1_outputs_for_global(10)
+                    .list_stage1_outputs_for_global(/*n*/ 10)
                     .await?
                     .is_empty(),
                 "cancelled memory output persisted"
@@ -202,7 +205,7 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
         let restarted = tmux.new_session(
             SessionSpec::new(
                 "restart",
-                TerminalSize::new(120, 42),
+                TerminalSize::new(/*columns*/ 120, /*rows*/ 42),
                 CommandSpec::new(&binary)
                     .env("CODEX_HOME", home.path())
                     .env("CORBANU_HOME", home.path())
@@ -247,7 +250,7 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
                 format!(
                     "canary_requests={canaries}\nstage1_outputs={}\n",
                     db.memories()
-                        .list_stage1_outputs_for_global(10)
+                        .list_stage1_outputs_for_global(/*n*/ 10)
                         .await?
                         .len()
                 ),

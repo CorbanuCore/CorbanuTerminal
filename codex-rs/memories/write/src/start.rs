@@ -75,11 +75,19 @@ pub fn start_memories_startup_task(
 
         // Run phase 1.
         if !phase1::run(Arc::clone(&context), Arc::clone(&config)).await {
-            context.counter(MEMORY_STARTUP, 1, &[("status", "skipped_policy")]);
+            context.counter(
+                MEMORY_STARTUP,
+                /*inc*/ 1,
+                &[("status", "skipped_policy")],
+            );
             return;
         }
         if context.current_stage_one_config(&config).await.is_err() {
-            context.counter(MEMORY_STARTUP, 1, &[("status", "skipped_policy")]);
+            context.counter(
+                MEMORY_STARTUP,
+                /*inc*/ 1,
+                &[("status", "skipped_policy")],
+            );
             return;
         }
         // Refresh above is a live policy gate only. Consolidation still uses

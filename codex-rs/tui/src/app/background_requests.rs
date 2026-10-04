@@ -1321,7 +1321,12 @@ mod tests {
         let generations = Arc::new(AtomicU64::new(1));
         let (tx, mut rx) = unbounded_channel();
         let sender = AppEventSender::new(tx);
-        spawn_correlated_skills_refresh(generations, 1, sender.clone(), std::future::pending());
+        spawn_correlated_skills_refresh(
+            generations,
+            /*generation*/ 1,
+            sender.clone(),
+            std::future::pending(),
+        );
 
         sender.send(AppEvent::CodexOp(AppCommand::interrupt()));
         assert!(matches!(
@@ -1337,11 +1342,16 @@ mod tests {
         let sender = AppEventSender::new(tx);
         let empty = || async { Ok(SkillsListResponse { data: Vec::new() }) };
 
-        spawn_correlated_skills_refresh(Arc::clone(&generations), 1, sender.clone(), empty());
+        spawn_correlated_skills_refresh(
+            Arc::clone(&generations),
+            /*generation*/ 1,
+            sender.clone(),
+            empty(),
+        );
         tokio::task::yield_now().await;
         assert!(rx.try_recv().is_err());
 
-        spawn_correlated_skills_refresh(generations, 2, sender, empty());
+        spawn_correlated_skills_refresh(generations, /*generation*/ 2, sender, empty());
         assert!(matches!(
             tokio::time::timeout(Duration::from_secs(1), rx.recv()).await,
             Ok(Some(AppEvent::SkillsListLoaded { result: Ok(_) }))

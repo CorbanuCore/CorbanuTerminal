@@ -7,7 +7,7 @@ async fn tmux_untrusted_apps_origin_preserves_account_and_healthy_model_route() 
     if !TmuxServer::should_run("PF-58 untrusted Apps origin")? {
         return Ok(());
     }
-    let fixture = Fixture::new("apps-origin-boundary", false).await?;
+    let fixture = Fixture::new("apps-origin-boundary", /*openai_auth*/ false).await?;
     let config_path = fixture.home.path().join("config.toml");
     let original = fs::read_to_string(&config_path)?;
     fs::write(
