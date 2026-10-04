@@ -57,11 +57,13 @@ fn binary() -> Result<Command, codex_utils_cargo_bin::CargoBinError> {
 
 fn reset_or_aborted(result: std::io::Result<usize>) -> bool {
     // An abortive close reads as WSAECONNABORTED on Windows.
-    result.is_ok()
-        || matches!(
-            result.unwrap_err().kind(),
+    match result {
+        Ok(_) => true,
+        Err(error) => matches!(
+            error.kind(),
             std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted
-        )
+        ),
+    }
 }
 
 #[test]
