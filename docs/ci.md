@@ -20,7 +20,8 @@ block merges. Without a BuildBuddy remote cache these cold Bazel jobs take two
 to five hours, so they no longer run on every PR and get the 360-minute
 hosted-runner maximum:
 
-- Bazel test (Linux gnu and musl), clippy, and release-build verification.
+- Bazel test (Linux gnu and musl, and native Windows), clippy, and
+  release-build verification.
 - Argument comment lint on Linux and macOS (Windows still runs on PRs).
 - The Bazel-built SDK job (`sdk / sdks`; the Python SDK test still runs on PRs).
 
