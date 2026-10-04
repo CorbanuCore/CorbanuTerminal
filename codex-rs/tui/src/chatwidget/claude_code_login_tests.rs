@@ -115,8 +115,10 @@ fn relative_config_dir_matches_runtime_keychain_profile_identity() {
     let home = std::path::Path::new("/unused-home");
 
     assert_eq!(
-        macos_platform_login_source_id(home, Some(relative), false).expect("relative source id"),
-        macos_platform_login_source_id(home, Some(absolute), false).expect("absolute source id"),
+        macos_platform_login_source_id(home, Some(relative), /*custom_oauth*/ false)
+            .expect("relative source id"),
+        macos_platform_login_source_id(home, Some(absolute), /*custom_oauth*/ false)
+            .expect("absolute source id"),
     );
 }
 
@@ -141,7 +143,7 @@ fn selected_environment_token_status_requires_the_bound_token() {
     let legacy = ClaudeAuthSelection::new_at(
         ClaudeAuthSource::EnvironmentToken,
         ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID,
-        10,
+        /*selected_at*/ 10,
     )
     .expect("legacy selection");
     assert!(!environment_token_matches_selection_value(
@@ -154,7 +156,7 @@ fn selected_environment_token_status_requires_the_bound_token() {
 fn claude_auth_method_choice_snapshot() {
     insta::assert_snapshot!(
         "claude_auth_method_choice",
-        render_selection(auth_method_choice_params(), 76)
+        render_selection(auth_method_choice_params(), /*width*/ 76)
     );
 }
 
@@ -167,7 +169,7 @@ fn claude_auth_recovery_snapshot() {
                 "Selected token missing. Restore it or explicitly choose another method."
                     .to_string(),
             ),
-            76,
+            /*width*/ 76,
         )
     );
 }
@@ -730,7 +732,7 @@ async fn claude_status_preserves_custom_oauth_profile_identity() {
     assert!(matches!(
         read_status_with_profile(
             &fake_claude,
-            None,
+            /*config_dir_override*/ None,
             Some(std::ffi::OsStr::new("https://oauth.example.invalid")),
         )
         .await

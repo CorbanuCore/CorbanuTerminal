@@ -53,7 +53,7 @@ fn runtime_refresh_replaces_only_gpu_models() {
 #[test]
 fn resumed_session_recovery_is_consumed_once() {
     let catalog = ModelCatalog::new(Vec::new());
-    catalog.set_session_recovery_only(true);
+    catalog.set_session_recovery_only(/*session_only*/ true);
 
     assert!(catalog.take_session_recovery_only());
     assert!(!catalog.take_session_recovery_only());
@@ -87,7 +87,7 @@ fn configured_runtime_model_is_added_with_exact_provider_identity() {
 fn configured_runtime_model_does_not_duplicate_existing_exact_or_inferred_provider() {
     let mut models = vec![
         preset("custom-model", Some("custom")),
-        preset("gpt-5.6-sol", None),
+        preset("gpt-5.6-sol", /*provider_id*/ None),
     ];
 
     include_runtime_model(&mut models, "custom-model", "custom");

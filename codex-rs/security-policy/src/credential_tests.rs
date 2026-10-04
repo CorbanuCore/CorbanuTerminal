@@ -28,7 +28,7 @@ fn capability_request(
     path: &str,
     revocations: &RevocationState,
 ) -> CredentialCapabilityRequest {
-    let destination = CredentialDestination::https(host, 443).expect("valid destination");
+    let destination = CredentialDestination::https(host, /*port*/ 443).expect("valid destination");
     let credential = CredentialReference::new("provider.openai", scope).expect("valid reference");
     let authorization = AuthorizationRequest::new(
         actors("agent:root"),
@@ -63,8 +63,8 @@ fn capability_request(
             BTreeMap::new(),
         )
         .expect("valid scope"),
-        90,
-        200,
+        /*issued_at_unix_seconds*/ 90,
+        /*expires_at_unix_seconds*/ 200,
         text("credential-grant-nonce"),
     )
     .expect("valid grant");
@@ -75,10 +75,10 @@ fn capability_request(
         method,
         destination,
         path,
-        100,
-        180,
+        /*issued_at_unix_seconds*/ 100,
+        /*expires_at_unix_seconds*/ 180,
         revocations,
-        None,
+        /*triggering_receipt*/ None,
     )
     .expect("valid capability request")
 }
@@ -96,7 +96,8 @@ fn metered_capability_request(
     model: &str,
     revocations: &RevocationState,
 ) -> CredentialCapabilityRequest {
-    let destination = CredentialDestination::https("api.openai.com", 443).expect("destination");
+    let destination =
+        CredentialDestination::https("api.openai.com", /*port*/ 443).expect("destination");
     let credential =
         CredentialReference::new("provider.openai", "responses.create").expect("reference");
     let aggregate = usage_limits(
@@ -117,7 +118,8 @@ fn metered_capability_request(
             operation: credential.scope.clone(),
             destination: Some(destination.authority().expect("authority")),
             quantity: Some(
-                QuantitativeLimit::new("credential.aggregate.requests", 2).expect("quantity"),
+                QuantitativeLimit::new("credential.aggregate.requests", /*max_units*/ 2)
+                    .expect("quantity"),
             ),
             grant_id: None,
         },
@@ -146,8 +148,8 @@ fn metered_capability_request(
             grant_limits,
         )
         .expect("grant scope"),
-        90,
-        200,
+        /*issued_at_unix_seconds*/ 90,
+        /*expires_at_unix_seconds*/ 200,
         text("metered-credential-grant-nonce"),
     )
     .expect("grant");
@@ -158,10 +160,10 @@ fn metered_capability_request(
         CredentialHttpMethod::Post,
         destination,
         "/v1/responses",
-        100,
-        180,
+        /*issued_at_unix_seconds*/ 100,
+        /*expires_at_unix_seconds*/ 180,
         revocations,
-        None,
+        /*triggering_receipt*/ None,
         model,
         per_request,
         aggregate,
@@ -190,7 +192,8 @@ fn credential_request_is_a_complete_secret_free_authority_object() {
             credential: CredentialReference::new("provider.openai", "responses.create")
                 .expect("reference"),
             method: CredentialHttpMethod::Post,
-            destination: CredentialDestination::https("api.openai.com", 443).expect("destination"),
+            destination: CredentialDestination::https("api.openai.com", /*port*/ 443)
+                .expect("destination"),
             path: text("/v1/responses"),
             issued_at_unix_seconds: 100,
             expires_at_unix_seconds: 180,
@@ -307,11 +310,11 @@ fn credential_request_rejects_invalid_authority_and_lifecycle() {
     ));
 
     assert!(matches!(
-        request.validate_at(99, &revocations),
+        request.validate_at(/*now_unix_seconds*/ 99, &revocations),
         Err(CredentialCapabilityError::ExpiredOrNotYetValid)
     ));
     assert!(matches!(
-        request.validate_at(180, &revocations),
+        request.validate_at(/*now_unix_seconds*/ 180, &revocations),
         Err(CredentialCapabilityError::ExpiredOrNotYetValid)
     ));
 }
@@ -333,29 +336,29 @@ fn credential_request_fails_on_revocation_and_generation_change() {
             grant_id: request.grant.grant_id.clone(),
         },
         RevocationReason::HumanRequest,
-        120,
+        /*created_at_unix_seconds*/ 120,
     )
     .expect("valid event");
     revocations.apply(&event).expect("apply revocation");
 
     assert!(matches!(
-        request.validate_at(121, &revocations),
+        request.validate_at(/*now_unix_seconds*/ 121, &revocations),
         Err(CredentialCapabilityError::StaleRevocationGeneration)
     ));
 
     let mut same_generation = request;
     same_generation.revocation_generation = revocations.generation;
     assert!(matches!(
-        same_generation.validate_at(121, &revocations),
+        same_generation.validate_at(/*now_unix_seconds*/ 121, &revocations),
         Err(CredentialCapabilityError::Revoked)
     ));
 }
 
 #[test]
 fn malformed_or_ambiguous_credential_metadata_fails_closed() {
-    assert!(CredentialDestination::https("127.0.0.1", 443).is_err());
-    assert!(CredentialDestination::https("api.openai.com.", 443).is_err());
-    assert!(CredentialDestination::https("user@api.openai.com", 443).is_err());
+    assert!(CredentialDestination::https("127.0.0.1", /*port*/ 443).is_err());
+    assert!(CredentialDestination::https("api.openai.com.", /*port*/ 443).is_err());
+    assert!(CredentialDestination::https("user@api.openai.com", /*port*/ 443).is_err());
     assert!(CredentialReference::new("provider openai", "responses.create").is_err());
 
     let revocations = RevocationState::new();
@@ -456,8 +459,10 @@ fn credential_usage_policy_is_grant_bound_and_digest_sensitive() {
     oversized
         .aggregate_usage_limits
         .insert(text("requests"), 1_025);
-    oversized.authorization.context.quantity =
-        Some(QuantitativeLimit::new("credential.aggregate.requests", 1_025).expect("quantity"));
+    oversized.authorization.context.quantity = Some(
+        QuantitativeLimit::new("credential.aggregate.requests", /*max_units*/ 1_025)
+            .expect("quantity"),
+    );
     let mut oversized_scope = oversized.grant.scope.clone();
     oversized_scope
         .quantitative_limits

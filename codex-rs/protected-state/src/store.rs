@@ -162,7 +162,9 @@ impl ControllerRoot {
             _lock: lock,
             failed: false,
         };
-        state.directory.create("head", &state.encode(None)?)?;
+        state
+            .directory
+            .create("head", &state.encode(/*checkpoint*/ None)?)?;
         state.registry.create(
             "complete",
             &serde_json::to_vec(&state.registration).map_err(|_| RootError::Invalid)?,

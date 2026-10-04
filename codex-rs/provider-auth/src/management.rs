@@ -48,7 +48,7 @@ impl ProviderManagementSession {
                 if matches!(self.phase, ProviderManagementPhase::Browsing) =>
             {
                 let Some(status) = self.status(&provider_id) else {
-                    return self.transition(false, effects, persistence_result);
+                    return self.transition(/*applied*/ false, effects, persistence_result);
                 };
                 let preserve_inactive = status.eligibility == ProviderEligibilityState::Inactive;
                 let attempt_id = self.allocate_attempt();
@@ -70,7 +70,13 @@ impl ProviderManagementSession {
                         preserve_inactive,
                         ..
                     } if *expected == provider_id => *preserve_inactive,
-                    _ => return self.transition(false, effects, persistence_result),
+                    _ => {
+                        return self.transition(
+                            /*applied*/ false,
+                            effects,
+                            persistence_result,
+                        );
+                    }
                 };
                 if preserve_inactive {
                     self.phase = ProviderManagementPhase::Browsing;
@@ -101,7 +107,7 @@ impl ProviderManagementSession {
                         ..
                     } if *expected == provider_id
                 ) {
-                    return self.transition(false, effects, persistence_result);
+                    return self.transition(/*applied*/ false, effects, persistence_result);
                 }
                 self.phase = ProviderManagementPhase::Browsing;
                 effects.push(ProviderManagementEffect::Refresh);
@@ -112,10 +118,10 @@ impl ProviderManagementSession {
                 policy,
             } if matches!(self.phase, ProviderManagementPhase::Browsing) => {
                 let Some(status) = self.status(&provider_id) else {
-                    return self.transition(false, effects, persistence_result);
+                    return self.transition(/*applied*/ false, effects, persistence_result);
                 };
                 if status.configuration != ProviderConfigurationState::Configured {
-                    return self.transition(false, effects, persistence_result);
+                    return self.transition(/*applied*/ false, effects, persistence_result);
                 }
                 match policy {
                     ProviderActivationPolicy::Active
@@ -160,7 +166,7 @@ impl ProviderManagementSession {
                         .status(&replacement.provider_id)
                         .is_some_and(is_usable_replacement)
                 {
-                    return self.transition(false, effects, persistence_result);
+                    return self.transition(/*applied*/ false, effects, persistence_result);
                 }
                 let attempt_id = self.allocate_attempt();
                 let mutation = ProviderManagementMutation::ReplacementThenDeactivate {
@@ -185,7 +191,7 @@ impl ProviderManagementSession {
                         target_provider_id: expected,
                     } if *expected == target_provider_id
                 ) {
-                    return self.transition(false, effects, persistence_result);
+                    return self.transition(/*applied*/ false, effects, persistence_result);
                 }
                 self.phase = ProviderManagementPhase::Browsing;
                 effects.push(ProviderManagementEffect::Refresh);
@@ -199,7 +205,7 @@ impl ProviderManagementSession {
                         ..
                     } if *expected == attempt_id
                 ) {
-                    return self.transition(false, effects, persistence_result);
+                    return self.transition(/*applied*/ false, effects, persistence_result);
                 }
                 self.phase = ProviderManagementPhase::Browsing;
                 persistence_result = Some(result);

@@ -84,7 +84,12 @@ impl Directory {
     /// Walk opened descriptors so checking one ancestor cannot be raced by
     /// changing a later pathname. Test directories deliberately do not use it.
     pub(crate) fn verify_system_path(path: &Path) -> Result<(), RootError> {
-        let mut parent = open_at(libc::AT_FDCWD, "/", libc::O_RDONLY | libc::O_DIRECTORY, 0)?;
+        let mut parent = open_at(
+            libc::AT_FDCWD,
+            "/",
+            libc::O_RDONLY | libc::O_DIRECTORY,
+            /*mode*/ 0,
+        )?;
         for component in path.components() {
             match component {
                 std::path::Component::RootDir => {}
@@ -93,7 +98,7 @@ impl Directory {
                         parent.as_raw_fd(),
                         name.to_str().ok_or(RootError::Invalid)?,
                         libc::O_RDONLY | libc::O_DIRECTORY,
-                        0,
+                        /*mode*/ 0,
                     )?;
                     let metadata = parent.metadata().map_err(|_| RootError::Unavailable)?;
                     if metadata.uid() != 0 || metadata.mode() & 0o022 != 0 {
@@ -114,9 +119,9 @@ impl Directory {
             libc::AT_FDCWD,
             path.to_str().ok_or(RootError::Invalid)?,
             libc::O_RDONLY | libc::O_DIRECTORY,
-            0,
+            /*mode*/ 0,
         )?;
-        private(&file, true)?;
+        private(&file, /*directory*/ true)?;
         let mut stat = std::mem::MaybeUninit::<libc::statfs>::uninit();
         // SAFETY: stat points to writable storage; fstatfs initializes it on success.
         if unsafe { libc::fstatfs(file.as_raw_fd(), stat.as_mut_ptr()) } != 0 {
@@ -137,9 +142,9 @@ impl Directory {
     }
 
     pub(crate) fn read(&self, name: &str) -> Result<Vec<u8>, RootError> {
-        private(&self.file, true)?;
-        let file = open_at(self.file.as_raw_fd(), name, libc::O_RDONLY, 0)?;
-        private(&file, false)?;
+        private(&self.file, /*directory*/ true)?;
+        let file = open_at(self.file.as_raw_fd(), name, libc::O_RDONLY, /*mode*/ 0)?;
+        private(&file, /*directory*/ false)?;
         let mut bytes = Vec::new();
         file.take((MAX_BYTES + 1) as u64)
             .read_to_end(&mut bytes)
@@ -151,7 +156,7 @@ impl Directory {
     }
 
     pub(crate) fn create(&self, name: &str, bytes: &[u8]) -> Result<(), RootError> {
-        private(&self.file, true)?;
+        private(&self.file, /*directory*/ true)?;
         if bytes.len() > MAX_BYTES {
             return Err(RootError::Invalid);
         }
@@ -163,7 +168,7 @@ impl Directory {
             self.file.as_raw_fd(),
             name,
             libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL,
-            0o600,
+            /*mode*/ 0o600,
         )?;
         #[cfg(test)]
         if self.fault.get() == Some(Fault::ShortWrite) {
@@ -181,10 +186,10 @@ impl Directory {
     }
 
     pub(crate) fn lock(&self) -> Result<File, RootError> {
-        private(&self.file, true)?;
+        private(&self.file, /*directory*/ true)?;
         // The inode is enrolled once and never replaced or recreated by open.
-        let file = open_at(self.file.as_raw_fd(), "lock", libc::O_RDWR, 0)?;
-        private(&file, false)?;
+        let file = open_at(self.file.as_raw_fd(), "lock", libc::O_RDWR, /*mode*/ 0)?;
+        private(&file, /*directory*/ false)?;
         // SAFETY: flock acts only on the owned descriptor.
         if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
             return Err(RootError::Conflict);
@@ -193,7 +198,7 @@ impl Directory {
     }
 
     pub(crate) fn publish(&self) -> Result<(), RootError> {
-        private(&self.file, true)?;
+        private(&self.file, /*directory*/ true)?;
         // SAFETY: static NUL-terminated names and live directory descriptor.
         if unsafe {
             libc::renameat(
@@ -219,7 +224,7 @@ impl Directory {
     }
 
     pub(crate) fn has_pending(&self) -> Result<bool, RootError> {
-        private(&self.file, true)?;
+        private(&self.file, /*directory*/ true)?;
         let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY: valid descriptor, static name and writable stat storage.
         let result = unsafe {

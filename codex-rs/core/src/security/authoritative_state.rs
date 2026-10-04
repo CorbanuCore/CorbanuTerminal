@@ -349,7 +349,7 @@ impl AuthoritativeStateStore {
                         if metadata.file_type().is_symlink() {
                             return Err(AuthoritativeStateStoreError::SymlinkRejected { path });
                         }
-                        validate_private_metadata(&path, &metadata, false)?;
+                        validate_private_metadata(&path, &metadata, /*directory*/ false)?;
                         fs::remove_file(&path).map_err(|source| {
                             io_error("discard unanchored record", &path, source)
                         })?;

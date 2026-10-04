@@ -1,6 +1,6 @@
 //! Dedicated post-exec bootstrap only: never call KernelOps in a test runner.
 use super::hardening;
-use codex_secret_broker_service::SyntheticChildIdentity;
+use codex_secret_broker_fixture::SyntheticChildIdentity;
 use nix::sys::prctl;
 use nix::unistd::Gid;
 use nix::unistd::Uid;

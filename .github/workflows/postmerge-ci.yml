@@ -17,6 +17,13 @@ jobs:
   v8-canary:
     name: v8-canary
     uses: ./.github/workflows/v8-canary.yml
+    # A called workflow cannot request more token scope than its caller. The
+    # repository default token is read-only (no `actions`), and v8-canary's
+    # build job asks for `actions: read`, so grant it here or the whole run
+    # fails at startup.
+    permissions:
+      contents: read
+      actions: read
     secrets: inherit
 
   results:

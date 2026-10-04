@@ -132,7 +132,7 @@ fn request(
     label: &str,
     revocations: &RevocationState,
 ) -> CredentialCapabilityRequest {
-    let destination = CredentialDestination::https(host, 443).expect("destination");
+    let destination = CredentialDestination::https(host, /*port*/ 443).expect("destination");
     let credential = CredentialReference::new(label, scope).expect("reference");
     let authorization = AuthorizationRequest::new(
         actors(agent_id),
@@ -166,8 +166,8 @@ fn request(
             BTreeMap::new(),
         )
         .expect("grant scope"),
-        90,
-        200,
+        /*issued_at_unix_seconds*/ 90,
+        /*expires_at_unix_seconds*/ 200,
         text("credential-grant-nonce"),
     )
     .expect("grant");
@@ -178,10 +178,10 @@ fn request(
         method,
         destination,
         path,
-        100,
-        180,
+        /*issued_at_unix_seconds*/ 100,
+        /*expires_at_unix_seconds*/ 180,
         revocations,
-        None,
+        /*triggering_receipt*/ None,
     )
     .expect("capability request")
 }
@@ -215,7 +215,7 @@ fn metered_request(
     aggregate: CredentialUsage,
     revocations: &RevocationState,
 ) -> CredentialCapabilityRequest {
-    let destination = CredentialDestination::https(host, 443).expect("destination");
+    let destination = CredentialDestination::https(host, /*port*/ 443).expect("destination");
     let credential = CredentialReference::new(label, scope).expect("reference");
     let authorization = AuthorizationRequest::new(
         actors(agent_id),
@@ -272,8 +272,8 @@ fn metered_request(
             grant_limits,
         )
         .expect("grant scope"),
-        90,
-        200,
+        /*issued_at_unix_seconds*/ 90,
+        /*expires_at_unix_seconds*/ 200,
         text("metered-credential-grant-nonce"),
     )
     .expect("grant");
@@ -284,10 +284,10 @@ fn metered_request(
         CredentialHttpMethod::Post,
         destination,
         path,
-        100,
-        180,
+        /*issued_at_unix_seconds*/ 100,
+        /*expires_at_unix_seconds*/ 180,
         revocations,
-        None,
+        /*triggering_receipt*/ None,
         model,
         per_request_limits,
         aggregate_limits,
@@ -304,10 +304,12 @@ fn standard_metered_request(revocations: &RevocationState) -> CredentialCapabili
         "/v1/responses",
         "provider.openai",
         usage(
-            /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+            /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000,
+            /*spend_microunits*/ 100,
         ),
         usage(
-            /*requests*/ 2, /*tokens*/ 150, /*bytes*/ 1_500, /*spend*/ 150,
+            /*requests*/ 2, /*tokens*/ 150, /*bytes*/ 1_500,
+            /*spend_microunits*/ 150,
         ),
         revocations,
     )
@@ -342,8 +344,8 @@ fn assert_canary_absent(surface: &str, value: &[u8], canary: &str) {
 #[test]
 fn issued_capability_is_consumed_only_for_the_complete_bound_request() {
     let revocations = RevocationState::new();
-    let clock = TestClock::new(100);
-    let store = store(4, clock);
+    let clock = TestClock::new(/*now*/ 100);
+    let store = store(/*capacity*/ 4, clock);
     let request = standard_request(&revocations);
     let capability = store
         .issue(request.clone(), &revocations)
@@ -380,7 +382,7 @@ fn issued_capability_is_consumed_only_for_the_complete_bound_request() {
 fn concurrent_duplicate_consumption_allows_exactly_one_use() {
     let revocations = Arc::new(RevocationState::new());
     let request = Arc::new(standard_request(&revocations));
-    let store = Arc::new(store(4, TestClock::new(100)));
+    let store = Arc::new(store(/*capacity*/ 4, TestClock::new(/*now*/ 100)));
     let capability = Arc::new(
         store
             .issue(request.as_ref().clone(), &revocations)
@@ -416,11 +418,11 @@ fn concurrent_duplicate_consumption_allows_exactly_one_use() {
 fn capability_authority_does_not_survive_runtime_restart() {
     let revocations = RevocationState::new();
     let request = standard_request(&revocations);
-    let original_store = store(4, TestClock::new(100));
+    let original_store = store(/*capacity*/ 4, TestClock::new(/*now*/ 100));
     let capability = original_store
         .issue(request.clone(), &revocations)
         .expect("issue capability");
-    let restarted_store = store(4, TestClock::new(100));
+    let restarted_store = store(/*capacity*/ 4, TestClock::new(/*now*/ 100));
 
     assert!(matches!(
         restarted_store.consume(&capability, &request, &revocations),
@@ -433,7 +435,7 @@ fn capability_authority_does_not_survive_runtime_restart() {
 #[test]
 fn adjacent_actor_purpose_operation_method_host_path_and_scope_fail() {
     let revocations = RevocationState::new();
-    let store = store(8, TestClock::new(100));
+    let store = store(/*capacity*/ 8, TestClock::new(/*now*/ 100));
     let original = standard_request(&revocations);
     let capability = store
         .issue(original, &revocations)
@@ -522,7 +524,7 @@ fn adjacent_actor_purpose_operation_method_host_path_and_scope_fail() {
 #[test]
 fn forged_bearer_and_public_id_alone_cannot_authorize() {
     let revocations = RevocationState::new();
-    let store = store(4, TestClock::new(100));
+    let store = store(/*capacity*/ 4, TestClock::new(/*now*/ 100));
     let request = standard_request(&revocations);
     let issued = store
         .issue(request.clone(), &revocations)
@@ -543,19 +545,19 @@ fn forged_bearer_and_public_id_alone_cannot_authorize() {
 #[test]
 fn expiry_and_revocation_remove_authority_before_reuse() {
     let mut revocations = RevocationState::new();
-    let clock = TestClock::new(100);
-    let store = store(4, clock.clone());
+    let clock = TestClock::new(/*now*/ 100);
+    let store = store(/*capacity*/ 4, clock.clone());
     let request = standard_request(&revocations);
     let capability = store
         .issue(request.clone(), &revocations)
         .expect("issue capability");
 
-    clock.set(180);
+    clock.set(/*now*/ 180);
     assert!(store.consume(&capability, &request, &revocations).is_err());
     assert_eq!(store.purge(&revocations).expect("purge expired"), 1);
     assert_eq!(store.len().expect("length"), 0);
 
-    clock.set(100);
+    clock.set(/*now*/ 100);
     let request = standard_request(&revocations);
     let capability = store
         .issue(request.clone(), &revocations)
@@ -566,11 +568,11 @@ fn expiry_and_revocation_remove_authority_before_reuse() {
             grant_id: request.grant.grant_id.clone(),
         },
         RevocationReason::HumanRequest,
-        110,
+        /*created_at_unix_seconds*/ 110,
     )
     .expect("revocation");
     revocations.apply(&event).expect("apply");
-    clock.set(111);
+    clock.set(/*now*/ 111);
     assert!(store.consume(&capability, &request, &revocations).is_err());
     assert_eq!(store.purge(&revocations).expect("purge revoked"), 1);
 }
@@ -578,8 +580,8 @@ fn expiry_and_revocation_remove_authority_before_reuse() {
 #[test]
 fn capacity_is_hard_bounded_and_cleanup_reclaims_space() {
     let revocations = RevocationState::new();
-    let clock = TestClock::new(100);
-    let store = store(1, clock.clone());
+    let clock = TestClock::new(/*now*/ 100);
+    let store = store(/*capacity*/ 1, clock.clone());
     let request = standard_request(&revocations);
     let _capability = store
         .issue(request.clone(), &revocations)
@@ -589,20 +591,20 @@ fn capacity_is_hard_bounded_and_cleanup_reclaims_space() {
         Err(CredentialCapabilityStoreError::CapacityReached { capacity: 1 })
     ));
 
-    clock.set(180);
+    clock.set(/*now*/ 180);
     assert_eq!(store.purge(&revocations).expect("purge"), 1);
-    clock.set(100);
+    clock.set(/*now*/ 100);
     store
         .issue(request, &revocations)
         .expect("capacity reclaimed");
-    assert!(CredentialCapabilityStore::new(0).is_err());
+    assert!(CredentialCapabilityStore::new(/*capacity*/ 0).is_err());
     assert!(CredentialCapabilityStore::new(MAX_CREDENTIAL_CAPABILITIES + 1).is_err());
 }
 
 #[test]
 fn concurrent_issuance_never_aliases_capability_ids() {
     let revocations = Arc::new(RevocationState::new());
-    let store = Arc::new(store(32, TestClock::new(100)));
+    let store = Arc::new(store(/*capacity*/ 32, TestClock::new(/*now*/ 100)));
     let mut workers = Vec::new();
     for _ in 0..32 {
         let store = Arc::clone(&store);
@@ -628,9 +630,9 @@ fn concurrent_issuance_never_aliases_capability_ids() {
 #[test]
 fn clock_entropy_collision_and_lock_failures_are_fail_closed() {
     let revocations = RevocationState::new();
-    let clock = TestClock::new(100);
+    let clock = TestClock::new(/*now*/ 100);
     clock.fail.store(true, Ordering::SeqCst);
-    let failing_clock_store = store(1, clock);
+    let failing_clock_store = store(/*capacity*/ 1, clock);
     assert!(matches!(
         failing_clock_store.issue(standard_request(&revocations), &revocations),
         Err(CredentialCapabilityStoreError::ClockOverflow)
@@ -638,8 +640,12 @@ fn clock_entropy_collision_and_lock_failures_are_fail_closed() {
 
     let entropy = CounterEntropy::default();
     entropy.fail.store(true, Ordering::SeqCst);
-    let failing_entropy_store =
-        CredentialCapabilityStore::with_sources(1, TestClock::new(100), entropy).expect("store");
+    let failing_entropy_store = CredentialCapabilityStore::with_sources(
+        /*capacity*/ 1,
+        TestClock::new(/*now*/ 100),
+        entropy,
+    )
+    .expect("store");
     assert!(matches!(
         failing_entropy_store.issue(standard_request(&revocations), &revocations),
         Err(CredentialCapabilityStoreError::EntropyUnavailable)
@@ -647,9 +653,12 @@ fn clock_entropy_collision_and_lock_failures_are_fail_closed() {
 
     let collision_entropy = CounterEntropy::default();
     collision_entropy.constant.store(true, Ordering::SeqCst);
-    let collision_store =
-        CredentialCapabilityStore::with_sources(2, TestClock::new(100), collision_entropy)
-            .expect("store");
+    let collision_store = CredentialCapabilityStore::with_sources(
+        /*capacity*/ 2,
+        TestClock::new(/*now*/ 100),
+        collision_entropy,
+    )
+    .expect("store");
     collision_store
         .issue(standard_request(&revocations), &revocations)
         .expect("first issue");
@@ -658,7 +667,7 @@ fn clock_entropy_collision_and_lock_failures_are_fail_closed() {
         Err(CredentialCapabilityStoreError::TokenCollision)
     ));
 
-    let poisoned = store(1, TestClock::new(100));
+    let poisoned = store(/*capacity*/ 1, TestClock::new(/*now*/ 100));
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let _guard = poisoned.entries.write().expect("lock");
         panic!("poison credential store");
@@ -672,7 +681,7 @@ fn clock_entropy_collision_and_lock_failures_are_fail_closed() {
 #[test]
 fn usage_reservation_enforces_limits_and_retry_cannot_reset_spent_authority() {
     let revocations = RevocationState::new();
-    let store = store(4, TestClock::new(100));
+    let store = store(/*capacity*/ 4, TestClock::new(/*now*/ 100));
     let request = standard_metered_request(&revocations);
     let capability = store
         .issue(request.clone(), &revocations)
@@ -687,7 +696,8 @@ fn usage_reservation_enforces_limits_and_retry_cannot_reset_spent_authority() {
             &capability,
             &request,
             usage(
-                /*requests*/ 1, /*tokens*/ 101, /*bytes*/ 1_000, /*spend*/ 100
+                /*requests*/ 1, /*tokens*/ 101, /*bytes*/ 1_000,
+                /*spend_microunits*/ 100
             ),
             &revocations,
         ),
@@ -699,7 +709,8 @@ fn usage_reservation_enforces_limits_and_retry_cannot_reset_spent_authority() {
             &capability,
             &request,
             usage(
-                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000,
+                /*spend_microunits*/ 100,
             ),
             &revocations,
         )
@@ -708,7 +719,8 @@ fn usage_reservation_enforces_limits_and_retry_cannot_reset_spent_authority() {
         .settle(
             &first,
             TrustedCredentialMetering::partial(usage(
-                /*requests*/ 1, /*tokens*/ 60, /*bytes*/ 600, /*spend*/ 60,
+                /*requests*/ 1, /*tokens*/ 60, /*bytes*/ 600,
+                /*spend_microunits*/ 60,
             )),
             &revocations,
         )
@@ -717,7 +729,8 @@ fn usage_reservation_enforces_limits_and_retry_cannot_reset_spent_authority() {
     assert_eq!(
         first_settlement.charged,
         usage(
-            /*requests*/ 1, /*tokens*/ 60, /*bytes*/ 600, /*spend*/ 60
+            /*requests*/ 1, /*tokens*/ 60, /*bytes*/ 600,
+            /*spend_microunits*/ 60
         )
     );
 
@@ -726,7 +739,8 @@ fn usage_reservation_enforces_limits_and_retry_cannot_reset_spent_authority() {
             &capability,
             &request,
             usage(
-                /*requests*/ 1, /*tokens*/ 90, /*bytes*/ 900, /*spend*/ 90,
+                /*requests*/ 1, /*tokens*/ 90, /*bytes*/ 900,
+                /*spend_microunits*/ 90,
             ),
             &revocations,
         )
@@ -736,7 +750,8 @@ fn usage_reservation_enforces_limits_and_retry_cannot_reset_spent_authority() {
             &capability,
             &request,
             usage(
-                /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1, /*spend*/ 1
+                /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1,
+                /*spend_microunits*/ 1
             ),
             &revocations,
         ),
@@ -748,7 +763,7 @@ fn usage_reservation_enforces_limits_and_retry_cannot_reset_spent_authority() {
     assert_eq!(
         cancellation.charged,
         usage(
-            /*requests*/ 1, /*tokens*/ 0, /*bytes*/ 0, /*spend*/ 0
+            /*requests*/ 1, /*tokens*/ 0, /*bytes*/ 0, /*spend_microunits*/ 0
         )
     );
     assert_eq!(
@@ -762,7 +777,8 @@ fn usage_reservation_enforces_limits_and_retry_cannot_reset_spent_authority() {
             &capability,
             &request,
             usage(
-                /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1, /*spend*/ 1
+                /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1,
+                /*spend_microunits*/ 1
             ),
             &revocations,
         ),
@@ -781,14 +797,16 @@ fn concurrent_usage_reservations_cannot_overcommit() {
         "/v1/responses",
         "provider.openai",
         usage(
-            /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+            /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000,
+            /*spend_microunits*/ 100,
         ),
         usage(
-            /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+            /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000,
+            /*spend_microunits*/ 100,
         ),
         &revocations,
     ));
-    let store = Arc::new(store(4, TestClock::new(100)));
+    let store = Arc::new(store(/*capacity*/ 4, TestClock::new(/*now*/ 100)));
     let capability = Arc::new(
         store
             .issue(request.as_ref().clone(), &revocations)
@@ -810,7 +828,7 @@ fn concurrent_usage_reservations_cannot_overcommit() {
                     &request,
                     usage(
                         /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000,
-                        /*spend*/ 100,
+                        /*spend_microunits*/ 100,
                     ),
                     &revocations,
                 )
@@ -830,7 +848,7 @@ fn concurrent_usage_reservations_cannot_overcommit() {
 #[test]
 fn trusted_settlement_rejects_forgery_and_unknown_usage_charges_the_full_reservation() {
     let revocations = RevocationState::new();
-    let store = store(4, TestClock::new(100));
+    let store = store(/*capacity*/ 4, TestClock::new(/*now*/ 100));
     let request = standard_metered_request(&revocations);
     let capability = store
         .issue(request.clone(), &revocations)
@@ -840,7 +858,8 @@ fn trusted_settlement_rejects_forgery_and_unknown_usage_charges_the_full_reserva
             &capability,
             &request,
             usage(
-                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000,
+                /*spend_microunits*/ 100,
             ),
             &revocations,
         )
@@ -868,7 +887,8 @@ fn trusted_settlement_rejects_forgery_and_unknown_usage_charges_the_full_reserva
         store.settle(
             &reservation,
             TrustedCredentialMetering::completed(usage(
-                /*requests*/ 1, /*tokens*/ 101, /*bytes*/ 1_000, /*spend*/ 100,
+                /*requests*/ 1, /*tokens*/ 101, /*bytes*/ 1_000,
+                /*spend_microunits*/ 100,
             )),
             &revocations,
         ),
@@ -902,7 +922,7 @@ fn trusted_settlement_rejects_forgery_and_unknown_usage_charges_the_full_reserva
 #[test]
 fn cancellation_after_dispatch_charges_the_full_reservation() {
     let revocations = RevocationState::new();
-    let store = store(4, TestClock::new(100));
+    let store = store(/*capacity*/ 4, TestClock::new(/*now*/ 100));
     let request = standard_metered_request(&revocations);
     let capability = store
         .issue(request.clone(), &revocations)
@@ -912,7 +932,8 @@ fn cancellation_after_dispatch_charges_the_full_reservation() {
             &capability,
             &request,
             usage(
-                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000,
+                /*spend_microunits*/ 100,
             ),
             &revocations,
         )
@@ -936,7 +957,7 @@ fn cancellation_after_dispatch_charges_the_full_reservation() {
 #[test]
 fn settled_history_does_not_consume_active_reservation_capacity() {
     let revocations = RevocationState::new();
-    let store = store(4, TestClock::new(100));
+    let store = store(/*capacity*/ 4, TestClock::new(/*now*/ 100));
     let request = standard_metered_request(&revocations);
     let capability = store
         .issue(request.clone(), &revocations)
@@ -950,7 +971,8 @@ fn settled_history_does_not_consume_active_reservation_capacity() {
             let reservation_id =
                 CapabilityId::from_sha256_hex(format!("{index:064x}")).expect("synthetic id");
             let reserved = usage(
-                /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1, /*spend*/ 1,
+                /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1,
+                /*spend_microunits*/ 1,
             );
             stored.reservations.insert(
                 reservation_id.clone(),
@@ -972,7 +994,8 @@ fn settled_history_does_not_consume_active_reservation_capacity() {
             &capability,
             &request,
             usage(
-                /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1, /*spend*/ 1,
+                /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1,
+                /*spend_microunits*/ 1,
             ),
             &revocations,
         )
@@ -982,8 +1005,8 @@ fn settled_history_does_not_consume_active_reservation_capacity() {
 #[test]
 fn metered_authority_binds_operation_model_resource_and_settles_after_revocation() {
     let mut revocations = RevocationState::new();
-    let clock = TestClock::new(100);
-    let store = store(4, clock.clone());
+    let clock = TestClock::new(/*now*/ 100);
+    let store = store(/*capacity*/ 4, clock.clone());
     let request = standard_metered_request(&revocations);
     let capability = store
         .issue(request.clone(), &revocations)
@@ -997,10 +1020,12 @@ fn metered_authority_binds_operation_model_resource_and_settles_after_revocation
             "/v1/responses",
             "provider.openai",
             usage(
-                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000,
+                /*spend_microunits*/ 100,
             ),
             usage(
-                /*requests*/ 2, /*tokens*/ 150, /*bytes*/ 1_500, /*spend*/ 150,
+                /*requests*/ 2, /*tokens*/ 150, /*bytes*/ 1_500,
+                /*spend_microunits*/ 150,
             ),
             &revocations,
         ),
@@ -1012,10 +1037,12 @@ fn metered_authority_binds_operation_model_resource_and_settles_after_revocation
             "/v1/responses",
             "provider.openai",
             usage(
-                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000,
+                /*spend_microunits*/ 100,
             ),
             usage(
-                /*requests*/ 2, /*tokens*/ 150, /*bytes*/ 1_500, /*spend*/ 150,
+                /*requests*/ 2, /*tokens*/ 150, /*bytes*/ 1_500,
+                /*spend_microunits*/ 150,
             ),
             &revocations,
         ),
@@ -1027,10 +1054,12 @@ fn metered_authority_binds_operation_model_resource_and_settles_after_revocation
             "/v1/responses",
             "provider.backup",
             usage(
-                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000,
+                /*spend_microunits*/ 100,
             ),
             usage(
-                /*requests*/ 2, /*tokens*/ 150, /*bytes*/ 1_500, /*spend*/ 150,
+                /*requests*/ 2, /*tokens*/ 150, /*bytes*/ 1_500,
+                /*spend_microunits*/ 150,
             ),
             &revocations,
         ),
@@ -1041,7 +1070,8 @@ fn metered_authority_binds_operation_model_resource_and_settles_after_revocation
                 &capability,
                 &variant,
                 usage(
-                    /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1, /*spend*/ 1
+                    /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1,
+                    /*spend_microunits*/ 1
                 ),
                 &revocations,
             ),
@@ -1054,7 +1084,8 @@ fn metered_authority_binds_operation_model_resource_and_settles_after_revocation
             &capability,
             &request,
             usage(
-                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000,
+                /*spend_microunits*/ 100,
             ),
             &revocations,
         )
@@ -1067,19 +1098,20 @@ fn metered_authority_binds_operation_model_resource_and_settles_after_revocation
                     grant_id: request.grant.grant_id.clone(),
                 },
                 RevocationReason::HumanRequest,
-                110,
+                /*created_at_unix_seconds*/ 110,
             )
             .expect("revocation event"),
         )
         .expect("apply revocation");
-    clock.set(111);
+    clock.set(/*now*/ 111);
     assert!(
         store
             .reserve(
                 &capability,
                 &request,
                 usage(
-                    /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1, /*spend*/ 1
+                    /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1,
+                    /*spend_microunits*/ 1
                 ),
                 &revocations,
             )
@@ -1103,8 +1135,8 @@ fn metered_authority_binds_operation_model_resource_and_settles_after_revocation
 #[test]
 fn abandoned_reservation_is_force_charged_unknown_and_reclaimed_at_expiry() {
     let revocations = RevocationState::new();
-    let clock = TestClock::new(100);
-    let store = store(4, clock.clone());
+    let clock = TestClock::new(/*now*/ 100);
+    let store = store(/*capacity*/ 4, clock.clone());
     let request = standard_metered_request(&revocations);
     let capability = store
         .issue(request.clone(), &revocations)
@@ -1114,7 +1146,8 @@ fn abandoned_reservation_is_force_charged_unknown_and_reclaimed_at_expiry() {
             &capability,
             &request,
             usage(
-                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000,
+                /*spend_microunits*/ 100,
             ),
             &revocations,
         )
@@ -1135,7 +1168,7 @@ fn abandoned_reservation_is_force_charged_unknown_and_reclaimed_at_expiry() {
         assert_eq!(settlement.outcome, CredentialUsageOutcome::Unknown);
         assert_eq!(settlement.charged, reservation.reserved());
     }
-    clock.set(180);
+    clock.set(/*now*/ 180);
     assert_eq!(store.purge(&revocations).expect("reclaim expired"), 1);
     assert_eq!(store.len().expect("empty store"), 0);
     assert!(matches!(
@@ -1147,10 +1180,13 @@ fn abandoned_reservation_is_force_charged_unknown_and_reclaimed_at_expiry() {
         Err(CredentialCapabilityStoreError::UnknownCapability)
     ));
 
-    let late_clock = TestClock::new(100);
-    let late_store =
-        CredentialCapabilityStore::with_sources(4, late_clock.clone(), CounterEntropy::default())
-            .expect("late-settlement store");
+    let late_clock = TestClock::new(/*now*/ 100);
+    let late_store = CredentialCapabilityStore::with_sources(
+        /*capacity*/ 4,
+        late_clock.clone(),
+        CounterEntropy::default(),
+    )
+    .expect("late-settlement store");
     let late_request = standard_metered_request(&revocations);
     let late_capability = late_store
         .issue(late_request.clone(), &revocations)
@@ -1160,12 +1196,13 @@ fn abandoned_reservation_is_force_charged_unknown_and_reclaimed_at_expiry() {
             &late_capability,
             &late_request,
             usage(
-                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000,
+                /*spend_microunits*/ 100,
             ),
             &revocations,
         )
         .expect("reserve late-settlement usage");
-    late_clock.set(180);
+    late_clock.set(/*now*/ 180);
     assert!(matches!(
         late_store.settle(
             &late_reservation,
@@ -1183,8 +1220,8 @@ fn credential_authority_unique_canary_is_confined_to_one_outgoing_request() {
     let canary = format!("sk-pf13-{}", Uuid::new_v4());
     let canary_sha256 = sha256_hex(canary.as_bytes());
     let revocations = RevocationState::new();
-    let clock = TestClock::new(100);
-    let store = store(4, clock.clone());
+    let clock = TestClock::new(/*now*/ 100);
+    let store = store(/*capacity*/ 4, clock.clone());
     let request = standard_request(&revocations);
     let model_context = serde_json::to_string(&request).expect("serialize authority");
     let capability = store
@@ -1232,9 +1269,12 @@ fn credential_authority_unique_canary_is_confined_to_one_outgoing_request() {
         .into_vault_ref()
         .expect("crash vault reference");
     let crash_error = vault
-        .with_scoped_credential(&crash_reference, 100, &revocations, |secret| {
-            panic!("credential canary callback crash: {secret}")
-        })
+        .with_scoped_credential(
+            &crash_reference,
+            /*now_unix_seconds*/ 100,
+            &revocations,
+            |secret| panic!("credential canary callback crash: {secret}"),
+        )
         .expect_err("callback panic must be contained");
     assert_eq!(
         crash_error,
@@ -1250,7 +1290,7 @@ fn credential_authority_unique_canary_is_confined_to_one_outgoing_request() {
     config.set_credential_broker_enabled(/*enabled*/ true);
     let spec = NetworkProxySpec::from_config_and_constraints(
         config,
-        None,
+        /*requirements*/ None,
         &PermissionProfile::workspace_write(),
     )
     .expect("network proxy spec");
@@ -1285,7 +1325,7 @@ fn credential_authority_unique_canary_is_confined_to_one_outgoing_request() {
         .inject_request_credentials(
             "https",
             "api.openai.com",
-            443,
+            /*port*/ 443,
             "POST",
             "/v1/responses",
             &mut headers,
@@ -1308,7 +1348,7 @@ fn credential_authority_unique_canary_is_confined_to_one_outgoing_request() {
         .inject_request_credentials(
             "https",
             "api.openai.com",
-            443,
+            /*port*/ 443,
             "POST",
             "/v1/responses",
             &mut replay_headers,
@@ -1381,8 +1421,8 @@ fn credential_authority_unique_canary_is_confined_to_one_outgoing_request() {
 #[traced_test]
 fn credential_authority_revocation_before_resolve_denies_without_vault_access() {
     let initial_revocations = RevocationState::new();
-    let clock = TestClock::new(100);
-    let store = store(4, clock.clone());
+    let clock = TestClock::new(/*now*/ 100);
+    let store = store(/*capacity*/ 4, clock.clone());
     let request = standard_request(&initial_revocations);
     let capability = store
         .issue(request.clone(), &initial_revocations)
@@ -1402,12 +1442,12 @@ fn credential_authority_revocation_before_resolve_denies_without_vault_access() 
                     grant_id: request.grant.grant_id,
                 },
                 RevocationReason::HumanRequest,
-                101,
+                /*created_at_unix_seconds*/ 101,
             )
             .expect("revocation event"),
         )
         .expect("apply revocation");
-    clock.set(102);
+    clock.set(/*now*/ 102);
 
     let directory = tempfile::tempdir().expect("vault directory");
     let vault = Arc::new(Vault::new_with_keyring_store(
@@ -1422,7 +1462,7 @@ fn credential_authority_revocation_before_resolve_denies_without_vault_access() 
     config.set_credential_broker_enabled(/*enabled*/ true);
     let spec = NetworkProxySpec::from_config_and_constraints(
         config,
-        None,
+        /*requirements*/ None,
         &PermissionProfile::workspace_write(),
     )
     .expect("network proxy spec");
@@ -1450,7 +1490,7 @@ fn credential_authority_revocation_before_resolve_denies_without_vault_access() 
             .inject_request_credentials(
                 "https",
                 "api.openai.com",
-                443,
+                /*port*/ 443,
                 "POST",
                 "/v1/responses",
                 &mut headers,

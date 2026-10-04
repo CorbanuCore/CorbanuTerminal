@@ -338,7 +338,7 @@ mod tests {
         });
         let response = Client::anonymous(&origin)
             .unwrap()
-            .request_blocking(Method::GET, "/api/test", None)
+            .request_blocking(Method::GET, "/api/test", /*body*/ None)
             .unwrap();
         assert_eq!(response.status, 302);
         assert!(!response.is_ok());

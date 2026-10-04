@@ -23,16 +23,16 @@ run() {
         return "$result"
     fi
 }
-run fix just fix -p codex-secret-broker-service --features synthetic-fixture
+run fix just fix -p codex-secret-broker-service -p codex-secret-broker-fixture
 run fmt just fmt
 run clippy-default just clippy -p codex-secret-broker-service
-run clippy-fixture just clippy -p codex-secret-broker-service --features synthetic-fixture
+run clippy-fixture just clippy -p codex-secret-broker-service -p codex-secret-broker-fixture
 run bazel-lock just bazel-lock-update
 bazel shutdown > "$evidence/bazel-shutdown.log" 2>&1 || true
 run default just test -p codex-secret-broker-service --retries 0 --test-threads 4
-run fixture just test -p codex-secret-broker-service --features synthetic-fixture --retries 0 --test-threads 4
+run fixture just test -p codex-secret-broker-service -p codex-secret-broker-fixture --retries 0 --test-threads 4
 run affected just test -p codex-secret-broker -p codex-vault -p codex-network-proxy --retries 0 --test-threads 4
-run build bash -c 'cd codex-rs && cargo build --locked -p codex-secret-broker-service --features synthetic-fixture'
+run build bash -c 'cd codex-rs && cargo build --locked -p codex-secret-broker-service -p codex-secret-broker-fixture'
 mkdir -p "$evidence/candidate"
 cp "$CARGO_TARGET_DIR/debug/codex-secret-broker-service" "$evidence/candidate/"
 cp "$CARGO_TARGET_DIR/debug/codex-secret-broker-service-fixture" "$evidence/candidate/"

@@ -53,18 +53,18 @@ async fn report_menu_and_failure_offer_refresh() {
     chat.show_selection_view(team_context_params(Ok(report())));
     insta::assert_snapshot!(
         "team_context_menu",
-        crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 84)
+        crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 84)
     );
     chat.show_or_replace_tasknode_selection(VIEW_ID, || {
         team_context_params(Err("Service temporarily unavailable".to_string()))
     });
-    let screen = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 84);
+    let screen = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 84);
     insta::assert_snapshot!("team_context_failure", screen);
     assert!(!screen.contains("Read full report"));
     assert_eq!(chat.bottom_pane.active_view_id(), Some(VIEW_ID));
     assert!(!chat.tasknode_response_is_current(
         &codex_tasknode_session::SessionScope::for_profile("other-account"),
-        None,
+        /*identity*/ None,
         Some(VIEW_ID)
     ));
 }

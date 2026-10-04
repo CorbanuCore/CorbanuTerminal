@@ -34,16 +34,16 @@ fn transition_contract_freezes_cancel_commit_timeout_and_enclosing_redaction() {
         transition(
             ProviderAuthFlowSnapshot::Settling {
                 flow,
-                attempt_id: attempt(1)
+                attempt_id: attempt(/*id*/ 1)
             },
             vec![
                 ProviderAuthEffect::PersistApiKey {
-                    attempt_id: attempt(1),
+                    attempt_id: attempt(/*id*/ 1),
                     target,
                     secret: ApiKeySecret::new("canary-secret"),
                 },
                 ProviderAuthEffect::ScheduleTimeout {
-                    attempt_id: attempt(1),
+                    attempt_id: attempt(/*id*/ 1),
                     timeout: Duration::from_secs(120),
                 },
             ],
@@ -115,16 +115,16 @@ fn stored_result_reconciles_to_metadata_only_completion() {
     let mut controller = submitted(target.clone());
     assert_eq!(
         controller.dispatch(ProviderAuthAction::PersistenceFinished {
-            attempt_id: attempt(1),
+            attempt_id: attempt(/*id*/ 1),
             result: ApiKeyPersistenceResult::Stored,
         }),
         transition(
             ProviderAuthFlowSnapshot::Reconciling {
                 flow: flow(target.clone(), ApiKeyFlowIntent::Add),
-                attempt_id: attempt(1),
+                attempt_id: attempt(/*id*/ 1),
             },
             vec![ProviderAuthEffect::RefreshProviderStatus {
-                attempt_id: attempt(1),
+                attempt_id: attempt(/*id*/ 1),
                 target: target.clone(),
             }],
             ProviderAuthDisposition::Applied,
@@ -133,7 +133,7 @@ fn stored_result_reconciles_to_metadata_only_completion() {
     let status = status(&target, ProviderConfigurationState::Configured);
     assert_eq!(
         controller.dispatch(ProviderAuthAction::StatusResolved {
-            attempt_id: attempt(1),
+            attempt_id: attempt(/*id*/ 1),
             status: status.clone(),
         }),
         transition(
@@ -154,22 +154,22 @@ fn timeout_nonconfigured_metadata_stays_unknown_until_late_stored_settlement() {
     let target = target();
     let unknown = ProviderAuthFlowSnapshot::OutcomeUnknown {
         flow: flow(target.clone(), ApiKeyFlowIntent::Add),
-        attempt_id: attempt(1),
+        attempt_id: attempt(/*id*/ 1),
     };
     let mut controller = submitted(target.clone());
     assert_eq!(
         controller.dispatch(ProviderAuthAction::TimeoutElapsed {
-            attempt_id: attempt(1)
+            attempt_id: attempt(/*id*/ 1)
         }),
         transition(
             unknown.clone(),
             vec![
                 ProviderAuthEffect::RefreshProviderStatus {
-                    attempt_id: attempt(1),
+                    attempt_id: attempt(/*id*/ 1),
                     target: target.clone(),
                 },
                 ProviderAuthEffect::ScheduleTimeout {
-                    attempt_id: attempt(1),
+                    attempt_id: attempt(/*id*/ 1),
                     timeout: API_KEY_AUTH_TIMEOUT,
                 },
             ],
@@ -185,7 +185,7 @@ fn timeout_nonconfigured_metadata_stays_unknown_until_late_stored_settlement() {
     assert_eq!(
         controller
             .dispatch(ProviderAuthAction::StatusResolved {
-                attempt_id: attempt(2),
+                attempt_id: attempt(/*id*/ 2),
                 status: status(&target, ProviderConfigurationState::Configured),
             })
             .disposition,
@@ -199,7 +199,7 @@ fn timeout_nonconfigured_metadata_stays_unknown_until_late_stored_settlement() {
     ] {
         assert_eq!(
             controller.dispatch(ProviderAuthAction::StatusResolved {
-                attempt_id: attempt(1),
+                attempt_id: attempt(/*id*/ 1),
                 status: status(&target, configuration),
             }),
             transition(unknown.clone(), vec![], ProviderAuthDisposition::Applied)
@@ -207,7 +207,7 @@ fn timeout_nonconfigured_metadata_stays_unknown_until_late_stored_settlement() {
     }
     assert_eq!(
         controller.dispatch(ProviderAuthAction::PersistenceFinished {
-            attempt_id: attempt(1),
+            attempt_id: attempt(/*id*/ 1),
             result: ApiKeyPersistenceResult::Stored,
         }),
         stored_reconciliation(target, ApiKeyFlowIntent::Add)
@@ -219,11 +219,11 @@ fn timeout_then_stored_settlement_reconciles_without_duplicate_persistence() {
     let target = target();
     let mut controller = submitted(target.clone());
     controller.dispatch(ProviderAuthAction::TimeoutElapsed {
-        attempt_id: attempt(1),
+        attempt_id: attempt(/*id*/ 1),
     });
     assert_eq!(
         controller.dispatch(ProviderAuthAction::PersistenceFinished {
-            attempt_id: attempt(1),
+            attempt_id: attempt(/*id*/ 1),
             result: ApiKeyPersistenceResult::Stored,
         }),
         stored_reconciliation(target, ApiKeyFlowIntent::Add)
@@ -236,17 +236,17 @@ fn second_correlated_timeout_bounds_unknown_replacement_and_unlocks_retry() {
     let flow = flow(target.clone(), ApiKeyFlowIntent::Replace);
     let mut controller = submitted_with_intent(target, ApiKeyFlowIntent::Replace);
     controller.dispatch(ProviderAuthAction::TimeoutElapsed {
-        attempt_id: attempt(1),
+        attempt_id: attempt(/*id*/ 1),
     });
 
     assert_eq!(
         controller.dispatch(ProviderAuthAction::TimeoutElapsed {
-            attempt_id: attempt(2),
+            attempt_id: attempt(/*id*/ 2),
         }),
         transition(
             ProviderAuthFlowSnapshot::OutcomeUnknown {
                 flow: flow.clone(),
-                attempt_id: attempt(1),
+                attempt_id: attempt(/*id*/ 1),
             },
             vec![],
             ProviderAuthDisposition::IgnoredStale,
@@ -254,7 +254,7 @@ fn second_correlated_timeout_bounds_unknown_replacement_and_unlocks_retry() {
     );
     assert_eq!(
         controller.dispatch(ProviderAuthAction::TimeoutElapsed {
-            attempt_id: attempt(1),
+            attempt_id: attempt(/*id*/ 1),
         }),
         transition(
             ProviderAuthFlowSnapshot::Failed {
@@ -277,11 +277,11 @@ fn configured_after_timeout_completes_add_but_replace_waits_for_fresh_status() {
     let configured = status(&target, ProviderConfigurationState::Configured);
     let mut add = submitted(target.clone());
     add.dispatch(ProviderAuthAction::TimeoutElapsed {
-        attempt_id: attempt(1),
+        attempt_id: attempt(/*id*/ 1),
     });
     assert_eq!(
         add.dispatch(ProviderAuthAction::StatusResolved {
-            attempt_id: attempt(1),
+            attempt_id: attempt(/*id*/ 1),
             status: configured.clone(),
         }),
         configured_transition(target.clone(), configured.clone())
@@ -290,17 +290,17 @@ fn configured_after_timeout_completes_add_but_replace_waits_for_fresh_status() {
     let replace_flow = flow(target.clone(), ApiKeyFlowIntent::Replace);
     let mut replace = submitted_with_intent(target.clone(), ApiKeyFlowIntent::Replace);
     replace.dispatch(ProviderAuthAction::TimeoutElapsed {
-        attempt_id: attempt(1),
+        attempt_id: attempt(/*id*/ 1),
     });
     assert_eq!(
         replace.dispatch(ProviderAuthAction::StatusResolved {
-            attempt_id: attempt(1),
+            attempt_id: attempt(/*id*/ 1),
             status: configured.clone(),
         }),
         transition(
             ProviderAuthFlowSnapshot::OutcomeUnknown {
                 flow: replace_flow,
-                attempt_id: attempt(1),
+                attempt_id: attempt(/*id*/ 1),
             },
             vec![],
             ProviderAuthDisposition::Applied,
@@ -308,14 +308,14 @@ fn configured_after_timeout_completes_add_but_replace_waits_for_fresh_status() {
     );
     assert_eq!(
         replace.dispatch(ProviderAuthAction::PersistenceFinished {
-            attempt_id: attempt(1),
+            attempt_id: attempt(/*id*/ 1),
             result: ApiKeyPersistenceResult::Stored,
         }),
         stored_reconciliation(target.clone(), ApiKeyFlowIntent::Replace)
     );
     assert_eq!(
         replace.dispatch(ProviderAuthAction::StatusResolved {
-            attempt_id: attempt(1),
+            attempt_id: attempt(/*id*/ 1),
             status: configured.clone(),
         }),
         configured_transition(target, configured)
@@ -338,17 +338,17 @@ fn timeout_then_correlated_definite_failure_unlocks_retry_but_stale_id_does_not(
         let flow = flow(target.clone(), ApiKeyFlowIntent::Add);
         let mut controller = submitted(target);
         controller.dispatch(ProviderAuthAction::TimeoutElapsed {
-            attempt_id: attempt(1),
+            attempt_id: attempt(/*id*/ 1),
         });
         assert_eq!(
             controller.dispatch(ProviderAuthAction::PersistenceFinished {
-                attempt_id: attempt(2),
+                attempt_id: attempt(/*id*/ 2),
                 result: ApiKeyPersistenceResult::Stored,
             }),
             transition(
                 ProviderAuthFlowSnapshot::OutcomeUnknown {
                     flow: flow.clone(),
-                    attempt_id: attempt(1),
+                    attempt_id: attempt(/*id*/ 1),
                 },
                 vec![],
                 ProviderAuthDisposition::IgnoredStale,
@@ -356,7 +356,7 @@ fn timeout_then_correlated_definite_failure_unlocks_retry_but_stale_id_does_not(
         );
         assert_eq!(
             controller.dispatch(ProviderAuthAction::PersistenceFinished {
-                attempt_id: attempt(1),
+                attempt_id: attempt(/*id*/ 1),
                 result,
             }),
             transition(
@@ -377,7 +377,7 @@ fn reconciling_transient_status_remains_nonretryable() {
     let target = target();
     let mut controller = submitted(target.clone());
     controller.dispatch(ProviderAuthAction::PersistenceFinished {
-        attempt_id: attempt(1),
+        attempt_id: attempt(/*id*/ 1),
         result: ApiKeyPersistenceResult::Stored,
     });
     for configuration in [
@@ -387,7 +387,7 @@ fn reconciling_transient_status_remains_nonretryable() {
     ] {
         assert_eq!(
             controller.dispatch(ProviderAuthAction::StatusResolved {
-                attempt_id: attempt(1),
+                attempt_id: attempt(/*id*/ 1),
                 status: status(&target, configuration),
             }),
             waiting_reconciliation(target.clone())
@@ -404,7 +404,7 @@ fn definite_failure_allows_retry_while_old_attempt_results_are_stale() {
     let target = target();
     let mut controller = submitted(target.clone());
     controller.dispatch(ProviderAuthAction::PersistenceFinished {
-        attempt_id: attempt(1),
+        attempt_id: attempt(/*id*/ 1),
         result: ApiKeyPersistenceResult::Rejected,
     });
     controller.dispatch(ProviderAuthAction::Retry);
@@ -414,13 +414,13 @@ fn definite_failure_allows_retry_while_old_attempt_results_are_stale() {
     controller.dispatch(ProviderAuthAction::Submit);
     assert_eq!(
         controller.dispatch(ProviderAuthAction::PersistenceFinished {
-            attempt_id: attempt(1),
+            attempt_id: attempt(/*id*/ 1),
             result: ApiKeyPersistenceResult::Stored,
         }),
         transition(
             ProviderAuthFlowSnapshot::Settling {
                 flow: flow(target, ApiKeyFlowIntent::Add),
-                attempt_id: attempt(2),
+                attempt_id: attempt(/*id*/ 2),
             },
             vec![],
             ProviderAuthDisposition::IgnoredStale,
@@ -479,10 +479,10 @@ fn stored_reconciliation(
     transition(
         ProviderAuthFlowSnapshot::Reconciling {
             flow: flow(target.clone(), intent),
-            attempt_id: attempt(1),
+            attempt_id: attempt(/*id*/ 1),
         },
         vec![ProviderAuthEffect::RefreshProviderStatus {
-            attempt_id: attempt(1),
+            attempt_id: attempt(/*id*/ 1),
             target,
         }],
         ProviderAuthDisposition::Applied,
@@ -516,7 +516,7 @@ fn waiting_reconciliation(target: ApiKeyAuthTarget) -> ProviderAuthTransition {
 fn reconciliation_snapshot(target: ApiKeyAuthTarget) -> ProviderAuthFlowSnapshot {
     ProviderAuthFlowSnapshot::Reconciling {
         flow: flow(target, ApiKeyFlowIntent::Add),
-        attempt_id: attempt(1),
+        attempt_id: attempt(/*id*/ 1),
     }
 }
 

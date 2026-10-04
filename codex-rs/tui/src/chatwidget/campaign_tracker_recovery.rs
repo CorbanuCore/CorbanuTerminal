@@ -61,7 +61,7 @@ impl ChatWidget {
                 "Retry",
                 "Reload the failed view",
                 path.to_string(),
-                None,
+                /*body*/ None,
             ));
             if route == "/activity" || route == "/replay" {
                 items.push(item(
@@ -76,7 +76,7 @@ impl ChatWidget {
             "Overview",
             "Open Campaign Tracker status",
             "/status".to_string(),
-            None,
+            /*body*/ None,
         ));
         let mut header = ColumnRenderable::new();
         header.push(Line::from("Campaign Tracker".bold()));
