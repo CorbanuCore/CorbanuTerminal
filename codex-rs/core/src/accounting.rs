@@ -376,14 +376,15 @@ pub(crate) fn turn_mode(
     // Resolved under the turn's own authentication, because a provider's route
     // can differ by credential: a ChatGPT plan turn goes to the Codex route, not
     // to the API-key one, and both are that provider's own.
-    let own_route = codex_model_provider_info::built_in_model_providers(None)
-        .get(provider_id)
-        .is_some_and(|built_in| {
-            built_in.wire_api == provider.wire_api
-                && built_in
-                    .to_api_provider(auth_mode)
-                    .is_ok_and(|api| api.base_url == resolved_endpoint)
-        });
+    let own_route =
+        codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None)
+            .get(provider_id)
+            .is_some_and(|built_in| {
+                built_in.wire_api == provider.wire_api
+                    && built_in
+                        .to_api_provider(auth_mode)
+                        .is_ok_and(|api| api.base_url == resolved_endpoint)
+            });
     // Which economics apply is decided by the authentication actually used, not
     // by whether per-token rates happen to be available. Treating "API key on a
     // route this client will not price" as subscription capacity would book
@@ -712,7 +713,15 @@ impl Sampling {
         turn: String,
         mode: &AccountingMode,
     ) -> Result<Arc<Self>, CodexErr> {
-        Self::start_request(runtime, owner, turn, mode, Uuid::new_v4(), None).await
+        Self::start_request(
+            runtime,
+            owner,
+            turn,
+            mode,
+            Uuid::new_v4(),
+            /*path_override*/ None,
+        )
+        .await
     }
 
     /// Start a sampling pinned to `path` under the mode's approved endpoint.
@@ -879,7 +888,7 @@ impl Sampling {
     }
 
     async fn admit(&self, model: &str, endpoint: &str) -> anyhow::Result<Attempt> {
-        self.admit_with_tier(model, endpoint, None).await
+        self.admit_with_tier(model, endpoint, /*tier*/ None).await
     }
 
     pub(crate) async fn admit_with_tier(

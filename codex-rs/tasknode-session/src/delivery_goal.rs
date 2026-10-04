@@ -103,7 +103,7 @@ pub(crate) fn prepare(
     // Direct typed decoding rejects duplicate keys as well as unknown fields.
     let event: Event = serde_json::from_str(event_json).map_err(|_| Error::Schema)?;
     if !selection.event_id.starts_with("cc-")
-        || !hex(&selection.event_id[3..], 64)
+        || !hex(&selection.event_id[3..], /*size*/ 64)
         || event.id != selection.event_id
     {
         return Err(Error::Identity);
@@ -116,7 +116,7 @@ pub(crate) fn prepare(
     value["id"] = Value::String(event.id.clone());
     let payload = serde_json::json!({"event": value});
     let payload_sha256 = digest(&payload);
-    if !hex(selection.payload_sha256, 64) || payload_sha256 != selection.payload_sha256 {
+    if !hex(selection.payload_sha256, /*size*/ 64) || payload_sha256 != selection.payload_sha256 {
         return Err(Error::PayloadDigest);
     }
     let sprint = event.turn_id.as_bytes();
@@ -140,7 +140,7 @@ pub(crate) fn prepare(
         )
         || event.coverage != "manager_observed_worker_report_not_independent_acceptance"
         || event.repository.label != "Corbanu Terminal"
-        || !hex(&event.repository.commit, 40)
+        || !hex(&event.repository.commit, /*size*/ 40)
     {
         return Err(Error::Schema);
     }
@@ -168,9 +168,21 @@ pub(crate) fn prepare(
     {
         return Err(Error::Mapping);
     }
-    safe_text(&event.content, 2000, 2048)?;
-    safe_text(&event.repository.branch, 300, 500)?;
-    safe_text(&python_json(&payload["event"]), 12000, 12000)?;
+    safe_text(
+        &event.content,
+        /*characters*/ 2000,
+        /*bytes*/ 2048,
+    )?;
+    safe_text(
+        &event.repository.branch,
+        /*characters*/ 300,
+        /*bytes*/ 500,
+    )?;
+    safe_text(
+        &python_json(&payload["event"]),
+        /*characters*/ 12000,
+        /*bytes*/ 12000,
+    )?;
     // No normalization of identity-bearing timestamps, including leap seconds.
     let occurred =
         DateTime::parse_from_rfc3339(&event.occurred_at).map_err(|_| Error::Timestamp)?;

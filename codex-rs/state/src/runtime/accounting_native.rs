@@ -86,7 +86,10 @@ impl Journal<'_> {
         batch: &[Observation],
         as_of_ms: i64,
     ) -> anyhow::Result<()> {
-        Self::append_validated_on_connection(conn, owner, attempt, batch, as_of_ms, None).await
+        Self::append_validated_on_connection(
+            conn, owner, attempt, batch, as_of_ms, /*validated_at_ms*/ None,
+        )
+        .await
     }
 
     /// As `append_native_on_connection`, after this hour's validation ran on a

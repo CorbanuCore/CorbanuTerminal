@@ -344,7 +344,7 @@ impl Journal<'_> {
         }
         let start = day.checked_mul(DAY_MS).context("day overflow")?;
         let (lower, upper) = window.unwrap_or((start, start + DAY_MS));
-        if !work.scans(5) {
+        if !work.scans(/*count*/ 5) {
             return Ok(InspectionDay::TooLarge);
         }
         // Reject malformed/noncanonical ownership before the SQL pre-filter;

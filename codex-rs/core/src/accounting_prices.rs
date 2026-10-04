@@ -88,14 +88,14 @@ fn billed(
             output: Some(rate(output)?),
             read: read.map(rate).transpose()?,
             write: if free_cache_write {
-                Some(rate(0)?)
+                Some(rate(/*milli*/ 0)?)
             } else {
                 anthropic_write.map(|(_, write)| rate(write)).transpose()?
             },
         },
         reference,
         Basis::Billed,
-        None,
+        /*plan_burn_millis*/ None,
     )
 }
 

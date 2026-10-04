@@ -118,7 +118,7 @@ impl DeferredResponsesSampling {
         match &self.mode {
             AccountingMode::DirectOpenAiResponses {
                 approved_endpoint, ..
-            } => super::websocket::endpoint(approved_endpoint, None)
+            } => super::websocket::endpoint(approved_endpoint, /*query*/ None)
                 .map(Some)
                 .inspect_err(|_| self.reject()),
             AccountingMode::Provider {

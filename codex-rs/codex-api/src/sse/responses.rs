@@ -40,7 +40,13 @@ pub fn spawn_response_stream(
     telemetry: Option<Arc<dyn SseTelemetry>>,
     turn_state: Option<Arc<OnceLock<String>>>,
 ) -> ResponseStream {
-    spawn_response_stream_with_observer(stream_response, idle_timeout, telemetry, turn_state, None)
+    spawn_response_stream_with_observer(
+        stream_response,
+        idle_timeout,
+        telemetry,
+        turn_state,
+        /*observer*/ None,
+    )
 }
 
 pub(crate) fn spawn_response_stream_with_observer(

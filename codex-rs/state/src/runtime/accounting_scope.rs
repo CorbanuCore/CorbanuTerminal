@@ -58,9 +58,11 @@ pub(super) async fn other_conversations(
         let read = match ThreadId::from_string(&thread) {
             // A thread that cannot be read is reported as unread, never as a
             // failure of the conversation the user asked about.
-            Ok(id) => Journal::inspect_window_on_connection(conn, id, day, read_at_ms, None, work)
-                .await
-                .ok(),
+            Ok(id) => Journal::inspect_window_on_connection(
+                conn, id, day, read_at_ms, /*window*/ None, work,
+            )
+            .await
+            .ok(),
             Err(_) => None,
         };
         let Some(InspectionDay::Ready(view)) = read else {

@@ -1983,7 +1983,7 @@ impl ChatWidget {
     }
 
     pub(crate) fn open_accounting_inspector(&mut self, day: i64) {
-        self.open_accounting_range(day, None);
+        self.open_accounting_range(day, /*range*/ None);
     }
 
     fn open_accounting_range(&mut self, day: i64, range: Option<InspectionRange>) {

@@ -192,7 +192,7 @@ impl DeferredChatSampling {
                     self.turn.clone(),
                     &mode,
                     self.request,
-                    None,
+                    /*path_override*/ None,
                 )
                 .await?;
                 completion.1 = true;

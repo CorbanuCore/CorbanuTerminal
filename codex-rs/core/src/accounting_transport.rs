@@ -334,9 +334,13 @@ impl<T: HttpTransport> HttpTransport for AccountingTransport<T> {
         // has exactly one.
         if let Ok(Some(usage)) = codex_api::responses_body_usage(&response.body) {
             // The observer has already logged its cause.
-            codex_api::ResponsesUsageObserver::observe(evidence.as_ref(), 1, Ok(usage))
-                .await
-                .map_err(|_| TransportError::Build(FAILURE.into()))?;
+            codex_api::ResponsesUsageObserver::observe(
+                evidence.as_ref(),
+                /*position*/ 1,
+                Ok(usage),
+            )
+            .await
+            .map_err(|_| TransportError::Build(FAILURE.into()))?;
         }
         Ok(response)
     }

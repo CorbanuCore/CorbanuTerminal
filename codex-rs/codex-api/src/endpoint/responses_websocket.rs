@@ -287,8 +287,13 @@ impl ResponsesWebsocketConnection {
         connection_reused: bool,
         turn_state: Option<Arc<OnceLock<String>>>,
     ) -> Result<ResponseStream, ApiError> {
-        self.stream_request_with_accounting(request, connection_reused, turn_state, None)
-            .await
+        self.stream_request_with_accounting(
+            request,
+            connection_reused,
+            turn_state,
+            /*admission*/ None,
+        )
+        .await
     }
 
     /// Optional pump-bound admission; ordinary callers retain the legacy path.

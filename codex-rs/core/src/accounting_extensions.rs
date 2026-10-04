@@ -67,7 +67,11 @@ impl ExtensionAccounting {
                 inner: AccountingTransport::new(transport, Some(evidence), model.to_string()),
             },
             None => Accounted {
-                inner: AccountingTransport::new(transport, None, model.to_string()),
+                inner: AccountingTransport::new(
+                    transport,
+                    /*evidence*/ None,
+                    model.to_string(),
+                ),
             },
         }
     }
@@ -75,7 +79,7 @@ impl ExtensionAccounting {
     /// A transport that records nothing, for a host that supplies no handle.
     pub fn unrecorded<T: HttpTransport>(transport: T, model: &str) -> Accounted<T> {
         Accounted {
-            inner: AccountingTransport::new(transport, None, model.to_string()),
+            inner: AccountingTransport::new(transport, /*evidence*/ None, model.to_string()),
         }
     }
 
@@ -174,8 +178,12 @@ impl ExtensionAccounting {
             // `start_request` logged its cause.
             return false;
         };
-        let route = crate::accounting::pinned_route(&request.endpoint, None, &request.path);
-        let attempt = match sampling.admit_with_tier(&request.model, &route, None).await {
+        let route =
+            crate::accounting::pinned_route(&request.endpoint, /*query*/ None, &request.path);
+        let attempt = match sampling
+            .admit_with_tier(&request.model, &route, /*tier*/ None)
+            .await
+        {
             Ok(attempt) => attempt,
             Err(error) => {
                 tracing::warn!(
@@ -199,9 +207,13 @@ impl ExtensionAccounting {
             codex_model_provider_info::WireApi::Chat => {
                 match codex_api::chat_body_usage(body.as_bytes()) {
                     Ok(Some(usage)) => {
-                        codex_api::ChatUsageObserver::observe(evidence.as_ref(), 1, Ok(usage))
-                            .await
-                            .is_ok()
+                        codex_api::ChatUsageObserver::observe(
+                            evidence.as_ref(),
+                            /*position*/ 1,
+                            Ok(usage),
+                        )
+                        .await
+                        .is_ok()
                     }
                     Ok(None) => true,
                     Err(_) => false,
@@ -210,9 +222,13 @@ impl ExtensionAccounting {
             codex_model_provider_info::WireApi::Responses => {
                 match codex_api::responses_body_usage(body.as_bytes()) {
                     Ok(Some(usage)) => {
-                        codex_api::ResponsesUsageObserver::observe(evidence.as_ref(), 1, Ok(usage))
-                            .await
-                            .is_ok()
+                        codex_api::ResponsesUsageObserver::observe(
+                            evidence.as_ref(),
+                            /*position*/ 1,
+                            Ok(usage),
+                        )
+                        .await
+                        .is_ok()
                     }
                     Ok(None) => true,
                     Err(_) => false,
@@ -221,9 +237,13 @@ impl ExtensionAccounting {
             codex_model_provider_info::WireApi::Anthropic => {
                 match codex_api::anthropic_body_usage(body.as_bytes()) {
                     Ok(Some(usage)) => {
-                        codex_api::AnthropicUsageObserver::observe(evidence.as_ref(), 1, Ok(usage))
-                            .await
-                            .is_ok()
+                        codex_api::AnthropicUsageObserver::observe(
+                            evidence.as_ref(),
+                            /*position*/ 1,
+                            Ok(usage),
+                        )
+                        .await
+                        .is_ok()
                     }
                     // A streamed Anthropic response reports its usage inside
                     // events this path never sees. The call is recorded; its

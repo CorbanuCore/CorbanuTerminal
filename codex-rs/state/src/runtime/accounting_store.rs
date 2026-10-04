@@ -264,7 +264,7 @@ impl<'a> AccountingStore<'a> {
         utc_day: i64,
         read_at_ms: i64,
     ) -> anyhow::Result<InspectionDay> {
-        Self::inspect(runtime, owner, utc_day, read_at_ms, None).await
+        Self::inspect(runtime, owner, utc_day, read_at_ms, /*requested*/ None).await
     }
 
     pub async fn inspect_range(
@@ -386,8 +386,14 @@ impl<'a> AccountingStore<'a> {
         observations: &[Observation],
         as_of: impl Into<AsOf>,
     ) -> anyhow::Result<ObservationQuote> {
-        self.write(owner, attempt, observations, None, as_of.into())
-            .await
+        self.write(
+            owner,
+            attempt,
+            observations,
+            /*original_prices*/ None,
+            as_of.into(),
+        )
+        .await
     }
 
     async fn write(
@@ -637,7 +643,10 @@ async fn inspect_tree(
     read_at_ms: i64,
 ) -> anyhow::Result<InspectionDay> {
     let mut work = InspectionWork::new(conn).await?;
-    inspect_tree_window(conn, owner, day, read_at_ms, None, &mut work).await
+    inspect_tree_window(
+        conn, owner, day, read_at_ms, /*window*/ None, &mut work,
+    )
+    .await
 }
 
 async fn inspect_tree_window(
@@ -656,7 +665,7 @@ async fn inspect_tree_window(
     let InspectionDay::Ready(mut view) = first else {
         return Ok(first);
     };
-    if !work.scans(1) {
+    if !work.scans(/*count*/ 1) {
         return Ok(InspectionDay::TooLarge);
     }
     let candidates: Vec<String> = sqlx::query_scalar(
@@ -833,7 +842,7 @@ async fn inspect_buckets(
     read_at_ms: i64,
 ) -> anyhow::Result<InspectionDay> {
     let mut work = InspectionWork::new(conn).await?;
-    if !work.scans(1) {
+    if !work.scans(/*count*/ 1) {
         return Ok(InspectionDay::TooLarge);
     }
     let oldest_aggregate_day =

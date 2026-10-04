@@ -44,8 +44,8 @@ fn recognised_reported_route(
     base_url: &str,
     path: &str,
 ) -> Option<(String, String, WireApi)> {
-    let provider = built_in_model_providers(None).remove(provider_id)?;
-    let api = provider.to_api_provider(None).ok()?;
+    let provider = built_in_model_providers(/*openai_base_url*/ None).remove(provider_id)?;
+    let api = provider.to_api_provider(/*auth_mode*/ None).ok()?;
     let route = api.base_url.trim_end_matches('/').to_string();
     if route != base_url.trim_end_matches('/') {
         return None;
