@@ -50,6 +50,9 @@ pub(crate) struct WalletPlanChoice {
     pub(crate) deferred_setup: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
 }
 
+// Unreachable since the legacy plan state was retired (66ff6579d7); remove
+// or wire back in.
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WalletPlanPurchaseMode {
     New,
@@ -111,6 +114,8 @@ fn wallet_balance_endpoint(
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WalletPlanStatus {
+    // Deserialized from the daemon status; no reader since 66ff6579d7.
+    #[allow(dead_code)]
     pub(crate) wallet_address: String,
     pub(crate) period: WalletPlanPeriod,
     pub(crate) weekly: WalletUsageWindow,
@@ -1405,6 +1410,7 @@ impl ChatWidget {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn on_wallet_plan_credential_persistence_finished(
         &mut self,
         attempt_id: WalletPlanPersistenceAttemptId,

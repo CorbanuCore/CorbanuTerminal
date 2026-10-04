@@ -545,6 +545,8 @@ fn operator_pane_dispatch_starts_normal_turn_with_target_session_model() -> Resu
 }
 
 #[test]
+// Holds the store lock across dispatch on purpose to simulate contention.
+#[allow(clippy::await_holding_invalid_type)]
 fn operator_pane_dispatch_defers_contended_store_without_blocking_ui() -> Result<()> {
     run_dispatch_integration(|| async {
         let mock = MockServer::start().await;

@@ -1,4 +1,7 @@
 #![cfg(any(not(debug_assertions), test))]
+// Unit tests compile this module for its helpers; the release-only update
+// check entry points have no callers in that configuration.
+#![cfg_attr(test, allow(dead_code))]
 
 use crate::legacy_core::config::Config;
 use crate::update_action;
