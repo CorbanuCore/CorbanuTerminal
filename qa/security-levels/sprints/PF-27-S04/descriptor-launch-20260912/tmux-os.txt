@@ -1,0 +1,26 @@
+cd /home/travis/worktrees/security-broker-adapter-20260912; export PATH=/home/travis/security-round5/tools:/home/travis/.cargo/bin:$PATH CARGO_TARGET_DIR=/home/
+travis/repos/CorbanuTerminal-harness/codex-rs/target PF27_SYNTHETIC_HOLD=/home/travis/security-round5/evidence/pf27-adapter-20260912/final/hold PF27_SYNTHETIC_I
+NSPECT=/home/travis/security-round5/evidence/pf27-adapter-20260912/final/inspect PF27_SYNTHETIC_PROBE=/home/travis/security-round5/evidence/pf27-static-probe-20
+260912/linkage-retry/candidate/codex-protected-root-probe; just test -p codex-linux-pidfd-spawn --features synthetic-fixture --run-ignored only -E 'not test(pf2
+7_unqualified_libc_fails_closed)' --retries 0 --test-threads 1; result=$?; echo PF27_TMUX_EXIT=$resultbash-5.3$ cd /home/travis/worktrees/security-broker-adapte
+r-20260912; export PATH=/home/travis/security-round5/tools:/home/travis/.cargo/bin:$PATH CARGO_TARGET_DIR=/home/travis/repos/CorbanuTerminal-harness/codex-rs/ta
+rget PF27_SYNTHETIC_HOLD=/home/travis/security-round5/evidence/pf27-adapter-20260912/final/hold PF27_SYNTHETIC_INSPECT=/home/travis/security-round5/evidence/pf2
+7-adapter-20260912/final/inspect PF27_SYNTHETIC_PROBE=/home/travis/security-round5/evidence/pf27-static-probe-20260912/linkage-retry/candidate/codex-protected-r
+oot-probe; just test -p codex-linux-pidfd-spawn --features synthetic-fixture --run-ignored only -E 'not test(pf27_unqualified_libc_fails_closed)' --retries 0 --
+test-threads 1; result=$?; echo PF27_TMUX_EXIT=$result
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.14s
+────────────
+ Nextest run ID d4591f24-e556-4404-8741-38a2b8b0b49a with nextest profile: local
+    Starting 7 tests across 1 binary (4 tests skipped)
+        PASS [   0.402s] codex-linux-pidfd-spawn spawn::tests::pf27_all_fixed_recipes_deny_non_root_before_setters
+        PASS [   0.004s] codex-linux-pidfd-spawn spawn::tests::pf27_enoexec_has_no_shell_fallback_or_fd_leak
+        PASS [   0.014s] codex-linux-pidfd-spawn spawn::tests::pf27_exact_environment_cwd_stdio_and_fd_allowlist
+        PASS [   0.003s] codex-linux-pidfd-spawn spawn::tests::pf27_exec_failure_reaps_without_fd_leaks
+        PASS [   0.015s] codex-linux-pidfd-spawn spawn::tests::pf27_held_bytes_survive_original_path_replacement
+        PASS [   0.035s] codex-linux-pidfd-spawn spawn::tests::pf27_live_pidfd_stop_and_drop_reap
+        PASS [   0.017s] codex-linux-pidfd-spawn spawn::tests::pf27_pidfd_resource_failure_does_not_detach_a_child
+────────────
+     Summary [   0.491s] 7 tests run: 7 passed, 4 skipped
+PF27_TMUX_EXIT=0
+bash-5.3$

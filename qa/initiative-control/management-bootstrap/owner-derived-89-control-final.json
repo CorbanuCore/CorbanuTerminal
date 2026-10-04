@@ -1,0 +1,143 @@
+{
+  "live_access": false,
+  "result": "PASS",
+  "scratch": "/private/tmp/od89-control-4yjywog1",
+  "unchanged_summary_sha256": "3812a2cca5e5cd70af836c795cf10a6a4971511a45ccf74fff95d72b5f80a36f",
+  "variants": {
+    "baseline": {
+      "after": {
+        "condition": "On an admitted tick reaching the watchdog; OFF, refusal or earlier failure runs no watchdog.",
+        "counted_actions": "unreported overdue dispatching/dispatched/running actions",
+        "covered_actions": [
+          "owner-overdue"
+        ],
+        "dispatcher": "owner",
+        "excluded_actions": [
+          "hand-overdue"
+        ],
+        "future_default_covered": false,
+        "future_default_owner": "hand",
+        "hand_stall_detection": "manager responsibility (--hand-run is manual; no scheduled hand watchdog)",
+        "manager_covered": true,
+        "summary": "Owner watchdog on admitted ticks (unreported overdue actions): covered=1, excluded=1; manager=covered; new default actions=excluded; hand stall detection=manager responsibility (--hand-run is manual; no scheduled hand watchdog)."
+      },
+      "before": {
+        "condition": "On an admitted tick reaching the watchdog; OFF, refusal or earlier failure runs no watchdog.",
+        "counted_actions": "unreported overdue dispatching/dispatched/running actions",
+        "covered_actions": [
+          "hand-overdue",
+          "owner-overdue"
+        ],
+        "dispatcher": null,
+        "excluded_actions": [],
+        "future_default_covered": true,
+        "future_default_owner": "hand",
+        "hand_stall_detection": "covered by this watchdog",
+        "manager_covered": true,
+        "summary": "Owner watchdog on admitted ticks (unreported overdue actions): covered=2, excluded=0; manager=covered; new default actions=covered; hand stall detection=covered by this watchdog."
+      },
+      "coordinator_sha256": "1a726549667b59849d1736884d7878e5b6c8a5f1b2483a0fa98c8a24bcab6ab2",
+      "events": [
+        {
+          "id": "manager-stall:manager",
+          "manager": "manager"
+        },
+        {
+          "action": "owner-overdue",
+          "id": "stall:owner-overdue:1",
+          "status": "dispatch_uncertain"
+        }
+      ]
+    },
+    "exclude_manager": {
+      "after": {
+        "condition": "On an admitted tick reaching the watchdog; OFF, refusal or earlier failure runs no watchdog.",
+        "counted_actions": "unreported overdue dispatching/dispatched/running actions",
+        "covered_actions": [
+          "owner-overdue"
+        ],
+        "dispatcher": "owner",
+        "excluded_actions": [
+          "hand-overdue"
+        ],
+        "future_default_covered": false,
+        "future_default_owner": "hand",
+        "hand_stall_detection": "manager responsibility (--hand-run is manual; no scheduled hand watchdog)",
+        "manager_covered": false,
+        "summary": "Owner watchdog on admitted ticks (unreported overdue actions): covered=1, excluded=1; manager=excluded; new default actions=excluded; hand stall detection=manager responsibility (--hand-run is manual; no scheduled hand watchdog)."
+      },
+      "before": {
+        "condition": "On an admitted tick reaching the watchdog; OFF, refusal or earlier failure runs no watchdog.",
+        "counted_actions": "unreported overdue dispatching/dispatched/running actions",
+        "covered_actions": [
+          "hand-overdue",
+          "owner-overdue"
+        ],
+        "dispatcher": null,
+        "excluded_actions": [],
+        "future_default_covered": true,
+        "future_default_owner": "hand",
+        "hand_stall_detection": "covered by this watchdog",
+        "manager_covered": false,
+        "summary": "Owner watchdog on admitted ticks (unreported overdue actions): covered=2, excluded=0; manager=excluded; new default actions=covered; hand stall detection=covered by this watchdog."
+      },
+      "coordinator_sha256": "52fcb2380a408d6648732ce2a26da9a87b1377ae4407cd051074a2590f4802ea",
+      "events": [
+        {
+          "action": "owner-overdue",
+          "id": "stall:owner-overdue:1",
+          "status": "dispatch_uncertain"
+        }
+      ]
+    },
+    "include_hand": {
+      "after": {
+        "condition": "On an admitted tick reaching the watchdog; OFF, refusal or earlier failure runs no watchdog.",
+        "counted_actions": "unreported overdue dispatching/dispatched/running actions",
+        "covered_actions": [
+          "hand-overdue",
+          "owner-overdue"
+        ],
+        "dispatcher": "owner",
+        "excluded_actions": [],
+        "future_default_covered": true,
+        "future_default_owner": "hand",
+        "hand_stall_detection": "covered by this watchdog",
+        "manager_covered": true,
+        "summary": "Owner watchdog on admitted ticks (unreported overdue actions): covered=2, excluded=0; manager=covered; new default actions=covered; hand stall detection=covered by this watchdog."
+      },
+      "before": {
+        "condition": "On an admitted tick reaching the watchdog; OFF, refusal or earlier failure runs no watchdog.",
+        "counted_actions": "unreported overdue dispatching/dispatched/running actions",
+        "covered_actions": [
+          "hand-overdue",
+          "owner-overdue"
+        ],
+        "dispatcher": null,
+        "excluded_actions": [],
+        "future_default_covered": true,
+        "future_default_owner": "hand",
+        "hand_stall_detection": "covered by this watchdog",
+        "manager_covered": true,
+        "summary": "Owner watchdog on admitted ticks (unreported overdue actions): covered=2, excluded=0; manager=covered; new default actions=covered; hand stall detection=covered by this watchdog."
+      },
+      "coordinator_sha256": "20ddf9d94eb8cc114f4689bb0fd988be000616ea3de8c14ea4d38af1adbc069e",
+      "events": [
+        {
+          "id": "manager-stall:manager",
+          "manager": "manager"
+        },
+        {
+          "action": "hand-overdue",
+          "id": "stall:hand-overdue:1",
+          "status": "running"
+        },
+        {
+          "action": "owner-overdue",
+          "id": "stall:owner-overdue:1",
+          "status": "dispatch_uncertain"
+        }
+      ]
+    }
+  }
+}

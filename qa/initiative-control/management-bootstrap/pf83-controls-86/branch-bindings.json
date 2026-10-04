@@ -1,0 +1,30 @@
+{
+  "round82_sha256": "90d917a82807c6caa1a4b4553eeb489ca0c3a69b31f189b4b6b4b91d0a5a3342",
+  "branches": {
+    "F05": {
+      "withhold then decline": "withhold-decline",
+      "withhold then accept": "withhold-accept",
+      "disclosed replacement/cancellation, if offered": "offered-replacement"
+    },
+    "F06": {
+      "Full Access to restricted": "full-to-restricted",
+      "restricted to Full Access with explicit approval of slow operation": "restricted-to-full-approved-slow"
+    },
+    "F07": {
+      "Full Access to restricted to Full Access": "full-restricted-full",
+      "restricted to Full Access to restricted": "restricted-full-restricted",
+      "later conflict while application confirmation open": "open-confirmation-conflict"
+    },
+    "F08": {
+      "cancel from restricted": "cancel-from-restricted",
+      "cancel from Full Access": "cancel-from-full",
+      "exposed benign failure from restricted": "failure-from-restricted",
+      "exposed benign failure from Full Access": "failure-from-full"
+    },
+    "F09": {
+      "Full Access to restricted": "full-to-restricted",
+      "restricted to Full Access": "restricted-to-full",
+      "deferred change when supported": "supported-deferred-change"
+    }
+  }
+}

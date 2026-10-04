@@ -1,0 +1,18 @@
+{
+  "commit": "ff3f74f6ae66efbf3dfcc4f6291af2ce97f0f6cc",
+  "clone": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-baseline-81/target/integration-01",
+  "command": [
+    "python3",
+    "-B",
+    "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-inventory-79/verify_acceptance.py"
+  ],
+  "exit": 2,
+  "status_before": "",
+  "status_after": "",
+  "package_absent": true,
+  "full_checkout": true,
+  "copied_working_tree_files": false,
+  "no_network": true,
+  "stdout_sha256": "55d4196ae42003bff51712ab436db37231369641cfb768f10b5543f2195e638b",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

@@ -1,0 +1,80 @@
+[
+  {
+    "lane": "prerequisites",
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "-p",
+      "codex-cli",
+      "--bin",
+      "codex",
+      "-p",
+      "codex-rmcp-client",
+      "--bins"
+    ],
+    "exit": 0,
+    "elapsed": 3.483006000518799,
+    "target": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target"
+  },
+  {
+    "lane": "core-default",
+    "command": [
+      "just",
+      "test",
+      "-p",
+      "codex-core",
+      "accounting"
+    ],
+    "exit": 0,
+    "elapsed": 106.20476913452148,
+    "target": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target"
+  },
+  {
+    "lane": "core-feature",
+    "command": [
+      "just",
+      "test",
+      "-p",
+      "codex-core",
+      "accounting",
+      "--features",
+      "codex-core/developer-accounting"
+    ],
+    "exit": 0,
+    "elapsed": 112.14032006263733,
+    "target": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target"
+  },
+  {
+    "lane": "tui",
+    "command": [
+      "just",
+      "test",
+      "-p",
+      "codex-tui",
+      "usage"
+    ],
+    "exit": 0,
+    "elapsed": 11.338248252868652,
+    "target": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target"
+  },
+  {
+    "lane": "feature-binary",
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "-p",
+      "codex-cli",
+      "--bin",
+      "codex",
+      "--features",
+      "codex-core/developer-accounting"
+    ],
+    "exit": 0,
+    "elapsed": 0.9025628566741943,
+    "target": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target"
+  }
+]

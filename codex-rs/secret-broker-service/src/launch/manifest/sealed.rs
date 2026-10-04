@@ -27,6 +27,28 @@ pub struct SyntheticProfileInspectedImage {
     _sealed: SyntheticSealedImage,
 }
 
+#[cfg(target_env = "gnu")]
+impl SyntheticProfileInspectedImage {
+    // No descriptor export or configurable argv: reject rather than silently
+    // replacing a manifest identity unsupported by this synthetic-only adapter.
+    pub(super) fn launch_owned(
+        self,
+        role: super::super::SyntheticChildRole,
+    ) -> io::Result<codex_linux_pidfd_spawn::OwnedChild> {
+        use codex_linux_pidfd_spawn::SyntheticRole;
+        let recipe = &self._sealed._recipe;
+        if recipe.identities != [(101, 201), (102, 202), (103, 203)] || recipe.anchor_gid != 204 {
+            return Err(denied("recipe not supported by synthetic adapter"));
+        }
+        let role = match role {
+            super::super::SyntheticChildRole::Journal => SyntheticRole::Journal,
+            super::super::SyntheticChildRole::Policy => SyntheticRole::Policy,
+            super::super::SyntheticChildRole::Worker => SyntheticRole::Worker,
+        };
+        codex_linux_pidfd_spawn::spawn_synthetic_probe(self._sealed._image.into(), role)
+    }
+}
+
 impl SyntheticSealedImage {
     pub fn inspect_static_profile(mut self) -> io::Result<SyntheticProfileInspectedImage> {
         let seals = fcntl_get_seals(&self._image).map_err(|_| denied("image seals unavailable"))?;

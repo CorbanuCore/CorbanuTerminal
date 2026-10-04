@@ -468,6 +468,8 @@ export type { ThreadRealtimeStartTransport } from "./ThreadRealtimeStartTranspor
 export type { ThreadRealtimeStartedNotification } from "./ThreadRealtimeStartedNotification";
 export type { ThreadRealtimeTranscriptDeltaNotification } from "./ThreadRealtimeTranscriptDeltaNotification";
 export type { ThreadRealtimeTranscriptDoneNotification } from "./ThreadRealtimeTranscriptDoneNotification";
+export type { ThreadRecordSentModelRequestParams } from "./ThreadRecordSentModelRequestParams";
+export type { ThreadRecordSentModelRequestResponse } from "./ThreadRecordSentModelRequestResponse";
 export type { ThreadResumeInitialTurnsPageParams } from "./ThreadResumeInitialTurnsPageParams";
 export type { ThreadResumeParams } from "./ThreadResumeParams";
 export type { ThreadResumeResponse } from "./ThreadResumeResponse";
@@ -483,6 +485,7 @@ export type { ThreadSectionMoveResponse } from "./ThreadSectionMoveResponse";
 export type { ThreadSetNameParams } from "./ThreadSetNameParams";
 export type { ThreadSetNameResponse } from "./ThreadSetNameResponse";
 export type { ThreadSettings } from "./ThreadSettings";
+export type { ThreadSettingsUpdateOutcome } from "./ThreadSettingsUpdateOutcome";
 export type { ThreadSettingsUpdatedNotification } from "./ThreadSettingsUpdatedNotification";
 export type { ThreadShellCommandParams } from "./ThreadShellCommandParams";
 export type { ThreadShellCommandResponse } from "./ThreadShellCommandResponse";

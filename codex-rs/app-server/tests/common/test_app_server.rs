@@ -235,7 +235,6 @@ impl TestAppServer {
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
         cmd.current_dir(codex_home);
-        cmd.env("CODEX_HOME", codex_home);
         cmd.env("RUST_LOG", "warn");
         // Keep integration tests isolated from host managed configuration.
         cmd.env(
@@ -255,6 +254,10 @@ impl TestAppServer {
                 }
             }
         }
+
+        // Caller environment overrides must never turn an ordinary test into
+        // a live-profile/native-Keychain test. Native qualification is separate.
+        crate::test_environment::isolate_profile(cmd.as_std_mut(), codex_home);
 
         let mut process = cmd
             .kill_on_drop(true)

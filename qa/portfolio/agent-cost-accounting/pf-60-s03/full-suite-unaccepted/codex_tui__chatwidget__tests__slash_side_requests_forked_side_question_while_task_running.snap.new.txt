@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/tests/side.rs
+assertion_line: 343
+expression: normalized_backend_snapshot(terminal.backend())
+---
+"                                                                                "
+"• Working (0s • esc to interrupt)                                               "
+"                                                                                "
+"                                                                                "
+"› Ask Corbanu Terminal to do anything                                           "
+"                                                                                "
+"  Ambient GLM 5.2 via ambient standard                        Side starting...  "

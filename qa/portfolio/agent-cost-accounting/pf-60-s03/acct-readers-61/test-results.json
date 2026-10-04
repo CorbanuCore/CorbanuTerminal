@@ -1,0 +1,33 @@
+{
+  "lanes": [
+    {
+      "lane": "core-default",
+      "run": 124,
+      "passed": 124,
+      "failed_or_timed_out": 0,
+      "exact_failure_lines": [],
+      "summary": "Summary [  47.118s] 124 tests run: 124 passed (1 slow), 3545 skipped"
+    },
+    {
+      "lane": "core-feature",
+      "run": 127,
+      "passed": 127,
+      "failed_or_timed_out": 0,
+      "exact_failure_lines": [],
+      "summary": "Summary [  47.797s] 127 tests run: 127 passed (1 slow), 3545 skipped"
+    },
+    {
+      "lane": "tui",
+      "run": 91,
+      "passed": 91,
+      "failed_or_timed_out": 0,
+      "exact_failure_lines": [],
+      "summary": "Summary [   1.318s] 91 tests run: 91 passed, 4078 skipped"
+    }
+  ],
+  "total_run": 342,
+  "total_passed": 342,
+  "threads": 4,
+  "prerequisites_first": true,
+  "source_commit": "90095a359599f055653d39eb3e6aa9831faeaaef"
+}

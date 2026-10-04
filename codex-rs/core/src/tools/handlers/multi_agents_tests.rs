@@ -3824,17 +3824,14 @@ async fn spawn_agent_allows_depth_up_to_configured_max_depth() {
         })
         .await
         .expect("live parent at the configured depth should start");
+    // Starting a sub-agent thread directly binds it to its live parent's policy,
+    // the same binding a live spawn receives.
     root.thread
         .session
         .services
         .agent_control
         .effective_security_policy()
-        .inherit_child(
-            root.thread_id,
-            parent.thread_id,
-            "task:test-configured-depth-parent",
-            turn.config.security_level,
-        )
+        .snapshot_for_agent(parent.thread_id)
         .expect("direct fixture parent should receive the same policy binding as a live spawn");
     session.services.agent_control = manager.agent_control();
     session.thread_id = parent.thread_id;

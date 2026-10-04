@@ -1,0 +1,13 @@
+[
+  "Requested: [2026-08-10T12:00:00.000Z, 2026-08-10T13:00:00.000Z); timezone: UTC; grouping: Hour",
+  "Oldest retained aggregate day (ledger): None; 90-day drill-down cutoff: Some(1781850452344) ms UTC (exclusive)",
+  "Collection coverage: unknown. Range estimate covers root and resolved descendants; unknown ancestry stays separate in bucket breakdowns. Billed cost: unavailable \u2014 no",
+  "settlement evidence.",
+  "Snapshot is not current; newer activity is unverified",
+  "Range: Unknown parent population: 1 inspectable attempts, excluded from range total",
+  "Estimated token cost for recorded attempts: $0.001688 (rounded)",
+  "Effective coverage (requested \u2229 aggregate retention \u2229 snapshot) for [2026-08-10T12:00:00.000Z, 2026-08-10T13:00:00.000Z): [2026-08-10T12:00:00.000Z, 2026-08-10T13:00:00.000Z)",
+  "Hour [2026-08-10T12:00:00.000Z, 2026-08-10T13:00:00.000Z)",
+  "Refresh",
+  "Close"
+]

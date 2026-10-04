@@ -922,6 +922,7 @@ fn test_built_in_model_providers_include_deepseek_flash_responses() {
         resolve_model_for_provider(/*model*/ None, DEEPSEEK_PROVIDER_ID).as_deref(),
         Some(DEEPSEEK_DEFAULT_MODEL)
     );
+    assert_eq!(DEEPSEEK_DEFAULT_MODEL, "deepseek-flash");
     assert_eq!(
         resolve_model_for_provider(
             Some(DEEPSEEK_DEFAULT_MODEL.to_string()),
@@ -935,6 +936,15 @@ fn test_built_in_model_providers_include_deepseek_flash_responses() {
             .as_deref(),
         Some(DEEPSEEK_PRO_MODEL),
         "DeepSeek Pro should remain on the authenticated direct provider"
+    );
+    assert_eq!(
+        resolve_model_for_provider(
+            Some(DEEPSEEK_LEGACY_FLASH_MODEL.to_string()),
+            DEEPSEEK_PROVIDER_ID,
+        )
+        .as_deref(),
+        Some(DEEPSEEK_LEGACY_FLASH_MODEL),
+        "the legacy Flash name is still accepted verbatim; DeepSeek serves V4.1 Flash on it"
     );
 }
 
@@ -1446,20 +1456,47 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider(CLAUDE_FABLE_5_MODEL, AMBIENT_PROVIDER_ID),
         Some(CLAUDE_PLAN_PROVIDER_ID)
     );
-    // Opus 5.5 is corrected onto Anthropic rather than the plan route the other
-    // bare Claude slugs take, because the plan route has no row for it and
-    // would substitute `claude-opus-5-plan` without saying so.
+    // Bare Opus 5.5 off both of its routes is corrected onto the provider its
+    // row states. On the subscription it is left alone: `claude-plan`
+    // translates it exactly, and moving it would turn plan work into spend.
     assert_eq!(
         corrected_catalog_provider(ANTHROPIC_OPUS_5_5_MODEL, AMBIENT_PROVIDER_ID),
         Some(ANTHROPIC_PROVIDER_ID)
     );
     assert_eq!(
         corrected_catalog_provider(ANTHROPIC_OPUS_5_5_MODEL, CLAUDE_PLAN_PROVIDER_ID),
-        Some(ANTHROPIC_PROVIDER_ID)
+        None
     );
     assert_eq!(
         corrected_catalog_provider(ANTHROPIC_OPUS_5_5_MODEL, ANTHROPIC_PROVIDER_ID),
         None
+    );
+    // The plan slug is the plan route's, and survives being read anywhere else.
+    assert_eq!(
+        corrected_catalog_provider(CLAUDE_OPUS_5_5_PLAN_MODEL, AMBIENT_PROVIDER_ID),
+        Some(CLAUDE_PLAN_PROVIDER_ID)
+    );
+    // Only the plan slug's own arm moves it off metered Anthropic; the generic
+    // `claude-*` correction exempts that provider.
+    assert_eq!(
+        corrected_catalog_provider(CLAUDE_OPUS_5_5_PLAN_MODEL, ANTHROPIC_PROVIDER_ID),
+        Some(CLAUDE_PLAN_PROVIDER_ID)
+    );
+    // Selecting bare Opus 5.5 on the plan provider resolves to the plan row
+    // rather than falling through to Opus 5, which is a different model.
+    assert_eq!(
+        resolve_model_for_provider(
+            Some(ANTHROPIC_OPUS_5_5_MODEL.to_string()),
+            CLAUDE_PLAN_PROVIDER_ID
+        ),
+        Some(CLAUDE_OPUS_5_5_PLAN_MODEL.to_string())
+    );
+    assert_eq!(
+        resolve_model_for_provider(
+            Some(CLAUDE_OPUS_5_5_PLAN_MODEL.to_string()),
+            CLAUDE_PLAN_PROVIDER_ID
+        ),
+        Some(CLAUDE_OPUS_5_5_PLAN_MODEL.to_string())
     );
     assert_eq!(
         corrected_catalog_provider(CLAUDE_FABLE_5_MODEL, ANTHROPIC_PROVIDER_ID),
@@ -1547,6 +1584,14 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider(DEEPSEEK_PRO_MODEL, OPENROUTER_PROVIDER_ID),
         Some(DEEPSEEK_PROVIDER_ID)
     );
+    assert_eq!(
+        corrected_catalog_provider(DEEPSEEK_LEGACY_FLASH_MODEL, OPENAI_PROVIDER_ID),
+        Some(DEEPSEEK_PROVIDER_ID)
+    );
+    assert_eq!(
+        corrected_catalog_provider(DEEPSEEK_LEGACY_FLASH_MODEL, DEEPSEEK_PROVIDER_ID),
+        None
+    );
 
     // Servable cross-provider pairs, unknown models, user-defined providers: untouched.
     assert_eq!(
@@ -1578,15 +1623,25 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (ZAI_DEFAULT_MODEL, ZAI_PROVIDER_ID),
         ("glm-5.3", ZAI_PROVIDER_ID),
         (CLAUDE_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
+        (CLAUDE_OPUS_5_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_1_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (ANTHROPIC_DEFAULT_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_1_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (OPENROUTER_GROK_4_6_MODEL, OPENROUTER_PROVIDER_ID),
+        (OPENROUTER_GROK_4_7_MODEL, OPENROUTER_PROVIDER_ID),
+        ("deepseek/deepseek-v4.1-flash", OPENROUTER_PROVIDER_ID),
+        ("z-ai/glm-5.3-flash", OPENROUTER_PROVIDER_ID),
+        (
+            "nvidia/nemotron-3-ultra-550b-a55b:free",
+            OPENROUTER_PROVIDER_ID,
+        ),
+        ("glm-5.3-flash", ZAI_PROVIDER_ID),
         ("x-ai/grok-4.5", OPENROUTER_PROVIDER_ID),
         ("moonshotai/kimi-k3", OPENROUTER_PROVIDER_ID),
         (DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PROVIDER_ID),
+        (DEEPSEEK_LEGACY_FLASH_MODEL, DEEPSEEK_PROVIDER_ID),
         (DEEPSEEK_PRO_MODEL, DEEPSEEK_PROVIDER_ID),
         (
             OPENROUTER_DEEPSEEK_V4_PRO_0813_MODEL,
@@ -1606,10 +1661,9 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (BASETEN_DEFAULT_MODEL, BASETEN_PROVIDER_ID),
         ("gpt-5.6-sol", OPENAI_PROVIDER_ID),
         ("gpt-6-sol", OPENAI_PROVIDER_ID),
-        // Not `claude-plan`, unlike the bare Claude slugs above. There is no
-        // Opus 5.5 plan row, so the plan provider would resolve this pair to
-        // `claude-opus-5-plan`: a different model at a different rate.
+        // The bare API row and explicit Plan row keep separate ownership.
         (ANTHROPIC_OPUS_5_5_MODEL, ANTHROPIC_PROVIDER_ID),
+        (CLAUDE_OPUS_5_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
     ] {
         assert_eq!(
             canonical_catalog_provider(model),
@@ -1622,8 +1676,9 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
 }
 
 #[test]
-fn fable_plan_versions_resolve_to_their_exact_upstream_models() {
+fn claude_plan_versions_resolve_to_their_exact_upstream_models() {
     for (upstream_model, plan_model) in [
+        (ANTHROPIC_OPUS_5_5_MODEL, CLAUDE_OPUS_5_5_PLAN_MODEL),
         (CLAUDE_FABLE_5_MODEL, CLAUDE_FABLE_5_PLAN_MODEL),
         (CLAUDE_FABLE_5_1_MODEL, CLAUDE_FABLE_5_1_PLAN_MODEL),
     ] {

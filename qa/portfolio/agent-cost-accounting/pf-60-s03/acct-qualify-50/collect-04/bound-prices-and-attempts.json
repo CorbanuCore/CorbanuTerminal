@@ -1,0 +1,18 @@
+[
+  [
+    "{\"attempt_id\":\"3b6308bb-70ba-4733-aa01-d15ffd032511\",\"request_id\":\"6e31b26b-db9a-4c95-b6c5-f895aa55d967\",\"thread_id\":\"019feb99-26d1-73b1-8d9e-343884d7350c\",\"turn\":\"019feb99-86f9-7f81-8ea1-f80c39dbe464\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"7f2e3f44-693f-4cd9-bfa1-c08eae865eec\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786364140473}",
+    "{\"id\":\"616d2f47-c3aa-43cf-a935-d4296e48b7b9\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"7f2e3f44-693f-4cd9-bfa1-c08eae865eec\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786364140473,\"approved_at_ms\":1786364140473,\"effective_from_ms\":1786364140473,\"effective_end_ms\":null}"
+  ],
+  [
+    "{\"attempt_id\":\"248fadc4-a221-437d-8725-79a715bdba17\",\"request_id\":\"e7e9115e-5b5c-4eb6-8cc7-9ef32351a5e2\",\"thread_id\":\"019feb99-26d1-73b1-8d9e-343884d7350c\",\"turn\":\"019feb99-86f9-7f81-8ea1-f80c39dbe464\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"7f2e3f44-693f-4cd9-bfa1-c08eae865eec\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786364147295}",
+    "{\"id\":\"1d89bc15-e971-4e64-9119-0d14574735cf\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"7f2e3f44-693f-4cd9-bfa1-c08eae865eec\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786364147295,\"approved_at_ms\":1786364147295,\"effective_from_ms\":1786364147295,\"effective_end_ms\":null}"
+  ],
+  [
+    "{\"attempt_id\":\"62ad5fff-25d4-4a72-9aa2-2763af2a3d28\",\"request_id\":\"0a62586d-7c8d-416f-b6b5-a49b7638b690\",\"thread_id\":\"019feb99-a107-7443-b2f7-e2171616b775\",\"turn\":\"019feb99-aa8e-7fd2-8f6e-77db72713c63\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-terra\",\"scope\":\"7f2e3f44-693f-4cd9-bfa1-c08eae865eec\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786364147929}",
+    "{\"id\":\"a9bd3641-e616-4e19-9fcf-cd58e8a2253f\",\"provider\":\"openai\",\"model\":\"gpt-5.6-terra\",\"scope\":\"7f2e3f44-693f-4cd9-bfa1-c08eae865eec\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"2.5\",\"read\":\"0.25\",\"write\":null,\"output\":\"15\"},\"source_reference\":\"778867fd-eaff-547a-b0c3-282e096d694f\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786364147929,\"approved_at_ms\":1786364147929,\"effective_from_ms\":1786364147929,\"effective_end_ms\":null}"
+  ],
+  [
+    "{\"attempt_id\":\"99a0cfa4-cc3d-4553-92ca-d5a182d3e179\",\"request_id\":\"13eb9eb1-5d31-4b78-ad39-0132d59503fa\",\"thread_id\":\"019feb99-d8d8-7f50-ad42-3f95353a67b0\",\"turn\":\"019feb9a-2e2f-7a13-884c-c3f60a8f98f4\",\"retry_of\":null,\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"38b9772a-a99f-47b2-a97b-590839449651\",\"dialect\":\"Inclusive\",\"dispatched_at_ms\":1786364181838}",
+    "{\"id\":\"9db78335-8566-4ea5-ad56-eec2ee558dd4\",\"provider\":\"openai\",\"model\":\"gpt-5.6-sol\",\"scope\":\"38b9772a-a99f-47b2-a97b-590839449651\",\"currency\":\"USD\",\"unit\":\"PerMillionTokens\",\"rates\":{\"noncached\":\"5\",\"read\":\"0.5\",\"write\":null,\"output\":\"30\"},\"source_reference\":\"295d1043-dbab-5ee3-a34f-269c0e3944ca\",\"source_kind\":\"NativeCatalog\",\"observed_at_ms\":1786364181838,\"approved_at_ms\":1786364181838,\"effective_from_ms\":1786364181838,\"effective_end_ms\":null}"
+  ]
+]

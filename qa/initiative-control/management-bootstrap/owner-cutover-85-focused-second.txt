@@ -1,0 +1,37 @@
+............../opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/encoder.py:263: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x108ecb010>
+  return _iterencode(o, 0)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+......................................E...................................................................................................................................................
+======================================================================
+ERROR: test_reconfigure_requires_off_and_preserves_old_history (test_owner_daemon.HandoffTests.test_reconfigure_requires_off_and_preserves_old_history)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 1439, in test_reconfigure_requires_off_and_preserves_old_history
+    owner.reconfigure_owner(self.config_path, replacement, self.root)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/owner_daemon.py", line 565, in reconfigure_owner
+    with uninstalled_schedule(config_path, schedule_root), activation_store(config_path) as (root, db, meta):
+         ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/owner_daemon.py", line 548, in uninstalled_schedule
+    with locked(schedule_root / "installation.lock"):
+         ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 141, in __enter__
+    return next(self.gen)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/owner_daemon.py", line 96, in locked
+    path = private_file(path)
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/owner_daemon.py", line 46, in private_file
+    info = path.stat()
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/pathlib/__init__.py", line 654, in stat
+    return os.stat(self, follow_symlinks=follow_symlinks)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/private/tmp/owner-fixture-vfdzi31o/state/installation.lock'
+
+----------------------------------------------------------------------
+Ran 200 tests in 20.561s
+
+FAILED (errors=1)
+{"reason":"TimeoutExpired","state":"ERROR"}
+{"reason":"TimeoutExpired","state":"ERROR"}
+{"fixture_only":true,"manager":"empty","routing":"deferred","state":"ACTIVE","states":["RECOVERING","READY","ACTIVE"]}

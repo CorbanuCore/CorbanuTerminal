@@ -1,0 +1,36 @@
+{
+  "binary": {
+    "path": "package/corbanu",
+    "sha256": "483031eee7d1b4f978aa782b89164e4072f1533f2eea72a02e1428857254d6de"
+  },
+  "cache_limit": "The seed was bound by path only at build time, not by content. This attestation cannot exclude cache reuse of an artifact built from another source pin or prove a clean/reproducible build. Post-build hashing cannot reconstruct that missing evidence. Source state, successful build command and final binary hashes remain evidenced; cache-origin exclusion is unproven.",
+  "inspection_after_move": [
+    "Compare exact attestation bytes to the independently frozen attestation SHA-256; do not edit or repin it.",
+    "Rehash provenance and manifest bytes, validate source commit/tree and clean successful build record.",
+    "Enumerate the complete package, reject symlinks/special files/extras, recompute each binary SHA-256 and mode.",
+    "If creating a new transport archive, hash and record that archive separately; its digest is not the attestation digest.",
+    "Repeat after extraction and before/after each case; filesystem modes are identity checks, not sandbox enforcement."
+  ],
+  "package": {
+    "manifest": "package-manifest.json",
+    "manifest_sha256": "32529d0a894503c021ff756ebc27a75555ab05ed2ec63dc47dc0d9d7bb878024",
+    "path": "package"
+  },
+  "provenance": {
+    "path": "build-provenance.json",
+    "sha256": "349ecadeae3d1d57125acc012103aa6bb92acf1eec42678669a817aaec162d53"
+  },
+  "relocation": "Move the entire bundle; resolve package/manifest/provenance relative to the attestation parent. Historical provenance paths are observations, not locators.",
+  "root": "attestation-parent",
+  "schema_version": 2,
+  "source_after": {
+    "commit": "ae5981d2d7d762dfd6d54e0ac0967729bf88f082",
+    "status": "",
+    "tree": "834f57388066d33c27fdee6e3b234dec7fa0b0e6"
+  },
+  "source_before": {
+    "commit": "ae5981d2d7d762dfd6d54e0ac0967729bf88f082",
+    "status": "",
+    "tree": "834f57388066d33c27fdee6e3b234dec7fa0b0e6"
+  }
+}

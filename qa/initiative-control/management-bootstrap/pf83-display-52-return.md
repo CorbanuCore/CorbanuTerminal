@@ -1,0 +1,26 @@
+# RETURN — pf83-display-52
+
+Allocation digest `2002cf9527f9c7159821450906f9743a0bd94dfb0bb4d39442352e7031b38be7`; claim `5455cb8a-f9b1-475a-9289-4c6265c17bb6`; runtime `gpt-6-astra high`. Brief SHA-256 verified: `2c64bd146a9febb1eb26c9c8440e3d1dbcc484968627436ec6bf98b7d2349da3`; initial clean HEAD equals frozen base `865a4a094d091043d0615cef1f861542b9a16f01`.
+Routine orphan cleanup and limitation disclosure; no production behavior changes. Product context: **Permission selection confirmation — TO BUILD**, excerpt “This is confirmation plumbing and truthful UI”; existing PF-83 / F03 display work. No new plan/sprint implementation.
+Deleted test fixtures:
+- `codex-rs/tui/src/app/snapshots/codex_tui__app__permission_confirmation__tests__permission_confirmation_outcomes_are_explicit.snap` (12 lines).
+- `codex-rs/tui/src/app/snapshots/codex_tui__app__permission_confirmation__tests__permission_confirmation_superseded.snap` (5 lines).
+Proof: tracked-source search for both external snapshot names finds no executable reference. The outcomes test uses `insta::assert_snapshot!(messages, @r"...")` at `permission_confirmation_tests.rs:263`; the superseded outcome uses an inline assertion in `permission_confirmation_orders_profiles_and_newer_observations` at line 447. Final permission tests run with both files absent and snapshot updates disabled.
+Brief correction: “nothing references them” is true for executable consumers, not literal repository mentions. Historical `qa/reliability/live-permission-transition-20260913/candidate-manifest{,-v2,-v3}.md` and `pf83-display-49-return.md` mention paths; preserved as provenance. This receipt also records them.
+
+Disclosed limitation — conditional running/next-turn distinction remains OPEN:
+- Today `chatwidget/status_controls.rs::add_status_output` passes `&self.config` plus display/session/usage metadata to `new_status_output_with_rate_limits_handle`. `status/card.rs` derives permissions from the session's effective/active profile, approval policy/reviewer, cwd and workspace roots. No captured running-turn authority or authoritative equality signal reaches this renderer.
+- A successor needs a server-grounded captured authority for the identified running turn (including effective permissions/approval policy and relevant execution context), compared with next-turn session authority, or a server-derived comparison signal. It must distinguish idle, unknown and equal/different states and update correctly on start, completion, settings change and reconnect; session config or a busy flag alone cannot establish equality. This requires separately authorized input/lifecycle work, deferred by this brief.
+- When running work retains Read Only and next-turn settings are Full Access, the current permission row reads `Permissions: Next turn: Full Access`; in the reverse example with OnRequest it reads `Permissions: Next turn: Read Only (Ask for approval)`. Wrapping varies with width. Neither case displays the running value or a conditional mismatch notice. The confirmation separately explains that input is held if permissions differ and that running work and approvals are unchanged. These are source/snapshot-derived examples, not a new interactive execution claim.
+- Judgment: the next-turn row is TRUE when authorities differ; it does not falsely relabel running authority. The unconditional qualifier is merely redundant when they match or no turn runs. Missing running-authority comparison is a visibility limitation, not the false display claim F03 targeted; no evidence here establishes an urgent correctness defect.
+- Brief clarification: the previous revision already removed the unconditional explanatory paragraph; only the unconditional `Next turn:` qualifier remains. No status wording was changed in this allocation.
+
+Validation: prerequisites `cargo build --locked --offline -p codex-cli --bin codex -p codex-rmcp-client --bins` exited 0 before tests. All lanes share `CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf83-rebind-31`, from `codex-rs`; tests use `INSTA_UPDATE=no` and `--locked --offline --retries 0 --test-threads 1`. Read test-isolation guidance first; guarded `just test` only, disposable profiles/native-keyring denial; no native prompt observed. Raw ignored logs beside this receipt: `pf83-display-52-{prerequisites,permission,status,settings}.log`.
+
+| Lane | Run / passed / failed / timed out / skipped | Exit / exact failure names |
+| --- | --- | --- |
+| `just test -p codex-tui permission` | 93 / 93 / 0 / 0 / 4078 | 0 / none |
+| `just test -p codex-tui status` | 391 / 391 / 0 / 0 / 3780 | 0 / none |
+| `just test -p codex-app-server settings` | 25 / 25 / 0 / 0 / 1074 | 0 / none |
+Line budget: 17 deleted snapshot/test lines; 26 added receipt/non-test lines; 43 total; 0 production lines. Ignored raw logs excluded. No Rust source edits, so no formatter needed; `git diff --check` and final three-file writable-scope audit pass.
+True-TUI/code-blind/live-repository qualification N/A to this routine deletion/disclosure: user-facing behavior is unchanged. Existing feature qualification remains the integrator's gate; no human-test readiness or acceptance claimed. No commit, push, release or subagent dispatch.

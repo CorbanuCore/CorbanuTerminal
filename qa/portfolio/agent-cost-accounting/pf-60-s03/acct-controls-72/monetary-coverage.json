@@ -1,0 +1,462 @@
+{
+  "checks": 147,
+  "mutations": 159,
+  "all_reached_and_failed_for_named_reason": true,
+  "plan": "controls-04/plan.json.gz",
+  "raw_results": "controls-04/semantic-results.json.gz",
+  "check_to_zero_based_mutation_indices": {
+    "exact-count:backend-reopened": [
+      0
+    ],
+    "exact-value:backend-reopened": [
+      1
+    ],
+    "display-count:backend-reopened": [
+      2
+    ],
+    "display-value:backend-reopened": [
+      3
+    ],
+    "exact-count:historical": [
+      4
+    ],
+    "exact-value:historical": [
+      5
+    ],
+    "display-count:historical": [
+      6
+    ],
+    "display-value:historical": [
+      7
+    ],
+    "exact-count:historical-Request-1-Attempt-1": [
+      8
+    ],
+    "exact-value:historical-Request-1-Attempt-1": [
+      9
+    ],
+    "display-count:historical-Request-1-Attempt-1": [
+      10
+    ],
+    "display-value:historical-Request-1-Attempt-1": [
+      11
+    ],
+    "exact-count:mixed-provider": [
+      12
+    ],
+    "exact-value:mixed-provider": [
+      13
+    ],
+    "display-count:mixed-provider": [
+      14
+    ],
+    "display-value:mixed-provider": [
+      15
+    ],
+    "exact-count:mixed-provider-Request-1-Attempt-1": [
+      16
+    ],
+    "exact-value:mixed-provider-Request-1-Attempt-1": [
+      17
+    ],
+    "display-count:mixed-provider-Request-1-Attempt-1": [
+      18
+    ],
+    "display-value:mixed-provider-Request-1-Attempt-1": [
+      19
+    ],
+    "exact-count:mixed-provider-Provider-openai": [
+      20
+    ],
+    "exact-value:mixed-provider-Provider-openai": [
+      21
+    ],
+    "display-count:mixed-provider-Provider-openai": [
+      22
+    ],
+    "display-value:mixed-provider-Provider-openai": [
+      23
+    ],
+    "exact-count:narrow": [
+      24
+    ],
+    "exact-value:narrow": [
+      25
+    ],
+    "display-count:narrow": [
+      26
+    ],
+    "display-value:narrow": [
+      27
+    ],
+    "exact-count:narrow-Request-1-Attempt-1": [
+      28
+    ],
+    "exact-value:narrow-Request-1-Attempt-1": [
+      29
+    ],
+    "display-count:narrow-Request-1-Attempt-1": [
+      30
+    ],
+    "display-value:narrow-Request-1-Attempt-1": [
+      31
+    ],
+    "exact-count:stale-restored-control": [
+      32
+    ],
+    "exact-value:stale-restored-control": [
+      33
+    ],
+    "display-count:stale-restored-control": [
+      34
+    ],
+    "display-value:stale-restored-control": [
+      35
+    ],
+    "exact-count:missing-price": [
+      36
+    ],
+    "exact-value:missing-price": [
+      37
+    ],
+    "display-count:missing-price": [
+      38
+    ],
+    "display-value:missing-price": [
+      39
+    ],
+    "exact-count:missing-price-Request-1-Attempt-1": [
+      40
+    ],
+    "exact-value:missing-price-Request-1-Attempt-1": [
+      41
+    ],
+    "display-count:missing-price-Request-1-Attempt-1": [
+      42
+    ],
+    "display-value:missing-price-Request-1-Attempt-1": [
+      43
+    ],
+    "exact-count:no-usage": [
+      44
+    ],
+    "exact-value:no-usage": [
+      45
+    ],
+    "display-count:no-usage": [
+      46
+    ],
+    "display-value:no-usage": [
+      47
+    ],
+    "exact-count:no-usage-Request-1-Attempt-1": [
+      48
+    ],
+    "exact-value:no-usage-Request-1-Attempt-1": [
+      49
+    ],
+    "display-count:no-usage-Request-1-Attempt-1": [
+      50
+    ],
+    "display-value:no-usage-Request-1-Attempt-1": [
+      51
+    ],
+    "exact-count:zero-attempt-day": [
+      52
+    ],
+    "exact-value:zero-attempt-day": [
+      53
+    ],
+    "display-count:zero-attempt-day": [
+      54
+    ],
+    "display-value:zero-attempt-day": [
+      55
+    ],
+    "exact-count:never-prompted": [
+      56
+    ],
+    "exact-value:never-prompted": [
+      57
+    ],
+    "display-count:never-prompted": [
+      58
+    ],
+    "display-value:never-prompted": [
+      59
+    ],
+    "unknown-cost:missing-price": [
+      60
+    ],
+    "incomplete-cost:missing-price": [
+      61
+    ],
+    "unknown-cost:missing-price-Request-1-Attempt-1": [
+      62
+    ],
+    "incomplete-cost:missing-price-Request-1-Attempt-1": [
+      63
+    ],
+    "unknown-cost:no-usage": [
+      64
+    ],
+    "incomplete-cost:no-usage": [
+      65
+    ],
+    "unknown-cost:no-usage-Request-1-Attempt-1": [
+      66
+    ],
+    "incomplete-cost:no-usage-Request-1-Attempt-1": [
+      67
+    ],
+    "component:historical-Request-1-Attempt-1:Noncached input": [
+      68,
+      69
+    ],
+    "component:historical-Request-1-Attempt-1:Cache read": [
+      70,
+      71
+    ],
+    "component:historical-Request-1-Attempt-1:Cache write": [
+      72,
+      73
+    ],
+    "component:historical-Request-1-Attempt-1:Output": [
+      74,
+      75
+    ],
+    "rate:historical-Request-1-Attempt-1:Noncached input": [
+      76
+    ],
+    "rate:historical-Request-1-Attempt-1:Cache read": [
+      77
+    ],
+    "rate:historical-Request-1-Attempt-1:Output": [
+      78
+    ],
+    "component:mixed-provider-Request-1-Attempt-1:Noncached input": [
+      79,
+      80
+    ],
+    "component:mixed-provider-Request-1-Attempt-1:Cache read": [
+      81,
+      82
+    ],
+    "component:mixed-provider-Request-1-Attempt-1:Cache write": [
+      83,
+      84
+    ],
+    "component:mixed-provider-Request-1-Attempt-1:Output": [
+      85,
+      86
+    ],
+    "rate:mixed-provider-Request-1-Attempt-1:Noncached input": [
+      87
+    ],
+    "rate:mixed-provider-Request-1-Attempt-1:Cache read": [
+      88
+    ],
+    "rate:mixed-provider-Request-1-Attempt-1:Output": [
+      89
+    ],
+    "component:narrow-Request-1-Attempt-1:Noncached input": [
+      90,
+      91
+    ],
+    "component:narrow-Request-1-Attempt-1:Cache read": [
+      92,
+      93
+    ],
+    "component:narrow-Request-1-Attempt-1:Cache write": [
+      94,
+      95
+    ],
+    "component:narrow-Request-1-Attempt-1:Output": [
+      96,
+      97
+    ],
+    "rate:narrow-Request-1-Attempt-1:Noncached input": [
+      98
+    ],
+    "rate:narrow-Request-1-Attempt-1:Cache read": [
+      99
+    ],
+    "rate:narrow-Request-1-Attempt-1:Output": [
+      100
+    ],
+    "missing-price:missing-price-Request-1-Attempt-1:snapshot": [
+      101
+    ],
+    "missing-price:missing-price-Request-1-Attempt-1:input": [
+      102
+    ],
+    "missing-price:missing-price-Request-1-Attempt-1:output": [
+      103
+    ],
+    "no-usage:no-usage-Request-1-Attempt-1:input": [
+      104
+    ],
+    "no-usage:no-usage-Request-1-Attempt-1:output": [
+      105
+    ],
+    "refused-money:stale-estimate": [
+      106
+    ],
+    "refused-money:stale-refresh": [
+      107
+    ],
+    "refused-money:unavailable-backend": [
+      108
+    ],
+    "narrow-qualifier:Estimated token cost for recorded attempts: $0.000710": [
+      109
+    ],
+    "narrow-qualifier:Billed cost: unavailable \u2014 no settlement evidence": [
+      110
+    ],
+    "narrow-qualifier:this UTC day is not their complete lifetime.": [
+      111
+    ],
+    "narrow-exact": [
+      112
+    ],
+    "usage:historical:Input": [
+      113
+    ],
+    "usage:historical:Noncached input (derived for inclusive input)": [
+      114
+    ],
+    "usage:historical:Cache read": [
+      115
+    ],
+    "usage:historical:Cache write": [
+      116
+    ],
+    "usage:historical:Output": [
+      117
+    ],
+    "usage:historical:Reasoning (subset, not separately billed)": [
+      118
+    ],
+    "usage:historical:Total (not separately billed)": [
+      119
+    ],
+    "usage:narrow:Input": [
+      120
+    ],
+    "usage:narrow:Noncached input (derived for inclusive input)": [
+      121
+    ],
+    "usage:narrow:Cache read": [
+      122
+    ],
+    "usage:narrow:Cache write": [
+      123
+    ],
+    "usage:narrow:Output": [
+      124
+    ],
+    "usage:narrow:Reasoning (subset, not separately billed)": [
+      125
+    ],
+    "usage:narrow:Total (not separately billed)": [
+      126
+    ],
+    "usage:mixed-provider:Input": [
+      127
+    ],
+    "usage:mixed-provider:Noncached input (derived for inclusive input)": [
+      128
+    ],
+    "usage:mixed-provider:Cache read": [
+      129
+    ],
+    "usage:mixed-provider:Cache write": [
+      130
+    ],
+    "usage:mixed-provider:Output": [
+      131
+    ],
+    "usage:mixed-provider:Reasoning (subset, not separately billed)": [
+      132
+    ],
+    "usage:mixed-provider:Total (not separately billed)": [
+      133
+    ],
+    "usage:missing-price:Input": [
+      134
+    ],
+    "usage:missing-price:Noncached input (derived for inclusive input)": [
+      135
+    ],
+    "usage:missing-price:Cache read": [
+      136
+    ],
+    "usage:missing-price:Cache write": [
+      137
+    ],
+    "usage:missing-price:Output": [
+      138
+    ],
+    "usage:missing-price:Reasoning (subset, not separately billed)": [
+      139
+    ],
+    "usage:missing-price:Total (not separately billed)": [
+      140
+    ],
+    "usage:no-usage:Input": [
+      141
+    ],
+    "usage:no-usage:Noncached input (derived for inclusive input)": [
+      142
+    ],
+    "usage:no-usage:Cache read": [
+      143
+    ],
+    "usage:no-usage:Cache write": [
+      144
+    ],
+    "usage:no-usage:Output": [
+      145
+    ],
+    "usage:no-usage:Reasoning (subset, not separately billed)": [
+      146
+    ],
+    "usage:no-usage:Total (not separately billed)": [
+      147
+    ],
+    "usage:zero-attempt-day:Input": [
+      148
+    ],
+    "usage:zero-attempt-day:Noncached input (derived for inclusive input)": [
+      149
+    ],
+    "usage:zero-attempt-day:Cache read": [
+      150
+    ],
+    "usage:zero-attempt-day:Cache write": [
+      151
+    ],
+    "usage:zero-attempt-day:Output": [
+      152
+    ],
+    "usage:zero-attempt-day:Reasoning (subset, not separately billed)": [
+      153
+    ],
+    "usage:zero-attempt-day:Total (not separately billed)": [
+      154
+    ],
+    "arithmetic:known-attempt": [
+      155
+    ],
+    "arithmetic:emitted-usage": [
+      156
+    ],
+    "native:missing-price": [
+      157
+    ],
+    "native:rates": [
+      158
+    ]
+  }
+}

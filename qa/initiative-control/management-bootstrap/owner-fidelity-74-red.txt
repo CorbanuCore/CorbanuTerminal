@@ -1,0 +1,262 @@
+test_resolved_decision_slack_line_survives_omission_with_slack_on (test_decision_feed.SlackProjectionTests.test_resolved_decision_slack_line_survives_omission_with_slack_on) ... ERROR
+test_resolved_decision_slack_line_survives_omission_with_slack_off (test_decision_feed.SlackProjectionTests.test_resolved_decision_slack_line_survives_omission_with_slack_off) ... ERROR
+test_historical_resolutions_also_retain_their_answered_revisions (test_decision_feed.ProjectionRegressionTests.test_historical_resolutions_also_retain_their_answered_revisions) ... FAIL
+test_omitted_settled_history_is_distinct_from_unavailable_status (test_attention.DecisionRenderingTests.test_omitted_settled_history_is_distinct_from_unavailable_status) ... 
+  test_omitted_settled_history_is_distinct_from_unavailable_status (test_attention.DecisionRenderingTests.test_omitted_settled_history_is_distinct_from_unavailable_status) (enabled=False, disclosed=True) ... FAIL
+  test_omitted_settled_history_is_distinct_from_unavailable_status (test_attention.DecisionRenderingTests.test_omitted_settled_history_is_distinct_from_unavailable_status) (enabled=True, disclosed=True) ... FAIL
+test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) ... 
+  test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='owner', error='OSError') ... FAIL
+  test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='owner', error='OperationalError') ... FAIL
+  test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='owner', error='ValueError') ... FAIL
+  test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='owner', error='TypeError') ... FAIL
+  test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='owner', error='KeyError') ... FAIL
+  test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='coordinator', error='OSError') ... FAIL
+  test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='coordinator', error='OperationalError') ... FAIL
+  test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='coordinator', error='ValueError') ... FAIL
+  test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='coordinator', error='TypeError') ... FAIL
+  test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='coordinator', error='KeyError') ... FAIL
+test_busy_coordinator_returns_partial_status_through_cli (test_owner_daemon.ActivationVisibilityTests.test_busy_coordinator_returns_partial_status_through_cli) ... FAIL
+
+======================================================================
+ERROR: test_resolved_decision_slack_line_survives_omission_with_slack_on (test_decision_feed.SlackProjectionTests.test_resolved_decision_slack_line_survives_omission_with_slack_on)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_feed.py", line 824, in test_resolved_decision_slack_line_survives_omission_with_slack_on
+    self.check_resolved_decision_after_omission(True)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_feed.py", line 838, in check_resolved_decision_after_omission
+    d.save_fixture(self.feed_root, changed, d.digest(self.feed), NOW)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 274, in save_fixture
+    raise Invalid() from None
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+ERROR: test_resolved_decision_slack_line_survives_omission_with_slack_off (test_decision_feed.SlackProjectionTests.test_resolved_decision_slack_line_survives_omission_with_slack_off)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_feed.py", line 827, in test_resolved_decision_slack_line_survives_omission_with_slack_off
+    self.check_resolved_decision_after_omission(False)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_feed.py", line 838, in check_resolved_decision_after_omission
+    d.save_fixture(self.feed_root, changed, d.digest(self.feed), NOW)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/decisions.py", line 274, in save_fixture
+    raise Invalid() from None
+decisions.Invalid: Decision input unavailable: invalid fixture.
+
+======================================================================
+FAIL: test_historical_resolutions_also_retain_their_answered_revisions (test_decision_feed.ProjectionRegressionTests.test_historical_resolutions_also_retain_their_answered_revisions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_decision_feed.py", line 63, in test_historical_resolutions_also_retain_their_answered_revisions
+    self.assertEqual({1, 4, 5}, {row["revision"] for row in result["decisions"]})
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Items in the first set but not the second:
+1
+4
+
+======================================================================
+FAIL: test_omitted_settled_history_is_distinct_from_unavailable_status (test_attention.DecisionRenderingTests.test_omitted_settled_history_is_distinct_from_unavailable_status) (enabled=False, disclosed=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_attention.py", line 157, in test_omitted_settled_history_is_distinct_from_unavailable_status
+    self.assertIn("omits 2 older revision(s) for this decision", current)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'omits 2 older revision(s) for this decision' not found in ' tabindex="-1"><summary><span class="decision-overview"><span class="decision-title"><a href="doc-6330009c9cfdad2604f8.html">PF-80-S01</a> pilot size</span> <span class="decision-owner">Owner: Travis</span> <span class="decision-sprints"><a href="doc-6330009c9cfdad2604f8.html">PF-80-S01</a></span> <span class="badge">resolved</span></span></summary><div class="decision-body-bounded" tabindex="0" role="region" aria-label="Decision context: PF-80-S01 pilot size"><a href="#decision-choice-1">Permanent decision link</a><p>Revision 3: resolved; raised 2026-09-12T12:00:00Z; context updated 2026-09-12T12:00:00Z. Context within freshness window.</p><p>Sprints: <a href="doc-6330009c9cfdad2604f8.html">PF-80-S01</a></p><p><strong>Initiative</strong> PF-80</p><p><strong>Summary</strong> <a href="doc-6330009c9cfdad2604f8.html">PF-80-S01</a> pilot size</p><p><strong>Owner</strong> Travis</p><p><strong>Background</strong> Synthetic pilot planning</p><p><strong>Impact / tradeoffs</strong> Ten testers increase triage</p><p><strong>Stopped work</strong> Pilot invitations</p><p><strong>Work that can continue</strong> Offline implementation</p><p><strong>Recommendation (not an answer)</strong> Five testers bounds triage</p><p><strong>Options</strong></p><ul><li>Five testers</li><li>Ten testers</li></ul><p><strong>Question</strong> Five or ten testers?</p><p><strong>Evidence / context / test links</strong></p><p><a href="doc-6330009c9cfdad2604f8.html">Sanitized test plan</a> — Evidence within freshness window; assessed 2026-09-12T12:00:00Z</p><p>Recorded resolved against question revision 1; 2026-09-12T12:00:00Z.</p><p><strong>Actor</strong> Travis</p><p><strong>Answer</strong> Five testers</p><p><strong>Scope</strong> Synthetic pilot only</p><p>Slack status for this question revision: unknown.</p>'
+
+======================================================================
+FAIL: test_omitted_settled_history_is_distinct_from_unavailable_status (test_attention.DecisionRenderingTests.test_omitted_settled_history_is_distinct_from_unavailable_status) (enabled=True, disclosed=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_attention.py", line 157, in test_omitted_settled_history_is_distinct_from_unavailable_status
+    self.assertIn("omits 2 older revision(s) for this decision", current)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'omits 2 older revision(s) for this decision' not found in ' tabindex="-1"><summary><span class="decision-overview"><span class="decision-title"><a href="doc-6330009c9cfdad2604f8.html">PF-80-S01</a> pilot size</span> <span class="decision-owner">Owner: Travis</span> <span class="decision-sprints"><a href="doc-6330009c9cfdad2604f8.html">PF-80-S01</a></span> <span class="badge">resolved</span></span></summary><div class="decision-body-bounded" tabindex="0" role="region" aria-label="Decision context: PF-80-S01 pilot size"><a href="#decision-choice-1">Permanent decision link</a><p>Revision 3: resolved; raised 2026-09-12T12:00:00Z; context updated 2026-09-12T12:00:00Z. Context within freshness window.</p><p>Sprints: <a href="doc-6330009c9cfdad2604f8.html">PF-80-S01</a></p><p><strong>Initiative</strong> PF-80</p><p><strong>Summary</strong> <a href="doc-6330009c9cfdad2604f8.html">PF-80-S01</a> pilot size</p><p><strong>Owner</strong> Travis</p><p><strong>Background</strong> Synthetic pilot planning</p><p><strong>Impact / tradeoffs</strong> Ten testers increase triage</p><p><strong>Stopped work</strong> Pilot invitations</p><p><strong>Work that can continue</strong> Offline implementation</p><p><strong>Recommendation (not an answer)</strong> Five testers bounds triage</p><p><strong>Options</strong></p><ul><li>Five testers</li><li>Ten testers</li></ul><p><strong>Question</strong> Five or ten testers?</p><p><strong>Evidence / context / test links</strong></p><p><a href="doc-6330009c9cfdad2604f8.html">Sanitized test plan</a> — Evidence within freshness window; assessed 2026-09-12T12:00:00Z</p><p>Recorded resolved against question revision 1; 2026-09-12T12:00:00Z.</p><p><strong>Actor</strong> Travis</p><p><strong>Answer</strong> Five testers</p><p><strong>Scope</strong> Synthetic pilot only</p><p>Slack status for this question revision: unknown.</p>'
+
+======================================================================
+FAIL: test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='owner', error='OSError')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 459, in test_partial_status_cli_redacts_untrusted_error_details
+    self.assertEqual(dict(error=type(error).__name__, reason=expected),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     value["unavailable"][component])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'error': 'OSError', 'reason': 'OSError'} != {'error': 'OSError', 'reason': 'private-path-canary'}
+- {'error': 'OSError', 'reason': 'OSError'}
+?                                 ^^^  ^^
+
++ {'error': 'OSError', 'reason': 'private-path-canary'}
+?                                 ^ +++++++++++++++ ^
+
+
+======================================================================
+FAIL: test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='owner', error='OperationalError')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 459, in test_partial_status_cli_redacts_untrusted_error_details
+    self.assertEqual(dict(error=type(error).__name__, reason=expected),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     value["unavailable"][component])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'error': 'OperationalError', 'reason': 'OperationalError'} != {'error': 'OperationalError', 'reason': 'private-statement-canary'}
+- {'error': 'OperationalError', 'reason': 'OperationalError'}
+?                                          - -   ^^  -- ^^^
+
++ {'error': 'OperationalError', 'reason': 'private-statement-canary'}
+?                                            ++  ^^^^^^^^^^^^^^   ^
+
+
+======================================================================
+FAIL: test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='owner', error='ValueError')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 459, in test_partial_status_cli_redacts_untrusted_error_details
+    self.assertEqual(dict(error=type(error).__name__, reason=expected),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     value["unavailable"][component])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'error': 'ValueError', 'reason': 'ValueError'} != {'error': 'ValueError', 'reason': 'private-value-canary'}
+- {'error': 'ValueError', 'reason': 'ValueError'}
+?                                    ^    ^ ^^^
+
++ {'error': 'ValueError', 'reason': 'private-value-canary'}
+?                                    ^^^^^^^^^    ^^^^^ ^
+
+
+======================================================================
+FAIL: test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='owner', error='TypeError')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 459, in test_partial_status_cli_redacts_untrusted_error_details
+    self.assertEqual(dict(error=type(error).__name__, reason=expected),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     value["unavailable"][component])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'error': 'TypeError', 'reason': 'TypeError'} != {'error': 'TypeError', 'reason': 'private-type-canary'}
+- {'error': 'TypeError', 'reason': 'TypeError'}
+?                                   ^   ^ ^^^
+
++ {'error': 'TypeError', 'reason': 'private-type-canary'}
+?                                   ^^^^^^^^^   ^^^^^ ^
+
+
+======================================================================
+FAIL: test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='owner', error='KeyError')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 459, in test_partial_status_cli_redacts_untrusted_error_details
+    self.assertEqual(dict(error=type(error).__name__, reason=expected),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     value["unavailable"][component])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'error': 'KeyError', 'reason': 'KeyError'} != {'error': 'KeyError', 'reason': "'private-key-canary'"}
+- {'error': 'KeyError', 'reason': 'KeyError'}
+?                                  ^  ^ ^^^
+
++ {'error': 'KeyError', 'reason': "'private-key-canary'"}
+?                                 + ^^^^^^^^^  ^^^^^ ^ +
+
+
+======================================================================
+FAIL: test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='coordinator', error='OSError')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 459, in test_partial_status_cli_redacts_untrusted_error_details
+    self.assertEqual(dict(error=type(error).__name__, reason=expected),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     value["unavailable"][component])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'error': 'OSError', 'reason': 'OSError'} != {'error': 'OSError', 'reason': 'private-path-canary'}
+- {'error': 'OSError', 'reason': 'OSError'}
+?                                 ^^^  ^^
+
++ {'error': 'OSError', 'reason': 'private-path-canary'}
+?                                 ^ +++++++++++++++ ^
+
+
+======================================================================
+FAIL: test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='coordinator', error='OperationalError')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 459, in test_partial_status_cli_redacts_untrusted_error_details
+    self.assertEqual(dict(error=type(error).__name__, reason=expected),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     value["unavailable"][component])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'error': 'OperationalError', 'reason': 'OperationalError'} != {'error': 'OperationalError', 'reason': 'private-statement-canary'}
+- {'error': 'OperationalError', 'reason': 'OperationalError'}
+?                                          - -   ^^  -- ^^^
+
++ {'error': 'OperationalError', 'reason': 'private-statement-canary'}
+?                                            ++  ^^^^^^^^^^^^^^   ^
+
+
+======================================================================
+FAIL: test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='coordinator', error='ValueError')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 459, in test_partial_status_cli_redacts_untrusted_error_details
+    self.assertEqual(dict(error=type(error).__name__, reason=expected),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     value["unavailable"][component])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'error': 'ValueError', 'reason': 'ValueError'} != {'error': 'ValueError', 'reason': 'private-value-canary'}
+- {'error': 'ValueError', 'reason': 'ValueError'}
+?                                    ^    ^ ^^^
+
++ {'error': 'ValueError', 'reason': 'private-value-canary'}
+?                                    ^^^^^^^^^    ^^^^^ ^
+
+
+======================================================================
+FAIL: test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='coordinator', error='TypeError')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 459, in test_partial_status_cli_redacts_untrusted_error_details
+    self.assertEqual(dict(error=type(error).__name__, reason=expected),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     value["unavailable"][component])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'error': 'TypeError', 'reason': 'TypeError'} != {'error': 'TypeError', 'reason': 'private-type-canary'}
+- {'error': 'TypeError', 'reason': 'TypeError'}
+?                                   ^   ^ ^^^
+
++ {'error': 'TypeError', 'reason': 'private-type-canary'}
+?                                   ^^^^^^^^^   ^^^^^ ^
+
+
+======================================================================
+FAIL: test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) (component='coordinator', error='KeyError')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 459, in test_partial_status_cli_redacts_untrusted_error_details
+    self.assertEqual(dict(error=type(error).__name__, reason=expected),
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     value["unavailable"][component])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'error': 'KeyError', 'reason': 'KeyError'} != {'error': 'KeyError', 'reason': "'private-key-canary'"}
+- {'error': 'KeyError', 'reason': 'KeyError'}
+?                                  ^  ^ ^^^
+
++ {'error': 'KeyError', 'reason': "'private-key-canary'"}
+?                                 + ^^^^^^^^^  ^^^^^ ^ +
+
+
+======================================================================
+FAIL: test_busy_coordinator_returns_partial_status_through_cli (test_owner_daemon.ActivationVisibilityTests.test_busy_coordinator_returns_partial_status_through_cli)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 430, in test_busy_coordinator_returns_partial_status_through_cli
+    self.assertEqual("OperationalError", value["unavailable"]["coordinator"]["reason"])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'OperationalError' != 'database is locked'
+- OperationalError
++ database is locked
+
+
+----------------------------------------------------------------------
+Ran 6 tests in 1.494s
+
+FAILED (failures=14, errors=2)

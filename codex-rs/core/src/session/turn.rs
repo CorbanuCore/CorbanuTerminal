@@ -609,6 +609,28 @@ pub(crate) async fn run_turn(
                                 .services
                                 .model_client()
                                 .new_session_for_provider(turn_context.provider.info());
+                            // The classifier is a second model request the
+                            // operator paid for, on a session of its own, so it
+                            // is collected like any other - under the turn it
+                            // assesses. Best effort: an assessment that cannot
+                            // be recorded still runs.
+                            let _accounting = match crate::accounting::attach_turn(
+                                &sess,
+                                turn_context.as_ref(),
+                                &assessment_client_session,
+                                crate::accounting::assessment_turn_label(&turn_context.sub_id),
+                            )
+                            .await
+                            {
+                                Ok(scopes) => Some(scopes),
+                                Err(error) => {
+                                    tracing::warn!(
+                                        %error,
+                                        "accounting: completion assessment proceeding unrecorded"
+                                    );
+                                    None
+                                }
+                            };
                             let assessment_started_at = Instant::now();
                             match assess_turn_completion(
                                 sess.as_ref(),
@@ -1635,6 +1657,17 @@ async fn run_sampling_request(
     let turn_context = Arc::clone(&step_context.turn);
     let router = Arc::clone(&step_context.tool_router);
 
+    let scopes = crate::accounting::attach_turn(
+        &sess,
+        &turn_context,
+        client_session,
+        turn_context.sub_id.clone(),
+    )
+    .await?;
+    let accounting = scopes.anthropic.clone();
+    let responses_accounting = scopes.responses.clone();
+    let chat_accounting = scopes.chat.clone();
+
     let base_instructions = sess.get_base_instructions().await;
     trace_turn_timing("after_get_base_instructions", sampling_started_at);
 
@@ -1695,6 +1728,15 @@ async fn run_sampling_request(
         )
         .await;
         let attempt_elapsed = attempt_started_at.elapsed();
+        if let Some(accounting) = &accounting {
+            accounting.check()?;
+        }
+        if let Some(accounting) = &responses_accounting {
+            accounting.check()?;
+        }
+        if let Some(accounting) = &chat_accounting {
+            accounting.check()?;
+        }
         let err = match attempt_result {
             Ok(output) => {
                 return Ok((output, original_input.unwrap_or(prompt.input)));
@@ -2470,6 +2512,10 @@ async fn drain_in_flight(
     sess: Arc<Session>,
     turn_context: Arc<TurnContext>,
 ) -> CodexResult<()> {
+    // A tool that reports a fatal error (for example the repeated-call or
+    // malformed-call guards) ends the turn once every other in-flight call has
+    // recorded its output.
+    let mut fatal = None;
     while let Some(res) = in_flight.next().await {
         match res {
             Ok(Ok(response_input)) => {
@@ -2483,13 +2529,16 @@ async fn drain_in_flight(
                 )
                 .await;
             }
+            Ok(Err(err)) if matches!(err.details(), CodexErrorDetails::Fatal(_)) => {
+                fatal.get_or_insert(err);
+            }
             Ok(Err(err)) => {
                 error_or_panic(format!("in-flight tool future failed during drain: {err}"));
             }
             Err(err) => error_or_panic(format!("in-flight tool task failed during drain: {err}")),
         }
     }
-    Ok(())
+    fatal.map_or(Ok(()), Err)
 }
 async fn acquire_provider_request_lease(
     sess: &Session,
@@ -2497,6 +2546,7 @@ async fn acquire_provider_request_lease(
     client_session: &ModelClientSession,
     prompt: &Prompt,
     responses_metadata: &CodexResponsesMetadata,
+    cancellation_token: &CancellationToken,
 ) -> CodexResult<Option<ProviderRequestLease>> {
     let preflight_started_at = Instant::now();
     trace_turn_timing("provider_preflight_start", preflight_started_at);
@@ -2568,15 +2618,20 @@ async fn acquire_provider_request_lease(
     trace_turn_timing("provider_preflight_after_warning", preflight_started_at);
     let now_ms = now_unix_timestamp_ms();
     if !provider_request_active_lease_needed(turn_context, &preflight, last_token_usage.as_ref()) {
-        if let Some(block) = state_db
+        // The state DB write waits out another process's lock; an interrupt
+        // must not wait with it.
+        let Ok(cooldown) = state_db
             .check_provider_request_cooldown(&key, &preflight, now_ms)
+            .or_cancel(cancellation_token)
             .await
-            .map_err(|err| {
-                CodexErr::Fatal(format!(
-                    "failed to check provider request throttle state: {err:#}"
-                ))
-            })?
-        {
+        else {
+            return Err(CodexErr::TurnAborted);
+        };
+        if let Some(block) = cooldown.map_err(|err| {
+            CodexErr::Fatal(format!(
+                "failed to check provider request throttle state: {err:#}"
+            ))
+        })? {
             warn!(
                 turn_id = %turn_context.sub_id,
                 provider = %key.provider_id,
@@ -2601,7 +2656,18 @@ async fn acquire_provider_request_lease(
         sess.thread_id,
         turn_context.sub_id
     );
-    let decision = state_db
+    // An interrupt can land after the lease write committed: dropping this guard
+    // then releases whatever this owner holds. Release matches key and owner
+    // only, so the lease's end time is not needed.
+    let provisional_lease = ProviderRequestLeaseGuard::provisional(
+        sess,
+        ProviderRequestLease {
+            key: key.clone(),
+            owner: owner.clone(),
+            lease_until_ms: now_ms,
+        },
+    );
+    let Ok(decision) = state_db
         .try_acquire_provider_request_lease(
             &key,
             &preflight,
@@ -2609,12 +2675,17 @@ async fn acquire_provider_request_lease(
             PROVIDER_REQUEST_LEASE_TTL_MS,
             now_ms,
         )
+        .or_cancel(cancellation_token)
         .await
-        .map_err(|err| {
-            CodexErr::Fatal(format!(
-                "failed to check provider request throttle state: {err:#}"
-            ))
-        })?;
+    else {
+        return Err(CodexErr::TurnAborted);
+    };
+    provisional_lease.disarm();
+    let decision = decision.map_err(|err| {
+        CodexErr::Fatal(format!(
+            "failed to check provider request throttle state: {err:#}"
+        ))
+    })?;
 
     match decision {
         ProviderRequestLeaseDecision::Acquired(lease) => {
@@ -2873,6 +2944,8 @@ struct ProviderRequestLeaseGuard {
     state_db: Option<StateDbHandle>,
     runtime_handle: tokio::runtime::Handle,
     lease: Option<ProviderRequestLease>,
+    /// The lease may never have been written; releasing nothing is expected.
+    provisional: bool,
 }
 
 impl ProviderRequestLeaseGuard {
@@ -2881,7 +2954,19 @@ impl ProviderRequestLeaseGuard {
             state_db: sess.state_db(),
             runtime_handle: sess.services.runtime_handle.clone(),
             lease,
+            provisional: false,
         }
+    }
+
+    fn provisional(sess: &Session, lease: ProviderRequestLease) -> Self {
+        let mut guard = Self::new(sess, Some(lease));
+        guard.provisional = true;
+        guard
+    }
+
+    /// Forget the lease without releasing it.
+    fn disarm(mut self) {
+        self.lease = None;
     }
 
     async fn record_result(&mut self, sess: &Session, result: ProviderRequestResult) {
@@ -2902,11 +2987,18 @@ impl Drop for ProviderRequestLeaseGuard {
         let Some(state_db) = self.state_db.clone() else {
             return;
         };
+        let provisional = self.provisional;
         std::mem::drop(self.runtime_handle.spawn(async move {
             match state_db
                 .release_provider_request_lease(&lease, now_unix_timestamp_ms())
                 .await
             {
+                Ok(0) if provisional => trace!(
+                    provider = %lease.key.provider_id,
+                    model = %lease.key.model,
+                    owner = %lease.owner,
+                    "interrupted before a provider request lease was written"
+                ),
                 Ok(0) => warn!(
                     provider = %lease.key.provider_id,
                     model = %lease.key.model,
@@ -3115,6 +3207,7 @@ async fn try_run_sampling_request(
         client_session,
         prompt,
         responses_metadata,
+        &cancellation_token,
     )
     .await?;
     trace_turn_timing("after_provider_request_lease", try_started_at);
@@ -3838,6 +3931,13 @@ pub(crate) fn get_last_assistant_message_from_turn(responses: &[ResponseItem]) -
         }
     }
     None
+}
+
+#[cfg(test)]
+impl Session {
+    pub(crate) async fn lock_state_for_accounting_fixture(&self) -> impl Drop + '_ {
+        self.state.lock().await
+    }
 }
 
 #[cfg(test)]

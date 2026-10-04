@@ -1,0 +1,30 @@
+Acceptance reconciliation: retained evidence only; no new functional qualification.
+AGREE scope-zero: priced_attempts=4; USD=0.00284; fresh_root_rendered_USD=0; selected quote revisions only
+AGREE priced-page counts: priced=9; unknown_cost=4; zero_recorded=2; derived from bound page contents
+AGREE mutation coverage: named_checks=147; failing_diagnostic_mutations=159; each named reason reached
+AGREE capture bindings: JSON_pages=24; viewports=45; content SHA-256 agrees
+AGREE round-76 prerequisites: build exit=0; raw log SHA-256 agrees
+AGREE round-76 core-default: passed/run=124/124; skipped=3545; failed=0; timed_out=0; flaky=0; leaky=0; exit=0; failure_names=[]
+AGREE round-76 alone-feature: passed/run=1/1; skipped=3671; failed=0; timed_out=0; flaky=0; leaky=0; exit=0; failure_names=[]
+AGREE round-76 core-feature: passed/run=127/127; skipped=3545; failed=0; timed_out=0; flaky=0; leaky=0; exit=0; failure_names=[]
+AGREE round-76 tui: passed/run=91/91; skipped=4078; failed=0; timed_out=0; flaky=0; leaky=0; exit=0; failure_names=[]
+AGREE round-76 aggregate: gate_executions=342; gate_passed=342; alone_executions=1; overlapping test sets
+AGREE round-66 historical timeout: TRY durations=60.013,60.012s; passed/run=126/127; timed_out=1; exit=100; test=suite::accounting_responses_ws_recovery::accounting_responses_ws_native_auxiliary_scope_and_event_parity; cause remains unproven
+AGREE round-66 default timing: 58.790s; target test raw PASS line agrees
+AGREE round-69 alone timing: 31.743s; target test raw PASS line agrees
+AGREE round-69 feature timing: 31.335s; target test raw PASS line agrees
+AGREE round-75 feature timing: 31.283s; target test raw PASS line agrees
+AGREE acct-controls-72 inventory: entries=55; current_bytes=350442; current_text_lines=6352; hashes agree
+AGREE acct-acceptance-75 inventory: entries=18; new_files=15; new_bytes=49880; new_text_lines=666; modified_files=3; modified_bytes=16713; modified_text_lines=230; current_bytes=66593; current_text_lines=896; full-file sizes, not diff lines
+AGREE inventory classifications and correction: 15 added paths and 3 modified paths against original base; round-72 changed entries=3
+AGREE package build evidence: build receipt and raw log agree; launch/functional acceptance not claimed
+UNAVAILABLE committed package codex: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/codex is not tracked; unavailable from a clean checkout; cannot re-derive bytes=33, mode=0555 or SHA-256
+UNAVAILABLE committed package codex-code-mode-host: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/codex-code-mode-host is not tracked; unavailable from a clean checkout; cannot re-derive bytes=33, mode=0555 or SHA-256
+UNAVAILABLE committed package rmcp_test_server: qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/rmcp_test_server is not tracked; unavailable from a clean checkout; cannot re-derive bytes=33, mode=0555 or SHA-256
+AGREE acceptance numerical coverage: no unmatched digit-form quantities outside matched claim spans, fenced code and link targets; known round/sprint/severity identifiers excluded; worded quantities and excluded regions not audited
+RETAINED BASELINE MATCH: documented counts, evidence exit and unavailable identities match
+AGREE local package codex: bytes=33; SHA-256 and mode agree; not launched
+AGREE local package codex-code-mode-host: bytes=33; SHA-256 and mode agree; not launched
+AGREE local package rmcp_test_server: bytes=33; SHA-256 and mode agree; not launched
+BASELINE REFUSED: --local-package has no documented combined baseline; local results are diagnostic only
+RESULT agreement=23 disagreement=0 unavailable=3 exit=3

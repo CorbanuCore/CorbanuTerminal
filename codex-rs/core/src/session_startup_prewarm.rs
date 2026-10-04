@@ -311,6 +311,26 @@ async fn schedule_startup_prewarm_inner(
             CodexResponsesRequestKind::Prewarm,
         );
     let mut client_session = session.services.new_model_client_session();
+    // Prewarm sends the session's whole prompt to prime the model's cache. The
+    // provider charges for those cache writes, so it is inference the operator
+    // paid for and it is collected like any other turn, under its own identity.
+    // Best effort on purpose, exactly as compaction is: a prewarm that cannot be
+    // recorded must still run, because accounting is an observer here and not a
+    // gate on starting a session.
+    let _accounting = match crate::accounting::attach_turn(
+        &session,
+        startup_turn_context.as_ref(),
+        &client_session,
+        crate::accounting::prewarm_turn_label(),
+    )
+    .await
+    {
+        Ok(scopes) => Some(scopes),
+        Err(error) => {
+            tracing::warn!(%error, "accounting: startup prewarm proceeding unrecorded");
+            None
+        }
+    };
     let websocket_warmup_started_at = Instant::now();
     client_session
         .prewarm_websocket(

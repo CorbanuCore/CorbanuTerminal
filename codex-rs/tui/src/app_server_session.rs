@@ -290,12 +290,44 @@ pub(crate) struct AppServerSession {
     remote_cwd_override: Option<PathBuf>,
     thread_params_mode: ThreadParamsMode,
     thread_settings_update_supported: bool,
+    server_permission_threads: std::collections::HashSet<ThreadId>,
     default_model: Option<String>,
     available_models: Vec<ModelPreset>,
     managed_new_thread_defaults: Option<NewThreadModelDefaults>,
     external_agent_config_import_completion_pending: AtomicBool,
     injected_turn_start_failures: usize,
     injected_spawn_agent_failures: usize,
+}
+
+#[derive(Debug)]
+pub(crate) enum PermissionConfirmationResult {
+    Applied,
+    Unsupported,
+    Failed(String),
+    Uncertain(String),
+}
+
+impl PermissionConfirmationResult {
+    fn from_reply(
+        reply: std::result::Result<ThreadSettingsUpdateResponse, TypedRequestError>,
+    ) -> Self {
+        match reply {
+            Ok(ThreadSettingsUpdateResponse::Confirmed {
+                outcome: codex_app_server_protocol::ThreadSettingsUpdateOutcome::Applied,
+            }) => Self::Applied,
+            Ok(ThreadSettingsUpdateResponse::Accepted {}) => Self::Unsupported,
+            Err(TypedRequestError::Server { source, .. }) => {
+                if is_thread_settings_update_unsupported(&source) {
+                    Self::Unsupported
+                } else if matches!(source.code, JSONRPC_INVALID_REQUEST | -32602) {
+                    Self::Failed(source.message)
+                } else {
+                    Self::Uncertain(source.message)
+                }
+            }
+            other => Self::Uncertain(format!("{other:?}")),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -379,6 +411,7 @@ impl AppServerSession {
             remote_cwd_override: None,
             thread_params_mode,
             thread_settings_update_supported: true,
+            server_permission_threads: Default::default(),
             default_model: None,
             available_models: Vec::new(),
             managed_new_thread_defaults: None,
@@ -1205,6 +1238,48 @@ impl AppServerSession {
         }
     }
 
+    pub(crate) fn confirm_permissions(
+        &mut self,
+        mut params: ThreadSettingsUpdateParams,
+        selection_id: Uuid,
+        tx: crate::app_event_sender::AppEventSender,
+    ) {
+        // Subsequent turns must use Core's sticky settings, including after an
+        // uncertain outcome, rather than replaying stale UI permission values.
+        if self.thread_settings_update_supported
+            && let Ok(thread_id) = ThreadId::from_string(&params.thread_id)
+        {
+            self.server_permission_threads.insert(thread_id);
+        }
+        params.confirm = true;
+        let request_id = self.next_request_id();
+        let handle = self.request_handle();
+        let supported = self.thread_settings_update_supported;
+        tokio::spawn(async move {
+            let result = if supported {
+                match tokio::time::timeout(
+                    Duration::from_secs(15),
+                    handle.request_typed::<ThreadSettingsUpdateResponse>(
+                        ClientRequest::ThreadSettingsUpdate { request_id, params },
+                    ),
+                )
+                .await
+                {
+                    Ok(reply) => PermissionConfirmationResult::from_reply(reply),
+                    Err(error) => PermissionConfirmationResult::Uncertain(error.to_string()),
+                }
+            } else {
+                PermissionConfirmationResult::Unsupported
+            };
+            tx.send(
+                crate::app_event::AppEvent::PermissionConfirmationCompleted {
+                    selection_id,
+                    result,
+                },
+            );
+        });
+    }
+
     pub(crate) async fn thread_inject_items(
         &mut self,
         thread_id: ThreadId,
@@ -1252,6 +1327,17 @@ impl AppServerSession {
     ) -> tokio::task::JoinHandle<Result<TurnStartOutcome>> {
         let (sandbox_policy, permissions) =
             turn_permissions_overrides(permissions_override, cwd.as_path());
+        let (approval_policy, approvals_reviewer, sandbox_policy, permissions) =
+            if self.server_permission_threads.contains(&thread_id) {
+                (None, None, None, None)
+            } else {
+                (
+                    Some(approval_policy),
+                    Some(approvals_reviewer.into()),
+                    sandbox_policy,
+                    permissions,
+                )
+            };
         let client_user_message_id =
             client_user_message_id.unwrap_or_else(|| Uuid::now_v7().to_string());
         let request_handle = self.request_handle();
@@ -1273,8 +1359,8 @@ impl AppServerSession {
                     environments: None,
                     cwd: Some(cwd.clone()),
                     runtime_workspace_roots: Some(workspace_roots.to_vec()),
-                    approval_policy: Some(approval_policy),
-                    approvals_reviewer: Some(approvals_reviewer.into()),
+                    approval_policy,
+                    approvals_reviewer,
                     sandbox_policy: sandbox_policy.clone(),
                     permissions: permissions.clone(),
                     model: Some(model.clone()),
@@ -1886,6 +1972,37 @@ fn service_tier_override_from_config(config: &Config) -> Option<Option<String>> 
     })
 }
 
+pub(crate) fn has_explicit_resume_service_tier(config: &Config) -> bool {
+    config
+        .config_layer_stack
+        .layers_high_to_low()
+        .into_iter()
+        .any(|layer| {
+            matches!(
+                &layer.name,
+                codex_config::ConfigLayerSource::SessionFlags
+                    | codex_config::ConfigLayerSource::User {
+                        profile: Some(_),
+                        ..
+                    }
+            ) && layer.config.get("service_tier").is_some()
+        })
+}
+
+fn resume_service_tier_override(
+    config: &Config,
+    model_settings: ResumeModelSettings,
+) -> Option<Option<String>> {
+    if model_settings == ResumeModelSettings::OverrideFromCurrentConfig
+        || has_explicit_resume_service_tier(config)
+    {
+        service_tier_override_from_config(config)
+    } else {
+        // Global defaults belong to new sessions, not the saved session being resumed.
+        None
+    }
+}
+
 fn sandbox_mode_from_permission_profile(
     permission_profile: &PermissionProfile,
     cwd: &std::path::Path,
@@ -2042,7 +2159,7 @@ fn thread_resume_params_from_config(
         thread_id: thread_id.to_string(),
         model,
         model_provider,
-        service_tier: service_tier_override_from_config(&config),
+        service_tier: resume_service_tier_override(&config, model_settings),
         cwd: thread_cwd_from_config(&config, thread_params_mode, remote_cwd_override),
         runtime_workspace_roots: Some(config.workspace_roots.clone()),
         approval_policy: override_permissions
@@ -2388,7 +2505,84 @@ pub(crate) fn app_server_rate_limit_snapshots(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn permission_confirmation_requires_explicit_applied_reply() {
+        use super::PermissionConfirmationResult as Outcome;
+        let decode = |wire| Outcome::from_reply(Ok(serde_json::from_str(wire).unwrap()));
+        assert!(matches!(decode("{}"), Outcome::Unsupported));
+        assert!(matches!(
+            decode(r#"{"outcome":"applied"}"#),
+            Outcome::Applied
+        ));
+        assert!(matches!(
+            decode(r#"{"outcome":"uncertain"}"#),
+            Outcome::Uncertain(_)
+        ));
+        assert!(matches!(
+            Outcome::from_reply(Err(super::TypedRequestError::Server {
+                method: "thread/settings/update".into(),
+                source: super::JSONRPCErrorError {
+                    code: -32603,
+                    message: "lost completion".into(),
+                    data: None
+                },
+            })),
+            Outcome::Uncertain(_)
+        ));
+        for (code, message, unsupported) in [
+            (-32601, "unknown method", true),
+            (
+                -32600,
+                "thread/settings/update requires experimentalApi",
+                true,
+            ),
+            (-32600, "Core rejected settings", false),
+        ] {
+            let result = Outcome::from_reply(Err(super::TypedRequestError::Server {
+                method: "thread/settings/update".into(),
+                source: super::JSONRPCErrorError {
+                    code,
+                    message: message.into(),
+                    data: None,
+                },
+            }));
+            assert_eq!(matches!(result, Outcome::Unsupported), unsupported);
+            assert_eq!(matches!(result, Outcome::Failed(_)), !unsupported);
+        }
+    }
+
     use super::*;
+    #[tokio::test]
+    async fn permission_confirmation_unsupported_keeps_turn_permission_ownership() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let config = build_config(&temp_dir).await;
+        let mut session = crate::start_embedded_app_server_for_picker(&config).await?;
+        session.thread_settings_update_supported = false;
+        let thread_id = ThreadId::new();
+        let selection_id = Uuid::new_v4();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        session.confirm_permissions(
+            ThreadSettingsUpdateParams {
+                thread_id: thread_id.to_string(),
+                approval_policy: Some(AskForApproval::Never),
+                ..Default::default()
+            },
+            selection_id,
+            crate::app_event_sender::AppEventSender::new(tx),
+        );
+        let event = tokio::time::timeout(Duration::from_secs(2), rx.recv()).await?;
+        assert!(matches!(
+            event,
+            Some(crate::app_event::AppEvent::PermissionConfirmationCompleted {
+                selection_id: id,
+                result: PermissionConfirmationResult::Unsupported,
+            }) if id == selection_id
+        ));
+        assert_eq!(session.server_permission_threads, Default::default());
+        session.shutdown().await?;
+        Ok(())
+    }
+
     use crate::legacy_core::config::ConfigBuilder;
     use crate::legacy_core::config::ConfigOverrides;
     use app_test_support::create_fake_rollout;
@@ -3049,9 +3243,28 @@ mod tests {
     #[tokio::test]
     async fn persisted_resume_does_not_forward_implicit_service_tier() -> Result<()> {
         let codex_home = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            codex_home.path().join("config.toml"),
+            r#"
+model = "gpt-5.4"
+model_provider = "resume-fixture"
+cli_auth_credentials_store = "file"
+[features]
+fast_mode = true
+[model_providers.resume-fixture]
+name = "Resume fixture"
+base_url = "http://127.0.0.1:1/v1"
+wire_api = "responses"
+requires_openai_auth = false
+"#,
+        )?;
         let mut config = build_config(&codex_home).await;
+        // The generic rollout fixture uses `/`; keep the resumed skills watcher inside this
+        // disposable directory rather than registering host-root filesystem watches on macOS.
+        config.cwd =
+            codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(codex_home.path())?;
         config.model = Some("gpt-5.4".to_string());
-        config.service_tier = None;
+        config.service_tier = Some("priority".to_string());
         config
             .features
             .enable(Feature::FastMode)
@@ -3090,9 +3303,37 @@ mod tests {
             )
             .await?;
 
-        assert_eq!(resumed.session.service_tier, None);
+        assert_eq!(resumed.session.service_tier.as_deref(), Some("default"));
         app_server.shutdown().await?;
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn resume_service_tier_ignores_global_but_preserves_explicit_overrides() {
+        let home = tempfile::tempdir().expect("tempdir");
+        let mut config = build_config(&home).await;
+        config.service_tier = Some("priority".to_string());
+        assert_eq!(
+            resume_service_tier_override(&config, ResumeModelSettings::RestoreFromThread),
+            None
+        );
+        assert_eq!(
+            resume_service_tier_override(&config, ResumeModelSettings::OverrideFromCurrentConfig),
+            Some(Some("priority".to_string()))
+        );
+        config.config_layer_stack = codex_config::ConfigLayerStack::new(
+            vec![codex_config::ConfigLayerEntry::new(
+                codex_config::ConfigLayerSource::SessionFlags,
+                toml::from_str("service_tier = 'priority'").expect("config"),
+            )],
+            Default::default(),
+            Default::default(),
+        )
+        .expect("layers");
+        assert_eq!(
+            resume_service_tier_override(&config, ResumeModelSettings::RestoreFromThread),
+            Some(Some("priority".to_string()))
+        );
     }
 
     #[tokio::test]

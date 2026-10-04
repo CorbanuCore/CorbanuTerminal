@@ -1,0 +1,43 @@
+[
+  {
+    "sent": {
+      "id": 1,
+      "method": "initialize",
+      "params": {
+        "clientInfo": {
+          "name": "acct_boundaries_fixture",
+          "version": "1"
+        },
+        "capabilities": {
+          "experimentalApi": true
+        }
+      }
+    }
+  },
+  {
+    "received": {
+      "id": 1,
+      "result": {
+        "userAgent": "acct_boundaries_fixture/0.1.42 (Mac OS 26.6.2; arm64) xterm-256color (acct_boundaries_fixture; 1)",
+        "codexHome": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-boundaries-58/boundary-run-03/fixture/profile",
+        "platformFamily": "unix",
+        "platformOs": "macos"
+      }
+    }
+  },
+  {
+    "sent": {
+      "id": 2,
+      "method": "thread/delete",
+      "params": {
+        "threadId": "019ccc3e-e198-7e90-9544-2813dd15fb7f"
+      }
+    }
+  },
+  {
+    "received": {
+      "id": 2,
+      "result": {}
+    }
+  }
+]

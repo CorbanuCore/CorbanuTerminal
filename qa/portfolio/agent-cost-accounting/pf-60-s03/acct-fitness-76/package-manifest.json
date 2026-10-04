@@ -1,0 +1,54 @@
+{
+  "command": [
+    "cargo",
+    "build",
+    "--locked",
+    "--offline",
+    "-p",
+    "codex-cli",
+    "--bin",
+    "codex",
+    "-p",
+    "codex-rmcp-client",
+    "-p",
+    "codex-code-mode-host",
+    "--bins",
+    "--features",
+    "codex-core/developer-accounting"
+  ],
+  "environment": {
+    "CARGO_TARGET_DIR": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-activation-33/feature/target",
+    "CARGO_BUILD_JOBS": "2",
+    "CARGO_INCREMENTAL": "0",
+    "NEXTEST_TEST_THREADS": "4",
+    "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "true",
+    "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS": "true"
+  },
+  "exit": 0,
+  "elapsed_seconds": 127.3261170387268,
+  "log_sha256": "39ee562f3c6858d966e29a2b0356e6a7aaa68dec235ee13fc553d91c889e365c",
+  "base": "1aadfc123592530f657794489249e954f5e3885a",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "files": [
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/codex",
+      "bytes": 607785336,
+      "sha256": "c78e276fee3860e3214d9b753dc9be1e4d429911eb2e6e91cbb14e7025235c06",
+      "mode": "0555"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/codex-code-mode-host",
+      "bytes": 93937576,
+      "sha256": "b0ab2dab74061db2fb8f8ee43748b1342998de9813f3de470feac1b001862d6d",
+      "mode": "0555"
+    },
+    {
+      "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/package/rmcp_test_server",
+      "bytes": 11508704,
+      "sha256": "b113f81be0fce13aa208ce879f441aa8b3d2cda869d2ddb4516c9da35d94aeec",
+      "mode": "0555"
+    }
+  ],
+  "launched": false,
+  "status": "Local developer package only; not an isolated executor enclosure, signed distribution, or independent qualification."
+}

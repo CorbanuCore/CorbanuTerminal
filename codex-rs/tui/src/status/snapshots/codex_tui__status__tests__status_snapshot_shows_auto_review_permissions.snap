@@ -5,12 +5,14 @@ expression: sanitized
 /status
 
 ╭──────────────────────────────────────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v0.1.38)                                           │
+│  >_ Corbanu Terminal (v<V>)                                              │
 │                                                                          │
-│  Model:            gpt-5.1-codex-max                                     │
-│  Model provider:   Ambient                                               │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date            │
+│ information on rate limits and credits                                   │
+│                                                                          │
+│  Model:            gpt-5.1-codex-max (reasoning none, summaries auto)    │
 │  Directory: [[workspace]]                                                │
-│  Permissions:      Workspace (Approve for me)                            │
+│  Permissions:      Next turn: Workspace (Approve for me)                 │
 │  Security:         Requested Permissive; effective protection unverified │
 │                    (/security)                                           │
 │  Agents.md:        <none>                                                │

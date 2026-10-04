@@ -1,0 +1,37 @@
+{
+  "label": "final-staged-cancellation-stop",
+  "command": [
+    "bash",
+    "--noprofile",
+    "--norc",
+    "-x",
+    "-c",
+    "set -eu\nq=qa/portfolio/agent-cost-accounting/pf-60-s03\ntest \"$(git rev-parse --show-toplevel)\" = \"$PWD\"\ncandidate=$(git rev-parse HEAD)\nprintf 'Candidate: %s\\n' \"$candidate\"\ngit status --porcelain --untracked-files=all --ignored=matching\nif ! git diff --quiet -- || ! git diff --cached --quiet HEAD -- || test -n \"$(git ls-files --unmerged)\"; then\n    printf '%s\\n' 'STOP: tracked source changes; preserve them and resolve the candidate.'\n    exit 1\nfi\nomitted=$(git ls-files --others --exclude-standard --directory; git ls-files --others --ignored --exclude-standard --directory)\nif test -n \"$omitted\"; then\n    printf 'Omitted paths:\\n%s\\n' \"$omitted\"\n    if test -z \"${REPLAY_OMISSIONS_NOTE:-}\"; then\n        printf '%s\\n' 'STOP: classify omissions using the criterion above; record REPLAY_OMISSIONS_NOTE and rerun only if permissible.'\n        exit 1\n    fi\n    printf 'Operator omission assessment: %s\\n' \"$REPLAY_OMISSIONS_NOTE\"\nfi\naudit=${CORBANU_AUDIT_DIR:-\"$PWD/$q/acct-criterion-97/target/audit-copy\"}\ncase \"$audit\" in /*) ;; *) printf '%s\\n' 'STOP: CORBANU_AUDIT_DIR must be absolute.'; exit 1 ;; esac\ntest ! -e \"$audit\"\ntest ! -L \"$audit\"\ncase \"$audit\" in \"$PWD\"/*) git check-ignore -v \"$audit\" ;; esac\ngit clone --no-local --no-checkout . \"$audit\"\ngit -C \"$audit\" checkout --detach \"$candidate\"\naudit=$(cd \"$audit\" && pwd -P)\ngit -C \"$audit\" update-ref refs/heads/integrate/management-workstreams-20260911 \"$candidate\"\ngit -C \"$audit\" config --local corbanu.replayRoot \"$audit\"\ngit -C \"$audit\" config --local corbanu.replayCandidate \"$candidate\"\nprintf 'Run every remaining block from: %s\\n' \"$audit\"\n"
+  ],
+  "cwd": "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/target/source-copy",
+  "note_sha256": "d46df323a5d5538c6b4e8bddec84aa08266346d5cc827bc7ac5581d204457864",
+  "script_sha256": "50058e2ffc4e034551e6a38380a5fe21985c2e79451a33ad3159982730566320",
+  "log_sha256": "40cd50e5ca410ae8e7c5cf4cedd6e80f3b3a9d8e1e739faf46fe83cf602071aa",
+  "exit": 1,
+  "expected_exit": 1,
+  "elapsed_seconds": 0.15758299827575684,
+  "fresh_shell": true,
+  "environment_keys": [
+    "CARGO_HOME",
+    "CARGO_TERM_COLOR",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "LC_ALL",
+    "PATH",
+    "PYTHONDONTWRITEBYTECODE",
+    "REPLAY_OMISSIONS_NOTE",
+    "RUSTUP_HOME",
+    "TERM",
+    "TMPDIR"
+  ],
+  "explicit_inputs": {
+    "REPLAY_OMISSIONS_NOTE": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/deliberate-omission.txt is a synthetic text output created solely to exercise this status branch; it is absent from the candidate inventories and replay/build input references. qa/portfolio/agent-cost-accounting/pf-60-s03/acct-criterion-97/target contains only our synthetic ignored scratch output. Neither changes any candidate claim or input. Both are deliberately omitted; only committed HEAD is replayed."
+  }
+}

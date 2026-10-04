@@ -368,6 +368,7 @@ fn assert_managed_resolver_returns(codex: &Path, codex_home: &Path, canary: &str
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn session_spec(
     name: &str,
     codex: &Path,

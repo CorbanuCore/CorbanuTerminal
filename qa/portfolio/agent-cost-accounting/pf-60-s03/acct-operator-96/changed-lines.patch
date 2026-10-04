@@ -1,0 +1,133 @@
+diff --git a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md
+index c5d72542b..4b1781ffc 100644
+--- a/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md
++++ b/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-derive-95/OPERATOR.md
+@@ -8,6 +8,6 @@ scope-zero finding and historical timeout. Treat recorded conclusions as claims.
+-**Get a clean copy.** Use Python 3 and Git. From the repository you were given,
+-record `git rev-parse HEAD` as the candidate commit. Clone that repository with
+-full history, not a shallow clone or exported files; check out that exact commit.
+-Use a destination you own and replace the placeholders below. Uncommitted edits
+-are not included. In this disposable clone only, set the integration ref to the
+-candidate so the replay audits the intended commit rather than an older branch:
++**Get a clean copy.** Use Python 3, Git and Bash. Run this first block from the
++root of the supplied repository. It records HEAD and creates a full-history,
++detached clone inside ignored scratch space. The destination must not already
++exist; preserve earlier attempts and use another supplied copy for a new run.
++Uncommitted edits are not included. Inspect the source status printed here to
++identify anything omitted; it is not required to be empty.
+@@ -16,4 +16,4 @@ candidate so the replay audits the intended commit rather than an older branch:
+-git clone --no-local --no-checkout /path/to/supplied-repository /path/to/audit-copy
+-cd /path/to/audit-copy
+-git checkout --detach <candidate-commit>
+-git update-ref refs/heads/integrate/management-workstreams-20260911 <candidate-commit>
++set -eu
++q=qa/portfolio/agent-cost-accounting/pf-60-s03
++candidate=$(git rev-parse HEAD)
++printf 'Candidate: %s\n' "$candidate"
+@@ -20,0 +21,19 @@ git status --porcelain --untracked-files=all
++audit="$PWD/$q/acct-operator-96/target/audit-copy"
++git check-ignore -v "$audit"
++git clone --no-local --no-checkout . "$audit"
++git -C "$audit" checkout --detach "$candidate"
++git -C "$audit" update-ref refs/heads/integrate/management-workstreams-20260911 "$candidate"
++printf 'Run every remaining block from: %s\n' "$audit"
++```
++
++Run **each remaining block from the printed audit-copy root**, in a fresh Bash
++shell (`bash --noprofile --norc`); no block relies on another block's variables
++or working-directory changes. The clone's integration ref is deliberately
++re-pointed at the candidate because the replay script reads that fixed ref.
++This makes the replay self-referential: candidate code and evidence are compared
++with expected bytes and a digest committed in that same candidate. It proves
++internal agreement, not agreement with an independently trusted integration tip
++or historical release. The supplied repository's integration ref is unchanged.
++
++```sh
++set -eu
+@@ -22 +41,4 @@ q=qa/portfolio/agent-cost-accounting/pf-60-s03
+-python3 -B "$q/acct-inventory-79/verify_acceptance.py"
++rc=0
++python3 -B "$q/acct-inventory-79/verify_acceptance.py" || rc=$?
++printf 'Acceptance exit: %s (expected 2)\n' "$rc"
++test "$rc" -eq 2
+@@ -27,2 +49 @@ python3 -B "$q/acct-selfcheck-84/check_current_tip.py"
+-**Read the outputs, including exit status.** Initial Git status must be empty.
+-The verifier must end with `BASELINE MATCH` and
++**Read the outputs, including exit status.** The verifier must end with `BASELINE MATCH` and
+@@ -50,3 +71,16 @@ package from immutable artifact storage. Do not turn missing bytes into passes.
+-[build setup](../../../../../docs/install.md#source-build). Install the pinned Rust
+-toolchain, `just` and `cargo-nextest`; populate dependencies before an offline
+-build. From the clean clone root, use one dedicated target for all commands:
++[build setup](../../../../../docs/install.md#source-build). Before these blocks,
++install Rust 1.95.0 (the pin in `codex-rs/rust-toolchain.toml`), `just`,
++`cargo-nextest` and platform build tools described there. The first block runs
++`cargo fetch --locked` while network access is available: this populates the
++active Cargo home's registry and git dependency caches for the lockfile. On a
++network-isolated host, transfer those caches from a trusted same-lockfile build
++host first and replace that fetch with `cargo fetch --locked --offline`; record
++that adaptation. Cargo's offline flag does not prevent build scripts fetching
++external artifacts such as rusty_v8 archives; prepopulate those caches too for
++a fully disconnected build. Never copy a Corbanu profile or credential files.
++
++These blocks use the same dedicated target under `acct-operator-96/target/`,
++covered by the committed `*/target/` rule; the first block prints that match.
++Build prerequisites first. Then run each test block separately, inspecting its
++exit/log before dispatching the next. Stop successors on any native credential
++prompt or live-profile read; never authorize it.
+@@ -55 +89,3 @@ build. From the clean clone root, use one dedicated target for all commands:
+-export CARGO_TARGET_DIR="$PWD/$q/acct-derive-95/target"
++set -eu
++q=qa/portfolio/agent-cost-accounting/pf-60-s03
++export CARGO_TARGET_DIR="$PWD/$q/acct-operator-96/target/cargo"
+@@ -57,0 +94,2 @@ export CARGO_PROFILE_DEV_DEBUG_ASSERTIONS=true CARGO_PROFILE_TEST_DEBUG_ASSERTIO
++git check-ignore -v "$CARGO_TARGET_DIR"
++cat docs/development/test-isolation.md
+@@ -58,0 +97 @@ cd codex-rs
++cargo fetch --locked
+@@ -59,0 +99,9 @@ cargo build --locked --offline -p codex-cli --bin codex -p codex-rmcp-client -p
++```
++
++```sh
++set -eu
++q=qa/portfolio/agent-cost-accounting/pf-60-s03
++export CARGO_TARGET_DIR="$PWD/$q/acct-operator-96/target/cargo"
++export NEXTEST_TEST_THREADS=4 CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0
++export CARGO_PROFILE_DEV_DEBUG_ASSERTIONS=true CARGO_PROFILE_TEST_DEBUG_ASSERTIONS=true
++cd codex-rs
+@@ -60,0 +109,9 @@ just test -p codex-core accounting
++```
++
++```sh
++set -eu
++q=qa/portfolio/agent-cost-accounting/pf-60-s03
++export CARGO_TARGET_DIR="$PWD/$q/acct-operator-96/target/cargo"
++export NEXTEST_TEST_THREADS=4 CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0
++export CARGO_PROFILE_DEV_DEBUG_ASSERTIONS=true CARGO_PROFILE_TEST_DEBUG_ASSERTIONS=true
++cd codex-rs
+@@ -61,0 +119,9 @@ just test -p codex-core accounting --features codex-core/developer-accounting
++```
++
++```sh
++set -eu
++q=qa/portfolio/agent-cost-accounting/pf-60-s03
++export CARGO_TARGET_DIR="$PWD/$q/acct-operator-96/target/cargo"
++export NEXTEST_TEST_THREADS=4 CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0
++export CARGO_PROFILE_DEV_DEBUG_ASSERTIONS=true CARGO_PROFILE_TEST_DEBUG_ASSERTIONS=true
++cd codex-rs
+@@ -65,2 +131,3 @@ just test -p codex-tui usage
+-Run each command separately; inspect its exit/log before starting the next.
+-Require the isolation banner, nonzero runs and zero failures/timeouts: the
++Require the exact banner
++`Test isolation: disposable profile; native keyring disabled (debug lane)`
++before every test lane, nonzero runs and zero failures/timeouts: the
+@@ -75,2 +142,8 @@ or refused baseline; 1/traceback is failed execution/check; missing history/ref
+-a prerequisite failure. Compare changed files and hashes with the reference.
+-Restore accidental edits or send intentional claim/evidence changes to the
++a prerequisite failure. The comparison reference is
++`qa/portfolio/agent-cost-accounting/pf-60-s03/acct-reference-88/expected.stdout.txt`,
++with digest `25450ea3837dfc7624189eb89f7067fda71b76dbec21e2853122875f03dd1fce`
++in the adjacent `reference.json`, read from the candidate commit. Compare the
++retained `acceptance.stdout.txt` against that file; compare candidate evidence
++files and hashes with those in the supplied candidate SHA recorded at clone time.
++This is the same self-referential consistency check described above, not an
++independent historical reference. Restore accidental edits or send intentional claim/evidence changes to the

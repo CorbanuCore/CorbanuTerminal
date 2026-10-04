@@ -58,7 +58,7 @@ fn standard_crew_is_valid_and_topologically_ordered() {
                 "orc-3",
                 Some("troll"),
                 "orc",
-                Some((OPENROUTER_PROVIDER_ID, "x-ai/grok-4.6", None)),
+                Some((OPENROUTER_PROVIDER_ID, "x-ai/grok-4.7", None)),
             ),
         ]
     );
@@ -166,7 +166,7 @@ fn qualification_crew_covers_each_required_runtime_pair() {
         vec![
             (CLAUDE_PLAN_PROVIDER_ID, CLAUDE_FABLE_5_PLAN_MODEL),
             (CLAUDE_PLAN_PROVIDER_ID, CLAUDE_PLAN_MODEL),
-            (OPENROUTER_PROVIDER_ID, "x-ai/grok-4.6"),
+            (OPENROUTER_PROVIDER_ID, "x-ai/grok-4.7"),
             (KIMI_CODE_PROVIDER_ID, KIMI_CODE_K3_MODEL),
         ]
     );

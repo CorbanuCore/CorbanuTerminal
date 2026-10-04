@@ -1,0 +1,98 @@
+{
+  "schema": 1,
+  "receiving_launch_commit": "f17e5a54daba11c6da2554f14b62f11ace752142",
+  "branch": "workstream/tasknode-pf80-s01-20260911",
+  "source_root": "/Volumes/CorbanuDrive/Corbanu/CorbanuTerminal/scripts/initiative_control",
+  "source_checkout_head": "6f8f4ce46446e951437e1ce7e7c4a526e5b9e546",
+  "source_git_status": "scripts/initiative_control/ was untracked at audit; source HEAD alone does not pin these files. Per-file SHA-256 is authoritative.",
+  "excluded": [
+    "__pycache__/"
+  ],
+  "copied_state_or_credentials": false,
+  "files": [
+    {
+      "path": "scripts/initiative_control/README.md",
+      "source_sha256": "fa8c3c4f1ce79b42d2bfec0a66914f13ddc16a35ba89952158d881e6c0d335fe",
+      "receiving_sha256": "53899290d3e1ec4b7c22fbe04e200c868579216a2cbae72ee68e14c4e3711f55",
+      "audit": "Replaced recovery deployment claims/live setup instructions with receiving-slice status, offline preparation, holds and limits."
+    },
+    {
+      "path": "scripts/initiative_control/activate.py",
+      "source_sha256": "b1e90ba85cd799f0aec728e15ec63e6e3bc0ba2cf1d5914c603b913bfa2a7fb0",
+      "receiving_sha256": "b1e90ba85cd799f0aec728e15ec63e6e3bc0ba2cf1d5914c603b913bfa2a7fb0",
+      "audit": "Unchanged: audited dedicated-root install, hash verification, report validation, locked source switch, local enrollment preservation, scoped pruning and service invocation. Tests mock service calls."
+    },
+    {
+      "path": "scripts/initiative_control/control.py",
+      "source_sha256": "d65490419a48c5b1feb2b6f7002dad1c78b029170a383b0576e84a794064ab98",
+      "receiving_sha256": "59df3fbce80f49fd446e87d235b81c39247ccc3804269cb175b3e98773df6e02",
+      "audit": "Added PF-76 history hold before bare sprint-ID joins; raw report files preserved. Sanitization, staleness and last-good publication retained."
+    },
+    {
+      "path": "scripts/initiative_control/delivery.example.json",
+      "source_sha256": "615af3e71fbc6056db154096212fcda193d3e9256612674fd526e8af59ed6133",
+      "receiving_sha256": "615af3e71fbc6056db154096212fcda193d3e9256612674fd526e8af59ed6133",
+      "audit": "Unchanged: placeholder evidence contract, not live configuration or authority."
+    },
+    {
+      "path": "scripts/initiative_control/delivery.py",
+      "source_sha256": "f66fe5bb719795786d17c9133e7c208e4d9192411c095ab373eeb5e1cf5d345a",
+      "receiving_sha256": "f66fe5bb719795786d17c9133e7c208e4d9192411c095ab373eeb5e1cf5d345a",
+      "audit": "Unchanged: native-flag and candidate/evidence checks; enablement needs human acceptance. Does not grant release authority."
+    },
+    {
+      "path": "scripts/initiative_control/export.py",
+      "source_sha256": "e5531f30e4f415be3ca154892832cfa8c0dfc190601cef224fc47152b1c8f7b3",
+      "receiving_sha256": "df903d6c16bdd0f238d85650adb67d019f3b25884c4ba0b7ab8ef2099f9d5cbe",
+      "audit": "Replaced stale recovery-source note with hash-bound source provenance disclaimer. Existing explicit document/tooling export preserved."
+    },
+    {
+      "path": "scripts/initiative_control/requirements.txt",
+      "source_sha256": "c3a75e999eb351a6333e73d415a379d71840809a6b9ec0c9d310251841aa8d87",
+      "receiving_sha256": "c3a75e999eb351a6333e73d415a379d71840809a6b9ec0c9d310251841aa8d87",
+      "audit": "Unchanged: markdown-it-py 3.0.0 and mdurl 0.1.2."
+    },
+    {
+      "path": "scripts/initiative_control/status.js",
+      "source_sha256": "023c2ddfa024e3ff13e8a22d1c0c16a6d052a165b7915ceb17bc061e923aaebd",
+      "receiving_sha256": "023c2ddfa024e3ff13e8a22d1c0c16a6d052a165b7915ceb17bc061e923aaebd",
+      "audit": "Unchanged: same-origin health read, freshness/generation handling; no third-party scripts or images."
+    },
+    {
+      "path": "scripts/initiative_control/style.css",
+      "source_sha256": "49b8e0e11042809f20f4c797fcb9beec1f706a1fecac628ea891265544a3e1f1",
+      "receiving_sha256": "49b8e0e11042809f20f4c797fcb9beec1f706a1fecac628ea891265544a3e1f1",
+      "audit": "Unchanged: local static styles; no remote resource URLs."
+    },
+    {
+      "path": "scripts/initiative_control/tasknode.py",
+      "source_sha256": "bbcf622f623912fc3ab3cf2a3e4288b720c170b786cb10444e9cb7af7f8146e0",
+      "receiving_sha256": "f8fc005626363de68e95454e02b2a53d0351e92ee1f1768d05a214f040400e2b",
+      "audit": "Added exact-ID read-only prepare/preview, immutable goal validation before preview/send/retry, PF-76 enqueue/retry hold and byte-preserving batch skip, explicit rejection of flush --event-id. Existing transport reused; no new credential flow or live one-event sender. Follow-up to f7159c167: reject repeated selectors before dispatch, including retry, and enforce the pinned 500-byte UTF-8 branch bound at creation and immutable validation while retaining text safety checks."
+    },
+    {
+      "path": "scripts/initiative_control/test_control.py",
+      "source_sha256": "076e98e2b432a4f7359f16bfba1aa992f034b3dce7829b08b9f7e8a0ac679c1b",
+      "receiving_sha256": "4d5a763eda6fa74850be0896dac46e97945baab0fbb5e43ca1c00f05be9c38db",
+      "audit": "Retained all 33 tests; changed four synthetic PF-76 identity references to receiving PF-80 after baseline 33 passed unchanged. Dedicated historical tests cover preserved raw PF-76 fixtures."
+    },
+    {
+      "path": "scripts/initiative_control/tick.py",
+      "source_sha256": "b99f3acfa0ffe9625a9da69b667f8979bf4cbb0f1a606570a24db49a7854375f",
+      "receiving_sha256": "b99f3acfa0ffe9625a9da69b667f8979bf4cbb0f1a606570a24db49a7854375f",
+      "audit": "Unchanged: explicit enablement before credential loading/flush; local queuing while OFF, status publication and health failure handling."
+    }
+  ],
+  "added": [
+    {
+      "path": "scripts/initiative_control/test_preparation.py",
+      "receiving_sha256": "d7dc3a031c14ee295f1ec8625722317e27b49dcaf68140f05e913798a8731809",
+      "audit": "15 original offline preparation, identity, history, batch and receiving-publication tests plus 6 follow-up regressions for selector rejection without state/auth/network activity, unchanged single-ID dispatch, and branch text/byte bounds at creation and persisted validation."
+    },
+    {
+      "path": "scripts/initiative_control/fixtures/recovery-old-state.json",
+      "receiving_sha256": "0e2e903debe19ac0de83ff3561a3ef38c011b857771eeb6912de9dbc0bdae5ea",
+      "audit": "Synthetic old-state fixture; no live IDs/state."
+    }
+  ]
+}

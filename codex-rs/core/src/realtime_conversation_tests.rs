@@ -28,6 +28,7 @@ fn pf_30_realtime_start(
     let mut api_provider = model_client.provider_info().to_api_provider(None).unwrap();
     api_provider.base_url = base_url;
     super::RealtimeStart {
+        accounting: None,
         api_provider,
         realtime_sideband_base_url: None,
         extra_headers: None,
@@ -462,4 +463,122 @@ fn realtime_headers_include_only_non_default_originator() {
             expected_header
         );
     }
+}
+
+/// A realtime call is a model request the operator paid for, and it recorded
+/// nothing. The realtime protocol this client parses carries no usage anywhere,
+/// so the call is recorded with its tokens unknown - which is what the provider
+/// said - rather than left invisible.
+#[tokio::test]
+async fn pf_60_s03_realtime_call_is_recorded() -> anyhow::Result<()> {
+    use codex_state::SqliteConfig;
+    use codex_state::StateRuntime;
+    use codex_state::ThreadMetadataBuilder;
+    use codex_utils_absolute_path::AbsolutePathBuf;
+
+    let server = wiremock::MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/v1/realtime/calls"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200)
+                .insert_header("Location", "/v1/live/rtc_fixture")
+                .set_body_string("v=answer\r\n"),
+        )
+        .mount(&server)
+        .await;
+
+    let home = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path()).await;
+    config.model_provider = codex_model_provider_info::ModelProviderInfo {
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        supports_websockets: false,
+        ..codex_model_provider_info::ModelProviderInfo::create_openai_provider(Some(
+            endpoint.clone(),
+        ))
+    };
+    config.model_provider_id = "openai".into();
+    config.accounting = crate::config::AccountingMode::Provider {
+        scope: uuid::Uuid::new_v4(),
+        provider_id: "openai".into(),
+        wire_api: codex_model_provider_info::WireApi::Responses,
+        approved_endpoint: endpoint.clone(),
+        approved_query: None,
+        pricing: crate::config::PriceAuthority::Unavailable,
+    };
+    config
+        .features
+        .enable(codex_features::Feature::Sqlite)
+        .expect("sqlite for the ledger");
+
+    let (mut session, _context) =
+        crate::session::tests::make_session_and_context_for_config(config).await;
+    let db = StateRuntime::init(
+        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        "openai".into(),
+    )
+    .await?;
+    session.services.state_db = Some(db.clone());
+    let owner = Arc::new(session);
+    db.upsert_thread(
+        &ThreadMetadataBuilder::new(
+            owner.thread_id,
+            home.path().join("realtime-fixture.jsonl"),
+            chrono::Utc::now(),
+            codex_protocol::protocol::SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+
+    let accounting = super::realtime_accounting(&owner, "fixture-sub", &endpoint)
+        .await
+        .expect("realtime accounting attaches");
+    owner
+        .services
+        .model_client()
+        .create_realtime_call_with_headers(
+            "v=offer\r\n".to_string(),
+            codex_api::RealtimeSessionConfig {
+                instructions: String::new(),
+                initial_items: Vec::new(),
+                model: Some("gpt-realtime-1.5".into()),
+                session_id: None,
+                event_parser: RealtimeEventParser::V1,
+                session_mode: codex_api::RealtimeSessionMode::Conversational,
+                output_modality: codex_protocol::protocol::RealtimeOutputModality::Audio,
+                voice: codex_protocol::protocol::RealtimeVoice::Alloy,
+            },
+            Default::default(),
+            None,
+            &accounting.0.responses_accounting,
+        )
+        .await?;
+
+    let pool = db
+        .sqlite()
+        .open_read_only_pool(&db.sqlite().state_db_path())
+        .await?;
+    let rows: Vec<String> =
+        sqlx::query_scalar("SELECT payload FROM draft_accounting_attempts ORDER BY rowid")
+            .fetch_all(&pool)
+            .await?;
+    let turns: Vec<String> = rows
+        .iter()
+        .filter_map(|row| {
+            serde_json::from_str::<serde_json::Value>(row).ok()?["turn"]
+                .as_str()
+                .map(str::to_string)
+        })
+        .collect();
+    assert_eq!(
+        turns
+            .iter()
+            .filter(|turn| turn.starts_with("realtime:"))
+            .count(),
+        1,
+        "turns recorded: {turns:?}"
+    );
+    Ok(())
 }

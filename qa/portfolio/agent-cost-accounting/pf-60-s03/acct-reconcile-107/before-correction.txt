@@ -1,0 +1,252 @@
+{
+  "allocation": "acct-inventory-79",
+  "before": {
+    "base": "49e7d1b8cf6d762c433360e54efccd50a0840f83",
+    "scope": "qa/portfolio/agent-cost-accounting/pf-60-s03/",
+    "files": [
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/RETURN.md",
+        "bytes": 4553,
+        "sha256": "a1c5a34ee0fb5023791150dc77692f17ee8026887c7f5a04db4b332c1fe907e5",
+        "lines": 73
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/acceptance.md",
+        "bytes": 4772,
+        "sha256": "8e29bfa03f76d2e1b3d1848150abdc4d5b3443ecafb603f2b22a4a58c964d5f5",
+        "lines": 71
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/commit-message.txt",
+        "bytes": 1176,
+        "sha256": "f9344ccd3265170d89c394efa2c0eb36e7d994caf2842ef6749b4b583dd00fe2",
+        "lines": 19
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/finalize.py",
+        "bytes": 2506,
+        "sha256": "bf4be1b3bd3a18ca80dd27682fe67621bb2e81b3b6c3b355bc9a8982441bb571",
+        "lines": 48
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gate.py",
+        "bytes": 3323,
+        "sha256": "867439fb4de5a404ac071c846d14cc99d4ad72991c6388eb4cc60c8ea3a2692f",
+        "lines": 72
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gates-01/core-default.json",
+        "bytes": 1380,
+        "sha256": "4c213d4b39bde93a36a443aa65cf8cb9997e8c3a52c7b04b3a9fcdac3a8169a0",
+        "lines": 41
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gates-01/core-default.log.gz",
+        "bytes": 4983,
+        "sha256": "7bd0d1705971b4da2ff964ccbda7389c758d0b5230806f4030b57fb0f9c08762",
+        "lines": null
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gates-01/core-feature.json",
+        "bytes": 1437,
+        "sha256": "ecc9ab78f53f1dc0bcbe680b358c7ba55de6675b8b35875c647e13478a1dd419",
+        "lines": 43
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gates-01/core-feature.log.gz",
+        "bytes": 5066,
+        "sha256": "38434394efa5a98a9c8f478a3b4bf025ddb177f67c5ad1a14e1e7a8eb488632c",
+        "lines": null
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gates-01/prerequisites.json",
+        "bytes": 962,
+        "sha256": "00fc363d80351266618d5e38494a25dcef99c279be79ced73549eec1c3646eeb",
+        "lines": 33
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gates-01/prerequisites.log.gz",
+        "bytes": 3132,
+        "sha256": "94a0413637d1894ac9ddfec8d4a7d13c61113e79f00a67d6324032d1b11b65de",
+        "lines": null
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gates-01/tui.json",
+        "bytes": 1004,
+        "sha256": "74395163427846b188f7db558999617f951e50a08989315c5f5534e4468c8414",
+        "lines": 38
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/gates-01/tui.log.gz",
+        "bytes": 6536,
+        "sha256": "27753737688e0143fb2065a09c93ce106f3fbb065fb4eef8e46b70311ab7424f",
+        "lines": null
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/summary-recheck.json",
+        "bytes": 437,
+        "sha256": "cbdc49f06188370331eb1c90ed209f9cc4348cd81fc5543560b9a5ad53f848c4",
+        "lines": 16
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-acceptance-75/test-results.json",
+        "bytes": 5569,
+        "sha256": "5142dc7afededb8cb969ef99ebc51d438e55f21bddb5953cb8fa060f2c93d550",
+        "lines": 163
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/RETURN.md",
+        "bytes": 6251,
+        "sha256": "55c761960422d9abcb9f900f2f911b5b5d90a593721547a1dbb30d8c8511c103",
+        "lines": 102
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/acceptance-gap.md",
+        "bytes": 6357,
+        "sha256": "21ce106cc0f1d4267a56d672981e8a6279fe8427bf21de45870b8a4e3f6c650a",
+        "lines": 43
+      },
+      {
+        "path": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-controls-72/summarize.py",
+        "bytes": 4105,
+        "sha256": "420e4a31be49b7f182bb0228006d9ec5f085f368921b4b5c66562da20b179616",
+        "lines": 85
+      }
+    ],
+    "self_excluded": true,
+    "total_new_bytes": 63549,
+    "total_new_text_lines": 847,
+    "refresh": {
+      "allocation": "acct-fitness-76",
+      "checked_at_base": "1aadfc123592530f657794489249e954f5e3885a",
+      "original_inventory": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/acct-acceptance-75-scope-before.json",
+      "original_inventory_sha256": "a51e25cbc46e4509221bce53981033c62024c026c20f2a5fe5e7e950c6dc2651",
+      "meaning": "Original path membership/base/numstat are historical; listed byte sizes, lines and hashes describe the current files. No new test execution is inferred.",
+      "change_record": "qa/portfolio/agent-cost-accounting/pf-60-s03/acct-fitness-76/inventory-refresh.json"
+    }
+  },
+  "after_totals": {
+    "total_new_bytes": 59977,
+    "total_new_text_lines": 782,
+    "total_new_files": 15,
+    "total_modified_files": 3,
+    "total_modified_bytes": 16713,
+    "total_modified_text_lines": 230,
+    "total_current_bytes": 76690,
+    "total_current_text_lines": 1012
+  },
+  "note": "Preserves the prior inventory; round-76 scope/delta remain historical snapshots. This record supersedes their round-75 inventory digest, not their test evidence.",
+  "after_sha256": "cb8a70050303d4fc3c625b5baae9bb2d95bea7b7830196d43ca602caa1063a63",
+  "baseline_81_refresh": {
+    "previous_after_sha256": "24009e07f2f604270a831e6b1f4c073dbb1c867f686a4dd5ad82ec301e97fcaa",
+    "previous_after_totals": {
+      "total_new_bytes": 47679,
+      "total_new_text_lines": 632,
+      "total_new_files": 15,
+      "total_modified_files": 3,
+      "total_modified_bytes": 16713,
+      "total_modified_text_lines": 230,
+      "total_current_bytes": 64392,
+      "total_current_text_lines": 862
+    },
+    "reason": "Acceptance baseline and bounded coverage disclosure added; historical path membership unchanged."
+  },
+  "selfcheck_84_refresh": {
+    "previous_after_sha256": "b4a0da055f3299cdd1157a6e6cfd4a6a5a2100824d964d79727a302a462b0fff",
+    "previous_after_totals": {
+      "total_new_bytes": 48919,
+      "total_new_text_lines": 653,
+      "total_new_files": 15,
+      "total_modified_files": 3,
+      "total_modified_bytes": 16713,
+      "total_modified_text_lines": 230,
+      "total_current_bytes": 65632,
+      "total_current_text_lines": 883
+    },
+    "reason": "Enforce the documented baseline and disclose worded-quantity residual; membership unchanged."
+  },
+  "decay_87_refresh": {
+    "previous_after_sha256": "6f24f7a00d72f3fe5fb53e264fc9716a3cea3c0a2f990838432fe821f188998c",
+    "previous_after_totals": {
+      "total_new_bytes": 49726,
+      "total_new_text_lines": 664,
+      "total_new_files": 15,
+      "total_modified_files": 3,
+      "total_modified_bytes": 16713,
+      "total_modified_text_lines": 230,
+      "total_current_bytes": 66439,
+      "total_current_text_lines": 894
+    },
+    "reason": "Refuse undocumented local-package baseline agreement; membership unchanged."
+  },
+  "reference_88_refresh": {
+    "previous_after_sha256": "6f81ad1a2ce0665c35969e9c44240026952f4a9fa5c454a6a60371afe46a294b",
+    "previous_after_totals": {
+      "total_new_bytes": 49880,
+      "total_new_text_lines": 666,
+      "total_new_files": 15,
+      "total_modified_files": 3,
+      "total_modified_bytes": 16713,
+      "total_modified_text_lines": 230,
+      "total_current_bytes": 66593,
+      "total_current_text_lines": 896
+    },
+    "reason": "State the acceptance durability condition and content reference contract; membership unchanged."
+  },
+  "guard_91_refresh": {
+    "previous_after_sha256": "889aae0737c20a7787ffd58de6314142c6d70c38ae34453722d9486a867d3d43",
+    "previous_after_totals": {
+      "total_new_bytes": 51602,
+      "total_new_text_lines": 690,
+      "total_new_files": 15,
+      "total_modified_files": 3,
+      "total_modified_bytes": 16713,
+      "total_modified_text_lines": 230,
+      "total_current_bytes": 68315,
+      "total_current_text_lines": 920
+    },
+    "reason": "Clarify manual replay and evidence-set durability; retain actual unrefreshed-edit stdout; membership unchanged."
+  },
+  "inventory_92_refresh": {
+    "previous_after_sha256": "f88b0ff613b884a80d3bf35cd3cdc0aec5aa4e8bc36bd4c56497466c165174ec",
+    "previous_after_totals": {
+      "total_new_bytes": 56370,
+      "total_new_text_lines": 742,
+      "total_new_files": 15,
+      "total_modified_files": 3,
+      "total_modified_bytes": 16713,
+      "total_modified_text_lines": 230,
+      "total_current_bytes": 73083,
+      "total_current_text_lines": 972
+    },
+    "reason": "Define evidence and process exits in the acceptance document; historical membership unchanged."
+  },
+  "derive_95_refresh": {
+    "previous_after_sha256": "6e771503adf10f42e53160f3bb21fd3181bc1f240144265aeaa93d78444f6514",
+    "previous_after_totals": {
+      "total_new_bytes": 58157,
+      "total_new_text_lines": 759,
+      "total_new_files": 15,
+      "total_modified_files": 3,
+      "total_modified_bytes": 16713,
+      "total_modified_text_lines": 230,
+      "total_current_bytes": 74870,
+      "total_current_text_lines": 989
+    },
+    "reason": "Move exit table after replay introduction; same bytes/lines totals and membership. No changed numeric claim or expected stdout."
+  },
+  "guarantee_103_refresh": {
+    "previous_after_sha256": "f6ae55c47ce1228c644fd0038b37c261effc22eb727f14b3147b9746eb9fe34d",
+    "previous_after_totals": {
+      "total_new_bytes": 58157,
+      "total_new_text_lines": 759,
+      "total_new_files": 15,
+      "total_modified_files": 3,
+      "total_modified_bytes": 16713,
+      "total_modified_text_lines": 230,
+      "total_current_bytes": 74870,
+      "total_current_text_lines": 989
+    },
+    "reason": "Add the manager-attributed adversarial review history and concrete correction trail; no changed measured claims or membership. Only acceptance document bytes/lines/hash and derived totals change."
+  }
+}

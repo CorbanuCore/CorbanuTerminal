@@ -1,0 +1,8 @@
+ca7477af1dc60b3e81cebee90cefe80bd80acc27902cc746835d88fc55f6483a  codex-rs/tasknode-session/src/delivery_reconcile.rs
+7ab8e63d0bc1f0c827a57a79848e02dcedb7043d0c2392782e9455158a356ac8  codex-rs/tasknode-session/src/delivery_reconcile_tests.rs
+157297e9edef29ebde80ba19cef9d2b91421df4c64782abc0a15dcb18c5ba2fa  codex-rs/tasknode-session/src/delivery_send.rs
+0e973288d3dbfcd58603bc2746760f673210b6773e9ffb1fb96e33d769404734  qa/initiative-control/pf-80-s01/native-reconciliation/receipt.md
+ff4096cb9c536abf28fe8ace64c1663943d6df499f62015c689769fa80f4b496  docs/research/tasknode-integration/native-reconciliation-allocation.md
+9535786494b4e1b44291c4cdac26cce1cfe45854bbaa8f51dd5daa8b5503e9a8  /Volumes/CorbanuDrive/Corbanu/.codex-work/tasknode-beta.Rf2AJJ/tasknode-source/server/campaign-tracker-routes.js
+eaf1a0112538afb6a56a337ff90069125521677c54acd692fa3a637c13f0b269  /Volumes/CorbanuDrive/Corbanu/.codex-work/tasknode-beta.Rf2AJJ/tasknode-source/server/repositories/campaign-tracker.js
+a2f11df4adca1abe09b70bc4a0d7ae36118501831b13e884bc9e5de8c7198a7c  /Volumes/CorbanuDrive/Corbanu/.codex-work/tasknode-beta.Rf2AJJ/tasknode-source/server/campaign-tracker-contract.js

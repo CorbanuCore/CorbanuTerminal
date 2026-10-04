@@ -1,0 +1,5 @@
+{
+  "cmd": "env -i PATH=/opt/homebrew/bin:/usr/bin:/bin UV_CACHE_DIR=/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-f09gap-83/artifacts/uv-cache UV_PYTHON_INSTALL_DIR=/Volumes/CorbanuDrive/Corbanu/worktrees/pf83-rebind-20260916/qa/initiative-control/management-bootstrap/pf83-f09gap-83/artifacts/python uv run --offline --no-project --no-config --with jsonschema==4.25.1 python qa/initiative-control/management-bootstrap/pf83-controls-86/run_controls.py",
+  "exit_code": 0,
+  "expected_exit_code": 0
+}

@@ -1,3 +1,5 @@
+// Corbanu plan status for the provider credentials view, which has no opener now.
+#![allow(dead_code)]
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_wallet::Wallet;
 use zeroize::Zeroizing;

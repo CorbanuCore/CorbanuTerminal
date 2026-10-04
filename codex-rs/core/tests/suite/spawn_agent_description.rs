@@ -496,7 +496,7 @@ async fn spawn_agent_v2_catalog_respects_provider_policy_with_mixed_model_defaul
     let expected_openai = allowlist
         .as_ref()
         .is_none_or(|ids| ids.iter().any(|id| id == "openai"));
-    let expected_kimi = allowlist.is_none();
+    let expected_other_provider = allowlist.is_none();
     let test = test_codex()
         // Reproduce the account catalog's Luna preference without overriding it in
         // production. The bundled Kimi model has no multi-agent version preference.
@@ -532,9 +532,14 @@ async fn spawn_agent_v2_catalog_respects_provider_policy_with_mixed_model_defaul
         (
             description.contains("`openai` / `gpt-5.6-luna`"),
             description.contains("`openai` / `gpt-6-astra`; explicit-choice only;"),
-            description.contains("`kimi-code` / `k3`")
+            // The list is capped, so probe for any non-OpenAI row rather
+            // than one particular model that catalogue growth can push out.
+            description
+                .lines()
+                .any(|line| line.trim_start().starts_with("- `")
+                    && !line.trim_start().starts_with("- `openai`"))
         ),
-        (expected_openai, expected_openai, expected_kimi),
+        (expected_openai, expected_openai, expected_other_provider),
         "provider policy, not engine preference or allocation economics, owns discovery: {description}"
     );
     assert!(

@@ -3,6 +3,98 @@ use crate::bottom_pane::slash_commands::ServiceTierCommand;
 use pretty_assertions::assert_eq;
 use serial_test::serial;
 
+#[tokio::test]
+async fn accounting_inspect_usability_child_watcher_keeps_input_blocked() {
+    for command in [
+        "/usage requests 2026-09-16",
+        "/usage reset",
+        "/compact",
+        "change the task",
+    ] {
+        let (mut chat, mut rx, mut ops) = make_chatwidget_manual(None).await;
+        chat.thread_id = Some(ThreadId::new());
+        drain_insert_history(&mut rx);
+        chat.set_parent_owned_thread();
+        chat.bottom_pane
+            .set_composer_text(command.into(), Vec::new(), Vec::new());
+        let draft = chat.bottom_pane.composer_draft_snapshot();
+        chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(chat.bottom_pane.composer_draft_snapshot(), draft);
+        assert!(chat.accounting_inspector.is_none());
+        assert!(ops.try_recv().is_err());
+        let mut messages = Vec::new();
+        while let Ok(event) = rx.try_recv() {
+            match event {
+                AppEvent::InsertHistoryCell(cell) => messages.push(
+                    cell.display_lines(150)
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                ),
+                other => panic!("unexpected watcher event: {other:?}"),
+            }
+        }
+        assert!(messages.join("\n").contains(PARENT_OWNED_INPUT_MESSAGE));
+    }
+}
+
+#[tokio::test]
+async fn accounting_inspect_command_without_account_auth() {
+    let (mut chat, mut rx, mut ops) = make_chatwidget_manual(None).await;
+    assert!(!chat.has_codex_backend_auth());
+    chat.dispatch_command_with_args(SlashCommand::Usage, "requests".into(), Vec::new());
+    assert_matches!(rx.try_recv(), Ok(AppEvent::LoadAccountingInspector { .. }));
+    assert!(rx.try_recv().is_err());
+    assert!(ops.try_recv().is_err());
+    assert!(render_bottom_popup(&chat, 80).contains("Loading recorded requests"));
+    chat.clear_pending_token_activity_refreshes();
+    chat.dispatch_command_with_args(SlashCommand::Usage, "weekly".into(), Vec::new());
+    let cells = drain_insert_history(&mut rx);
+    assert!(
+        cells
+            .iter()
+            .map(|c| lines_to_single_string(c))
+            .collect::<String>()
+            .contains("Sign in with ChatGPT")
+    );
+}
+
+#[tokio::test]
+async fn accounting_inspect_command_date_validation() {
+    let today = chrono::NaiveDate::from_ymd_opt(2026, 9, 15).unwrap();
+    for (args, day) in [
+        ("requests", Some(20711)),
+        ("requests 1970-01-01", Some(0)),
+        ("requests 2024-02-29", Some(19782)),
+        ("requests 2026-02-29", None),
+        ("requests 2026-9-15", None),
+        ("requests 2026-09-16", None),
+        ("requests 1969-12-31", None),
+        ("requests 2026-09-15 extra", None),
+        ("requests junk", None),
+    ] {
+        let (mut chat, mut rx, mut ops) = make_chatwidget_manual(None).await;
+        chat.open_accounting_command(args, today);
+        if let Some(expected) = day {
+            let AppEvent::LoadAccountingInspector { day, .. } = rx.try_recv().unwrap() else {
+                panic!("{args}")
+            };
+            assert_eq!(day, expected);
+            assert!(rx.try_recv().is_err());
+        } else {
+            let events: Vec<_> = std::iter::from_fn(|| rx.try_recv().ok()).collect();
+            assert!(
+                events
+                    .iter()
+                    .all(|e| !matches!(e, AppEvent::LoadAccountingInspector { .. }))
+            );
+            assert!(!render_bottom_popup(&chat, 80).contains("Loading recorded requests"));
+        }
+        assert!(ops.try_recv().is_err());
+    }
+}
+
 fn force_pet_image_support(chat: &mut ChatWidget) {
     chat.set_pet_image_support_for_tests(crate::pets::PetImageSupport::Supported(
         crate::pets::ImageProtocol::Kitty,
@@ -1362,8 +1454,15 @@ async fn signed_out_usage_command_with_args_reports_chatgpt_login_requirement() 
         .collect::<Vec<_>>()
         .join("\n");
     assert!(
-        rendered.contains("Sign in with ChatGPT to view OpenAI usage with /usage."),
+        rendered.contains("Sign in with ChatGPT to view OpenAI account usage."),
         "expected ChatGPT login requirement, got: {rendered:?}"
+    );
+    // The account view needs that sign-in; what a turn cost does not, and an
+    // operator on another provider must be told where to look instead of being
+    // left to conclude the feature does not exist.
+    assert!(
+        rendered.contains("/usage requests"),
+        "expected the recorded-cost view to be named, got: {rendered:?}"
     );
     assert_eq!(recall_latest_after_clearing(&mut chat), "/usage weekly");
 }
@@ -3310,4 +3409,73 @@ async fn test_approval_command_resolves_locally_on_cancel() {
         }
     }
     assert!(rendered_resolution, "expected an explicit local resolution");
+}
+
+/// Cost has to be reachable by name, by an operator who is not signed in with
+/// ChatGPT, on whatever provider served the turn. It was previously an
+/// undocumented argument to a command that hid itself without that sign-in,
+/// which is indistinguishable from the feature not existing.
+#[tokio::test]
+async fn cost_command_is_listed_and_runs_without_chatgpt_auth() {
+    use crate::bottom_pane::slash_commands::BuiltinCommandFlags;
+    use crate::bottom_pane::slash_commands::builtins_for_input;
+
+    let listed = builtins_for_input(BuiltinCommandFlags {
+        token_activity_command_enabled: false,
+        ..BuiltinCommandFlags {
+            collaboration_modes_enabled: true,
+            connectors_enabled: true,
+            plugins_command_enabled: true,
+            token_activity_command_enabled: false,
+            service_tier_commands_enabled: true,
+            goal_command_enabled: true,
+            personality_command_enabled: true,
+            allow_elevate_sandbox: true,
+            side_conversation_active: false,
+        }
+    })
+    .into_iter()
+    .any(|(name, command)| name == "cost" && command == SlashCommand::Cost);
+    // Both directions matter. In a build that can collect, cost must be
+    // offered without any sign-in - that is the defect this fixes. In a build
+    // that cannot, the view is a held surface and must not be advertised.
+    assert_eq!(
+        listed,
+        cfg!(feature = "developer-accounting"),
+        "`/cost` is listed exactly in builds that can record"
+    );
+
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.dispatch_command_with_args(SlashCommand::Cost, String::new(), Vec::new());
+
+    // It opens the recorded-request inspector rather than the account view, so
+    // it must not ask the backend for account token activity - and it must not
+    // answer with the sign-in refusal. Both are read from one drain: draining
+    // twice silently empties the channel and makes the second assertion
+    // unfailable.
+    let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, AppEvent::RefreshTokenActivity { .. })),
+        "`/cost` reads the local ledger, not the account API"
+    );
+    let rendered = events
+        .iter()
+        .filter_map(|event| match event {
+            AppEvent::InsertHistoryCell(cell) => Some(
+                cell.display_lines(/*width*/ 80)
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !rendered.contains("Sign in with ChatGPT"),
+        "`/cost` never demands a ChatGPT sign-in, got: {rendered:?}"
+    );
 }

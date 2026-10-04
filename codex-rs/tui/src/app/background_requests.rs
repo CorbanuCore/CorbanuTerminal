@@ -22,6 +22,8 @@ use codex_app_server_protocol::MarketplaceUpgradeResponse;
 use std::future::Future;
 
 use codex_app_server_protocol::RequestId;
+use codex_app_server_protocol::ThreadRecordSentModelRequestParams;
+use codex_app_server_protocol::ThreadRecordSentModelRequestResponse;
 
 use crate::hooks_rpc::fetch_hooks_list;
 use crate::hooks_rpc::write_hook_trust;
@@ -1301,6 +1303,54 @@ pub(super) fn mcp_inventory_maps_from_statuses(statuses: Vec<McpServerStatus>) -
     }
 
     (tools, resources, resource_templates, auth_statuses)
+}
+
+impl App {
+    /// Record a model request a pane bridge sent on the operator's credential.
+    ///
+    /// The bridge posts upstream from inside this process, which does not run
+    /// the model client, so nothing about that request reaches the ledger
+    /// unless it is reported. The report goes to the server, which decides
+    /// which account the route bills and whether to record it at all; this
+    /// side only says what it sent and what the provider answered.
+    ///
+    /// Best effort: a failed report leaves the request unrecorded and never
+    /// disturbs the pane turn that earned it.
+    pub(super) fn record_pane_bridge_model_request(
+        &mut self,
+        app_server: &AppServerSession,
+        provider_id: String,
+        base_url: String,
+        path: String,
+        model: String,
+        usage: Option<serde_json::Value>,
+    ) {
+        let Some(thread_id) = self.primary_thread_id else {
+            return;
+        };
+        let request_handle = app_server.request_handle();
+        tokio::spawn(async move {
+            let result: Result<ThreadRecordSentModelRequestResponse, _> = request_handle
+                .request_typed(ClientRequest::ThreadRecordSentModelRequest {
+                    request_id: RequestId::String(format!(
+                        "pane-bridge-accounting-{}",
+                        uuid::Uuid::new_v4()
+                    )),
+                    params: ThreadRecordSentModelRequestParams {
+                        thread_id: thread_id.to_string(),
+                        provider_id,
+                        base_url,
+                        path,
+                        model,
+                        usage,
+                    },
+                })
+                .await;
+            if let Err(err) = result {
+                tracing::debug!(error = %err, "pane bridge model request was not recorded");
+            }
+        });
+    }
 }
 
 #[cfg(test)]

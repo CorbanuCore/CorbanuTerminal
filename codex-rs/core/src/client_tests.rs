@@ -608,6 +608,56 @@ fn responses_input_normalizes_accidental_assistant_prefill_without_changing_user
         super::ensure_responses_input_ends_with_user_turn(&mut input);
         assert_eq!(input, expected);
     }
+
+    // Tool results after assistant commentary are an ordinary tool continuation, not a prefill.
+    // A synthetic `Continue.` here reads to the model as a user interjection after every tool
+    // result.
+    let call = ResponseItem::FunctionCall {
+        id: None,
+        name: "shell".to_string(),
+        namespace: None,
+        arguments: "{}".to_string(),
+        call_id: "call-1".to_string(),
+        encrypted_function_args: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let output = ResponseItem::FunctionCallOutput {
+        id: None,
+        call_id: "call-1".to_string(),
+        output: FunctionCallOutputPayload::from_text("ok".to_string()),
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let reasoning = ResponseItem::Reasoning {
+        id: None,
+        summary: Vec::new(),
+        content: None,
+        encrypted_content: None,
+        anthropic_content_block: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let tool_continuation = vec![
+        message("user", "Fix the defect."),
+        message("assistant", "I will inspect the repository."),
+        call,
+        output,
+    ];
+    let mut unchanged = tool_continuation.clone();
+    super::ensure_responses_input_ends_with_user_turn(&mut unchanged);
+    assert_eq!(unchanged, tool_continuation);
+    assert!(super::responses_input_latest_message_is_assistant(
+        &tool_continuation
+    ));
+
+    let mut trailing_reasoning = vec![
+        message("user", "Summarize."),
+        message("assistant", "Done."),
+        reasoning,
+    ];
+    super::ensure_responses_input_ends_with_user_turn(&mut trailing_reasoning);
+    assert_eq!(
+        trailing_reasoning.last(),
+        Some(&message("user", "Continue."))
+    );
 }
 
 #[test]
@@ -907,10 +957,18 @@ fn anthropic_api_request_repairs_tool_result_after_trailing_assistant_text() {
 }
 
 #[test]
-fn claude_plan_fable_versions_use_exact_upstream_slugs() {
+fn claude_plan_versions_use_exact_upstream_slugs() {
     for (plan_model, upstream_model) in [
+        (
+            codex_model_provider_info::CLAUDE_OPUS_5_5_PLAN_MODEL,
+            codex_model_provider_info::ANTHROPIC_OPUS_5_5_MODEL,
+        ),
         (CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_FABLE_5_MODEL),
         (CLAUDE_FABLE_5_1_PLAN_MODEL, CLAUDE_FABLE_5_1_MODEL),
+        (
+            codex_model_provider_info::CLAUDE_OPUS_5_5_PLAN_MODEL,
+            codex_model_provider_info::ANTHROPIC_OPUS_5_5_MODEL,
+        ),
     ] {
         assert_eq!(super::anthropic_upstream_model(plan_model), upstream_model);
         assert!(super::is_claude_plan_model_slug(plan_model));
@@ -1202,6 +1260,7 @@ async fn compact_uses_bearer_after_agent_identity_session_fallback() -> anyhow::
             &test_session_telemetry(),
             &CompactionTraceContext::disabled(),
             &responses_metadata,
+            &Default::default(),
         )
         .await?;
 
@@ -1465,6 +1524,72 @@ fn ambient_required_low_reasoning_is_enabled_without_duplicate_scalar_control() 
 }
 
 #[test]
+fn refreshed_provider_models_keep_exact_request_routes_and_reasoning() {
+    let models = codex_models_manager::bundled_models_response()
+        .expect("bundled catalogue")
+        .models;
+    for (slug, provider) in [
+        ("glm-5.3-flash", ModelProviderInfo::create_zai_provider()),
+        (
+            "z-ai/glm-5.3-flash",
+            ModelProviderInfo::create_openrouter_provider(),
+        ),
+        (
+            "x-ai/grok-4.7",
+            ModelProviderInfo::create_openrouter_provider(),
+        ),
+        (
+            "deepseek/deepseek-v4.1-flash",
+            ModelProviderInfo::create_openrouter_provider(),
+        ),
+        (
+            "nvidia/nemotron-3-ultra-550b-a55b:free",
+            ModelProviderInfo::create_openrouter_provider(),
+        ),
+    ] {
+        let model = models
+            .iter()
+            .find(|model| model.slug == slug)
+            .expect("model");
+        let client = test_model_client(SessionSource::Cli).for_provider(&provider);
+        let metadata = test_responses_metadata_for_client(
+            &client,
+            /*turn_id*/ None,
+            format!("{}:0", client.state.thread_id),
+            /*parent_thread_id*/ None,
+            TestCodexResponsesRequestKind::Turn,
+        );
+        for level in &model.supported_reasoning_levels {
+            let request = client
+                .build_chat_completions_request(
+                    &Prompt::default(),
+                    model,
+                    Some(level.effort.clone()),
+                    &metadata,
+                )
+                .expect("supported effort must serialize");
+            assert_eq!(request.model, slug);
+            if provider.is_zai() {
+                assert_eq!(request.enable_thinking, Some(true));
+                assert_eq!(
+                    request.reasoning_effort.as_deref(),
+                    Some(level.effort.as_str())
+                );
+            } else {
+                assert_eq!(
+                    request
+                        .reasoning
+                        .as_ref()
+                        .and_then(|reasoning| reasoning.get("effort"))
+                        .and_then(serde_json::Value::as_str),
+                    Some(level.effort.as_str()),
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn zai_glm_5_3_replays_preserved_reasoning_with_tool_calls_and_outputs() {
     let model = codex_models_manager::bundled_models_response()
         .expect("bundled model catalogue")
@@ -1642,6 +1767,27 @@ fn test_claude_plan_model_info() -> ModelInfo {
     model.slug = CLAUDE_PLAN_MODEL.to_string();
     model.display_name = "Claude Opus 5 Plan".to_string();
     model
+}
+
+#[test]
+fn opus_5_5_plan_request_preserves_exact_model_and_subscription_identity() {
+    let mut model = test_claude_plan_model_info();
+    model.slug = codex_model_provider_info::CLAUDE_OPUS_5_5_PLAN_MODEL.to_string();
+    let request = test_model_client(SessionSource::Cli)
+        .build_anthropic_messages_request(
+            &super::Prompt::default(),
+            &model,
+            Some(ReasoningEffort::High),
+        )
+        .expect("Opus 5.5 Plan request");
+    let body = serde_json::to_value(request).expect("request JSON");
+    assert_eq!(body["model"], json!("claude-opus-5-5"));
+    assert_eq!(
+        body["system"][0]["text"],
+        json!(super::CLAUDE_CODE_IDENTITY_PROMPT)
+    );
+    assert_eq!(body["thinking"]["type"], json!("adaptive"));
+    assert_eq!(body["output_config"]["effort"], json!("high"));
 }
 
 #[test]
@@ -1921,47 +2067,6 @@ fn vercel_anthropic_requests_translate_provider_qualified_model_slugs() {
             ),
         ]
     );
-}
-
-fn test_openrouter_gemini_model_info() -> ModelInfo {
-    serde_json::from_value(json!({
-        "slug": "google/gemini-3.5-flash",
-        "display_name": "OpenRouter Gemini 3.5 Flash",
-        "description": "OpenRouter Gemini 3.5 Flash",
-        "default_reasoning_level": null,
-        "supported_reasoning_levels": [
-            {"effort": "minimal", "description": "Minimal"},
-            {"effort": "low", "description": "Low"},
-            {"effort": "medium", "description": "Medium"},
-            {"effort": "high", "description": "High"}
-        ],
-        "shell_type": "shell_command",
-        "visibility": "list",
-        "supported_in_api": true,
-        "priority": 1,
-        "upgrade": null,
-        "base_instructions": "base instructions",
-        "model_messages": null,
-        "supports_reasoning_summaries": false,
-        "support_verbosity": false,
-        "default_verbosity": null,
-        "apply_patch_tool_type": null,
-        "truncation_policy": {"mode": "tokens", "limit": 10000},
-        "supports_parallel_tool_calls": true,
-        "supports_image_detail_original": false,
-        "context_window": 1048576,
-        "auto_compact_token_limit": null,
-        "experimental_supported_tools": []
-    }))
-    .expect("deserialize OpenRouter Gemini test model info")
-}
-
-fn test_openrouter_anthropic_model_info() -> ModelInfo {
-    let mut model_info = test_openrouter_gemini_model_info();
-    model_info.slug = "anthropic/claude-sonnet-4.6".to_string();
-    model_info.display_name = "OpenRouter Claude Sonnet 4.6".to_string();
-    model_info.description = Some("OpenRouter Claude Sonnet 4.6".to_string());
-    model_info
 }
 
 fn test_session_telemetry() -> SessionTelemetry {
@@ -2256,6 +2361,7 @@ async fn summarize_memories_returns_empty_for_empty_input() {
             &model_info,
             /*effort*/ None,
             &session_telemetry,
+            /*accounting*/ &Default::default(),
         )
         .await
         .expect("empty summarize request should succeed");
@@ -2581,4 +2687,509 @@ async fn non_chatgpt_codex_endpoints_omit_attestation_generation() {
         None,
     );
     assert_eq!(attestation_calls.load(Ordering::Relaxed), 0);
+}
+
+/// Summarising memories names a model and a reasoning effort, so it is
+/// inference the operator pays for. It answers with one body rather than a
+/// stream, which is how it escaped the streaming collector entirely.
+#[tokio::test]
+async fn pf_60_s03_memory_summarize_is_recorded() -> anyhow::Result<()> {
+    use codex_state::SqliteConfig;
+    use codex_state::StateRuntime;
+    use codex_state::ThreadMetadataBuilder;
+    use codex_utils_absolute_path::AbsolutePathBuf;
+    use std::sync::Arc;
+
+    let server = wiremock::MockServer::start().await;
+    let endpoint = format!("{}/v1", server.uri());
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/v1/memories/trace_summarize"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "output": [],
+                "usage": {"input_tokens": 90, "output_tokens": 12, "total_tokens": 102}
+            })),
+        )
+        .mount(&server)
+        .await;
+
+    let home = tempfile::tempdir()?;
+    let mut config = crate::session::tests::build_test_config(home.path()).await;
+    config.model_provider = codex_model_provider_info::ModelProviderInfo {
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        supports_websockets: false,
+        ..codex_model_provider_info::ModelProviderInfo::create_openai_provider(Some(
+            endpoint.clone(),
+        ))
+    };
+    config.model_provider_id = "openai".into();
+    config.accounting = crate::config::AccountingMode::Provider {
+        scope: uuid::Uuid::new_v4(),
+        provider_id: "openai".into(),
+        wire_api: codex_model_provider_info::WireApi::Responses,
+        approved_endpoint: endpoint.clone(),
+        approved_query: None,
+        pricing: crate::config::PriceAuthority::Unavailable,
+    };
+    config
+        .features
+        .enable(codex_features::Feature::Sqlite)
+        .expect("sqlite for the ledger");
+
+    let (mut session, _context) =
+        crate::session::tests::make_session_and_context_for_config(config).await;
+    let db = StateRuntime::init(
+        SqliteConfig::from_sqlite_home(AbsolutePathBuf::try_from(home.path().to_path_buf())?),
+        "openai".into(),
+    )
+    .await?;
+    session.services.state_db = Some(db.clone());
+    let owner = Arc::new(session);
+    db.upsert_thread(
+        &ThreadMetadataBuilder::new(
+            owner.thread_id,
+            home.path().join("memory-fixture.jsonl"),
+            chrono::Utc::now(),
+            codex_protocol::protocol::SessionSource::Cli,
+        )
+        .build("openai"),
+    )
+    .await?;
+
+    let client_session = owner.services.new_model_client_session();
+    let provider = owner.provider().await;
+    let (accounting, provider_id) = owner.accounting_binding().await;
+    let auth = owner.services.auth_manager.auth().await;
+    let _scopes = crate::accounting::attach_scopes(
+        &owner,
+        &accounting,
+        &provider_id,
+        &provider,
+        auth.as_ref().map(codex_login::CodexAuth::auth_mode),
+        &endpoint,
+        &client_session,
+        "memory-summarize:fixture".to_string(),
+    )
+    .await?;
+
+    owner
+        .services
+        .model_client()
+        .summarize_memories(
+            vec![codex_api::RawMemory {
+                id: "fixture".into(),
+                metadata: codex_api::RawMemoryMetadata {
+                    source_path: "fixture.jsonl".into(),
+                },
+                items: Vec::new(),
+            }],
+            &test_model_info(),
+            /*effort*/ None,
+            &test_session_telemetry(),
+            &client_session.responses_accounting,
+        )
+        .await?;
+
+    let pool = db
+        .sqlite()
+        .open_read_only_pool(&db.sqlite().state_db_path())
+        .await?;
+    let attempts: Vec<String> =
+        sqlx::query_scalar("SELECT payload FROM draft_accounting_attempts ORDER BY rowid")
+            .fetch_all(&pool)
+            .await?;
+    assert_eq!(attempts.len(), 1, "attempts recorded: {attempts:?}");
+    let attempt: serde_json::Value = serde_json::from_str(&attempts[0])?;
+    assert_eq!(attempt["model"], "gpt-test");
+    assert_eq!(attempt["turn"], "memory-summarize:fixture");
+    // The endpoint states its usage in the body it answers with, so the tokens
+    // are recorded rather than left unknown.
+    let observations: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM draft_accounting_observations")
+            .fetch_one(&pool)
+            .await?;
+    assert_eq!(observations, 1);
+    Ok(())
+}
+
+fn chat_message(role: &str, text: Option<&str>) -> codex_api::ChatMessage {
+    codex_api::ChatMessage {
+        role: role.to_string(),
+        content: text.map(codex_api::ChatMessageContent::text),
+        reasoning_content: None,
+        tool_call_id: None,
+        tool_calls: Vec::new(),
+    }
+}
+
+fn cache_marked_roles(messages: &[codex_api::ChatMessage]) -> Vec<(usize, String)> {
+    messages
+        .iter()
+        .enumerate()
+        .filter(|(_, message)| {
+            serde_json::to_value(message)
+                .map(|value| count_cache_control_markers(&value) > 0)
+                .unwrap_or(false)
+        })
+        .map(|(index, message)| (index, message.role.clone()))
+        .collect()
+}
+
+#[test]
+fn chat_cache_breakpoints_follow_the_newest_tool_turn() {
+    // An agent loop: one user task, then assistant tool calls and tool results.
+    let mut messages = vec![
+        chat_message("system", Some("instructions")),
+        chat_message("user", Some("environment context")),
+        chat_message("user", Some("fix the queue")),
+        chat_message("assistant", None),
+        chat_message("tool", Some("ls output")),
+        chat_message("assistant", Some("")),
+        chat_message("tool", Some("test output")),
+        chat_message("assistant", Some("reading scheduler")),
+        chat_message("tool", Some("scheduler source")),
+    ];
+
+    super::apply_chat_cache_control(&mut messages);
+
+    assert_eq!(
+        cache_marked_roles(&messages),
+        vec![
+            (0, "system".to_string()),
+            (7, "assistant".to_string()),
+            (8, "tool".to_string()),
+        ],
+        "breakpoints must sit on the newest turn, not the first user messages"
+    );
+}
+
+#[test]
+fn chat_cache_breakpoints_skip_messages_without_text() {
+    let mut messages = vec![
+        chat_message("system", Some("instructions")),
+        chat_message("user", Some("task")),
+        chat_message("tool", Some("result")),
+        chat_message("assistant", None),
+        chat_message("assistant", Some("   ")),
+    ];
+
+    super::apply_chat_cache_control(&mut messages);
+
+    assert_eq!(
+        cache_marked_roles(&messages),
+        vec![
+            (0, "system".to_string()),
+            (1, "user".to_string()),
+            (2, "tool".to_string()),
+        ]
+    );
+    assert!(messages[3].content.is_none());
+}
+
+#[test]
+fn chat_freeform_tool_wrappers_are_never_strict() {
+    let tool = codex_tools::ToolSpec::Freeform(codex_tools::FreeformTool {
+        name: "exec".to_string(),
+        description: "Run JavaScript.".to_string(),
+        format: codex_tools::FreeformToolFormat {
+            r#type: "grammar".to_string(),
+            syntax: "lark".to_string(),
+            definition: "start: /.+/".to_string(),
+        },
+    });
+
+    for strip_strict in [false, true] {
+        let tools = super::create_tools_json_for_chat_completions(
+            std::slice::from_ref(&tool),
+            strip_strict,
+            /*zai_native_web_search*/ false,
+        )
+        .expect("chat tools");
+        let function = &tools[0]["function"];
+        assert_eq!(function["name"], "exec");
+        assert_eq!(function.get("strict"), None, "strip_strict={strip_strict}");
+        assert_eq!(
+            function["parameters"]["required"],
+            serde_json::json!(["input"])
+        );
+    }
+    assert_eq!(
+        super::freeform_tool_to_anthropic_tool(match &tool {
+            codex_tools::ToolSpec::Freeform(tool) => tool,
+            _ => unreachable!(),
+        })
+        .get("strict"),
+        None
+    );
+}
+
+#[test]
+fn chat_replay_keeps_malformed_tool_calls_and_their_errors_visible() {
+    let call = |arguments: &str, call_id: &str| ResponseItem::FunctionCall {
+        id: None,
+        name: "exec".to_string(),
+        namespace: None,
+        arguments: arguments.to_string(),
+        call_id: call_id.to_string(),
+        encrypted_function_args: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let output = |call_id: &str, text: &str| ResponseItem::FunctionCallOutput {
+        id: None,
+        call_id: call_id.to_string(),
+        output: FunctionCallOutputPayload::from_text(text.to_string()),
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let unescaped_quote = r#"{"input":"load_csv("x,y")"}"#;
+    let truncated_stream = format!(r#"{{"input":"{}"#, "a".repeat(5_000));
+    let mut messages = Vec::new();
+    let mut skipped = std::collections::HashSet::new();
+
+    super::append_chat_messages_for_response_items(
+        vec![
+            call(unescaped_quote, "call-quote"),
+            output("call-quote", "exec arguments must be a JSON object"),
+            call(&truncated_stream, "call-truncated"),
+            output("call-truncated", "exec arguments must be a JSON object"),
+            call(r#"{"input":"text(1)"}"#, "call-ok"),
+            output("call-ok", "1"),
+        ],
+        &mut messages,
+        &mut skipped,
+        ChatReasoningProtocol::Independent,
+    );
+
+    let calls: Vec<_> = messages
+        .iter()
+        .flat_map(|message| message.tool_calls.iter())
+        .map(|call| {
+            let arguments: serde_json::Value =
+                serde_json::from_str(&call.function.arguments).expect("replayed JSON arguments");
+            (call.id.clone(), arguments)
+        })
+        .collect();
+    assert_eq!(calls.len(), 3);
+    assert_eq!(
+        calls[0],
+        (
+            "call-quote".to_string(),
+            serde_json::json!({ "malformed_arguments": unescaped_quote })
+        )
+    );
+    let truncated = calls[1].1["malformed_arguments"]
+        .as_str()
+        .expect("truncated raw arguments");
+    assert!(truncated.starts_with(r#"{"input":"aaa"#));
+    assert!(truncated.ends_with("…[1010 more characters omitted]"));
+    assert_eq!(
+        calls[2],
+        (
+            "call-ok".to_string(),
+            serde_json::json!({ "input": "text(1)" })
+        )
+    );
+
+    let outputs: Vec<_> = messages
+        .iter()
+        .filter(|message| message.role == "tool")
+        .filter_map(|message| message.tool_call_id.clone())
+        .collect();
+    assert_eq!(outputs, vec!["call-quote", "call-truncated", "call-ok"]);
+    assert!(skipped.is_empty());
+}
+
+#[test]
+fn chat_replay_wraps_custom_tool_calls_as_input_functions() {
+    let mut messages = Vec::new();
+    let mut skipped = std::collections::HashSet::new();
+    super::append_chat_messages_for_response_items(
+        vec![ResponseItem::CustomToolCall {
+            id: None,
+            status: None,
+            call_id: "call-patch".to_string(),
+            name: "apply_patch".to_string(),
+            namespace: None,
+            input: "*** Begin Patch\n*** End Patch".to_string(),
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        &mut messages,
+        &mut skipped,
+        ChatReasoningProtocol::Independent,
+    );
+
+    let call = &messages[0].tool_calls[0];
+    assert_eq!(call.function.name, "apply_patch");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&call.function.arguments).expect("JSON"),
+        serde_json::json!({ "input": "*** Begin Patch\n*** End Patch" })
+    );
+}
+
+fn vercel_gateway_error(status: http::StatusCode, body: serde_json::Value) -> ApiError {
+    ApiError::Transport(TransportError::Http {
+        status,
+        url: None,
+        headers: None,
+        body: Some(body.to_string()),
+    })
+}
+
+fn vercel_zdr_exclusion_body() -> serde_json::Value {
+    json!({
+        "error": {
+            "type": "no_zdr_providers_available",
+            "message": "None of the providers considered for zai/glm-5.3 support ZDR"
+        },
+        "providerMetadata": {"gateway": {"routing": {
+            "resolvedProvider": "zai",
+            "totalProviderAttemptCount": 0,
+            "skippedProviderAttempts": [
+                {"credentialType": "system", "provider": "zai", "reason": "zdr_not_supported"}
+            ]
+        }}}
+    })
+}
+
+#[test]
+fn vercel_policy_exclusion_is_read_from_gateway_routing_metadata() {
+    assert!(super::is_vercel_gateway_policy_exclusion(
+        &vercel_gateway_error(http::StatusCode::BAD_REQUEST, vercel_zdr_exclusion_body(),)
+    ));
+
+    let mut attempted = vercel_zdr_exclusion_body();
+    attempted["providerMetadata"]["gateway"]["routing"]["totalProviderAttemptCount"] = json!(1);
+    let mut nothing_skipped = vercel_zdr_exclusion_body();
+    nothing_skipped["providerMetadata"]["gateway"]["routing"]["skippedProviderAttempts"] =
+        json!([]);
+    for (status, body) in [
+        (http::StatusCode::BAD_REQUEST, attempted),
+        (http::StatusCode::BAD_REQUEST, nothing_skipped),
+        (
+            http::StatusCode::BAD_REQUEST,
+            json!({"error": {"message": "bad input"}}),
+        ),
+        (
+            http::StatusCode::TOO_MANY_REQUESTS,
+            vercel_zdr_exclusion_body(),
+        ),
+    ] {
+        assert!(!super::is_vercel_gateway_policy_exclusion(
+            &vercel_gateway_error(status, body)
+        ));
+    }
+}
+
+#[test]
+fn vercel_policy_exclusion_drops_the_zai_pin_for_the_session() {
+    let client = test_model_client_with_provider(
+        ThreadId::new(),
+        SessionSource::Cli,
+        ModelProviderInfo::create_vercel_anthropic_provider(),
+    );
+    let prompt = Prompt {
+        input: vec![ResponseItem::Message {
+            id: None,
+            role: "user".to_string(),
+            content: vec![ContentItem::InputText {
+                text: "Inspect the repository.".to_string(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        ..Default::default()
+    };
+    let mut glm = test_vercel_kimi_model_info();
+    glm.slug = "zai/glm-5.3".to_string();
+    let provider_options = || {
+        client
+            .build_anthropic_messages_request(&prompt, &glm, /*effort*/ None)
+            .expect("Vercel GLM request")
+            .provider_options
+    };
+
+    assert_eq!(
+        provider_options(),
+        Some(json!({"gateway": {"only": ["zai"]}}))
+    );
+    let exclusion =
+        vercel_gateway_error(http::StatusCode::BAD_REQUEST, vercel_zdr_exclusion_body());
+    assert!(
+        client.drop_vercel_vendor_pin_after_policy_exclusion(&exclusion),
+        "the first exclusion retries without the pin"
+    );
+    assert_eq!(provider_options(), None);
+    assert!(
+        !client.drop_vercel_vendor_pin_after_policy_exclusion(&exclusion),
+        "an unpinned request that is still excluded must surface the error"
+    );
+}
+
+#[test]
+fn policy_exclusion_bodies_do_not_drop_pins_off_the_vercel_gateway() {
+    let client = test_model_client(SessionSource::Cli)
+        .for_provider(&ModelProviderInfo::create_zai_provider());
+    assert!(
+        !client.drop_vercel_vendor_pin_after_policy_exclusion(&vercel_gateway_error(
+            http::StatusCode::BAD_REQUEST,
+            vercel_zdr_exclusion_body(),
+        ))
+    );
+}
+
+#[test]
+fn only_shared_pool_rate_limits_are_transient() {
+    let error = |status: http::StatusCode, body: serde_json::Value| {
+        ApiError::Transport(TransportError::Http {
+            status,
+            url: None,
+            headers: None,
+            body: Some(body.to_string()),
+        })
+    };
+    let shared_pool = json!({"error": {"code": 429, "metadata": {
+        "limit_source": "upstream_provider_shared_pool"
+    }}});
+    assert!(super::is_transient_upstream_rate_limit(&error(
+        http::StatusCode::TOO_MANY_REQUESTS,
+        shared_pool.clone()
+    )));
+    assert!(!super::is_transient_upstream_rate_limit(&error(
+        http::StatusCode::BAD_REQUEST,
+        shared_pool
+    )));
+    assert!(!super::is_transient_upstream_rate_limit(&error(
+        http::StatusCode::TOO_MANY_REQUESTS,
+        json!({"error": {"type": "usage_limit_reached", "message": "limit reached"}})
+    )));
+}
+
+#[test]
+fn transient_rate_limit_delay_backs_off_and_honors_retry_after() {
+    let without_header = ApiError::Transport(TransportError::Http {
+        status: http::StatusCode::TOO_MANY_REQUESTS,
+        url: None,
+        headers: None,
+        body: None,
+    });
+    let delays = (0..4)
+        .map(|attempt| super::transient_rate_limit_delay(&without_header, attempt).as_secs())
+        .collect::<Vec<_>>();
+    assert_eq!(delays, vec![2, 4, 8, 16]);
+
+    let mut headers = http::HeaderMap::new();
+    headers.insert(
+        http::header::RETRY_AFTER,
+        http::HeaderValue::from_static("5"),
+    );
+    let with_header = ApiError::Transport(TransportError::Http {
+        status: http::StatusCode::TOO_MANY_REQUESTS,
+        url: None,
+        headers: Some(headers),
+        body: None,
+    });
+    assert_eq!(
+        super::transient_rate_limit_delay(&with_header, 3).as_secs(),
+        5
+    );
 }

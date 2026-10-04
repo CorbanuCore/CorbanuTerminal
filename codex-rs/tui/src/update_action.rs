@@ -56,6 +56,7 @@ fn canonical_installer_action() -> UpdateAction {
 }
 
 #[cfg(any(not(debug_assertions), test))]
+#[cfg_attr(all(debug_assertions, test), allow(dead_code))]
 pub fn get_update_action() -> Option<UpdateAction> {
     Some(UpdateAction::from_install_context(InstallContext::current()))
 }

@@ -240,7 +240,7 @@ const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 14] = [
     ModelPickerProviderGroup {
         id: "zai",
         label: "Z.AI",
-        subtitle: "Z.AI coding plan",
+        subtitle: "Z.AI API key",
     },
     ModelPickerProviderGroup {
         id: "deepseek",
@@ -1450,6 +1450,13 @@ mod tests {
         );
         assert_eq!(
             ChatWidget::model_provider_for_selection(DEEPSEEK_PRO_MODEL).as_deref(),
+            Some(DEEPSEEK_PROVIDER_ID)
+        );
+        assert_eq!(
+            ChatWidget::model_provider_for_selection(
+                codex_model_provider_info::DEEPSEEK_LEGACY_FLASH_MODEL
+            )
+            .as_deref(),
             Some(DEEPSEEK_PROVIDER_ID)
         );
         assert_eq!(

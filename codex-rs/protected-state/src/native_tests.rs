@@ -216,3 +216,284 @@ fn pf20_s03_partial_frame_obeys_one_total_deadline() {
     );
     assert!(start.elapsed() < Duration::from_secs(1));
 }
+
+#[cfg(all(target_env = "gnu", feature = "synthetic-fixture"))]
+#[derive(Clone, Copy)]
+enum Entry {
+    Descriptor,
+    Legacy,
+}
+
+#[cfg(all(target_env = "gnu", feature = "synthetic-fixture"))]
+enum RelayOwner {
+    Descriptor(codex_linux_pidfd_spawn::OwnedChild),
+    Legacy(Child),
+}
+
+#[cfg(all(target_env = "gnu", feature = "synthetic-fixture"))]
+impl Drop for RelayOwner {
+    fn drop(&mut self) {
+        if let Self::Legacy(child) = self {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+#[cfg(all(target_env = "gnu", feature = "synthetic-fixture"))]
+fn sealed_artifact(key: &str) -> std::os::fd::OwnedFd {
+    let bytes = fs::read(std::env::var_os(key).expect("hashed fixture required")).unwrap();
+    // SAFETY: fixed valid C string and flags; returned fd is newly owned.
+    let raw = unsafe {
+        libc::memfd_create(
+            c"pf27-root-relay".as_ptr(),
+            libc::MFD_CLOEXEC | libc::MFD_ALLOW_SEALING,
+        )
+    };
+    assert!(raw >= 0);
+    let mut file = unsafe { File::from_raw_fd(raw) };
+    file.write_all(&bytes).unwrap();
+    // SAFETY: live descriptor, only fixed sealing flags.
+    assert_eq!(
+        unsafe {
+            libc::fcntl(
+                file.as_raw_fd(),
+                libc::F_ADD_SEALS,
+                libc::F_SEAL_WRITE | libc::F_SEAL_SHRINK | libc::F_SEAL_GROW | libc::F_SEAL_SEAL,
+            )
+        },
+        0
+    );
+    file.into()
+}
+
+#[cfg(all(target_env = "gnu", feature = "synthetic-fixture"))]
+fn relay(entry: Entry) -> (RelayOwner, UnixStream, UnixStream, UnixStream) {
+    use std::os::linux::net::SocketAddrExt;
+    use std::os::unix::net::SocketAddr;
+    let name = format!("corbanu-pf27-root-{}", std::process::id());
+    let listener = UnixListener::bind_addr(&SocketAddr::from_abstract_name(name).unwrap()).unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let owner = match entry {
+        Entry::Descriptor => RelayOwner::Descriptor(
+            codex_linux_pidfd_spawn::spawn_synthetic_probe(
+                sealed_artifact("PF27_ROOT_RELAY"),
+                codex_linux_pidfd_spawn::SyntheticRole::Journal,
+            )
+            .unwrap(),
+        ),
+        Entry::Legacy => RelayOwner::Legacy(
+            Command::new(std::env::var_os("PF27_ROOT_RELAY").unwrap())
+                .args(["--prepare-synthetic-child", "journal", "101", "201", "204"])
+                .env_clear()
+                .current_dir("/")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap(),
+        ),
+    };
+    let accept = || {
+        let until = Instant::now() + Duration::from_secs(3);
+        loop {
+            match listener.accept() {
+                Ok((stream, _)) => {
+                    configure(&stream).unwrap();
+                    return stream;
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    assert!(Instant::now() < until, "relay did not connect");
+                    std::thread::sleep(Duration::from_millis(2));
+                }
+                Err(error) => panic!("accept: {error}"),
+            }
+        }
+    };
+    (owner, accept(), accept(), accept())
+}
+
+#[cfg(all(target_env = "gnu", feature = "synthetic-fixture"))]
+fn relay_server(
+    root: std::sync::Arc<ControllerRoot>,
+    mut owner: RelayOwner,
+    stream: UnixStream,
+) -> std::thread::JoinHandle<Result<(), RootError>> {
+    std::thread::spawn(move || match &mut owner {
+        RelayOwner::Descriptor(child) => {
+            root.serve_owned_child(stream, child.retain_identity().unwrap())
+        }
+        RelayOwner::Legacy(child) => root.serve_child(stream, child),
+    })
+}
+
+#[cfg(all(target_env = "gnu", feature = "synthetic-fixture"))]
+fn relay_checkpoint() -> IntegrityCheckpoint {
+    IntegrityCheckpoint {
+        schema_version: 1,
+        sequence: 1,
+        record_sha256: "a".repeat(64),
+        producer: PolicyPrincipal::new(PrincipalKind::Service, "native-fixture").unwrap(),
+        owner_generation: 1,
+        integrity_key_id: BoundedText::new("fixture-key").unwrap(),
+        policy_generation: 1,
+        run_generation: 1,
+    }
+}
+
+#[cfg(all(target_env = "gnu", feature = "synthetic-fixture"))]
+#[test]
+#[ignore = "source-qualified static relay and non-root kernel proof"]
+fn pf27_root_compat_both_entries_cas_and_death() {
+    for entry in [Entry::Descriptor, Entry::Legacy] {
+        let (_temp, root) = fixture();
+        let root = std::sync::Arc::new(root);
+        let (owner, server, client, mut control) = relay(entry);
+        let worker = relay_server(std::sync::Arc::clone(&root), owner, server);
+        let client = NativeAnchorClient::from_authenticated_stream(client).unwrap();
+        assert_eq!(client.load(), Ok(None));
+        let next = relay_checkpoint();
+        client.compare_and_store(None, &next).unwrap();
+        assert_eq!(client.load(), Ok(Some(next.clone())));
+        control.write_all(b"x").unwrap();
+        assert!(worker.join().unwrap().is_err());
+        assert!(client.load().is_err());
+        assert_eq!(client.load(), Err(IntegrityRootError::Unavailable));
+        assert_eq!(IntegrityRootStore::load(root.as_ref()).unwrap(), Some(next));
+    }
+}
+
+#[cfg(all(target_env = "gnu", feature = "synthetic-fixture"))]
+#[test]
+#[ignore = "source-qualified static relay and non-root kernel proof"]
+fn pf27_root_compat_both_entries_reject_malformed_and_replay() {
+    for entry in [Entry::Descriptor, Entry::Legacy] {
+        for replay in [false, true] {
+            let (_temp, root) = fixture();
+            let (owner, server, mut client, _control) = relay(entry);
+            let worker = relay_server(std::sync::Arc::new(root), owner, server);
+            let key: [u8; 32] = read(&mut client).unwrap();
+            if replay {
+                let mut channel = Channel {
+                    stream: client,
+                    key: Zeroizing::new(key),
+                    sequence: 1,
+                };
+                channel
+                    .send(&Request::LoadJournal, b"corbanu-anchor-request/v1")
+                    .unwrap();
+                assert!(matches!(
+                    channel.receive::<Reply>(b"corbanu-anchor-reply/v1"),
+                    Ok(Reply::Loaded(None))
+                ));
+                // Intentionally reuse the authenticated old sequence.
+                channel
+                    .send(&Request::LoadJournal, b"corbanu-anchor-request/v1")
+                    .unwrap();
+                assert!(
+                    channel
+                        .receive::<Reply>(b"corbanu-anchor-reply/v1")
+                        .is_err()
+                );
+            } else {
+                client.write_all(&u32::MAX.to_be_bytes()).unwrap();
+                let mut byte = [0];
+                assert_eq!(client.read(&mut byte).unwrap(), 0);
+            }
+            assert_eq!(worker.join().unwrap(), Err(RootError::Invalid));
+        }
+    }
+}
+
+#[cfg(all(target_env = "gnu", feature = "synthetic-fixture"))]
+#[test]
+#[ignore = "source-qualified static relay and non-root kernel proof"]
+fn pf27_root_compat_both_entries_lost_reply_is_ambiguous() {
+    for entry in [Entry::Descriptor, Entry::Legacy] {
+        let (_temp, root) = fixture();
+        let root = std::sync::Arc::new(root);
+        let (owner, server, client, mut control) = relay(entry);
+        let worker = relay_server(std::sync::Arc::clone(&root), owner, server);
+        let client = NativeAnchorClient::from_authenticated_stream(client).unwrap();
+        control.write_all(b"p").unwrap();
+        let mut ack = [0];
+        control.read_exact(&mut ack).unwrap();
+        assert_eq!(ack, *b"k");
+        let next = relay_checkpoint();
+        let writer = std::thread::spawn(move || {
+            let result = client.exchange(&Request::Compare {
+                expected: None,
+                next: Box::new(Checkpoint::Journal(next)),
+            });
+            assert!(matches!(result, Err(RootError::Ambiguous)));
+            assert_eq!(client.load(), Err(IntegrityRootError::Unavailable));
+        });
+        let until = Instant::now() + Duration::from_secs(3);
+        while IntegrityRootStore::load(root.as_ref()).unwrap().is_none() {
+            assert!(Instant::now() < until, "compare never committed");
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        // Publication is proven; discard its withheld reply by killing relay.
+        control.write_all(b"x").unwrap();
+        writer.join().unwrap();
+        assert!(worker.join().unwrap().is_err());
+        assert_eq!(
+            IntegrityRootStore::load(root.as_ref()).unwrap(),
+            Some(relay_checkpoint())
+        );
+    }
+}
+
+#[cfg(all(target_env = "gnu", feature = "synthetic-fixture"))]
+#[test]
+#[ignore = "source-qualified static relay and non-root kernel proof"]
+fn pf27_root_compat_rejected_identity_never_receives_key() {
+    for case in ["wrong", "inherited", "dead", "stale", "kernel"] {
+        let (_temp, root) = fixture();
+        let (owner, server, mut client, _control) = relay(Entry::Descriptor);
+        let RelayOwner::Descriptor(child) = &owner else {
+            unreachable!()
+        };
+        let wrong = (case == "wrong").then(|| {
+            codex_linux_pidfd_spawn::spawn_synthetic_probe(
+                sealed_artifact("PF27_SYNTHETIC_HOLD"),
+                codex_linux_pidfd_spawn::SyntheticRole::Journal,
+            )
+            .unwrap()
+        });
+        let identity = wrong.as_ref().unwrap_or(child).retain_identity().unwrap();
+        let (server, mut observer) = if case == "inherited" {
+            UnixStream::pair().unwrap()
+        } else if case == "kernel" {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let tcp = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+            let (other, _) = listener.accept().unwrap();
+            let fd: std::os::fd::OwnedFd = tcp.into();
+            let other: std::os::fd::OwnedFd = other.into();
+            (UnixStream::from(fd), UnixStream::from(other))
+        } else {
+            if case != "wrong" {
+                child.terminate().unwrap();
+                let until = Instant::now() + Duration::from_secs(3);
+                while identity.check_live().is_ok() {
+                    assert!(Instant::now() < until, "child failed to exit");
+                    std::thread::yield_now();
+                }
+            }
+            (server, client.try_clone().unwrap())
+        };
+        configure(&observer).unwrap();
+        if case == "stale" {
+            drop(owner);
+        }
+        assert!(root.serve_owned_child(server, identity).is_err());
+        // The directly rejected endpoint is closed without even a key prefix.
+        if case == "inherited" || case == "kernel" {
+            let mut byte = [0];
+            assert_eq!(observer.read(&mut byte).unwrap(), 0);
+        } else {
+            let mut byte = [0];
+            assert_eq!(client.read(&mut byte).unwrap(), 0);
+        }
+    }
+}

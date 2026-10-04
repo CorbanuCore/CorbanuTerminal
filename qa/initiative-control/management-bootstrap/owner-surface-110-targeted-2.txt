@@ -1,0 +1,15 @@
+test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure (test_slack_transport.TransportTests.test_qualification_restores_prior_hold_after_interrupt_auth_and_final_write_failure) ... ok
+test_qualification_single_flight_across_instances_and_processes (test_slack_transport.TransportTests.test_qualification_single_flight_across_instances_and_processes) ... ok
+test_failed_qualification_preserves_newer_fault_hold (test_slack_transport.TransportTests.test_failed_qualification_preserves_newer_fault_hold) ... ok
+test_initial_qualification_failures_retry_after_real_reload_without_reset (test_slack_transport.TransportTests.test_initial_qualification_failures_retry_after_real_reload_without_reset) ... ok
+test_review_rechecks_undrained_events_after_auth (test_slack_transport.TransportTests.test_review_rechecks_undrained_events_after_auth) ... ok
+test_saved_verified_snapshot_downgrades_without_reprojection_or_mutation (test_decision_feed.FeedTests.test_saved_verified_snapshot_downgrades_without_reprojection_or_mutation) ... ok
+test_held_notices_distinguish_wait_act_and_expired_undelivered (test_attention.SlackNoticeTests.test_held_notices_distinguish_wait_act_and_expired_undelivered) ... ok
+test_mixed_conditions_retain_fault_and_each_intake_disposition (test_attention.SlackNoticeTests.test_mixed_conditions_retain_fault_and_each_intake_disposition) ... ok
+test_supervisor_uncertainty_downgrades_fresh_projection_and_rendering (test_decision_manager.ManagerTests.test_supervisor_uncertainty_downgrades_fresh_projection_and_rendering) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 10.976s
+
+OK
+Verified export activated; private server refreshed; timer activation unchanged

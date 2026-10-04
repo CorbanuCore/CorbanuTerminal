@@ -73,6 +73,7 @@ members = [
     "file-search",
     "file-watcher",
     "linux-sandbox",
+    "linux-pidfd-spawn",
     "lmstudio",
     "login",
     "codex-mcp",
@@ -148,7 +149,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.42"
+version = "0.1.48"
 # Track the edition for all workspace crates in one place. Individual
 # crates can still override this value, but keeping it here means new
 # crates created with `cargo new -w ...` automatically inherit the 2024
@@ -257,6 +258,7 @@ codex-security-audit = { path = "security-audit" }
 codex-security-policy = { path = "security-policy" }
 codex-secret-broker = { path = "secret-broker" }
 codex-secret-broker-service = { path = "secret-broker-service" }
+codex-linux-pidfd-spawn = { path = "linux-pidfd-spawn" }
 codex-secrets = { path = "secrets" }
 codex-shell-command = { path = "shell-command" }
 codex-shell-escalation = { path = "shell-escalation" }
@@ -368,7 +370,10 @@ glob = "0.3"
 globset = "0.4"
 hmac = "0.12.1"
 http = "1.3.1"
+http-body-util = "=0.1.3"
 httpdate = "1.0.3"
+hyper = { version = "=1.8.1", default-features = false }
+hyper-util = { version = "=0.1.20", default-features = false }
 iana-time-zone = "0.1.64"
 icu_decimal = "2.1"
 icu_locale_core = "2.1"
@@ -591,6 +596,11 @@ ignored = [
 # Keep line tables/backtraces while avoiding expensive full variable debug info
 # across local dev builds.
 debug = "limited"
+# macOS defaults to "unpacked", which keeps one object file per codegen unit for
+# the debugger. Cargo never deletes stale ones, so a long-lived target grew to
+# ~930k files in debug/deps and every rustc invocation slowed to a crawl while
+# listing it. "off" is already the default on Linux.
+split-debuginfo = "off"
 
 # Vault passphrases use the production scrypt work factor in every profile.
 # Optimize the CPU-heavy primitives so debug builds stay responsive without

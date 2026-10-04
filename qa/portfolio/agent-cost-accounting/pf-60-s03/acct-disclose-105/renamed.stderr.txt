@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "<string>", line 6, in <module>
+    exec(compile(raw, str(path), 'exec'), {'__file__': str(path), '__name__': '__main__'})
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/acct-activation-20260916/qa/portfolio/agent-cost-accounting/pf-60-s03/acct-final-100/test_destination.py", line 81, in <module>
+    raise RuntimeError("missing unique pinned alias-unignored-regression observation")
+RuntimeError: missing unique pinned alias-unignored-regression observation

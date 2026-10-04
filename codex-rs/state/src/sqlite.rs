@@ -19,6 +19,7 @@ use crate::telemetry::DbKind;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use log::LevelFilter;
 use sqlx::ConnectOptions;
+use sqlx::Connection;
 use sqlx::Error;
 use sqlx::SqlitePool;
 use sqlx::migrate::Migrator;
@@ -330,9 +331,25 @@ impl SqliteConfig {
             .create_if_missing(true)
             .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Normal)
-            .auto_vacuum(SqliteAutoVacuum::Incremental)
             .busy_timeout(Duration::from_secs(5))
             .log_statements(LevelFilter::Off);
+        // Setting `auto_vacuum` takes the write lock even when the value is
+        // unchanged, so it must not be a per-connection option: every pooled
+        // connection would run it as it connects, and on a database another
+        // process is writing, opening a connection - for a reader too - waited
+        // out the busy timeout and failed. It only takes effect before the first
+        // table exists (later changes need a VACUUM), so set it once, on the one
+        // connection that creates the database, and leave existing ones alone.
+        if !database_has_content(path) {
+            let mut creator = options
+                .clone()
+                .auto_vacuum(SqliteAutoVacuum::Incremental)
+                .connect()
+                .await?;
+            // An empty file keeps no settings; writing the header persists them.
+            sqlx::query("VACUUM").execute(&mut creator).await?;
+            creator.close().await?;
+        }
         SqlitePoolOptions::new()
             .max_connections(5)
             .connect_with(options)
@@ -353,6 +370,20 @@ impl SqliteConfig {
     }
 }
 
+/// Whether `path` is an existing, non-empty database file.
+fn database_has_content(path: &Path) -> bool {
+    std::fs::metadata(path).is_ok_and(|metadata| metadata.len() > 0)
+}
+
+/// Keep fault-fixture connection options and checkout barriers intact at the SQLite boundary.
+#[cfg(test)]
+pub(crate) async fn open_pool_for_testing(
+    pool_options: SqlitePoolOptions,
+    connect_options: SqliteConnectOptions,
+) -> Result<SqlitePool, Error> {
+    pool_options.connect_with(connect_options).await
+}
+
 async fn rename_if_source_still_exists(source: &Path, destination: &Path) -> anyhow::Result<()> {
     match tokio::fs::rename(source, destination).await {
         Ok(()) => Ok(()),
@@ -366,3 +397,7 @@ async fn rename_if_source_still_exists(source: &Path, destination: &Path) -> any
         Err(err) => Err(err.into()),
     }
 }
+
+#[cfg(test)]
+#[path = "sqlite_tests.rs"]
+mod tests;

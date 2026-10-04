@@ -1,0 +1,59 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s
+────────────
+ Nextest run ID 7c2fce2d-88c8-458c-837b-3a8847e977e0 with nextest profile: local
+    Starting 52 tests across 7 binaries (4 tests skipped)
+        PASS [   0.002s] ( 1/52) codex-secret-broker-service launch::manifest::sealed::tests::pf_27_s01_sealed_copy_bounds_and_partial_io_errors
+        PASS [   0.002s] ( 2/52) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_reservation_precedes_image_and_rejects_second_launch
+        PASS [   0.002s] ( 3/52) codex-secret-broker-service launch::tests::pf_27_s01_recipe_rejects_collisions_and_sentinel_ids
+        PASS [   0.003s] ( 4/52) codex-secret-broker-service children::tests::pf_27_s01_reaper_spawn_failure_returns_both_owned_children
+        PASS [   0.003s] ( 5/52) codex-secret-broker-service launch::manifest::elf::tests::pf_27_s01_elf_profile_identity_and_header_bounds
+        PASS [   0.003s] ( 6/52) codex-secret-broker-service launch::manifest::elf::tests::pf_27_s01_elf_profile_io_failures_are_sanitized
+        PASS [   0.003s] ( 7/52) codex-secret-broker-service launch::manifest::elf::tests::pf_27_s01_elf_profile_dynamic_vocabulary_and_termination
+        PASS [   0.003s] ( 8/52) codex-secret-broker-service launch::manifest::elf::tests::pf_27_s01_elf_profile_program_ranges_and_mapping_denials
+        PASS [   0.003s] ( 9/52) codex-secret-broker-service launch::manifest::files::tests::pf_27_s01_file_metadata_and_stability_guards
+        PASS [   0.004s] (10/52) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_cancel_before_worker_starts_never_launches
+        PASS [   0.002s] (11/52) codex-secret-broker-service::lifecycle pf_27_s01_production_service_requires_qualified_bootstrap
+        PASS [   0.015s] (12/52) codex-secret-broker-service children::tests::pf_27_s01_early_drop_uses_preallocated_reaper
+        PASS [   0.003s] (13/52) codex-secret-broker-service launch::tests::pf_27_s01_preparation_arguments_are_exact_and_canonical
+        PASS [   0.019s] (14/52) codex-secret-broker-service launch::manifest::sealed::tests::pf_27_s01_sealed_image_kernel_denials_and_drop
+        PASS [   0.019s] (15/52) codex-secret-broker-service launch::manifest::sealed::tests::pf_27_s01_sealed_image_stale_source_and_invalid_bytes_deny
+        PASS [   0.019s] (16/52) codex-secret-broker-service launch::manifest::sealed::tests::pf_27_s01_sealed_image_every_failure_drops_both_handles
+        PASS [   0.004s] (17/52) codex-secret-broker-service launch::manifest::tests::pf_27_s01_manifest_tree_positive_and_leaf_mutations
+        PASS [   0.004s] (18/52) codex-secret-broker-service launch::manifest::tests::pf_27_s01_manifest_strict_schema_and_role_table
+        PASS [   0.020s] (19/52) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_panic_is_not_cleanup_receipt_or_relaunch_permission
+        PASS [   0.020s] (20/52) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_late_spawn_drop_keeps_permit_until_reaping
+        PASS [   0.005s] (21/52) codex-secret-broker-service launch::manifest::tests::pf_27_s01_manifest_every_component_denies_links_modes_and_missing
+        PASS [   0.018s] (22/52) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_roles_route_independently_and_stalled_handlers_shutdown
+        PASS [   0.022s] (23/52) codex-secret-broker-service launch::manifest::tests::pf_27_s01_manifest_leaf_fifo_socket_and_identity_guard
+        PASS [   0.003s] (24/52) codex-secret-broker-service::bin/codex-protected-root-probe hardening::tests::pf_27_s01_probe_each_failed_kernel_observation_prevents_success
+        PASS [   0.003s] (25/52) codex-secret-broker-service::bin/codex-protected-root-probe hardening::tests::pf_27_s01_probe_missing_malformed_or_duplicate_ambient_state_denies
+        PASS [   0.003s] (26/52) codex-secret-broker-service::bin/codex-protected-root-probe hardening::tests::pf_27_s01_probe_identity_requires_nonroot_and_all_saved_ids
+        PASS [   0.003s] (27/52) codex-secret-broker-service::bin/codex-protected-root-probe prepare::tests::pf_27_s01_preparation_requires_exact_saved_ids_and_groups
+        PASS [   0.003s] (28/52) codex-secret-broker-service::bin/codex-protected-root-probe prepare::tests::pf_27_s01_preparation_stops_at_each_failed_boundary
+        PASS [   0.008s] (29/52) codex-secret-broker-service::probe_lifecycle pf_27_s01_preparation_denies_nonroot_and_invalid_invocations
+        PASS [   0.007s] (30/52) codex-secret-broker-service::probe_lifecycle pf_27_s01_probe_native_and_invalid_modes_remain_unavailable
+        PASS [   0.011s] (31/52) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_worker_failure_returns_image_without_spawn
+        PASS [   0.026s] (32/52) codex-secret-broker-service launch::manifest::files::tests::pf_27_s01_digest_bounds_identity_and_read_failures
+        PASS [   0.026s] (33/52) codex-secret-broker-service launch::manifest::sealed::tests::pf_27_s01_profile_inspection_retains_same_sealed_inode_and_closes_failures
+        PASS [   0.011s] (34/52) codex-secret-broker-service::launch_recipe_lifecycle pf_27_s01_recipe_transports_exact_args_with_null_stdio_and_no_home
+        PASS [   0.028s] (35/52) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_early_exit_and_rejected_spawn_release_only_after_cleanup
+        PASS [   0.015s] (36/52) codex-secret-broker-service::probe_lifecycle pf_27_s01_probe_hardens_only_its_own_actual_process
+        PASS [   0.035s] (37/52) codex-secret-broker-service root::tests::pf_27_s01_root_mapping_uses_child_role_and_shutdown_releases_roots
+        PASS [   0.034s] (38/52) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_duplicate_parent_and_wrong_uid_connections_deny
+        PASS [   0.018s] (39/52) codex-secret-broker-service::probe_lifecycle pf_27_s01_probe_reports_inherited_synthetic_fd_without_disclosing_it
+        PASS [   0.040s] (40/52) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_signal_wait_failure_quarantines_until_same_owner_recovers
+        PASS [   0.026s] (41/52) codex-secret-broker-service root::tests::pf_27_s01_native_root_open_denies_nonroot_and_fences_children
+        PASS [   0.039s] (42/52) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_unknown_peer_and_old_generation_cannot_enter_replacement
+        PASS [   0.044s] (43/52) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_exit_and_handler_failure_fence_generation
+        PASS [   0.034s] (44/52) codex-secret-broker-service root::tests::pf_27_s01_root_open_failures_release_first_root_and_both_children
+        PASS [   0.064s] (45/52) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_handler_deadline_fences_without_blocking_supervisor
+        PASS [   0.071s] (46/52) codex-secret-broker-service root::tests::pf_27_s01_root_terminal_outcomes_fence_and_preserve_ambiguous_errors
+        PASS [   0.087s] (47/52) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_peer_mismatch_denies_before_audit
+        PASS [   0.088s] (48/52) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_dispatch_uses_vault_and_settles_journal
+        PASS [   0.105s] (49/52) codex-secret-broker-service launch::manifest::spawn::tests::pf_27_s01_owner_deadline_while_spawn_blocked_is_not_cleanup
+        PASS [   0.184s] (50/52) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_replay_denies_without_second_audit_or_secret
+        PASS [   0.351s] (51/52) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_death_and_restart_refuse_old_channel_and_key
+        PASS [   5.493s] (52/52) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_signal_during_partial_read_preserves_absolute_deadline
+────────────
+     Summary [   5.496s] 52 tests run: 52 passed, 4 skipped

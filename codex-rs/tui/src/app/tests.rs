@@ -1,5 +1,327 @@
 //! App-level orchestration tests for the TUI.
 
+async fn accounting_fixture(
+    app: &mut App,
+    path: &std::path::Path,
+) -> anyhow::Result<(ThreadId, i64)> {
+    use codex_state::accounting::*;
+    let now = chrono::Utc::now().timestamp_millis();
+    let owner = ThreadId::new();
+    let db = codex_state::StateRuntime::init(
+        codex_state::SqliteConfig::from_sqlite_home(path.abs()),
+        "synthetic".into(),
+    )
+    .await?;
+    let metadata = codex_state::ThreadMetadataBuilder::new(
+        owner,
+        path.join("synthetic.jsonl"),
+        chrono::Utc::now(),
+        codex_protocol::protocol::SessionSource::Cli,
+    );
+    db.upsert_thread(&metadata.build("synthetic")).await?;
+    let a: Attempt = serde_json::from_value(serde_json::json!({
+        "attempt_id":uuid::Uuid::from_u128(1),"request_id":uuid::Uuid::from_u128(2),
+        "thread_id":owner,"turn":"synthetic","retry_of":null,"provider":"fixture-only",
+        "model":"fixture-model","scope":uuid::Uuid::nil(),"dialect":"Inclusive","dispatched_at_ms":now
+    }))?;
+    let s: Snapshot = serde_json::from_value(serde_json::json!({
+        "id":uuid::Uuid::from_u128(3),"provider":"fixture-only","model":"fixture-model",
+        "scope":uuid::Uuid::nil(),"currency":"USD","unit":"PerMillionTokens",
+        "rates":{"noncached":"1","read":"1","write":"2","output":"4"},
+        "source_reference":uuid::Uuid::from_u128(4),"source_kind":"ProviderPublished",
+        "observed_at_ms":0,"approved_at_ms":0,"effective_from_ms":0,"effective_end_ms":null
+    }))?;
+    let o: Observation = serde_json::from_value(serde_json::json!({
+        "revision":1,"source":uuid::Uuid::from_u128(5),"sequence":1,
+        "patch":{"input":100,"read":20,"output":40}
+    }))?;
+    let store = AccountingStore::open(&db, now).await?;
+    store.admit(owner, &a, &[s], now).await?;
+    store.observe(owner, &a, &[o], now).await?;
+    app.chat_widget
+        .handle_thread_session_quiet(test_thread_session(owner, path.to_path_buf()));
+    app.active_thread_id = Some(owner);
+    app.state_db = Some(db);
+    Ok((owner, now / 86_400_000))
+}
+
+async fn accounting_load(
+    app: &mut App,
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
+    day: i64,
+) -> AppEvent {
+    while rx.try_recv().is_ok() {}
+    app.handle_accounting_inspector_event(AppEvent::OpenAccountingInspector { day });
+    let load = rx.recv().await.unwrap();
+    assert!(matches!(load, AppEvent::LoadAccountingInspector { .. }));
+    app.handle_accounting_inspector_event(load);
+    tokio::time::timeout(Duration::from_secs(20), rx.recv())
+        .await
+        .unwrap()
+        .unwrap()
+}
+
+fn accounting_scroll(app: &mut App) -> String {
+    app.chat_widget.on_terminal_resize(40);
+    let mut output = String::new();
+    for _ in 0..120 {
+        output.push_str(&render_bottom_popup(&app.chat_widget, 40));
+        app.chat_widget
+            .handle_key_event(crossterm::event::KeyEvent::new(
+                crossterm::event::KeyCode::Down,
+                crossterm::event::KeyModifiers::NONE,
+            ));
+    }
+    output
+}
+
+#[tokio::test]
+async fn accounting_inspect_app_real_store_to_view() -> anyhow::Result<()> {
+    use codex_state::accounting::InspectionDay;
+    let path = tempdir()?;
+    let (mut app, mut rx, mut ops) = make_test_app_with_channels().await;
+    let (_, day) = accounting_fixture(&mut app, path.path()).await?;
+    while ops.try_recv().is_ok() {}
+    let event = accounting_load(&mut app, &mut rx, day).await;
+    let generation = match &event {
+        AppEvent::AccountingInspectorLoaded {
+            result: Ok(InspectionDay::Ready(v)),
+            generation,
+            ..
+        } => {
+            assert_eq!(
+                serde_json::to_value(v.totals.known_usd)?,
+                serde_json::json!("0.00018")
+            );
+            assert_eq!(v.totals.unknown_estimates, 1);
+            assert_eq!(v.requests.len(), 1);
+            *generation
+        }
+        other => panic!("{other:?}"),
+    };
+    app.handle_accounting_inspector_event(event);
+    let summary = accounting_scroll(&mut app);
+    assert!(
+        summary.contains("$0.000180") && summary.contains("+ unknown") && summary.contains("costs")
+    );
+    for page in [1, 2] {
+        app.handle_accounting_inspector_event(AppEvent::NavigateAccountingInspector {
+            generation,
+            page,
+        });
+    }
+    let detail = accounting_scroll(&mut app);
+    for required in [
+        "Cache write: unknown",
+        "fixture-only",
+        "fixture-model",
+        "0.00018",
+        "Price ID:",
+    ] {
+        assert!(detail.contains(required), "{required}");
+    }
+    assert!(ops.try_recv().is_err());
+    assert!(rx.try_recv().is_err());
+    app.state_db.as_ref().unwrap().close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_range_app_dispatch_preserves_query() -> anyhow::Result<()> {
+    use codex_state::accounting::InspectionDay;
+    use codex_state::accounting::InspectionGrouping;
+    use codex_state::accounting::InspectionRange;
+    let path = tempdir()?;
+    let (mut app, mut rx, _ops) = make_test_app_with_channels().await;
+    let (_, day) = accounting_fixture(&mut app, path.path()).await?;
+    while rx.try_recv().is_ok() {}
+    app.handle_accounting_inspector_event(AppEvent::OpenAccountingInspector { day });
+    let mut load = rx.recv().await.unwrap();
+    let requested = InspectionRange {
+        start_ms: day * 86_400_000,
+        end_ms: (day + 1) * 86_400_000,
+        grouping: InspectionGrouping::Hour,
+    };
+    let AppEvent::LoadAccountingInspector { range, .. } = &mut load else {
+        panic!()
+    };
+    *range = Some(requested);
+    app.handle_accounting_inspector_event(load);
+    let event = tokio::time::timeout(Duration::from_secs(20), rx.recv())
+        .await?
+        .unwrap();
+    assert!(matches!(&event, AppEvent::AccountingInspectorLoaded {
+        result: Ok(InspectionDay::Range { requested: actual, buckets, .. }), ..
+    } if *actual == requested && buckets.len() == 24));
+    app.handle_accounting_inspector_event(event);
+    let text = accounting_scroll(&mut app);
+    assert!(text.contains("timezone: UTC"));
+    assert!(text.contains("Range total unavailable"));
+    app.state_db.as_ref().unwrap().close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_app_remote_does_not_read_local() -> anyhow::Result<()> {
+    let path = tempdir()?;
+    let (mut app, mut rx, _ops) = make_test_app_with_channels().await;
+    let (_, day) = accounting_fixture(&mut app, path.path()).await?;
+    app.app_server_target = crate::AppServerTarget::Remote {
+        endpoint: crate::RemoteAppServerEndpoint::UnixSocket {
+            socket_path: path.path().join("missing.sock").abs(),
+        },
+    };
+    let event = accounting_load(&mut app, &mut rx, day).await;
+    assert!(
+        matches!(&event, AppEvent::AccountingInspectorLoaded { result: Err(message), .. } if message.contains("remote"))
+    );
+    app.handle_accounting_inspector_event(event);
+    let screen = accounting_scroll(&mut app);
+    assert!(!screen.contains("0.000180"));
+    assert!(!screen.contains("fixture-only"));
+    app.state_db.as_ref().unwrap().close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_app_thread_switch_stale_reply() -> anyhow::Result<()> {
+    let path = tempdir()?;
+    let (mut app, mut rx, _ops) = make_test_app_with_channels().await;
+    let (_, day) = accounting_fixture(&mut app, path.path()).await?;
+    let held_result = accounting_load(&mut app, &mut rx, day).await;
+    let other = ThreadId::new();
+    app.chat_widget
+        .handle_thread_session_quiet(test_thread_session(other, path.path().to_path_buf()));
+    app.active_thread_id = Some(other);
+    app.handle_accounting_inspector_event(held_result);
+    assert!(!render_bottom_popup(&app.chat_widget, 80).contains("Cost — this conversation"));
+    let next = accounting_load(&mut app, &mut rx, day).await;
+    assert!(matches!(next, AppEvent::AccountingInspectorLoaded {
+        thread: Some(id), result: Ok(codex_state::accounting::InspectionDay::MissingThread), ..
+    } if id == other));
+    app.state_db.as_ref().unwrap().close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_app_error_retry_and_timeout() -> anyhow::Result<()> {
+    let path = tempdir()?;
+    let (mut app, mut rx, _ops) = make_test_app_with_channels().await;
+    let (_, day) = accounting_fixture(&mut app, path.path()).await?;
+    let db = app.state_db.take().unwrap();
+    let missing = accounting_load(&mut app, &mut rx, day).await;
+    assert!(
+        matches!(&missing, AppEvent::AccountingInspectorLoaded { result: Err(s), .. } if s.contains("database is not open"))
+    );
+    app.handle_accounting_inspector_event(missing);
+    app.state_db = Some(db.clone());
+    let event = accounting_load(&mut app, &mut rx, day).await;
+    let AppEvent::AccountingInspectorLoaded { generation, .. } = &event else {
+        panic!()
+    };
+    let generation = *generation;
+    app.handle_accounting_inspector_event(event);
+    tokio::time::pause();
+    let timeout =
+        super::event_dispatch::accounting_inspector_read_result(std::future::pending()).await;
+    tokio::time::resume();
+    assert!(timeout.unwrap_err().contains("timed out"));
+    app.handle_accounting_inspector_event(AppEvent::RefreshAccountingInspector { generation });
+    let AppEvent::LoadAccountingInspector {
+        generation: next, ..
+    } = rx.recv().await.unwrap()
+    else {
+        panic!()
+    };
+    assert_ne!(generation, next);
+    db.close().await;
+    let failed = accounting_load(&mut app, &mut rx, day).await;
+    assert!(
+        matches!(&failed, AppEvent::AccountingInspectorLoaded { result: Err(s), .. } if s.contains("could not be read") && !s.contains("SELECT"))
+    );
+    app.handle_accounting_inspector_event(failed);
+    app.chat_widget
+        .handle_key_event(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Esc,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+    app.handle_accounting_inspector_event(rx.recv().await.unwrap());
+    assert!(!render_bottom_popup(&app.chat_widget, 80).contains("Cost — this conversation"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_app_restart_and_profile_isolation() -> anyhow::Result<()> {
+    let path = tempdir()?;
+    let fresh = tempdir()?;
+    let (mut app, mut rx, _ops) = make_test_app_with_channels().await;
+    let (owner, day) = accounting_fixture(&mut app, path.path()).await?;
+    let before = accounting_load(&mut app, &mut rx, day).await;
+    app.handle_accounting_inspector_event(before);
+    app.state_db.take().unwrap().close().await;
+    app.chat_widget.clear_pending_token_activity_refreshes();
+    app.state_db = Some(
+        codex_state::StateRuntime::init(
+            codex_state::SqliteConfig::from_sqlite_home(path.path().abs()),
+            "synthetic".into(),
+        )
+        .await?,
+    );
+    let reopened = accounting_load(&mut app, &mut rx, day).await;
+    assert!(
+        matches!(reopened, AppEvent::AccountingInspectorLoaded { result: Ok(codex_state::accounting::InspectionDay::Ready(v)), .. } if v.owner == owner && v.totals.attempts == 1)
+    );
+    app.state_db.take().unwrap().close().await;
+    app.chat_widget
+        .update_account_state(None, None, false, false);
+    app.state_db = Some(
+        codex_state::StateRuntime::init(
+            codex_state::SqliteConfig::from_sqlite_home(fresh.path().abs()),
+            "synthetic".into(),
+        )
+        .await?,
+    );
+    let empty = accounting_load(&mut app, &mut rx, day).await;
+    assert!(matches!(
+        &empty,
+        AppEvent::AccountingInspectorLoaded {
+            result: Ok(codex_state::accounting::InspectionDay::Absent),
+            ..
+        }
+    ));
+    app.handle_accounting_inspector_event(empty);
+    assert!(!accounting_scroll(&mut app).contains("0.000180"));
+    app.state_db.take().unwrap().close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn accounting_inspect_app_off_and_old_usage_routes() -> anyhow::Result<()> {
+    let (mut app, mut rx, mut ops) = make_test_app_with_channels().await;
+    let event = accounting_load(&mut app, &mut rx, 0).await;
+    assert!(
+        matches!(&event, AppEvent::AccountingInspectorLoaded { result: Err(s), .. } if s.contains("no current native thread"))
+    );
+    app.handle_accounting_inspector_event(event);
+    assert!(ops.try_recv().is_err());
+    assert!(rx.try_recv().is_err());
+    app.chat_widget.clear_pending_token_activity_refreshes();
+    set_chatgpt_auth(&mut app.chat_widget);
+    app.chat_widget.handle_paste("/usage".into());
+    app.chat_widget
+        .handle_key_event(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Enter,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+    app.chat_widget
+        .handle_key_event(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Enter,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+    assert!(matches!(rx.recv().await, Some(AppEvent::OpenTokenActivity)));
+    Ok(())
+}
+
 #[path = "tests/advanced_reasoning_tests.rs"]
 mod advanced_reasoning_tests;
 mod dispatch_integration;
@@ -153,9 +475,50 @@ use tokio::time;
 macro_rules! assert_app_snapshot {
     ($name:expr, $value:expr $(,)?) => {
         insta::with_settings!({snapshot_path => "../snapshots"}, {
-            assert_snapshot!($name, $value);
+            let normalized = crate::status::snapshot_helpers::normalize_snapshot_version(&$value);
+            assert_snapshot!($name, normalized);
         });
     };
+}
+
+#[tokio::test]
+async fn modal_tui_input_handoff_accounts_for_keys_and_returns_queue_to_chat() {
+    use crossterm::event::KeyCode;
+    use crossterm::event::KeyEvent;
+    let keys = [
+        KeyCode::Char('f'),
+        KeyCode::Down,
+        KeyCode::Esc,
+        KeyCode::Char('x'),
+    ];
+    let source =
+        tokio_stream::iter(keys.map(|code| TuiEvent::Key(KeyEvent::new(code, KeyModifiers::NONE))));
+    let mut drained = spawn_tui_event_drainer(Box::pin(source));
+    {
+        let mut modal = modal_tui_events(&mut drained.rx, &drained.watchdog);
+        for expected in &keys[..3] {
+            let event = time::timeout(Duration::from_secs(2), modal.next())
+                .await
+                .expect("modal receives input")
+                .expect("key");
+            assert!(matches!(event, TuiEvent::Key(key) if key.code == *expected));
+        }
+    }
+    let event = drained
+        .rx
+        .recv()
+        .await
+        .expect("chat retains ownership after cancel");
+    drained.watchdog.note_handled();
+    assert!(matches!(event, TuiEvent::Key(key) if key.code == KeyCode::Char('x')));
+    assert_eq!(drained.watchdog.pending_events.load(Ordering::Relaxed), 0);
+    // Reopening after EOF does not create another terminal reader or hang.
+    assert!(
+        modal_tui_events(&mut drained.rx, &drained.watchdog)
+            .next()
+            .await
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -342,6 +705,7 @@ fn bypass_hook_trust_startup_warning_snapshot() {
 async fn enqueue_primary_thread_session_replays_buffered_approval_after_attach() -> Result<()> {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
     let thread_id = ThreadId::new();
+    app.pending_permission_confirmation = Some(test_support::pending_confirmation(thread_id));
     let approval_request =
         exec_approval_request(thread_id, "turn-1", "call-1", /*approval_id*/ None);
 
@@ -387,6 +751,7 @@ async fn enqueue_primary_thread_session_replays_buffered_approval_after_attach()
         } = app_event
         {
             assert_eq!(op_thread_id, thread_id);
+            assert!(app.pending_permission_confirmation.is_some());
             return Ok(());
         }
     }
@@ -4614,6 +4979,7 @@ async fn direct_six_orc_turn_reports_are_visible_to_claude_troll_context() {
                     status: crate::claude_panes::ClaudePaneTurnStatus::Success,
                     session_id: Some("claude-session".to_string()),
                     usage_summary: None,
+                    turn_usage_summary: None,
                     usage_status: crate::claude_panes::ClaudePaneUsageStatus::Missing,
                     artifact_path: app
                         .config
@@ -4632,6 +4998,7 @@ async fn direct_six_orc_turn_reports_are_visible_to_claude_troll_context() {
                     tool_events: Vec::new(),
                     reasoning_events: Vec::new(),
                     command_mode: crate::claude_panes::ClaudeCommandMode::NewSession,
+                    direct_accounting: None,
                 }),
             );
         }
@@ -4912,6 +5279,7 @@ async fn claude_orc_completion_is_reported_to_parent_troll_context() {
             status: crate::claude_panes::ClaudePaneTurnStatus::Success,
             session_id: Some("claude-session".to_string()),
             usage_summary: None,
+            turn_usage_summary: None,
             usage_status: crate::claude_panes::ClaudePaneUsageStatus::Missing,
             artifact_path,
             audit_path,
@@ -4922,6 +5290,7 @@ async fn claude_orc_completion_is_reported_to_parent_troll_context() {
             tool_events: Vec::new(),
             reasoning_events: Vec::new(),
             command_mode: crate::claude_panes::ClaudeCommandMode::NewSession,
+            direct_accounting: None,
         }),
     );
 
@@ -6984,6 +7353,7 @@ async fn claude_orc_completion_uses_core_edge_message_not_native_prompt_reinject
             status: crate::claude_panes::ClaudePaneTurnStatus::Success,
             session_id: Some("claude-session".to_string()),
             usage_summary: None,
+            turn_usage_summary: None,
             usage_status: crate::claude_panes::ClaudePaneUsageStatus::Missing,
             artifact_path: app.config.cwd.join("turn-0001.jsonl").to_path_buf(),
             audit_path: app.config.cwd.join("turn-0001.audit.json").to_path_buf(),
@@ -6994,6 +7364,7 @@ async fn claude_orc_completion_uses_core_edge_message_not_native_prompt_reinject
             tool_events: Vec::new(),
             reasoning_events: Vec::new(),
             command_mode: crate::claude_panes::ClaudeCommandMode::NewSession,
+            direct_accounting: None,
         }),
     );
 
@@ -7507,7 +7878,7 @@ async fn standard_crew_quick_start_uses_the_expected_role_picker_label() {
     assert_eq!(App::STANDARD_TROLL_MODEL, "gpt-5.6-sol");
     assert_eq!(App::STANDARD_ORC_MODEL, "gpt-5.6-luna");
     assert_eq!(App::STANDARD_ORC_2_MODEL, "gpt-5.6-terra");
-    assert_eq!(App::STANDARD_ORC_3_MODEL, "x-ai/grok-4.6");
+    assert_eq!(App::STANDARD_ORC_3_MODEL, "x-ai/grok-4.7");
     let orc_runtimes = App::standard_orc_runtimes();
     assert_eq!(
         orc_runtimes
@@ -7523,7 +7894,7 @@ async fn standard_crew_quick_start_uses_the_expected_role_picker_label() {
         vec![
             ("gpt-5.6-luna", OPENAI_PROVIDER_ID, Some("xhigh")),
             ("gpt-5.6-terra", OPENAI_PROVIDER_ID, Some("xhigh")),
-            ("x-ai/grok-4.6", OPENROUTER_PROVIDER_ID, None),
+            ("x-ai/grok-4.7", OPENROUTER_PROVIDER_ID, None),
         ]
     );
     // Provider resolution for each crew model.
@@ -8879,6 +9250,7 @@ async fn reset_memories_clears_local_memory_directories() -> Result<()> {
 #[tokio::test]
 async fn apply_permission_profile_selection_preserves_loader_overrides() -> Result<()> {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let mut app_server = start_config_write_test_app_server(&app).await?;
     let codex_home = tempdir()?;
     let selected_config = codex_home.path().join("work.config.toml");
     std::fs::write(
@@ -8896,12 +9268,15 @@ default_permissions = "locked-down"
     app.harness_overrides.permission_profile = Some(PermissionProfile::workspace_write());
 
     assert!(
-        app.apply_permission_profile_selection(PermissionProfileSelection {
-            profile_id: "locked-down".to_string(),
-            approval_policy: None,
-            approvals_reviewer: None,
-            display_label: "locked-down".to_string(),
-        })
+        app.apply_permission_profile_selection(
+            &mut app_server,
+            PermissionProfileSelection {
+                profile_id: "locked-down".to_string(),
+                approval_policy: None,
+                approvals_reviewer: None,
+                display_label: "locked-down".to_string(),
+            }
+        )
         .await
     );
 
@@ -8926,27 +9301,6 @@ default_permissions = "locked-down"
         app.runtime_permission_profile_override,
         Some(RuntimePermissionProfileOverride::from_config(&app.config))
     );
-    let op = match app_event_rx.try_recv() {
-        Ok(AppEvent::CodexOp(op)) => op,
-        other => panic!("expected CodexOp event, got {other:?}"),
-    };
-    assert_eq!(
-        op,
-        Op::OverrideTurnContext {
-            cwd: None,
-            approval_policy: None,
-            approvals_reviewer: None,
-            permission_profile: Some(app.config.permissions.permission_profile().clone()),
-            active_permission_profile: app.config.permissions.active_permission_profile(),
-            windows_sandbox_level: None,
-            model: None,
-            effort: None,
-            summary: None,
-            service_tier: None,
-            collaboration_mode: None,
-            personality: None,
-        }
-    );
     let cell = match app_event_rx.try_recv() {
         Ok(AppEvent::InsertHistoryCell(cell)) => cell,
         other => panic!("expected InsertHistoryCell event, got {other:?}"),
@@ -8957,7 +9311,8 @@ default_permissions = "locked-down"
         .map(|line| line.to_string())
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(rendered.contains("Permissions updated to locked-down"));
+    assert!(rendered.contains("Permissions selected for the new session: locked-down"));
+    app_server.shutdown().await?;
     Ok(())
 }
 
@@ -11370,7 +11725,7 @@ async fn clear_header_remains_source_backed_for_model_refresh() -> Result<()> {
     Ok(())
 }
 
-async fn make_test_app() -> App {
+pub(super) async fn make_test_app() -> App {
     let (chat_widget, app_event_tx, _rx, _op_rx) = make_chatwidget_manual_with_sender().await;
     let config = chat_widget.config_ref().clone();
     let file_search = FileSearchManager::new(config.cwd.to_path_buf(), app_event_tx.clone());
@@ -11399,6 +11754,7 @@ async fn make_test_app() -> App {
         cloud_config_bundle: CloudConfigBundleLoader::default(),
         runtime_approval_policy_override: None,
         runtime_permission_profile_override: None,
+        pending_permission_confirmation: None,
         file_search,
         transcript_cells: Vec::new(),
         claude_pane_transcript_cells: HashMap::new(),
@@ -11470,7 +11826,7 @@ async fn make_test_app() -> App {
     }
 }
 
-async fn make_test_app_with_channels() -> (
+pub(super) async fn make_test_app_with_channels() -> (
     App,
     tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
     tokio::sync::mpsc::UnboundedReceiver<Op>,
@@ -11504,6 +11860,7 @@ async fn make_test_app_with_channels() -> (
             cloud_config_bundle: CloudConfigBundleLoader::default(),
             runtime_approval_policy_override: None,
             runtime_permission_profile_override: None,
+            pending_permission_confirmation: None,
             file_search,
             transcript_cells: Vec::new(),
             claude_pane_transcript_cells: HashMap::new(),
@@ -11798,7 +12155,7 @@ async fn replace_goal_confirmation_snapshot() {
     );
 }
 
-fn test_thread_session(thread_id: ThreadId, cwd: PathBuf) -> ThreadSessionState {
+pub(super) fn test_thread_session(thread_id: ThreadId, cwd: PathBuf) -> ThreadSessionState {
     ThreadSessionState {
         thread_id,
         forked_from_id: None,
@@ -13912,6 +14269,7 @@ async fn interrupt_without_active_turn_is_treated_as_handled() {
             .await
             .expect("thread/start should succeed");
         let thread_id = started.session.thread_id;
+        app.pending_permission_confirmation = Some(test_support::pending_confirmation(thread_id));
         app.enqueue_primary_thread_session(started.session, started.turns)
             .await
             .expect("primary thread should be registered");
@@ -13928,6 +14286,7 @@ async fn interrupt_without_active_turn_is_treated_as_handled() {
 
         assert_eq!(handled, true);
         assert!(!app.backtrack.primed);
+        assert!(app.pending_permission_confirmation.is_some());
     })
     .await;
 }
@@ -13936,6 +14295,12 @@ async fn interrupt_without_active_turn_is_treated_as_handled() {
 async fn override_turn_context_sends_thread_settings_update() {
     Box::pin(async {
         let mut app = make_test_app().await;
+        // This test switches GPT models, so start with a compatible provider.
+        // The default fixture uses Ambient, which rejects GPT before submission.
+        let (chat_widget, _events, _ops) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(Some("gpt-5.3-codex")).await;
+        app.chat_widget = chat_widget;
+        app.config = app.chat_widget.config_ref().clone();
         let mut app_server =
             crate::start_embedded_app_server_for_picker(app.chat_widget.config_ref())
                 .await

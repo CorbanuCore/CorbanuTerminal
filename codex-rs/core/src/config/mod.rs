@@ -87,6 +87,7 @@ use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+use codex_model_provider_info::DEFAULT_MODEL_PROVIDER_ID;
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
 use codex_model_provider_info::META_PROVIDER_ID;
@@ -103,6 +104,7 @@ use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_model_provider_info::built_in_model_providers;
 use codex_model_provider_info::canonical_provider_id;
+use codex_model_provider_info::claude_plan_translation;
 use codex_model_provider_info::corrected_catalog_provider;
 use codex_model_provider_info::create_oss_provider_with_base_url;
 use codex_model_provider_info::default_model_context_window_for_provider;
@@ -345,7 +347,7 @@ fn resolve_mcp_oauth_credentials_store_mode(
 #[cfg(test)]
 pub(crate) async fn test_config() -> Config {
     let codex_home = tempfile::tempdir().expect("create temp dir");
-    Config::load_from_base_config_with_overrides(
+    let mut config = Config::load_from_base_config_with_overrides(
         ConfigToml {
             model: Some("gpt-5.5".to_string()),
             ..Default::default()
@@ -354,7 +356,26 @@ pub(crate) async fn test_config() -> Config {
         AbsolutePathBuf::from_absolute_path(codex_home.path()).expect("temp dir should resolve"),
     )
     .await
-    .expect("load default test config")
+    .expect("load default test config");
+    config.accounting = AccountingMode::Disabled;
+    config
+}
+
+/// Which economics this client may state for a turn, decided by the route and
+/// the authentication actually used.
+///
+/// These are three situations, not two. Conflating "ran on a plan" with "ran
+/// under an API key somewhere this client cannot price" would book API-key spend
+/// as subscription capacity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PriceAuthority {
+    /// Rates the provider charges per token for this route and this credential.
+    ApiKeyRates,
+    /// Subscription capacity: the plan rate that applied, and any API equivalent
+    /// the catalogue states for the same row.
+    PlanRate,
+    /// Neither. Tokens are still recorded; no economics are claimed.
+    Unavailable,
 }
 
 /// Application configuration loaded from disk and merged with overrides.
@@ -636,9 +657,51 @@ pub enum ThreadStoreConfig {
     InMemory { id: String },
 }
 
+/// Internal native embedding opt-in; no accounting TOML, environment or CLI key.
+/// The non-default `developer-accounting` build also binds supported provider routes.
+/// The binding is local estimate provenance, not provider authorization.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum AccountingMode {
+    #[default]
+    Disabled,
+    /// Developer-selected route; identity is rebound to the serving provider per turn.
+    Provider {
+        scope: uuid::Uuid,
+        provider_id: String,
+        wire_api: codex_model_provider_info::WireApi,
+        approved_endpoint: String,
+        /// Configured query parameters, canonically sorted as `k=v&k=v`.
+        ///
+        /// The client appends these to every request URL, so the pinned route has
+        /// to carry them or the endpoint check can never match. They are ordered
+        /// here because the provider stores them in a `HashMap`.
+        approved_query: Option<String>,
+        pricing: PriceAuthority,
+    },
+    DirectAnthropic {
+        scope: uuid::Uuid,
+        approved_endpoint: String,
+    },
+    DirectOpenAiResponsesHttp {
+        scope: uuid::Uuid,
+        approved_endpoint: String,
+    },
+    /// Internal direct API-key Chat sampling; no public activation.
+    DirectOpenAiChat {
+        scope: uuid::Uuid,
+        approved_endpoint: String,
+    },
+    /// Internal sampling-only Responses accounting across WebSocket and HTTP.
+    DirectOpenAiResponses {
+        scope: uuid::Uuid,
+        approved_endpoint: String,
+    },
+}
+
 /// Application configuration loaded from disk and merged with overrides.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
+    pub accounting: AccountingMode,
     /// Provenance for how this [`Config`] was derived (merged layers + enforced
     /// requirements).
     pub config_layer_stack: ConfigLayerStack,
@@ -1059,6 +1122,12 @@ pub struct Config {
 
     /// When set, restricts the login mechanism users may use.
     pub forced_login_method: Option<ForcedLoginMethod>,
+
+    /// The login method the operator configured, without the one implied by
+    /// choosing an API-key provider. Only this may remove stored credentials:
+    /// the implied one shapes sign-in, and choosing OpenRouter must not sign
+    /// the profile out of the OpenAI account it also uses.
+    pub configured_forced_login_method: Option<ForcedLoginMethod>,
 
     /// Explicit or feature-derived web search mode.
     pub web_search_mode: Constrained<WebSearchMode>,
@@ -2014,7 +2083,7 @@ impl Config {
             .map(AbsolutePathBuf::try_from)
             .transpose()?;
 
-        Self::load_config_with_layer_stack(
+        let config = Self::load_config_with_layer_stack(
             LOCAL_FS.as_ref(),
             cfg,
             ConfigOverrides {
@@ -2031,7 +2100,12 @@ impl Config {
             refreshed_config.codex_home.clone(),
             config_layer_stack,
         )
-        .await
+        .await?;
+        // Preserve the developer opt-in and explicit OFF through refresh.
+        // Provider-aware collection rebinds identity and endpoint at each turn.
+        let mut config = config;
+        config.accounting.clone_from(&self.accounting);
+        Ok(config)
     }
 
     /// This is the preferred way to create an instance of [Config].
@@ -3947,7 +4021,7 @@ impl Config {
             model_provider.is_some() || cfg.model_provider.is_some();
         let requested_model_provider_id = model_provider
             .or(cfg.model_provider)
-            .unwrap_or_else(|| AMBIENT_PROVIDER_ID.to_string());
+            .unwrap_or_else(|| DEFAULT_MODEL_PROVIDER_ID.to_string());
         let requested_model_provider_id =
             canonical_provider_id(&requested_model_provider_id).to_string();
         let stale_runtime_provider = requested_model_provider_id.starts_with("gpu-")
@@ -3960,7 +4034,7 @@ impl Config {
         let model_provider_was_explicit =
             requested_provider_was_explicit && !stale_runtime_provider;
         let model_provider_id = if stale_runtime_provider {
-            AMBIENT_PROVIDER_ID.to_string()
+            DEFAULT_MODEL_PROVIDER_ID.to_string()
         } else {
             requested_model_provider_id
         };
@@ -4015,12 +4089,20 @@ impl Config {
         let model = if incompatible_explicit_provider.is_some()
             && allow_provider_model_fallback
         {
-            // Leave model selection to the provider-specific ModelsManager. In
-            // particular, Bedrock's catalog default is not represented by the
-            // shared resolve_model_for_provider mapping.
-            None
+            // Use the provider's own default model. Providers without one in
+            // the shared mapping (OpenAI, Bedrock) resolve to None and leave
+            // selection to their provider-specific ModelsManager; anything
+            // else must not fall through to that manager, whose catalogue
+            // default is an OpenAI model the provider cannot serve.
+            resolve_model_for_provider(/*model*/ None, &model_provider_id)
         } else {
             match model {
+            // An explicit bare Claude slug on the subscription is sent as its exact
+            // plan slug; any other override is honoured verbatim.
+            Some(model_override) if model_provider_id == CLAUDE_PLAN_PROVIDER_ID => Some(
+                claude_plan_translation(&model_override)
+                    .map_or(model_override, str::to_string),
+            ),
             Some(model_override) => Some(model_override),
             None if stale_runtime_provider => resolve_model_for_provider(/*model*/ None, &model_provider_id),
             None if model_without_explicit_provider => cfg.model,
@@ -4035,27 +4117,31 @@ impl Config {
             .then_some(requested_model_for_pair_validation.as_deref())
             .flatten()
             .and_then(|value| corrected_catalog_provider(value, &model_provider_id));
-        let (model_provider_id, model_provider, model) = match corrected_provider
-            .and_then(|corrected| {
+        // Whether the correction actually applied, not merely whether one was
+        // proposed: a correction naming a provider this install does not have
+        // leaves the pair alone, and the login policy below follows the
+        // provider the session really resolved to.
+        let (model_provider_id, model_provider, model, provider_was_corrected) =
+            match corrected_provider.and_then(|corrected| {
                 model_providers
                     .get(corrected)
                     .map(|info| (corrected, info.clone()))
             }) {
-            Some((corrected, info)) => {
+                Some((corrected, info)) => {
                 tracing::warn!(
                     model = model.as_deref().unwrap_or_default(),
                     stored_provider = %model_provider_id,
                     corrected_provider = corrected,
                     "correcting impossible model/provider pair during config derivation"
                 );
-                let corrected_model = resolve_model_for_provider(
-                    requested_model_for_pair_validation,
-                    corrected,
-                );
-                (corrected.to_string(), info, corrected_model)
-            }
-            None => (model_provider_id, model_provider, model),
-        };
+                    let corrected_model = resolve_model_for_provider(
+                        requested_model_for_pair_validation,
+                        corrected,
+                    );
+                    (corrected.to_string(), info, corrected_model, true)
+                }
+                None => (model_provider_id, model_provider, model, false),
+            };
         let shell_environment_policy = cfg.shell_environment_policy.into();
         let allow_login_shell = cfg.allow_login_shell.unwrap_or(true);
 
@@ -4231,22 +4317,48 @@ impl Config {
         let zai_chat_provider_selected = model_provider_id == ZAI_PROVIDER_ID;
         let zai_provider_selected =
             matches!(model_provider_id.as_str(), ZAI_PROVIDER_ID | ZAI_ANTHROPIC_PROVIDER_ID);
-        let forced_login_method = cfg
-            .forced_login_method
-            .or_else(|| {
-                (ambient_provider_selected
+        // Forcing API-key-only sign-in is right for someone who chose one of
+        // these providers, and wrong for someone who chose nothing at all. An
+        // unconfigured install has no `model_provider`, so it lands on the
+        // default provider above; forcing the API path there (when that
+        // default was Ambient) collapsed
+        // first-run onboarding to a single "Use your Ambient API key" prompt
+        // with no way to reach ChatGPT, Claude, or Corbanu Plan: the picker is
+        // switched off precisely when a login method is forced. The same thing
+        // happened after a rented GPU provider expired, which falls back to the
+        // same default. Gate it on the provider actually having been asked for.
+        // A model the operator named can imply a provider as surely as naming
+        // the provider does, and the pair correction above acts on exactly that.
+        // Only "nothing was stated at all" should stop forcing.
+        let provider_selection_was_stated = model_provider_was_explicit || provider_was_corrected;
+        let forced_login_method = cfg.forced_login_method.or_else(|| {
+            (provider_selection_was_stated
+                && (ambient_provider_selected
                     || kimi_code_provider_selected
                     || anthropic_provider_selected
                     || meta_provider_selected
                     || baseten_provider_selected
                     || openrouter_provider_selected
                     || vercel_provider_selected
-                    || zai_provider_selected)
-                    .then_some(ForcedLoginMethod::Api)
-            });
+                    || zai_provider_selected))
+                .then_some(ForcedLoginMethod::Api)
+        });
 
-        let model_reasoning_effort = if (ambient_provider_selected && !model_without_explicit_provider)
-            || zai_chat_provider_selected
+        // Exact catalogue dialects must survive config load/resume. The legacy
+        // Ambient/Z.AI mapping converts even low/max into xhigh, which GLM 5.3
+        // routes reject; retain that compatibility mapping only for legacy models.
+        let exact_catalogue_effort = model.as_deref().is_some_and(|slug| {
+            codex_models_manager::bundled_models_response().is_ok_and(|catalogue| {
+                catalogue.models.iter().any(|entry| {
+                    entry.slug == slug
+                        && entry.chat_completions.reasoning_effort_protocol
+                            != codex_protocol::openai_models::ChatReasoningEffortProtocol::ProviderDefault
+                })
+            })
+        });
+        let model_reasoning_effort = if !exact_catalogue_effort
+            && ((ambient_provider_selected && !model_without_explicit_provider)
+                || zai_chat_provider_selected)
         {
             cfg.model_reasoning_effort
                 .map(normalize_ambient_reasoning_effort)
@@ -4467,6 +4579,13 @@ impl Config {
         .map_err(std::io::Error::from)?;
         let otel = otel::resolve_config(cfg.otel.unwrap_or_default(), &mut startup_warnings);
         let config = Self {
+            #[cfg(not(feature = "developer-accounting"))]
+            accounting: AccountingMode::Disabled,
+            #[cfg(feature = "developer-accounting")]
+            accounting: crate::accounting::developer_accounting_mode(
+                &model_provider_id,
+                &model_provider,
+            ),
             model,
             service_tier,
             review_model,
@@ -4626,6 +4745,7 @@ impl Config {
             experimental_thread_store: thread_store_config(cfg.experimental_thread_store),
             forced_chatgpt_workspace_id,
             forced_login_method,
+            configured_forced_login_method: cfg.forced_login_method,
             web_search_mode: constrained_web_search_mode.value,
             web_search_config,
             experimental_request_user_input_enabled,
@@ -5072,6 +5192,10 @@ pub async fn apply_agent_role_to_config(
 #[cfg(test)]
 #[path = "config_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "catalogue_effort_tests.rs"]
+mod catalogue_effort_tests;
 
 #[cfg(test)]
 #[path = "config_loader_tests.rs"]

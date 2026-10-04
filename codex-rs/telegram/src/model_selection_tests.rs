@@ -200,6 +200,26 @@ fn provider_is_inherited_for_models_outside_the_corrected_families() {
     assert!(!glm.changed);
 }
 
+/// `/model claude-opus-5-5` on a subscription chat: kept on `claude-plan`, the
+/// bare slug must run as its plan slug, or the subscription refuses the turn and
+/// the ledger records a metered model for subscription work.
+#[test]
+fn bare_claude_on_the_subscription_runs_as_its_plan_slug() {
+    use codex_model_provider_info::ANTHROPIC_OPUS_5_5_MODEL;
+    use codex_model_provider_info::CLAUDE_OPUS_5_5_PLAN_MODEL;
+
+    let choice = provider_for_model(ANTHROPIC_OPUS_5_5_MODEL, CLAUDE_PLAN_PROVIDER_ID);
+    assert_eq!(choice.provider, CLAUDE_PLAN_PROVIDER_ID);
+    assert!(!choice.changed);
+    assert_eq!(choice.model, CLAUDE_OPUS_5_5_PLAN_MODEL);
+
+    // Off the subscription the slug is untouched.
+    let metered = provider_for_model(ANTHROPIC_OPUS_5_5_MODEL, OPENAI_PROVIDER_ID);
+    assert_eq!(metered.model, ANTHROPIC_OPUS_5_5_MODEL);
+    let ambient = provider_for_model("ambient/large", ZAI);
+    assert_eq!(ambient.model, "ambient/large");
+}
+
 #[test]
 fn same_provider_correction_is_not_reported_as_a_change() {
     let choice = provider_for_model(CLAUDE_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID);

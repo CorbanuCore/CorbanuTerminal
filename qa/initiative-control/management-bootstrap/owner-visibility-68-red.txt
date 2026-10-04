@@ -1,0 +1,68 @@
+test_cli_status_discloses_manual_deadline_and_help_warns_before_arming (test_owner_daemon.ActivationVisibilityTests.test_cli_status_discloses_manual_deadline_and_help_warns_before_arming) ... ERROR
+test_empty_status_still_warns_about_future_shared_state_mutation (test_owner_daemon.ActivationVisibilityTests.test_empty_status_still_warns_about_future_shared_state_mutation) ... ERROR
+test_manual_overdue_claim_does_not_refuse_arm_and_paused_tick_matches_warning (test_owner_daemon.ActivationVisibilityTests.test_manual_overdue_claim_does_not_refuse_arm_and_paused_tick_matches_warning) ... ERROR
+test_status_does_not_recover_coordinator_journal (test_owner_daemon.ActivationVisibilityTests.test_status_does_not_recover_coordinator_journal) ... FAIL
+test_status_lists_in_flight_and_overdue_with_exact_watchdog_effects (test_owner_daemon.ActivationVisibilityTests.test_status_lists_in_flight_and_overdue_with_exact_watchdog_effects) ... ERROR
+
+======================================================================
+ERROR: test_cli_status_discloses_manual_deadline_and_help_warns_before_arming (test_owner_daemon.ActivationVisibilityTests.test_cli_status_discloses_manual_deadline_and_help_warns_before_arming)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 400, in test_cli_status_discloses_manual_deadline_and_help_warns_before_arming
+    row = json.loads(result.stdout)["coordinator"]["overdue"][0]
+          ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+KeyError: 'coordinator'
+
+======================================================================
+ERROR: test_empty_status_still_warns_about_future_shared_state_mutation (test_owner_daemon.ActivationVisibilityTests.test_empty_status_still_warns_about_future_shared_state_mutation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 374, in test_empty_status_still_warns_about_future_shared_state_mutation
+    result = owner.activation_status(self.config_path)["coordinator"]
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+KeyError: 'coordinator'
+
+======================================================================
+ERROR: test_manual_overdue_claim_does_not_refuse_arm_and_paused_tick_matches_warning (test_owner_daemon.ActivationVisibilityTests.test_manual_overdue_claim_does_not_refuse_arm_and_paused_tick_matches_warning)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 387, in test_manual_overdue_claim_does_not_refuse_arm_and_paused_tick_matches_warning
+    row = result["coordinator"]["overdue"][0]
+          ~~~~~~^^^^^^^^^^^^^^^
+KeyError: 'coordinator'
+
+======================================================================
+ERROR: test_status_lists_in_flight_and_overdue_with_exact_watchdog_effects (test_owner_daemon.ActivationVisibilityTests.test_status_lists_in_flight_and_overdue_with_exact_watchdog_effects)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 338, in test_status_lists_in_flight_and_overdue_with_exact_watchdog_effects
+    with self.c.mutation("fixture", {}) as (_, state):
+         ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 148, in __exit__
+    next(self.gen)
+    ~~~~^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/coordinator.py", line 108, in mutation
+    self._archive_actions(db, state)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/coordinator.py", line 123, in _archive_actions
+    terminal = sorted((a for a in state["actions"].values()
+                       if a["workstream"] == stream and a["status"] in TERMINAL),
+                      key=lambda a: a["sequence"])
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/coordinator.py", line 124, in <genexpr>
+    if a["workstream"] == stream and a["status"] in TERMINAL),
+       ~^^^^^^^^^^^^^^
+KeyError: 'workstream'
+
+======================================================================
+FAIL: test_status_does_not_recover_coordinator_journal (test_owner_daemon.ActivationVisibilityTests.test_status_does_not_recover_coordinator_journal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 411, in test_status_does_not_recover_coordinator_journal
+    with self.assertRaisesRegex(f.LaunchError, "coordinator_recovery_required"):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: LaunchError not raised
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.259s
+
+FAILED (failures=1, errors=4)

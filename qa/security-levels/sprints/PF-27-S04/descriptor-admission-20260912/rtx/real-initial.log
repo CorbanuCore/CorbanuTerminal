@@ -1,0 +1,10 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+────────────
+ Nextest run ID 2c01233f-194f-4fdf-9f16-48011daa5148 with nextest profile: local
+    Starting 3 tests across 7 binaries (64 tests skipped)
+        PASS [   0.049s] (1/3) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_uid_mismatch_and_unrelated_process
+        PASS [   0.071s] (2/3) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_roles_reverse_duplicate_parent_old_and_dead
+        PASS [   0.194s] (3/3) codex-secret-broker-service launch::manifest::pair::admission::tests::pf_27_s01_admission_real_peer_eof_death_receipt_drop_and_caller_drop
+────────────
+     Summary [   0.195s] 3 tests run: 3 passed, 64 skipped

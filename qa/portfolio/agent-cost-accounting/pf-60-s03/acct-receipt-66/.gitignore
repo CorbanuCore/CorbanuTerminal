@@ -1,0 +1,4 @@
+# Regenerable fixture copies; consolidated exits/errors and recipes are retained.
+/page-controls-01/*/
+/removal-controls-01/*/
+/gates-01/*.log

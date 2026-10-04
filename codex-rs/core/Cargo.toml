@@ -12,6 +12,10 @@ path = "src/lib.rs"
 name = "codex-write-config-schema"
 path = "src/bin/config_schema.rs"
 
+[features]
+# Developer qualification only. Never enable in distributed builds.
+developer-accounting = []
+
 [lints]
 workspace = true
 
@@ -146,6 +150,7 @@ codex-shell-escalation = { workspace = true }
 [dev-dependencies]
 assert_cmd = { workspace = true }
 assert_matches = { workspace = true }
+codex-agent-identity = { workspace = true }
 codex-exec-server-test-support = { workspace = true }
 codex-image-generation-extension = { workspace = true }
 codex-home = { workspace = true }
@@ -168,6 +173,7 @@ opentelemetry_sdk = { workspace = true, features = [
     "metrics",
 ] }
 serial_test = { workspace = true }
+sqlx = { workspace = true }
 tempfile = { workspace = true }
 test-log = { workspace = true }
 tracing-opentelemetry = { workspace = true }

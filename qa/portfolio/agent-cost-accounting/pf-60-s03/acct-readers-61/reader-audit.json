@@ -1,0 +1,126 @@
+{
+  "passed": true,
+  "emissions": 5,
+  "native_attempts": 4,
+  "numeric_pages": [
+    {
+      "page": "backend-reopened",
+      "expected_known_usd": "0.00071",
+      "complete_recorded_estimate": true,
+      "complete_run_or_billed_amount": false
+    },
+    {
+      "page": "historical-Request-1-Attempt-1",
+      "expected_known_usd": "0.00071",
+      "complete_recorded_estimate": true,
+      "complete_run_or_billed_amount": false
+    },
+    {
+      "page": "historical",
+      "expected_known_usd": "0.00071",
+      "complete_recorded_estimate": true,
+      "complete_run_or_billed_amount": false
+    },
+    {
+      "page": "missing-price-Request-1-Attempt-1",
+      "expected_known_usd": "0",
+      "complete_recorded_estimate": false,
+      "complete_run_or_billed_amount": false
+    },
+    {
+      "page": "missing-price",
+      "expected_known_usd": "0",
+      "complete_recorded_estimate": false,
+      "complete_run_or_billed_amount": false
+    },
+    {
+      "page": "mixed-provider-Provider-openai",
+      "expected_known_usd": "0.00071",
+      "complete_recorded_estimate": true,
+      "complete_run_or_billed_amount": false
+    },
+    {
+      "page": "mixed-provider-Request-1-Attempt-1",
+      "expected_known_usd": "0.00071",
+      "complete_recorded_estimate": true,
+      "complete_run_or_billed_amount": false
+    },
+    {
+      "page": "mixed-provider",
+      "expected_known_usd": "0.00071",
+      "complete_recorded_estimate": true,
+      "complete_run_or_billed_amount": false
+    },
+    {
+      "page": "narrow-Request-1-Attempt-1",
+      "expected_known_usd": "0.00071",
+      "complete_recorded_estimate": true,
+      "complete_run_or_billed_amount": false
+    },
+    {
+      "page": "narrow",
+      "expected_known_usd": "0.00071",
+      "complete_recorded_estimate": true,
+      "complete_run_or_billed_amount": false
+    },
+    {
+      "page": "never-prompted",
+      "expected_known_usd": "0",
+      "complete_recorded_estimate": false,
+      "complete_run_or_billed_amount": false
+    },
+    {
+      "page": "no-usage-Request-1-Attempt-1",
+      "expected_known_usd": "0",
+      "complete_recorded_estimate": false,
+      "complete_run_or_billed_amount": false
+    },
+    {
+      "page": "no-usage",
+      "expected_known_usd": "0",
+      "complete_recorded_estimate": false,
+      "complete_run_or_billed_amount": false
+    },
+    {
+      "page": "stale-restored-control",
+      "expected_known_usd": "0.00071",
+      "complete_recorded_estimate": true,
+      "complete_run_or_billed_amount": false
+    },
+    {
+      "page": "zero-attempt-day",
+      "expected_known_usd": "0",
+      "complete_recorded_estimate": false,
+      "complete_run_or_billed_amount": false
+    }
+  ],
+  "numeric_page_count": 15,
+  "independent_components": {
+    "Noncached input": "0.0004",
+    "Cache read": "0.00001",
+    "Cache write": "0",
+    "Output": "0.0003"
+  },
+  "known_attempt_usd": "0.00071",
+  "rates_per_million": {
+    "noncached": "5",
+    "read": "0.5",
+    "output": "30"
+  },
+  "missing_price": "Known subtotal 0 is an empty known component, not a zero-price quote.",
+  "no_usage": "usage_present=false means numeric handler constants were not transmitted and cannot supply a measurement.",
+  "mixed_provider": "OpenAI + reader_local emitted; only OpenAI collected. .00071 is the known recorded component; full mixed-provider cost unknown.",
+  "stale": "Stale evidence refused, Refresh did not repair injected evidence, restored control recovers .00071.",
+  "backend_refresh": {
+    "recovered": false,
+    "rendered": [
+      "Unavailable \u2014 accounting evidence is corrupt, incompatible or could not be read. Refresh to retry; no repair performed.",
+      "Collection coverage: unknown; recorded root and resolved descendants only. Unknown parent population excluded.",
+      "Billed cost: unavailable \u2014 no settlement evidence",
+      "Logical requests may have attempts on other days; this UTC day is not their complete lifetime.",
+      "Refresh",
+      "Close"
+    ]
+  },
+  "narrow": "64x24 actual resize; amount, billing/estimate/day qualifiers and drill-down retained."
+}

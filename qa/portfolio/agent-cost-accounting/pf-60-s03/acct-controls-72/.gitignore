@@ -1,0 +1,11 @@
+# Reproducible fixture copies/symlinks; retain plans, receipts and process logs.
+/controls-*/mutant-*/
+/page-controls-*/*/
+/controls-*/viewport-semantic-*.json
+/removal-controls-*/exact-*/
+/removal-controls-*/displayed-*/
+/priced-controls-*/extra-total-*/
+/priced-controls-*/euro-*/
+/priced-controls-*/cents-*/
+/priced-controls-*/symbol-free-*/
+/priced-controls-*/leading-decimal-*/

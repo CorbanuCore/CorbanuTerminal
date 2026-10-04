@@ -42,9 +42,14 @@ use tracing::trace;
 
 const REQUEST_ID_HEADER: &str = "x-request-id";
 
+#[path = "anthropic_accounting.rs"]
+pub(crate) mod accounting;
+use accounting::AnthropicUsageObserver;
+
 pub struct AnthropicMessagesClient<T: HttpTransport> {
     session: EndpointSession<T>,
     sse_telemetry: Option<Arc<dyn SseTelemetry>>,
+    usage_observer: Option<Arc<dyn AnthropicUsageObserver>>,
 }
 
 #[derive(Default)]
@@ -60,6 +65,7 @@ impl<T: HttpTransport> AnthropicMessagesClient<T> {
         Self {
             session: EndpointSession::new(transport, provider, auth),
             sse_telemetry: None,
+            usage_observer: None,
         }
     }
 
@@ -71,7 +77,16 @@ impl<T: HttpTransport> AnthropicMessagesClient<T> {
         Self {
             session: self.session.with_request_telemetry(request),
             sse_telemetry: sse,
+            usage_observer: self.usage_observer,
         }
+    }
+
+    pub fn with_usage_observer(
+        mut self,
+        observer: Option<Arc<dyn AnthropicUsageObserver>>,
+    ) -> Self {
+        self.usage_observer = observer;
+        self
     }
 
     #[instrument(
@@ -124,6 +139,7 @@ impl<T: HttpTransport> AnthropicMessagesClient<T> {
             stream_response,
             self.session.provider().stream_idle_timeout,
             self.sse_telemetry.clone(),
+            self.usage_observer.clone(),
         ))
     }
 
@@ -136,6 +152,7 @@ fn spawn_anthropic_messages_stream(
     stream_response: StreamResponse,
     idle_timeout: Duration,
     telemetry: Option<Arc<dyn SseTelemetry>>,
+    usage_observer: Option<Arc<dyn AnthropicUsageObserver>>,
 ) -> ResponseStream {
     let upstream_request_id = stream_response
         .headers
@@ -146,12 +163,13 @@ fn spawn_anthropic_messages_stream(
     let (tx_event, rx_event) = mpsc::channel::<Result<ResponseEvent, ApiError>>(1600);
     tokio::spawn(async move {
         let _ = tx_event.send(Ok(ResponseEvent::Created)).await;
-        process_anthropic_sse(
+        process_accounted_anthropic_sse(
             stream_response.bytes,
             tx_event,
             idle_timeout,
             telemetry,
             response_id_hint,
+            usage_observer,
         )
         .await;
     });
@@ -1056,15 +1074,17 @@ fn anthropic_web_search_action_from_input(input: &Value) -> Option<WebSearchActi
     }
 }
 
-async fn process_anthropic_sse(
+async fn process_accounted_anthropic_sse(
     stream: ByteStream,
     tx_event: mpsc::Sender<Result<ResponseEvent, ApiError>>,
     idle_timeout: Duration,
     telemetry: Option<Arc<dyn SseTelemetry>>,
     response_id_hint: Option<String>,
+    usage_observer: Option<Arc<dyn AnthropicUsageObserver>>,
 ) {
     let mut stream = stream.eventsource();
     let mut state = AnthropicStreamState::new(response_id_hint);
+    let mut position = 0_i64;
 
     loop {
         let start = Instant::now();
@@ -1097,6 +1117,33 @@ async fn process_anthropic_sse(
 
         trace!("Anthropic messages SSE event: {}", &sse.data);
 
+        if let Some(observer) = &usage_observer {
+            let decoded = accounting::decode(&sse.data);
+            let next = position.checked_add(1);
+            let evidence = match (next, decoded) {
+                (Some(next), decoded) => {
+                    position = next;
+                    match decoded {
+                        Ok(patch) => patch.map(Ok),
+                        Err(error) => Some(Err(error)),
+                    }
+                }
+                _ => Some(Err(accounting::InvalidAnthropicUsage)),
+            };
+            if let Some(evidence) = evidence {
+                let invalid = evidence.is_err();
+                let result = observer.observe(position, evidence).await;
+                if invalid || result.is_err() {
+                    let _ = tx_event
+                        .send(Err(ApiError::Stream(
+                            "Anthropic accounting evidence could not be persisted".into(),
+                        )))
+                        .await;
+                    return;
+                }
+            }
+        }
+
         let event = match serde_json::from_str::<AnthropicStreamEvent>(&sse.data) {
             Ok(event) => event,
             Err(err) => {
@@ -1114,6 +1161,26 @@ async fn process_anthropic_sse(
             return;
         }
     }
+}
+
+// Preserve the existing parser fixtures and their unobserved/default behavior.
+#[cfg(test)]
+async fn process_anthropic_sse(
+    stream: ByteStream,
+    tx_event: mpsc::Sender<Result<ResponseEvent, ApiError>>,
+    idle_timeout: Duration,
+    telemetry: Option<Arc<dyn SseTelemetry>>,
+    response_id_hint: Option<String>,
+) {
+    process_accounted_anthropic_sse(
+        stream,
+        tx_event,
+        idle_timeout,
+        telemetry,
+        response_id_hint,
+        /*usage_observer*/ None,
+    )
+    .await;
 }
 
 #[cfg(test)]

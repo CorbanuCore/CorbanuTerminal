@@ -908,6 +908,87 @@ mod thread_processor_behavior_tests {
     }
 
     #[test]
+    fn resume_service_tier_restores_saved_value_or_standard_without_global_leakage() {
+        let mut history = persisted_workspace_permission_history();
+        for tier in [None, Some("priority"), Some("flex")] {
+            let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &mut history[0]
+            else {
+                panic!("fixture")
+            };
+            event.thread_settings.service_tier = tier.map(str::to_string);
+            let mut overrides = ConfigOverrides::default();
+            merge_persisted_service_tier(&history, None, &mut overrides);
+            assert_eq!(overrides.service_tier, Some(tier.map(str::to_string)));
+        }
+        let mut overrides = ConfigOverrides::default();
+        merge_persisted_service_tier(&[], None, &mut overrides);
+        assert_eq!(overrides.service_tier, Some(None));
+    }
+
+    #[test]
+    fn resume_service_tier_keeps_explicit_tier_or_model_override() {
+        for mut overrides in [
+            ConfigOverrides {
+                service_tier: Some(Some("priority".to_string())),
+                ..Default::default()
+            },
+            ConfigOverrides {
+                service_tier: Some(None),
+                ..Default::default()
+            },
+            ConfigOverrides {
+                model: Some("explicit-model".to_string()),
+                ..Default::default()
+            },
+        ] {
+            let before = overrides.service_tier.clone();
+            merge_persisted_service_tier(
+                &persisted_workspace_permission_history(),
+                None,
+                &mut overrides,
+            );
+            assert_eq!(overrides.service_tier, before);
+        }
+        let mut overrides = ConfigOverrides::default();
+        let request = HashMap::from([("service_tier".to_string(), serde_json::json!("flex"))]);
+        merge_persisted_service_tier(
+            &persisted_workspace_permission_history(),
+            Some(&request),
+            &mut overrides,
+        );
+        assert_eq!(overrides.service_tier, None);
+    }
+
+    #[test]
+    fn resume_service_tier_recovers_settings_before_compaction_suffix() {
+        let mut durable = persisted_workspace_permission_history();
+        let RolloutItem::EventMsg(EventMsg::ThreadSettingsApplied(event)) = &mut durable[0] else {
+            panic!("fixture")
+        };
+        event.thread_settings.service_tier = Some("priority".to_string());
+        let mut suffix = vec![RolloutItem::Compacted(
+            codex_protocol::protocol::CompactedItem {
+                message: "checkpoint".to_string(),
+                replacement_history: Some(Vec::new()),
+                window_number: Some(1),
+                first_window_id: None,
+                previous_window_id: None,
+                window_id: None,
+            },
+        )];
+        let checkpoint = suffix[0].clone();
+        prepend_missing_resume_settings(&mut suffix, &durable);
+        assert_eq!(suffix.len(), 2);
+        assert_eq!(
+            serde_json::to_value(&suffix[1]).unwrap(),
+            serde_json::to_value(checkpoint).unwrap()
+        );
+        let mut overrides = ConfigOverrides::default();
+        merge_persisted_service_tier(&suffix, None, &mut overrides);
+        assert_eq!(overrides.service_tier, Some(Some("priority".to_string())));
+    }
+
+    #[test]
     fn merge_persisted_permissions_restores_restricted_thread_without_override() {
         let mut typesafe_overrides = ConfigOverrides::default();
 

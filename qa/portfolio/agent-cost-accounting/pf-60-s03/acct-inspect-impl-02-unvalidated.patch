@@ -1,0 +1,866 @@
+diff --git a/codex-rs/state/src/runtime/accounting_estimates.rs b/codex-rs/state/src/runtime/accounting_estimates.rs
+index 8e605bdfa..7d665e210 100644
+--- a/codex-rs/state/src/runtime/accounting_estimates.rs
++++ b/codex-rs/state/src/runtime/accounting_estimates.rs
+@@ -253,6 +253,17 @@ pub use lifecycle::RetainedDay;
+ pub use lifecycle::RetentionCoverage;
+
+ impl Journal<'_> {
++    pub(in crate::runtime::accounting) async fn inspect_quote_on_connection(
++        conn: &mut SqliteConnection,
++        id: Uuid,
++    ) -> anyhow::Result<ObservationQuote> {
++        ensure!(
++            binding(conn, id).await?.is_some(),
++            "missing original binding"
++        );
++        EstimateStore::latest_quote_on_connection(conn, id).await
++    }
++
+     pub(in crate::runtime::accounting) async fn persist_price_on_connection(
+         conn: &mut SqliteConnection,
+         id: Uuid,
+diff --git a/codex-rs/state/src/runtime/accounting_lifecycle.rs b/codex-rs/state/src/runtime/accounting_lifecycle.rs
+index 496c9761d..de51522a7 100644
+--- a/codex-rs/state/src/runtime/accounting_lifecycle.rs
++++ b/codex-rs/state/src/runtime/accounting_lifecycle.rs
+@@ -268,6 +268,133 @@ pub use retention_plan::reduction::atomic::RetainedDay;
+ pub use retention_plan::reduction::atomic::RetentionCoverage;
+
+ impl Journal<'_> {
++    pub(in crate::runtime::accounting) async fn inspect_on_connection(
++        conn: &mut SqliteConnection,
++        owner: ThreadId,
++        day: i64,
++        read_at_ms: i64,
++    ) -> anyhow::Result<crate::accounting::InspectionDay> {
++        use crate::accounting::Inspection;
++        use crate::accounting::InspectionDay;
++        let checkpoint = match retention_fixture_on_connection(conn).await? {
++            RetentionFixture::Active(time) => time,
++            RetentionFixture::Staging => return Ok(InspectionDay::NeedsRefresh),
++            RetentionFixture::Absent => anyhow::bail!("missing retention schema"),
++        };
++        ensure!(read_at_ms >= checkpoint, "backward inspection read");
++        // The inherited retained reader validates the whole store. Bound its inputs
++        // before it deserializes any payload; no LIMIT-based partial total.
++        let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM draft_accounting_attempts")
++            .fetch_one(&mut *conn)
++            .await?;
++        if rows > 10_000 {
++            return Ok(InspectionDay::TooLarge);
++        }
++        let excessive: bool = sqlx::query_scalar(
++            "SELECT EXISTS(SELECT 1 FROM draft_accounting_observations GROUP BY attempt_id HAVING count(*) > 4096)",
++        ).fetch_one(&mut *conn).await?;
++        if excessive {
++            return Ok(InspectionDay::TooLarge);
++        }
++        // Conservative input budget also bounds historical estimate versions and
++        // unrelated retained data visited by the inherited whole-store validator.
++        let bytes: i64 = sqlx::query_scalar(
++            "SELECT coalesce(sum(n), 0) FROM (
++             SELECT length(CAST(payload AS BLOB)) AS n FROM draft_accounting_attempts UNION ALL
++             SELECT length(CAST(payload AS BLOB)) FROM draft_accounting_observations UNION ALL
++             SELECT length(CAST(payload AS BLOB)) FROM draft_accounting_price_snapshots UNION ALL
++             SELECT length(CAST(payload AS BLOB)) + length(CAST(evidence AS BLOB)) FROM draft_accounting_estimates UNION ALL
++             SELECT length(CAST(evidence AS BLOB)) FROM draft_accounting_contributions UNION ALL
++             SELECT length(CAST(payload AS BLOB)) FROM draft_accounting_compact_days)",
++        ).fetch_one(&mut *conn).await?;
++        if bytes > 4 * 1024 * 1024 {
++            return Ok(InspectionDay::TooLarge);
++        }
++        if day > checkpoint / DAY_MS {
++            return Ok(InspectionDay::NeedsRefresh);
++        }
++        let retained = Self::retained_day_on_connection(conn, owner, day, checkpoint).await?;
++        let (coverage, expected) = match retained {
++            RetainedDay::Available {
++                coverage,
++                totals: Current::Ready(totals),
++            } => (coverage, totals),
++            RetainedDay::Expired(coverage) => {
++                return Ok(InspectionDay::DetailUnavailable {
++                    coverage,
++                    compact: false,
++                });
++            }
++            RetainedDay::Available { .. }
++            | RetainedDay::NeedsActivation
++            | RetainedDay::NeedsMaintenance { .. } => return Ok(InspectionDay::NeedsRefresh),
++        };
++        let compact: bool = sqlx::query_scalar(
++            "SELECT EXISTS(SELECT 1 FROM draft_accounting_compact_days WHERE thread_id = ? AND utc_day = ?)",
++        ).bind(owner.to_string()).bind(day).fetch_one(&mut *conn).await?;
++        let start = day.checked_mul(DAY_MS).context("day overflow")?;
++        if compact || (read_at_ms >= 90 * DAY_MS && start <= read_at_ms - 90 * DAY_MS) {
++            return Ok(InspectionDay::DetailUnavailable { coverage, compact });
++        }
++        let records = owned_attempts(conn, owner).await?;
++        let selected = records
++            .iter()
++            .filter(|(a, _)| i64::from(a.dispatched_at_ms) / DAY_MS == day)
++            .count();
++        if selected > 512 {
++            return Ok(InspectionDay::TooLarge);
++        }
++        let mut requests: BTreeMap<Uuid, Vec<ObservationQuote>> = BTreeMap::new();
++        let mut totals = DayTotals::default();
++        let mut projected = 0usize;
++        for (attempt, _) in records {
++            if i64::from(attempt.dispatched_at_ms) / DAY_MS != day {
++                continue;
++            }
++            // Check logical ownership across days and threads, including retries.
++            let siblings: Vec<String> = sqlx::query_scalar(
++                "SELECT payload FROM draft_accounting_attempts WHERE request_id = ?",
++            )
++            .bind(attempt.request_id.to_string())
++            .fetch_all(&mut *conn)
++            .await?;
++            for payload in siblings {
++                ensure!(
++                    attempt.same_owner(&serde_json::from_str(&payload)?),
++                    "request owner mismatch"
++                );
++            }
++            let mut predecessor = attempt.retry_of;
++            let mut seen = HashSet::from([attempt.attempt_id]);
++            while let Some(id) = predecessor {
++                ensure!(seen.insert(id), "retry cycle");
++                let parent = read_attempt(conn, id).await?;
++                // Compaction can legitimately remove a cross-day predecessor.
++                let Some(parent) = parent else { break };
++                ensure!(attempt.same_owner(&parent), "retry owner mismatch");
++                predecessor = parent.retry_of;
++            }
++            let quote = Self::inspect_quote_on_connection(conn, attempt.attempt_id).await?;
++            projected = projected
++                .checked_add(serde_json::to_vec(&quote)?.len())
++                .context("inspection size overflow")?;
++            if projected > 4 * 1024 * 1024 {
++                return Ok(InspectionDay::TooLarge);
++            }
++            totals.add(&quote)?;
++            requests.entry(attempt.request_id).or_default().push(quote);
++        }
++        ensure!(totals == expected, "inspection contribution mismatch");
++        Ok(InspectionDay::Ready(Inspection {
++            owner,
++            utc_day: day,
++            read_at_ms,
++            coverage,
++            totals,
++            requests,
++        }))
++    }
++
+     pub(in crate::runtime::accounting) async fn refresh_contribution_on_connection(
+         conn: &mut SqliteConnection,
+         id: Uuid,
+diff --git a/codex-rs/state/src/runtime/accounting_pricing.rs b/codex-rs/state/src/runtime/accounting_pricing.rs
+index 1837236db..ab3fe534c 100644
+--- a/codex-rs/state/src/runtime/accounting_pricing.rs
++++ b/codex-rs/state/src/runtime/accounting_pricing.rs
+@@ -86,7 +86,7 @@ impl Decimal {
+         Ok(Self::canonical(coefficient, scale))
+     }
+
+-    fn display(self) -> DisplayAmount {
++    pub fn display(self) -> DisplayAmount {
+         let (whole, fraction, rounded, nonzero_sub_micro) = if self.scale <= 6 {
+             let divisor = 10_u128.pow(self.scale);
+             (
+diff --git a/codex-rs/state/src/runtime/accounting_store.rs b/codex-rs/state/src/runtime/accounting_store.rs
+index 0bccc9877..662c8f4af 100644
+--- a/codex-rs/state/src/runtime/accounting_store.rs
++++ b/codex-rs/state/src/runtime/accounting_store.rs
+@@ -28,6 +28,31 @@ pub use super::types::Patch;
+ pub use super::types::Presence;
+ pub use super::types::Usage;
+
++/// One UTC day's immutable, recorded-only explanation. No collection coverage claim.
++#[derive(Debug, PartialEq, Eq)]
++pub struct Inspection {
++    pub owner: ThreadId,
++    pub utc_day: i64,
++    pub read_at_ms: i64,
++    pub coverage: RetentionCoverage,
++    pub totals: DayTotals,
++    pub requests: std::collections::BTreeMap<uuid::Uuid, Vec<ObservationQuote>>,
++}
++
++/// Unavailability never carries a partial amount.
++#[derive(Debug, PartialEq, Eq)]
++pub enum InspectionDay {
++    Absent,
++    MissingThread,
++    NeedsRefresh,
++    TooLarge,
++    DetailUnavailable {
++        coverage: RetentionCoverage,
++        compact: bool,
++    },
++    Ready(Inspection),
++}
++
+ /// Original dispatch-time evidence, never a catalog to select a replacement from.
+ #[derive(Clone, Debug, PartialEq, Eq)]
+ pub enum OriginalPriceEvidence {
+@@ -60,6 +85,40 @@ pub struct AccountingStore<'a> {
+ }
+
+ impl<'a> AccountingStore<'a> {
++    /// Inspect an existing ledger in one read transaction, without installation,
++    /// maintenance, repricing or repair. All times are UTC milliseconds/days.
++    pub async fn inspect_day(
++        runtime: &StateRuntime,
++        owner: ThreadId,
++        utc_day: i64,
++        read_at_ms: i64,
++    ) -> anyhow::Result<InspectionDay> {
++        let start = utc_day.checked_mul(86_400_000).context("day overflow")?;
++        ensure!(utc_day >= 0 && read_at_ms >= start, "invalid or future day");
++        start.checked_add(86_400_000).context("day end overflow")?;
++        let mut tx = runtime.pool.begin().await?;
++        if !ledger_exists(&mut tx).await? {
++            let objects: i64 = sqlx::query_scalar(
++                "SELECT count(*) FROM sqlite_schema WHERE name GLOB 'draft_accounting_*'",
++            )
++            .fetch_one(&mut *tx)
++            .await?;
++            ensure!(objects == 0, "unversioned accounting schema");
++            return Ok(InspectionDay::Absent);
++        }
++        validate_on_connection(&mut tx).await?;
++        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM threads WHERE id = ?)")
++            .bind(owner.to_string())
++            .fetch_one(&mut *tx)
++            .await?;
++        if !exists {
++            return Ok(InspectionDay::MissingThread);
++        }
++        let result = Journal::inspect_on_connection(&mut tx, owner, utc_day, read_at_ms).await?;
++        tx.commit().await?;
++        Ok(result)
++    }
++
+     /// Atomically import 1..=64 complete attempts aged 90..365 days without raw
+     /// staging. Each has at most 256 observations, with at most 4096 in total.
+     /// Duplicate identical entries receive the same outcome but contribute once.
+diff --git a/codex-rs/tui/src/app/event_dispatch.rs b/codex-rs/tui/src/app/event_dispatch.rs
+index e339e9d02..f3b0482ef 100644
+--- a/codex-rs/tui/src/app/event_dispatch.rs
++++ b/codex-rs/tui/src/app/event_dispatch.rs
+@@ -1680,6 +1680,38 @@ impl App {
+             AppEvent::RefreshRateLimits { origin } => {
+                 self.refresh_rate_limits(app_server, origin);
+             }
++            AppEvent::OpenAccountingInspector { day } => self.chat_widget.open_accounting_inspector(day),
++            AppEvent::LoadAccountingInspector { generation, thread, day } => {
++                let db = self.state_db.clone();
++                let embedded = matches!(self.app_server_target, crate::AppServerTarget::Embedded);
++                let current = self.current_displayed_thread_id();
++                let tx = self.app_event_tx.clone();
++                tokio::spawn(async move {
++                    let result = if !embedded {
++                        Err("Unavailable — recorded request inspection is local-only; remote server selected.".into())
++                    } else if thread.is_none() || thread != current {
++                        Err("Unavailable — no current native thread.".into())
++                    } else if let (Some(db), Some(owner)) = (db, thread) {
++                        match tokio::time::timeout(std::time::Duration::from_secs(15),
++                            codex_state::accounting::AccountingStore::inspect_day(&db, owner, day, chrono::Utc::now().timestamp_millis())).await {
++                            Ok(Ok(value)) => Ok(value),
++                            Ok(Err(_)) => Err("Unavailable — accounting evidence is corrupt, incompatible or could not be read. Refresh to retry; no repair performed.".into()),
++                            Err(_) => Err("Unavailable — inspection timed out. Refresh to retry.".into()),
++                        }
++                    } else {
++                        Err("Unavailable — native state database is not open.".into())
++                    };
++                    tx.send(AppEvent::AccountingInspectorLoaded { generation, thread, day, result });
++                });
++            }
++            AppEvent::AccountingInspectorLoaded { generation, thread, day, result } => {
++                if thread == self.current_displayed_thread_id() {
++                    self.chat_widget.finish_accounting_inspector(generation, thread, day, result);
++                }
++            }
++            AppEvent::NavigateAccountingInspector { generation, page } => self.chat_widget.navigate_accounting_inspector(generation, page),
++            AppEvent::CloseAccountingInspector { generation } => self.chat_widget.close_accounting_inspector(generation),
++            AppEvent::RefreshAccountingInspector { generation } => self.chat_widget.refresh_accounting_inspector(generation),
+             AppEvent::RefreshTokenActivity { request_id } => {
+                 self.refresh_token_activity(app_server, request_id);
+             }
+diff --git a/codex-rs/tui/src/app_event.rs b/codex-rs/tui/src/app_event.rs
+index 109598aea..a4d0dc3d3 100644
+--- a/codex-rs/tui/src/app_event.rs
++++ b/codex-rs/tui/src/app_event.rs
+@@ -1050,6 +1050,31 @@ pub(crate) enum AppEvent {
+     /// Open the default token-activity view selected from the `/usage` menu.
+     OpenTokenActivity,
+
++    OpenAccountingInspector {
++        day: i64,
++    },
++    LoadAccountingInspector {
++        generation: uuid::Uuid,
++        thread: Option<ThreadId>,
++        day: i64,
++    },
++    AccountingInspectorLoaded {
++        generation: uuid::Uuid,
++        thread: Option<ThreadId>,
++        day: i64,
++        result: Result<codex_state::accounting::InspectionDay, String>,
++    },
++    NavigateAccountingInspector {
++        generation: uuid::Uuid,
++        page: usize,
++    },
++    CloseAccountingInspector {
++        generation: uuid::Uuid,
++    },
++    RefreshAccountingInspector {
++        generation: uuid::Uuid,
++    },
++
+     /// Open the reset-credit flow selected from the `/usage` menu.
+     OpenRateLimitResetCredits,
+
+diff --git a/codex-rs/tui/src/chatwidget.rs b/codex-rs/tui/src/chatwidget.rs
+index b520b65b6..5677436c2 100644
+--- a/codex-rs/tui/src/chatwidget.rs
++++ b/codex-rs/tui/src/chatwidget.rs
+@@ -591,6 +591,7 @@ pub(crate) struct ChatWidget {
+     rate_limit_snapshots_by_limit_id: BTreeMap<String, RateLimitSnapshotDisplay>,
+     refreshing_status_outputs: Vec<(u64, StatusHistoryHandle)>,
+     next_status_refresh_request_id: u64,
++    accounting_inspector: Option<tokens::Inspector>,
+     refreshing_token_activity_output: Option<tokens::PendingTokenActivityOutput>,
+     completed_token_activity_output: Option<history_cell::CompositeHistoryCell>,
+     next_token_activity_request_id: u64,
+diff --git a/codex-rs/tui/src/chatwidget/constructor.rs b/codex-rs/tui/src/chatwidget/constructor.rs
+index eae29dc05..09a9e755a 100644
+--- a/codex-rs/tui/src/chatwidget/constructor.rs
++++ b/codex-rs/tui/src/chatwidget/constructor.rs
+@@ -134,6 +134,7 @@ impl ChatWidget {
+             rate_limit_snapshots_by_limit_id: BTreeMap::new(),
+             refreshing_status_outputs: Vec::new(),
+             next_status_refresh_request_id: 0,
++            accounting_inspector: None,
+             refreshing_token_activity_output: None,
+             completed_token_activity_output: None,
+             next_token_activity_request_id: 0,
+diff --git a/codex-rs/tui/src/chatwidget/slash_dispatch.rs b/codex-rs/tui/src/chatwidget/slash_dispatch.rs
+index 077ead9db..89483ec2f 100644
+--- a/codex-rs/tui/src/chatwidget/slash_dispatch.rs
++++ b/codex-rs/tui/src/chatwidget/slash_dispatch.rs
+@@ -760,11 +760,13 @@ impl ChatWidget {
+         let trimmed = args.trim();
+         match cmd {
+             SlashCommand::Usage => {
+-                if self.ensure_usage_command_available() {
++                if trimmed.split_whitespace().next() == Some("requests") {
++                    self.open_accounting_command(trimmed, chrono::Utc::now().date_naive());
++                } else if self.ensure_usage_command_available() {
+                     match tokens::TokenActivityView::parse(trimmed) {
+                         Some(view) => self.add_token_activity_output(view),
+                         None => self.add_error_message(
+-                            "Usage: /usage [daily|weekly|cumulative]".to_string(),
++                            "Usage: /usage [daily|weekly|cumulative] or /usage requests [YYYY-MM-DD]".to_string(),
+                         ),
+                     }
+                 }
+diff --git a/codex-rs/tui/src/chatwidget/tokens.rs b/codex-rs/tui/src/chatwidget/tokens.rs
+index 52db0a60f..a255c54bc 100644
+--- a/codex-rs/tui/src/chatwidget/tokens.rs
++++ b/codex-rs/tui/src/chatwidget/tokens.rs
+@@ -278,6 +278,7 @@ impl ChatWidget {
+     /// Late background responses cannot mutate cards after a transcript reset,
+     /// backtrack, or replacement flow clears this widget-owned state.
+     pub(crate) fn clear_pending_token_activity_refreshes(&mut self) {
++        self.accounting_inspector = None;
+         let cleared_refresh = self.refreshing_token_activity_output.take().is_some();
+         let cleared_completed = self.completed_token_activity_output.take().is_some();
+         if cleared_refresh || cleared_completed {
+@@ -287,6 +288,456 @@ impl ChatWidget {
+     }
+ }
+
++// Inspector pages contain local evidence only; never insert them into history.
++use crate::bottom_pane::SelectionItem;
++use crate::bottom_pane::SelectionViewParams;
++use codex_protocol::ThreadId;
++use codex_state::accounting::BucketQuote;
++use codex_state::accounting::Decimal;
++use codex_state::accounting::InspectionDay;
++use codex_state::accounting::ObservationQuote;
++use uuid::Uuid;
++
++const INSPECTOR_VIEW: &str = "recorded-requests";
++
++pub(super) struct Inspector {
++    generation: Uuid,
++    thread: Option<ThreadId>,
++    day: i64,
++    pages: Vec<InspectorPage>,
++    page: usize,
++    alive: Arc<std::sync::atomic::AtomicBool>,
++}
++
++struct InspectorPage {
++    title: String,
++    text: Vec<String>,
++    links: Vec<(String, usize)>,
++    parent: Option<usize>,
++}
++
++fn money(value: Decimal) -> String {
++    let display = value.display();
++    format!(
++        "${}{}{}",
++        display.text,
++        if display.rounded { " (rounded)" } else { "" },
++        if display.nonzero_sub_micro {
++            " (nonzero, less than $0.000001)"
++        } else {
++            ""
++        }
++    )
++}
++
++fn exact(value: Decimal) -> String {
++    serde_json::to_value(value)
++        .ok()
++        .and_then(|v| v.as_str().map(str::to_owned))
++        .unwrap_or_else(|| "unavailable".to_string())
++}
++
++fn estimate(known: Decimal, unknown: i64, attempts: i64) -> Vec<String> {
++    if attempts == 0 {
++        return vec!["No recorded attempts in this day; collection coverage unknown.".into()];
++    }
++    if unknown == 0 {
++        return vec![format!(
++            "Estimated token cost for recorded attempts: {}",
++            money(known)
++        )];
++    }
++    let mut lines = vec![
++        format!(
++            "Known estimated token cost: {} + unknown costs",
++            money(known)
++        ),
++        format!(
++            "Full recorded estimate: unavailable ({unknown} of {attempts} attempts incomplete)"
++        ),
++    ];
++    if known == Decimal::default() {
++        lines.insert(0, "Estimated token cost: unknown".into());
++    }
++    lines
++}
++
++const METRICS: [&str; 7] = [
++    "Input",
++    "Noncached input (derived for inclusive input)",
++    "Cache read",
++    "Cache write",
++    "Output",
++    "Reasoning (subset, not separately billed)",
++    "Total (not separately billed)",
++];
++const BUCKETS: [&str; 4] = ["Noncached input", "Cache read", "Cache write", "Output"];
++
++fn attempt_text(q: &ObservationQuote) -> Vec<String> {
++    let a = &q.attempt;
++    let mut lines = vec![
++        format!("Request: {}", a.request_id),
++        format!("Attempt: {}", a.attempt_id),
++        format!("Thread: {}", a.thread_id),
++        format!("Turn: {}", a.turn),
++        format!("Provider: {}", a.provider),
++        format!("Model: {}", a.model),
++        format!("Opaque scope: {}", a.scope),
++        format!("Arithmetic dialect: {:?}", a.dialect),
++        format!(
++            "Admission time: {} ms since Unix epoch (UTC)",
++            i64::from(a.dispatched_at_ms)
++        ),
++        format!(
++            "Retry predecessor: {}",
++            a.retry_of.map_or("none".into(), |v| v.to_string())
++        ),
++        "Literal wire/endpoint, terminal status and usage observation wall time: unavailable"
++            .into(),
++    ];
++    lines.extend(estimate(
++        q.known_subtotal,
++        i64::from(q.all_buckets_priced.is_none()),
++        1,
++    ));
++    let u = &q.usage;
++    for (label, value) in METRICS.iter().zip([
++        u.input,
++        u.noncached,
++        u.read,
++        u.write,
++        u.output,
++        u.reasoning,
++        u.total,
++    ]) {
++        lines.push(format!(
++            "{label}: {}",
++            value.map_or("unknown — no retained numeric evidence".into(), |n| {
++                if n == 0 {
++                    "0 (reported or derived; see evidence)".into()
++                } else {
++                    n.to_string()
++                }
++            })
++        ));
++    }
++    for (label, bucket) in BUCKETS.iter().zip(q.buckets) {
++        lines.push(format!(
++            "{label} cost: {}",
++            match bucket {
++                BucketQuote::Priced(v) => format!("{}; exact USD {}", money(v), exact(v)),
++                BucketQuote::MissingUsage => "unknown — no retained numeric evidence".into(),
++                BucketQuote::MissingRate => "unknown — rate unavailable".into(),
++            }
++        ));
++    }
++    lines.push(format!(
++        "Known subtotal exact USD: {}",
++        exact(q.known_subtotal)
++    ));
++    if let Some(s) = &q.snapshot {
++        lines.extend([
++            format!("Price ID: {}", s.id),
++            format!(
++                "Price source: {:?}; reference {}",
++                s.source_kind, s.source_reference
++            ),
++            format!("Price currency/unit: {:?} / {:?}", s.currency, s.unit),
++            format!(
++                "Price observed/approved: {} / {} ms UTC",
++                i64::from(s.observed_at_ms),
++                i64::from(s.approved_at_ms)
++            ),
++            format!(
++                "Price effective interval: [{}, {}) ms UTC",
++                i64::from(s.effective_from_ms),
++                s.effective_end_ms
++                    .map_or("unbounded".into(), |n| i64::from(n).to_string())
++            ),
++        ]);
++        for (label, rate) in BUCKETS.iter().zip([
++            s.rates.noncached,
++            s.rates.read,
++            s.rates.write,
++            s.rates.output,
++        ]) {
++            lines.push(rate.map_or_else(
++                || format!("Rate unavailable for {label}"),
++                |r| format!("{label} rate: {} USD per million tokens", exact(r)),
++            ));
++        }
++    } else {
++        lines.push("Price: unavailable — no dispatch-time price snapshot".into());
++    }
++    for o in &q.observations {
++        lines.push(format!(
++            "Evidence revision {}; source {}; sequence {}; presence patch {}",
++            i64::from(o.revision),
++            o.source,
++            i64::from(o.sequence),
++            serde_json::to_string(&o.patch).unwrap_or_default()
++        ));
++    }
++    lines
++}
++
++fn inspection_pages(result: Result<InspectionDay, String>) -> Vec<InspectorPage> {
++    let mut pages = vec![InspectorPage { title: "Recorded requests — this thread only".into(), text: vec![
++        "Collection coverage: unknown; recorded attempts only. Descendants excluded.".into(),
++        "Billed cost: unavailable — no settlement evidence".into(),
++        "Logical requests may have attempts on other days; this UTC day is not their complete lifetime.".into(),
++    ], links: Vec::new(), parent: None }];
++    let ready = match result {
++        Ok(InspectionDay::Ready(view)) => view,
++        other => {
++            pages[0].text.push(match other {
++                Ok(InspectionDay::Absent) => "Unavailable — accounting ledger not installed. Collection remains off.".into(),
++                Ok(InspectionDay::MissingThread) => "Unavailable — native thread no longer exists.".into(),
++                Ok(InspectionDay::NeedsRefresh) => "Unavailable — store needs estimate/maintenance refresh. This inspector cannot repair it.".into(),
++                Ok(InspectionDay::TooLarge) => "Range too large for this inspector. No total shown.".into(),
++                Ok(InspectionDay::DetailUnavailable { coverage, compact }) => format!(
++                    "Request explanation unavailable — {}. No partial-day total shown. Store checkpoint: {}; aggregate day floor: {}; oldest recorded day: {:?}.",
++                    if compact { "compacted history lost request/provider attribution" } else { "day touches expired detail or aggregate history" },
++                    coverage.completed_as_of_ms, coverage.aggregate_day_floor, coverage.oldest_recorded_day),
++                Err(message) => message,
++                Ok(InspectionDay::Ready(_)) => unreachable!(),
++            });
++            return pages;
++        }
++    };
++    let t = &ready.totals;
++    pages[0]
++        .text
++        .splice(0..0, estimate(t.known_usd, t.unknown_estimates, t.attempts));
++    pages[0].text.extend([
++        format!("UTC admission interval: [{}, {}) ms since Unix epoch", ready.utc_day * 86_400_000, (ready.utc_day + 1) * 86_400_000),
++        format!("Read at: {} ms UTC; store checkpoint: {} ms UTC; maintenance lag: {} ms",
++            ready.read_at_ms, ready.coverage.completed_as_of_ms, ready.read_at_ms - ready.coverage.completed_as_of_ms),
++        format!("90-day wall-clock detail cutoff: {:?}; aggregate day floor at checkpoint: {}; oldest recorded day: {:?}",
++            ready.read_at_ms.checked_sub(90 * 86_400_000).filter(|n| *n >= 0), ready.coverage.aggregate_day_floor, ready.coverage.oldest_recorded_day),
++        format!("Known subtotal exact USD: {}", exact(t.known_usd)),
++    ]);
++    for (label, m) in METRICS.iter().zip(&t.measured) {
++        pages[0].text.push(format!(
++            "{label}: {} known + unknown in {} attempts",
++            m.known, m.unknown
++        ));
++    }
++    for (request, quotes) in ready.requests {
++        let request_page = pages.len();
++        let number = pages[0].links.len() + 1;
++        pages[0]
++            .links
++            .push((format!("Request {number}"), request_page));
++        pages.push(InspectorPage {
++            title: "Logical request".into(),
++            text: vec![format!("Request: {request}")],
++            links: Vec::new(),
++            parent: Some(0),
++        });
++        for (index, quote) in quotes.iter().enumerate() {
++            let target = pages.len();
++            pages[request_page]
++                .links
++                .push((format!("Attempt {}", index + 1), target));
++            pages.push(InspectorPage {
++                title: "Attempt, components and original price".into(),
++                text: attempt_text(quote),
++                links: Vec::new(),
++                parent: Some(request_page),
++            });
++        }
++    }
++    pages
++}
++
++impl Inspector {
++    fn params(&self) -> SelectionViewParams {
++        let page = &self.pages[self.page];
++        let generation = self.generation;
++        // Small selectable fragments keep every long field reachable at 40 columns.
++        let mut items: Vec<SelectionItem> = page
++            .text
++            .iter()
++            .flat_map(|text| {
++                let clean: String = text.chars().filter(|c| !c.is_control()).collect();
++                textwrap::wrap(&clean, 26)
++                    .into_iter()
++                    .map(|part| SelectionItem {
++                        name: part.into_owned(),
++                        ..Default::default()
++                    })
++                    .collect::<Vec<_>>()
++            })
++            .collect();
++        for (label, target) in &page.links {
++            let page = *target;
++            items.push(SelectionItem {
++                name: label.clone(),
++                actions: vec![Box::new(move |tx| {
++                    tx.send(AppEvent::NavigateAccountingInspector { generation, page })
++                })],
++                ..Default::default()
++            });
++        }
++        if let Some(page) = page.parent {
++            items.push(SelectionItem {
++                name: "Back".into(),
++                actions: vec![Box::new(move |tx| {
++                    tx.send(AppEvent::NavigateAccountingInspector { generation, page })
++                })],
++                ..Default::default()
++            });
++        }
++        items.push(SelectionItem {
++            name: "Refresh".into(),
++            actions: vec![Box::new(move |tx| {
++                tx.send(AppEvent::RefreshAccountingInspector { generation })
++            })],
++            ..Default::default()
++        });
++        let alive = self.alive.clone();
++        let parent = page.parent;
++        SelectionViewParams {
++            view_id: Some(INSPECTOR_VIEW),
++            title: Some(page.title.clone()),
++            items,
++            allow_number_shortcuts: false,
++            footer_hint: Some("↑↓ scroll · Enter open · Esc back/close".into()),
++            on_cancel: Some(Box::new(move |tx| {
++                if let Some(page) = parent {
++                    tx.send(AppEvent::NavigateAccountingInspector { generation, page });
++                } else {
++                    alive.store(false, std::sync::atomic::Ordering::Release);
++                    tx.send(AppEvent::CloseAccountingInspector { generation });
++                }
++            })),
++            ..Default::default()
++        }
++    }
++}
++
++impl ChatWidget {
++    pub(super) fn open_accounting_command(&mut self, args: &str, today: NaiveDate) {
++        let parts: Vec<_> = args.split_whitespace().collect();
++        let date = match parts.as_slice() {
++            ["requests"] => Some(today),
++            ["requests", date] if date.len() == 10 => NaiveDate::parse_from_str(date, "%Y-%m-%d")
++                .ok()
++                .filter(|d| d.to_string() == *date),
++            _ => None,
++        };
++        if let Some(date) = date.filter(|d| *d <= today)
++            && let Some(time) = date.and_hms_opt(0, 0, 0)
++            && time.and_utc().timestamp() >= 0
++        {
++            self.open_accounting_inspector(time.and_utc().timestamp() / 86_400);
++        } else {
++            self.add_error_message(
++                "Usage: /usage requests [YYYY-MM-DD] (UTC, no future dates)".into(),
++            );
++        }
++    }
++
++    pub(crate) fn open_accounting_inspector(&mut self, day: i64) {
++        let generation = Uuid::new_v4();
++        let thread = self.thread_id();
++        let inspector = Inspector {
++            generation,
++            thread,
++            day,
++            pages: vec![InspectorPage {
++                title: "Recorded requests".into(),
++                text: vec!["Loading recorded requests…".into()],
++                links: Vec::new(),
++                parent: None,
++            }],
++            page: 0,
++            alive: Arc::new(std::sync::atomic::AtomicBool::new(true)),
++        };
++        let params = inspector.params();
++        if !self
++            .bottom_pane
++            .replace_selection_view_if_present(INSPECTOR_VIEW, inspector.params())
++        {
++            self.bottom_pane.show_selection_view(params);
++        }
++        self.accounting_inspector = Some(inspector);
++        self.app_event_tx.send(AppEvent::LoadAccountingInspector {
++            generation,
++            thread,
++            day,
++        });
++        self.request_redraw();
++    }
++
++    pub(crate) fn finish_accounting_inspector(
++        &mut self,
++        generation: Uuid,
++        thread: Option<ThreadId>,
++        day: i64,
++        result: Result<InspectionDay, String>,
++    ) {
++        let current_thread = self.thread_id();
++        let Some(view) = self.accounting_inspector.as_mut().filter(|v| {
++            v.generation == generation
++                && v.thread == thread
++                && v.day == day
++                && v.thread == current_thread
++                && v.alive.load(std::sync::atomic::Ordering::Acquire)
++        }) else {
++            return;
++        };
++        view.pages = inspection_pages(result);
++        view.page = 0;
++        if !self
++            .bottom_pane
++            .replace_selection_view_if_present(INSPECTOR_VIEW, view.params())
++        {
++            self.accounting_inspector = None;
++        }
++        self.request_redraw();
++    }
++
++    pub(crate) fn navigate_accounting_inspector(&mut self, generation: Uuid, page: usize) {
++        let Some(view) = self.accounting_inspector.as_mut().filter(|v| {
++            v.generation == generation && v.alive.load(std::sync::atomic::Ordering::Acquire)
++        }) else {
++            return;
++        };
++        if page >= view.pages.len() {
++            return;
++        }
++        view.page = page;
++        if !self
++            .bottom_pane
++            .replace_selection_view_if_present(INSPECTOR_VIEW, view.params())
++        {
++            self.bottom_pane.show_selection_view(view.params());
++        }
++        self.request_redraw();
++    }
++
++    pub(crate) fn close_accounting_inspector(&mut self, generation: Uuid) {
++        if self
++            .accounting_inspector
++            .as_ref()
++            .is_some_and(|v| v.generation == generation)
++        {
++            self.accounting_inspector = None;
++        }
++    }
++
++    pub(crate) fn refresh_accounting_inspector(&mut self, generation: Uuid) {
++        if let Some(view) = &self.accounting_inspector
++            && view.generation == generation
++            && view.alive.load(std::sync::atomic::Ordering::Acquire)
++        {
++            self.open_accounting_inspector(view.day);
++        }
++    }
++}
++
+ #[cfg(test)]
+ #[path = "tokens_tests.rs"]
+ mod tests;
+diff --git a/codex-rs/tui/src/chatwidget/usage.rs b/codex-rs/tui/src/chatwidget/usage.rs
+index 8d91aa26c..bf4e3a08c 100644
+--- a/codex-rs/tui/src/chatwidget/usage.rs
++++ b/codex-rs/tui/src/chatwidget/usage.rs
+@@ -70,6 +70,19 @@ impl ChatWidget {
+                     dismiss_on_select: true,
+                     ..Default::default()
+                 },
++                SelectionItem {
++                    name: "Recorded requests".to_string(),
++                    description: Some(
++                        "Explain this thread's recorded requests for today (UTC).".to_string(),
++                    ),
++                    actions: vec![Box::new(|tx| {
++                        tx.send(AppEvent::OpenAccountingInspector {
++                            day: chrono::Utc::now().timestamp_millis() / 86_400_000,
++                        })
++                    })],
++                    dismiss_on_select: true,
++                    ..Default::default()
++                },
+             ],
+             ..Default::default()
+         }

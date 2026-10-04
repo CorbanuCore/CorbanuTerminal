@@ -1,0 +1,503 @@
+{
+  "cases": [
+    {
+      "case": "spring-America-New_York-0",
+      "emissions": [
+        0,
+        1,
+        2
+      ],
+      "exact_usd": "0.001960",
+      "metrics": {
+        "Input": 281,
+        "Noncached input (derived for inclusive input)": 231,
+        "Cache read": 50,
+        "Cache write": 0,
+        "Output": 26,
+        "Reasoning (subset, not separately billed)": 10,
+        "Total (not separately billed)": 307
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "spring-America-New_York-1",
+      "emissions": [
+        3
+      ],
+      "exact_usd": "0.00072",
+      "metrics": {
+        "Input": 102,
+        "Noncached input (derived for inclusive input)": 82,
+        "Cache read": 20,
+        "Cache write": 0,
+        "Output": 10,
+        "Reasoning (subset, not separately billed)": 4,
+        "Total (not separately billed)": 112
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "spring-America-New_York-day",
+      "emissions": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "exact_usd": "0.002680",
+      "metrics": {
+        "Input": 383,
+        "Noncached input (derived for inclusive input)": 313,
+        "Cache read": 70,
+        "Cache write": 0,
+        "Output": 36,
+        "Reasoning (subset, not separately billed)": 14,
+        "Total (not separately billed)": 419
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "spring-UTC-0",
+      "emissions": [
+        0,
+        1,
+        2
+      ],
+      "exact_usd": "0.001960",
+      "metrics": {
+        "Input": 281,
+        "Noncached input (derived for inclusive input)": 231,
+        "Cache read": 50,
+        "Cache write": 0,
+        "Output": 26,
+        "Reasoning (subset, not separately billed)": 10,
+        "Total (not separately billed)": 307
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "spring-UTC-1",
+      "emissions": [
+        3
+      ],
+      "exact_usd": "0.00072",
+      "metrics": {
+        "Input": 102,
+        "Noncached input (derived for inclusive input)": 82,
+        "Cache read": 20,
+        "Cache write": 0,
+        "Output": 10,
+        "Reasoning (subset, not separately billed)": 4,
+        "Total (not separately billed)": 112
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "spring-UTC-day",
+      "emissions": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "exact_usd": "0.002680",
+      "metrics": {
+        "Input": 383,
+        "Noncached input (derived for inclusive input)": 313,
+        "Cache read": 70,
+        "Cache write": 0,
+        "Output": 36,
+        "Reasoning (subset, not separately billed)": 14,
+        "Total (not separately billed)": 419
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "spring-Asia-Kolkata-0",
+      "emissions": [
+        0,
+        1,
+        2
+      ],
+      "exact_usd": "0.001960",
+      "metrics": {
+        "Input": 281,
+        "Noncached input (derived for inclusive input)": 231,
+        "Cache read": 50,
+        "Cache write": 0,
+        "Output": 26,
+        "Reasoning (subset, not separately billed)": 10,
+        "Total (not separately billed)": 307
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "spring-Asia-Kolkata-1",
+      "emissions": [
+        3
+      ],
+      "exact_usd": "0.00072",
+      "metrics": {
+        "Input": 102,
+        "Noncached input (derived for inclusive input)": 82,
+        "Cache read": 20,
+        "Cache write": 0,
+        "Output": 10,
+        "Reasoning (subset, not separately billed)": 4,
+        "Total (not separately billed)": 112
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "spring-Asia-Kolkata-day",
+      "emissions": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "exact_usd": "0.002680",
+      "metrics": {
+        "Input": 383,
+        "Noncached input (derived for inclusive input)": 313,
+        "Cache read": 70,
+        "Cache write": 0,
+        "Output": 36,
+        "Reasoning (subset, not separately billed)": 14,
+        "Total (not separately billed)": 419
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "spring-America-Phoenix-0",
+      "emissions": [
+        0,
+        1,
+        2
+      ],
+      "exact_usd": "0.001960",
+      "metrics": {
+        "Input": 281,
+        "Noncached input (derived for inclusive input)": 231,
+        "Cache read": 50,
+        "Cache write": 0,
+        "Output": 26,
+        "Reasoning (subset, not separately billed)": 10,
+        "Total (not separately billed)": 307
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "spring-America-Phoenix-1",
+      "emissions": [
+        3
+      ],
+      "exact_usd": "0.00072",
+      "metrics": {
+        "Input": 102,
+        "Noncached input (derived for inclusive input)": 82,
+        "Cache read": 20,
+        "Cache write": 0,
+        "Output": 10,
+        "Reasoning (subset, not separately billed)": 4,
+        "Total (not separately billed)": 112
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "spring-America-Phoenix-day",
+      "emissions": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "exact_usd": "0.002680",
+      "metrics": {
+        "Input": 383,
+        "Noncached input (derived for inclusive input)": 313,
+        "Cache read": 70,
+        "Cache write": 0,
+        "Output": 36,
+        "Reasoning (subset, not separately billed)": 14,
+        "Total (not separately billed)": 419
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "before-deletion",
+      "emissions": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "exact_usd": "0.002680",
+      "metrics": {
+        "Input": 383,
+        "Noncached input (derived for inclusive input)": 313,
+        "Cache read": 70,
+        "Cache write": 0,
+        "Output": 36,
+        "Reasoning (subset, not separately billed)": 14,
+        "Total (not separately billed)": 419
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "after-deletion",
+      "emissions": [
+        0,
+        1,
+        3
+      ],
+      "exact_usd": "0.002145",
+      "metrics": {
+        "Input": 303,
+        "Noncached input (derived for inclusive input)": 243,
+        "Cache read": 60,
+        "Cache write": 0,
+        "Output": 30,
+        "Reasoning (subset, not separately billed)": 12,
+        "Total (not separately billed)": 333
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "fall-0",
+      "emissions": [
+        6
+      ],
+      "exact_usd": "0.00073",
+      "metrics": {
+        "Input": 104,
+        "Noncached input (derived for inclusive input)": 84,
+        "Cache read": 20,
+        "Cache write": 0,
+        "Output": 10,
+        "Reasoning (subset, not separately billed)": 4,
+        "Total (not separately billed)": 114
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "fall-1",
+      "emissions": [
+        7
+      ],
+      "exact_usd": "0.0003675",
+      "metrics": {
+        "Input": 105,
+        "Noncached input (derived for inclusive input)": 85,
+        "Cache read": 20,
+        "Cache write": 0,
+        "Output": 10,
+        "Reasoning (subset, not separately billed)": 4,
+        "Total (not separately billed)": 115
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "fall-day",
+      "emissions": [
+        6,
+        7
+      ],
+      "exact_usd": "0.0010975",
+      "metrics": {
+        "Input": 209,
+        "Noncached input (derived for inclusive input)": 169,
+        "Cache read": 40,
+        "Cache write": 0,
+        "Output": 20,
+        "Reasoning (subset, not separately billed)": 8,
+        "Total (not separately billed)": 229
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "empty-day",
+      "emissions": [],
+      "exact_usd": "0",
+      "metrics": {
+        "Input": 0,
+        "Noncached input (derived for inclusive input)": 0,
+        "Cache read": 0,
+        "Cache write": 0,
+        "Output": 0,
+        "Reasoning (subset, not separately billed)": 0,
+        "Total (not separately billed)": 0
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "partial-day-2026-10-31",
+      "emissions": [
+        5
+      ],
+      "exact_usd": "0.000725",
+      "metrics": {
+        "Input": 103,
+        "Noncached input (derived for inclusive input)": 83,
+        "Cache read": 20,
+        "Cache write": 0,
+        "Output": 10,
+        "Reasoning (subset, not separately billed)": 4,
+        "Total (not separately billed)": 113
+      },
+      "expected_state": "unavailable-partial",
+      "numeric_pages": 0
+    },
+    {
+      "case": "partial-day-2026-11-02",
+      "emissions": [
+        8
+      ],
+      "exact_usd": "0.00037",
+      "metrics": {
+        "Input": 106,
+        "Noncached input (derived for inclusive input)": 86,
+        "Cache read": 20,
+        "Cache write": 0,
+        "Output": 10,
+        "Reasoning (subset, not separately billed)": 4,
+        "Total (not separately billed)": 116
+      },
+      "expected_state": "unavailable-partial",
+      "numeric_pages": 0
+    },
+    {
+      "case": "partial-days-full-middle",
+      "emissions": [
+        6,
+        7
+      ],
+      "exact_usd": "0.0010975",
+      "metrics": {
+        "Input": 209,
+        "Noncached input (derived for inclusive input)": 169,
+        "Cache read": 40,
+        "Cache write": 0,
+        "Output": 20,
+        "Reasoning (subset, not separately billed)": 8,
+        "Total (not separately billed)": 229
+      },
+      "expected_state": "available-bucket-unavailable-range",
+      "numeric_pages": 1
+    },
+    {
+      "case": "mixed-day",
+      "emissions": [
+        6,
+        7
+      ],
+      "exact_usd": "0.0010975",
+      "metrics": {
+        "Input": 209,
+        "Noncached input (derived for inclusive input)": 169,
+        "Cache read": 40,
+        "Cache write": 0,
+        "Output": 20,
+        "Reasoning (subset, not separately billed)": 8,
+        "Total (not separately billed)": 229
+      },
+      "expected_state": "unavailable-compact",
+      "numeric_pages": 0
+    },
+    {
+      "case": "mixed-compact-hour",
+      "emissions": [
+        6
+      ],
+      "exact_usd": "0.00073",
+      "metrics": {
+        "Input": 104,
+        "Noncached input (derived for inclusive input)": 84,
+        "Cache read": 20,
+        "Cache write": 0,
+        "Output": 10,
+        "Reasoning (subset, not separately billed)": 4,
+        "Total (not separately billed)": 114
+      },
+      "expected_state": "unavailable-precision",
+      "numeric_pages": 0
+    },
+    {
+      "case": "mixed-raw-hour",
+      "emissions": [
+        7
+      ],
+      "exact_usd": "0.0003675",
+      "metrics": {
+        "Input": 105,
+        "Noncached input (derived for inclusive input)": 85,
+        "Cache read": 20,
+        "Cache write": 0,
+        "Output": 10,
+        "Reasoning (subset, not separately billed)": 4,
+        "Total (not separately billed)": 115
+      },
+      "expected_state": "available",
+      "numeric_pages": 1
+    },
+    {
+      "case": "expired-range",
+      "emissions": [],
+      "exact_usd": "0",
+      "metrics": {
+        "Input": 0,
+        "Noncached input (derived for inclusive input)": 0,
+        "Cache read": 0,
+        "Cache write": 0,
+        "Output": 0,
+        "Reasoning (subset, not separately billed)": 0,
+        "Total (not separately billed)": 0
+      },
+      "expected_state": "unavailable-expired",
+      "numeric_pages": 0
+    },
+    {
+      "case": "deleted-history-after-retention",
+      "emissions": [
+        0,
+        1,
+        3
+      ],
+      "exact_usd": "0.002145",
+      "metrics": {
+        "Input": 303,
+        "Noncached input (derived for inclusive input)": 243,
+        "Cache read": 60,
+        "Cache write": 0,
+        "Output": 30,
+        "Reasoning (subset, not separately billed)": 12,
+        "Total (not separately billed)": 333
+      },
+      "expected_state": "unavailable-compact",
+      "numeric_pages": 0
+    }
+  ],
+  "passed": true,
+  "membership": "Driver windows + emitted timestamp/model/count tuples; deletion controlled through native API.",
+  "amount_source": "Independent fixed-rate Decimal calculations; no persisted subtotal supplies an expectation.",
+  "timezone": "UTC hours stay 3600s and UTC days 86400s; local spring gap/fall repeat never redefines a bucket.",
+  "offset_input": "Range refused: timestamps must use UTC Z"
+}

@@ -1,0 +1,121 @@
+test_busy_coordinator_returns_partial_status_through_cli (test_owner_daemon.ActivationVisibilityTests.test_busy_coordinator_returns_partial_status_through_cli) ... ok
+test_busy_owner_still_reports_coordinator_and_unknown_owner (test_owner_daemon.ActivationVisibilityTests.test_busy_owner_still_reports_coordinator_and_unknown_owner) ... ok
+test_cli_status_discloses_manual_deadline_and_help_warns_before_arming (test_owner_daemon.ActivationVisibilityTests.test_cli_status_discloses_manual_deadline_and_help_warns_before_arming) ... ok
+test_complete_status_is_explicit (test_owner_daemon.ActivationVisibilityTests.test_complete_status_is_explicit) ... ok
+test_empty_status_still_warns_about_future_shared_state_mutation (test_owner_daemon.ActivationVisibilityTests.test_empty_status_still_warns_about_future_shared_state_mutation) ... ok
+test_fixture_watchdog_covers_partitioned_hand_actions (test_owner_daemon.ActivationVisibilityTests.test_fixture_watchdog_covers_partitioned_hand_actions) ... ok
+test_hold_row_shape_for_missing_and_resolved_action (test_owner_daemon.ActivationVisibilityTests.test_hold_row_shape_for_missing_and_resolved_action) ... ERROR
+test_manager_coverage_and_execution_follow_shared_predicate (test_owner_daemon.ActivationVisibilityTests.test_manager_coverage_and_execution_follow_shared_predicate) ... ok
+test_manual_overdue_claim_does_not_refuse_arm_and_paused_tick_matches_warning (test_owner_daemon.ActivationVisibilityTests.test_manual_overdue_claim_does_not_refuse_arm_and_paused_tick_matches_warning) ... ok
+test_partial_status_cli_redacts_untrusted_error_details (test_owner_daemon.ActivationVisibilityTests.test_partial_status_cli_redacts_untrusted_error_details) ... /opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/unittest/mock.py:2259: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10a28f010>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_status_discloses_unresolved_foreign_and_global_holds (test_owner_daemon.ActivationVisibilityTests.test_status_discloses_unresolved_foreign_and_global_holds) ... ok
+test_status_does_not_recover_coordinator_journal (test_owner_daemon.ActivationVisibilityTests.test_status_does_not_recover_coordinator_journal) ... ok
+test_status_lists_in_flight_and_overdue_with_exact_watchdog_effects (test_owner_daemon.ActivationVisibilityTests.test_status_lists_in_flight_and_overdue_with_exact_watchdog_effects) ... ok
+test_transport_coverage_matches_watchdog_for_default_hand_and_owner (test_owner_daemon.ActivationVisibilityTests.test_transport_coverage_matches_watchdog_for_default_hand_and_owner) ... ok
+test_batch_selection_denials_roll_back_every_table (test_coordinator.CoordinatorTests.test_batch_selection_denials_roll_back_every_table) ... ok
+test_cli_reopen_snapshot_and_oversize_rejection (test_coordinator.CoordinatorTests.test_cli_reopen_snapshot_and_oversize_rejection) ... ok
+test_cycle_rejected (test_coordinator.CoordinatorTests.test_cycle_rejected) ... ok
+test_draft_successor_not_executable (test_coordinator.CoordinatorTests.test_draft_successor_not_executable) ... ok
+test_duplicate_event_does_not_change_revision_and_conflict_denied (test_coordinator.CoordinatorTests.test_duplicate_event_does_not_change_revision_and_conflict_denied) ... ok
+test_found_worker_then_dead_worker_reconciliations_are_distinct (test_coordinator.CoordinatorTests.test_found_worker_then_dead_worker_reconciliations_are_distinct) ... ok
+test_fresh_connection_preserves_all_three_and_event (test_coordinator.CoordinatorTests.test_fresh_connection_preserves_all_three_and_event) ... ok
+test_history_archived_and_briefing_order_not_identifier_order (test_coordinator.CoordinatorTests.test_history_archived_and_briefing_order_not_identifier_order) ... /opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/encoder.py:263: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10ab78d60>
+  return _iterencode(o, 0)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_invalid_directory_and_json_rejected (test_coordinator.CoordinatorTests.test_invalid_directory_and_json_rejected) ... ok
+test_large_event_referenced_without_losing_original (test_coordinator.CoordinatorTests.test_large_event_referenced_without_losing_original) ... ok
+test_large_worker_result_cannot_wedge_next_manager (test_coordinator.CoordinatorTests.test_large_worker_result_cannot_wedge_next_manager) ... ok
+test_lifecycle_claim_ack_return_verify (test_coordinator.CoordinatorTests.test_lifecycle_claim_ack_return_verify) ... ok
+test_long_manager_id_rejected_before_claim (test_coordinator.CoordinatorTests.test_long_manager_id_rejected_before_claim) ... ok
+test_malformed_manager_input_is_json_rejection (test_coordinator.CoordinatorTests.test_malformed_manager_input_is_json_rejection) ... ok
+test_manager_cannot_expand_frozen_inputs (test_coordinator.CoordinatorTests.test_manager_cannot_expand_frozen_inputs) ... ok
+test_manager_exclusive_and_stale_decision_retains_event (test_coordinator.CoordinatorTests.test_manager_exclusive_and_stale_decision_retains_event) ... ok
+test_manager_extra_operational_fields_rejected (test_coordinator.CoordinatorTests.test_manager_extra_operational_fields_rejected) ... ok
+test_manager_watchdog_once_without_relaunch (test_coordinator.CoordinatorTests.test_manager_watchdog_once_without_relaunch) ... ok
+test_oversized_manager_rationale_cannot_enter_state (test_coordinator.CoordinatorTests.test_oversized_manager_rationale_cannot_enter_state) ... ok
+test_owner_can_reconcile_interrupted_dispatch_immediately (test_coordinator.CoordinatorTests.test_owner_can_reconcile_interrupted_dispatch_immediately) ... ok
+test_owner_records_dead_worker_without_impersonating_return (test_coordinator.CoordinatorTests.test_owner_records_dead_worker_without_impersonating_return) ... ok
+test_owner_restricts_only_pending_prefix_and_preserves_it_after_restart (test_coordinator.CoordinatorTests.test_owner_restricts_only_pending_prefix_and_preserves_it_after_restart) ... ok
+test_pause_prevents_prepared_dispatch (test_coordinator.CoordinatorTests.test_pause_prevents_prepared_dispatch) ... ok
+test_reconciled_dispatch_stalls_again_under_new_epoch (test_coordinator.CoordinatorTests.test_reconciled_dispatch_stalls_again_under_new_epoch) ... ok
+test_resource_held_until_verification (test_coordinator.CoordinatorTests.test_resource_held_until_verification) ... ok
+test_uncertain_dispatch_never_retries_after_restart (test_coordinator.CoordinatorTests.test_uncertain_dispatch_never_retries_after_restart) ... ok
+test_watchdog_rechecks_new_deadline_inside_transaction (test_coordinator.CoordinatorTests.test_watchdog_rechecks_new_deadline_inside_transaction) ... ok
+test_allocation_replace_cancels_prepared_and_retains_versions_on_restart (test_coordinator.OwnerControlsTests.test_allocation_replace_cancels_prepared_and_retains_versions_on_restart) ... ok
+test_completion_archive_successor_cli_restart_and_history (test_coordinator.OwnerControlsTests.test_completion_archive_successor_cli_restart_and_history) ... ok
+test_draft_cannot_execute_and_successor_requires_exact_receiving_base (test_coordinator.OwnerControlsTests.test_draft_cannot_execute_and_successor_requires_exact_receiving_base) ... ok
+test_failed_wrong_or_incomplete_receiving_proof_cannot_complete (test_coordinator.OwnerControlsTests.test_failed_wrong_or_incomplete_receiving_proof_cannot_complete) ... ok
+test_gate_pause_pending_and_stale_completion_denials (test_coordinator.OwnerControlsTests.test_gate_pause_pending_and_stale_completion_denials) ... ok
+test_legacy_stale_prepared_claim_and_changed_accepted_proof_refused (test_coordinator.OwnerControlsTests.test_legacy_stale_prepared_claim_and_changed_accepted_proof_refused) ... ok
+test_mandatory_gate_contract_and_explicit_owner_na (test_coordinator.OwnerControlsTests.test_mandatory_gate_contract_and_explicit_owner_na) ... ok
+test_owner_inputs_staleness_and_manager_authority (test_coordinator.OwnerControlsTests.test_owner_inputs_staleness_and_manager_authority) ... ok
+test_owner_lifecycle_process_crash_rolls_back_or_preserves_whole_effect (test_coordinator.OwnerControlsTests.test_owner_lifecycle_process_crash_rolls_back_or_preserves_whole_effect) ... ok
+test_prepared_completion_receiving_and_gate_failures_are_atomic (test_coordinator.OwnerControlsTests.test_prepared_completion_receiving_and_gate_failures_are_atomic) ... ok
+test_prepared_lifecycle_pause_revision_allocation_and_manager_guards (test_coordinator.OwnerControlsTests.test_prepared_lifecycle_pause_revision_allocation_and_manager_guards) ... ok
+test_prepared_lifecycle_rejects_wrong_kind_and_owned_or_terminal_actions (test_coordinator.OwnerControlsTests.test_prepared_lifecycle_rejects_wrong_kind_and_owned_or_terminal_actions) ... ok
+test_prepared_lifecycle_respects_other_pending_and_cross_stream_resources (test_coordinator.OwnerControlsTests.test_prepared_lifecycle_respects_other_pending_and_cross_stream_resources) ... ok
+test_prepared_owner_lifecycle_from_real_receiving_tests_to_first_claim (test_coordinator.OwnerControlsTests.test_prepared_owner_lifecycle_from_real_receiving_tests_to_first_claim) ... ok
+test_prepared_successor_wrong_base_pending_and_authority_denials (test_coordinator.OwnerControlsTests.test_prepared_successor_wrong_base_pending_and_authority_denials) ... ok
+test_reallocated_wait_is_cancelled_and_cannot_be_recorded (test_coordinator.OwnerControlsTests.test_reallocated_wait_is_cancelled_and_cannot_be_recorded) ... ok
+test_record_wait_cannot_hide_claimed_or_uncertain_dispatch (test_coordinator.OwnerControlsTests.test_record_wait_cannot_hide_claimed_or_uncertain_dispatch) ... ok
+test_record_wait_rejects_other_kinds_stale_and_owned_state (test_coordinator.OwnerControlsTests.test_record_wait_rejects_other_kinds_stale_and_owned_state) ... ok
+test_record_wait_serializes_competing_owner_connections (test_coordinator.OwnerControlsTests.test_record_wait_serializes_competing_owner_connections) ... ok
+test_record_wait_while_paused_preserves_state_without_native_receipts_or_wakeup (test_coordinator.OwnerControlsTests.test_record_wait_while_paused_preserves_state_without_native_receipts_or_wakeup) ... ok
+test_repeated_waits_archive_history_without_pending_queue_growth (test_coordinator.OwnerControlsTests.test_repeated_waits_archive_history_without_pending_queue_growth) ... ok
+test_replacement_denied_through_active_returned_and_uncertain_reservations (test_coordinator.OwnerControlsTests.test_replacement_denied_through_active_returned_and_uncertain_reservations) ... ok
+test_seed_and_activation_enforce_reservation_limit_including_blocked (test_coordinator.OwnerControlsTests.test_seed_and_activation_enforce_reservation_limit_including_blocked) ... ok
+test_stream_pause_reopen_and_global_pause_precedence (test_coordinator.OwnerControlsTests.test_stream_pause_reopen_and_global_pause_precedence) ... ok
+test_two_owner_connections_cannot_apply_same_revision (test_coordinator.OwnerControlsTests.test_two_owner_connections_cannot_apply_same_revision) ... ok
+test_re_registration_corrects_the_document_reference_of_an_unstarted_draft (test_coordinator.SprintRegistrationTests.test_re_registration_corrects_the_document_reference_of_an_unstarted_draft) ... ok
+test_re_registration_refused_for_a_sprint_worked_only_in_archived_history (test_coordinator.SprintRegistrationTests.test_re_registration_refused_for_a_sprint_worked_only_in_archived_history)
+state["actions"] is pruned, and an allocation id can be repointed. ... ok
+test_re_registration_refused_once_the_sprint_is_real (test_coordinator.SprintRegistrationTests.test_re_registration_refused_once_the_sprint_is_real) ... ok
+test_register_cycle_refused (test_coordinator.SprintRegistrationTests.test_register_cycle_refused) ... ok
+test_register_document_mismatch_refused (test_coordinator.SprintRegistrationTests.test_register_document_mismatch_refused) ... ok
+test_register_draft_is_durable_audited_and_does_not_activate (test_coordinator.SprintRegistrationTests.test_register_draft_is_durable_audited_and_does_not_activate) ... ok
+test_register_evidence_required (test_coordinator.SprintRegistrationTests.test_register_evidence_required) ... ok
+test_register_existing_id_refused (test_coordinator.SprintRegistrationTests.test_register_existing_id_refused) ... ok
+test_register_malformed_front_matter_refused (test_coordinator.SprintRegistrationTests.test_register_malformed_front_matter_refused) ... ok
+test_register_missing_file_refused (test_coordinator.SprintRegistrationTests.test_register_missing_file_refused) ... ok
+test_register_paused_refused (test_coordinator.SprintRegistrationTests.test_register_paused_refused) ... ok
+test_register_reservation_limit_refused (test_coordinator.SprintRegistrationTests.test_register_reservation_limit_refused) ... ok
+test_register_reserved_status_refused (test_coordinator.SprintRegistrationTests.test_register_reserved_status_refused) ... ok
+test_register_stale_revision_refused (test_coordinator.SprintRegistrationTests.test_register_stale_revision_refused) ... ok
+test_register_unknown_dependency_refused (test_coordinator.SprintRegistrationTests.test_register_unknown_dependency_refused) ... ok
+test_registered_sprint_accepts_an_allocation (test_coordinator.SprintRegistrationTests.test_registered_sprint_accepts_an_allocation)
+The point of registering: work can then be allocated against it. ... ok
+test_replace_flag_must_be_explicit_boolean (test_coordinator.SprintRegistrationTests.test_replace_flag_must_be_explicit_boolean) ... ok
+test_repo_that_is_not_a_directory_says_so (test_coordinator.SprintRegistrationTests.test_repo_that_is_not_a_directory_says_so) ... ok
+test_repo_without_the_named_plan_is_not_a_checkout (test_coordinator.SprintRegistrationTests.test_repo_without_the_named_plan_is_not_a_checkout) ... ok
+test_source_path_is_confined_to_repository_sprint_documents (test_coordinator.SprintRegistrationTests.test_source_path_is_confined_to_repository_sprint_documents) ... ok
+
+======================================================================
+ERROR: test_hold_row_shape_for_missing_and_resolved_action (test_owner_daemon.ActivationVisibilityTests.test_hold_row_shape_for_missing_and_resolved_action)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/test_owner_daemon.py", line 637, in test_hold_row_shape_for_missing_and_resolved_action
+    with self.c.mutation("fixture", {}) as (_, state):
+         ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 148, in __exit__
+    next(self.gen)
+    ~~~~^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/coordinator.py", line 108, in mutation
+    self._archive_actions(db, state)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/coordinator.py", line 123, in _archive_actions
+    terminal = sorted((a for a in state["actions"].values()
+                       if a["workstream"] == stream and a["status"] in TERMINAL),
+                      key=lambda a: a["sequence"])
+  File "/Volumes/CorbanuDrive/Corbanu/worktrees/owner-recurrence-20260917/scripts/initiative_control/coordinator.py", line 124, in <genexpr>
+    if a["workstream"] == stream and a["status"] in TERMINAL),
+       ~^^^^^^^^^^^^^^
+KeyError: 'workstream'
+
+----------------------------------------------------------------------
+Ran 86 tests in 3.010s
+
+FAILED (errors=1)

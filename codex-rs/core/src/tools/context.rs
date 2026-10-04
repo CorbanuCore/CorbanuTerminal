@@ -404,6 +404,13 @@ impl ToolOutput for ExecCommandToolOutput {
             JsonValue::String(format!("failed to serialize exec result: {err}"))
         })
     }
+
+    fn result_identity(&self, _payload: &ToolPayload) -> JsonValue {
+        serde_json::json!({
+            "exit_code": self.exit_code,
+            "output": String::from_utf8_lossy(&self.raw_output),
+        })
+    }
 }
 
 impl ExecCommandToolOutput {

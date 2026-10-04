@@ -1,0 +1,9 @@
+{
+  "restored_exact_usd": "0.0016875",
+  "unaligned_utc_buckets": [
+    "hour",
+    "week",
+    "month"
+  ],
+  "partial_totals_withheld": true
+}

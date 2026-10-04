@@ -4,6 +4,10 @@
 #[path = "memory_stage_one_tests.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "accounting_tests.rs"]
+mod accounting_tests;
+
 use crate::client::ModelClient;
 use crate::client_common::Prompt;
 use crate::client_common::ResponseEvent;
@@ -82,6 +86,12 @@ pub struct StageOneMemoryOutput {
 pub struct StageOneMemoryClient {
     client: ModelClient,
     binding: Arc<StageOneMemoryBinding>,
+    /// Collection inputs, read once from the owner's configuration when this
+    /// client was admitted, rather than re-read per request. The binding
+    /// already denies a request whose owner, provider or policy has drifted, so
+    /// a second read would answer the same question again.
+    accounting: crate::config::AccountingMode,
+    accounting_provider_id: String,
 }
 
 pub(crate) struct StageOneMemoryBinding {
@@ -148,6 +158,56 @@ impl StageOneMemoryBinding {
         result
     }
 
+    /// Stream-time validation uses the published runtime provider and live policy view.
+    /// The configured security floor was captured at construction and is session-static;
+    /// runtime config refresh does not change it. No session-state lock or Config copy.
+    pub(crate) fn check_stream(&self) -> Result<(), StageOneMemoryDenial> {
+        let mut denial = self
+            .denial
+            .lock()
+            .map_err(|_| StageOneMemoryDenial::PolicyUnavailable)?;
+        if let Some(reason) = *denial {
+            return Err(reason);
+        }
+        let result = (|| {
+            if self.termination.clone().now_or_never().is_some() {
+                return Err(StageOneMemoryDenial::OwnerTerminated);
+            }
+            let owner = self
+                .owner
+                .upgrade()
+                .ok_or(StageOneMemoryDenial::OwnerTerminated)?;
+            if owner.thread_id() != self.owner_id {
+                return Err(StageOneMemoryDenial::OwnerMismatch);
+            }
+            if owner.services.model_client().provider_info() != &self.provider {
+                return Err(StageOneMemoryDenial::ProviderChanged);
+            }
+            let policy = owner
+                .services
+                .agent_control
+                .effective_security_policy()
+                .snapshot_for_agent(self.owner_id)
+                .map_err(|_| StageOneMemoryDenial::PolicyUnavailable)?;
+            if policy.runtime_nonce != self.runtime_nonce
+                || policy.session_id.as_str() != self.session_id
+            {
+                return Err(StageOneMemoryDenial::OwnerMismatch);
+            }
+            if policy.kill_switch_active {
+                return Err(StageOneMemoryDenial::KillSwitchActive);
+            }
+            if self.floor.max(policy.level) != SecurityLevel::Permissive {
+                return Err(StageOneMemoryDenial::ProtectedInputUnavailable);
+            }
+            Ok(())
+        })();
+        if let Err(reason) = result {
+            *denial = Some(reason);
+        }
+        result
+    }
+
     fn request_error(&self, error: CodexErr) -> StageOneMemoryError {
         match self.denial.lock() {
             Ok(reason) => reason.map_or(
@@ -160,6 +220,17 @@ impl StageOneMemoryBinding {
 }
 
 impl StageOneMemoryClient {
+    #[cfg(debug_assertions)]
+    pub(crate) fn binding_for_fixture(
+        &self,
+        owner: ThreadId,
+    ) -> Result<Arc<StageOneMemoryBinding>, StageOneMemoryDenial> {
+        if self.binding.owner_id != owner {
+            return Err(StageOneMemoryDenial::OwnerMismatch);
+        }
+        Ok(Arc::clone(&self.binding))
+    }
+
     pub(crate) async fn new(
         owner: Weak<Session>,
         termination: SessionLoopTermination,
@@ -199,13 +270,62 @@ impl StageOneMemoryClient {
             /*concurrent_reasoning_summaries_enabled*/ false,
             /*attestation_provider*/ None,
             config.http_client_factory(),
-        )
-        .with_stage_one_memory_binding(Arc::clone(&binding));
-        Ok(Self { client, binding })
+        );
+        client.with_stage_one_memory_binding(Arc::clone(&binding))?;
+        Ok(Self {
+            client,
+            binding,
+            accounting: config.accounting.clone(),
+            accounting_provider_id: config.model_provider_id.clone(),
+        })
     }
 
     pub async fn check_completion(&self) -> Result<(), StageOneMemoryError> {
         self.binding.check().await.map_err(Into::into)
+    }
+
+    /// Collection for one extraction.
+    ///
+    /// The owner is held weakly, and the pipeline runs after a turn: a session
+    /// that has gone away records nothing rather than failing the extraction.
+    /// Nothing here takes the session's state lock - the inputs were read when
+    /// this client was admitted - because the request path runs alongside the
+    /// session's own turn lifecycle.
+    async fn attach_accounting(
+        &self,
+        session: &crate::client::ModelClientSession,
+    ) -> anyhow::Result<Option<crate::accounting::TurnScopes>> {
+        let Some(owner) = self.binding.owner.upgrade() else {
+            return Ok(None);
+        };
+        // Collect only when this request really goes to the route the admitted
+        // configuration approved. Accounting must never be the reason a
+        // stage-one request fails, and a request bound elsewhere would fail the
+        // route check at admission instead of simply going unrecorded.
+        if self.client.provider_info() != &self.binding.provider {
+            return Ok(None);
+        }
+        let auth = owner.services.auth_manager.auth().await;
+        let auth_mode = auth.as_ref().map(codex_login::CodexAuth::auth_mode);
+        let endpoint = self
+            .binding
+            .provider
+            .to_api_provider(auth_mode)
+            .map(|api| api.base_url)
+            .unwrap_or_default();
+        Ok(Some(
+            crate::accounting::attach_scopes(
+                &owner,
+                &self.accounting,
+                &self.accounting_provider_id,
+                &self.binding.provider,
+                auth_mode,
+                &endpoint,
+                session,
+                crate::accounting::memory_turn_label(),
+            )
+            .await?,
+        ))
     }
 
     pub async fn extract(
@@ -214,6 +334,18 @@ impl StageOneMemoryClient {
     ) -> Result<StageOneMemoryOutput, StageOneMemoryError> {
         self.check_completion().await?;
         let mut session = self.client.new_session();
+        // Extraction is a model request the operator paid for, on a session of
+        // its own, so it is collected like any other - under its own `memory:`
+        // turn. Best effort, exactly as compaction and prewarm are: an
+        // extraction that cannot be recorded still runs, because accounting is
+        // an observer here and not a gate on the memory pipeline.
+        let _accounting = match self.attach_accounting(&session).await {
+            Ok(scopes) => scopes,
+            Err(error) => {
+                tracing::warn!(%error, "accounting: stage-one memory proceeding unrecorded");
+                None
+            }
+        };
         let trace = InferenceTraceContext::disabled();
         let mut stream = tokio::select! {
             _ = self.binding.termination.clone() => return Err(StageOneMemoryDenial::OwnerTerminated.into()),
@@ -258,17 +390,21 @@ impl StageOneMemoryClient {
 
 /// Checks below endpoint retries, after async auth and before transport dispatch.
 #[derive(Clone, Debug)]
-pub(crate) struct StageOneGuardedTransport {
-    inner: ReqwestTransport,
+pub(crate) struct StageOneGuardedTransport<T = ReqwestTransport> {
+    inner: T,
     binding: Option<Arc<StageOneMemoryBinding>>,
 }
 
-impl StageOneGuardedTransport {
-    pub(crate) fn new(
-        inner: ReqwestTransport,
-        binding: Option<Arc<StageOneMemoryBinding>>,
-    ) -> Self {
+impl<T> StageOneGuardedTransport<T> {
+    pub(crate) fn new(inner: T, binding: Option<Arc<StageOneMemoryBinding>>) -> Self {
         Self { inner, binding }
+    }
+
+    pub(crate) fn map_inner<U>(self, map: impl FnOnce(T) -> U) -> StageOneGuardedTransport<U> {
+        StageOneGuardedTransport {
+            inner: map(self.inner),
+            binding: self.binding,
+        }
     }
 
     async fn check(&self) -> Result<(), TransportError> {
@@ -282,7 +418,7 @@ impl StageOneGuardedTransport {
     }
 }
 
-impl HttpTransport for StageOneGuardedTransport {
+impl<T: HttpTransport> HttpTransport for StageOneGuardedTransport<T> {
     async fn execute(&self, request: Request) -> Result<Response, TransportError> {
         self.check().await?;
         self.inner.execute(request).await

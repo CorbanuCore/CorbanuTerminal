@@ -315,6 +315,8 @@ pub(crate) enum WalletUnlockContinuation {
     OpenCorbanuApi {
         deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
     },
+    // Handled when sent; nothing constructs it in this build.
+    #[allow(dead_code)]
     OpenPlans {
         mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode,
     },
@@ -625,6 +627,20 @@ pub(crate) enum AppEvent {
     /// A Claude Code headless pane emitted bounded live progress.
     ClaudePaneTurnProgress {
         progress: crate::claude_panes::ClaudePaneTurnProgress,
+    },
+    /// A pane bridge sent a model request upstream and is reporting it.
+    ///
+    /// The bridge posts to a provider from inside this process, which does not
+    /// run the model client, so the request reaches no ledger unless it is
+    /// reported. The server decides which account the route bills and whether
+    /// to record it at all.
+    PaneBridgeModelRequestSent {
+        provider_id: String,
+        base_url: String,
+        path: String,
+        model: String,
+        /// The `usage` object the provider's response carried, if any.
+        usage: Option<serde_json::Value>,
     },
 
     AgentControlTick {
@@ -1049,6 +1065,32 @@ pub(crate) enum AppEvent {
 
     /// Open the default token-activity view selected from the `/usage` menu.
     OpenTokenActivity,
+
+    OpenAccountingInspector {
+        day: i64,
+    },
+    LoadAccountingInspector {
+        generation: uuid::Uuid,
+        thread: Option<ThreadId>,
+        day: i64,
+        range: Option<codex_state::accounting::InspectionRange>,
+    },
+    AccountingInspectorLoaded {
+        generation: uuid::Uuid,
+        thread: Option<ThreadId>,
+        day: i64,
+        result: Result<codex_state::accounting::InspectionDay, String>,
+    },
+    NavigateAccountingInspector {
+        generation: uuid::Uuid,
+        page: usize,
+    },
+    CloseAccountingInspector {
+        generation: uuid::Uuid,
+    },
+    RefreshAccountingInspector {
+        generation: uuid::Uuid,
+    },
 
     /// Open the reset-credit flow selected from the `/usage` menu.
     OpenRateLimitResetCredits,
@@ -1760,6 +1802,8 @@ pub(crate) enum AppEvent {
         result: Option<Result<String, String>>,
     },
 
+    // Handled when sent; nothing constructs it in this build.
+    #[allow(dead_code)]
     /// Latest provider credential statuses loaded away from the TUI event thread.
     ProviderCredentialStatusesReady {
         claude_status: crate::chatwidget::claude_code_login::ClaudeCodePlanStatus,
@@ -1852,6 +1896,8 @@ pub(crate) enum AppEvent {
     CorbanuApiLoaded {
         result: Result<crate::chatwidget::wallet_api::CorbanuApiView, String>,
         deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+        /// The daemon refused the held wallet capability as lapsed.
+        capability_lapsed: bool,
     },
     OpenCorbanuApiTopUp {
         deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
@@ -1927,10 +1973,14 @@ pub(crate) enum AppEvent {
         selection_policy: WalletPlanReceiptSelectionPolicy,
         receipt: crate::chatwidget::wallet_receipt::WalletPlanReceipt,
     },
+    // Handled when sent; nothing constructs it in this build.
+    #[allow(dead_code)]
     OpenWalletPlanReceipt {
         receipt: crate::chatwidget::wallet_receipt::WalletPlanReceipt,
     },
     CloseWalletPlanReceipt,
+    // Handled when sent; nothing constructs it in this build.
+    #[allow(dead_code)]
     WalletRecoverPlanRequested,
 
     /// Open the vault credential list.
@@ -2074,11 +2124,18 @@ pub(crate) enum AppEvent {
     /// Update the current approval policy in the running app and widget.
     UpdateAskForApprovalPolicy(AskForApproval),
 
+    // Handled when sent; nothing constructs it in this build.
+    #[allow(dead_code)]
     /// Update the current built-in active permission profile in the running app and widget.
     UpdateActivePermissionProfile(ActivePermissionProfile),
 
     /// Select a named permission profile, optionally applying built-in mode settings too.
     SelectPermissionProfile(PermissionProfileSelection),
+    SelectPermissionPreset(PermissionProfileSelection),
+    PermissionConfirmationCompleted {
+        selection_id: uuid::Uuid,
+        result: crate::app_server_session::PermissionConfirmationResult,
+    },
 
     /// Update the current approvals reviewer in the running app and widget.
     UpdateApprovalsReviewer(ApprovalsReviewer),

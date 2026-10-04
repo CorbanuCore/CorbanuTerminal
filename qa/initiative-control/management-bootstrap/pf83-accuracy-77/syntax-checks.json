@@ -1,0 +1,70 @@
+{
+  "bash_checks": [
+    {
+      "block": 1,
+      "exit_code": 0,
+      "stderr": ""
+    },
+    {
+      "block": 2,
+      "exit_code": 0,
+      "stderr": ""
+    }
+  ],
+  "bash_syntax_blocks": 2,
+  "python_checks": [
+    {
+      "path": "pf83-accuracy-77/collect_checks.py",
+      "status": "passed"
+    },
+    {
+      "path": "pf83-accuracy-77/inspect_paths.py",
+      "status": "passed"
+    },
+    {
+      "path": "pf83-accuracy-77/measure_syntax.py",
+      "status": "passed"
+    },
+    {
+      "path": "pf83-accuracy-77/test_controls.py",
+      "status": "passed"
+    },
+    {
+      "path": "pf83-accuracy-77/validate.py",
+      "status": "passed"
+    },
+    {
+      "path": "pf83-failclosed-73/collect_checks.py",
+      "status": "passed"
+    },
+    {
+      "path": "pf83-failclosed-73/dispatch_guard.py",
+      "status": "passed"
+    },
+    {
+      "path": "pf83-failclosed-73/guest_check.py",
+      "status": "passed"
+    },
+    {
+      "path": "pf83-failclosed-73/preflight.py",
+      "status": "passed"
+    },
+    {
+      "path": "pf83-failclosed-73/prepare_payload.py",
+      "status": "passed"
+    },
+    {
+      "path": "pf83-failclosed-73/stage.py",
+      "status": "passed"
+    },
+    {
+      "path": "pf83-failclosed-73/test_guards.py",
+      "status": "passed"
+    },
+    {
+      "path": "pf83-failclosed-73/validate.py",
+      "status": "passed"
+    }
+  ],
+  "python_syntax_files": 13
+}

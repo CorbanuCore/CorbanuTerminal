@@ -1,0 +1,101 @@
+{
+  "checks": [
+    {
+      "detail": "--receiving is required",
+      "name": "receiving_locations_and_fresh_outputs",
+      "status": "failed"
+    },
+    {
+      "detail": {
+        "attestation_sha256": "9d33fcc21788a84c61011fe64a3607fc7569b390a260e5c19a7b9d3e6582ce27",
+        "files": {
+          "codex-code-mode-host": {
+            "mode": 365,
+            "sha256": "ae25bd69782ecf167a2588d0b8368b53b9bae68d9ec2bed200f55e6598ef810c"
+          },
+          "corbanu": {
+            "mode": 365,
+            "sha256": "483031eee7d1b4f978aa782b89164e4072f1533f2eea72a02e1428857254d6de"
+          },
+          "corbanu-acp": {
+            "mode": 365,
+            "sha256": "36a35e03f3816bb067867eb46933da18c25662a2be81cd6bb138248b687ccea5"
+          },
+          "corbanu-walletd": {
+            "mode": 365,
+            "sha256": "3ec7539bcb6bdb0543e4c933f059a624b411dc5cc3895c730ed101a19e19066d"
+          }
+        },
+        "manifest_sha256": "32529d0a894503c021ff756ebc27a75555ab05ed2ec63dc47dc0d9d7bb878024",
+        "packaged_binary_executed": false,
+        "source_commit": "ae5981d2d7d762dfd6d54e0ac0967729bf88f082",
+        "source_tree": "834f57388066d33c27fdee6e3b234dec7fa0b0e6",
+        "verified_binaries": 4
+      },
+      "name": "package_attestation_after_move",
+      "status": "passed"
+    },
+    {
+      "detail": [
+        "package/codex-code-mode-host",
+        "package/corbanu",
+        "package/corbanu-acp",
+        "package/corbanu-walletd",
+        "packet/navigation.md",
+        "packet/original-F01-F11.md"
+      ],
+      "name": "actor_asset_allowlist",
+      "status": "passed"
+    },
+    {
+      "detail": "harness/packet candidate disagreement; dispatch refused",
+      "name": "candidate_agreement_and_288_packet_hashes",
+      "status": "failed"
+    },
+    {
+      "detail": "7366c535a80863731b09bb21a628cece6bd5750b8af9ef5646c339d32217418b",
+      "name": "pinned_public_host_key",
+      "status": "passed"
+    },
+    {
+      "detail": "--key is required",
+      "name": "ssh_identity_metadata",
+      "status": "failed"
+    },
+    {
+      "detail": "--owner-check is required",
+      "name": "owner_checker_identity",
+      "status": "failed"
+    },
+    {
+      "detail": "owner checker unavailable or not pinned; no approval inferred",
+      "name": "executor_mediator_interface",
+      "status": "failed"
+    },
+    {
+      "detail": "owner checker unavailable or not pinned; no approval inferred",
+      "name": "owner_admission",
+      "status": "failed"
+    },
+    {
+      "detail": "owner checker unavailable or not pinned; no approval inferred",
+      "name": "live_pin_authorization_and_hashes",
+      "status": "failed"
+    },
+    {
+      "detail": "owner checker unavailable or not pinned; no approval inferred",
+      "name": "independent_reviewer_and_staging_authorization",
+      "status": "failed"
+    },
+    {
+      "detail": "--contact-guest not supplied; no guest contact authorized",
+      "name": "live_ssh_host_uuid_os_arch_account_uid",
+      "status": "failed"
+    }
+  ],
+  "exit_code": 1,
+  "guest_contact_attempted": false,
+  "packaged_binary_executed": false,
+  "passed": false,
+  "upload_calls": 0
+}

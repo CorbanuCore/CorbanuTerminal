@@ -1,0 +1,11 @@
+Local source commit: 30b471a47bce83605ee1f5ac385f62a12c17e56e
+Local HEAD:codex-rs and RTX staged-source :codex-rs:
+2d270c5c4cdde5e814055f2647b0a707b88497db
+RTX staged only codex-rs/Cargo.lock and codex-rs/linux-pidfd-spawn after final fix/fmt/tests.
+MODULE.bazel.lock unchanged: 5ecff077dbbbf7887a61c03a8e9aa354f002e1ed
+SHA256:
+80c4c46da3d74ca3d1853ff7656cdc815921b27e15695f679e7bfed0e6df9709 codex-rs/linux-pidfd-spawn/src/ffi.rs
+27ba0439e2911c49ce23107b7320b98afe1b021f79dd4824b955bc8a3cb7669d codex-rs/linux-pidfd-spawn/src/lib.rs
+3fb6b66925abb2b625a272d4f34cbb727386e4bceb98890a73804453df00544a codex-rs/linux-pidfd-spawn/src/spawn.rs
+79a821f857125beb75004ea5a41f39dd27a5e9858dd7b32be41cf27e990e755b codex-rs/linux-pidfd-spawn/src/spawn_tests.rs
+159e4c386ff5215cb0838539b94c4bc454fe6da9077f59e096ffb664ecd352d0 codex-rs/Cargo.lock
