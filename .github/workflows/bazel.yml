@@ -26,6 +26,10 @@ concurrency:
   group: concurrency-group::${{ github.workflow }}::${{ github.event.pull_request.number > 0 && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}${{ github.ref_name == 'main' && format('::{0}', github.run_id) || ''}}
   cancel-in-progress: ${{ github.ref_name != 'main' }}
 
+# Read-only token: none of these jobs call the GitHub API.
+permissions:
+  contents: read
+
 jobs:
   test:
     if: ${{ inputs.cold_bazel }}

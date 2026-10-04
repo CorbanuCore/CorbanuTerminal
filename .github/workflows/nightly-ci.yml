@@ -13,6 +13,10 @@ concurrency:
   group: nightly-ci::${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only token: none of these jobs call the GitHub API.
+permissions:
+  contents: read
+
 jobs:
   bazel:
     name: Bazel
