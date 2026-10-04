@@ -26,7 +26,10 @@ def distribution_source_binaries(*args, **kwargs):
             if path.stat().st_size == 0:
                 continue  # Empty files cannot carry developer code.
             with mmap.mmap(binary.fileno(), 0, access=mmap.ACCESS_READ) as data:
-                if data.find(b"CORBANU_DEVELOPER_ACCOUNTING_NOT_FOR_DISTRIBUTION") != -1:
+                if (
+                    data.find(b"CORBANU_DEVELOPER_ACCOUNTING_NOT_FOR_DISTRIBUTION")
+                    != -1
+                ):
                     raise SystemExit(
                         f"Refusing distribution package: developer-accounting enabled in {path}"
                     )

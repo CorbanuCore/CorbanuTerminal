@@ -70,10 +70,14 @@ def validate_debug_run(args: list[str], env: dict[str, str]) -> None:
 # builds a package's own binaries when testing it. Build them first so a
 # package-scoped run does not fail on a missing sibling executable.
 _SUITE_HELPERS = [
-    "-p", "codex-cli",
-    "-p", "codex-wallet-daemon",
-    "-p", "codex-rmcp-client",
-    "-p", "codex-code-mode-host",
+    "-p",
+    "codex-cli",
+    "-p",
+    "codex-wallet-daemon",
+    "-p",
+    "codex-rmcp-client",
+    "-p",
+    "codex-code-mode-host",
     "--bins",
 ]
 HELPER_BINARIES = {
@@ -85,9 +89,7 @@ HELPER_BINARIES = {
 
 def helper_build_args(args: list[str]) -> list[str]:
     packages = [
-        value
-        for flag, value in zip(args, args[1:])
-        if flag in ("-p", "--package")
+        value for flag, value in zip(args, args[1:]) if flag in ("-p", "--package")
     ] + [arg.split("=", 1)[1] for arg in args if arg.startswith("--package=")]
     build: list[str] = []
     if any(package in HELPER_BINARIES for package in packages):
@@ -114,7 +116,11 @@ def remove_leaked_mount_targets(workspace: Path) -> None:
             continue
         for name in SANDBOX_MOUNT_TARGETS:
             target = package / name
-            if target.is_dir() and not target.is_symlink() and not any(target.iterdir()):
+            if (
+                target.is_dir()
+                and not target.is_symlink()
+                and not any(target.iterdir())
+            ):
                 try:
                     target.rmdir()
                 except OSError:
@@ -155,7 +161,9 @@ def main(args: list[str]) -> int:
                 check=False,
             )
             if built.returncode != 0:
-                print("Test isolation: helper binaries failed to build", file=sys.stderr)
+                print(
+                    "Test isolation: helper binaries failed to build", file=sys.stderr
+                )
                 return built.returncode
         try:
             return subprocess.run(
