@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+source "$ROOT/qa/orchestrate_tui_readiness.sh"
 BINARY=${PFTERMINAL_BINARY:-"$ROOT/codex-rs/target/debug/pfterminal"}
 SHA=$(git -C "$ROOT" rev-parse HEAD)
 ARTIFACT_ROOT=${PFTERMINAL_MATRIX_ARTIFACT_ROOT:-"$ROOT/qa/artifacts/$SHA"}
@@ -96,6 +97,20 @@ wait_screen_absent() {
     sleep 0.25
   done
   capture "wait-absent-timeout" >/dev/null
+  return 1
+}
+
+wait_composer_ready() {
+  local attempts=$1
+  local attempt output
+  for ((attempt = 0; attempt < attempts; attempt++)); do
+    output=$(tmux capture-pane -p -t "$CURRENT_SESSION":0.0)
+    if orchestrate_composer_ready <<<"$output"; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  capture "wait-timeout" >/dev/null
   return 1
 }
 
@@ -197,7 +212,7 @@ start_row() {
     "cd '$ROOT' && export PFTERMINAL_HOME='$CURRENT_HOME' CODEX_HOME='$CURRENT_HOME' PFTERMINAL_ORCHESTRATE_QA=1 PFTERMINAL_ORCHESTRATE_QA_CONTROL='$CONTROL' PFTERMINAL_ORCHESTRATE_TEST_CADENCE_SECONDS='$cadence_s' && exec '$BINARY' -c 'model=\"qa-model\"' -c 'model_provider=\"qa\"' -c 'model_providers.qa={ name = \"QA\", base_url = \"http://127.0.0.1:$PORT/v1\", wire_api = \"responses\", requires_openai_auth = false, request_max_retries = 0, stream_max_retries = 0 }' -c 'approval_policy=\"never\"' -c 'sandbox_mode=\"workspace-write\"'"
   wait_screen "Do you trust the contents" 40
   tmux send-keys -t "$CURRENT_SESSION":0.0 Enter
-  wait_screen "qa-model default" 80
+  wait_composer_ready 80
   sleep 2
   capture "started" >/dev/null
 }
@@ -208,7 +223,7 @@ restart_current() {
   tmux kill-session -t "$CURRENT_SESSION" 2>/dev/null || true
   tmux new-session -d -s "$CURRENT_SESSION" -x 140 -y 45 \
     "cd '$ROOT' && export PFTERMINAL_HOME='$CURRENT_HOME' CODEX_HOME='$CURRENT_HOME' PFTERMINAL_ORCHESTRATE_QA=1 PFTERMINAL_ORCHESTRATE_QA_CONTROL='$CONTROL' PFTERMINAL_ORCHESTRATE_TEST_CADENCE_SECONDS='$cadence_s' && exec '$BINARY' -c 'model=\"qa-model\"' -c 'model_provider=\"qa\"' -c 'model_providers.qa={ name = \"QA\", base_url = \"http://127.0.0.1:$PORT/v1\", wire_api = \"responses\", requires_openai_auth = false, request_max_retries = 0, stream_max_retries = 0 }' -c 'approval_policy=\"never\"' -c 'sandbox_mode=\"workspace-write\"' resume '$root_thread_id'"
-  wait_screen "qa-model default" 100
+  wait_composer_ready 100
   sleep 2
 }
 
