@@ -503,8 +503,6 @@ fn run_bwrap_in_child_with_synthetic_mount_cleanup(bwrap_args: crate::bwrap::Bwr
     let synthetic_mount_registrations = register_synthetic_mount_targets(&synthetic_mount_targets);
     let protected_create_registrations =
         register_protected_create_targets(&protected_create_targets);
-    let cleanup_reaper =
-        CleanupReaper::spawn(&synthetic_mount_registrations, &protected_create_registrations);
     let exec_start_pipe = create_exec_start_pipe(!protected_create_targets.is_empty());
     let parent_pid = unsafe { libc::getpid() };
     let pid = unsafe { libc::fork() };
@@ -527,9 +525,6 @@ fn run_bwrap_in_child_with_synthetic_mount_cleanup(bwrap_args: crate::bwrap::Bwr
     }
 
     close_child_exec_start_read(exec_start_pipe[0]);
-    if let Some(cleanup_reaper) = &cleanup_reaper {
-        cleanup_reaper.watch_bwrap_child(pid);
-    }
     let protected_create_monitor = ProtectedCreateMonitor::start(&protected_create_targets);
     let signal_forwarders = install_bwrap_signal_forwarders(pid);
     release_child_exec_start(exec_start_pipe[1]);
@@ -543,9 +538,6 @@ fn run_bwrap_in_child_with_synthetic_mount_cleanup(bwrap_args: crate::bwrap::Bwr
     cleanup_synthetic_mount_targets(&synthetic_mount_registrations);
     let protected_create_violation = protected_create_monitor_violation
         || cleanup_protected_create_targets(&protected_create_registrations);
-    if let Some(cleanup_reaper) = cleanup_reaper {
-        cleanup_reaper.finish();
-    }
     signal_forwarders.restore();
     cleanup_signal_mask.restore();
     exit_with_wait_status_or_policy_violation(status, protected_create_violation);
@@ -875,195 +867,6 @@ fn wait_for_bwrap_child(pid: libc::pid_t) -> libc::c_int {
         }
         panic!("waitpid failed for bubblewrap child: {err}");
     }
-}
-
-/// Runs the synthetic mount and protected create cleanup if this helper dies first.
-///
-/// Unified exec stops commands with `killpg(SIGKILL)`. That kills this helper,
-/// so the cleanup after `wait_for_bwrap_child` never runs and the empty
-/// `.git`, `.codex` and `.agents` mount targets it created stay on the host,
-/// where they make temp directories and workspaces look like repositories or
-/// project config roots. The reaper is a forked process in its own session, so
-/// the same `killpg` misses it. It waits for this helper to exit, then for the
-/// bubblewrap child to exit (its parent-death signal stops it, and
-/// `--die-with-parent` takes the sandbox down with it), and only then runs the
-/// same marker-aware cleanup. A helper that cleans up normally tells the reaper
-/// to exit without touching anything.
-struct CleanupReaper {
-    write_fd: libc::c_int,
-}
-
-const CLEANUP_REAPER_DONE: u8 = 1;
-const CLEANUP_REAPER_BWRAP_EXIT_TIMEOUT: Duration = Duration::from_secs(30);
-
-impl CleanupReaper {
-    fn spawn(
-        synthetic_mount_registrations: &[SyntheticMountTargetRegistration],
-        protected_create_registrations: &[ProtectedCreateTargetRegistration],
-    ) -> Option<Self> {
-        if synthetic_mount_registrations.is_empty() && protected_create_registrations.is_empty() {
-            return None;
-        }
-        let mut pipe = [-1, -1];
-        if unsafe { libc::pipe2(pipe.as_mut_ptr(), libc::O_CLOEXEC) } < 0 {
-            let err = std::io::Error::last_os_error();
-            panic!("failed to create bubblewrap cleanup reaper pipe: {err}");
-        }
-        let pid = unsafe { libc::fork() };
-        if pid < 0 {
-            let err = std::io::Error::last_os_error();
-            panic!("failed to fork bubblewrap cleanup reaper: {err}");
-        }
-        if pid == 0 {
-            unsafe {
-                libc::close(pipe[1]);
-            }
-            run_cleanup_reaper(
-                pipe[0],
-                synthetic_mount_registrations,
-                protected_create_registrations,
-            );
-        }
-        unsafe {
-            libc::close(pipe[0]);
-        }
-        Some(Self { write_fd: pipe[1] })
-    }
-
-    fn watch_bwrap_child(&self, pid: libc::pid_t) {
-        write_all_to_fd(self.write_fd, &pid.to_ne_bytes());
-    }
-
-    fn finish(self) {
-        write_all_to_fd(self.write_fd, &[CLEANUP_REAPER_DONE]);
-        unsafe {
-            libc::close(self.write_fd);
-        }
-    }
-}
-
-fn run_cleanup_reaper(
-    read_fd: libc::c_int,
-    synthetic_mount_registrations: &[SyntheticMountTargetRegistration],
-    protected_create_registrations: &[ProtectedCreateTargetRegistration],
-) -> ! {
-    unsafe {
-        libc::setsid();
-    }
-    detach_cleanup_reaper_fds(read_fd);
-    let message = read_fd_to_end(read_fd);
-    let pid_len = std::mem::size_of::<libc::pid_t>();
-    let helper_finished = message.get(pid_len) == Some(&CLEANUP_REAPER_DONE);
-    if !helper_finished {
-        let bwrap_exited = match message.get(..pid_len) {
-            Some(pid) => {
-                let mut pid_bytes = [0_u8; std::mem::size_of::<libc::pid_t>()];
-                pid_bytes.copy_from_slice(pid);
-                wait_for_process_exit(
-                    libc::pid_t::from_ne_bytes(pid_bytes),
-                    CLEANUP_REAPER_BWRAP_EXIT_TIMEOUT,
-                )
-            }
-            // Without the child pid the sandbox might still be starting.
-            None => false,
-        };
-        // Never remove mount targets while the sandbox may still be using them.
-        if bwrap_exited {
-            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                cleanup_synthetic_mount_targets(synthetic_mount_registrations);
-                cleanup_protected_create_targets(protected_create_registrations);
-            }));
-        }
-    }
-    unsafe { libc::_exit(0) }
-}
-
-/// Keeps the reaper from holding the command's terminal or pipes open.
-fn detach_cleanup_reaper_fds(keep_fd: libc::c_int) {
-    let dev_null = unsafe { libc::open(c"/dev/null".as_ptr(), libc::O_RDWR) };
-    if dev_null >= 0 {
-        for fd in 0..=2 {
-            unsafe {
-                libc::dup2(dev_null, fd);
-            }
-        }
-        if dev_null > 2 {
-            unsafe {
-                libc::close(dev_null);
-            }
-        }
-    }
-    let open_fds = fs::read_dir("/proc/self/fd")
-        .map(|entries| {
-            entries
-                .filter_map(Result::ok)
-                .filter_map(|entry| entry.file_name().to_str()?.parse::<libc::c_int>().ok())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    for fd in open_fds {
-        if fd > 2 && fd != keep_fd {
-            unsafe {
-                libc::close(fd);
-            }
-        }
-    }
-}
-
-fn read_fd_to_end(fd: libc::c_int) -> Vec<u8> {
-    let mut message = Vec::new();
-    let mut buffer = [0_u8; 16];
-    loop {
-        let read = unsafe { libc::read(fd, buffer.as_mut_ptr().cast(), buffer.len()) };
-        if read > 0 {
-            message.extend_from_slice(&buffer[..read as usize]);
-            continue;
-        }
-        if read < 0 && std::io::Error::last_os_error().kind() == std::io::ErrorKind::Interrupted {
-            continue;
-        }
-        return message;
-    }
-}
-
-fn write_all_to_fd(fd: libc::c_int, mut bytes: &[u8]) {
-    while !bytes.is_empty() {
-        let written = unsafe { libc::write(fd, bytes.as_ptr().cast(), bytes.len()) };
-        if written > 0 {
-            bytes = &bytes[written as usize..];
-            continue;
-        }
-        if written < 0 && std::io::Error::last_os_error().kind() == std::io::ErrorKind::Interrupted
-        {
-            continue;
-        }
-        return;
-    }
-}
-
-/// Waits until `pid` is gone or a zombie; returns false on timeout.
-fn wait_for_process_exit(pid: libc::pid_t, timeout: Duration) -> bool {
-    let deadline = std::time::Instant::now() + timeout;
-    loop {
-        if !process_is_active(pid) || process_is_zombie(pid) {
-            return true;
-        }
-        if std::time::Instant::now() >= deadline {
-            return false;
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
-}
-
-fn process_is_zombie(pid: libc::pid_t) -> bool {
-    // The state follows the parenthesized command name, which may contain spaces.
-    fs::read_to_string(format!("/proc/{pid}/stat"))
-        .ok()
-        .and_then(|stat| {
-            let (_, after_name) = stat.rsplit_once(')')?;
-            after_name.split_whitespace().next().map(|state| state == "Z")
-        })
-        .unwrap_or(false)
 }
 
 fn register_synthetic_mount_targets(
