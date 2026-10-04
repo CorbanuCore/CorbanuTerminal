@@ -503,8 +503,10 @@ fn run_bwrap_in_child_with_synthetic_mount_cleanup(bwrap_args: crate::bwrap::Bwr
     let synthetic_mount_registrations = register_synthetic_mount_targets(&synthetic_mount_targets);
     let protected_create_registrations =
         register_protected_create_targets(&protected_create_targets);
-    let cleanup_reaper =
-        CleanupReaper::spawn(&synthetic_mount_registrations, &protected_create_registrations);
+    let cleanup_reaper = CleanupReaper::spawn(
+        &synthetic_mount_registrations,
+        &protected_create_registrations,
+    );
     let exec_start_pipe = create_exec_start_pipe(!protected_create_targets.is_empty());
     let parent_pid = unsafe { libc::getpid() };
     let pid = unsafe { libc::fork() };
@@ -1061,7 +1063,10 @@ fn process_is_zombie(pid: libc::pid_t) -> bool {
         .ok()
         .and_then(|stat| {
             let (_, after_name) = stat.rsplit_once(')')?;
-            after_name.split_whitespace().next().map(|state| state == "Z")
+            after_name
+                .split_whitespace()
+                .next()
+                .map(|state| state == "Z")
         })
         .unwrap_or(false)
 }
