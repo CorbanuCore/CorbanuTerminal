@@ -62,7 +62,9 @@ async fn initialize_client(client: &RmcpClient) -> anyhow::Result<ServerPeerInfo
     client
         .initialize(
             initialize_params(),
-            Some(Duration::from_secs(5)),
+            // An upper bound only: the native Windows Bazel lane needed more
+            // than 5s for this handshake under parallel load.
+            Some(Duration::from_secs(30)),
             Box::new(|_, _| {
                 async {
                     Ok(ElicitationResponse {
