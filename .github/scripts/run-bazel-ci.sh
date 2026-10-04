@@ -379,6 +379,9 @@ if [[ -n "${BUILDBUDDY_API_KEY:-}" ]]; then
   bazel_run_args+=("--config=${ci_config}")
 else
   echo "BuildBuddy API key is not available; using local Bazel configuration."
+  # `ci` would have set this: one failed action in a multi-hour cold build
+  # must not hide every other target's result.
+  bazel_run_args+=(--keep_going)
   if [[ "${RUNNER_OS:-}" == "Windows" && $windows_cross_compile -eq 0 ]]; then
     # Keep the Windows test skip list that `ci-windows` would have applied.
     bazel_run_args+=("--config=windows-native-tests")

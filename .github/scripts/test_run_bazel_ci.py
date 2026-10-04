@@ -155,6 +155,7 @@ Path(os.environ["BAZEL_ARGS_CAPTURE"]).write_text(
             self.assertEqual(result.returncode, 0, result.stderr)
             args = json.loads(capture_path.read_text(encoding="utf-8"))
             self.assertIn("--config=windows-native-tests", args)
+            self.assertIn("--keep_going", args)
             self.assertNotIn("--config=ci-windows", args)
 
 
