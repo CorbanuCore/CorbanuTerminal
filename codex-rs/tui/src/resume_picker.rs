@@ -59,6 +59,7 @@ use ratatui::text::Span;
 use ratatui::widgets::Clear;
 use ratatui::widgets::Widget;
 use tokio::sync::mpsc;
+use tokio_stream::Stream;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::warn;
@@ -310,6 +311,7 @@ pub async fn run_resume_picker_with_app_server(
     include_non_interactive: bool,
     app_server: AppServerSession,
 ) -> Result<SessionSelection> {
+    let mut tui_events = tui.event_stream();
     run_resume_picker_with_launch_context(
         tui,
         config,
@@ -317,6 +319,7 @@ pub async fn run_resume_picker_with_app_server(
         include_non_interactive,
         app_server,
         SessionPickerLaunchContext::Startup,
+        &mut tui_events,
     )
     .await
 }
@@ -327,6 +330,7 @@ pub async fn run_resume_picker_from_existing_session_with_app_server(
     show_all: bool,
     include_non_interactive: bool,
     app_server: AppServerSession,
+    tui_events: &mut (impl Stream<Item = TuiEvent> + Unpin),
 ) -> Result<SessionSelection> {
     run_resume_picker_with_launch_context(
         tui,
@@ -335,6 +339,7 @@ pub async fn run_resume_picker_from_existing_session_with_app_server(
         include_non_interactive,
         app_server,
         SessionPickerLaunchContext::ExistingSession,
+        tui_events,
     )
     .await
 }
@@ -346,6 +351,7 @@ async fn run_resume_picker_with_launch_context(
     include_non_interactive: bool,
     app_server: AppServerSession,
     launch_context: SessionPickerLaunchContext,
+    tui_events: &mut (impl Stream<Item = TuiEvent> + Unpin),
 ) -> Result<SessionSelection> {
     let (bg_tx, bg_rx) = mpsc::unbounded_channel();
     let uses_remote_workspace = app_server.uses_remote_workspace();
@@ -383,6 +389,7 @@ async fn run_resume_picker_with_launch_context(
             bg_tx,
         ),
         bg_rx,
+        tui_events,
     )
     .await
 }
@@ -418,6 +425,7 @@ pub async fn run_fork_picker_with_app_server(
         pager_keymap: runtime_keymap.pager,
         list_keymap: runtime_keymap.list,
     };
+    let mut tui_events = tui.event_stream();
     run_session_picker_with_loader(
         tui,
         options,
@@ -429,6 +437,7 @@ pub async fn run_fork_picker_with_app_server(
             bg_tx,
         ),
         bg_rx,
+        &mut tui_events,
     )
     .await
 }
@@ -438,6 +447,7 @@ async fn run_session_picker_with_loader(
     options: SessionPickerRunOptions,
     picker_loader: PickerLoader,
     bg_rx: mpsc::UnboundedReceiver<BackgroundEvent>,
+    tui_events: &mut (impl Stream<Item = TuiEvent> + Unpin),
 ) -> Result<SessionSelection> {
     let alt = AltScreenGuard::enter(tui);
     let mut state = PickerState::new(
@@ -457,7 +467,7 @@ async fn run_session_picker_with_loader(
     state.start_initial_load();
     state.request_frame();
 
-    let mut tui_events = alt.tui.event_stream().fuse();
+    let mut tui_events = tui_events.fuse();
     let mut background_events = UnboundedReceiverStream::new(bg_rx).fuse();
 
     loop {

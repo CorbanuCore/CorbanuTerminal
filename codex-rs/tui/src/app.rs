@@ -235,6 +235,7 @@ mod provider_management_auth;
 mod provider_management_status;
 mod replay_filter;
 mod resize_reflow;
+mod resume_picker;
 mod safety_buffering;
 mod session_lifecycle;
 mod side;
@@ -1830,25 +1831,39 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
             loop {
                 let control = select! {
                     Some(event) = app_event_rx.recv() => {
-                        if matches!(event, AppEvent::OpenExternalAgentConfigMigration) {
-                            app.handle_external_agent_config_migration_event(
-                                tui,
-                                &mut app_server,
-                                &mut tui_event_rx,
-                            )
-                            .await;
-                            AppRunControl::Continue
-                        } else {
-                            match Box::pin(app.handle_event(tui, &mut app_server, event)).await {
-                                Ok(control) => control,
-                                Err(err) => {
-                                    tracing::error!(error = ?err, "contained app event handler failure");
-                                    app.chat_widget.add_error_message(format!(
-                                        "A command failed but Corbanu Terminal is still running: {err:#}"
-                                    ));
-                                    AppRunControl::Continue
-                                },
+                        let result = match event {
+                            AppEvent::OpenExternalAgentConfigMigration => {
+                                app.handle_external_agent_config_migration_event(
+                                    tui,
+                                    &mut app_server,
+                                    &mut tui_event_rx,
+                                )
+                                .await;
+                                Ok(AppRunControl::Continue)
                             }
+                            AppEvent::OpenResumePicker => {
+                                let mut tui_events = resume_picker::modal_tui_events(
+                                    &mut tui_event_rx,
+                                    &tui_input_watchdog_state,
+                                );
+                                Box::pin(app.handle_resume_picker_event(
+                                    tui,
+                                    &mut app_server,
+                                    &mut tui_events,
+                                ))
+                                .await
+                            }
+                            event => Box::pin(app.handle_event(tui, &mut app_server, event)).await,
+                        };
+                        match result {
+                            Ok(control) => control,
+                            Err(err) => {
+                                tracing::error!(error = ?err, "contained app event handler failure");
+                                app.chat_widget.add_error_message(format!(
+                                    "A command failed but Corbanu Terminal is still running: {err:#}"
+                                ));
+                                AppRunControl::Continue
+                            },
                         }
                     }
                     active = async {
