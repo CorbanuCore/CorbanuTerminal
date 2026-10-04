@@ -15,6 +15,8 @@ use tempfile::TempDir;
 use tempfile::tempdir;
 
 use super::provider_management::select_label;
+use crate::support::chat_ready;
+use crate::support::secret_scan;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
 use crate::support::tmux::TerminalSize;
@@ -221,6 +223,11 @@ fn assert_claude_model_catalog(pane: &TmuxPane) -> Result<()> {
             && !text.contains("Press enter to confirm or esc to go back")
     })?;
     pane.wait_stable_contains("Corbanu Terminal · TPS:", READY_TIMEOUT)?;
+    pane.wait_stable_until(
+        "session configured",
+        READY_TIMEOUT,
+        chat_ready::session_configured,
+    )?;
     pane.send_literal("/model")?;
     pane.wait_stable_contains("/model", Duration::from_secs(10))?;
     pane.send_key(TmuxKey::Enter)?;
@@ -546,24 +553,7 @@ fn synthetic_canary() -> String {
 }
 
 fn tree_contains(root: &Path, needle: &[u8]) -> Result<bool> {
-    if !root.exists() {
-        return Ok(false);
-    }
-    if root.is_file() {
-        let bytes = fs::read(root)?;
-        return Ok(bytes.windows(needle.len()).any(|window| window == needle));
-    }
-    for entry in fs::read_dir(root)? {
-        let entry = entry?;
-        let file_type = entry.file_type()?;
-        if file_type.is_symlink() {
-            continue;
-        }
-        if tree_contains(&entry.path(), needle)? {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    secret_scan::tree_contains(root, needle, &|_| false)
 }
 
 fn codex_binary(repo_root: &Path) -> Result<PathBuf> {

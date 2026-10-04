@@ -1874,6 +1874,16 @@ impl ChatComposer {
             return self.begin_history_search();
         }
 
+        // The slash popup can open on a typed `/` while the rest of the command is still held by
+        // the rapid-input detector. Enter and Tab act on the popup selection, so materialize that
+        // input first; otherwise they would accept a command chosen from a stale filter.
+        if matches!(self.popups.active, ActivePopup::Command(_))
+            && matches!(key_event.code, KeyCode::Enter | KeyCode::Tab)
+            && let Some(pasted) = self.draft.paste_burst.flush_before_modified_input()
+        {
+            self.handle_paste(pasted);
+        }
+
         let result = match &mut self.popups.active {
             ActivePopup::Command(_) => self.handle_key_event_with_slash_popup(key_event),
             ActivePopup::File(_) => self.handle_key_event_with_file_popup(key_event),
@@ -8628,6 +8638,56 @@ mod tests {
             assert_eq!(result, InputResult::Command(expected), "command {text}");
             assert!(composer.draft.textarea.text().is_empty(), "command {text}");
             assert!(!composer.is_in_paste_burst(), "command {text}");
+        }
+    }
+
+    /// Regression for tmux smoke flakes: a slowly rendered prefix opens the slash popup, the rest
+    /// of the command is still held by the rapid-input detector, and Enter arrives before the
+    /// idle flush. Enter must act on the full command, not the stale popup selection.
+    #[test]
+    fn slash_popup_enter_materializes_rapid_input_tail() {
+        use crate::slash_command::SlashCommand;
+        use crossterm::event::KeyCode;
+        use crossterm::event::KeyEvent;
+        use crossterm::event::KeyModifiers;
+
+        for (typed, held, expected) in [
+            ("/", "exit", SlashCommand::Exit),
+            ("/ex", "it", SlashCommand::Exit),
+            ("/walle", "t", SlashCommand::Wallet),
+        ] {
+            let (mut composer, _rx) = new_test_composer();
+            let mut now = Instant::now();
+            for character in typed.chars() {
+                let _ = composer.handle_input_basic_with_time(
+                    KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE),
+                    now,
+                );
+                now += ChatComposer::recommended_paste_flush_delay();
+                composer.handle_paste_burst_flush(now);
+                composer.sync_popups();
+            }
+            for character in held.chars() {
+                let _ = composer.handle_input_basic_with_time(
+                    KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE),
+                    now,
+                );
+                now += Duration::from_millis(1);
+            }
+            composer.sync_popups();
+            assert_eq!(composer.draft.textarea.text(), typed, "{typed}+{held}");
+            assert!(
+                matches!(composer.popups.active, ActivePopup::Command(_)),
+                "{typed}+{held}"
+            );
+            assert!(composer.is_in_paste_burst(), "{typed}+{held}");
+
+            let (result, _) =
+                composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+            assert_eq!(result, InputResult::Command(expected), "{typed}+{held}");
+            assert!(composer.draft.textarea.text().is_empty(), "{typed}+{held}");
+            assert!(!composer.is_in_paste_burst(), "{typed}+{held}");
         }
     }
 
