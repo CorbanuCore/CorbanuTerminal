@@ -13,6 +13,7 @@ use tempfile::tempdir;
 use uuid::Uuid;
 use wiremock::MockServer;
 
+use crate::support::secret_scan;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
 use crate::support::tmux::TerminalSize;
@@ -660,7 +661,7 @@ fn capture(fixture: &Fixture, pane: &TmuxPane<'_>) -> Result<()> {
             "secret canary appeared outside credential custody"
         );
         ensure!(
-            !tree_contains(&directory, secret.as_bytes())?,
+            !tree_contains_except_custody(&directory, secret.as_bytes())?,
             "secret canary appeared in success artifacts"
         );
     }
@@ -681,36 +682,13 @@ impl Fixture {
     }
 }
 
+/// Custody files keep their secret by design; every other file must not contain it.
 fn tree_contains_except_custody(root: &Path, needle: &[u8]) -> Result<bool> {
-    if root.file_name().and_then(|name| name.to_str()) == Some("provider_auth.json")
-        || root.file_name().and_then(|name| name.to_str()) == Some("pf55-auth-command.sh")
-    {
-        return Ok(false);
-    }
-    tree_contains(root, needle)
-}
-
-fn tree_contains(root: &Path, needle: &[u8]) -> Result<bool> {
-    let metadata = match fs::symlink_metadata(root) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(error) => return Err(error.into()),
-    };
-    if metadata.file_type().is_symlink() {
-        return Ok(false);
-    }
-    if metadata.is_file() {
-        let bytes = fs::read(root)?;
-        return Ok(bytes.windows(needle.len()).any(|window| window == needle));
-    }
-    if metadata.is_dir() {
-        for entry in fs::read_dir(root)? {
-            if tree_contains_except_custody(&entry?.path(), needle)? {
-                return Ok(true);
-            }
-        }
-    }
-    Ok(false)
+    secret_scan::tree_contains(root, needle, &|path| {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name == "provider_auth.json" || name == "pf55-auth-command.sh")
+    })
 }
 
 fn canary(label: &str) -> String {
