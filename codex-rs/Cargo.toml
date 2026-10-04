@@ -618,6 +618,56 @@ opt-level = 3
 [profile.test.package.salsa20]
 opt-level = 3
 
+# Image codecs: unoptimized PNG/JPEG/WebP decode, resize and re-encode made
+# image-preparation tests exceed the 60s nextest limit on hosted CI runners.
+[profile.test.package.crc32fast]
+opt-level = 3
+
+[profile.test.package.fdeflate]
+opt-level = 3
+
+[profile.test.package.flate2]
+opt-level = 3
+
+[profile.test.package.gif]
+opt-level = 3
+
+[profile.test.package.image]
+opt-level = 3
+
+[profile.test.package.image-webp]
+opt-level = 3
+
+[profile.test.package.miniz_oxide]
+opt-level = 3
+
+[profile.test.package.moxcms]
+opt-level = 3
+
+[profile.test.package.png]
+opt-level = 3
+
+[profile.test.package.pxfm]
+opt-level = 3
+
+[profile.test.package.simd-adler32]
+opt-level = 3
+
+[profile.test.package.tiff]
+opt-level = 3
+
+[profile.test.package.weezl]
+opt-level = 3
+
+[profile.test.package.zlib-rs]
+opt-level = 3
+
+[profile.test.package.zune-core]
+opt-level = 3
+
+[profile.test.package.zune-jpeg]
+opt-level = 3
+
 [profile.dev-small]
 inherits = "dev"
 opt-level = 0

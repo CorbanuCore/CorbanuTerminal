@@ -2,9 +2,15 @@ use super::*;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 
+// Each test module includes its own copy of the shared fixtures, which use
+// `super::*` relative to the including module.
+#[allow(clippy::duplicate_mod)]
 #[path = "accounting_retention_test_support.rs"]
 mod support;
 use support::*;
+// Each test module includes its own copy of the shared fixtures, which use
+// `super::*` relative to the including module.
+#[allow(clippy::duplicate_mod)]
 #[path = "accounting_retention_atomic_test_support.rs"]
 mod atomic_support;
 use atomic_support::*;

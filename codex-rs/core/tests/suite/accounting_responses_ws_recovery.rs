@@ -582,7 +582,29 @@ async fn accounting_responses_ws_native_auxiliary_scope_and_event_parity() -> an
     assert_eq!(turn_observations(&db).await?.len(), 1);
     counts(&gate, (1, 1, 1, 1));
     stop(&test).await;
-    for mask in 0..8 {
+    metadata_terminal_matrix(&server, 0..2).await
+}
+
+// The 72-case terminal-metadata matrix is split by mask so each test stays well
+// inside the per-test timeout; together they cover every case.
+#[tokio::test]
+async fn accounting_responses_ws_native_event_parity_masks_2_3() -> anyhow::Result<()> {
+    metadata_terminal_matrix(&MockServer::start().await, 2..4).await
+}
+#[tokio::test]
+async fn accounting_responses_ws_native_event_parity_masks_4_5() -> anyhow::Result<()> {
+    metadata_terminal_matrix(&MockServer::start().await, 4..6).await
+}
+#[tokio::test]
+async fn accounting_responses_ws_native_event_parity_masks_6_7() -> anyhow::Result<()> {
+    metadata_terminal_matrix(&MockServer::start().await, 6..8).await
+}
+
+async fn metadata_terminal_matrix(
+    server: &MockServer,
+    masks: std::ops::Range<u8>,
+) -> anyhow::Result<()> {
+    for mask in masks {
         for usage_kind in 0..3 {
             for kind in [
                 "response.completed",
@@ -591,7 +613,7 @@ async fn accounting_responses_ws_native_auxiliary_scope_and_event_parity() -> an
             ] {
                 let mut gate = Gate::start().await?;
                 let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
-                    .build_with_auto_env(&server)
+                    .build_with_auto_env(server)
                     .await?;
                 let mut metadata = json!({});
                 let mut expected = Vec::new();

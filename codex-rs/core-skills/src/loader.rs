@@ -469,11 +469,24 @@ async fn find_project_root(
         .map(|(ancestor, marker_path)| async move {
             let marker_path_uri = PathUri::from_abs_path(&marker_path);
             let result = fs.get_metadata(&marker_path_uri, /*sandbox*/ None).await;
-            (ancestor, marker_path, result)
+            // A `.git` directory only marks a checkout when it contains `HEAD`;
+            // the Linux sandbox leaves empty `.git` mount targets in writable roots.
+            let is_incomplete_git_dir = match &result {
+                Ok(metadata) if metadata.is_directory && marker_path.ends_with(".git") => fs
+                    .get_metadata(
+                        &PathUri::from_abs_path(&marker_path.join("HEAD")),
+                        /*sandbox*/ None,
+                    )
+                    .await
+                    .is_err(),
+                _ => false,
+            };
+            (ancestor, marker_path, result, is_incomplete_git_dir)
         })
         .buffered(MAX_CONCURRENT_ANCESTOR_PROBES);
-    while let Some((ancestor, marker_path, result)) = results.next().await {
+    while let Some((ancestor, marker_path, result, is_incomplete_git_dir)) = results.next().await {
         match result {
+            Ok(_) if is_incomplete_git_dir => {}
             Ok(_) => return ancestor,
             Err(err) if err.kind() == io::ErrorKind::NotFound => {}
             Err(err) => {

@@ -1958,7 +1958,11 @@ async fn remote_control_waits_for_account_id_before_enrolling() {
     .expect("auth with account id should save");
     auth_manager.reload().await;
 
-    let enroll_request = timeout(Duration::from_millis(100), accept_http_request(&listener))
+    // The account-id retry fires 1s after the first attempt, which was at least
+    // 100ms before this point. On a hosted CI runner the woken enrollment alone
+    // takes ~70ms idle and more under load, so allow 500ms: still well short
+    // of the retry, so only the auth-change wakeup can satisfy it.
+    let enroll_request = timeout(Duration::from_millis(500), accept_http_request(&listener))
         .await
         .expect("auth change should wake remote control before the retry delay");
     assert_eq!(
