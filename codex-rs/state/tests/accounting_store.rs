@@ -550,9 +550,11 @@ async fn accounting_inspect_work_budget_refuses_unknown_busy_host() -> anyhow::R
         .bind(a.thread_id.to_string())
         .execute(&mut conn)
         .await?;
+    // Upper bounds against unbounded scans; an unoptimized build on a loaded
+    // Windows runner needed more than 30s to reach the budget.
     assert_eq!(
         tokio::time::timeout(
-            std::time::Duration::from_secs(30),
+            std::time::Duration::from_secs(90),
             AccountingStore::inspect_day(
                 &runtime,
                 a.thread_id,
@@ -565,7 +567,7 @@ async fn accounting_inspect_work_budget_refuses_unknown_busy_host() -> anyhow::R
     );
     assert_eq!(
         tokio::time::timeout(
-            std::time::Duration::from_secs(30),
+            std::time::Duration::from_secs(90),
             AccountingStore::inspect_range(
                 &runtime,
                 a.thread_id,

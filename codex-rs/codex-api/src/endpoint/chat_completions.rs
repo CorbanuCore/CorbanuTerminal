@@ -1929,18 +1929,20 @@ mod tests {
 
     #[tokio::test]
     async fn comment_only_stream_survives_actionable_silence_timeout() {
+        // Keepalives every 200ms span 600ms, twice the 300ms actionable-silence
+        // budget. At 20ms/30ms, coarse Windows timers stretched a gap past it.
         let body = delayed_body(vec![
             (Duration::ZERO, b": OPENROUTER PROCESSING\n\n".to_vec()),
             (
-                Duration::from_millis(20),
+                Duration::from_millis(200),
                 b": OPENROUTER PROCESSING\n\n".to_vec(),
             ),
             (
-                Duration::from_millis(20),
+                Duration::from_millis(200),
                 b": OPENROUTER PROCESSING\n\n".to_vec(),
             ),
             (
-                Duration::from_millis(20),
+                Duration::from_millis(200),
                 br#"data: {"id":"chatcmpl-late","choices":[{"delta":{"content":"late"}}]}"#
                     .to_vec(),
             ),
@@ -1952,8 +1954,8 @@ mod tests {
         process_chat_sse(
             body,
             tx_event,
-            Duration::from_millis(100),
-            Duration::from_millis(30),
+            Duration::from_millis(1_000),
+            Duration::from_millis(300),
             /*telemetry*/ None,
             /*response_id_hint*/ None,
             /*metrics*/ None,
