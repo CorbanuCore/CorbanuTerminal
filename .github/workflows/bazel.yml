@@ -37,7 +37,7 @@ jobs:
     # See docs/ci.md for the restoration plan.
     # Cold local builds compile V8 transitively and can exceed 90 minutes when
     # remote execution is unavailable.
-    timeout-minutes: 180
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -407,7 +407,7 @@ jobs:
 
   clippy:
     if: ${{ inputs.cold_bazel }}
-    timeout-minutes: 180
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
@@ -503,7 +503,7 @@ jobs:
 
   verify-release-build:
     if: ${{ inputs.cold_bazel }}
-    timeout-minutes: 180
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
