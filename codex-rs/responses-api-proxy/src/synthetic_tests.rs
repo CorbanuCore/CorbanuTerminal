@@ -72,7 +72,14 @@ async fn closed(stream: &mut TcpStream) -> Vec<u8> {
         .await
         .expect("socket survived deadline");
     if let Err(error) = result {
-        assert_eq!(error.kind(), std::io::ErrorKind::ConnectionReset);
+        // An abortive close reads as WSAECONNABORTED on Windows.
+        assert!(
+            matches!(
+                error.kind(),
+                std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted
+            ),
+            "unexpected close error: {error}"
+        );
     }
     bytes
 }
