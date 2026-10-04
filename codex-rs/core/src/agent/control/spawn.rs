@@ -883,10 +883,9 @@ impl AgentControl {
             if let Some(parent_developer_instructions) = parent_developer_instructions.as_ref()
                 && let Some(subagent_developer_instructions) =
                     subagent_developer_instructions.as_ref()
-                && let ResponseItem::Message { role, content, .. } = response_item
-                && role == "developer"
+                && matches!(response_item, ResponseItem::Message { role, .. } if role == "developer")
             {
-                content.retain_mut(|content_item| {
+                response_item.retain_message_content(|content_item| {
                     let ContentItem::InputText { text } = content_item else {
                         return true;
                     };
@@ -904,7 +903,10 @@ impl AgentControl {
                     *text = text.replace(parent_developer_instructions, replacement);
                     !text.is_empty()
                 });
-                return !content.is_empty();
+                return !matches!(
+                    response_item,
+                    ResponseItem::Message { content, .. } if content.is_empty()
+                );
             }
 
             true

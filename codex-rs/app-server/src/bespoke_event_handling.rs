@@ -1454,9 +1454,11 @@ async fn complete_command_execution_item(
 async fn maybe_emit_raw_response_item_completed(
     conversation_id: ThreadId,
     turn_id: &str,
-    item: codex_protocol::models::ResponseItem,
+    mut item: codex_protocol::models::ResponseItem,
     outgoing: &ThreadScopedOutgoingMessageSender,
 ) {
+    // Fragment provenance is local harness metadata, not part of the client-facing item.
+    item.clear_context_fragment_sources();
     let notification = RawResponseItemCompletedNotification {
         thread_id: conversation_id.to_string(),
         turn_id: turn_id.to_string(),

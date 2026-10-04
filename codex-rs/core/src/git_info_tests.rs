@@ -12,6 +12,7 @@ use codex_exec_server::RemoveOptions;
 use codex_git_utils::GitInfo;
 use codex_git_utils::GitSha;
 use codex_git_utils::collect_git_info;
+use codex_git_utils::get_git_repo_root;
 use codex_git_utils::get_has_changes;
 use codex_git_utils::git_diff_to_remote;
 use codex_git_utils::recent_commits;
@@ -606,6 +607,7 @@ async fn resolve_root_git_project_for_trust_starts_at_parent_for_file() {
     let proj = tmp.path().join("proj");
     let nested = proj.join("nested");
     std::fs::create_dir_all(proj.join(".git")).unwrap();
+    std::fs::write(proj.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
     std::fs::create_dir_all(&nested).unwrap();
     let file = nested.join("file.txt");
     std::fs::write(&file, "contents").unwrap();
@@ -622,6 +624,7 @@ async fn resolve_root_git_project_for_trust_ignores_metadata_errors() {
     let proj = tmp.path().join("proj");
     let nested = proj.join("nested");
     std::fs::create_dir_all(proj.join(".git")).unwrap();
+    std::fs::write(proj.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
     std::fs::create_dir_all(&nested).unwrap();
     let fs = FailingMetadataFileSystem {
         path: PathUri::from_abs_path(&nested.join(".git").abs()),
@@ -639,6 +642,7 @@ async fn resolve_root_git_project_for_trust_supports_windows_namespace_paths() {
     let tmp = TempDir::new().expect("tempdir");
     let repo = tmp.path().join("repo");
     std::fs::create_dir_all(repo.join(".git")).unwrap();
+    std::fs::write(repo.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
     std::fs::create_dir_all(repo.join("nested")).unwrap();
 
     let namespace_repo = PathBuf::from(format!(r"\\?\{}", repo.display()));
@@ -660,7 +664,11 @@ async fn resolve_root_git_project_for_trust_regular_repo_returns_repo_root() {
         Some(repo_path.clone())
     );
     let nested = repo_path.join("sub/dir");
-    std::fs::create_dir_all(nested.as_path()).unwrap();
+    std::fs::create_dir_all(nested.join(".git")).unwrap();
+    assert_eq!(
+        get_git_repo_root(nested.as_path()),
+        Some(repo_path.as_path().to_path_buf())
+    );
     assert_eq!(
         resolve_root_git_project_for_trust(LOCAL_FS.as_ref(), &nested).await,
         Some(repo_path)

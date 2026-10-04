@@ -491,6 +491,9 @@ async fn pf_60_s03_stage_one_extraction_records_its_own_turn() -> anyhow::Result
     )
     .await?;
     session.services.state_db = Some(db.clone());
+    // Accounting attributes attempts to a persisted thread; ephemeral sessions
+    // run uncollected, so the fixture needs a live thread like a real session.
+    crate::session::tests::open_thread_persistence(&mut session).await;
     session.services.agent_control = session
         .services
         .agent_control

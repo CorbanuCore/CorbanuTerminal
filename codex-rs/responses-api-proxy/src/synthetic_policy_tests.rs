@@ -12,10 +12,12 @@ fn exact_wire_packets_admit_without_rewriting() {
         assert_eq!(parsed["model"], "synthetic-no-inference");
         assert!(parsed["input"].is_array());
         // This is a wire compatibility check, not static-constant equality:
-        // the same JSON value in a different encoding must not admit. (Compact
-        // re-serialization can be byte-identical when serde_json preserves key
-        // order, as it does under Bazel's unified feature set.)
-        assert!(admit(serde_json::to_vec_pretty(&parsed).unwrap().as_slice()).is_err());
+        // equivalent JSON with different bytes stays outside the corpus. Use
+        // pretty output so the bytes differ whether or not workspace feature
+        // unification enables serde_json's `preserve_order`.
+        let equivalent = serde_json::to_vec_pretty(&parsed).unwrap();
+        assert_ne!(equivalent.as_slice(), packet.as_bytes());
+        assert!(admit(equivalent.as_slice()).is_err());
     }
 }
 

@@ -134,16 +134,10 @@ async fn orchestrator_skill_can_read_referenced_resource_without_an_executor() -
     let (apps_server_url, apps_server_calls, apps_server_handle) =
         start_resource_apps_mcp_server().await?;
     let responses_server_uri = responses_server.uri();
-    // The host and orchestrator catalogs share the `<skills_instructions>` tag.
-    // Non-OpenAI wire adapters keep only the latest such section
-    // (`retain_latest_contextual_developer_fragments`), so assert the catalog on
-    // the OpenAI provider, which receives the full developer history.
-    let (_codex_home, mut mcp) = start_resource_test_app_server_with_config(
+    let (_codex_home, mut mcp) = start_resource_test_app_server(
         &apps_server_url,
         &responses_server_uri,
-        "",
         ResourceTestEnvironment::Auto,
-        ResourceTestProvider::OpenAi,
     )
     .await?;
 
@@ -696,31 +690,8 @@ async fn start_resource_test_app_server_with_extra_config(
     extra_config: &str,
     environment: ResourceTestEnvironment,
 ) -> Result<(TempDir, TestAppServer)> {
-    start_resource_test_app_server_with_config(
-        apps_server_url,
-        responses_server_uri,
-        extra_config,
-        environment,
-        ResourceTestProvider::Mock,
-    )
-    .await
-}
-
-async fn start_resource_test_app_server_with_config(
-    apps_server_url: &str,
-    responses_server_uri: &str,
-    extra_config: &str,
-    environment: ResourceTestEnvironment,
-    provider: ResourceTestProvider,
-) -> Result<(TempDir, TestAppServer)> {
     let codex_home = TempDir::new()?;
-    let config = match provider {
-        ResourceTestProvider::Mock => MockResponsesConfig::new(responses_server_uri),
-        ResourceTestProvider::OpenAi => MockResponsesConfig::new(responses_server_uri)
-            .with_builtin_model_provider("openai")
-            .with_root_config(&format!("openai_base_url = \"{responses_server_uri}/v1\"")),
-    };
-    config
+    MockResponsesConfig::new(responses_server_uri)
         .with_approval_policy("untrusted")
         .with_root_config(&format!(
             "chatgpt_base_url = \"{apps_server_url}\"\nmcp_oauth_credentials_store = \"file\""
@@ -752,11 +723,6 @@ async fn start_resource_test_app_server_with_config(
 enum ResourceTestEnvironment {
     Auto,
     Local,
-}
-
-enum ResourceTestProvider {
-    Mock,
-    OpenAi,
 }
 
 async fn start_resource_apps_mcp_server()

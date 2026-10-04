@@ -2,7 +2,8 @@ use super::*;
 use serde_json::json;
 use sqlx::Connection;
 
-// Shared fixture file, deliberately included by several test modules.
+// Each test module includes its own copy of the shared fixtures, which use
+// `super::*` relative to the including module.
 #[allow(clippy::duplicate_mod)]
 #[path = "accounting_retention_test_support.rs"]
 mod support;

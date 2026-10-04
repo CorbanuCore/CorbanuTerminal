@@ -4527,6 +4527,8 @@ async fn wait_for_thread_rollback_failed(rx: &async_channel::Receiver<Event>) ->
     }
 }
 
+/// Gives a fixture session a persisted (non-ephemeral) thread, as a real
+/// session has, and returns its rollout path.
 pub(crate) async fn open_thread_persistence(session: &mut Session) -> PathBuf {
     let config = session.get_config().await;
     let live_thread = LiveThread::create(

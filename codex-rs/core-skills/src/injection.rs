@@ -40,6 +40,14 @@ pub struct InjectedHostSkillPrompts {
     paths: HashSet<String>,
 }
 
+/// Stable producer ID of the host skill catalog, shared by the skills extension's
+/// WorldState section and core's legacy thread-start catalog.
+pub const HOST_SKILLS_CONTEXT_SOURCE_ID: &str = "host_skills";
+
+/// Stable producer ID of the skills extension's thread-context catalog. It shares the skills
+/// markers with the host and executor catalogs but must not replace them.
+pub const THREAD_SKILLS_CONTEXT_SOURCE_ID: &str = "thread_skills";
+
 /// Marks a turn whose skills extension projects the host skill catalog through
 /// WorldState.
 ///

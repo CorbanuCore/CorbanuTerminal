@@ -530,6 +530,9 @@ async fn pf_60_s03_realtime_call_is_recorded() -> anyhow::Result<()> {
     )
     .await?;
     session.services.state_db = Some(db.clone());
+    // Accounting attributes attempts to a persisted thread; ephemeral sessions
+    // run uncollected, so the fixture needs a live thread like a real session.
+    crate::session::tests::open_thread_persistence(&mut session).await;
     let owner = Arc::new(session);
     db.upsert_thread(
         &ThreadMetadataBuilder::new(

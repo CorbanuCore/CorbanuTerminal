@@ -22,7 +22,8 @@ hosted-runner maximum:
 
 - Bazel test (Linux gnu and musl, and native Windows), clippy, and
   release-build verification.
-- Argument comment lint on Linux and macOS (Windows still runs on PRs).
+- Argument comment lint on Linux and macOS (Windows still runs on PRs;
+  `rust-ci-full.yml` does not repeat it).
 - The Bazel-built SDK job (`sdk / sdks`; the Python SDK test still runs on PRs).
 
 Check the latest nightly run before cutting a release. To run these jobs on
