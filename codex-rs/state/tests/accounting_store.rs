@@ -149,19 +149,36 @@ async fn accounting_inspect_public_reads_do_not_write() -> anyhow::Result<()> {
         .await
         .is_err()
     );
-    // Drop a polled read at its first asynchronous database boundary.
-    let mut read = Box::pin(AccountingStore::inspect_day(
-        &runtime,
-        a.thread_id,
-        /*utc_day*/ 0,
-        /*read_at_ms*/ 0,
-    ));
-    std::future::poll_fn(|cx| {
-        assert!(std::future::Future::poll(read.as_mut(), cx).is_pending());
-        std::task::Poll::Ready(())
-    })
-    .await;
-    drop(read);
+    // Drop a polled read at its first asynchronous database boundary. SQLite's worker thread
+    // can answer every step before a loaded runner's first poll returns, so retry until a poll
+    // actually suspends; a read that completes instead must still be correct.
+    let mut dropped_suspended_read = false;
+    for _ in 0..100 {
+        let mut read = Box::pin(AccountingStore::inspect_day(
+            &runtime,
+            a.thread_id,
+            /*utc_day*/ 0,
+            /*read_at_ms*/ 0,
+        ));
+        let first_poll = std::future::poll_fn(|cx| {
+            std::task::Poll::Ready(std::future::Future::poll(read.as_mut(), cx))
+        })
+        .await;
+        match first_poll {
+            std::task::Poll::Pending => {
+                drop(read);
+                dropped_suspended_read = true;
+                break;
+            }
+            std::task::Poll::Ready(result) => {
+                assert_eq!(ready(result?).totals.attempts, 1);
+            }
+        }
+    }
+    assert!(
+        dropped_suspended_read,
+        "no read suspended at a database boundary"
+    );
     assert_eq!(inspection_tables(&mut conn).await?, before);
     conn.close().await?;
     runtime.close().await;
