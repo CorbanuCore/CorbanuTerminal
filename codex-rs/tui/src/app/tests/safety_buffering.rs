@@ -445,6 +445,9 @@ goals = true
     )
     .await
     .expect("state db should initialize");
+    // Core charges an active goal real elapsed wall-clock seconds, so bound the source goal's
+    // time by how long this test kept the goal active instead of assuming the turn took <1s.
+    let goal_active_since = std::time::Instant::now();
     state_db
         .thread_goals()
         .replace_thread_goal(
@@ -736,10 +739,16 @@ goals = true
         .await?
         .goal
         .expect("retry goal");
+    let goal_active_seconds =
+        i64::try_from(goal_active_since.elapsed().as_secs()).expect("test goal window fits in i64");
     let expected_source_tokens = if committed_steer.is_some() { 150 } else { 50 };
     assert_eq!(source_goal.objective, RETRY_GOAL);
     assert_eq!(source_goal.tokens_used, expected_source_tokens);
-    assert_eq!(source_goal.time_used_seconds, 12);
+    assert!(
+        (12..=12 + goal_active_seconds).contains(&source_goal.time_used_seconds),
+        "source goal should keep its 12s and gain at most the {goal_active_seconds}s it was active, got {}",
+        source_goal.time_used_seconds
+    );
     assert_eq!(retry_goal.objective, RETRY_GOAL);
     assert!(retry_goal.tokens_used >= expected_source_tokens);
     assert!(retry_goal.time_used_seconds >= 12);

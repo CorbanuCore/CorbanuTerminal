@@ -347,6 +347,18 @@ crate.annotation(
     gen_build_script = "off",
 )
 
+# Mirror Cargo's `[profile.{dev,test}.package.{scrypt,salsa20}] opt-level = 3`.
+# Bazel ignores Cargo profiles, so fastbuild tests derived every vault key with
+# unoptimized scrypt (~50x slower), starving loaded CI runners into timeouts.
+crate.annotation(
+    crate = "scrypt",
+    rustc_flags = ["-Copt-level=3"],
+)
+crate.annotation(
+    crate = "salsa20",
+    rustc_flags = ["-Copt-level=3"],
+)
+
 inject_repo(crate, "aws-lc")
 
 inject_repo(crate, "zstd")
