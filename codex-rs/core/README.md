@@ -84,13 +84,17 @@ supports a narrow split-filesystem subset: full-read split policies whose
 writable roots still match the legacy `WorkspaceWrite` root set, but add extra
 read-only carveouts under those writable roots.
 
-Known limitation (#158): the unelevated backend does not confine deletes or
-renames. Its write-restricted token applies the writable-root capability SIDs
-only to write accesses, and Windows does not treat `DELETE` or
-`FILE_DELETE_CHILD` as writes. A sandboxed command can therefore delete or move
-anything the user account itself can delete, including files outside the
-writable roots and protected carveouts such as `.git`, in both `ReadOnly` and
-`WorkspaceWrite` modes. Use the elevated backend when that boundary matters.
+Known limitation (#158): the unelevated backend does not confine deletes. Its
+write-restricted token applies the writable-root capability SIDs only to write
+accesses, and Windows does not treat `DELETE` or `FILE_DELETE_CHILD` as writes.
+A sandboxed command can therefore delete anything the user's non-administrator
+identity can delete (Administrators is deny-only in the sandbox token), in both
+`ReadOnly` and `WorkspaceWrite` modes, and move such files into writable roots.
+This includes files outside the writable roots and protected carveouts such as
+`.git`, which can then be recreated with new contents inside a writable root
+(for example Git hooks or config that later run unsandboxed). Creating or
+writing files outside writable roots is still blocked. Whether the elevated
+backend fully protects carveouts against deletion is tracked in #158 as well.
 
 New `[permissions]` / split filesystem policies remain supported on Windows
 only when they can be enforced directly by the selected Windows backend or

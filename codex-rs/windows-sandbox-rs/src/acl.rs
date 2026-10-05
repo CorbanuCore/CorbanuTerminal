@@ -350,7 +350,8 @@ pub unsafe fn dacl_has_read_deny_for_sid(p_dacl: *mut ACL, psid: *mut c_void) ->
 // on protected children such as `.git` or an explicit read-only subpath.
 // For WRITE_RESTRICTED sandbox tokens these capability-SID delete rights are
 // not what authorizes a delete: DELETE is not a restricted "write" access, so
-// the base token's own DACL rights decide (see token.rs and #158).
+// the object's DACL evaluated against the base token's enabled SIDs decides
+// (see token.rs and #158).
 const WRITE_ALLOW_MASK: u32 =
     FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE | DELETE;
 

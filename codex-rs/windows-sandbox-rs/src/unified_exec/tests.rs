@@ -686,9 +686,21 @@ fn legacy_capture_emits_output_and_preserves_descendant_after_normal_exit() {
         .expect("sandbox descendant did not exit after release");
 }
 
-#[test]
-#[ignore = "known escape, #158: WRITE_RESTRICTED tokens do not apply restricting SIDs to DELETE"]
-fn legacy_workspace_write_delete_is_limited_to_writable_roots() {
+/// Observed state after a legacy workspace-write session tries to delete one
+/// fixture inside each writable root (workspace, TEMP, TMP), one outside every
+/// writable root, and the protected `.git` directory.
+#[derive(Debug, PartialEq, Eq)]
+struct LegacyDeleteOutcome {
+    exit_code: i32,
+    workspace_file_exists: bool,
+    temp_file_exists: bool,
+    tmp_file_exists: bool,
+    outside_file_contents: Option<String>,
+    protected_git_dir_exists: bool,
+}
+
+/// Runs the legacy delete fixture and returns its outcome plus diagnostics.
+fn run_legacy_delete_fixture() -> (LegacyDeleteOutcome, String) {
     let _guard = legacy_process_test_guard();
     let runtime = current_thread_runtime();
     runtime.block_on(async move {
@@ -783,20 +795,51 @@ fn legacy_workspace_write_delete_is_limited_to_writable_roots() {
                 .await;
         let stdout = String::from_utf8_lossy(&stdout);
 
-        assert_eq!(
-            (
+        (
+            LegacyDeleteOutcome {
                 exit_code,
-                workspace_file.exists(),
-                temp_file.exists(),
-                tmp_file.exists(),
-                fs::read_to_string(&outside_file).ok(),
-                protected_git_dir.is_dir(),
-            ),
-            (0, false, false, false, Some("outside".to_string()), true),
-            "stdout={stdout:?}\n{}",
-            sandbox_log(codex_home.path())
-        );
-    });
+                workspace_file_exists: workspace_file.exists(),
+                temp_file_exists: temp_file.exists(),
+                tmp_file_exists: tmp_file.exists(),
+                outside_file_contents: fs::read_to_string(&outside_file).ok(),
+                protected_git_dir_exists: protected_git_dir.is_dir(),
+            },
+            format!("stdout={stdout:?}\n{}", sandbox_log(codex_home.path())),
+        )
+    })
+}
+
+#[test]
+fn legacy_workspace_write_can_delete_inside_writable_roots() {
+    let (outcome, diagnostics) = run_legacy_delete_fixture();
+    assert_eq!(
+        (
+            outcome.exit_code,
+            outcome.workspace_file_exists,
+            outcome.temp_file_exists,
+            outcome.tmp_file_exists,
+        ),
+        (0, false, false, false),
+        "{diagnostics}"
+    );
+}
+
+#[test]
+#[ignore = "known escape, #158: WRITE_RESTRICTED tokens do not apply restricting SIDs to DELETE"]
+fn legacy_workspace_write_delete_is_limited_to_writable_roots() {
+    let (outcome, diagnostics) = run_legacy_delete_fixture();
+    assert_eq!(
+        outcome,
+        LegacyDeleteOutcome {
+            exit_code: 0,
+            workspace_file_exists: false,
+            temp_file_exists: false,
+            tmp_file_exists: false,
+            outside_file_contents: Some("outside".to_string()),
+            protected_git_dir_exists: true,
+        },
+        "{diagnostics}"
+    );
 }
 
 #[test]
