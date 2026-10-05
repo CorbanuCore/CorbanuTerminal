@@ -52,10 +52,10 @@ async fn whole_store_mixed_days_shared_snapshots_and_two_reopens() -> anyhow::Re
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
     let price = snapshot();
-    let a = attempt(1, DAY_MS);
-    let mut b = attempt(2, DAY_MS);
+    let a = attempt(/*id*/ 1, DAY_MS);
+    let mut b = attempt(/*id*/ 2, DAY_MS);
     b.thread_id = ThreadId::from_string(&Uuid::from_u128(8).to_string())?;
-    let fresh = attempt(3, 91 * DAY_MS);
+    let fresh = attempt(/*id*/ 3, 91 * DAY_MS);
     for a in [&a, &b, &fresh] {
         save(&store, a, std::slice::from_ref(&price)).await?;
     }
@@ -63,11 +63,21 @@ async fn whole_store_mixed_days_shared_snapshots_and_two_reopens() -> anyhow::Re
     store
         .estimates
         .journal
-        .append_observation(&a, &[row(&a, 2, 3)])
+        .append_observation(&a, &[row(&a, /*revision*/ 2, /*input*/ 3)])
         .await?;
     let mut tx = runtime.pool.begin().await?;
-    compact(&mut tx, 1, &partial(2, 1, TWO).encode()?).await?;
-    compact(&mut tx, 0, &partial(1, 1, "0").encode()?).await?;
+    compact(
+        &mut tx,
+        /*day*/ 1,
+        &partial(/*input*/ 2, /*attempts*/ 1, TWO).encode()?,
+    )
+    .await?;
+    compact(
+        &mut tx,
+        /*day*/ 0,
+        &partial(/*input*/ 1, /*attempts*/ 1, "0").encode()?,
+    )
+    .await?;
     let mut prior = price.clone();
     prior.id = Uuid::from_u128(999);
     sqlx::query("INSERT INTO draft_accounting_price_snapshots VALUES (?, ?)")
@@ -86,18 +96,27 @@ async fn whole_store_mixed_days_shared_snapshots_and_two_reopens() -> anyhow::Re
     expected.previous_as_of_ms = Some(0);
     let refs = [price.id.to_string(), prior.id.to_string()];
     expected.compact_days = BTreeMap::from([
-        (key(0), day(partial(1, 1, "0"), &refs)),
-        (key(1), day(partial(5, 2, FIVE), &refs)),
+        (
+            key(/*day*/ 0),
+            day(partial(/*input*/ 1, /*attempts*/ 1, "0"), &refs),
+        ),
+        (
+            key(/*day*/ 1),
+            day(partial(/*input*/ 5, /*attempts*/ 2, FIVE), &refs),
+        ),
         (
             (b.thread_id.to_string(), 1),
-            day(partial(1, 1, TINY), &[price.id.to_string()]),
+            day(
+                partial(/*input*/ 1, /*attempts*/ 1, TINY),
+                &[price.id.to_string()],
+            ),
         ),
     ]);
     expected.raw_removals =
         BTreeMap::from([(a.attempt_id, 366 * DAY_MS), (b.attempt_id, 366 * DAY_MS)]);
     expected.raw_days.insert(
-        key(91),
-        Current::Ready(partial(1, 1, TINY).to_day_totals()?),
+        key(/*day*/ 91),
+        Current::Ready(partial(/*input*/ 1, /*attempts*/ 1, TINY).to_day_totals()?),
     );
     unchanged(&mut tx, expected.computed_as_of_ms, Ok(&expected)).await?;
     unchanged(&mut tx, expected.computed_as_of_ms, Ok(&expected)).await?;
@@ -112,12 +131,21 @@ async fn exact_90_365_dispatch_zero_and_one_millisecond_day_loss() -> anyhow::Re
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
-    for a in [attempt(1, 0), attempt(2, 1), attempt(3, DAY_MS)] {
+    for a in [
+        attempt(/*id*/ 1, /*dispatch*/ 0),
+        attempt(/*id*/ 2, /*dispatch*/ 1),
+        attempt(/*id*/ 3, DAY_MS),
+    ] {
         save(&store, &a, &[]).await?;
     }
     let mut tx = runtime.pool.begin().await?;
-    compact(&mut tx, 0, &partial(1, 1, "0").encode()?).await?;
-    unchanged(&mut tx, 0, Err("future dispatch")).await?;
+    compact(
+        &mut tx,
+        /*day*/ 0,
+        &partial(/*input*/ 1, /*attempts*/ 1, "0").encode()?,
+    )
+    .await?;
+    unchanged(&mut tx, /*as_of*/ 0, Err("future dispatch")).await?;
     // Time, removed raw count, surviving compact populations, raw populations.
     for (now, removed, compact0, compact1, raw0, raw1) in [
         (DETAIL_MS - 1, 0, 1, 0, 2, 1),
@@ -129,7 +157,7 @@ async fn exact_90_365_dispatch_zero_and_one_millisecond_day_loss() -> anyhow::Re
     ] {
         let mut expected = empty(now);
         if compact0 == 0 {
-            expected.expired_days.insert(key(0));
+            expected.expired_days.insert(key(/*day*/ 0));
         }
         for (bucket, count) in [(0, compact0), (1, compact1)] {
             if count > 0 {
@@ -180,7 +208,7 @@ async fn missing_stale_null_unbound_and_original_prices_survive_reopen() -> anyh
         let runtime =
             StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
         let store = install(&runtime).await?;
-        let a = attempt(1, 0);
+        let a = attempt(/*id*/ 1, /*dispatch*/ 0);
         let price = snapshot();
         if mode == "intent" {
             store.estimates.journal.begin_attempt(&a).await?;
@@ -188,7 +216,7 @@ async fn missing_stale_null_unbound_and_original_prices_survive_reopen() -> anyh
             store
                 .estimates
                 .journal
-                .append_observation(&a, &[row(&a, 1, 1)])
+                .append_observation(&a, &[row(&a, /*revision*/ 1, /*input*/ 1)])
                 .await?;
         } else {
             let prices = if mode == "null" {
@@ -202,14 +230,14 @@ async fn missing_stale_null_unbound_and_original_prices_survive_reopen() -> anyh
             store
                 .estimates
                 .journal
-                .append_observation(&a, &[row(&a, 2, 2)])
+                .append_observation(&a, &[row(&a, /*revision*/ 2, /*input*/ 2)])
                 .await?;
         }
         let mut tx = runtime.pool.begin().await?;
         // An eligible newer catalog row must never price null or never-bound attempts.
         let mut newer = price.clone();
         newer.id = Uuid::from_u128(1002);
-        newer.rates.noncached = Some(Decimal::canonical(9, 0));
+        newer.rates.noncached = Some(Decimal::canonical(/*coefficient*/ 9, /*scale*/ 0));
         for price in [&price, &newer] {
             sqlx::query(
                 "INSERT INTO draft_accounting_price_snapshots VALUES (?, ?) ON CONFLICT DO NOTHING",
@@ -228,20 +256,22 @@ async fn missing_stale_null_unbound_and_original_prices_survive_reopen() -> anyh
         }
         let mut raw = empty(DETAIL_MS - 1);
         let freshness = if ready {
-            Current::Ready(partial(input, 1, amount).to_day_totals()?)
+            Current::Ready(partial(input, /*attempts*/ 1, amount).to_day_totals()?)
         } else {
             Current::NeedsRefresh
         };
-        raw.raw_days.insert(key(0), freshness);
+        raw.raw_days.insert(key(/*day*/ 0), freshness);
         unchanged(&mut tx, raw.computed_as_of_ms, Ok(&raw)).await?;
-        let mut values = partial(input, 1, amount);
+        let mut values = partial(input, /*attempts*/ 1, amount);
         if mode == "intent" {
             values = CompactValues::decode(
                 r#"{"version":1,"known":[0,0,0,0,0,0,0],"unknown":[1,1,1,1,1,1,1],"known_usd":"0","unknown_estimates":1,"attempts":1}"#,
             )?;
         }
         let mut expected = empty(DETAIL_MS);
-        expected.compact_days.insert(key(0), day(values, &refs));
+        expected
+            .compact_days
+            .insert(key(/*day*/ 0), day(values, &refs));
         expected.raw_removals.insert(a.attempt_id, REPLAY_MS);
         unchanged(&mut tx, DETAIL_MS, Ok(&expected)).await?;
         let baseline = dump(&mut tx).await?;
@@ -257,17 +287,21 @@ async fn checked_compact_merges_fail_without_writes() -> anyhow::Result<()> {
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
-    save(&store, &attempt(1, 0), &[snapshot()]).await?;
+    save(&store, &attempt(/*id*/ 1, /*dispatch*/ 0), &[snapshot()]).await?;
     for (values, error) in [
-        (partial(i64::MAX, 1, "0"), "known overflow"),
-        (partial(1, i64::MAX, "0"), "unknown overflow"),
+        (partial(i64::MAX, /*attempts*/ 1, "0"), "known overflow"),
+        (partial(/*input*/ 1, i64::MAX, "0"), "unknown overflow"),
         (
-            partial(1, 1, "340282366920938463463374607431768211455"),
+            partial(
+                /*input*/ 1,
+                /*attempts*/ 1,
+                "340282366920938463463374607431768211455",
+            ),
             "decimal alignment overflow",
         ),
     ] {
         let mut tx = runtime.pool.begin().await?;
-        compact(&mut tx, 0, &values.encode()?).await?;
+        compact(&mut tx, /*day*/ 0, &values.encode()?).await?;
         unchanged(&mut tx, DETAIL_MS, Err(error)).await?;
         tx.rollback().await?;
     }
@@ -281,14 +315,15 @@ async fn raw_day_freshness_and_checked_sums_cover_every_member() -> anyhow::Resu
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
     for id in [1, 2] {
-        save(&store, &attempt(id, 0), &[snapshot()]).await?;
+        save(&store, &attempt(id, /*dispatch*/ 0), &[snapshot()]).await?;
     }
     let mut ready = empty(DETAIL_MS - 1);
-    ready
-        .raw_days
-        .insert(key(0), Current::Ready(partial(2, 2, TWO).to_day_totals()?));
+    ready.raw_days.insert(
+        key(/*day*/ 0),
+        Current::Ready(partial(/*input*/ 2, /*attempts*/ 2, TWO).to_day_totals()?),
+    );
     let mut stale = empty(DETAIL_MS - 1);
-    stale.raw_days.insert(key(0), Current::NeedsRefresh);
+    stale.raw_days.insert(key(/*day*/ 0), Current::NeedsRefresh);
     for id in [1, 2] {
         let mut tx = runtime.pool.begin().await?;
         unchanged(&mut tx, DETAIL_MS - 1, Ok(&ready)).await?;
@@ -304,7 +339,14 @@ async fn raw_day_freshness_and_checked_sums_cover_every_member() -> anyhow::Resu
         store
             .estimates
             .journal
-            .append_observation(&attempt(id, 0), &[row(&attempt(id, 0), 2, 2)])
+            .append_observation(
+                &attempt(id, /*dispatch*/ 0),
+                &[row(
+                    &attempt(id, /*dispatch*/ 0),
+                    /*revision*/ 2,
+                    /*input*/ 2,
+                )],
+            )
             .await?;
         let mut tx = runtime.pool.begin().await?;
         unchanged(&mut tx, DETAIL_MS - 1, Ok(&stale)).await?;
@@ -321,7 +363,14 @@ async fn raw_day_freshness_and_checked_sums_cover_every_member() -> anyhow::Resu
     store
         .estimates
         .journal
-        .append_observation(&attempt(1, 0), &[row(&attempt(1, 0), 3, i64::MAX)])
+        .append_observation(
+            &attempt(/*id*/ 1, /*dispatch*/ 0),
+            &[row(
+                &attempt(/*id*/ 1, /*dispatch*/ 0),
+                /*revision*/ 3,
+                i64::MAX,
+            )],
+        )
         .await?;
     let mut tx = runtime.pool.begin().await?;
     unchanged(&mut tx, DETAIL_MS - 1, Err("metric overflow")).await?;

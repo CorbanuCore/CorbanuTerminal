@@ -46,7 +46,24 @@ fn binary() -> Result<Command, codex_utils_cargo_bin::CargoBinError> {
         .env_clear()
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    // Winsock cannot initialize without SystemRoot, so a fully cleared
+    // environment makes every bind fail on Windows.
+    #[cfg(windows)]
+    if let Some(system_root) = std::env::var_os("SystemRoot") {
+        command.env("SystemRoot", system_root);
+    }
     Ok(command)
+}
+
+fn reset_or_aborted(result: std::io::Result<usize>) -> bool {
+    // An abortive close reads as WSAECONNABORTED on Windows.
+    match result {
+        Ok(_) => true,
+        Err(error) => matches!(
+            error.kind(),
+            std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted
+        ),
+    }
 }
 
 #[test]
@@ -89,7 +106,7 @@ fn actual_binary_uses_production_head_deadline_without_reading_stdin() {
     let started = Instant::now();
     let mut output = Vec::new();
     let result = first.read_to_end(&mut output);
-    assert!(result.is_ok() || result.unwrap_err().kind() == std::io::ErrorKind::ConnectionReset);
+    assert!(reset_or_aborted(result));
     assert!(started.elapsed() >= Duration::from_millis(1500));
     assert!(started.elapsed() < Duration::from_secs(4));
     for _ in 0..7 {
@@ -101,9 +118,7 @@ fn actual_binary_uses_production_head_deadline_without_reading_stdin() {
             .write_all(b"GET / HTTP/1.1\r\nHost: x\r\n\r\n")
             .unwrap();
         let result = client.read_to_end(&mut Vec::new());
-        assert!(
-            result.is_ok() || result.unwrap_err().kind() == std::io::ErrorKind::ConnectionReset
-        );
+        assert!(reset_or_aborted(result));
     }
     assert!(child.wait().unwrap().success());
     assert_eq!(

@@ -63,7 +63,7 @@ pub(super) async fn save(
     store
         .estimates
         .journal
-        .append_observation(a, &[row(a, 1, 1)])
+        .append_observation(a, &[row(a, /*revision*/ 1, /*input*/ 1)])
         .await?;
     store
         .estimates

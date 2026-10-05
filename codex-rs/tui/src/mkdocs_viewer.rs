@@ -293,7 +293,7 @@ fn missing_mkdocs_error(cwd: &Path, managed_package_root: Option<&Path>) -> MkDo
 }
 
 fn split_path_arg(args: &str) -> Result<(String, Option<String>), MkDocsViewerError> {
-    let parts = shlex::split(args).ok_or_else(|| {
+    let parts = split_args(args).ok_or_else(|| {
         MkDocsViewerError::new(format!("Failed to parse /docs arguments: {args}"))
     })?;
     let Some(first) = parts.first() else {
@@ -303,6 +303,46 @@ fn split_path_arg(args: &str) -> Result<(String, Option<String>), MkDocsViewerEr
     };
     let remaining = (!parts[1..].is_empty()).then(|| parts[1..].join(" "));
     Ok((first.clone(), remaining))
+}
+
+#[cfg(not(windows))]
+fn split_args(args: &str) -> Option<Vec<String>> {
+    shlex::split(args)
+}
+
+/// Backslashes are path separators on Windows, so POSIX shell escaping would
+/// mangle `C:\docs`. Split on whitespace outside double quotes instead.
+#[cfg(windows)]
+fn split_args(args: &str) -> Option<Vec<String>> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut in_token = false;
+    let mut quoted = false;
+    for ch in args.chars() {
+        match ch {
+            '"' => {
+                quoted = !quoted;
+                in_token = true;
+            }
+            ch if ch.is_whitespace() && !quoted => {
+                if in_token {
+                    parts.push(std::mem::take(&mut current));
+                    in_token = false;
+                }
+            }
+            ch => {
+                current.push(ch);
+                in_token = true;
+            }
+        }
+    }
+    if quoted {
+        return None;
+    }
+    if in_token {
+        parts.push(current);
+    }
+    Some(parts)
 }
 
 fn resolve_path(cwd: &Path, value: &str) -> PathBuf {
@@ -321,7 +361,7 @@ fn is_mkdocs_config_path(path: &Path) -> bool {
 }
 
 fn find_mkdocs_config(cwd: &Path) -> Option<PathBuf> {
-    let start = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
+    let start = dunce::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
     for dir in start.ancestors().take(MAX_DISCOVERY_ANCESTORS) {
         for name in MKDOCS_CONFIG_NAMES {
             let candidate = dir.join(name);
@@ -386,9 +426,7 @@ fn synthetic_docs_dir_config(docs_dir: &Path) -> Result<MkDocsConfig, MkDocsView
             docs_dir.display()
         )));
     }
-    let docs_dir = docs_dir
-        .canonicalize()
-        .unwrap_or_else(|_| docs_dir.to_path_buf());
+    let docs_dir = dunce::canonicalize(docs_dir).unwrap_or_else(|_| docs_dir.to_path_buf());
     let project_root = docs_dir
         .parent()
         .map(Path::to_path_buf)
@@ -442,8 +480,8 @@ fn normalize_config_relative_path(project_root: &Path, value: &str) -> PathBuf {
 }
 
 fn path_stays_under(path: &Path, root: &Path) -> bool {
-    let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-    let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let canonical_path = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let canonical_root = dunce::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
     canonical_path.starts_with(canonical_root)
 }
 

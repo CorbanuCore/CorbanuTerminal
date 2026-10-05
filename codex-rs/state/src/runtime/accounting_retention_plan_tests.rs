@@ -33,8 +33,10 @@ fn expected_raw(
         1 => (
             Some(snapshot()),
             Some(3),
-            Decimal::canonical(3, 24),
-            BucketQuote::Priced(Decimal::canonical(3, 24)),
+            Decimal::canonical(/*coefficient*/ 3, /*scale*/ 24),
+            BucketQuote::Priced(Decimal::canonical(
+                /*coefficient*/ 3, /*scale*/ 24,
+            )),
         ),
         2 => (None, None, Decimal::default(), BucketQuote::MissingUsage),
         3 => (None, Some(1), Decimal::default(), BucketQuote::MissingRate),
@@ -68,7 +70,7 @@ fn expected_raw(
             plan_burn_milli_tokens: None,
             pricing_rules: 1,
         },
-        day: key(0),
+        day: key(/*day*/ 0),
         detail_expires_at_ms: DETAIL_MS,
         replay_expires_at_ms: REPLAY_MS,
         day_expires_at_ms: REPLAY_MS,
@@ -82,18 +84,27 @@ async fn complete_input_preserves_expired_rows_bindings_freshness_and_two_reopen
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
-    let (a, intent, null) = (attempt(1, 0), attempt(2, 0), attempt(3, 0));
+    let (a, intent, null) = (
+        attempt(/*id*/ 1, /*dispatch*/ 0),
+        attempt(/*id*/ 2, /*dispatch*/ 0),
+        attempt(/*id*/ 3, /*dispatch*/ 0),
+    );
     save(&store, &a, &[snapshot()]).await?;
     store
         .estimates
         .journal
-        .append_observation(&a, &[row(&a, 2, 3)])
+        .append_observation(&a, &[row(&a, /*revision*/ 2, /*input*/ 3)])
         .await?;
     store.estimates.journal.begin_attempt(&intent).await?;
     save(&store, &null, &[]).await?;
     let mut tx = runtime.pool.begin().await?;
     for day in [0, 365] {
-        compact(&mut tx, day, &partial(1, 1, "0").encode()?).await?;
+        compact(
+            &mut tx,
+            day,
+            &partial(/*input*/ 1, /*attempts*/ 1, "0").encode()?,
+        )
+        .await?;
     }
     sqlx::query("INSERT INTO draft_accounting_compact_snapshots SELECT thread_id, utc_day, snapshot_id FROM draft_accounting_compact_days CROSS JOIN draft_accounting_price_snapshots").execute(&mut *tx).await?;
     sqlx::query("INSERT INTO draft_accounting_tombstones VALUES (?, ?)")
@@ -104,7 +115,8 @@ async fn complete_input_preserves_expired_rows_bindings_freshness_and_two_reopen
     // Eligible alternative cannot reprice the old binding, explicit NULL or unbound intent.
     let mut alternative = snapshot();
     alternative.id = Uuid::from_u128(1002);
-    alternative.rates.noncached = Some(Decimal::canonical(9, 0));
+    alternative.rates.noncached =
+        Some(Decimal::canonical(/*coefficient*/ 9, /*scale*/ 0));
     sqlx::query("INSERT INTO draft_accounting_price_snapshots VALUES (?, ?)")
         .bind(alternative.id.to_string())
         .bind(serde_json::to_string(&alternative)?)
@@ -113,29 +125,35 @@ async fn complete_input_preserves_expired_rows_bindings_freshness_and_two_reopen
     let mut expected = ValidatedRetentionInput {
         previous_as_of_ms: None,
         as_of_ms: REPLAY_MS,
-        compact_days: [(key(0), REPLAY_MS), (key(365), 730 * DAY_MS)]
-            .into_iter()
-            .map(|(key, expires_at_ms)| {
-                (
-                    key,
-                    CompactInput {
-                        values: partial(1, 1, "0"),
-                        snapshots: BTreeSet::from([snapshot().id.to_string()]),
-                        expires_at_ms,
-                    },
-                )
-            })
-            .collect(),
+        compact_days: [
+            (key(/*day*/ 0), REPLAY_MS),
+            (key(/*day*/ 365), 730 * DAY_MS),
+        ]
+        .into_iter()
+        .map(|(key, expires_at_ms)| {
+            (
+                key,
+                CompactInput {
+                    values: partial(/*input*/ 1, /*attempts*/ 1, "0"),
+                    snapshots: BTreeSet::from([snapshot().id.to_string()]),
+                    expires_at_ms,
+                },
+            )
+        })
+        .collect(),
         raw_attempts: [
             (
                 &a,
-                vec![row(&a, 1, 1), row(&a, 2, 3)],
+                vec![
+                    row(&a, /*revision*/ 1, /*input*/ 1),
+                    row(&a, /*revision*/ 2, /*input*/ 3),
+                ],
                 ContributionFreshness::Stale,
             ),
             (&intent, vec![], ContributionFreshness::Missing),
             (
                 &null,
-                vec![row(&null, 1, 1)],
+                vec![row(&null, /*revision*/ 1, /*input*/ 1)],
                 ContributionFreshness::Current,
             ),
         ]
@@ -165,18 +183,23 @@ async fn whole_store_corruption_including_expired_and_orphan_rows_never_writes()
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
-    let a = attempt(1, 0);
+    let a = attempt(/*id*/ 1, /*dispatch*/ 0);
     save(&store, &a, &[snapshot()]).await?;
     store
         .estimates
         .journal
-        .append_observation(&a, &[row(&a, 2, 2)])
+        .append_observation(&a, &[row(&a, /*revision*/ 2, /*input*/ 2)])
         .await?;
     let mut conn = runtime.pool.acquire().await?;
     sqlx::query("PRAGMA foreign_keys = OFF")
         .execute(&mut *conn)
         .await?;
-    compact(&mut conn, 0, &partial(1, 1, "0").encode()?).await?;
+    compact(
+        &mut conn,
+        /*day*/ 0,
+        &partial(/*input*/ 1, /*attempts*/ 1, "0").encode()?,
+    )
+    .await?;
     sqlx::query("INSERT INTO draft_accounting_compact_snapshots SELECT thread_id, utc_day, snapshot_id FROM draft_accounting_compact_days CROSS JOIN draft_accounting_price_snapshots").execute(&mut *conn).await?;
     for (sql, error) in [
         (
@@ -330,25 +353,35 @@ async fn checked_times_keys_and_payloads_fail_without_writes() -> anyhow::Result
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
-    save(&store, &attempt(1, 0), &[snapshot()]).await?;
+    save(&store, &attempt(/*id*/ 1, /*dispatch*/ 0), &[snapshot()]).await?;
     let mut tx = runtime.pool.begin().await?;
-    unchanged(&mut tx, -1, Err("negative as-of")).await?;
+    unchanged(&mut tx, /*as_of*/ -1, Err("negative as-of")).await?;
     tx.rollback().await?;
     for (bucket, payload, now, error) in [
-        (-1, partial(1, 1, "0").encode()?, DETAIL_MS, "negative day"),
+        (
+            -1,
+            partial(/*input*/ 1, /*attempts*/ 1, "0").encode()?,
+            DETAIL_MS,
+            "negative day",
+        ),
         (
             i64::MAX,
-            partial(1, 1, "0").encode()?,
+            partial(/*input*/ 1, /*attempts*/ 1, "0").encode()?,
             i64::MAX,
             "day start overflow",
         ),
         (
             i64::MAX / DAY_MS,
-            partial(1, 1, "0").encode()?,
+            partial(/*input*/ 1, /*attempts*/ 1, "0").encode()?,
             i64::MAX,
             "day expiry overflow",
         ),
-        (91, partial(1, 1, "0").encode()?, DETAIL_MS, "future day"),
+        (
+            91,
+            partial(/*input*/ 1, /*attempts*/ 1, "0").encode()?,
+            DETAIL_MS,
+            "future day",
+        ),
     ] {
         let mut tx = runtime.pool.begin().await?;
         compact(&mut tx, bucket, &payload).await?;

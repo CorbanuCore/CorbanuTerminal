@@ -133,15 +133,18 @@ async fn presence_gaps_reordering_and_two_replays_after_reopen() -> anyhow::Resu
     let mut f = Fixture::new().await?;
     let a = attempt();
     let rows = vec![
-        observation(1, r#"{"input":100,"read":10}"#),
-        observation(3, r#"{"input":null,"read":0,"output":20}"#),
-        observation(7, r#"{"input":120,"output":30}"#),
+        observation(/*revision*/ 1, r#"{"input":100,"read":10}"#),
+        observation(
+            /*revision*/ 3,
+            r#"{"input":null,"read":0,"output":20}"#,
+        ),
+        observation(/*revision*/ 7, r#"{"input":120,"output":30}"#),
     ];
     {
         let j = Journal::create_for_tests(&f.runtime).await?;
         j.append_observation(&a, &[rows[2].clone(), rows[0].clone(), rows[1].clone()])
             .await?;
-        let canonical = observation(1, r#"{"read":10,"input":100}"#);
+        let canonical = observation(/*revision*/ 1, r#"{"read":10,"input":100}"#);
         j.append_observation(&a, &[canonical]).await?;
     }
     f.runtime.close().await;
@@ -176,8 +179,8 @@ async fn conflicting_batch_rolls_back_identity_rows_and_positions() -> anyhow::R
     let f = Fixture::new().await?;
     let j = Journal::create_for_tests(&f.runtime).await?;
     let a = attempt();
-    let first = observation(1, r#"{"input":10}"#);
-    let conflict = observation(1, r#"{"input":11}"#);
+    let first = observation(/*revision*/ 1, r#"{"input":10}"#);
+    let conflict = observation(/*revision*/ 1, r#"{"input":11}"#);
     assert!(
         j.append_observation(&a, &[first.clone(), conflict.clone()])
             .await
@@ -186,7 +189,7 @@ async fn conflicting_batch_rolls_back_identity_rows_and_positions() -> anyhow::R
     assert_eq!(j.read_observations(a.attempt_id).await?, None);
     j.append_observation(&a, std::slice::from_ref(&first))
         .await?;
-    let second = observation(2, r#"{"output":2}"#);
+    let second = observation(/*revision*/ 2, r#"{"output":2}"#);
     assert!(
         j.append_observation(&a, &[second.clone(), conflict])
             .await
@@ -219,7 +222,7 @@ async fn duplicate_revision_cannot_change_source_position_or_presence() -> anyho
     let f = Fixture::new().await?;
     let j = Journal::create_for_tests(&f.runtime).await?;
     let a = attempt();
-    let row = observation(1, "{}");
+    let row = observation(/*revision*/ 1, "{}");
     j.append_observation(&a, std::slice::from_ref(&row)).await?;
     let mut moved = row.clone();
     moved.sequence = Count::try_from(99)?;
@@ -228,8 +231,8 @@ async fn duplicate_revision_cannot_change_source_position_or_presence() -> anyho
     for changed in [
         moved,
         source,
-        observation(1, r#"{"input":null}"#),
-        observation(1, r#"{"input":0}"#),
+        observation(/*revision*/ 1, r#"{"input":null}"#),
+        observation(/*revision*/ 1, r#"{"input":0}"#),
     ] {
         assert!(j.append_observation(&a, &[changed]).await.is_err());
         assert_eq!(
@@ -246,15 +249,15 @@ async fn concurrent_same_key_writers_deduplicate_and_conflict() -> anyhow::Resul
     let f = Fixture::new().await?;
     let j = Journal::create_for_tests(&f.runtime).await?;
     let a = attempt();
-    let batch = [observation(1, r#"{"output":2}"#)];
+    let batch = [observation(/*revision*/ 1, r#"{"output":2}"#)];
     let (left, right) = tokio::join!(
         j.append_observation(&a, &batch),
         j.append_observation(&a, &batch)
     );
     left?;
     right?;
-    let left_batch = [observation(2, r#"{"output":3}"#)];
-    let right_batch = [observation(2, r#"{"output":4}"#)];
+    let left_batch = [observation(/*revision*/ 2, r#"{"output":3}"#)];
+    let right_batch = [observation(/*revision*/ 2, r#"{"output":4}"#)];
     let (left, right) = tokio::join!(
         j.append_observation(&a, &left_batch),
         j.append_observation(&a, &right_batch)
@@ -278,12 +281,12 @@ async fn reordered_prefix_validation_rolls_back_without_erasing_knowns() -> anyh
     let f = Fixture::new().await?;
     let j = Journal::create_for_tests(&f.runtime).await?;
     let a = attempt();
-    let final_row = observation(3, r#"{"input":30,"read":20}"#);
+    let final_row = observation(/*revision*/ 3, r#"{"input":30,"read":20}"#);
     j.append_observation(&a, std::slice::from_ref(&final_row))
         .await?;
-    let early = observation(1, r#"{"input":10,"read":20}"#);
+    let early = observation(/*revision*/ 1, r#"{"input":10,"read":20}"#);
     assert!(j.append_observation(&a, &[early]).await.is_err());
-    let null_input = observation(4, r#"{"input":null,"read":31}"#);
+    let null_input = observation(/*revision*/ 4, r#"{"input":null,"read":31}"#);
     assert!(j.append_observation(&a, &[null_input]).await.is_err());
     assert_eq!(
         j.read_observations(a.attempt_id).await?,
@@ -323,7 +326,10 @@ fn numeric_presence_rejects_nonintegers_overflow_and_arbitrary_fields() {
 
 #[test]
 fn native_anthropic_partial_input_and_unknown_dialect_remain_distinct() -> anyhow::Result<()> {
-    let rows = [observation(1, r#"{"input":50,"read":10}"#)];
+    let rows = [observation(
+        /*revision*/ 1,
+        r#"{"input":50,"read":10}"#,
+    )];
     assert_eq!(
         replay(Dialect::NativeAnthropic, &rows)?,
         Usage {
@@ -340,7 +346,10 @@ fn native_anthropic_partial_input_and_unknown_dialect_remain_distinct() -> anyho
         }
     );
     let mut complete = rows.to_vec();
-    complete.push(observation(2, r#"{"write":0,"output":5}"#));
+    complete.push(observation(
+        /*revision*/ 2,
+        r#"{"write":0,"output":5}"#,
+    ));
     assert_eq!(
         replay(Dialect::NativeAnthropic, &complete)?,
         Usage {
@@ -369,19 +378,22 @@ fn inclusive_subsets_totals_and_arithmetic_overflow_are_validated() {
         r#"{"input":9223372036854775807,"output":1}"#,
     ] {
         assert!(
-            replay(Dialect::Inclusive, &[observation(1, patch)]).is_err(),
+            replay(Dialect::Inclusive, &[observation(/*revision*/ 1, patch)]).is_err(),
             "{patch}"
         );
     }
     assert!(
         replay(
             Dialect::NativeAnthropic,
-            &[observation(1, r#"{"input":9223372036854775807,"read":1}"#)]
+            &[observation(
+                /*revision*/ 1,
+                r#"{"input":9223372036854775807,"read":1}"#
+            )]
         )
         .is_err()
     );
     let valid = observation(
-        1,
+        /*revision*/ 1,
         r#"{"input":10,"read":6,"write":4,"output":2,"reasoning":2,"total":12}"#,
     );
     assert_eq!(
@@ -401,9 +413,12 @@ fn inclusive_subsets_totals_and_arithmetic_overflow_are_validated() {
 
 #[test]
 fn billed_usd_replays_latest_and_absent_keeps_exact_bytes() -> anyhow::Result<()> {
-    let first = observation(1, r#"{"input":10,"read":6,"output":2}"#);
-    let billed = observation(2, r#"{"output":3,"billed_usd":"0.0123312"}"#);
-    let later = observation(3, r#"{"output":4}"#);
+    let first = observation(/*revision*/ 1, r#"{"input":10,"read":6,"output":2}"#);
+    let billed = observation(
+        /*revision*/ 2,
+        r#"{"output":3,"billed_usd":"0.0123312"}"#,
+    );
+    let later = observation(/*revision*/ 3, r#"{"output":4}"#);
     // The latest stated charge stands; a later patch without one keeps it.
     let usage = replay(Dialect::Inclusive, &[first.clone(), billed.clone(), later])?;
     assert_eq!(
@@ -447,12 +462,12 @@ async fn invalid_metadata_revision_and_batch_leave_no_intent() -> anyhow::Result
     self_retry.retry_of = Some(a.attempt_id);
     assert!(j.begin_attempt(&self_retry).await.is_err());
     assert!(
-        j.append_observation(&a, &[observation(0, "{}")])
+        j.append_observation(&a, &[observation(/*revision*/ 0, "{}")])
             .await
             .is_err()
     );
     assert!(
-        j.append_observation(&a, &vec![observation(1, "{}"); 257])
+        j.append_observation(&a, &vec![observation(/*revision*/ 1, "{}"); 257])
             .await
             .is_err()
     );

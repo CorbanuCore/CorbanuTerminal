@@ -402,7 +402,7 @@ fn inner_resolver_uses_injected_codec_and_preserves_failed_profile_state() {
                         assert_ne!(client.identity(), current.binding.client_identity);
                         json!({"ok":true,"accountId":account})
                     };
-                    Client::decode_fixture(200, &serde_json::to_vec(&body).unwrap())
+                    Client::decode_fixture(/*status*/ 200, &serde_json::to_vec(&body).unwrap())
                         .map_err(|_| "fixture decode".into())
                 },
             );
@@ -423,7 +423,7 @@ fn inner_resolver_uses_injected_codec_and_preserves_failed_profile_state() {
                 recovery::resolve_fixture(
                     &store,
                     &SessionScope::for_profile("unlinked"),
-                    None,
+                    /*requested_origin*/ None,
                     |_, _| panic!("no profile fallback")
                 )
                 .is_err()

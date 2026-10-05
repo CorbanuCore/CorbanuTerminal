@@ -577,6 +577,9 @@ fn atomic_json<T: Serialize>(path: &Path, value: &T, mode: u32) -> Result<(), Wa
     file.write_all(b"\n").map_err(storage)?;
     file.sync_all().map_err(storage)?;
     fs::rename(&temporary, path).map_err(storage)?;
+    // Windows cannot open a directory with `File::open` (os error 5), and
+    // `MoveFileExW` needs no separate directory flush.
+    #[cfg(unix)]
     File::open(parent)
         .and_then(|directory| directory.sync_all())
         .map_err(storage)?;

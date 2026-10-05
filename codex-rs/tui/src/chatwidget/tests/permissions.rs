@@ -13,7 +13,7 @@ use pretty_assertions::assert_eq;
 #[tokio::test]
 async fn permission_confirmation_deferral_preserves_payload_queue_and_running_state() {
     for running in [false, true] {
-        let (mut chat, _events, mut ops) = make_chatwidget_manual(None).await;
+        let (mut chat, _events, mut ops) = make_chatwidget_manual(/*model_override*/ None).await;
         chat.thread_id = Some(ThreadId::new());
         let mut prompt = UserMessage::from("use $figma [Image #2]");
         prompt.local_images = vec![crate::bottom_pane::LocalImageAttachment {
@@ -57,7 +57,7 @@ async fn permission_confirmation_deferral_preserves_payload_queue_and_running_st
             .queued_user_messages
             .push_back(UserMessage::from("queued").into());
         chat.turn_lifecycle.agent_turn_running = running;
-        chat.bottom_pane.set_task_running(true);
+        chat.bottom_pane.set_task_running(/*running*/ true);
         chat.defer_turn_for_permission_confirmation();
         let restored = chat.bottom_pane.composer_draft_snapshot();
         assert_eq!(restored.text, prompt.text);
@@ -831,6 +831,9 @@ async fn permissions_selection_requests_change_without_optimistic_history() {
     }
     chat.set_feature_enabled(Feature::GuardianApproval, /*enabled*/ true);
     chat.open_permissions_popup();
+    chat.handle_key_event(KeyEvent::from(KeyCode::Down));
+    // Windows lists the non-admin sandbox approval row first.
+    #[cfg(target_os = "windows")]
     chat.handle_key_event(KeyEvent::from(KeyCode::Down));
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
 

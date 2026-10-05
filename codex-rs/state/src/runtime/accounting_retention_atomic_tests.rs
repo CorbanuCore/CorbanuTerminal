@@ -72,60 +72,70 @@ async fn exact_boundaries_replay_shared_prices_and_two_reopens() -> anyhow::Resu
         0
     );
     let store = install(&runtime).await?;
-    for a in [attempt(1, 0), attempt(2, 1), owned(3, DAY_MS, 8)] {
+    for a in [
+        attempt(/*id*/ 1, /*dispatch*/ 0),
+        attempt(/*id*/ 2, /*dispatch*/ 1),
+        owned(/*id*/ 3, DAY_MS, /*owner*/ 8),
+    ] {
         save(&store, &a, &[snapshot()]).await?;
     }
     let baseline = rows(&runtime).await?;
     let cases = [
-        (DETAIL_MS - 1, vec![], vec![], vec![], partial(2, 2, TWO)),
+        (
+            DETAIL_MS - 1,
+            vec![],
+            vec![],
+            vec![],
+            partial(/*input*/ 2, /*count*/ 2, TWO),
+        ),
         (
             DETAIL_MS,
             vec![1],
-            vec![(7, 0, partial(1, 1, TINY), vec![1000])],
+            vec![(7, 0, partial(/*input*/ 1, /*count*/ 1, TINY), vec![1000])],
             vec![(1, REPLAY_MS)],
-            partial(2, 2, TWO),
+            partial(/*input*/ 2, /*count*/ 2, TWO),
         ),
         (
             DETAIL_MS + 1,
             vec![1, 2],
-            vec![(7, 0, partial(2, 2, TWO), vec![1000])],
+            vec![(7, 0, partial(/*input*/ 2, /*count*/ 2, TWO), vec![1000])],
             vec![(1, REPLAY_MS), (2, REPLAY_MS + 1)],
-            partial(2, 2, TWO),
+            partial(/*input*/ 2, /*count*/ 2, TWO),
         ),
         (
             DETAIL_MS + DAY_MS,
             vec![1, 2, 3],
             vec![
-                (7, 0, partial(2, 2, TWO), vec![1000]),
-                (8, 1, partial(1, 1, TINY), vec![1000]),
+                (7, 0, partial(/*input*/ 2, /*count*/ 2, TWO), vec![1000]),
+                (8, 1, partial(/*input*/ 1, /*count*/ 1, TINY), vec![1000]),
             ],
             vec![(1, REPLAY_MS), (2, REPLAY_MS + 1), (3, REPLAY_MS + DAY_MS)],
-            partial(2, 2, TWO),
+            partial(/*input*/ 2, /*count*/ 2, TWO),
         ),
         (
             REPLAY_MS,
             vec![1, 2, 3],
-            vec![(8, 1, partial(1, 1, TINY), vec![1000])],
+            vec![(8, 1, partial(/*input*/ 1, /*count*/ 1, TINY), vec![1000])],
             vec![(2, REPLAY_MS + 1), (3, REPLAY_MS + DAY_MS)],
-            partial(0, 0, "0"),
+            partial(/*input*/ 0, /*count*/ 0, "0"),
         ),
         (
             REPLAY_MS + 1,
             vec![1, 2, 3],
-            vec![(8, 1, partial(1, 1, TINY), vec![1000])],
+            vec![(8, 1, partial(/*input*/ 1, /*count*/ 1, TINY), vec![1000])],
             vec![(3, REPLAY_MS + DAY_MS)],
-            partial(0, 0, "0"),
+            partial(/*input*/ 0, /*count*/ 0, "0"),
         ),
     ];
     for (time, removed, days, tombstones, total) in cases {
         let expected = retained_rows(&baseline, &removed, &days, &tombstones, &[1000], time)?;
-        let expected_read = response(time, 0, (time < REPLAY_MS).then_some(0), total);
+        let expected_read = response(time, /*day*/ 0, (time < REPLAY_MS).then_some(0), total);
         for _ in 0..2 {
             store.maintain_retention(time).await?;
             assert_eq!(rows(&runtime).await?, expected);
             read_checked(
                 &mut *runtime.pool.acquire().await?,
-                0,
+                /*day*/ 0,
                 time,
                 Ok(&expected_read),
             )
@@ -134,7 +144,7 @@ async fn exact_boundaries_replay_shared_prices_and_two_reopens() -> anyhow::Resu
         if time >= DETAIL_MS {
             rejected(
                 &store,
-                &attempt(99, 0),
+                &attempt(/*id*/ 99, /*dispatch*/ 0),
                 &[],
                 if time >= REPLAY_MS {
                     "expired replay"
@@ -146,25 +156,61 @@ async fn exact_boundaries_replay_shared_prices_and_two_reopens() -> anyhow::Resu
         }
     }
     let expected = rows(&runtime).await?;
-    let expired = response(REPLAY_MS + 1, 0, None, partial(0, 0, "0"));
+    let expired = response(
+        REPLAY_MS + 1,
+        /*day*/ 0,
+        /*oldest*/ None,
+        partial(/*input*/ 0, /*count*/ 0, "0"),
+    );
     runtime.close().await;
-    reopened(&home, &expected, 0, REPLAY_MS + 1, Ok(&expired)).await?;
+    reopened(
+        &home,
+        &expected,
+        /*day*/ 0,
+        REPLAY_MS + 1,
+        Ok(&expired),
+    )
+    .await?;
     for reopen in 0..2 {
         let runtime =
             StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
         let store = attach(&runtime);
-        rejected(&store, &attempt(1, 0), &[], "expired replay").await?;
-        rejected(&store, &attempt(2, 1), &[], "expired replay").await?;
+        rejected(
+            &store,
+            &attempt(/*id*/ 1, /*dispatch*/ 0),
+            &[],
+            "expired replay",
+        )
+        .await?;
+        rejected(
+            &store,
+            &attempt(/*id*/ 2, /*dispatch*/ 1),
+            &[],
+            "expired replay",
+        )
+        .await?;
         if reopen == 0 {
             assert_eq!(
                 store
-                    .read_retained_day(owned(3, DAY_MS, 8).thread_id, 1, REPLAY_MS + 1)
+                    .read_retained_day(
+                        owned(/*id*/ 3, DAY_MS, /*owner*/ 8).thread_id,
+                        /*day*/ 1,
+                        REPLAY_MS + 1
+                    )
                     .await?,
-                response(REPLAY_MS + 1, 1, Some(1), partial(1, 1, TINY))
+                response(
+                    REPLAY_MS + 1,
+                    /*day*/ 1,
+                    Some(1),
+                    partial(/*input*/ 1, /*count*/ 1, TINY)
+                )
             );
         }
         store
-            .delete_recorded_thread(owned(3, DAY_MS, 8).thread_id, REPLAY_MS + 1)
+            .delete_recorded_thread(
+                owned(/*id*/ 3, DAY_MS, /*owner*/ 8).thread_id,
+                REPLAY_MS + 1,
+            )
             .await?;
         let deleted = retained_rows(
             &expected,
@@ -195,7 +241,9 @@ impl Operation {
         time: i64,
     ) -> anyhow::Result<()> {
         match self {
-            Self::Append => Journal::append_on_connection(conn, a, &[row(a, 2, 2)]).await,
+            Self::Append => {
+                Journal::append_on_connection(conn, a, &[row(a, /*revision*/ 2, /*input*/ 2)]).await
+            }
             Self::Maintain => maintain_on_connection(conn, time).await,
             Self::Delete => delete_on_connection(conn, a.thread_id, time).await,
         }
@@ -207,7 +255,7 @@ impl Operation {
                 store
                     .estimates
                     .journal
-                    .append_observation(a, &[row(a, 2, 2)])
+                    .append_observation(a, &[row(a, /*revision*/ 2, /*input*/ 2)])
                     .await
             }
             Self::Maintain => store.maintain_retention(time).await,
@@ -259,7 +307,11 @@ async fn fourteen_reachable_sql_faults_rollback_reopen_retry_both_routes() -> an
             let runtime =
                 StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
             let store = install(&runtime).await?;
-            for a in [attempt(1, 0), attempt(2, 1), owned(3, DAY_MS, 8)] {
+            for a in [
+                attempt(/*id*/ 1, /*dispatch*/ 0),
+                attempt(/*id*/ 2, /*dispatch*/ 1),
+                owned(/*id*/ 3, DAY_MS, /*owner*/ 8),
+            ] {
                 save(&store, &a, &[snapshot()]).await?;
             }
             let original = rows(&runtime).await?;
@@ -269,7 +321,7 @@ async fn fourteen_reachable_sql_faults_rollback_reopen_retry_both_routes() -> an
                 (
                     REPLAY_MS,
                     vec![1, 2, 3],
-                    vec![(8, 1, partial(1, 1, TINY), vec![1000])],
+                    vec![(8, 1, partial(/*input*/ 1, /*count*/ 1, TINY), vec![1000])],
                     vec![(2, REPLAY_MS + 1), (3, REPLAY_MS + DAY_MS)],
                 )
             } else if site == "compact_update" {
@@ -277,14 +329,14 @@ async fn fourteen_reachable_sql_faults_rollback_reopen_retry_both_routes() -> an
                 (
                     DETAIL_MS + 1,
                     vec![1, 2],
-                    vec![(7, 0, partial(2, 2, TWO), vec![1000])],
+                    vec![(7, 0, partial(/*input*/ 2, /*count*/ 2, TWO), vec![1000])],
                     vec![(1, REPLAY_MS), (2, REPLAY_MS + 1)],
                 )
             } else {
                 (
                     DETAIL_MS,
                     vec![1],
-                    vec![(7, 0, partial(1, 1, TINY), vec![1000])],
+                    vec![(7, 0, partial(/*input*/ 1, /*count*/ 1, TINY), vec![1000])],
                     vec![(1, REPLAY_MS)],
                 )
             };
@@ -301,7 +353,7 @@ async fn fourteen_reachable_sql_faults_rollback_reopen_retry_both_routes() -> an
             fault(&mut conn, site, event, "1").await?;
             let baseline = dump(&mut conn).await?;
             drop(conn);
-            let target = owned(99, time, 99);
+            let target = owned(/*id*/ 99, time, /*owner*/ 99);
             assert_error(
                 operation.run(&store, &target, time).await.unwrap_err(),
                 &format!("retention_fault_{site}"),
@@ -310,13 +362,18 @@ async fn fourteen_reachable_sql_faults_rollback_reopen_retry_both_routes() -> an
             if site == "checkpoint" {
                 assert_eq!(
                     store
-                        .read_retained_day(attempt(1, 0).thread_id, 0, time)
+                        .read_retained_day(
+                            attempt(/*id*/ 1, /*dispatch*/ 0).thread_id,
+                            /*day*/ 0,
+                            time
+                        )
                         .await?,
                     RetainedDay::NeedsActivation
                 );
                 // A failed first sweep leaves only the explicitly staged setup permission.
                 let mut setup = runtime.pool.begin_with("BEGIN IMMEDIATE").await?;
-                Journal::append_on_connection(&mut setup, &attempt(88, 0), &[]).await?;
+                Journal::append_on_connection(&mut setup, &attempt(/*id*/ 88, /*dispatch*/ 0), &[])
+                    .await?;
                 setup.rollback().await?;
                 assert_eq!(rows(&runtime).await?, baseline);
             }
@@ -342,15 +399,15 @@ async fn fourteen_reachable_sql_faults_rollback_reopen_retry_both_routes() -> an
             runtime.close().await;
             let expected_read = response(
                 time,
-                0,
+                /*day*/ 0,
                 (!expiry).then_some(0),
                 if expiry {
-                    partial(0, 0, "0")
+                    partial(/*input*/ 0, /*count*/ 0, "0")
                 } else {
-                    partial(2, 2, TWO)
+                    partial(/*input*/ 2, /*count*/ 2, TWO)
                 },
             );
-            reopened(&home, &expected, 0, time, Ok(&expected_read)).await?;
+            reopened(&home, &expected, /*day*/ 0, time, Ok(&expected_read)).await?;
         }
     }
     Ok(())
@@ -411,14 +468,19 @@ async fn target_deletion_faults_follow_maintenance_and_preserve_all_owners() -> 
         let runtime =
             StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
         let store = install(&runtime).await?;
-        let target = attempt(1, DAY_MS);
+        let target = attempt(/*id*/ 1, DAY_MS);
         save(&store, &target, &[snapshot()]).await?;
-        save(&store, &attempt(2, 0), &[snapshot()]).await?;
+        save(&store, &attempt(/*id*/ 2, /*dispatch*/ 0), &[snapshot()]).await?;
         let mut other_price = snapshot();
         if site == "target_gc" {
             other_price.id = Uuid::from_u128(1002);
         }
-        save(&store, &owned(3, 1, 8), &[other_price.clone()]).await?;
+        save(
+            &store,
+            &owned(/*id*/ 3, /*dispatch*/ 1, /*owner*/ 8),
+            &[other_price.clone()],
+        )
+        .await?;
         let original = rows(&runtime).await?;
         // First-activation failure as well as already-active checkpoint advancement.
         if site != "target_tombstone" {
@@ -465,7 +527,12 @@ async fn target_deletion_faults_follow_maintenance_and_preserve_all_owners() -> 
         let expected = retained_rows(
             &original,
             &[1, 2, 3],
-            &[(8, 0, partial(1, 1, TINY), vec![price_id])],
+            &[(
+                8,
+                0,
+                partial(/*input*/ 1, /*count*/ 1, TINY),
+                vec![price_id],
+            )],
             &tombstones,
             &[price_id],
             time,
@@ -477,18 +544,32 @@ async fn target_deletion_faults_follow_maintenance_and_preserve_all_owners() -> 
             assert_eq!(rows(&runtime).await?, expected);
         }
         runtime.close().await;
-        let empty = response(time, 0, None, partial(0, 0, "0"));
-        reopened(&home, &expected, 0, time, Ok(&empty)).await?;
+        let empty = response(
+            time,
+            /*day*/ 0,
+            /*oldest*/ None,
+            partial(/*input*/ 0, /*count*/ 0, "0"),
+        );
+        reopened(&home, &expected, /*day*/ 0, time, Ok(&empty)).await?;
         let runtime =
             StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
         assert_eq!(
             attach(&runtime)
-                .read_retained_day(owned(3, 1, 8).thread_id, 0, time)
+                .read_retained_day(
+                    owned(/*id*/ 3, /*dispatch*/ 1, /*owner*/ 8).thread_id,
+                    /*day*/ 0,
+                    time
+                )
                 .await?,
-            response(time, 0, Some(0), partial(1, 1, TINY))
+            response(
+                time,
+                /*day*/ 0,
+                Some(0),
+                partial(/*input*/ 1, /*count*/ 1, TINY)
+            )
         );
         attach(&runtime)
-            .delete_recorded_thread(owned(3, 1, 8).thread_id, time)
+            .delete_recorded_thread(owned(/*id*/ 3, /*dispatch*/ 1, /*owner*/ 8).thread_id, time)
             .await?;
         assert_eq!(
             rows(&runtime).await?,
@@ -506,7 +587,7 @@ async fn deferred_foreign_key_commit_failure_rolls_back_and_retries() -> anyhow:
         let runtime =
             StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
         let store = install(&runtime).await?;
-        save(&store, &attempt(1, 0), &[snapshot()]).await?;
+        save(&store, &attempt(/*id*/ 1, /*dispatch*/ 0), &[snapshot()]).await?;
         let baseline = rows(&runtime).await?;
         sqlx::raw_sql("CREATE TRIGGER retention_commit_fault AFTER UPDATE ON draft_accounting_retention_checkpoint BEGIN INSERT INTO draft_accounting_compact_snapshots VALUES ('00000000-0000-0000-0000-000000000007', 0, '00000000-0000-0000-0000-000000009999'); END;")
             .execute(runtime.pool.as_ref()).await?;
@@ -514,7 +595,7 @@ async fn deferred_foreign_key_commit_failure_rolls_back_and_retries() -> anyhow:
         sqlx::query("PRAGMA defer_foreign_keys=ON")
             .execute(other.pool.as_ref())
             .await?;
-        let target = owned(99, DETAIL_MS, 99);
+        let target = owned(/*id*/ 99, DETAIL_MS, /*owner*/ 99);
         let error = operation
             .run(&attach(&other), &target, DETAIL_MS)
             .await
@@ -536,7 +617,7 @@ async fn deferred_foreign_key_commit_failure_rolls_back_and_retries() -> anyhow:
         reopened(
             &home,
             &baseline,
-            0,
+            /*day*/ 0,
             DETAIL_MS,
             Ok(&RetainedDay::NeedsActivation),
         )
@@ -549,7 +630,7 @@ async fn deferred_foreign_key_commit_failure_rolls_back_and_retries() -> anyhow:
         let expected = retained_rows(
             &baseline,
             &[1],
-            &[(7, 0, partial(1, 1, TINY), vec![1000])],
+            &[(7, 0, partial(/*input*/ 1, /*count*/ 1, TINY), vec![1000])],
             &[(1, REPLAY_MS)],
             &[1000],
             DETAIL_MS,
@@ -562,9 +643,14 @@ async fn deferred_foreign_key_commit_failure_rolls_back_and_retries() -> anyhow:
         reopened(
             &home,
             &expected,
-            0,
+            /*day*/ 0,
             DETAIL_MS,
-            Ok(&response(DETAIL_MS, 0, Some(0), partial(1, 1, TINY))),
+            Ok(&response(
+                DETAIL_MS,
+                /*day*/ 0,
+                Some(0),
+                partial(/*input*/ 1, /*count*/ 1, TINY),
+            )),
         )
         .await?;
     }
@@ -585,7 +671,7 @@ async fn four_real_writer_orders_and_reader_snapshot_transfer() -> anyhow::Resul
         let runtime =
             StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
         let store = install(&runtime).await?;
-        let a = attempt(1, 0);
+        let a = attempt(/*id*/ 1, /*dispatch*/ 0);
         save(&store, &a, &[snapshot()]).await?;
         store.maintain_retention(DETAIL_MS - 1).await?;
         let baseline = rows(&runtime).await?;
@@ -633,17 +719,17 @@ async fn four_real_writer_orders_and_reader_snapshot_transfer() -> anyhow::Resul
         }
         let (days, total, oldest) = match (first, second) {
             (Operation::Append, Operation::Maintain) => (
-                vec![(7, 0, partial(2, 1, TWO), vec![1000])],
-                partial(2, 1, TWO),
+                vec![(7, 0, partial(/*input*/ 2, /*count*/ 1, TWO), vec![1000])],
+                partial(/*input*/ 2, /*count*/ 1, TWO),
                 Some(0),
             ),
             (Operation::Maintain, Operation::Append) => (
-                vec![(7, 0, partial(1, 1, TINY), vec![1000])],
-                partial(1, 1, TINY),
+                vec![(7, 0, partial(/*input*/ 1, /*count*/ 1, TINY), vec![1000])],
+                partial(/*input*/ 1, /*count*/ 1, TINY),
                 Some(0),
             ),
             (Operation::Delete, Operation::Maintain) | (Operation::Maintain, Operation::Delete) => {
-                (vec![], partial(0, 0, "0"), None)
+                (vec![], partial(/*input*/ 0, /*count*/ 0, "0"), None)
             }
             _ => unreachable!("only the four explicit contention orders"),
         };
@@ -660,8 +746,10 @@ async fn four_real_writer_orders_and_reader_snapshot_transfer() -> anyhow::Resul
             )?
         );
         assert_eq!(
-            store.read_retained_day(a.thread_id, 0, DETAIL_MS).await?,
-            response(DETAIL_MS, 0, oldest, total)
+            store
+                .read_retained_day(a.thread_id, /*day*/ 0, DETAIL_MS)
+                .await?,
+            response(DETAIL_MS, /*day*/ 0, oldest, total)
         );
         other.pool.close().await;
         runtime.close().await;
@@ -669,29 +757,39 @@ async fn four_real_writer_orders_and_reader_snapshot_transfer() -> anyhow::Resul
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
-    save(&store, &attempt(1, 0), &[snapshot()]).await?;
-    save(&store, &attempt(2, 1), &[snapshot()]).await?;
+    save(&store, &attempt(/*id*/ 1, /*dispatch*/ 0), &[snapshot()]).await?;
+    save(&store, &attempt(/*id*/ 2, /*dispatch*/ 1), &[snapshot()]).await?;
     store.maintain_retention(DETAIL_MS - 1).await?;
     let mut reader = runtime.pool.begin().await?;
     let old_rows = dump(&mut reader).await?; // SELECT establishes the WAL snapshot.
-    let before = response(DETAIL_MS - 1, 0, Some(0), partial(2, 2, TWO));
-    read_checked(&mut reader, 0, DETAIL_MS - 1, Ok(&before)).await?;
+    let before = response(
+        DETAIL_MS - 1,
+        /*day*/ 0,
+        Some(0),
+        partial(/*input*/ 2, /*count*/ 2, TWO),
+    );
+    read_checked(&mut reader, /*day*/ 0, DETAIL_MS - 1, Ok(&before)).await?;
     store.maintain_retention(DETAIL_MS).await?;
     assert_eq!(dump(&mut reader).await?, old_rows);
-    read_checked(&mut reader, 0, DETAIL_MS - 1, Ok(&before)).await?;
+    read_checked(&mut reader, /*day*/ 0, DETAIL_MS - 1, Ok(&before)).await?;
     read_checked(
         &mut reader,
-        0,
+        /*day*/ 0,
         DETAIL_MS,
         Ok(&RetainedDay::NeedsMaintenance {
             completed_as_of_ms: DETAIL_MS - 1,
         }),
     )
     .await?;
-    let after = response(DETAIL_MS, 0, Some(0), partial(2, 2, TWO));
+    let after = response(
+        DETAIL_MS,
+        /*day*/ 0,
+        Some(0),
+        partial(/*input*/ 2, /*count*/ 2, TWO),
+    );
     read_checked(
         &mut *runtime.pool.acquire().await?,
-        0,
+        /*day*/ 0,
         DETAIL_MS,
         Ok(&after),
     )
@@ -701,7 +799,7 @@ async fn four_real_writer_orders_and_reader_snapshot_transfer() -> anyhow::Resul
         retained_rows(
             &old_rows,
             &[1],
-            &[(7, 0, partial(1, 1, TINY), vec![1000])],
+            &[(7, 0, partial(/*input*/ 1, /*count*/ 1, TINY), vec![1000])],
             &[(1, REPLAY_MS)],
             &[1000],
             DETAIL_MS
@@ -717,12 +815,12 @@ async fn latest_original_price_null_binding_intent_and_known_zero() -> anyhow::R
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
-    let a = attempt(1, 0);
+    let a = attempt(/*id*/ 1, /*dispatch*/ 0);
     let mut price_json = serde_json::to_value(snapshot())?;
     price_json["rates"]["noncached"] = json!("3");
     price_json["rates"]["read"] = json!("0.3");
     let price: Snapshot = serde_json::from_value(price_json)?;
-    let mut first = row(&a, 1, 50);
+    let mut first = row(&a, /*revision*/ 1, /*input*/ 50);
     first.patch = serde_json::from_value(json!({"input":50,"read":10}))?;
     store
         .estimates
@@ -740,10 +838,10 @@ async fn latest_original_price_null_binding_intent_and_known_zero() -> anyhow::R
     store
         .estimates
         .journal
-        .append_observation(&a, &[row(&a, 2, 60)])
+        .append_observation(&a, &[row(&a, /*revision*/ 2, /*input*/ 60)])
         .await?;
-    let b = attempt(2, 1);
-    let mut raw = row(&b, 1, 1);
+    let b = attempt(/*id*/ 2, /*dispatch*/ 1);
+    let mut raw = row(&b, /*revision*/ 1, /*input*/ 1);
     raw.patch = serde_json::from_value(json!({"input":1,"read":0,"write":0,"output":0}))?;
     store
         .estimates
@@ -755,11 +853,11 @@ async fn latest_original_price_null_binding_intent_and_known_zero() -> anyhow::R
         store.refresh_current(b.attempt_id).await?,
         Current::Ready(())
     );
-    save(&store, &owned(3, DAY_MS, 8), &[price]).await?;
-    let intent = owned(4, 0, 9);
+    save(&store, &owned(/*id*/ 3, DAY_MS, /*owner*/ 8), &[price]).await?;
+    let intent = owned(/*id*/ 4, /*dispatch*/ 0, /*owner*/ 9);
     store.estimates.journal.begin_attempt(&intent).await?;
-    let zero_attempt = owned(5, 0, 10);
-    let mut zero_row = row(&zero_attempt, 1, 0);
+    let zero_attempt = owned(/*id*/ 5, /*dispatch*/ 0, /*owner*/ 10);
+    let mut zero_row = row(&zero_attempt, /*revision*/ 1, /*input*/ 0);
     zero_row.patch = serde_json::from_value(
         json!({"input":0,"read":0,"write":0,"output":0,"reasoning":0,"total":0}),
     )?;
@@ -781,17 +879,17 @@ async fn latest_original_price_null_binding_intent_and_known_zero() -> anyhow::R
         [1, 61, 10, 0, 0, 0, 1],
         [1, 0, 0, 1, 1, 2, 1],
         "0.000183",
-        2,
-        2,
+        /*missing*/ 2,
+        /*count*/ 2,
     );
     // The compacted day for the unpriced attempt carries one incomplete estimate:
     // zero tokens without a rate is not a zero cost, and `zero` is the row this
     // test's pipeline actually produces. `priced_zero` is a hand-built row: it
     // pins only that `to_day_totals` still reports a complete zero when the
     // estimate count is zero, not that any attempt here produced it.
-    let zero = values([0; 7], [0; 7], "0", 1, 1);
-    let priced_zero = values([0; 7], [0; 7], "0", 0, 1);
-    let unknown = values([0; 7], [1; 7], "0", 1, 1);
+    let zero = values([0; 7], [0; 7], "0", /*missing*/ 1, /*count*/ 1);
+    let priced_zero = values([0; 7], [0; 7], "0", /*missing*/ 0, /*count*/ 1);
+    let unknown = values([0; 7], [1; 7], "0", /*missing*/ 1, /*count*/ 1);
     let priced_zero_totals = priced_zero.to_day_totals()?;
     assert_eq!(priced_zero_totals.full_usd(), Some(Decimal::default()));
     assert!(
@@ -814,8 +912,8 @@ async fn latest_original_price_null_binding_intent_and_known_zero() -> anyhow::R
                     [0, 60, 10, 0, 0, 0, 0],
                     [1, 0, 0, 1, 1, 1, 1],
                     "0.000183",
-                    1,
-                    1,
+                    /*missing*/ 1,
+                    /*count*/ 1,
                 ),
                 vec![1000],
             ),
@@ -827,10 +925,16 @@ async fn latest_original_price_null_binding_intent_and_known_zero() -> anyhow::R
         DETAIL_MS,
     )?;
     assert_eq!(rows(&runtime).await?, expected);
-    let read = response(DETAIL_MS, 0, Some(0), main_total);
-    read_checked(&mut *runtime.pool.acquire().await?, 0, DETAIL_MS, Ok(&read)).await?;
+    let read = response(DETAIL_MS, /*day*/ 0, Some(0), main_total);
+    read_checked(
+        &mut *runtime.pool.acquire().await?,
+        /*day*/ 0,
+        DETAIL_MS,
+        Ok(&read),
+    )
+    .await?;
     runtime.close().await;
-    reopened(&home, &expected, 0, DETAIL_MS, Ok(&read)).await?;
+    reopened(&home, &expected, /*day*/ 0, DETAIL_MS, Ok(&read)).await?;
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = attach(&runtime);
     // Raw+compact target is deleted only after two successful on-disk reopens.
@@ -852,14 +956,20 @@ async fn expired_first_sweep_and_invalid_times_never_resurrect_detail() -> anyho
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
-    for a in [attempt(1, 0), attempt(2, 1), attempt(3, DAY_MS)] {
+    for a in [
+        attempt(/*id*/ 1, /*dispatch*/ 0),
+        attempt(/*id*/ 2, /*dispatch*/ 1),
+        attempt(/*id*/ 3, DAY_MS),
+    ] {
         save(&store, &a, &[snapshot()]).await?;
     }
     let baseline = rows(&runtime).await?;
     for (time, marker) in [(-1, "negative"), (0, "future dispatch")] {
         for op in [Operation::Maintain, Operation::Delete] {
             assert_error(
-                op.run(&store, &attempt(1, 0), time).await.unwrap_err(),
+                op.run(&store, &attempt(/*id*/ 1, /*dispatch*/ 0), time)
+                    .await
+                    .unwrap_err(),
                 marker,
             );
             assert_eq!(rows(&runtime).await?, baseline);
@@ -869,7 +979,7 @@ async fn expired_first_sweep_and_invalid_times_never_resurrect_detail() -> anyho
     let expected = retained_rows(
         &baseline,
         &[1, 2, 3],
-        &[(7, 1, partial(1, 1, TINY), vec![1000])],
+        &[(7, 1, partial(/*input*/ 1, /*count*/ 1, TINY), vec![1000])],
         &[(2, REPLAY_MS + 1), (3, REPLAY_MS + DAY_MS)],
         &[1000],
         REPLAY_MS,
@@ -877,7 +987,7 @@ async fn expired_first_sweep_and_invalid_times_never_resurrect_detail() -> anyho
     assert_eq!(rows(&runtime).await?, expected);
     for op in [Operation::Maintain, Operation::Delete] {
         assert_error(
-            op.run(&store, &attempt(1, 0), REPLAY_MS - 1)
+            op.run(&store, &attempt(/*id*/ 1, /*dispatch*/ 0), REPLAY_MS - 1)
                 .await
                 .unwrap_err(),
             "backward",
@@ -888,16 +998,24 @@ async fn expired_first_sweep_and_invalid_times_never_resurrect_detail() -> anyho
     reopened(
         &home,
         &expected,
-        0,
+        /*day*/ 0,
         REPLAY_MS,
-        Ok(&response(REPLAY_MS, 0, Some(1), partial(0, 0, "0"))),
+        Ok(&response(
+            REPLAY_MS,
+            /*day*/ 0,
+            Some(1),
+            partial(/*input*/ 0, /*count*/ 0, "0"),
+        )),
     )
     .await?;
     let late_home = support::home();
     let runtime =
         StateRuntime::init_for_testing(late_home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
-    for a in [attempt(1, 0), attempt(2, 1)] {
+    for a in [
+        attempt(/*id*/ 1, /*dispatch*/ 0),
+        attempt(/*id*/ 2, /*dispatch*/ 1),
+    ] {
         save(&store, &a, &[snapshot()]).await?;
     }
     let before = rows(&runtime).await?;
@@ -909,16 +1027,21 @@ async fn expired_first_sweep_and_invalid_times_never_resurrect_detail() -> anyho
     reopened(
         &late_home,
         &empty,
-        0,
+        /*day*/ 0,
         REPLAY_MS + 1,
-        Ok(&response(REPLAY_MS + 1, 0, None, partial(0, 0, "0"))),
+        Ok(&response(
+            REPLAY_MS + 1,
+            /*day*/ 0,
+            /*oldest*/ None,
+            partial(/*input*/ 0, /*count*/ 0, "0"),
+        )),
     )
     .await?;
     let overflow_home = support::home();
     let runtime =
         StateRuntime::init_for_testing(overflow_home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
-    let a = attempt(1, i64::MAX);
+    let a = attempt(/*id*/ 1, i64::MAX);
     store.estimates.journal.begin_attempt(&a).await?;
     let baseline = rows(&runtime).await?;
     for op in [Operation::Maintain, Operation::Delete] {
@@ -981,15 +1104,15 @@ async fn corrupt_inputs_fail_maintenance_read_and_deletion_then_restore_and_retr
         let runtime =
             StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
         let store = install(&runtime).await?;
-        save(&store, &attempt(1, 0), &[snapshot()]).await?;
-        save(&store, &attempt(2, 1), &[snapshot()]).await?;
+        save(&store, &attempt(/*id*/ 1, /*dispatch*/ 0), &[snapshot()]).await?;
+        save(&store, &attempt(/*id*/ 2, /*dispatch*/ 1), &[snapshot()]).await?;
         store.maintain_retention(DETAIL_MS).await?;
         // Keep a valid newer quote so corruption specifically exercises an older version.
-        let b = attempt(2, 1);
+        let b = attempt(/*id*/ 2, /*dispatch*/ 1);
         store
             .estimates
             .journal
-            .append_observation(&b, &[row(&b, 2, 1)])
+            .append_observation(&b, &[row(&b, /*revision*/ 2, /*input*/ 1)])
             .await?;
         store.estimates.persist_current(b.attempt_id, &[]).await?;
         assert_eq!(
@@ -1017,12 +1140,14 @@ async fn corrupt_inputs_fail_maintenance_read_and_deletion_then_restore_and_retr
         let broken = dump(&mut conn).await?;
         for op in [Operation::Maintain, Operation::Delete] {
             assert_error(
-                op.run(&store, &attempt(1, 0), DETAIL_MS).await.unwrap_err(),
+                op.run(&store, &attempt(/*id*/ 1, /*dispatch*/ 0), DETAIL_MS)
+                    .await
+                    .unwrap_err(),
                 marker,
             );
             assert_eq!(dump(&mut conn).await?, broken);
         }
-        read_checked(&mut conn, 0, DETAIL_MS, Err(marker)).await?;
+        read_checked(&mut conn, /*day*/ 0, DETAIL_MS, Err(marker)).await?;
         sqlx::query(sqlx::AssertSqlSafe(update))
             .bind(original)
             .execute(&mut *conn)
@@ -1036,14 +1161,14 @@ async fn corrupt_inputs_fail_maintenance_read_and_deletion_then_restore_and_retr
         let expected = retained_rows(
             &valid,
             &[2],
-            &[(7, 0, partial(2, 2, TWO), vec![1000])],
+            &[(7, 0, partial(/*input*/ 2, /*count*/ 2, TWO), vec![1000])],
             &[(1, REPLAY_MS), (2, REPLAY_MS + 1)],
             &[1000],
             DETAIL_MS + 1,
         )?;
         assert_eq!(rows(&runtime).await?, expected);
         store
-            .delete_recorded_thread(attempt(1, 0).thread_id, DETAIL_MS + 1)
+            .delete_recorded_thread(attempt(/*id*/ 1, /*dispatch*/ 0).thread_id, DETAIL_MS + 1)
             .await?;
         assert_eq!(
             rows(&runtime).await?,
@@ -1064,10 +1189,14 @@ async fn corrupt_inputs_fail_maintenance_read_and_deletion_then_restore_and_retr
 #[tokio::test]
 async fn checked_compact_overflow_propagates_through_all_coupled_paths() -> anyhow::Result<()> {
     for (bad, marker) in [
-        (partial(i64::MAX, 1, "0"), "known overflow"),
-        (partial(1, i64::MAX, "0"), "unknown overflow"),
+        (partial(i64::MAX, /*count*/ 1, "0"), "known overflow"),
+        (partial(/*input*/ 1, i64::MAX, "0"), "unknown overflow"),
         (
-            partial(1, 1, "340282366920938463463374607431768211455"),
+            partial(
+                /*input*/ 1,
+                /*count*/ 1,
+                "340282366920938463463374607431768211455",
+            ),
             "decimal alignment overflow",
         ),
     ] {
@@ -1075,8 +1204,8 @@ async fn checked_compact_overflow_propagates_through_all_coupled_paths() -> anyh
         let runtime =
             StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
         let store = install(&runtime).await?;
-        save(&store, &attempt(1, 0), &[snapshot()]).await?;
-        save(&store, &attempt(2, 1), &[snapshot()]).await?;
+        save(&store, &attempt(/*id*/ 1, /*dispatch*/ 0), &[snapshot()]).await?;
+        save(&store, &attempt(/*id*/ 2, /*dispatch*/ 1), &[snapshot()]).await?;
         store.maintain_retention(DETAIL_MS).await?;
         let valid = rows(&runtime).await?;
         let mut conn = runtime.pool.acquire().await?;
@@ -1090,10 +1219,10 @@ async fn checked_compact_overflow_propagates_through_all_coupled_paths() -> anyh
             .execute(&mut *conn)
             .await?;
         let broken = dump(&mut conn).await?;
-        read_checked(&mut conn, 0, DETAIL_MS + 1, Err(marker)).await?;
+        read_checked(&mut conn, /*day*/ 0, DETAIL_MS + 1, Err(marker)).await?;
         for op in [Operation::Maintain, Operation::Delete] {
             assert_error(
-                op.run(&store, &attempt(1, 0), DETAIL_MS + 1)
+                op.run(&store, &attempt(/*id*/ 1, /*dispatch*/ 0), DETAIL_MS + 1)
                     .await
                     .unwrap_err(),
                 marker,
@@ -1101,7 +1230,7 @@ async fn checked_compact_overflow_propagates_through_all_coupled_paths() -> anyh
             assert_eq!(dump(&mut conn).await?, broken);
         }
         sqlx::query("UPDATE draft_accounting_compact_days SET payload = ?")
-            .bind(partial(1, 1, TINY).encode()?)
+            .bind(partial(/*input*/ 1, /*count*/ 1, TINY).encode()?)
             .execute(&mut *conn)
             .await?;
         sqlx::query("UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = ?")
@@ -1114,7 +1243,7 @@ async fn checked_compact_overflow_propagates_through_all_coupled_paths() -> anyh
         let expected = retained_rows(
             &valid,
             &[2],
-            &[(7, 0, partial(2, 2, TWO), vec![1000])],
+            &[(7, 0, partial(/*input*/ 2, /*count*/ 2, TWO), vec![1000])],
             &[(1, REPLAY_MS), (2, REPLAY_MS + 1)],
             &[1000],
             DETAIL_MS + 1,
@@ -1122,13 +1251,18 @@ async fn checked_compact_overflow_propagates_through_all_coupled_paths() -> anyh
         assert_eq!(rows(&runtime).await?, expected);
         read_checked(
             &mut *runtime.pool.acquire().await?,
-            0,
+            /*day*/ 0,
             DETAIL_MS + 1,
-            Ok(&response(DETAIL_MS + 1, 0, Some(0), partial(2, 2, TWO))),
+            Ok(&response(
+                DETAIL_MS + 1,
+                /*day*/ 0,
+                Some(0),
+                partial(/*input*/ 2, /*count*/ 2, TWO),
+            )),
         )
         .await?;
         store
-            .delete_recorded_thread(attempt(1, 0).thread_id, DETAIL_MS + 1)
+            .delete_recorded_thread(attempt(/*id*/ 1, /*dispatch*/ 0).thread_id, DETAIL_MS + 1)
             .await?;
         assert_eq!(
             rows(&runtime).await?,
@@ -1151,16 +1285,16 @@ async fn transferred_replay_suppression_survives_two_reopens_without_setup() -> 
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
-    let a = attempt(1, 0);
+    let a = attempt(/*id*/ 1, /*dispatch*/ 0);
     save(&store, &a, &[snapshot()]).await?;
-    save(&store, &attempt(2, 1), &[snapshot()]).await?;
+    save(&store, &attempt(/*id*/ 2, /*dispatch*/ 1), &[snapshot()]).await?;
     let original = rows(&runtime).await?;
     let time = DETAIL_MS + 1;
     store.maintain_retention(time).await?;
     let expected = retained_rows(
         &original,
         &[1, 2],
-        &[(7, 0, partial(2, 2, TWO), vec![1000])],
+        &[(7, 0, partial(/*input*/ 2, /*count*/ 2, TWO), vec![1000])],
         &[(1, REPLAY_MS), (2, REPLAY_MS + 1)],
         &[1000],
         time,
@@ -1174,15 +1308,32 @@ async fn transferred_replay_suppression_survives_two_reopens_without_setup() -> 
         assert_eq!(rows(&runtime).await?, expected);
         read_checked(
             &mut *runtime.pool.acquire().await?,
-            0,
+            /*day*/ 0,
             time,
-            Ok(&response(time, 0, Some(0), partial(2, 2, TWO))),
+            Ok(&response(
+                time,
+                /*day*/ 0,
+                Some(0),
+                partial(/*input*/ 2, /*count*/ 2, TWO),
+            )),
         )
         .await?;
-        rejected(&store, &a, &[row(&a, 2, 60)], "unsupported compact-only").await?;
-        rejected(&store, &attempt(1, time), &[], "deleted attempt").await?;
-        rejected(&store, &attempt(99, 0), &[], "unsupported compact-only").await?;
-        let mut retry = attempt(99, time);
+        rejected(
+            &store,
+            &a,
+            &[row(&a, /*revision*/ 2, /*input*/ 60)],
+            "unsupported compact-only",
+        )
+        .await?;
+        rejected(&store, &attempt(/*id*/ 1, time), &[], "deleted attempt").await?;
+        rejected(
+            &store,
+            &attempt(/*id*/ 99, /*dispatch*/ 0),
+            &[],
+            "unsupported compact-only",
+        )
+        .await?;
+        let mut retry = attempt(/*id*/ 99, time);
         retry.request_id = a.request_id;
         retry.retry_of = Some(a.attempt_id);
         rejected(&store, &retry, &[], "retry predecessor").await?;
@@ -1198,12 +1349,12 @@ async fn target_failure_rolls_back_day365_expiry_and_replay_floor() -> anyhow::R
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
-    let target = attempt(1, 276 * DAY_MS);
+    let target = attempt(/*id*/ 1, 276 * DAY_MS);
     for a in [
         target.clone(),
-        owned(2, 0, 9),
-        owned(3, 275 * DAY_MS, 8),
-        attempt(4, DAY_MS),
+        owned(/*id*/ 2, /*dispatch*/ 0, /*owner*/ 9),
+        owned(/*id*/ 3, 275 * DAY_MS, /*owner*/ 8),
+        attempt(/*id*/ 4, DAY_MS),
     ] {
         save(&store, &a, &[snapshot()]).await?;
     }
@@ -1213,8 +1364,8 @@ async fn target_failure_rolls_back_day365_expiry_and_replay_floor() -> anyhow::R
         &original,
         &[2, 4],
         &[
-            (7, 1, partial(1, 1, TINY), vec![1000]),
-            (9, 0, partial(1, 1, TINY), vec![1000]),
+            (7, 1, partial(/*input*/ 1, /*count*/ 1, TINY), vec![1000]),
+            (9, 0, partial(/*input*/ 1, /*count*/ 1, TINY), vec![1000]),
         ],
         &[(2, REPLAY_MS), (4, REPLAY_MS + DAY_MS)],
         &[1000],
@@ -1243,16 +1394,28 @@ async fn target_failure_rolls_back_day365_expiry_and_replay_floor() -> anyhow::R
     );
     assert_eq!(rows(&runtime).await?, baseline);
     // Day zero is still available at the old checkpoint; expiry/floor did not partially commit.
-    let before_read = response(REPLAY_MS - 1, 0, Some(1), partial(0, 0, "0"));
+    let before_read = response(
+        REPLAY_MS - 1,
+        /*day*/ 0,
+        Some(1),
+        partial(/*input*/ 0, /*count*/ 0, "0"),
+    );
     read_checked(
         &mut *runtime.pool.acquire().await?,
-        0,
+        /*day*/ 0,
         REPLAY_MS - 1,
         Ok(&before_read),
     )
     .await?;
     runtime.close().await;
-    reopened(&home, &baseline, 0, REPLAY_MS - 1, Ok(&before_read)).await?;
+    reopened(
+        &home,
+        &baseline,
+        /*day*/ 0,
+        REPLAY_MS - 1,
+        Ok(&before_read),
+    )
+    .await?;
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     sqlx::query("DROP TRIGGER retention_fault_target_floor")
         .execute(runtime.pool.as_ref())
@@ -1260,7 +1423,7 @@ async fn target_failure_rolls_back_day365_expiry_and_replay_floor() -> anyhow::R
     let expected = retained_rows(
         &original,
         &[1, 2, 3, 4],
-        &[(8, 275, partial(1, 1, TINY), vec![1000])],
+        &[(8, 275, partial(/*input*/ 1, /*count*/ 1, TINY), vec![1000])],
         &[(1, 641 * DAY_MS), (3, 640 * DAY_MS), (4, 366 * DAY_MS)],
         &[1000],
         REPLAY_MS,
@@ -1271,16 +1434,27 @@ async fn target_failure_rolls_back_day365_expiry_and_replay_floor() -> anyhow::R
             .await?;
         assert_eq!(rows(&runtime).await?, expected);
     }
-    rejected(&attach(&runtime), &owned(2, 0, 9), &[], "expired replay").await?;
-    let after_read = response(REPLAY_MS, 0, None, partial(0, 0, "0"));
+    rejected(
+        &attach(&runtime),
+        &owned(/*id*/ 2, /*dispatch*/ 0, /*owner*/ 9),
+        &[],
+        "expired replay",
+    )
+    .await?;
+    let after_read = response(
+        REPLAY_MS,
+        /*day*/ 0,
+        /*oldest*/ None,
+        partial(/*input*/ 0, /*count*/ 0, "0"),
+    );
     read_checked(
         &mut *runtime.pool.acquire().await?,
-        0,
+        /*day*/ 0,
         REPLAY_MS,
         Ok(&after_read),
     )
     .await?;
     runtime.close().await;
-    reopened(&home, &expected, 0, REPLAY_MS, Ok(&after_read)).await?;
+    reopened(&home, &expected, /*day*/ 0, REPLAY_MS, Ok(&after_read)).await?;
     Ok(())
 }

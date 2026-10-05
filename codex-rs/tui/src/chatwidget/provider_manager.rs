@@ -348,7 +348,9 @@ mod tests {
                 chat.open_provider_manager_actions(entry, &status);
                 insta::assert_snapshot!(
                     format!("provider_replace_{provider}_{eligibility:?}"),
-                    crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 90)
+                    crate::chatwidget::tests::helpers::render_bottom_popup(
+                        &chat, /*width*/ 90
+                    )
                 );
                 for key in [
                     crossterm::event::KeyCode::Down,

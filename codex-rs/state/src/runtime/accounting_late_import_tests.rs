@@ -14,8 +14,8 @@ async fn accounting_late_import_raw_plus_compact_overflow_and_unrelated_delete()
 -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let e = entry(1, 0)?;
-    let mut raw = entry(2, DAY - 1)?;
+    let e = entry(/*id*/ 1, /*time*/ 0)?;
+    let mut raw = entry(/*id*/ 2, DAY - 1)?;
     raw.original_price = OriginalPriceEvidence::Unpriced;
     raw.observations[0].patch.input = Presence::Number(i64::MAX.try_into()?);
     native(&runtime, e.attempt.thread_id).await?;
@@ -63,11 +63,11 @@ async fn accounting_late_import_original_snapshot_collision_and_invalid_prefix()
     for case in ["snapshot", "prefix", "erased-parent", "raw-parent"] {
         let path = home();
         let runtime = open(&path).await?;
-        let mut e = entry(1, 0)?;
-        let mut parent = entry(2, 0)?;
+        let mut e = entry(/*id*/ 1, /*time*/ 0)?;
+        let mut parent = entry(/*id*/ 2, /*time*/ 0)?;
         parent.attempt.request_id = e.attempt.request_id;
         native(&runtime, e.attempt.thread_id).await?;
-        let store = AccountingStore::open(&runtime, 0).await?;
+        let store = AccountingStore::open(&runtime, /*as_of*/ 0).await?;
         let mut conn = connection(&runtime).await?;
         match case {
             "snapshot" => {
@@ -97,7 +97,7 @@ async fn accounting_late_import_original_snapshot_collision_and_invalid_prefix()
             }
             "raw-parent" => {
                 store
-                    .admit(e.attempt.thread_id, &parent.attempt, &[], 0)
+                    .admit(e.attempt.thread_id, &parent.attempt, &[], /*as_of*/ 0)
                     .await?;
                 e.attempt.retry_of = Some(parent.attempt.attempt_id);
             }
@@ -125,7 +125,7 @@ async fn accounting_late_import_writer_orders_and_read_snapshot() -> anyhow::Res
         let path = home();
         let runtime = open(&path).await?;
         let other = open(&path).await?;
-        let e = entry(1, 0)?;
+        let e = entry(/*id*/ 1, /*time*/ 0)?;
         native(&runtime, e.attempt.thread_id).await?;
         AccountingStore::open(&runtime, 99 * DAY).await?;
         let store = AccountingStore::open(&other, 99 * DAY).await?;
@@ -147,7 +147,7 @@ async fn accounting_late_import_writer_orders_and_read_snapshot() -> anyhow::Res
             .await?;
         }
         let next = if order == "distinct" {
-            entry(2, 0)?
+            entry(/*id*/ 2, /*time*/ 0)?
         } else {
             e.clone()
         };
@@ -183,8 +183,10 @@ async fn accounting_late_import_writer_orders_and_read_snapshot() -> anyhow::Res
         assert_ne!(dump(&mut reader).await?, before);
         let attempts = if order == "distinct" { 2 } else { 1 };
         assert_eq!(
-            store.read_day(e.attempt.thread_id, 0, 100 * DAY).await?,
-            expected_day(true, 100 * DAY, attempts)?
+            store
+                .read_day(e.attempt.thread_id, /*utc_day*/ 0, 100 * DAY)
+                .await?,
+            expected_day(/*owner_has_data*/ true, 100 * DAY, attempts)?
         );
         reader.close().await?;
         conn.close().await?;
@@ -202,7 +204,7 @@ async fn accounting_late_import_uncommitted_process_worker() -> anyhow::Result<(
     let runtime = open(&path).await?;
     let mut conn = connection(&runtime).await?;
     let mut tx = conn.begin_with("BEGIN IMMEDIATE").await?;
-    let e = entry(1, 0)?;
+    let e = entry(/*id*/ 1, /*time*/ 0)?;
     Journal::import_retained_on_connection(&mut tx, e.attempt.thread_id, &[e], 100 * DAY).await?;
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM draft_accounting_tombstones")
@@ -222,7 +224,7 @@ async fn accounting_late_import_uncommitted_process_worker() -> anyhow::Result<(
 async fn accounting_late_import_process_kill_after_uncommitted_writes() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let e = entry(1, 0)?;
+    let e = entry(/*id*/ 1, /*time*/ 0)?;
     native(&runtime, e.attempt.thread_id).await?;
     AccountingStore::open(&runtime, 99 * DAY).await?;
     let mut conn = connection(&runtime).await?;
@@ -304,7 +306,7 @@ async fn accounting_late_import_presence_numeric_and_exact_price_goldens() -> an
     ] {
         let path = home();
         let runtime = open(&path).await?;
-        let mut e = entry(1, 0)?;
+        let mut e = entry(/*id*/ 1, /*time*/ 0)?;
         e.attempt.dialect = dialect;
         e.observations[0].patch = serde_json::from_value(patch)?;
         e.original_price = OriginalPriceEvidence::Unpriced;
@@ -314,7 +316,9 @@ async fn accounting_late_import_presence_numeric_and_exact_price_goldens() -> an
             .import_retained(e.attempt.thread_id, &[e.clone()], 100 * DAY)
             .await?;
         assert_eq!(
-            store.read_day(e.attempt.thread_id, 0, 100 * DAY).await?,
+            store
+                .read_day(e.attempt.thread_id, /*utc_day*/ 0, 100 * DAY)
+                .await?,
             RetainedDay::Available {
                 coverage: RetentionCoverage {
                     completed_as_of_ms: 100 * DAY,
@@ -339,15 +343,23 @@ async fn accounting_late_import_presence_numeric_and_exact_price_goldens() -> an
     for (rate, amount, display) in [
         (
             "0.000000000000000001",
-            Decimal::canonical(1, 24),
+            Decimal::canonical(/*coefficient*/ 1, /*scale*/ 24),
             "0.000000",
         ),
-        ("0.5", Decimal::canonical(5, 7), "0.000000"),
-        ("1.5", Decimal::canonical(15, 7), "0.000002"),
+        (
+            "0.5",
+            Decimal::canonical(/*coefficient*/ 5, /*scale*/ 7),
+            "0.000000",
+        ),
+        (
+            "1.5",
+            Decimal::canonical(/*coefficient*/ 15, /*scale*/ 7),
+            "0.000002",
+        ),
     ] {
         let path = home();
         let runtime = open(&path).await?;
-        let mut e = entry(1, 0)?;
+        let mut e = entry(/*id*/ 1, /*time*/ 0)?;
         let mut price = snapshot()?;
         price.rates.noncached = Some(rate.to_owned().try_into()?);
         e.original_price = OriginalPriceEvidence::Bound(price);
@@ -356,7 +368,8 @@ async fn accounting_late_import_presence_numeric_and_exact_price_goldens() -> an
         store
             .import_retained(e.attempt.thread_id, &[e.clone()], 100 * DAY)
             .await?;
-        let mut expected = expected_day(true, 100 * DAY, 1)?;
+        let mut expected =
+            expected_day(/*owner_has_data*/ true, 100 * DAY, /*attempts*/ 1)?;
         if let RetainedDay::Available {
             totals: Current::Ready(ref mut totals),
             ..
@@ -365,7 +378,9 @@ async fn accounting_late_import_presence_numeric_and_exact_price_goldens() -> an
             totals.known_usd = amount;
         }
         assert_eq!(
-            store.read_day(e.attempt.thread_id, 0, 100 * DAY).await?,
+            store
+                .read_day(e.attempt.thread_id, /*utc_day*/ 0, 100 * DAY)
+                .await?,
             expected
         );
         assert_eq!(
@@ -386,7 +401,7 @@ async fn accounting_late_import_overflow_rolls_back_entire_database() -> anyhow:
     for case in 0..5 {
         let path = home();
         let runtime = open(&path).await?;
-        let mut e = entry(1, 0)?;
+        let mut e = entry(/*id*/ 1, /*time*/ 0)?;
         native(&runtime, e.attempt.thread_id).await?;
         let store = AccountingStore::open(&runtime, 100 * DAY).await?;
         let mut conn = connection(&runtime).await?;
@@ -405,7 +420,7 @@ async fn accounting_late_import_overflow_rolls_back_entire_database() -> anyhow:
                 totals.unknown_estimates = i64::MAX;
             }
             3 => {
-                totals.known_usd = Decimal::canonical(u128::MAX, 6);
+                totals.known_usd = Decimal::canonical(u128::MAX, /*scale*/ 6);
             }
             4 => {
                 e.observations[0].patch =
@@ -447,16 +462,21 @@ async fn accounting_late_import_raw_authority_and_input_bounds_are_not_bypassed(
     for case in 0..7 {
         let path = home();
         let runtime = open(&path).await?;
-        let raw = entry(1, 0)?;
+        let raw = entry(/*id*/ 1, /*time*/ 0)?;
         native(&runtime, raw.attempt.thread_id).await?;
-        let store = AccountingStore::open(&runtime, 0).await?;
+        let store = AccountingStore::open(&runtime, /*as_of*/ 0).await?;
         store
-            .admit(raw.attempt.thread_id, &raw.attempt, &[], 0)
+            .admit(raw.attempt.thread_id, &raw.attempt, &[], /*as_of*/ 0)
             .await?;
         store
-            .observe(raw.attempt.thread_id, &raw.attempt, &raw.observations, 0)
+            .observe(
+                raw.attempt.thread_id,
+                &raw.attempt,
+                &raw.observations,
+                /*as_of*/ 0,
+            )
             .await?;
-        let mut e = entry(2, 0)?;
+        let mut e = entry(/*id*/ 2, /*time*/ 0)?;
         let mut bundle = Vec::new();
         match case {
             0 => e = raw.clone(),
@@ -520,12 +540,16 @@ async fn accounting_late_import_sql_faults_full_rollback_reopen_retry() -> anyho
     ] {
         let path = home();
         let runtime = open(&path).await?;
-        let e = entry(1, 0)?;
+        let e = entry(/*id*/ 1, /*time*/ 0)?;
         native(&runtime, e.attempt.thread_id).await?;
         let store = AccountingStore::open(&runtime, 99 * DAY).await?;
         if seeded {
             store
-                .import_retained(e.attempt.thread_id, &[entry(2, 0)?], 99 * DAY)
+                .import_retained(
+                    e.attempt.thread_id,
+                    &[entry(/*id*/ 2, /*time*/ 0)?],
+                    99 * DAY,
+                )
                 .await?;
         }
         let mut conn = connection(&runtime).await?;
@@ -578,7 +602,7 @@ async fn accounting_late_import_sql_faults_full_rollback_reopen_retry() -> anyho
 async fn accounting_late_import_deferred_commit_failure_rolls_back() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let e = entry(1, 0)?;
+    let e = entry(/*id*/ 1, /*time*/ 0)?;
     native(&runtime, e.attempt.thread_id).await?;
     AccountingStore::open(&runtime, 99 * DAY).await?;
     let mut conn = connection(&runtime).await?;
@@ -634,9 +658,9 @@ async fn accounting_late_import_boundaries_and_no_raw_staging() -> anyhow::Resul
     ] {
         let path = home();
         let runtime = open(&path).await?;
-        let e = entry(1, time)?;
+        let e = entry(/*id*/ 1, time)?;
         native(&runtime, e.attempt.thread_id).await?;
-        let store = AccountingStore::open(&runtime, 0).await?;
+        let store = AccountingStore::open(&runtime, /*as_of*/ 0).await?;
         let mut conn = connection(&runtime).await?;
         raw_insert_guards(&mut conn).await?;
         let before = dump(&mut conn).await?;
@@ -684,8 +708,10 @@ async fn accounting_late_import_boundaries_and_no_raw_staging() -> anyhow::Resul
                     );
                 } else {
                     assert_eq!(
-                        store.read_day(e.attempt.thread_id, 0, as_of).await?,
-                        expected_day(true, as_of, 1)?
+                        store
+                            .read_day(e.attempt.thread_id, /*utc_day*/ 0, as_of)
+                            .await?,
+                        expected_day(/*owner_has_data*/ true, as_of, /*attempts*/ 1)?
                     );
                 }
             }
@@ -701,7 +727,7 @@ async fn accounting_late_import_boundaries_and_no_raw_staging() -> anyhow::Resul
 async fn accounting_late_import_replay_price_and_two_reopens() -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let e = entry(1, 0)?;
+    let e = entry(/*id*/ 1, /*time*/ 0)?;
     native(&runtime, e.attempt.thread_id).await?;
     let store = AccountingStore::open(&runtime, 100 * DAY).await?;
     assert_eq!(
@@ -728,8 +754,10 @@ async fn accounting_late_import_replay_price_and_two_reopens() -> anyhow::Result
             vec![RetainedImportOutcome::SuppressedByReplayRecord]
         );
         assert_eq!(
-            store.read_day(e.attempt.thread_id, 0, 100 * DAY).await?,
-            expected_day(true, 100 * DAY, 1)?
+            store
+                .read_day(e.attempt.thread_id, /*utc_day*/ 0, 100 * DAY)
+                .await?,
+            expected_day(/*owner_has_data*/ true, 100 * DAY, /*attempts*/ 1)?
         );
         let mut conn = connection(&runtime).await?;
         assert_eq!(dump(&mut conn).await?, before);
@@ -750,9 +778,9 @@ async fn accounting_late_import_invalid_identity_revision_retry_and_prices() -> 
     for case in 0..15 {
         let path = home();
         let runtime = open(&path).await?;
-        let mut e = entry(1, 0)?;
+        let mut e = entry(/*id*/ 1, /*time*/ 0)?;
         native(&runtime, e.attempt.thread_id).await?;
-        let mut second = entry(2, 0)?;
+        let mut second = entry(/*id*/ 2, /*time*/ 0)?;
         match case {
             0 => e.attempt.retry_of = Some(e.attempt.attempt_id),
             1 => e.attempt.retry_of = Some(Uuid::from_u128(999)),
@@ -802,8 +830,8 @@ async fn accounting_late_import_retry_chain_normalizes_reordered_duplicate_revis
 -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let first = entry(1, 0)?;
-    let mut retry = entry(2, 0)?;
+    let first = entry(/*id*/ 1, /*time*/ 0)?;
+    let mut retry = entry(/*id*/ 2, /*time*/ 0)?;
     retry.attempt.request_id = first.attempt.request_id;
     retry.attempt.retry_of = Some(first.attempt.attempt_id);
     let mut revision = retry.observations[0].clone();
@@ -825,9 +853,9 @@ async fn accounting_late_import_retry_chain_normalizes_reordered_duplicate_revis
     );
     assert_eq!(
         store
-            .read_day(first.attempt.thread_id, 0, 100 * DAY)
+            .read_day(first.attempt.thread_id, /*utc_day*/ 0, 100 * DAY)
             .await?,
-        expected_day(true, 100 * DAY, 2)?
+        expected_day(/*owner_has_data*/ true, 100 * DAY, /*attempts*/ 2)?
     );
     assert_eq!(
         store

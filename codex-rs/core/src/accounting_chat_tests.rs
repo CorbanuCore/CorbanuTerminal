@@ -121,7 +121,7 @@ async fn accounting_chat_bootstrap_is_lazy_once_and_mode_local() -> anyhow::Resu
 #[tokio::test]
 async fn accounting_chat_direct_auth_and_gateway_eligibility() -> anyhow::Result<()> {
     assert!(legacy_eligible(&provider(), Some(&auth()), &body()));
-    assert!(!legacy_eligible(&provider(), None, &body()));
+    assert!(!legacy_eligible(&provider(), /*auth*/ None, &body()));
     for kind in 0..4 {
         let mut provider = provider();
         match kind {
@@ -185,7 +185,7 @@ async fn accounting_chat_direct_auth_and_gateway_eligibility() -> anyhow::Result
             .deferred
             .resolve(
                 &provider(),
-                None,
+                /*auth*/ None,
                 &format!("{ENDPOINT}/chat/completions"),
                 &body()
             )
@@ -231,6 +231,8 @@ fn request() -> Request {
     }
 }
 
+// Uses the debug-only stage-one binding fixture.
+#[cfg(debug_assertions)]
 #[tokio::test]
 async fn accounting_chat_auth_and_guard_before_admission() -> anyhow::Result<()> {
     let fixture = Fixture::new().await?;
@@ -242,7 +244,7 @@ async fn accounting_chat_auth_and_guard_before_admission() -> anyhow::Result<()>
             Some(evidence.clone()),
             "gpt-5.6-sol".into(),
         ),
-        None,
+        /*binding*/ None,
     );
     let api_provider = provider().to_api_provider(Some(codex_protocol::auth::AuthMode::ApiKey))?;
     let client = codex_api::ChatCompletionsClient::new(transport, api_provider, Arc::new(Denied))
@@ -268,7 +270,7 @@ async fn accounting_chat_auth_and_guard_before_admission() -> anyhow::Result<()>
         .with_effective_security_policy(
             codex_security_policy::SecurityLevel::Permissive,
             owner.thread_id,
-            false,
+            /*inherits_from_spawn_parent*/ false,
         )?;
     let owner = Arc::new(owner);
     let memory = crate::memory_stage_one::StageOneMemoryClient::new(
@@ -304,6 +306,8 @@ async fn accounting_chat_auth_and_guard_before_admission() -> anyhow::Result<()>
     Ok(())
 }
 
+// Uses the debug-only stage-one binding fixture.
+#[cfg(debug_assertions)]
 #[tokio::test]
 async fn accounting_chat_borrowed_binding_denies_existing_and_future_clones() -> anyhow::Result<()>
 {
@@ -360,6 +364,8 @@ async fn accounting_chat_borrowed_binding_denies_existing_and_future_clones() ->
     Ok(())
 }
 
+// Uses the debug-only stage-one binding fixture.
+#[cfg(debug_assertions)]
 #[tokio::test]
 async fn accounting_chat_frame_guard_denies_provider_change_before_client_publication()
 -> anyhow::Result<()> {
@@ -485,7 +491,7 @@ async fn accounting_chat_bootstrap_cancel_scope_and_latch() -> anyhow::Result<()
     );
     assert!(deferred.check().is_err());
     let fixture = Fixture::new().await?;
-    let permit = crate::accounting::WRITES.acquire().await?;
+    let permit = crate::accounting::writes().acquire().await?;
     let mut pending = Box::pin(fixture.resolve());
     assert!(poll!(&mut pending).is_pending());
     drop(pending);
@@ -501,7 +507,7 @@ async fn accounting_chat_bootstrap_cancel_scope_and_latch() -> anyhow::Result<()
     let evidence = ResponseEvidence::new(fixture.resolve().await?);
     assert!(
         evidence
-            .observe(1, Err(codex_api::InvalidChatUsage))
+            .observe(/*position*/ 1, Err(codex_api::InvalidChatUsage))
             .await
             .is_err()
     );
@@ -531,7 +537,7 @@ async fn accounting_chat_response_local_attempt_identity() -> anyhow::Result<()>
     for (evidence, count) in [(&new, 7), (&old, 3)] {
         evidence
             .observe(
-                1,
+                /*position*/ 1,
                 Ok(ChatUsagePatch {
                     input_tokens: ChatTokenPresence::Number(count),
                     ..Default::default()

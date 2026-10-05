@@ -495,7 +495,11 @@ async fn pf_60_s03_stage_one_extraction_records_its_own_turn() -> anyhow::Result
         .services
         .agent_control
         .clone()
-        .with_effective_security_policy(SecurityLevel::Permissive, session.thread_id, false)
+        .with_effective_security_policy(
+            SecurityLevel::Permissive,
+            session.thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
         .unwrap();
     let owner = Arc::new(session);
     db.upsert_thread(

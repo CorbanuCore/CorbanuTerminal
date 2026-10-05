@@ -19,7 +19,7 @@ async fn accounting_late_import_process_worker() -> anyhow::Result<()> {
     };
     let runtime = open(&path).await?;
     let store = AccountingStore::open(&runtime, 100 * DAY).await?;
-    let e = entry(1, 0)?;
+    let e = entry(/*id*/ 1, /*time*/ 0)?;
     std::fs::write(path.join("ready"), b"store open")?;
     wait_file(&path.join("go")).await?;
     std::fs::write(path.join("calling"), b"import next")?;
@@ -52,7 +52,7 @@ async fn accounting_late_import_process_queued_cancel_and_lost_ack_replay() -> a
     for mode in ["queued", "lost-ack", "restart"] {
         let path = home();
         let runtime = open(&path).await?;
-        let e = entry(1, 0)?;
+        let e = entry(/*id*/ 1, /*time*/ 0)?;
         native(&runtime, e.attempt.thread_id).await?;
         AccountingStore::open(&runtime, 100 * DAY).await?;
         let mut conn = connection(&runtime).await?;
@@ -102,8 +102,10 @@ async fn accounting_late_import_process_queued_cancel_and_lost_ack_replay() -> a
                 vec![outcome]
             );
             assert_eq!(
-                store.read_day(e.attempt.thread_id, 0, 100 * DAY).await?,
-                expected_day(true, 100 * DAY, 1)?
+                store
+                    .read_day(e.attempt.thread_id, /*utc_day*/ 0, 100 * DAY)
+                    .await?,
+                expected_day(/*owner_has_data*/ true, 100 * DAY, /*attempts*/ 1)?
             );
             conn.close().await?;
             runtime.close().await;

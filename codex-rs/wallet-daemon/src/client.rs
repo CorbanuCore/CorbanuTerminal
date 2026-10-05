@@ -19,7 +19,10 @@ use crate::protocol::Response;
 use crate::protocol::UnlockPolicy;
 use crate::protocol::WalletDaemonError;
 
-const PING_TIMEOUT: Duration = Duration::from_millis(100);
+// A missing daemon fails the connect immediately, so this only bounds a live
+// daemon's reply. 100ms was too short on loaded Windows hosts, where a slow
+// pong made the client try to spawn a second daemon.
+const PING_TIMEOUT: Duration = Duration::from_secs(1);
 const STATUS_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 const NETWORK_OPERATION_TIMEOUT: Duration = Duration::from_secs(180);

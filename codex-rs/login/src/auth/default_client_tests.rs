@@ -8,7 +8,10 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use tracing_subscriber::layer::SubscriberExt;
 
+// Serialized with the test that sets the process-wide residency header, which
+// would otherwise leak into this test's expected default headers.
 #[tokio::test]
+#[serial_test::serial(residency_header)]
 async fn no_redirect_route_preserves_headers_proxy_and_sandbox_selection() {
     use wiremock::Mock;
     use wiremock::MockServer;
@@ -164,6 +167,7 @@ fn add_originator_header_omits_invalid_originator() {
 }
 
 #[tokio::test]
+#[serial_test::serial(residency_header)]
 async fn test_create_client_sets_default_headers() {
     skip_if_no_network!();
 

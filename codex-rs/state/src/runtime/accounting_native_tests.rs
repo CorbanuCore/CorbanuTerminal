@@ -97,8 +97,8 @@ async fn seed_native(runtime: &StateRuntime, path: &std::path::Path) -> anyhow::
     }
     runtime
         .upsert_thread_spawn_edge(
-            owner(7),
-            owner(8),
+            owner(/*id*/ 7),
+            owner(/*id*/ 8),
             crate::DirectionalThreadSpawnEdgeStatus::Closed,
         )
         .await?;
@@ -109,9 +109,9 @@ async fn seed(runtime: &StateRuntime, path: &std::path::Path) -> anyhow::Result<
     seed_native(runtime, path).await?;
     let store = install(runtime).await?;
     for a in [
-        attempt(1, 0),
-        attempt(2, DETAIL_MS - 1),
-        owned(3, DETAIL_MS - 1, 8),
+        attempt(/*id*/ 1, /*dispatch*/ 0),
+        attempt(/*id*/ 2, DETAIL_MS - 1),
+        owned(/*id*/ 3, DETAIL_MS - 1, /*thread*/ 8),
     ] {
         save(&store, &a, &[snapshot()]).await?;
     }
@@ -149,58 +149,110 @@ async fn native_admission_owner_replay_and_archived_rows() -> anyhow::Result<()>
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     seed_native(&runtime, &home).await?;
-    install(&runtime).await?.maintain_retention(0).await?;
+    install(&runtime)
+        .await?
+        .maintain_retention(/*as_of_ms*/ 0)
+        .await?;
     let journal = Journal { runtime: &runtime };
-    for a in [attempt(1, 0), owned(2, 0, 8)] {
+    for a in [
+        attempt(/*id*/ 1, /*dispatch*/ 0),
+        owned(/*id*/ 2, /*time*/ 0, /*thread*/ 8),
+    ] {
         journal
-            .append_native(a.thread_id, &a, &[row(&a, 1, 1)], 0)
+            .append_native(
+                a.thread_id,
+                &a,
+                &[row(&a, /*revision*/ 1, /*input*/ 1)],
+                /*as_of_ms*/ 0,
+            )
             .await?;
         let before = rows(&runtime).await?;
         journal
-            .append_native(a.thread_id, &a, &[row(&a, 1, 1)], 0)
+            .append_native(
+                a.thread_id,
+                &a,
+                &[row(&a, /*revision*/ 1, /*input*/ 1)],
+                /*as_of_ms*/ 0,
+            )
             .await?;
         assert_eq!(rows(&runtime).await?, before);
     }
     assert_eq!(
-        journal.read_observations(attempt(1, 0).attempt_id).await?,
-        Some((attempt(1, 0), vec![row(&attempt(1, 0), 1, 1)]))
+        journal
+            .read_observations(attempt(/*id*/ 1, /*dispatch*/ 0).attempt_id)
+            .await?,
+        Some((
+            attempt(/*id*/ 1, /*dispatch*/ 0),
+            vec![row(
+                &attempt(/*id*/ 1, /*dispatch*/ 0),
+                /*revision*/ 1,
+                /*input*/ 1
+            )]
+        ))
     );
     assert_eq!(
-        runtime.list_thread_spawn_descendants(owner(7)).await?,
-        vec![owner(8)]
+        runtime
+            .list_thread_spawn_descendants(owner(/*id*/ 7))
+            .await?,
+        vec![owner(/*id*/ 8)]
     );
     let before = rows(&runtime).await?;
     for (expected_owner, a, marker) in [
-        (owner(8), attempt(3, 1), "native owner mismatch"),
-        (owner(9), owned(4, 1, 9), "native owner missing"),
+        (
+            owner(/*id*/ 8),
+            attempt(/*id*/ 3, /*dispatch*/ 1),
+            "native owner mismatch",
+        ),
+        (
+            owner(/*id*/ 9),
+            owned(/*id*/ 4, /*time*/ 1, /*thread*/ 9),
+            "native owner missing",
+        ),
     ] {
         assert_error(
             journal
-                .append_native(expected_owner, &a, &[], 1)
+                .append_native(expected_owner, &a, &[], /*as_of_ms*/ 1)
                 .await
                 .unwrap_err(),
             marker,
         );
         assert_eq!(rows(&runtime).await?, before);
     }
-    let mut metadata = runtime.get_thread(owner(8)).await?.unwrap();
+    let mut metadata = runtime.get_thread(owner(/*id*/ 8)).await?.unwrap();
     metadata.archived_at = chrono::DateTime::from_timestamp(1_700_000_001, 0);
     runtime.upsert_thread(&metadata).await?;
     let archived = rows(&runtime).await?;
     journal
-        .append_native(owner(8), &owned(5, 1, 8), &[], 1)
+        .append_native(
+            owner(/*id*/ 8),
+            &owned(/*id*/ 5, /*time*/ 1, /*thread*/ 8),
+            &[],
+            /*as_of_ms*/ 1,
+        )
         .await?;
     assert_eq!(
-        runtime.get_thread(owner(8)).await?.unwrap().archived_at,
+        runtime
+            .get_thread(owner(/*id*/ 8))
+            .await?
+            .unwrap()
+            .archived_at,
         metadata.archived_at
     );
     assert_eq!(&rows(&runtime).await?[10..], &archived[10..]);
-    assert_eq!(runtime.delete_threads_at(&[owner(7)], 1).await?, 1);
+    assert_eq!(
+        runtime
+            .delete_threads_at(&[owner(/*id*/ 7)], /*as_of_ms*/ 1)
+            .await?,
+        1
+    );
     let before = rows(&runtime).await?;
-    for a in [attempt(1, 0), attempt(6, 1)] {
+    for a in [
+        attempt(/*id*/ 1, /*dispatch*/ 0),
+        attempt(/*id*/ 6, /*dispatch*/ 1),
+    ] {
         assert_error(
             journal
-                .append_native(owner(7), &a, &[], 1)
+                .append_native(owner(/*id*/ 7), &a, &[], /*as_of_ms*/ 1)
                 .await
                 .unwrap_err(),
             "native owner missing",
@@ -231,7 +283,7 @@ async fn native_raw_compact_missing_counts_and_shared_price_survive_reopens() ->
         if missing {
             // A missing native row must not strand its existing compact ownership.
             sqlx::query("DELETE FROM threads WHERE id = ?")
-                .bind(owner(7).to_string())
+                .bind(owner(/*id*/ 7).to_string())
                 .execute(runtime.pool.as_ref())
                 .await?;
         }
@@ -241,7 +293,7 @@ async fn native_raw_compact_missing_counts_and_shared_price_survive_reopens() ->
         let runtime =
             StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
         assert_eq!(
-            runtime.delete_threads_at(&[owner(7)], time).await?,
+            runtime.delete_threads_at(&[owner(/*id*/ 7)], time).await?,
             u64::from(!missing)
         );
         let mut expected = deleted(&baseline, &[7], time)?;
@@ -253,7 +305,7 @@ async fn native_raw_compact_missing_counts_and_shared_price_survive_reopens() ->
                     .iter()
                     .filter(|row| {
                         serde_json::from_str::<serde_json::Value>(row).unwrap()[0]
-                            == owner(8).to_string()
+                            == owner(/*id*/ 8).to_string()
                     })
                     .cloned()
                     .collect();
@@ -262,14 +314,14 @@ async fn native_raw_compact_missing_counts_and_shared_price_survive_reopens() ->
         assert_eq!(rows(&runtime).await?, expected);
         assert_eq!(
             runtime
-                .delete_threads_at(&[owner(7), owner(99)], time)
+                .delete_threads_at(&[owner(/*id*/ 7), owner(/*id*/ 99)], time)
                 .await?,
             0
         );
         assert_eq!(rows(&runtime).await?, expected);
         assert_eq!(
             attach(&runtime)
-                .read_retained_day(owner(8), 89, time)
+                .read_retained_day(owner(/*id*/ 8), /*day*/ 89, time)
                 .await?,
             RetainedDay::Available {
                 coverage: RetentionCoverage {
@@ -283,8 +335,8 @@ async fn native_raw_compact_missing_counts_and_shared_price_survive_reopens() ->
                         [0, 1, 0, 0, 0, 0, 0],
                         [1, 0, 1, 1, 1, 1, 1],
                         "0.000000000000000000000001",
-                        1,
-                        1
+                        /*missing*/ 1,
+                        /*count*/ 1
                     )
                     .to_day_totals()?
                 ),
@@ -319,15 +371,17 @@ async fn native_post_accounting_faults_and_second_owner_rollback_retry() -> anyh
         fault(&mut *runtime.pool.acquire().await?, site, event, &predicate).await?;
         assert_error(
             runtime
-                .delete_threads_at(&[owner(7), owner(8)], DETAIL_MS)
+                .delete_threads_at(&[owner(/*id*/ 7), owner(/*id*/ 8)], DETAIL_MS)
                 .await
                 .unwrap_err(),
             &format!("retention_fault_{site}"),
         );
         assert_eq!(rows(&runtime).await?, baseline);
         assert_eq!(
-            runtime.list_thread_spawn_descendants(owner(7)).await?,
-            vec![owner(8)]
+            runtime
+                .list_thread_spawn_descendants(owner(/*id*/ 7))
+                .await?,
+            vec![owner(/*id*/ 8)]
         );
         runtime.close().await;
         reopen_twice(&home, &baseline).await?;
@@ -340,7 +394,7 @@ async fn native_post_accounting_faults_and_second_owner_rollback_retry() -> anyh
         .await?;
         assert_eq!(
             runtime
-                .delete_threads_at(&[owner(7), owner(8)], DETAIL_MS)
+                .delete_threads_at(&[owner(/*id*/ 7), owner(/*id*/ 8)], DETAIL_MS)
                 .await?,
             2
         );
@@ -348,7 +402,7 @@ async fn native_post_accounting_faults_and_second_owner_rollback_retry() -> anyh
         assert_eq!(rows(&runtime).await?, expected);
         assert_eq!(
             runtime
-                .delete_threads_at(&[owner(7), owner(8)], DETAIL_MS)
+                .delete_threads_at(&[owner(/*id*/ 7), owner(/*id*/ 8)], DETAIL_MS)
                 .await?,
             0
         );
@@ -372,7 +426,7 @@ async fn native_commit_foreign_key_failure_is_jointly_atomic() -> anyhow::Result
         .execute(other.pool.as_ref())
         .await?;
     let error = other
-        .delete_threads_at(&[owner(7)], DETAIL_MS)
+        .delete_threads_at(&[owner(/*id*/ 7)], DETAIL_MS)
         .await
         .unwrap_err();
     assert_eq!(
@@ -394,7 +448,12 @@ async fn native_commit_foreign_key_failure_is_jointly_atomic() -> anyhow::Result
     sqlx::query("DROP TRIGGER native_commit_fault")
         .execute(runtime.pool.as_ref())
         .await?;
-    assert_eq!(runtime.delete_threads_at(&[owner(7)], DETAIL_MS).await?, 1);
+    assert_eq!(
+        runtime
+            .delete_threads_at(&[owner(/*id*/ 7)], DETAIL_MS)
+            .await?,
+        1
+    );
     let expected = deleted(&baseline, &[7], DETAIL_MS)?;
     assert_eq!(rows(&runtime).await?, expected);
     runtime.close().await;
@@ -418,19 +477,23 @@ async fn native_two_real_writer_orders_and_joint_read_snapshots() -> anyhow::Res
         let holder = tokio::spawn(async move {
             let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
             if append_first {
-                let a = attempt(2, DETAIL_MS - 1);
+                let a = attempt(/*id*/ 2, DETAIL_MS - 1);
                 Journal::append_native_on_connection(
                     &mut tx,
-                    owner(7),
+                    owner(/*id*/ 7),
                     &a,
-                    &[row(&a, 2, 2)],
+                    &[row(&a, /*revision*/ 2, /*input*/ 2)],
                     DETAIL_MS,
                 )
                 .await?;
             } else {
                 assert_eq!(
-                    StateRuntime::delete_threads_on_connection(&mut tx, &[owner(7)], DETAIL_MS)
-                        .await?,
+                    StateRuntime::delete_threads_on_connection(
+                        &mut tx,
+                        &[owner(/*id*/ 7)],
+                        DETAIL_MS
+                    )
+                    .await?,
                     1
                 );
             }
@@ -443,12 +506,17 @@ async fn native_two_real_writer_orders_and_joint_read_snapshots() -> anyhow::Res
         let journal = Journal { runtime: &other };
         let error = if append_first {
             other
-                .delete_threads_at(&[owner(7)], DETAIL_MS)
+                .delete_threads_at(&[owner(/*id*/ 7)], DETAIL_MS)
                 .await
                 .unwrap_err()
         } else {
             journal
-                .append_native(owner(7), &attempt(2, DETAIL_MS - 1), &[], DETAIL_MS)
+                .append_native(
+                    owner(/*id*/ 7),
+                    &attempt(/*id*/ 2, DETAIL_MS - 1),
+                    &[],
+                    DETAIL_MS,
+                )
                 .await
                 .unwrap_err()
         };
@@ -464,19 +532,40 @@ async fn native_two_real_writer_orders_and_joint_read_snapshots() -> anyhow::Res
         if append_first {
             // The first real append committed before the wrapper retry deletes it.
             assert_eq!(
-                journal.read_observations(attempt(2, 0).attempt_id).await?,
+                journal
+                    .read_observations(attempt(/*id*/ 2, /*dispatch*/ 0).attempt_id)
+                    .await?,
                 Some((
-                    attempt(2, DETAIL_MS - 1),
-                    vec![row(&attempt(2, 0), 1, 1), row(&attempt(2, 0), 2, 2)]
+                    attempt(/*id*/ 2, DETAIL_MS - 1),
+                    vec![
+                        row(
+                            &attempt(/*id*/ 2, /*dispatch*/ 0),
+                            /*revision*/ 1,
+                            /*input*/ 1
+                        ),
+                        row(
+                            &attempt(/*id*/ 2, /*dispatch*/ 0),
+                            /*revision*/ 2,
+                            /*input*/ 2
+                        )
+                    ]
                 ))
             );
-            assert_eq!(other.delete_threads_at(&[owner(7)], DETAIL_MS).await?, 1);
+            assert_eq!(
+                other
+                    .delete_threads_at(&[owner(/*id*/ 7)], DETAIL_MS)
+                    .await?,
+                1
+            );
         }
         let expected = deleted(&baseline, &[7], DETAIL_MS)?;
-        for a in [attempt(2, DETAIL_MS - 1), attempt(99, DETAIL_MS)] {
+        for a in [
+            attempt(/*id*/ 2, DETAIL_MS - 1),
+            attempt(/*id*/ 99, DETAIL_MS),
+        ] {
             assert_error(
                 journal
-                    .append_native(owner(7), &a, &[], DETAIL_MS)
+                    .append_native(owner(/*id*/ 7), &a, &[], DETAIL_MS)
                     .await
                     .unwrap_err(),
                 "native owner missing",
@@ -503,14 +592,19 @@ async fn native_invalid_time_activation_and_late_import_roll_back() -> anyhow::R
     for (time, marker) in [(-1, "negative"), (DETAIL_MS - 2, "backward")] {
         assert_error(
             journal
-                .append_native(owner(7), &attempt(2, DETAIL_MS - 1), &[], time)
+                .append_native(
+                    owner(/*id*/ 7),
+                    &attempt(/*id*/ 2, DETAIL_MS - 1),
+                    &[],
+                    time,
+                )
                 .await
                 .unwrap_err(),
             marker,
         );
         assert_error(
             runtime
-                .delete_threads_at(&[owner(7)], time)
+                .delete_threads_at(&[owner(/*id*/ 7)], time)
                 .await
                 .unwrap_err(),
             marker,
@@ -518,17 +612,25 @@ async fn native_invalid_time_activation_and_late_import_roll_back() -> anyhow::R
         assert_eq!(rows(&runtime).await?, baseline);
     }
     for (a, batch, marker) in [
-        (attempt(99, 0), vec![], "unsupported compact-only"),
-        (attempt(99, DETAIL_MS + 1), vec![], "future dispatch"),
         (
-            attempt(2, DETAIL_MS - 1),
-            vec![row(&attempt(2, 0), 1, 99)],
+            attempt(/*id*/ 99, /*dispatch*/ 0),
+            vec![],
+            "unsupported compact-only",
+        ),
+        (attempt(/*id*/ 99, DETAIL_MS + 1), vec![], "future dispatch"),
+        (
+            attempt(/*id*/ 2, DETAIL_MS - 1),
+            vec![row(
+                &attempt(/*id*/ 2, /*dispatch*/ 0),
+                /*revision*/ 1,
+                /*input*/ 99,
+            )],
             "observation conflict",
         ),
     ] {
         assert_error(
             journal
-                .append_native(owner(7), &a, &batch, DETAIL_MS)
+                .append_native(owner(/*id*/ 7), &a, &batch, DETAIL_MS)
                 .await
                 .unwrap_err(),
             marker,
@@ -554,14 +656,19 @@ async fn native_invalid_time_activation_and_late_import_roll_back() -> anyhow::R
         let invalid = rows(&runtime).await?;
         assert_error(
             journal
-                .append_native(owner(7), &attempt(99, DETAIL_MS), &[], DETAIL_MS)
+                .append_native(
+                    owner(/*id*/ 7),
+                    &attempt(/*id*/ 99, DETAIL_MS),
+                    &[],
+                    DETAIL_MS,
+                )
                 .await
                 .unwrap_err(),
             marker,
         );
         assert_error(
             runtime
-                .delete_threads_at(&[owner(7)], DETAIL_MS)
+                .delete_threads_at(&[owner(/*id*/ 7)], DETAIL_MS)
                 .await
                 .unwrap_err(),
             marker,
@@ -591,14 +698,14 @@ async fn public_delete_wrapper_and_absent_schema_keep_native_contract() -> anyho
         let now = chrono::Utc::now().timestamp_millis();
         if accounting {
             install(&runtime).await?.maintain_retention(now).await?;
-            let a = attempt(1, now);
+            let a = attempt(/*id*/ 1, now);
             Journal { runtime: &runtime }
-                .append_native(owner(7), &a, &[], now)
+                .append_native(owner(/*id*/ 7), &a, &[], now)
                 .await?;
         }
         assert_eq!(runtime.delete_threads_strict(&[]).await?, 0);
-        assert_eq!(runtime.delete_thread(owner(7)).await?, 1);
-        assert_eq!(runtime.delete_thread(owner(7)).await?, 0);
+        assert_eq!(runtime.delete_thread(owner(/*id*/ 7)).await?, 1);
+        assert_eq!(runtime.delete_thread(owner(/*id*/ 7)).await?, 0);
         let after = rows(&runtime).await?;
         assert_eq!(after[10].len(), 1);
         assert!(after[11].is_empty());
@@ -617,7 +724,12 @@ async fn public_delete_wrapper_and_absent_schema_keep_native_contract() -> anyho
             assert!((now..=chrono::Utc::now().timestamp_millis()).contains(&checkpoint));
         } else {
             assert_eq!(&after[..10], &vec![vec!["<absent>".to_string()]; 10]);
-            assert_eq!(runtime.delete_threads_at(&[owner(99)], -1).await?, 0);
+            assert_eq!(
+                runtime
+                    .delete_threads_at(&[owner(/*id*/ 99)], /*as_of_ms*/ -1)
+                    .await?,
+                0
+            );
             assert_eq!(rows(&runtime).await?, after);
         }
         runtime.close().await;
@@ -645,13 +757,13 @@ async fn separate_store_failures_preserve_retry_graph_without_global_rollback_cl
         )
         .await?;
         sqlx::query("INSERT INTO logs (ts, ts_nanos, level, target, feedback_log_body, thread_id) VALUES (1, 0, 'INFO', 'synthetic', 'fixture', ?)")
-            .bind(owner(7).to_string()).execute(runtime.logs_pool.as_ref()).await?;
+            .bind(owner(/*id*/ 7).to_string()).execute(runtime.logs_pool.as_ref()).await?;
         sqlx::query("INSERT INTO stage1_outputs (thread_id, source_updated_at, raw_memory, rollout_summary, generated_at) VALUES (?, 1, 'synthetic', 'synthetic', 1)")
-            .bind(owner(7).to_string()).execute(&memory).await?;
+            .bind(owner(/*id*/ 7).to_string()).execute(&memory).await?;
         runtime
             .thread_goals()
             .replace_thread_goal(
-                owner(7),
+                owner(/*id*/ 7),
                 "synthetic",
                 crate::ThreadGoalStatus::Active,
                 /*token_budget*/ None,
@@ -674,15 +786,17 @@ async fn separate_store_failures_preserve_retry_graph_without_global_rollback_cl
         let baseline = rows(&runtime).await?;
         assert_error(
             runtime
-                .delete_threads_at(&[owner(7)], DETAIL_MS)
+                .delete_threads_at(&[owner(/*id*/ 7)], DETAIL_MS)
                 .await
                 .unwrap_err(),
             &format!("retention_fault_{site}"),
         );
         assert_eq!(rows(&runtime).await?, baseline);
         assert_eq!(
-            runtime.list_thread_spawn_descendants(owner(7)).await?,
-            vec![owner(8)]
+            runtime
+                .list_thread_spawn_descendants(owner(/*id*/ 7))
+                .await?,
+            vec![owner(/*id*/ 8)]
         );
         let counts = (
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM logs")
@@ -716,7 +830,12 @@ async fn separate_store_failures_preserve_retry_graph_without_global_rollback_cl
         reopen_twice(&home, &baseline).await?;
         let runtime =
             StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
-        assert_eq!(runtime.delete_threads_at(&[owner(7)], DETAIL_MS).await?, 1);
+        assert_eq!(
+            runtime
+                .delete_threads_at(&[owner(/*id*/ 7)], DETAIL_MS)
+                .await?,
+            1
+        );
         let expected = deleted(&baseline, &[7], DETAIL_MS)?;
         assert_eq!(rows(&runtime).await?, expected);
         runtime.close().await;

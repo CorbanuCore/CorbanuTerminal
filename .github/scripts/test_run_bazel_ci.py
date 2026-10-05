@@ -110,6 +110,54 @@ Path(os.environ["BAZEL_ARGS_CAPTURE"]).write_text(
             self.assertIn("requires authenticated remote execution", result.stderr)
             self.assertFalse(capture_path.exists(), "Bazel must not run with a false local fallback")
 
+    def test_keyless_native_windows_keeps_the_windows_test_skip_list(self) -> None:
+        script = Path(__file__).with_name("run-bazel-ci.sh")
+
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            capture_path = temp_path / "bazel-args.json"
+            fake_bazel = temp_path / "bazel"
+            fake_bazel.write_text(
+                """#!/usr/bin/env python3
+import json
+import os
+import sys
+from pathlib import Path
+
+Path(os.environ["BAZEL_ARGS_CAPTURE"]).write_text(
+    json.dumps(sys.argv[1:]), encoding="utf-8"
+)
+""",
+                encoding="utf-8",
+            )
+            fake_bazel.chmod(0o755)
+
+            env = os.environ.copy()
+            env.pop("BUILDBUDDY_API_KEY", None)
+            env.update(
+                {
+                    "BAZEL_ARGS_CAPTURE": str(capture_path),
+                    "CODEX_BAZEL_BIN": str(fake_bazel),
+                    "CODEX_BAZEL_WINDOWS_PATH": "/usr/bin",
+                    "RUNNER_OS": "Windows",
+                }
+            )
+
+            result = subprocess.run(
+                ["bash", str(script), "--", "test", "--", "//..."],
+                cwd=script.parents[2],
+                env=env,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            args = json.loads(capture_path.read_text(encoding="utf-8"))
+            self.assertIn("--config=windows-native-tests", args)
+            self.assertIn("--keep_going", args)
+            self.assertNotIn("--config=ci-windows", args)
+
 
 if __name__ == "__main__":
     unittest.main()

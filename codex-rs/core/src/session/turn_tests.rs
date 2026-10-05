@@ -129,20 +129,48 @@ fn parent_completion_requires_triggering_collaboration_without_operator_input() 
 
 #[test]
 fn post_sampling_token_estimate_is_disabled_by_always_on_sinks() {
+    use tracing::Metadata;
+    use tracing::callsite::Callsite;
+    use tracing::callsite::Identifier;
+    use tracing::field::FieldSet;
+    use tracing::metadata::Kind;
+    use tracing::subscriber::Interest;
+
+    // Ask the sinks for their callsite interest directly. In production the
+    // estimate is skipped because the only subscriber reports `never` for this
+    // target; `event_enabled!` instead combines the interest of every live
+    // dispatcher in the process, so other tests' subscribers made it pass or
+    // fail depending on which tests ran first.
+    struct EstimateCallsite;
+    static CALLSITE: EstimateCallsite = EstimateCallsite;
+    static METADATA: Metadata<'static> = Metadata::new(
+        "post sampling token estimate",
+        POST_SAMPLING_TOKEN_ESTIMATE_TARGET,
+        tracing::Level::TRACE,
+        None,
+        None,
+        None,
+        FieldSet::new(
+            &["turn_id", "estimated_token_count", "message"],
+            Identifier(&CALLSITE),
+        ),
+        Kind::EVENT,
+    );
+    impl Callsite for EstimateCallsite {
+        fn set_interest(&self, _interest: Interest) {}
+
+        fn metadata(&self) -> &Metadata<'_> {
+            &METADATA
+        }
+    }
+
     let feedback = codex_feedback::CodexFeedback::new();
     let subscriber = tracing_subscriber::registry()
         .with(feedback.logger_layer())
         .with(tracing_subscriber::fmt::layer().with_filter(codex_state::log_db::default_filter()));
+    let dispatch = tracing::Dispatch::new(subscriber);
 
-    tracing::subscriber::with_default(subscriber, || {
-        assert!(!tracing::event_enabled!(
-            target: POST_SAMPLING_TOKEN_ESTIMATE_TARGET,
-            tracing::Level::TRACE,
-            turn_id,
-            estimated_token_count,
-            message
-        ));
-    });
+    assert!(dispatch.register_callsite(&METADATA).is_never());
 }
 
 #[tokio::test]

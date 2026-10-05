@@ -352,8 +352,10 @@ async fn network_denial_fallback_message_names_sandbox_network_proxy() {
 async fn late_network_denial_grace_observes_cancellation_after_exit() {
     let cancellation = CancellationToken::new();
     let cancellation_for_task = cancellation.clone();
+    // On the current-thread test runtime this task first runs once the wait
+    // below is pending, so the denial arrives during the grace period without
+    // racing a wall-clock timer.
     tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(10)).await;
         cancellation_for_task.cancel();
     });
 

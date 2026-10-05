@@ -121,7 +121,7 @@ fn by_request(
 
 /// The open conversation's day, as the store returns it.
 fn day(own: Vec<ObservationQuote>, others: Option<OtherConversations>) -> InspectionDay {
-    let owner = thread(1);
+    let owner = thread(/*n*/ 1);
     let requests = by_request(own);
     let totals = DayTotals::from_quotes(requests.values().flatten()).unwrap();
     let read_at_ms = utc_day() * DAY_MS + DAY_MS * 3 / 4;
@@ -153,9 +153,9 @@ fn two_other_conversations() -> OtherConversations {
         conversations: 2,
         unavailable: 0,
         requests: by_request(vec![
-            priced(11, thread(2)),
-            priced(12, thread(2)),
-            unpriced(13, thread(3), "local-mock", "mock-model"),
+            priced(/*id*/ 11, thread(/*n*/ 2)),
+            priced(/*id*/ 12, thread(/*n*/ 2)),
+            unpriced(/*id*/ 13, thread(/*n*/ 3), "local-mock", "mock-model"),
         ]),
     }
 }
@@ -277,7 +277,7 @@ fn every_day_view_says_whether_other_conversations_were_read() {
     let partly = OtherConversations {
         conversations: 2,
         unavailable: 1,
-        requests: by_request(vec![priced(11, thread(2))]),
+        requests: by_request(vec![priced(/*id*/ 11, thread(/*n*/ 2))]),
     };
     assert_eq!(
         first(Some(partly))[1..6].to_vec(),
@@ -296,8 +296,8 @@ fn every_day_view_says_whether_other_conversations_were_read() {
 #[test]
 fn mixed_provider_day_names_every_route_in_and_outside_the_conversation() {
     let own = vec![
-        priced(1, thread(1)),
-        unpriced(2, thread(1), "local-mock", "mock-model"),
+        priced(/*id*/ 1, thread(/*n*/ 1)),
+        unpriced(/*id*/ 2, thread(/*n*/ 1), "local-mock", "mock-model"),
     ];
     let pages = inspection_pages(Ok(day(own, Some(two_other_conversations()))));
     let mut expected = vec![
@@ -328,7 +328,12 @@ fn mixed_provider_day_names_every_route_in_and_outside_the_conversation() {
 // shows it, and no subtotal reads as zero.
 #[test]
 fn missing_price_pages_state_the_next_step_and_never_zero() {
-    let own = vec![unpriced(2, thread(1), "local-mock", "mock-model")];
+    let own = vec![unpriced(
+        /*id*/ 2,
+        thread(/*n*/ 1),
+        "local-mock",
+        "mock-model",
+    )];
     let pages = inspection_pages(Ok(day(own, Some(OtherConversations::default()))));
     let titles: Vec<&str> = pages
         .iter()
@@ -431,8 +436,8 @@ fn audit(pages: &[InspectorPage]) -> Result<(), String> {
 
 fn audited_pages() -> Vec<InspectorPage> {
     let own = vec![
-        priced(1, thread(1)),
-        unpriced(2, thread(1), "local-mock", "mock-model"),
+        priced(/*id*/ 1, thread(/*n*/ 1)),
+        unpriced(/*id*/ 2, thread(/*n*/ 1), "local-mock", "mock-model"),
     ];
     inspection_pages(Ok(day(own, Some(two_other_conversations()))))
 }
@@ -467,19 +472,23 @@ fn monetary_audit_is_bound_to_every_page() {
 
 #[tokio::test]
 async fn cost_scope_snapshots_wide_and_narrow() {
-    let empty = opened(day(Vec::new(), Some(two_other_conversations())), 100).await;
+    let empty = opened(
+        day(Vec::new(), Some(two_other_conversations())),
+        /*width*/ 100,
+    )
+    .await;
     insta::assert_snapshot!(
         "cost_empty_conversation_other_conversations_wide",
-        render_bottom_popup_with_height(&empty, 100, 30)
+        render_bottom_popup_with_height(&empty, /*width*/ 100, /*height*/ 30)
     );
     let own = vec![
-        priced(1, thread(1)),
-        unpriced(2, thread(1), "local-mock", "mock-model"),
+        priced(/*id*/ 1, thread(/*n*/ 1)),
+        unpriced(/*id*/ 2, thread(/*n*/ 1), "local-mock", "mock-model"),
     ];
-    let mut narrow = opened(day(own, Some(two_other_conversations())), 40).await;
+    let mut narrow = opened(day(own, Some(two_other_conversations())), /*width*/ 40).await;
     insta::assert_snapshot!(
         "cost_mixed_provider_day_narrow",
-        render_bottom_popup_with_height(&narrow, 40, 60)
+        render_bottom_popup_with_height(&narrow, /*width*/ 40, /*height*/ 60)
     );
     // Scroll to the other conversations' block on the same narrow screen.
     for _ in 0..12 {
@@ -487,6 +496,6 @@ async fn cost_scope_snapshots_wide_and_narrow() {
     }
     insta::assert_snapshot!(
         "cost_mixed_provider_day_narrow_other_conversations",
-        render_bottom_popup_with_height(&narrow, 40, 60)
+        render_bottom_popup_with_height(&narrow, /*width*/ 40, /*height*/ 60)
     );
 }

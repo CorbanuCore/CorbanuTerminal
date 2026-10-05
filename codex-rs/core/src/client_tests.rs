@@ -2873,7 +2873,7 @@ fn chat_cache_breakpoints_follow_the_newest_tool_turn() {
         chat_message("system", Some("instructions")),
         chat_message("user", Some("environment context")),
         chat_message("user", Some("fix the queue")),
-        chat_message("assistant", None),
+        chat_message("assistant", /*text*/ None),
         chat_message("tool", Some("ls output")),
         chat_message("assistant", Some("")),
         chat_message("tool", Some("test output")),
@@ -2900,7 +2900,7 @@ fn chat_cache_breakpoints_skip_messages_without_text() {
         chat_message("system", Some("instructions")),
         chat_message("user", Some("task")),
         chat_message("tool", Some("result")),
-        chat_message("assistant", None),
+        chat_message("assistant", /*text*/ None),
         chat_message("assistant", Some("   ")),
     ];
 
@@ -3219,7 +3219,7 @@ fn transient_rate_limit_delay_backs_off_and_honors_retry_after() {
         body: None,
     });
     assert_eq!(
-        super::transient_rate_limit_delay(&with_header, 3).as_secs(),
+        super::transient_rate_limit_delay(&with_header, /*attempt*/ 3).as_secs(),
         5
     );
 }

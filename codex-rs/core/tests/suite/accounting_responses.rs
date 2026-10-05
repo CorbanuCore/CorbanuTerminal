@@ -33,13 +33,13 @@ async fn accounting_chatgpt_subscription_off_route_collects_without_economics() 
         .with_auth(codex_login::CodexAuth::from_external_chatgpt_tokens(
             "header.e30.synthetic",
             "synthetic-account",
-            None,
+            /*chatgpt_plan_type*/ None,
         )?)
         .build_with_auto_env(&server)
         .await?;
     test.submit_turn("subscription accounting").await?;
     let db = test.codex.state_db().unwrap();
-    let records = wait_attempts(&db, 1).await?;
+    let records = wait_attempts(&db, /*count*/ 1).await?;
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].provider, "openai");
     // This fixture talks to a wiremock endpoint, which is nobody's own route.
@@ -47,7 +47,7 @@ async fn accounting_chatgpt_subscription_off_route_collects_without_economics() 
     // destination the catalogue quotes nothing for.
     let prices: Vec<Snapshot> = payloads(&db, "draft_accounting_price_snapshots").await?;
     assert!(prices.is_empty());
-    wait_observations(&db, 1).await?;
+    wait_observations(&db, /*count*/ 1).await?;
     let total = totals(&db, &records[0]).await?;
     assert_eq!(total.measured[0].known, 100);
     assert_eq!(total.known_usd, Decimal::default());
@@ -395,7 +395,7 @@ async fn accounting_responses_native_sampling_and_auxiliary_scope() -> anyhow::R
     assert_eq!(compact.single_request().path(), "/v1/responses/compact");
     // The legacy compaction endpoint records too, under its own `compact:`
     // turn. This assertion used to pin the opposite.
-    let after = wait_attempts(&db, 3).await?;
+    let after = wait_attempts(&db, /*count*/ 3).await?;
     assert_eq!(after[..2], records[..]);
     assert!(after[2].turn.starts_with("compact:"), "{}", after[2].turn);
     // That fixture's compact body states no usage, so the compaction records an
@@ -471,16 +471,16 @@ async fn accounting_records_manual_compaction() -> anyhow::Result<()> {
         .await?;
     test.submit_turn("fixture").await?;
     let db = test.codex.state_db().unwrap();
-    let turn = wait_attempts(&db, 1).await?;
+    let turn = wait_attempts(&db, /*count*/ 1).await?;
     assert_eq!(turn.len(), 1);
     // The day total is thread-wide, so it reads the turn's tokens alone here.
-    wait_observations(&db, 1).await?;
+    wait_observations(&db, /*count*/ 1).await?;
     assert_eq!(totals(&db, &turn[0]).await?.measured[0].known, 100);
     test.codex
         .submit(codex_protocol::protocol::Op::Compact)
         .await?;
     terminal(&test).await?;
-    let records = wait_attempts(&db, 2).await?;
+    let records = wait_attempts(&db, /*count*/ 2).await?;
     assert_eq!(records.len(), 2);
     let compaction = &records[1];
     assert!(
@@ -490,7 +490,7 @@ async fn accounting_records_manual_compaction() -> anyhow::Result<()> {
     );
     assert_ne!(compaction.turn, turn[0].turn);
     // The compaction's own tokens are what moved the day total from 100 to 200.
-    wait_observations(&db, 2).await?;
+    wait_observations(&db, /*count*/ 2).await?;
     assert_eq!(totals(&db, compaction).await?.measured[0].known, 200);
     assert_eq!(mock.requests().len(), 2);
     stop(&test).await;
@@ -533,7 +533,7 @@ async fn accounting_records_auto_compaction() -> anyhow::Result<()> {
     test.submit_turn("fixture").await?;
     test.submit_turn("fixture after compaction").await?;
     let db = test.codex.state_db().unwrap();
-    let records = wait_attempts(&db, 3).await?;
+    let records = wait_attempts(&db, /*count*/ 3).await?;
     assert_eq!(records.len(), 3);
     assert_eq!(mock.requests().len(), 3);
     let compactions: Vec<&Attempt> = records
@@ -550,7 +550,7 @@ async fn accounting_records_auto_compaction() -> anyhow::Result<()> {
             .collect::<Vec<_>>()
     );
     // Thread-wide day total: both turns and the compaction between them.
-    wait_observations(&db, 3).await?;
+    wait_observations(&db, /*count*/ 3).await?;
     assert_eq!(totals(&db, compactions[0]).await?.measured[0].known, 300);
     stop(&test).await;
     Ok(())
@@ -636,10 +636,10 @@ async fn accounting_agent_identity_session_collects() -> anyhow::Result<()> {
         .await?;
     test.submit_turn("agent identity accounting").await?;
     let db = test.codex.state_db().unwrap();
-    let records = wait_attempts(&db, 1).await?;
+    let records = wait_attempts(&db, /*count*/ 1).await?;
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].provider, "openai");
-    wait_observations(&db, 1).await?;
+    wait_observations(&db, /*count*/ 1).await?;
     assert_eq!(totals(&db, &records[0]).await?.measured[0].known, 100);
     assert_eq!(mock.requests().len(), 1);
     stop(&test).await;
@@ -680,12 +680,12 @@ async fn accounting_records_legacy_compaction() -> anyhow::Result<()> {
         .await?;
     test.submit_turn("fixture").await?;
     let db = test.codex.state_db().unwrap();
-    let turn = wait_attempts(&db, 1).await?;
+    let turn = wait_attempts(&db, /*count*/ 1).await?;
     test.codex
         .submit(codex_protocol::protocol::Op::Compact)
         .await?;
     terminal(&test).await?;
-    let records = wait_attempts(&db, 2).await?;
+    let records = wait_attempts(&db, /*count*/ 2).await?;
     assert_eq!(records.len(), 2);
     let compaction = &records[1];
     assert!(
@@ -697,7 +697,7 @@ async fn accounting_records_legacy_compaction() -> anyhow::Result<()> {
     assert_eq!(compact.single_request().path(), "/v1/responses/compact");
     // The endpoint's own body carried the numbers, so they are recorded: the
     // turn's 100 input tokens plus the compaction's own 100.
-    wait_observations(&db, 2).await?;
+    wait_observations(&db, /*count*/ 2).await?;
     assert_eq!(totals(&db, compaction).await?.measured[0].known, 200);
     assert_eq!(mock.requests().len(), 1);
     stop(&test).await;
@@ -744,7 +744,7 @@ async fn accounting_legacy_compaction_never_follows_a_redirect() -> anyhow::Resu
             .await?;
         test.submit_turn("fixture").await?;
         let db = test.codex.state_db().unwrap();
-        wait_attempts(&db, 1).await?;
+        wait_attempts(&db, /*count*/ 1).await?;
         test.codex
             .submit(codex_protocol::protocol::Op::Compact)
             .await?;

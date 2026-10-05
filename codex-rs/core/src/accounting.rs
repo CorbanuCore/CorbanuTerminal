@@ -586,7 +586,28 @@ pub(crate) type Slot = Arc<Mutex<Option<Arc<Sampling>>>>;
 // transactions before sampling time so concurrent native children cannot commit
 // a later checkpoint ahead of an older local operation. Never hold across HTTP;
 // external writers still use the store's fail-visible validation contract.
+#[cfg(not(test))]
 static WRITES: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
+
+// Unit tests run many accounting tests in one process, and several assert on
+// this gate's permits. Give each test thread its own gate; these tests use
+// current-thread runtimes, so each test still sees exactly one gate.
+#[cfg(test)]
+thread_local! {
+    static WRITES: &'static tokio::sync::Semaphore =
+        Box::leak(Box::new(tokio::sync::Semaphore::const_new(1)));
+}
+
+fn writes() -> &'static tokio::sync::Semaphore {
+    #[cfg(not(test))]
+    {
+        &WRITES
+    }
+    #[cfg(test)]
+    {
+        WRITES.with(|gate| *gate)
+    }
+}
 
 pub(crate) fn read_slot(slot: &Slot) -> Result<Option<Arc<Sampling>>, CodexErr> {
     match slot.lock() {
@@ -835,7 +856,7 @@ impl Sampling {
                 .into(),
             ));
         }
-        let _write = WRITES
+        let _write = writes()
             .acquire()
             .await
             .map_err(|error| CodexErr::Fatal(failure("open sampling", error).into()))?;
@@ -902,7 +923,7 @@ impl Sampling {
             canonical_route(endpoint) == canonical_route(&self.endpoint),
             "accounting route mismatch"
         );
-        let _write = WRITES.acquire().await?;
+        let _write = writes().acquire().await?;
         self.check()?;
         let mut completion = Completion {
             sampling: self,
@@ -999,7 +1020,7 @@ impl Sampling {
             sequence: position,
             patch,
         };
-        let _write = WRITES.acquire().await?;
+        let _write = writes().acquire().await?;
         self.check()?;
         let mut completion = Completion {
             sampling: self,

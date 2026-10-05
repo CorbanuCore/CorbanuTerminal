@@ -76,7 +76,9 @@ pub(super) async fn read_checked(
     let changes: i64 = sqlx::query_scalar("SELECT total_changes()")
         .fetch_one(&mut *conn)
         .await?;
-    let result = read_retained_on_connection(conn, attempt(1, 0).thread_id, day, time).await;
+    let result =
+        read_retained_on_connection(conn, attempt(/*id*/ 1, /*dispatch*/ 0).thread_id, day, time)
+            .await;
     assert_eq!(dump(conn).await?, before);
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT total_changes()")
@@ -106,15 +108,20 @@ pub(super) async fn schema_rejected(
         .fetch_one(&mut *conn)
         .await?;
     assert_error(
-        Journal::append_on_connection(conn, &attempt(3, 0), &[])
+        Journal::append_on_connection(conn, &attempt(/*id*/ 3, /*dispatch*/ 0), &[])
             .await
             .unwrap_err(),
         marker,
     );
     assert_error(
-        read_retained_on_connection(conn, attempt(1, 0).thread_id, 0, 0)
-            .await
-            .unwrap_err(),
+        read_retained_on_connection(
+            conn,
+            attempt(/*id*/ 1, /*dispatch*/ 0).thread_id,
+            /*day*/ 0,
+            /*as_of_ms*/ 0,
+        )
+        .await
+        .unwrap_err(),
         marker,
     );
     assert_eq!(
@@ -179,10 +186,10 @@ pub(super) async fn reopened(
         read_checked(&mut tx, day, time, expected).await?;
         tx.commit().await?;
         if let Err(marker) = expected {
-            rejected(&store, &attempt(99, time), &[], marker).await?;
+            rejected(&store, &attempt(/*id*/ 99, time), &[], marker).await?;
             assert_error(
                 store
-                    .delete_recorded_thread(attempt(1, 0).thread_id, time)
+                    .delete_recorded_thread(attempt(/*id*/ 1, /*dispatch*/ 0).thread_id, time)
                     .await
                     .unwrap_err(),
                 marker,

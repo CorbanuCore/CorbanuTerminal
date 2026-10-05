@@ -146,7 +146,7 @@ async fn current_stale_reordered_and_caller_rollback_survive_two_reopens() -> an
     let store = EstimateStore::create_for_tests(&runtime).await?;
     let a = attempt();
     let price = snapshot("3");
-    let first = row(3, json!({"input":50,"read":10}));
+    let first = row(/*revision*/ 3, json!({"input":50,"read":10}));
     store
         .journal
         .append_observation(&a, std::slice::from_ref(&first))
@@ -170,8 +170,8 @@ async fn current_stale_reordered_and_caller_rollback_survive_two_reopens() -> an
     let mut tx = runtime.pool.begin().await?;
     assert_eq!(unchanged_quote(&mut tx, a.attempt_id).await?, historical);
     tx.commit().await?;
-    let earlier = row(1, json!({"input":40}));
-    let newer = row(4, json!({"input":60}));
+    let earlier = row(/*revision*/ 1, json!({"input":40}));
+    let newer = row(/*revision*/ 4, json!({"input":60}));
     store
         .journal
         .append_observation(&a, &[newer.clone(), earlier.clone()])
@@ -188,7 +188,7 @@ async fn current_stale_reordered_and_caller_rollback_survive_two_reopens() -> an
     let mut tx = runtime.pool.begin().await?;
     let baseline = dump(&mut tx).await?;
     assert_eq!(unchanged_quote(&mut tx, a.attempt_id).await?, latest);
-    let staged = row(5, json!({"input":70}));
+    let staged = row(/*revision*/ 5, json!({"input":70}));
     sqlx::query("INSERT INTO draft_accounting_observations VALUES (?, ?, ?, ?, ?)")
         .bind(a.attempt_id.to_string())
         .bind(i64::from(staged.revision))
@@ -268,15 +268,15 @@ async fn null_unbound_missing_estimates_and_exact_quotes_survive_two_reopens() -
         let rows = match mode {
             "intent" => vec![],
             "zero" => vec![row(
-                1,
+                /*revision*/ 1,
                 json!({"input":0,"read":0,"write":0,"output":0,"reasoning":0}),
             )],
             "unknown" => vec![row(
-                1,
+                /*revision*/ 1,
                 json!({"input":50,"read":10,"reasoning":2,"total":80}),
             )],
-            "tiny" => vec![row(1, json!({"input":1}))],
-            _ => vec![row(1, json!({"input":50,"read":10}))],
+            "tiny" => vec![row(/*revision*/ 1, json!({"input":1}))],
+            _ => vec![row(/*revision*/ 1, json!({"input":50,"read":10}))],
         };
         store.journal.append_observation(&a, &rows).await?;
         let mut price = snapshot("3");
@@ -388,14 +388,14 @@ async fn every_current_and_old_version_is_validated_even_without_latest_estimate
     let a = attempt();
     store
         .journal
-        .append_observation(&a, &[row(1, json!({"input":50,"read":10}))])
+        .append_observation(&a, &[row(/*revision*/ 1, json!({"input":50,"read":10}))])
         .await?;
     let first = store
         .persist_current(a.attempt_id, &[snapshot("3")])
         .await?;
     store
         .journal
-        .append_observation(&a, &[row(2, json!({"input":60}))])
+        .append_observation(&a, &[row(/*revision*/ 2, json!({"input":60}))])
         .await?;
     let second = store.persist_current(a.attempt_id, &[]).await?;
     for saved in [&first, &second] {
@@ -409,12 +409,15 @@ async fn every_current_and_old_version_is_validated_even_without_latest_estimate
             ),
             (
                 "evidence",
-                serde_json::to_string(&vec![row(9, json!({"input":50}))])?,
+                serde_json::to_string(&vec![row(/*revision*/ 9, json!({"input":50}))])?,
                 "missing retained observation",
             ),
             (
                 "evidence",
-                serde_json::to_string(&vec![row(1, json!({"input":51,"read":10}))])?,
+                serde_json::to_string(&vec![row(
+                    /*revision*/ 1,
+                    json!({"input":51,"read":10}),
+                )])?,
                 "changed retained observation",
             ),
         ] {
@@ -459,7 +462,7 @@ async fn source_binding_and_snapshot_corruption_cannot_fall_back_to_unknown() ->
     let a = attempt();
     store
         .journal
-        .append_observation(&a, &[row(1, json!({"input":50,"read":10}))])
+        .append_observation(&a, &[row(/*revision*/ 1, json!({"input":50,"read":10}))])
         .await?;
     store
         .persist_current(a.attempt_id, &[snapshot("3")])
@@ -592,8 +595,8 @@ async fn invalid_replay_prefix_and_checked_arithmetic_fail_without_saved_estimat
         .append_observation(
             &a,
             &[
-                row(1, json!({"input":50,"read":10})),
-                row(2, json!({"output":10})),
+                row(/*revision*/ 1, json!({"input":50,"read":10})),
+                row(/*revision*/ 2, json!({"output":10})),
             ],
         )
         .await?;
@@ -617,7 +620,7 @@ async fn invalid_replay_prefix_and_checked_arithmetic_fail_without_saved_estimat
             .execute(&mut *tx)
             .await?;
         sqlx::query("UPDATE draft_accounting_observations SET payload = ? WHERE revision = 1")
-            .bind(serde_json::to_string(&row(1, patch))?)
+            .bind(serde_json::to_string(&row(/*revision*/ 1, patch))?)
             .execute(&mut *tx)
             .await?;
         unchanged_error(&mut tx, a.attempt_id, message).await?;

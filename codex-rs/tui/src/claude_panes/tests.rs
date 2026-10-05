@@ -2514,7 +2514,8 @@ fn claude_secret_redactor_redacts_bridge_credentials() {
 
 #[test]
 fn relative_claude_config_dir_is_bound_to_the_launch_cwd() {
-    let launch_cwd = PathBuf::from("/launch/cwd");
+    // `/launch/cwd` has no drive on Windows; anchor it like the product does.
+    let launch_cwd = std::path::absolute("/launch/cwd").expect("absolute launch cwd");
     let resolved = absolute_claude_config_dir_override_against(
         Some(PathBuf::from("profiles/work")),
         &launch_cwd,
@@ -4240,7 +4241,8 @@ fn every_pane_profile_reports_its_provider_s_own_route() {
     use super::bridge::AMBIENT_CHAT_BASE_URL;
     use super::provider::ClaudeProviderTransport;
 
-    let catalogue = codex_model_provider_info::built_in_model_providers(None);
+    let catalogue =
+        codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None);
     for kind in ClaudeProviderProfileKind::restoration_options() {
         let profile = kind.profile();
         // What the bridge will report, built the way the bridge builds it.
@@ -4278,7 +4280,7 @@ fn every_pane_profile_reports_its_provider_s_own_route() {
             panic!("{kind:?} names `{provider_id}`, which this build does not ship")
         });
         let api = provider
-            .to_api_provider(None)
+            .to_api_provider(/*auth_mode*/ None)
             .unwrap_or_else(|_| panic!("{provider_id} resolves to an API provider"));
         assert_eq!(
             api.base_url.trim_end_matches('/'),

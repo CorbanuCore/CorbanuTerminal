@@ -488,9 +488,17 @@ mod platform {
             let sddl = file_dacl_sddl(&socket_dir).expect("read socket ACL");
             let current_user = current_user_sid_string().expect("current user SID");
             assert!(sddl.starts_with("D:P"), "DACL must be protected: {sddl}");
-            assert!(
-                sddl.contains(&current_user),
-                "DACL omitted current user: {sddl}"
+            // Windows renders well-known account SIDs as SDDL aliases (for
+            // example `LA` when the runner is the built-in Administrator), so
+            // compare against the same DACL round-tripped through Windows.
+            let expected = canonical_dacl_sddl(&format!("D:P(A;;FA;;;SY)(A;;FA;;;{current_user})"))
+                .expect("canonicalize expected ACL");
+            // Compare ACEs only; control flags such as `AI` may legitimately differ.
+            let aces = |sddl: &str| sddl.find('(').map(|start| sddl[start..].to_string());
+            assert_eq!(
+                aces(&sddl),
+                aces(&expected),
+                "DACL must grant exactly LocalSystem and the current user: {sddl}"
             );
             assert!(sddl.contains(";;;SY"), "DACL omitted LocalSystem: {sddl}");
             for broad_principal in [";;;WD", ";;;BU", ";;;AU"] {
@@ -534,11 +542,36 @@ mod platform {
                 return Err(io::Error::last_os_error());
             }
 
+            descriptor_dacl_sddl(descriptor.as_mut_ptr().cast())
+        }
+
+        fn canonical_dacl_sddl(sddl: &str) -> IoResult<String> {
+            let sddl = wide_null(sddl.to_string());
+            let mut descriptor: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
+            if unsafe {
+                ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                    sddl.as_ptr(),
+                    1, // SDDL_REVISION_1
+                    &mut descriptor,
+                    std::ptr::null_mut(),
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            let canonical = descriptor_dacl_sddl(descriptor);
+            unsafe {
+                LocalFree(descriptor as HLOCAL);
+            }
+            canonical
+        }
+
+        fn descriptor_dacl_sddl(descriptor: PSECURITY_DESCRIPTOR) -> IoResult<String> {
             let mut string_descriptor = std::ptr::null_mut();
             let mut string_length = 0;
             if unsafe {
                 ConvertSecurityDescriptorToStringSecurityDescriptorW(
-                    descriptor.as_mut_ptr().cast(),
+                    descriptor,
                     1, // SDDL_REVISION_1
                     DACL_SECURITY_INFORMATION,
                     &mut string_descriptor,

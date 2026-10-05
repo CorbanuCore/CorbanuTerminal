@@ -838,7 +838,7 @@ mod tests {
             std::time::Duration::ZERO,
         );
         insta::assert_snapshot!(
-            cell.display_lines(80).iter().map(render_line_text).join("\n"),
+            cell.display_lines(/*width*/ 80).iter().map(render_line_text).join("\n"),
             @"
         ✗ Did not run cat refused.txt
           └ Approval declined
@@ -854,7 +854,7 @@ mod tests {
         );
         assert!(cell.should_flush());
         insta::assert_snapshot!(
-            cell.display_lines(80).iter().map(render_line_text).join("\n"),
+            cell.display_lines(/*width*/ 80).iter().map(render_line_text).join("\n"),
             @"
         ✗ Did not run cat refused.txt
           └ Approval declined
@@ -936,7 +936,7 @@ mod tests {
         assert!(cell.is_active());
         assert!(!cell.should_flush());
         insta::assert_snapshot!(
-            cell.display_lines(80).iter().map(render_line_text).join("\n"),
+            cell.display_lines(/*width*/ 80).iter().map(render_line_text).join("\n"),
             @"
         ✗ Execution unconfirmed cat pending.txt
           └ No exit status received
@@ -947,7 +947,7 @@ mod tests {
         cell.mark_failed();
         assert!(cell.should_flush());
         insta::assert_snapshot!(
-            cell.display_lines(80).iter().map(render_line_text).join("\n"),
+            cell.display_lines(/*width*/ 80).iter().map(render_line_text).join("\n"),
             @"
         ✗ Execution unconfirmed cat pending.txt
           └ No exit status received
@@ -973,8 +973,8 @@ mod tests {
             std::time::Duration::ZERO,
         );
         insta::assert_snapshot!(
-            cell.display_lines(80).iter().map(render_line_text).chain(
-                cell.transcript_lines(80).iter().map(render_line_text)
+            cell.display_lines(/*width*/ 80).iter().map(render_line_text).chain(
+                cell.transcript_lines(/*width*/ 80).iter().map(render_line_text)
             ).join("\n"),
             @"
         ✗ Execution unconfirmed echo pending

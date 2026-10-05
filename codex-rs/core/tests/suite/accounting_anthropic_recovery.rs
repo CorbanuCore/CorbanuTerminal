@@ -189,7 +189,7 @@ async fn accounting_anthropic_stream_retry_retains_start_usage_without_merging_r
         .chunks
         .send(sse(&[start(json!({"input_tokens":7,"output_tokens":0}))]))
         .await?;
-    wait_observations(&db, 1).await?;
+    wait_observations(&db, /*count*/ 1).await?;
     drop(first); // Real EOF after committed numeric evidence, before completion.
     let second = gate.next().await?;
     second
@@ -324,7 +324,7 @@ async fn accounting_anthropic_observation_failure_stops_real_sampling_without_re
         .chunks
         .send(sse(&[start(json!({"input_tokens":7,"output_tokens":0}))]))
         .await?;
-    wait_observations(&db, 1).await?;
+    wait_observations(&db, /*count*/ 1).await?;
     let before = observations(&db).await?;
     sqlx::query("CREATE TRIGGER fail_observation BEFORE INSERT ON draft_accounting_observations BEGIN SELECT RAISE(ABORT, 'caller-observation-fault'); END")
         .execute(&mut connection(&db).await?).await?;
@@ -362,7 +362,7 @@ async fn accounting_anthropic_cancel_keeps_intent_or_observed_start_through_reop
                 .chunks
                 .send(sse(&[start(json!({"input_tokens":7}))]))
                 .await?;
-            wait_observations(&db, 1).await?;
+            wait_observations(&db, /*count*/ 1).await?;
         }
         test.codex.submit(Op::Interrupt).await?;
         let events = terminal(&test).await?;

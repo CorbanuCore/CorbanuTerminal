@@ -144,7 +144,7 @@ async fn accounting_responses_native_outer_retry_prefix() -> anyhow::Result<()> 
         )]))
         .await?;
     let db = test.codex.state_db().unwrap();
-    wait_observations(&db, 1).await?;
+    wait_observations(&db, /*count*/ 1).await?;
     drop(first);
     let second = gate.next().await?;
     second.chunks.send(success(usage(Some(0)))).await?;
@@ -184,7 +184,7 @@ async fn accounting_responses_native_observation_failure() -> anyhow::Result<()>
             json!({"input_tokens":7}),
         )]))
         .await?;
-    wait_observations(&db, 1).await?;
+    wait_observations(&db, /*count*/ 1).await?;
     let before = observations(&db).await?;
     sqlx::query("CREATE TRIGGER reject_responses_observation BEFORE INSERT ON draft_accounting_observations BEGIN SELECT RAISE(ABORT, 'fixture'); END")
         .execute(&mut connection(&db).await?).await?;
@@ -257,7 +257,7 @@ async fn accounting_responses_native_cancel_two_reopens() -> anyhow::Result<()> 
                     usage(Some(0)),
                 )]))
                 .await?;
-            wait_observations(&db, 1).await?;
+            wait_observations(&db, /*count*/ 1).await?;
         }
         test.codex.submit(Op::Interrupt).await?;
         assert!(
@@ -446,15 +446,15 @@ async fn accounting_responses_native_spawned_role_children() -> anyhow::Result<(
         held.chunks.send(success(usage(Some(0)))).await?;
     }
     terminal(&test).await?;
-    wait_observations(&db, 4).await?;
+    wait_observations(&db, /*count*/ 4).await?;
     let before = attempts(&db).await?;
     test.thread_manager
         .fork_thread(
             codex_core::ForkSnapshot::Interrupted,
             test.config.clone(),
             test.codex.rollout_path().unwrap(),
-            None,
-            None,
+            /*thread_source*/ None,
+            /*parent_trace*/ None,
         )
         .await?;
     assert_eq!(attempts(&db).await?, before);

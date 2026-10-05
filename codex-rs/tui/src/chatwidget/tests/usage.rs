@@ -16,7 +16,7 @@ const TEST_OVERLAY_VIEW_ID: &str = "usage-test-overlay";
 #[tokio::test]
 async fn accounting_inspect_menu_and_reset_regression() {
     for (credits, downs, expected) in [(2, 0, 0), (2, 1, 1), (2, 2, 2), (0, 1, 2)] {
-        let (mut chat, mut rx, _ops) = make_chatwidget_manual(None).await;
+        let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
         set_chatgpt_auth(&mut chat);
         chat.available_rate_limit_reset_credits = Some(credits);
         chat.open_usage_menu();
@@ -36,8 +36,8 @@ async fn accounting_inspect_menu_and_reset_regression() {
 
 #[tokio::test]
 async fn accounting_inspect_cancel_refresh_generation() {
-    let (mut chat, mut rx, _ops) = make_chatwidget_manual(None).await;
-    chat.open_accounting_inspector(0);
+    let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.open_accounting_inspector(/*day*/ 0);
     let AppEvent::LoadAccountingInspector {
         generation,
         thread,
@@ -55,12 +55,12 @@ async fn accounting_inspect_cancel_refresh_generation() {
         day,
         Ok(codex_state::accounting::InspectionDay::Absent),
     );
-    chat.navigate_accounting_inspector(generation, 0);
-    assert!(!render_bottom_popup(&chat, 80).contains("Cost — this conversation"));
+    chat.navigate_accounting_inspector(generation, /*page*/ 0);
+    assert!(!render_bottom_popup(&chat, /*width*/ 80).contains("Cost — this conversation"));
     assert_matches!(rx.try_recv(), Ok(AppEvent::CloseAccountingInspector { .. }));
     chat.close_accounting_inspector(generation);
     assert!(chat.accounting_inspector.is_none());
-    chat.open_accounting_inspector(0);
+    chat.open_accounting_inspector(/*day*/ 0);
     let AppEvent::LoadAccountingInspector {
         generation: next, ..
     } = rx.try_recv().unwrap()
@@ -78,16 +78,19 @@ async fn accounting_inspect_cancel_refresh_generation() {
     };
     assert_ne!(next, refreshed);
     chat.finish_accounting_inspector(next, thread, day, Err("STALE".into()));
-    assert!(!render_bottom_popup(&chat, 80).contains("STALE"));
+    assert!(!render_bottom_popup(&chat, /*width*/ 80).contains("STALE"));
     chat.finish_accounting_inspector(
         refreshed,
         thread,
         day,
         Ok(codex_state::accounting::InspectionDay::Absent),
     );
-    chat.update_account_state(None, None, false, false);
+    chat.update_account_state(
+        /*status_account_display*/ None, /*plan_type*/ None,
+        /*has_chatgpt_account*/ false, /*has_codex_backend_auth*/ false,
+    );
     assert!(chat.accounting_inspector.is_none());
-    assert!(!render_bottom_popup(&chat, 80).contains("Cost — this conversation"));
+    assert!(!render_bottom_popup(&chat, /*width*/ 80).contains("Cost — this conversation"));
 }
 
 fn reset_credits(available_count: i64) -> RateLimitResetCreditsSummary {

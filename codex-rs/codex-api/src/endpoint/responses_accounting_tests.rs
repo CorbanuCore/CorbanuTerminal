@@ -48,8 +48,8 @@ fn stream(events: Vec<Value>, sink: Option<Arc<Sink>>) -> ResponseStream {
             bytes: futures::stream::iter(vec![Ok(data.into())]).boxed(),
         },
         Duration::from_secs(1),
-        None,
-        None,
+        /*telemetry*/ None,
+        /*turn_state*/ None,
         sink.map(|value| value as Arc<dyn ResponsesUsageObserver>),
     )
 }
@@ -316,7 +316,7 @@ async fn responses_accounting_none_preserves_legacy_stream() {
             json!({"input_tokens":1,"output_tokens":2,"total_tokens":3}),
         ),
     ];
-    let output = drain(stream(payload.clone(), None)).await;
+    let output = drain(stream(payload.clone(), /*sink*/ None)).await;
     assert_eq!(completed(&output), 1);
     let data: String = payload
         .iter()
@@ -329,8 +329,8 @@ async fn responses_accounting_none_preserves_legacy_stream() {
             bytes: futures::stream::iter(vec![Ok(data.into())]).boxed(),
         },
         Duration::from_secs(1),
-        None,
-        None,
+        /*telemetry*/ None,
+        /*turn_state*/ None,
     );
     assert_eq!(format!("{output:?}"), format!("{:?}", drain(legacy).await));
 }

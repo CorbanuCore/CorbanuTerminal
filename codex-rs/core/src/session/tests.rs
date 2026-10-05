@@ -11919,7 +11919,7 @@ async fn authorization_changed_injection_preserves_items_until_completion() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn authorization_changed_public_injection_waits_for_later_model_turn() -> anyhow::Result<()> {
-    assert_authorization_changed_model_admission(None).await
+    assert_authorization_changed_model_admission(/*schema*/ None).await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -12001,7 +12001,11 @@ async fn assert_authorization_changed_model_admission(
             },
         })
         .await?;
-    tokio::time::timeout(Duration::from_secs(10), server.wait_for_request_count(1)).await?;
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        server.wait_for_request_count(/*count*/ 1),
+    )
+    .await?;
     test.codex
         .submit(Op::ThreadSettings {
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
@@ -12139,7 +12143,7 @@ async fn authorization_changed_user_input_runs_after_completion_with_latest_perm
             thread_settings: Default::default(),
         },
         Some("client-delivery".into()),
-        None,
+        /*parent_turn_id*/ None,
     )
     .await;
     assert!(!sess.input_queue.has_pending_input(&sess.active_turn).await);
@@ -12178,14 +12182,17 @@ async fn authorization_changed_deferred_input_survives_interrupt() {
         items.clone(),
         Default::default(),
         Some("client".into()),
-        None,
+        /*final_output_json_schema*/ None,
     )
     .await
     .unwrap();
     sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
     assert!(sess.input_queue.has_pending_input(&sess.active_turn).await);
     assert_eq!(
-        sess.input_queue.subscribe_activity(None).await.1,
+        sess.input_queue
+            .subscribe_activity(/*turn_state*/ None)
+            .await
+            .1,
         Some(InputQueueActivity::Steer)
     );
     assert_eq!(
@@ -12245,7 +12252,7 @@ async fn authorization_changed_interrupted_input_wakes_fresh_admission() {
             thread_settings: Default::default(),
         },
         Some("interrupted-client".into()),
-        None,
+        /*parent_turn_id*/ None,
     )
     .await;
     sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
@@ -12279,9 +12286,14 @@ async fn interrupted_input_cannot_be_spliced_into_review_task() {
         text: "deferred user work".into(),
         text_elements: vec![],
     }];
-    sess.defer_user_input_until_active_turn_finished(items.clone(), Default::default(), None, None)
-        .await
-        .unwrap();
+    sess.defer_user_input_until_active_turn_finished(
+        items.clone(),
+        Default::default(),
+        /*client_user_message_id*/ None,
+        /*final_output_json_schema*/ None,
+    )
+    .await
+    .unwrap();
     sess.abort_all_tasks(TurnAbortReason::Replaced).await;
     let review = sess.new_default_turn().await;
     sess.spawn_task(
@@ -12313,7 +12325,7 @@ async fn interrupted_input_cannot_be_spliced_into_review_task() {
             thread_settings: Default::default(),
         },
         client_id,
-        None,
+        /*parent_turn_id*/ None,
     )
     .await;
     assert_eq!(
@@ -12372,8 +12384,8 @@ async fn deferred_input_does_not_interrupt_turn_local_sleep() {
             text_elements: vec![],
         }],
         Default::default(),
-        None,
-        None,
+        /*client_user_message_id*/ None,
+        /*final_output_json_schema*/ None,
     )
     .await
     .unwrap();
@@ -12466,7 +12478,11 @@ async fn deferred_mail_does_not_interrupt_turn_local_sleep() {
             trigger_turn,
         );
         sess.input_queue
-            .enqueue_mailbox_communication_for_session(&sess, mail.clone(), None)
+            .enqueue_mailbox_communication_for_session(
+                &sess,
+                mail.clone(),
+                /*parent_turn_id*/ None,
+            )
             .await;
         // Restoring authority must not release mail already bound to the next turn.
         sess.update_settings(SessionSettingsUpdate {
@@ -12484,7 +12500,10 @@ async fn deferred_mail_does_not_interrupt_turn_local_sleep() {
             None
         );
         assert_eq!(
-            sess.input_queue.subscribe_activity(None).await.1,
+            sess.input_queue
+                .subscribe_activity(/*turn_state*/ None)
+                .await
+                .1,
             Some(InputQueueActivity::Mailbox)
         );
         let next_turn_state = Mutex::new(crate::state::TurnState::default());
@@ -12498,7 +12517,11 @@ async fn deferred_mail_does_not_interrupt_turn_local_sleep() {
         for consumable in [false, true] {
             if consumable {
                 sess.input_queue
-                    .enqueue_mailbox_communication_for_session(&sess, mail.clone(), None)
+                    .enqueue_mailbox_communication_for_session(
+                        &sess,
+                        mail.clone(),
+                        /*parent_turn_id*/ None,
+                    )
                     .await;
                 activity_rx.changed().await.unwrap();
                 assert_eq!(
@@ -12562,10 +12585,10 @@ async fn abort_does_not_advance_unrelated_queue_only_mail() {
         AgentPath::root(),
         vec![],
         "queue only".into(),
-        false,
+        /*trigger_turn*/ false,
     );
     sess.input_queue
-        .enqueue_mailbox_communication_for_session(&sess, mail, None)
+        .enqueue_mailbox_communication_for_session(&sess, mail, /*parent_turn_id*/ None)
         .await;
     sess.abort_all_tasks(TurnAbortReason::Replaced).await;
     assert_eq!(
@@ -12745,8 +12768,8 @@ async fn steer_input_accepts_runtime_user_layer_reload() {
             }],
             Default::default(),
             Some(&tc.sub_id),
-            None,
-            None
+            /*client_user_message_id*/ None,
+            /*responsesapi_client_metadata*/ None
         )
         .await,
         Ok(tc.sub_id.clone())

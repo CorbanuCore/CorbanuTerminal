@@ -32,13 +32,13 @@ async fn permission_confirmation_native_requests_carry_effective_defaults() {
                 permissions: Some(profile.into()),
                 ..Default::default()
             };
-            app.request_permission_confirmation(&mut server, params.clone(), profile.into(), None);
+            app.request_permission_confirmation(&mut server, params.clone(), profile.into(), /*persist_reviewer*/ None);
             let pending = app.pending_permission_confirmation.clone();
             app.request_permission_confirmation(
                 &mut server,
                 params,
                 "refused second request".into(),
-                None,
+                /*persist_reviewer*/ None,
             );
             assert_eq!(app.pending_permission_confirmation, pending);
             if profile == ":danger-full-access" {
@@ -136,7 +136,7 @@ async fn permission_confirmation_f07_conflicts_are_refused_and_old_completion_ca
                     ..Default::default()
                 };
                 app.request_permission_confirmation(
-                    &mut server, requested.clone(), profile.into(), None,
+                    &mut server, requested.clone(), profile.into(), /*persist_reviewer*/ None,
                 );
                 let pending = app.pending_permission_confirmation.clone().unwrap();
                 let before = RuntimePermissionProfileOverride::from_config(&app.fresh_session_config());
@@ -157,7 +157,7 @@ async fn permission_confirmation_f07_conflicts_are_refused_and_old_completion_ca
                         ..requested
                     },
                     "refused-conflict".into(),
-                    None,
+                    /*persist_reviewer*/ None,
                 );
                 assert_eq!(app.pending_permission_confirmation, Some(pending.clone()));
                 let mut messages = Vec::new();
@@ -170,7 +170,7 @@ async fn permission_confirmation_f07_conflicts_are_refused_and_old_completion_ca
                                     app.finish_permission_confirmation(selection_id, result);
                                 }
                                 Some(AppEvent::InsertHistoryCell(cell)) => {
-                                    messages.push(cell.display_lines(120).iter().map(ToString::to_string).collect::<Vec<_>>().join("\n"));
+                                    messages.push(cell.display_lines(/*width*/ 120).iter().map(ToString::to_string).collect::<Vec<_>>().join("\n"));
                                 }
                                 _ => {}
                             },
@@ -184,7 +184,7 @@ async fn permission_confirmation_f07_conflicts_are_refused_and_old_completion_ca
                 }).await.unwrap();
                 while let Ok(event) = events.try_recv() {
                     if let AppEvent::InsertHistoryCell(cell) = event {
-                        messages.push(cell.display_lines(120).iter().map(ToString::to_string).collect::<Vec<_>>().join("\n"));
+                        messages.push(cell.display_lines(/*width*/ 120).iter().map(ToString::to_string).collect::<Vec<_>>().join("\n"));
                     }
                 }
                 let messages = messages.join("\n");
@@ -246,7 +246,7 @@ async fn permission_confirmation_f10_request_does_not_optimistically_apply_or_pe
                     ..Default::default()
                 },
                 requested.into(),
-                None,
+                /*persist_reviewer*/ None,
             );
             let pending = app.pending_permission_confirmation.clone().unwrap();
             assert!(!pending.observed);
@@ -344,7 +344,7 @@ async fn permission_confirmation_hint_matches_retained_steer_and_latest_submissi
             thread_id: thread_id.to_string(),
             turn: turn(TurnStatus::InProgress),
         }),
-        None,
+        /*replay_kind*/ None,
     );
     app.chat_widget
         .set_permission_profile_with_active_profile(
@@ -369,7 +369,7 @@ async fn permission_confirmation_hint_matches_retained_steer_and_latest_submissi
     app.finish_permission_confirmation(selection_id, PermissionConfirmationResult::Applied);
     let rendered_hint = std::iter::from_fn(|| events.try_recv().ok())
         .filter_map(|event| match event {
-            AppEvent::InsertHistoryCell(cell) => Some(cell.display_lines(80)),
+            AppEvent::InsertHistoryCell(cell) => Some(cell.display_lines(/*width*/ 80)),
             _ => None,
         })
         .flatten()
@@ -423,7 +423,7 @@ async fn permission_confirmation_hint_matches_retained_steer_and_latest_submissi
             thread_id: thread_id.to_string(),
             turn: turn(TurnStatus::Completed),
         }),
-        None,
+        /*replay_kind*/ None,
     );
     let submitted = std::iter::from_fn(|| ops.try_recv().ok())
         .filter_map(|op| match op {
@@ -458,7 +458,7 @@ fn permission_confirmation_outcomes_are_explicit() {
     .map(|result| {
         let (message, hint) = permission_confirmation_message("Full Access", result);
         crate::history_cell::new_info_event(message, Some(hint))
-            .display_lines(80)
+            .display_lines(/*width*/ 80)
             .into_iter()
             .map(|line| line.to_string())
             .collect::<Vec<_>>()
@@ -639,7 +639,7 @@ async fn permission_confirmation_orders_profiles_and_newer_observations() {
                 let message = std::iter::from_fn(|| events.try_recv().ok())
                     .filter_map(|event| match event {
                         AppEvent::InsertHistoryCell(cell) => Some(
-                            cell.display_lines(80)
+                            cell.display_lines(/*width*/ 80)
                                 .iter()
                                 .map(ToString::to_string)
                                 .collect::<Vec<_>>()
@@ -776,10 +776,10 @@ async fn permission_confirmation_held_input_resumes_only_after_matching_success(
             super::super::tests::test_thread_session(thread_id, app.config.cwd.to_path_buf());
         session.active_permission_profile = Some(ActivePermissionProfile::read_only());
         app.chat_widget
-            .set_initial_user_message_submit_suppressed(true);
+            .set_initial_user_message_submit_suppressed(/*suppressed*/ true);
         app.chat_widget.handle_thread_session(session);
         app.chat_widget
-            .set_initial_user_message_submit_suppressed(false);
+            .set_initial_user_message_submit_suppressed(/*suppressed*/ false);
         while events.try_recv().is_ok() {}
         let selection_id = uuid::Uuid::new_v4();
         app.pending_permission_confirmation = Some(PendingPermissionConfirmation {

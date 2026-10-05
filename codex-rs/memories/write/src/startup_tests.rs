@@ -1091,7 +1091,9 @@ async fn wait_for_phase2_workspace_reset(
 async fn wait_for_phase2_job_to_finish(
     db: &codex_state::StateRuntime,
 ) -> anyhow::Result<Phase2JobClaimOutcome> {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    // Phase 2 runs a full agent turn; on a loaded Windows runner under Bazel
+    // it took longer than 10s. Polling returns as soon as the job finishes.
+    let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         let outcome = db
             .memories()

@@ -29,18 +29,30 @@ async fn schema_staging_admission_and_active_null_reopens() -> anyhow::Result<()
         0
     );
     let store = install(&runtime).await?;
-    save(&store, &attempt(1, 0), &[snapshot()]).await?;
+    save(&store, &attempt(/*id*/ 1, /*dispatch*/ 0), &[snapshot()]).await?;
     let mut conn = runtime.pool.acquire().await?;
-    read_checked(&mut conn, 0, 0, Ok(&RetainedDay::NeedsActivation)).await?;
+    read_checked(
+        &mut conn,
+        /*day*/ 0,
+        /*time*/ 0,
+        Ok(&RetainedDay::NeedsActivation),
+    )
+    .await?;
     sqlx::query("UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms = 0")
         .execute(&mut *conn)
         .await?;
     store
         .estimates
         .journal
-        .begin_attempt(&attempt(2, 0))
+        .begin_attempt(&attempt(/*id*/ 2, /*dispatch*/ 0))
         .await?;
-    read_checked(&mut conn, 0, 0, Ok(&RetainedDay::NeedsActivation)).await?;
+    read_checked(
+        &mut conn,
+        /*day*/ 0,
+        /*time*/ 0,
+        Ok(&RetainedDay::NeedsActivation),
+    )
+    .await?;
     let original = dump(&mut conn).await?;
     for mask in 0..7 {
         let mut tx = conn.begin().await?;
@@ -61,11 +73,16 @@ async fn schema_staging_admission_and_active_null_reopens() -> anyhow::Result<()
                 retention_fixture_on_connection(&mut tx).await?,
                 RetentionFixture::Absent
             );
-            Journal::append_on_connection(&mut tx, &attempt(3, 0), &[]).await?;
+            Journal::append_on_connection(&mut tx, &attempt(/*id*/ 3, /*dispatch*/ 0), &[]).await?;
             assert_error(
-                read_retained_on_connection(&mut tx, attempt(1, 0).thread_id, 0, 0)
-                    .await
-                    .unwrap_err(),
+                read_retained_on_connection(
+                    &mut tx,
+                    attempt(/*id*/ 1, /*dispatch*/ 0).thread_id,
+                    /*day*/ 0,
+                    /*as_of_ms*/ 0,
+                )
+                .await
+                .unwrap_err(),
                 "absent",
             );
         } else {
@@ -139,11 +156,24 @@ async fn schema_staging_admission_and_active_null_reopens() -> anyhow::Result<()
         .execute(&mut *conn)
         .await?;
     sqlx::query("UPDATE draft_accounting_retention_checkpoint SET completed_as_of_ms=NULL, admission_active=1").execute(&mut *conn).await?;
-    read_checked(&mut conn, 0, 0, Err("active NULL")).await?;
+    read_checked(
+        &mut conn,
+        /*day*/ 0,
+        /*time*/ 0,
+        Err("active NULL"),
+    )
+    .await?;
     let baseline = dump(&mut conn).await?;
     drop(conn);
     runtime.close().await;
-    reopened(&home, &baseline, 0, 0, Err("active NULL")).await
+    reopened(
+        &home,
+        &baseline,
+        /*day*/ 0,
+        /*time*/ 0,
+        Err("active NULL"),
+    )
+    .await
 }
 
 #[tokio::test]
@@ -152,11 +182,11 @@ async fn strict_admission_boundaries_conflicts_and_no_write_failures() -> anyhow
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
     let mut conn = runtime.pool.acquire().await?;
-    active(&mut conn, 0).await?;
+    active(&mut conn, /*time*/ 0).await?;
     store
         .estimates
         .journal
-        .begin_attempt(&attempt(1, 0))
+        .begin_attempt(&attempt(/*id*/ 1, /*dispatch*/ 0))
         .await?;
     active(&mut conn, 400 * DAY_MS).await?;
     for (dispatch, marker) in [
@@ -167,19 +197,25 @@ async fn strict_admission_boundaries_conflicts_and_no_write_failures() -> anyhow
         (35 * DAY_MS, "expired replay"),
         (0, "expired replay"),
     ] {
-        rejected(&store, &attempt(2, dispatch), &[], marker).await?;
+        rejected(&store, &attempt(/*id*/ 2, dispatch), &[], marker).await?;
     }
-    let a = attempt(2, 310 * DAY_MS + 1);
+    let a = attempt(/*id*/ 2, 310 * DAY_MS + 1);
     store
         .estimates
         .journal
-        .append_observation(&a, &[row(&a, 1, 1)])
+        .append_observation(&a, &[row(&a, /*revision*/ 1, /*input*/ 1)])
         .await?;
-    rejected(&store, &a, &[row(&a, 1, 2)], "observation conflict").await?;
+    rejected(
+        &store,
+        &a,
+        &[row(&a, /*revision*/ 1, /*input*/ 2)],
+        "observation conflict",
+    )
+    .await?;
     let mut changed = a.clone();
     changed.dispatched_at_ms = (310 * DAY_MS + 2).try_into()?;
     rejected(&store, &changed, &[], "immutable identity").await?;
-    changed = attempt(3, 400 * DAY_MS);
+    changed = attempt(/*id*/ 3, 400 * DAY_MS);
     changed.retry_of = Some(Uuid::from_u128(99));
     sqlx::query("INSERT INTO draft_accounting_tombstones VALUES (?, ?)")
         .bind(Uuid::from_u128(99).to_string())
@@ -187,9 +223,15 @@ async fn strict_admission_boundaries_conflicts_and_no_write_failures() -> anyhow
         .execute(&mut *conn)
         .await?;
     rejected(&store, &changed, &[], "retry predecessor").await?;
-    rejected(&store, &attempt(99, 400 * DAY_MS), &[], "deleted attempt").await?;
+    rejected(
+        &store,
+        &attempt(/*id*/ 99, 400 * DAY_MS),
+        &[],
+        "deleted attempt",
+    )
+    .await?;
     active(&mut conn, i64::MAX).await?;
-    rejected(&store, &attempt(4, i64::MAX), &[], "overflow").await?;
+    rejected(&store, &attempt(/*id*/ 4, i64::MAX), &[], "overflow").await?;
     drop(conn);
     runtime.close().await;
     Ok(())
@@ -200,15 +242,25 @@ async fn retained_totals_freshness_coverage_corruption_and_reopens() -> anyhow::
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
-    let a = attempt(1, DAY_MS);
+    let a = attempt(/*id*/ 1, DAY_MS);
     save(&store, &a, &[snapshot()]).await?;
     let mut conn = runtime.pool.acquire().await?;
-    compact(&mut conn, 0, &values([0; 7], [1; 7], "0", 1, 1).encode()?).await?;
+    compact(
+        &mut conn,
+        /*day*/ 0,
+        &values([0; 7], [1; 7], "0", /*missing*/ 1, /*count*/ 1).encode()?,
+    )
+    .await?;
     sqlx::query("UPDATE draft_accounting_compact_days SET thread_id = ?")
         .bind(Uuid::from_u128(8).to_string())
         .execute(&mut *conn)
         .await?;
-    compact(&mut conn, 1, &values([0; 7], [0; 7], "0", 0, 1).encode()?).await?;
+    compact(
+        &mut conn,
+        /*day*/ 1,
+        &values([0; 7], [0; 7], "0", /*missing*/ 0, /*count*/ 1).encode()?,
+    )
+    .await?;
     sqlx::query("INSERT INTO draft_accounting_compact_snapshots SELECT thread_id, utc_day, snapshot_id FROM draft_accounting_compact_days CROSS JOIN draft_accounting_price_snapshots").execute(&mut *conn).await?;
     active(&mut conn, DAY_MS).await?;
     let expected = available(
@@ -219,20 +271,22 @@ async fn retained_totals_freshness_coverage_corruption_and_reopens() -> anyhow::
                 [0, 1, 0, 0, 0, 0, 0],
                 [1, 0, 1, 1, 1, 1, 1],
                 "0.000000000000000000000001",
-                1,
-                2,
+                /*missing*/ 1,
+                /*count*/ 2,
             )
             .to_day_totals()?,
         ),
     );
-    read_checked(&mut conn, 1, DAY_MS, Ok(&expected)).await?;
+    read_checked(&mut conn, /*day*/ 1, DAY_MS, Ok(&expected)).await?;
     assert_eq!(
-        store.read_retained_day(a.thread_id, 1, DAY_MS).await?,
+        store
+            .read_retained_day(a.thread_id, /*day*/ 1, DAY_MS)
+            .await?,
         expected
     );
     read_checked(
         &mut conn,
-        0,
+        /*day*/ 0,
         DAY_MS,
         Ok(&available(
             DAY_MS,
@@ -244,7 +298,7 @@ async fn retained_totals_freshness_coverage_corruption_and_reopens() -> anyhow::
     assert_eq!(DayTotals::default().full_usd(), None);
     let before = dump(&mut conn).await?;
     assert_error(
-        store.read_day(a.thread_id, 1).await.unwrap_err(),
+        store.read_day(a.thread_id, /*day*/ 1).await.unwrap_err(),
         "read_retained_day",
     );
     assert_eq!(dump(&mut conn).await?, before);
@@ -260,7 +314,7 @@ async fn retained_totals_freshness_coverage_corruption_and_reopens() -> anyhow::
     }
     read_checked(
         &mut conn,
-        1,
+        /*day*/ 1,
         DAY_MS + 1,
         Ok(&RetainedDay::NeedsMaintenance {
             completed_as_of_ms: DAY_MS,
@@ -294,7 +348,7 @@ async fn retained_totals_freshness_coverage_corruption_and_reopens() -> anyhow::
             .await?;
         let mut tx = conn.begin().await?;
         sqlx::query(sql).execute(&mut *tx).await?;
-        read_checked(&mut tx, 1, DAY_MS, Err(marker)).await?;
+        read_checked(&mut tx, /*day*/ 1, DAY_MS, Err(marker)).await?;
         tx.rollback().await?;
         sqlx::query("PRAGMA foreign_keys=ON")
             .execute(&mut *conn)
@@ -306,7 +360,7 @@ async fn retained_totals_freshness_coverage_corruption_and_reopens() -> anyhow::
         .await?;
     read_checked(
         &mut tx,
-        1,
+        /*day*/ 1,
         DAY_MS,
         Ok(&available(DAY_MS, Some(1), Current::NeedsRefresh)),
     )
@@ -315,7 +369,7 @@ async fn retained_totals_freshness_coverage_corruption_and_reopens() -> anyhow::
     let baseline = dump(&mut conn).await?;
     drop(conn);
     runtime.close().await;
-    reopened(&home, &baseline, 1, DAY_MS, Ok(&expected)).await
+    reopened(&home, &baseline, /*day*/ 1, DAY_MS, Ok(&expected)).await
 }
 
 #[tokio::test]
@@ -323,37 +377,43 @@ async fn pending_cleanup_expired_days_stale_and_known_zero() -> anyhow::Result<(
     let home = home();
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     let store = install(&runtime).await?;
-    let a = attempt(1, 0);
+    let a = attempt(/*id*/ 1, /*dispatch*/ 0);
     save(&store, &a, &[]).await?;
     store
         .estimates
         .journal
-        .append_observation(&a, &[row(&a, 2, 2)])
+        .append_observation(&a, &[row(&a, /*revision*/ 2, /*input*/ 2)])
         .await?;
     let mut conn = runtime.pool.acquire().await?;
-    active(&mut conn, 0).await?;
+    active(&mut conn, /*time*/ 0).await?;
     read_checked(
         &mut conn,
-        0,
-        0,
-        Ok(&available(0, Some(0), Current::NeedsRefresh)),
+        /*day*/ 0,
+        /*time*/ 0,
+        Ok(&available(/*time*/ 0, Some(0), Current::NeedsRefresh)),
     )
     .await?;
     active(&mut conn, DETAIL_MS).await?;
     read_checked(
         &mut conn,
-        0,
+        /*day*/ 0,
         DETAIL_MS,
         Ok(&RetainedDay::NeedsMaintenance {
             completed_as_of_ms: DETAIL_MS,
         }),
     )
     .await?;
-    active(&mut conn, 0).await?;
+    active(&mut conn, /*time*/ 0).await?;
     sqlx::query("UPDATE draft_accounting_estimates SET payload='{}'")
         .execute(&mut *conn)
         .await?;
-    read_checked(&mut conn, 0, 0, Err("corrupt estimate")).await?;
+    read_checked(
+        &mut conn,
+        /*day*/ 0,
+        /*time*/ 0,
+        Err("corrupt estimate"),
+    )
+    .await?;
     // Clear only this disposable fixture's rows to construct independent cleanup boundaries.
     for table in [
         "DELETE FROM draft_accounting_contributions",
@@ -364,7 +424,12 @@ async fn pending_cleanup_expired_days_stale_and_known_zero() -> anyhow::Result<(
     ] {
         sqlx::query(table).execute(&mut *conn).await?;
     }
-    compact(&mut conn, 0, &values([0; 7], [0; 7], "0", 0, 1).encode()?).await?;
+    compact(
+        &mut conn,
+        /*day*/ 0,
+        &values([0; 7], [0; 7], "0", /*missing*/ 0, /*count*/ 1).encode()?,
+    )
+    .await?;
     active(&mut conn, DETAIL_MS).await?;
     let coverage = RetentionCoverage {
         completed_as_of_ms: DETAIL_MS,
@@ -372,12 +437,12 @@ async fn pending_cleanup_expired_days_stale_and_known_zero() -> anyhow::Result<(
         aggregate_day_floor: 0,
         oldest_recorded_day: Some(0),
     };
-    let zero = values([0; 7], [0; 7], "0", 0, 1).to_day_totals()?;
+    let zero = values([0; 7], [0; 7], "0", /*missing*/ 0, /*count*/ 1).to_day_totals()?;
     assert_eq!(zero.full_usd(), Some(Decimal::default()));
     assert!(zero.measured.iter().all(|metric| metric.full() == Some(0)));
     read_checked(
         &mut conn,
-        0,
+        /*day*/ 0,
         DETAIL_MS,
         Ok(&RetainedDay::Available {
             coverage,
@@ -389,7 +454,7 @@ async fn pending_cleanup_expired_days_stale_and_known_zero() -> anyhow::Result<(
         active(&mut conn, time).await?;
         read_checked(
             &mut conn,
-            0,
+            /*day*/ 0,
             time,
             Ok(&RetainedDay::NeedsMaintenance {
                 completed_as_of_ms: time,
@@ -403,7 +468,7 @@ async fn pending_cleanup_expired_days_stale_and_known_zero() -> anyhow::Result<(
     active(&mut conn, REPLAY_MS).await?;
     read_checked(
         &mut conn,
-        0,
+        /*day*/ 0,
         REPLAY_MS,
         Ok(&RetainedDay::Expired(RetentionCoverage {
             completed_as_of_ms: REPLAY_MS,
@@ -420,7 +485,7 @@ async fn pending_cleanup_expired_days_stale_and_known_zero() -> anyhow::Result<(
         .await?;
     read_checked(
         &mut conn,
-        365,
+        /*day*/ 365,
         REPLAY_MS,
         Ok(&RetainedDay::NeedsMaintenance {
             completed_as_of_ms: REPLAY_MS,
@@ -443,8 +508,16 @@ async fn actual_append_contention_and_observation_fault_rollback() -> anyhow::Re
     let pool = runtime.pool.clone();
     let holder = tokio::spawn(async move {
         let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
-        Journal::append_on_connection(&mut tx, &attempt(1, 0), &[row(&attempt(1, 0), 1, 1)])
-            .await?;
+        Journal::append_on_connection(
+            &mut tx,
+            &attempt(/*id*/ 1, /*dispatch*/ 0),
+            &[row(
+                &attempt(/*id*/ 1, /*dispatch*/ 0),
+                /*revision*/ 1,
+                /*input*/ 1,
+            )],
+        )
+        .await?;
         held_tx.send(()).unwrap();
         release_rx.await?;
         tx.commit().await?;
@@ -454,7 +527,7 @@ async fn actual_append_contention_and_observation_fault_rollback() -> anyhow::Re
     let error = attach(&other)
         .estimates
         .journal
-        .begin_attempt(&attempt(2, 0))
+        .begin_attempt(&attempt(/*id*/ 2, /*dispatch*/ 0))
         .await
         .unwrap_err();
     let sql = error
@@ -468,7 +541,7 @@ async fn actual_append_contention_and_observation_fault_rollback() -> anyhow::Re
     attach(&other)
         .estimates
         .journal
-        .begin_attempt(&attempt(2, 0))
+        .begin_attempt(&attempt(/*id*/ 2, /*dispatch*/ 0))
         .await?;
     other.pool.close().await;
     let mut conn = runtime.pool.acquire().await?;
@@ -487,33 +560,51 @@ async fn actual_append_contention_and_observation_fault_rollback() -> anyhow::Re
     drop(conn);
     rejected(
         &store,
-        &attempt(3, 0),
-        &[row(&attempt(3, 0), 1, 1)],
+        &attempt(/*id*/ 3, /*dispatch*/ 0),
+        &[row(
+            &attempt(/*id*/ 3, /*dispatch*/ 0),
+            /*revision*/ 1,
+            /*input*/ 1,
+        )],
         "retention_fault_observation",
     )
     .await?;
     runtime.close().await;
-    reopened(&home, &baseline, 0, 0, Ok(&RetainedDay::NeedsActivation)).await?;
+    reopened(
+        &home,
+        &baseline,
+        /*day*/ 0,
+        /*time*/ 0,
+        Ok(&RetainedDay::NeedsActivation),
+    )
+    .await?;
     let runtime = StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
     sqlx::query("DROP TRIGGER retention_fault_observation")
         .execute(runtime.pool.as_ref())
         .await?;
     let store = attach(&runtime);
-    save(&store, &attempt(3, 0), &[]).await?;
+    save(&store, &attempt(/*id*/ 3, /*dispatch*/ 0), &[]).await?;
     let mut conn = runtime.pool.acquire().await?;
     let before = dump(&mut conn).await?;
     store
         .estimates
         .journal
-        .append_observation(&attempt(3, 0), &[row(&attempt(3, 0), 1, 1)])
+        .append_observation(
+            &attempt(/*id*/ 3, /*dispatch*/ 0),
+            &[row(
+                &attempt(/*id*/ 3, /*dispatch*/ 0),
+                /*revision*/ 1,
+                /*input*/ 1,
+            )],
+        )
         .await?;
     assert_eq!(dump(&mut conn).await?, before);
-    active(&mut conn, 0).await?;
+    active(&mut conn, /*time*/ 0).await?;
     read_checked(
         &mut conn,
-        0,
-        0,
-        Ok(&available(0, Some(0), Current::NeedsRefresh)),
+        /*day*/ 0,
+        /*time*/ 0,
+        Ok(&available(/*time*/ 0, Some(0), Current::NeedsRefresh)),
     )
     .await?;
     drop(conn);

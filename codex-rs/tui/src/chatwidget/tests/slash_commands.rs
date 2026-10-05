@@ -11,7 +11,7 @@ async fn accounting_inspect_usability_child_watcher_keeps_input_blocked() {
         "/compact",
         "change the task",
     ] {
-        let (mut chat, mut rx, mut ops) = make_chatwidget_manual(None).await;
+        let (mut chat, mut rx, mut ops) = make_chatwidget_manual(/*model_override*/ None).await;
         chat.thread_id = Some(ThreadId::new());
         drain_insert_history(&mut rx);
         chat.set_parent_owned_thread();
@@ -26,7 +26,7 @@ async fn accounting_inspect_usability_child_watcher_keeps_input_blocked() {
         while let Ok(event) = rx.try_recv() {
             match event {
                 AppEvent::InsertHistoryCell(cell) => messages.push(
-                    cell.display_lines(150)
+                    cell.display_lines(/*width*/ 150)
                         .iter()
                         .map(ToString::to_string)
                         .collect::<Vec<_>>()
@@ -41,13 +41,13 @@ async fn accounting_inspect_usability_child_watcher_keeps_input_blocked() {
 
 #[tokio::test]
 async fn accounting_inspect_command_without_account_auth() {
-    let (mut chat, mut rx, mut ops) = make_chatwidget_manual(None).await;
+    let (mut chat, mut rx, mut ops) = make_chatwidget_manual(/*model_override*/ None).await;
     assert!(!chat.has_codex_backend_auth());
     chat.dispatch_command_with_args(SlashCommand::Usage, "requests".into(), Vec::new());
     assert_matches!(rx.try_recv(), Ok(AppEvent::LoadAccountingInspector { .. }));
     assert!(rx.try_recv().is_err());
     assert!(ops.try_recv().is_err());
-    assert!(render_bottom_popup(&chat, 80).contains("Loading recorded requests"));
+    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("Loading recorded requests"));
     chat.clear_pending_token_activity_refreshes();
     chat.dispatch_command_with_args(SlashCommand::Usage, "weekly".into(), Vec::new());
     let cells = drain_insert_history(&mut rx);
@@ -74,7 +74,7 @@ async fn accounting_inspect_command_date_validation() {
         ("requests 2026-09-15 extra", None),
         ("requests junk", None),
     ] {
-        let (mut chat, mut rx, mut ops) = make_chatwidget_manual(None).await;
+        let (mut chat, mut rx, mut ops) = make_chatwidget_manual(/*model_override*/ None).await;
         chat.open_accounting_command(args, today);
         if let Some(expected) = day {
             let AppEvent::LoadAccountingInspector { day, .. } = rx.try_recv().unwrap() else {
@@ -89,7 +89,9 @@ async fn accounting_inspect_command_date_validation() {
                     .iter()
                     .all(|e| !matches!(e, AppEvent::LoadAccountingInspector { .. }))
             );
-            assert!(!render_bottom_popup(&chat, 80).contains("Loading recorded requests"));
+            assert!(
+                !render_bottom_popup(&chat, /*width*/ 80).contains("Loading recorded requests")
+            );
         }
         assert!(ops.try_recv().is_err());
     }

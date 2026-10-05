@@ -3,6 +3,9 @@ codex-rs/hooks/schema/generated/** linguist-generated
 *.snap -whitespace
 *.sha256 text eol=lf
 scripts/security_platform_probe.py text eol=lf
+# Sources embed prompts and fixtures with include_str!, so Windows checkouts
+# (core.autocrlf=true on hosted runners) must not turn them into CRLF.
+codex-rs/** text=auto eol=lf
 codex-rs/content-security/**/*.rs text eol=lf
 qa/security-levels/classifier/*.json text eol=lf
 qa/security-levels/classifier/**/*.json text eol=lf

@@ -229,6 +229,10 @@ async fn reqwest_default_route_preserves_transport_redirects() {
                     Err(error) => panic!("redirect server should accept: {error}"),
                 }
             };
+            // Windows sockets inherit the listener's nonblocking mode.
+            stream
+                .set_nonblocking(false)
+                .expect("redirect stream should become blocking");
             let mut buffer = [0_u8; 1024];
             let size = stream
                 .read(&mut buffer)

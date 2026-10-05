@@ -561,7 +561,7 @@ async fn pf_60_s03_realtime_call_is_recorded() -> anyhow::Result<()> {
                 voice: codex_protocol::protocol::RealtimeVoice::Alloy,
             },
             Default::default(),
-            None,
+            /*api_provider_override*/ None,
             &accounting.0.responses_accounting,
         )
         .await?;

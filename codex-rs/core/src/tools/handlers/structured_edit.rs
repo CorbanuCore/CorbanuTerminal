@@ -667,7 +667,9 @@ fn validate_relative_path(path: &str) -> Result<(), FunctionCallError> {
         ));
     }
     let path = Path::new(path);
-    if path.is_absolute() {
+    // On Windows `/tmp/file` is root-relative rather than absolute, but it
+    // still escapes the workspace, so report it the same way.
+    if path.is_absolute() || path.has_root() {
         return Err(FunctionCallError::RespondToModel(
             "path must be relative, not absolute".to_string(),
         ));
