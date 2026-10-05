@@ -1414,14 +1414,17 @@ mod tests {
     async fn active_time_timeout_pauses_while_elicitation_is_pending() {
         let pause_state = ElicitationPauseState::new();
         let pause = pause_state.enter();
+        // The work outlasts the 500ms budget in wall time (900ms) but spends
+        // only ~150ms of it unpaused. Wide margins keep a loaded runner's
+        // scheduling delays from crossing the budget.
         tokio::spawn(async move {
-            time::sleep(Duration::from_millis(75)).await;
+            time::sleep(Duration::from_millis(750)).await;
             drop(pause);
         });
 
         let result =
-            active_time_timeout(Duration::from_millis(50), pause_state.subscribe(), async {
-                time::sleep(Duration::from_millis(90)).await;
+            active_time_timeout(Duration::from_millis(500), pause_state.subscribe(), async {
+                time::sleep(Duration::from_millis(900)).await;
                 "done"
             })
             .await;
