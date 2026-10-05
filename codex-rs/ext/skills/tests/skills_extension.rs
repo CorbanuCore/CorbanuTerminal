@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -13,6 +14,8 @@ use codex_core_skills::injection::THREAD_SKILLS_CONTEXT_SOURCE_ID;
 use codex_core_skills::loader::MAX_CONCURRENT_ROOT_SCANS;
 use codex_core_skills::loader::SkillRoot;
 use codex_core_skills::loader::load_skills_from_roots;
+use codex_exec_server::EnvironmentManager;
+use codex_exec_server::LOCAL_ENVIRONMENT_ID;
 use codex_exec_server::LOCAL_FS;
 use codex_extension_api::ConversationHistory;
 use codex_extension_api::ExtensionData;
@@ -702,6 +705,141 @@ async fn selected_executor_catalog_follows_step_availability_and_reuses_its_cach
                 &normalized_listing_disabled_snapshot
             ))
             .is_none()
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn executor_skill_tools_reuse_the_thread_catalog_across_steps() -> TestResult {
+    let read_requests = Arc::new(Mutex::new(Vec::new()));
+    let list_calls = Arc::new(AtomicUsize::new(0));
+    let executor_provider = Arc::new(StaticSkillProvider {
+        catalog: SkillCatalog {
+            entries: vec![test_entry(
+                SkillSourceKind::Executor,
+                "lint-fix",
+                "executor/lint-fix",
+                "lint-fix/SKILL.md",
+            )],
+            warnings: Vec::new(),
+        },
+        read_requests: Arc::clone(&read_requests),
+        list_calls: Some(Arc::clone(&list_calls)),
+        fail_first_list: false,
+    });
+    let providers = SkillProviders::new().with_executor_provider(executor_provider);
+    let mut builder = ExtensionRegistryBuilder::new();
+    install_with_providers(&mut builder, providers, skills_extension_config);
+    let registry = builder.build();
+
+    let session_store = ExtensionData::new("session");
+    let thread_store = ExtensionData::new("thread");
+    let selected_roots = vec![SelectedCapabilityRoot {
+        id: "lint-fix".to_string(),
+        location: CapabilityRootLocation::Environment {
+            environment_id: LOCAL_ENVIRONMENT_ID.to_string(),
+            path: PathUri::parse("file:///skills/lint-fix").expect("skill root URI"),
+        },
+    }];
+    let session_source = SessionSource::Cli;
+    let config = default_config();
+    registry.thread_lifecycle_contributors()[0]
+        .on_thread_start(ThreadStartInput {
+            config: &config,
+            session_source: &session_source,
+            persistent_thread_state_available: true,
+            environments: &[],
+            mcp_resource_client: None,
+            extension_metrics: None,
+            session_store: &session_store,
+            thread_store: &thread_store,
+        })
+        .await;
+    let turn_store = ExtensionData::new("turn-1");
+    registry.context_contributors()[0]
+        .contribute_world_state(WorldStateContributionInput {
+            thread_id: codex_protocol::ThreadId::new(),
+            turn_id: "turn-1",
+            environments: &[],
+            ready_selected_capability_roots: &selected_roots,
+            executor_capability_discovery: None,
+            extension_metrics: None,
+            session_store: &session_store,
+            thread_store: &thread_store,
+            turn_store: &turn_store,
+        })
+        .await;
+    assert_eq!(1, list_calls.load(Ordering::Relaxed));
+
+    let environment_manager = EnvironmentManager::default_for_tests();
+    for step_id in ["step-1", "step-2"] {
+        let step_store = ExtensionData::new(step_id);
+        step_store.insert(
+            environment_manager
+                .resolve_selected_capability_roots(&selected_roots, &HashMap::new())
+                .await,
+        );
+        let tools = registry.tool_contributors()[0].tools_for_step(
+            &session_store,
+            &thread_store,
+            &step_store,
+        );
+        for (tool_name, arguments) in [
+            (
+                "list",
+                serde_json::json!({"authority": {"kind": "executor"}}),
+            ),
+            (
+                "read",
+                serde_json::json!({
+                    "authority": {"kind": "executor", "id": "lint-fix"},
+                    "package": "executor/lint-fix",
+                    "resource": "lint-fix/SKILL.md",
+                }),
+            ),
+        ] {
+            let tool = tools
+                .iter()
+                .find(|tool| tool.tool_name().name == tool_name)
+                .ok_or("skill tool should be registered")?;
+            let call_id = format!("{step_id}-{tool_name}");
+            let payload = ToolPayload::Function {
+                arguments: arguments.to_string(),
+            };
+            let output = tool
+                .handle(ToolCall {
+                    turn_id: "turn-1".to_string(),
+                    call_id: call_id.clone(),
+                    tool_name: tool.tool_name(),
+                    model: "gpt-test".to_string(),
+                    codex_turn_metadata: None,
+                    truncation_policy: TruncationPolicy::Bytes(1_024),
+                    conversation_history: ConversationHistory::default(),
+                    turn_item_emitter: Arc::new(NoopTurnItemEmitter),
+                    environments: Vec::new(),
+                    payload: payload.clone(),
+                })
+                .await?;
+            let response = output
+                .post_tool_use_response(&call_id, &payload)
+                .ok_or("skill tool should expose structured output")?;
+            if tool_name == "list" {
+                assert_eq!(response["skills"][0]["name"], "lint-fix");
+            } else {
+                assert_eq!(response["contents"], "# Lint Fix\n\nRun the formatter.");
+            }
+        }
+    }
+
+    // World State and every later skills.list/skills.read step share one executor scan.
+    assert_eq!(1, list_calls.load(Ordering::Relaxed));
+    assert_eq!(
+        2,
+        read_requests
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len()
     );
 
     Ok(())
