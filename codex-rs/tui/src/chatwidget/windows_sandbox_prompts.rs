@@ -3,6 +3,7 @@
 use super::*;
 
 /// Explains the non-admin sandbox's known limitation (#158) next to the option that selects it.
+#[cfg(any(target_os = "windows", test))]
 const LEGACY_SANDBOX_OPTION_DESCRIPTION: &str =
     "Commands can delete or move files outside your workspace";
 
@@ -358,7 +359,7 @@ impl ChatWidget {
                 "You can still use Corbanu Terminal in a non-admin sandbox. It carries greater risk if prompt injected."
             ]);
             lines.push(line![
-                "In the non-admin sandbox, commands can delete or move files outside your workspace in folders you own, such as most of your user profile.".yellow()
+                "In the non-admin sandbox, commands can delete or move files outside your workspace in folders you own, such as most of your user profile.".bold()
             ]);
         } else {
             lines.push(line![
