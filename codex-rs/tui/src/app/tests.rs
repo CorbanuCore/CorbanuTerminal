@@ -15193,9 +15193,6 @@ fn embedded_provider_key_save_is_visible_to_one_bulk_status_refresh() -> Result<
         config.model_providers =
             codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None);
         config.model_providers.insert(provider_id.into(), provider);
-        // Keep the embedded app server off the network: with plugins enabled it
-        // clones the curated plugin repository from GitHub at startup.
-        let _ = config.features.disable(Feature::Plugins);
 
         let app_server = crate::start_embedded_app_server_for_picker(&config).await?;
         let status_host = crate::provider_status_host::ProviderStatusHost::from_config(
