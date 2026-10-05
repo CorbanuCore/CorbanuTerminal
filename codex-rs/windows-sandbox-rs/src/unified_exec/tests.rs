@@ -92,22 +92,15 @@ fn system32_exe(name: &str) -> PathBuf {
 
 fn current_user_sid() -> String {
     let output = std::process::Command::new(system32_exe("whoami.exe"))
-        .args(["/user", "/fo", "csv", "/nh"])
+        .arg("/user")
         .output()
         .expect("run whoami");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    // Output is `"DOMAIN\user","S-1-5-..."`.
-    let sid = stdout
-        .trim()
-        .rsplit(',')
-        .next()
-        .unwrap_or_default()
-        .trim_matches('"');
-    assert!(
-        sid.starts_with("S-1-"),
-        "unexpected whoami output: {stdout:?}"
-    );
-    sid.to_string()
+    stdout
+        .split_whitespace()
+        .find(|token| token.starts_with("S-1-"))
+        .unwrap_or_else(|| panic!("unexpected whoami output: {stdout:?}"))
+        .to_string()
 }
 
 /// Creates a test root with a protected DACL granting full control only to SYSTEM,
