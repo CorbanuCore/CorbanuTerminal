@@ -84,6 +84,33 @@ supports a narrow split-filesystem subset: full-read split policies whose
 writable roots still match the legacy `WorkspaceWrite` root set, but add extra
 read-only carveouts under those writable roots.
 
+Known limitation (#158): the unelevated backend does not confine deletes
+outside its writable roots. Its write-restricted token checks the writable-root
+capability SIDs for write accesses, including `DELETE`, but Windows does not
+treat `FILE_DELETE_CHILD` as a write. NTFS lets a caller delete or move a file
+it has no `DELETE` right on when the parent directory grants
+`FILE_DELETE_CHILD`. A sandboxed command can therefore delete any file or
+directory whose parent grants that right to the user's non-administrator
+identity (Administrators is deny-only in the sandbox token), which in practice
+covers most of the user profile. This applies in both `ReadOnly` and
+`WorkspaceWrite` modes. In `WorkspaceWrite` the command can also move such
+files into a writable root. Creating or writing files outside writable roots
+is still blocked. Note that a `ReadOnly` session can therefore delete the
+workspace, including `.git`.
+
+Protected paths that already exist inside writable roots when a session
+starts, such as `.git`, `.codex`, and `.agents`, also get an Everyone deny of
+`FILE_DELETE_CHILD` on the path, its subdirectories, and its parent directory.
+That keeps the sandbox from deleting, moving, or replacing them through the
+parent, which would otherwise let it plant Git hooks or config that later run
+unsandboxed. Renaming a writable ancestor of a nested protected path is not
+covered. The deny entries are persistent and visible in the folder's security
+settings. Unsandboxed deletes normally keep working because they use each
+object's own `DELETE` right; only a delete that relies on the parent's
+`FILE_DELETE_CHILD` is affected. To remove the entries, run
+`icacls <dir> /remove:d *S-1-1-0` on the affected directories. That command
+also removes any other Everyone deny entries on them.
+
 New `[permissions]` / split filesystem policies remain supported on Windows
 only when they can be enforced directly by the selected Windows backend or
 round-trip through the legacy `SandboxPolicy` model without changing semantics.
