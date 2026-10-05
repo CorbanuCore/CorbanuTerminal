@@ -8,6 +8,11 @@ use std::os::unix::fs::PermissionsExt;
 
 use super::*;
 
+/// Upper bound for fixture subprocesses that are expected to answer. These tests assert the
+/// answer, not its latency, so a loaded CI runner must not turn them into timeout checks.
+#[cfg(unix)]
+const FIXTURE_SUCCESS_TIMEOUT: Duration = Duration::from_secs(30);
+
 #[test]
 fn managed_token_normalization_removes_only_pasted_line_breaks() {
     assert_eq!(
@@ -450,7 +455,7 @@ async fn existing_claude_login_is_selected_without_reauthorization() {
             &fake_claude,
             Some(&fake_claude),
             temp_dir.path(),
-            Duration::from_secs(1),
+            FIXTURE_SUCCESS_TIMEOUT,
         )
         .await
         .expect("select existing login")
@@ -492,7 +497,7 @@ async fn unhealthy_platform_record_does_not_replace_the_previous_selection() {
         &fake_claude,
         Some(&fake_claude),
         temp_dir.path(),
-        Duration::from_secs(1),
+        FIXTURE_SUCCESS_TIMEOUT,
     )
     .await
     .expect_err("unhealthy platform record must fail before persistence");
@@ -530,7 +535,7 @@ async fn providers_status_reports_selected_login_reauthorization_need() {
 
     let status = current_status_with_executables(
         temp_dir.path(),
-        Duration::from_secs(1),
+        FIXTURE_SUCCESS_TIMEOUT,
         &fake_claude,
         Some(&fake_claude),
     )
@@ -600,7 +605,7 @@ async fn providers_status_preserves_unavailable_claude_after_a_healthy_probe() {
 
     let status = current_status_with_executables(
         temp_dir.path(),
-        Duration::from_secs(1),
+        FIXTURE_SUCCESS_TIMEOUT,
         &temp_dir.path().join("missing-claude"),
         Some(&healthy_probe),
     )
@@ -760,7 +765,7 @@ async fn selected_source_mismatch_is_typed_as_identity_conflict() {
     assert!(matches!(
         verify_current_platform_login_health(
             Some(&health),
-            Duration::from_secs(1),
+            FIXTURE_SUCCESS_TIMEOUT,
             Some("claude-login:credentials-file:expected"),
         )
         .await,
@@ -813,7 +818,7 @@ async fn preserve_selected_source_change_is_identity_conflict_without_persistenc
             &fake_claude,
             Some(&health),
             temp_dir.path(),
-            Duration::from_secs(1),
+            FIXTURE_SUCCESS_TIMEOUT,
             Some(&expected),
         )
         .await,
