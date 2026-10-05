@@ -84,17 +84,22 @@ supports a narrow split-filesystem subset: full-read split policies whose
 writable roots still match the legacy `WorkspaceWrite` root set, but add extra
 read-only carveouts under those writable roots.
 
-Known limitation (#158): the unelevated backend does not confine deletes. Its
-write-restricted token applies the writable-root capability SIDs only to write
-accesses, and Windows does not treat `DELETE` or `FILE_DELETE_CHILD` as writes.
-A sandboxed command can therefore delete anything the user's non-administrator
-identity can delete (Administrators is deny-only in the sandbox token), in both
-`ReadOnly` and `WorkspaceWrite` modes, and move such files into writable roots.
-This includes files outside the writable roots and protected carveouts such as
-`.git`, which can then be recreated with new contents inside a writable root
-(for example Git hooks or config that later run unsandboxed). Creating or
-writing files outside writable roots is still blocked. Whether the elevated
-backend fully protects carveouts against deletion is tracked in #158 as well.
+Known limitation (#158): the unelevated backend does not confine deletes
+outside its writable roots. Its write-restricted token checks the writable-root
+capability SIDs for write accesses, including `DELETE`, but Windows does not
+treat `FILE_DELETE_CHILD` as a write. NTFS lets a caller delete or move a file
+it has no `DELETE` right on when the parent directory grants
+`FILE_DELETE_CHILD`. A sandboxed command can therefore delete any file or
+directory whose parent grants that right to the user's non-administrator
+identity (Administrators is deny-only in the sandbox token), which in practice
+covers most of the user profile. This applies in both `ReadOnly` and
+`WorkspaceWrite` modes. In `WorkspaceWrite` the command can also move such
+files into a writable root. Creating or writing files outside writable roots
+is still blocked. Protected paths inside writable roots, such as `.git`, also
+get an Everyone deny of `FILE_DELETE_CHILD` on the path, its subdirectories,
+and its parent directory. That keeps them from being deleted, moved, or
+replaced. Unsandboxed deletes are unaffected because they use each object's
+own `DELETE` right.
 
 New `[permissions]` / split filesystem policies remain supported on Windows
 only when they can be enforced directly by the selected Windows backend or

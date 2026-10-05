@@ -348,10 +348,9 @@ pub unsafe fn dacl_has_read_deny_for_sid(p_dacl: *mut ACL, psid: *mut c_void) ->
 // Grant DELETE on each inheriting descendant instead of FILE_DELETE_CHILD on
 // its parent. A parent delete-child grant would bypass a direct deny-write ACE
 // on protected children such as `.git` or an explicit read-only subpath.
-// For WRITE_RESTRICTED sandbox tokens these capability-SID delete rights are
-// not what authorizes a delete: DELETE is not a restricted "write" access, so
-// the object's DACL evaluated against the base token's enabled SIDs decides
-// (see token.rs and #158).
+// WRITE_RESTRICTED tokens do not restrict FILE_DELETE_CHILD itself, so a parent
+// whose DACL grants it to the user still opens that route; see
+// `add_deny_delete_child_ace` and #158.
 const WRITE_ALLOW_MASK: u32 =
     FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE | DELETE;
 
@@ -584,15 +583,36 @@ pub unsafe fn add_deny_write_ace(path: &Path, psid: *mut c_void) -> Result<bool>
     add_deny_ace(path, psid, DenyAceKind::Write)
 }
 
+/// Denies `FILE_DELETE_CHILD` to `psid` on a directory, and on its future and
+/// existing subdirectories when `inherit_to_subdirs` is set.
+///
+/// WRITE_RESTRICTED sandbox tokens do not consult restricting SIDs for
+/// `FILE_DELETE_CHILD` (#158). A parent directory that grants it to one of the
+/// token's normal SIDs (usually the user, through full control) lets the sandbox
+/// delete or move a child even when the child denies the capability SID
+/// `DELETE`, so this deny must name a SID from the token's normal groups.
+///
+/// # Safety
+/// Caller must ensure `psid` points to a valid SID and `path` is an existing directory.
+pub unsafe fn add_deny_delete_child_ace(
+    path: &Path,
+    psid: *mut c_void,
+    inherit_to_subdirs: bool,
+) -> Result<bool> {
+    add_deny_ace(path, psid, DenyAceKind::DeleteChild { inherit_to_subdirs })
+}
+
 #[derive(Clone, Copy)]
 enum DenyAceKind {
     Read,
     Write,
+    DeleteChild { inherit_to_subdirs: bool },
 }
 
 impl DenyAceKind {
     fn mask(self) -> u32 {
         match self {
+            Self::DeleteChild { .. } => FILE_DELETE_CHILD,
             Self::Read => FILE_GENERIC_READ | GENERIC_READ_MASK,
             Self::Write => {
                 FILE_GENERIC_WRITE
@@ -607,12 +627,71 @@ impl DenyAceKind {
         }
     }
 
+    fn inheritance(self) -> u32 {
+        match self {
+            Self::Read | Self::Write => CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE,
+            Self::DeleteChild {
+                inherit_to_subdirs: true,
+            } => CONTAINER_INHERIT_ACE,
+            Self::DeleteChild {
+                inherit_to_subdirs: false,
+            } => 0,
+        }
+    }
+
     unsafe fn already_present(self, p_dacl: *mut ACL, psid: *mut c_void) -> bool {
         match self {
             Self::Read => dacl_has_read_deny_for_sid(p_dacl, psid),
             Self::Write => dacl_has_write_deny_for_sid(p_dacl, psid),
+            Self::DeleteChild { inherit_to_subdirs } => {
+                dacl_has_delete_child_deny_for_sid(p_dacl, psid, inherit_to_subdirs)
+            }
         }
     }
+}
+
+/// Returns true when the DACL already denies `psid` `FILE_DELETE_CHILD` on the
+/// object itself and, if `require_container_inherit`, propagates that deny to
+/// subdirectories.
+unsafe fn dacl_has_delete_child_deny_for_sid(
+    p_dacl: *mut ACL,
+    psid: *mut c_void,
+    require_container_inherit: bool,
+) -> bool {
+    if p_dacl.is_null() {
+        return false;
+    }
+    let mut info: ACL_SIZE_INFORMATION = std::mem::zeroed();
+    let ok = GetAclInformation(
+        p_dacl as *const ACL,
+        &mut info as *mut _ as *mut c_void,
+        std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
+        AclSizeInformation,
+    );
+    if ok == 0 {
+        return false;
+    }
+    for i in 0..info.AceCount {
+        let mut p_ace: *mut c_void = std::ptr::null_mut();
+        if GetAce(p_dacl as *const ACL, i, &mut p_ace) == 0 {
+            continue;
+        }
+        let hdr = &*(p_ace as *const ACE_HEADER);
+        if hdr.AceType != ACCESS_DENIED_ACE_TYPE || (hdr.AceFlags & INHERIT_ONLY_ACE) != 0 {
+            continue;
+        }
+        if require_container_inherit && (u32::from(hdr.AceFlags) & CONTAINER_INHERIT_ACE) == 0 {
+            continue;
+        }
+        let ace = &*(p_ace as *const ACCESS_DENIED_ACE);
+        let base = p_ace as usize;
+        let sid_ptr =
+            (base + std::mem::size_of::<ACE_HEADER>() + std::mem::size_of::<u32>()) as *mut c_void;
+        if EqualSid(sid_ptr, psid) != 0 && (ace.Mask & FILE_DELETE_CHILD) != 0 {
+            return true;
+        }
+    }
+    false
 }
 
 unsafe fn add_deny_ace(path: &Path, psid: *mut c_void, kind: DenyAceKind) -> Result<bool> {
@@ -643,7 +722,7 @@ unsafe fn add_deny_ace(path: &Path, psid: *mut c_void, kind: DenyAceKind) -> Res
         let mut explicit: EXPLICIT_ACCESS_W = std::mem::zeroed();
         explicit.grfAccessPermissions = kind.mask();
         explicit.grfAccessMode = DENY_ACCESS;
-        explicit.grfInheritance = CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE;
+        explicit.grfInheritance = kind.inheritance();
         explicit.Trustee = trustee;
         let mut p_new_dacl: *mut ACL = std::ptr::null_mut();
         let code2 = SetEntriesInAclW(1, &explicit, p_dacl, &mut p_new_dacl);

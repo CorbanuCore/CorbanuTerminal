@@ -825,7 +825,110 @@ fn legacy_workspace_write_can_delete_inside_writable_roots() {
 }
 
 #[test]
-#[ignore = "known escape, #158: WRITE_RESTRICTED tokens do not apply restricting SIDs to DELETE"]
+fn legacy_workspace_write_cannot_delete_or_replace_protected_git_dir() {
+    let _guard = legacy_process_test_guard();
+    let runtime = current_thread_runtime();
+    runtime.block_on(async move {
+        // A user-owned root grants the user FILE_DELETE_CHILD everywhere, which a
+        // WRITE_RESTRICTED token does not check against capability SIDs (#158).
+        let test_root = user_owned_test_root();
+        let codex_home = sandbox_home("legacy-protected-git");
+        let workspace = test_root.path().join("workspace");
+        let git_dir = workspace.join(".git");
+        let hooks_dir = git_dir.join("hooks");
+        fs::create_dir_all(&hooks_dir).expect("create .git/hooks");
+        let git_config = git_dir.join("config");
+        let hook = hooks_dir.join("pre-commit");
+        fs::write(&git_config, "original").expect("seed .git/config");
+        fs::write(&hook, "original").expect("seed hook");
+        let workspace_file = workspace.join("workspace-delete.txt");
+        fs::write(&workspace_file, "workspace").expect("seed workspace file");
+
+        let script = codex_home.path().join("replace-git.cmd");
+        fs::write(
+            &script,
+            concat!(
+                "@echo off\r\n",
+                "del /f /q \"%WORKSPACE_DELETE%\"\r\n",
+                "move \"%GIT_DIR%\\config\" \"%WORKSPACE%\\stolen-config\"\r\n",
+                "move \"%GIT_DIR%\\hooks\" \"%WORKSPACE%\\stolen-hooks\"\r\n",
+                "del /f /q \"%GIT_DIR%\\hooks\\pre-commit\"\r\n",
+                "rd /s /q \"%GIT_DIR%\"\r\n",
+                "ren \"%GIT_DIR%\" git-renamed\r\n",
+                "mkdir \"%GIT_DIR%\"\r\n",
+                "echo planted> \"%GIT_DIR%\\config\"\r\n",
+                "exit /b 0\r\n",
+            ),
+        )
+        .expect("write replace-git script");
+        let env_map = HashMap::from([
+            (
+                "WORKSPACE".to_string(),
+                workspace.to_string_lossy().into_owned(),
+            ),
+            (
+                "WORKSPACE_DELETE".to_string(),
+                workspace_file.to_string_lossy().into_owned(),
+            ),
+            (
+                "GIT_DIR".to_string(),
+                git_dir.to_string_lossy().into_owned(),
+            ),
+        ]);
+
+        let spawned = spawn_windows_sandbox_session_legacy(
+            &PermissionProfile::workspace_write(),
+            workspace_roots_for(workspace.as_path()).as_slice(),
+            codex_home.path(),
+            vec![
+                "C:\\Windows\\System32\\cmd.exe".to_string(),
+                "/d".to_string(),
+                "/c".to_string(),
+                script.display().to_string(),
+            ],
+            workspace.as_path(),
+            env_map,
+            /*timeout_ms*/ Some(5_000),
+            &[],
+            &[],
+            /*tty*/ false,
+            /*stdin_open*/ false,
+            /*use_private_desktop*/ true,
+        )
+        .await
+        .expect("spawn legacy replace-git session");
+        let (stdout, exit_code) =
+            collect_stdout_and_exit(spawned, codex_home.path(), Duration::from_secs(/*secs*/ 10))
+                .await;
+        let stdout = String::from_utf8_lossy(&stdout);
+
+        assert_eq!(
+            (
+                exit_code,
+                workspace_file.exists(),
+                fs::read_to_string(&git_config).ok(),
+                fs::read_to_string(&hook).ok(),
+                workspace.join("stolen-config").exists(),
+                workspace.join("stolen-hooks").exists(),
+                workspace.join("git-renamed").exists(),
+            ),
+            (
+                0,
+                false,
+                Some("original".to_string()),
+                Some("original".to_string()),
+                false,
+                false,
+                false,
+            ),
+            "stdout={stdout:?}\n{}",
+            sandbox_log(codex_home.path())
+        );
+    });
+}
+
+#[test]
+#[ignore = "known escape, #158: WRITE_RESTRICTED tokens do not restrict FILE_DELETE_CHILD outside writable roots"]
 fn legacy_workspace_write_delete_is_limited_to_writable_roots() {
     let (outcome, diagnostics) = run_legacy_delete_fixture();
     assert_eq!(

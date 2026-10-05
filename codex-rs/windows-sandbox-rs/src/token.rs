@@ -478,11 +478,13 @@ unsafe fn create_token_with_caps_from(
 
     let mut new_token: HANDLE = 0;
     // WRITE_RESTRICTED: restricting SIDs are only consulted for write accesses.
-    // Observed on Windows (#158): generic-write rights and WRITE_DAC are
-    // restricted, DELETE and FILE_DELETE_CHILD are not. Deleting an object, or
-    // the source side of a rename, is therefore decided by its DACL against the
-    // base token's enabled SIDs alone; capability-SID ACEs, including the deny
-    // ACEs on protected children such as `.git`, do not constrain it.
+    // Observed on Windows (#158): generic-write rights, DELETE, and WRITE_DAC are
+    // restricted, but FILE_DELETE_CHILD is not. NTFS lets a caller delete or move
+    // an object it lacks DELETE on when the parent grants FILE_DELETE_CHILD, so a
+    // parent that grants the user full control lets the sandbox delete or move
+    // children that capability-SID ACEs protect. Legacy sessions close that route
+    // for protected paths with Everyone deny ACEs (`deny_delete_child_route`);
+    // outside writable roots it stays open.
     let flags = DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED;
     let ok = CreateRestrictedToken(
         base_token,
