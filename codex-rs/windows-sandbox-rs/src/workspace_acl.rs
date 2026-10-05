@@ -45,6 +45,11 @@ unsafe fn protect_workspace_subdir(cwd: &Path, psid: *mut c_void, subdir: &str) 
 /// # Safety
 /// Calls Win32 ACL APIs; `path` should exist.
 pub unsafe fn deny_delete_child_route(path: &Path) -> Result<()> {
+    // The sandbox may have planted a junction or symlink here; never follow it
+    // and write a persistent deny onto whatever it points at.
+    if is_reparse_point(path) {
+        return Ok(());
+    }
     let mut everyone = world_sid()?;
     let psid = everyone.as_mut_ptr() as *mut c_void;
     if let Some(parent) = path.parent()
@@ -56,4 +61,12 @@ pub unsafe fn deny_delete_child_route(path: &Path) -> Result<()> {
         add_deny_delete_child_ace(path, psid, /*inherit_to_subdirs*/ true)?;
     }
     Ok(())
+}
+
+fn is_reparse_point(path: &Path) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+    std::fs::symlink_metadata(path)
+        .map(|metadata| metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0)
+        .unwrap_or(true)
 }

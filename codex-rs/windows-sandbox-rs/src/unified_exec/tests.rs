@@ -901,25 +901,31 @@ fn legacy_workspace_write_cannot_delete_or_replace_protected_git_dir() {
             collect_stdout_and_exit(spawned, codex_home.path(), Duration::from_secs(/*secs*/ 10))
                 .await;
         let stdout = String::from_utf8_lossy(&stdout);
+        let sandbox_outcome = (
+            exit_code,
+            workspace_file.exists(),
+            fs::read_to_string(&git_config).ok(),
+            fs::read_to_string(&hook).ok(),
+            workspace.join("stolen-config").exists(),
+            workspace.join("stolen-hooks").exists(),
+            workspace.join("git-renamed").exists(),
+        );
+        // The deny must not stop the unsandboxed user from deleting their own files.
+        let host_delete = fs::remove_dir_all(&git_dir).map_err(|err| err.to_string());
 
         assert_eq!(
+            (sandbox_outcome, host_delete),
             (
-                exit_code,
-                workspace_file.exists(),
-                fs::read_to_string(&git_config).ok(),
-                fs::read_to_string(&hook).ok(),
-                workspace.join("stolen-config").exists(),
-                workspace.join("stolen-hooks").exists(),
-                workspace.join("git-renamed").exists(),
-            ),
-            (
-                0,
-                false,
-                Some("original".to_string()),
-                Some("original".to_string()),
-                false,
-                false,
-                false,
+                (
+                    0,
+                    false,
+                    Some("original".to_string()),
+                    Some("original".to_string()),
+                    false,
+                    false,
+                    false,
+                ),
+                Ok(()),
             ),
             "stdout={stdout:?}\n{}",
             sandbox_log(codex_home.path())
