@@ -72,6 +72,7 @@ use codex_core::config::resolve_profile_v2_config_path;
 use codex_core::find_thread_meta_by_name_str;
 use codex_core::format_exec_policy_error_with_source;
 use codex_core::path_utils;
+use codex_core::windows_sandbox::WindowsSandboxLevelExt;
 use codex_feedback::CodexFeedback;
 use codex_git_utils::get_git_repo_root;
 use codex_login::AuthConfig;
@@ -86,6 +87,7 @@ use codex_protocol::SessionId;
 use codex_protocol::ThreadId;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::config_types::SandboxMode;
+use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::protocol::AskForApproval;
@@ -920,6 +922,17 @@ async fn run_exec_session(args: ExecRunArgs) -> anyhow::Result<()> {
             codex_core::config::system_bwrap_warning(config.permissions.permission_profile())
     {
         event_processor.process_warning(message);
+    }
+    if let Some(message) = codex_core::config::legacy_windows_sandbox_warning(
+        WindowsSandboxLevel::from_config(&config),
+        config.permissions.permission_profile(),
+    ) {
+        // Keep JSONL stdout unchanged; the warning always goes to stderr.
+        if json_mode {
+            eprintln!("warning: {message}");
+        } else {
+            event_processor.process_warning(message);
+        }
     }
 
     info!("Codex initialized with event: {session_configured:?}");
