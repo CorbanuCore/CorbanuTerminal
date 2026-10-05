@@ -1152,6 +1152,7 @@ impl App {
         crate::chatwidget::campaign_tracker::start(&app_event_tx);
         emit_project_config_warnings(&app_event_tx, &config);
         emit_system_bwrap_warning(&app_event_tx, &config);
+        emit_legacy_windows_sandbox_warning(&app_event_tx, &config);
         tui.set_notification_settings(
             config.tui_notifications.method,
             config.tui_notifications.condition,

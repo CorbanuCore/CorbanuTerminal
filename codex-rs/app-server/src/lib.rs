@@ -61,10 +61,12 @@ use codex_config::TextRange as CoreTextRange;
 use codex_core::ExecPolicyError;
 use codex_core::check_execpolicy_for_warnings;
 use codex_core::config::find_codex_home;
+use codex_core::windows_sandbox::WindowsSandboxLevelExt;
 use codex_exec_server::EnvironmentManager;
 use codex_exec_server::ExecServerRuntimePaths;
 use codex_features::Feature;
 use codex_feedback::CodexFeedback;
+use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::protocol::SessionSource;
 use codex_rollout::state_db as rollout_state_db;
 use codex_state::log_db;
@@ -632,9 +634,14 @@ pub async fn run_main_with_transport_options(
             range: None,
         });
     }
-    if let Some(warning) =
-        codex_core::config::system_bwrap_warning(config.permissions.permission_profile())
-    {
+    let platform_sandbox_warnings = [
+        codex_core::config::system_bwrap_warning(config.permissions.permission_profile()),
+        codex_core::config::legacy_windows_sandbox_warning(
+            WindowsSandboxLevel::from_config(&config),
+            config.permissions.permission_profile(),
+        ),
+    ];
+    for warning in platform_sandbox_warnings.into_iter().flatten() {
         config_warnings.push(ConfigWarningNotification {
             summary: warning,
             details: None,

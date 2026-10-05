@@ -4459,6 +4459,13 @@ impl App {
                                     ]),
                                 ]);
                             }
+                            if let Some(message) = codex_sandboxing::legacy_windows_sandbox_warning(
+                                windows_sandbox_level,
+                                &preset.permission_profile,
+                            ) {
+                                self.chat_widget
+                                    .add_to_history(history_cell::new_warning_event(message));
+                            }
                         }
                         Err(err) => {
                             tracing::error!(

@@ -480,6 +480,20 @@ async fn run_command_under_windows_session(
     use codex_windows_sandbox::WindowsSandboxSessionRequest;
     use codex_windows_sandbox::spawn_windows_sandbox_session_for_level;
 
+    let windows_sandbox_level = WindowsSandboxLevel::from_config(config);
+    // Every non-elevated level runs on the legacy restricted-token backend here.
+    let backend_level = match windows_sandbox_level {
+        WindowsSandboxLevel::Elevated => WindowsSandboxLevel::Elevated,
+        WindowsSandboxLevel::RestrictedToken | WindowsSandboxLevel::Disabled => {
+            WindowsSandboxLevel::RestrictedToken
+        }
+    };
+    if let Some(warning) =
+        codex_core::config::legacy_windows_sandbox_warning(backend_level, permission_profile)
+    {
+        eprintln!("warning: {warning}");
+    }
+
     let empty_paths: &[AbsolutePathBuf] = &[];
     let spawned = spawn_windows_sandbox_session_for_level(WindowsSandboxSessionRequest {
         permission_profile,
@@ -488,7 +502,7 @@ async fn run_command_under_windows_session(
         command,
         cwd: cwd.as_path(),
         env_map: env,
-        windows_sandbox_level: WindowsSandboxLevel::from_config(config),
+        windows_sandbox_level,
         proxy_settings_mode: WindowsSandboxProxySettingsMode::Reconcile,
         proxy_enforced: false,
         network_proxy_restricting_sid: None,

@@ -9,6 +9,7 @@ pub mod seatbelt;
 mod spawn;
 mod violation;
 mod windows;
+mod windows_legacy_warning;
 
 #[cfg(target_os = "linux")]
 pub use bwrap::APPARMOR_BWRAP_USERNS_PROFILE;
@@ -48,6 +49,8 @@ pub use windows::resolve_windows_elevated_filesystem_overrides;
 pub use windows::resolve_windows_restricted_token_filesystem_overrides;
 pub use windows::unsupported_windows_restricted_token_sandbox_reason;
 pub use windows::windows_sandbox_uses_elevated_backend;
+pub use windows_legacy_warning::LEGACY_WINDOWS_SANDBOX_WARNING;
+pub use windows_legacy_warning::legacy_windows_sandbox_warning;
 
 use codex_protocol::error::CodexErr;
 

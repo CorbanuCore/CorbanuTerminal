@@ -193,6 +193,7 @@ pub use codex_config::ConstraintResult;
 pub use codex_config::LoaderOverrides;
 pub use codex_network_proxy::NetworkProxyAuditMetadata;
 use codex_sandboxing::compatibility_sandbox_policy_for_permission_profile;
+pub use codex_sandboxing::legacy_windows_sandbox_warning;
 pub use codex_sandboxing::system_bwrap_warning;
 use codex_security_policy::SecurityLevel;
 pub use managed_features::ManagedFeatures;

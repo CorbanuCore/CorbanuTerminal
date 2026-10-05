@@ -707,6 +707,18 @@ fn bypass_hook_trust_startup_warning_snapshot() {
 
     assert_app_snapshot!("bypass_hook_trust_startup_warning", rendered);
 }
+
+#[test]
+fn legacy_windows_sandbox_startup_warning_snapshot() {
+    let rendered = lines_to_single_string(
+        &history_cell::new_warning_event(
+            codex_sandboxing::LEGACY_WINDOWS_SANDBOX_WARNING.to_string(),
+        )
+        .display_lines(/*width*/ 80),
+    );
+
+    assert_app_snapshot!("legacy_windows_sandbox_startup_warning", rendered);
+}
 #[tokio::test]
 async fn enqueue_primary_thread_session_replays_buffered_approval_after_attach() -> Result<()> {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;

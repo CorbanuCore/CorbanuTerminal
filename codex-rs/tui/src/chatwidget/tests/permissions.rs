@@ -392,6 +392,10 @@ async fn approvals_selection_popup_snapshot_windows_degraded_sandbox() {
         popup.contains("non-admin sandbox"),
         "expected degraded sandbox note in approvals popup: {popup}"
     );
+    assert!(
+        popup.contains("delete or move files"),
+        "expected non-admin sandbox risk in approvals popup: {popup}"
+    );
 }
 
 #[tokio::test]
@@ -671,6 +675,40 @@ async fn windows_sandbox_required_fallback_prompt_snapshot() {
 
     let popup = render_bottom_popup(&chat, /*width*/ 120);
     assert_chatwidget_snapshot!("windows_sandbox_required_fallback_prompt", popup);
+}
+
+#[tokio::test]
+async fn windows_sandbox_enable_prompt_explains_non_admin_risk_snapshot() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    let preset = builtin_approval_presets()
+        .into_iter()
+        .find(|preset| preset.id == "auto")
+        .expect("auto preset");
+
+    chat.open_windows_sandbox_enable_prompt(preset, /*profile_selection*/ None);
+
+    assert_chatwidget_snapshot!(
+        "windows_sandbox_enable_prompt_non_admin_risk",
+        render_bottom_popup(&chat, /*width*/ 120)
+    );
+}
+
+#[tokio::test]
+async fn windows_sandbox_fallback_prompt_explains_non_admin_risk_snapshot() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    let preset = builtin_approval_presets()
+        .into_iter()
+        .find(|preset| preset.id == "auto")
+        .expect("auto preset");
+
+    chat.open_windows_sandbox_fallback_prompt(preset, /*profile_selection*/ None);
+
+    assert_chatwidget_snapshot!(
+        "windows_sandbox_fallback_prompt_non_admin_risk",
+        render_bottom_popup(&chat, /*width*/ 120)
+    );
 }
 
 #[cfg(target_os = "windows")]

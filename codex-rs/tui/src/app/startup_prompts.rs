@@ -117,6 +117,28 @@ pub(super) fn emit_system_bwrap_warning(app_event_tx: &AppEventSender, config: &
     )));
 }
 
+#[cfg(target_os = "windows")]
+pub(super) fn emit_legacy_windows_sandbox_warning(app_event_tx: &AppEventSender, config: &Config) {
+    let Some(message) = codex_sandboxing::legacy_windows_sandbox_warning(
+        crate::windows_sandbox::level_from_config(config),
+        config.permissions.permission_profile(),
+    ) else {
+        return;
+    };
+
+    app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+        history_cell::new_warning_event(message),
+    )));
+}
+
+/// Only Windows hosts run the legacy Windows sandbox backend.
+#[cfg(not(target_os = "windows"))]
+pub(super) fn emit_legacy_windows_sandbox_warning(
+    _app_event_tx: &AppEventSender,
+    _config: &Config,
+) {
+}
+
 pub(super) fn should_show_model_migration_prompt(
     current_model: &str,
     target_model: &str,
