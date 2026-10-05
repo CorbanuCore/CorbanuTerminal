@@ -27,6 +27,7 @@ use crate::token::create_readonly_token_with_cap;
 use crate::token::create_workspace_write_token_with_caps_from;
 use crate::token::get_current_token_for_restriction;
 use crate::token::get_logon_sid_bytes;
+use crate::workspace_acl::deny_delete_child_route;
 use crate::workspace_acl::is_command_cwd_root;
 use crate::workspace_acl::protect_workspace_agents_dir;
 use crate::workspace_acl::protect_workspace_codex_dir;
@@ -301,6 +302,15 @@ pub(crate) fn apply_legacy_session_acl_rules(
         for p in &deny {
             for root_sid in deny_root_capabilities_for_path(p, acl_sids.write_root_sids) {
                 let _ = add_deny_write_ace(p, root_sid.sid.as_ptr());
+            }
+            // The capability-SID deny above does not stop a delete or move
+            // through the parent's FILE_DELETE_CHILD (#158).
+            if p.exists()
+                && p.parent().is_some_and(|parent| {
+                    matching_root_capability(parent, acl_sids.write_root_sids).is_some()
+                })
+            {
+                let _ = deny_delete_child_route(p);
             }
         }
         if !additional_deny_read_paths.is_empty() {

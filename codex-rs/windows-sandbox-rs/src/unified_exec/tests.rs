@@ -85,6 +85,50 @@ fn sandbox_home(name: &str) -> TempDir {
     tempfile::TempDir::new_in(&path).expect("create sandbox home tempdir")
 }
 
+fn system32_exe(name: &str) -> PathBuf {
+    let system_root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
+    PathBuf::from(system_root).join("System32").join(name)
+}
+
+fn current_user_sid() -> String {
+    let output = std::process::Command::new(system32_exe("whoami.exe"))
+        .arg("/user")
+        .output()
+        .expect("run whoami");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .split_whitespace()
+        .find(|token| token.starts_with("S-1-"))
+        .unwrap_or_else(|| panic!("unexpected whoami output: {stdout:?}"))
+        .to_string()
+}
+
+/// Creates a test root with a protected DACL granting full control only to SYSTEM,
+/// Administrators, and the current user, like a typical user-profile directory.
+/// This keeps sandbox filesystem tests independent of the ACLs a runner puts on
+/// the checkout (#158).
+fn user_owned_test_root() -> TempDir {
+    let root = TempDir::new_in(sandbox_cwd()).expect("create user-owned test root");
+    let output = std::process::Command::new(system32_exe("icacls.exe"))
+        .arg(root.path())
+        .args([
+            "/inheritance:r",
+            "/grant:r",
+            "*S-1-5-18:(OI)(CI)F",
+            "*S-1-5-32-544:(OI)(CI)F",
+        ])
+        .arg(format!("*{}:(OI)(CI)F", current_user_sid()))
+        .output()
+        .expect("run icacls");
+    assert!(
+        output.status.success(),
+        "icacls failed: {}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    root
+}
+
 fn sandbox_log(codex_home: &Path) -> String {
     let log_path = crate::current_log_file_path(&codex_home.join(".sandbox"));
     fs::read_to_string(&log_path)
@@ -635,13 +679,28 @@ fn legacy_capture_emits_output_and_preserves_descendant_after_normal_exit() {
         .expect("sandbox descendant did not exit after release");
 }
 
-#[test]
-fn legacy_workspace_write_delete_is_limited_to_writable_roots() {
+/// Observed state after a legacy workspace-write session tries to delete one
+/// fixture inside each writable root (workspace, TEMP, TMP), one outside every
+/// writable root, and the protected `.git` directory.
+#[derive(Debug, PartialEq, Eq)]
+struct LegacyDeleteOutcome {
+    exit_code: i32,
+    workspace_file_exists: bool,
+    temp_file_exists: bool,
+    tmp_file_exists: bool,
+    outside_file_contents: Option<String>,
+    protected_git_dir_exists: bool,
+}
+
+/// Runs the legacy delete fixture and returns its outcome plus diagnostics.
+fn run_legacy_delete_fixture() -> (LegacyDeleteOutcome, String) {
     let _guard = legacy_process_test_guard();
     let runtime = current_thread_runtime();
     runtime.block_on(async move {
-        // Keep writable roots out of USERPROFILE exclusions such as AppData.
-        let test_root = TempDir::new_in(sandbox_cwd()).expect("create legacy delete test root");
+        // Keep writable roots out of USERPROFILE exclusions such as AppData, and
+        // give the root a user-owned DACL so the result does not depend on the
+        // ACLs the runner put on the checkout.
+        let test_root = user_owned_test_root();
         let codex_home = sandbox_home("legacy-delete-writable-roots");
         let workspace = test_root.path().join("workspace");
         let temp_root = test_root.path().join("temp");
@@ -729,20 +788,160 @@ fn legacy_workspace_write_delete_is_limited_to_writable_roots() {
                 .await;
         let stdout = String::from_utf8_lossy(&stdout);
 
-        assert_eq!(
-            (
+        (
+            LegacyDeleteOutcome {
                 exit_code,
-                workspace_file.exists(),
-                temp_file.exists(),
-                tmp_file.exists(),
-                fs::read_to_string(&outside_file).ok(),
-                protected_git_dir.is_dir(),
+                workspace_file_exists: workspace_file.exists(),
+                temp_file_exists: temp_file.exists(),
+                tmp_file_exists: tmp_file.exists(),
+                outside_file_contents: fs::read_to_string(&outside_file).ok(),
+                protected_git_dir_exists: protected_git_dir.is_dir(),
+            },
+            format!("stdout={stdout:?}\n{}", sandbox_log(codex_home.path())),
+        )
+    })
+}
+
+#[test]
+fn legacy_workspace_write_can_delete_inside_writable_roots() {
+    let (outcome, diagnostics) = run_legacy_delete_fixture();
+    assert_eq!(
+        (
+            outcome.exit_code,
+            outcome.workspace_file_exists,
+            outcome.temp_file_exists,
+            outcome.tmp_file_exists,
+        ),
+        (0, false, false, false),
+        "{diagnostics}"
+    );
+}
+
+#[test]
+fn legacy_workspace_write_cannot_delete_or_replace_protected_git_dir() {
+    let _guard = legacy_process_test_guard();
+    let runtime = current_thread_runtime();
+    runtime.block_on(async move {
+        // A user-owned root grants the user FILE_DELETE_CHILD everywhere, which a
+        // WRITE_RESTRICTED token does not check against capability SIDs (#158).
+        let test_root = user_owned_test_root();
+        let codex_home = sandbox_home("legacy-protected-git");
+        let workspace = test_root.path().join("workspace");
+        let git_dir = workspace.join(".git");
+        let hooks_dir = git_dir.join("hooks");
+        fs::create_dir_all(&hooks_dir).expect("create .git/hooks");
+        let git_config = git_dir.join("config");
+        let hook = hooks_dir.join("pre-commit");
+        fs::write(&git_config, "original").expect("seed .git/config");
+        fs::write(&hook, "original").expect("seed hook");
+        let workspace_file = workspace.join("workspace-delete.txt");
+        fs::write(&workspace_file, "workspace").expect("seed workspace file");
+
+        let script = codex_home.path().join("replace-git.cmd");
+        fs::write(
+            &script,
+            concat!(
+                "@echo off\r\n",
+                "del /f /q \"%WORKSPACE_DELETE%\"\r\n",
+                "move \"%GIT_DIR%\\config\" \"%WORKSPACE%\\stolen-config\"\r\n",
+                "move \"%GIT_DIR%\\hooks\" \"%WORKSPACE%\\stolen-hooks\"\r\n",
+                "del /f /q \"%GIT_DIR%\\hooks\\pre-commit\"\r\n",
+                "rd /s /q \"%GIT_DIR%\"\r\n",
+                "ren \"%GIT_DIR%\" git-renamed\r\n",
+                "mkdir \"%GIT_DIR%\"\r\n",
+                "echo planted> \"%GIT_DIR%\\config\"\r\n",
+                "exit /b 0\r\n",
             ),
-            (0, false, false, false, Some("outside".to_string()), true),
+        )
+        .expect("write replace-git script");
+        let env_map = HashMap::from([
+            (
+                "WORKSPACE".to_string(),
+                workspace.to_string_lossy().into_owned(),
+            ),
+            (
+                "WORKSPACE_DELETE".to_string(),
+                workspace_file.to_string_lossy().into_owned(),
+            ),
+            (
+                "GIT_DIR".to_string(),
+                git_dir.to_string_lossy().into_owned(),
+            ),
+        ]);
+
+        let spawned = spawn_windows_sandbox_session_legacy(
+            &PermissionProfile::workspace_write(),
+            workspace_roots_for(workspace.as_path()).as_slice(),
+            codex_home.path(),
+            vec![
+                "C:\\Windows\\System32\\cmd.exe".to_string(),
+                "/d".to_string(),
+                "/c".to_string(),
+                script.display().to_string(),
+            ],
+            workspace.as_path(),
+            env_map,
+            /*timeout_ms*/ Some(5_000),
+            &[],
+            &[],
+            /*tty*/ false,
+            /*stdin_open*/ false,
+            /*use_private_desktop*/ true,
+        )
+        .await
+        .expect("spawn legacy replace-git session");
+        let (stdout, exit_code) =
+            collect_stdout_and_exit(spawned, codex_home.path(), Duration::from_secs(/*secs*/ 10))
+                .await;
+        let stdout = String::from_utf8_lossy(&stdout);
+        let sandbox_outcome = (
+            exit_code,
+            workspace_file.exists(),
+            fs::read_to_string(&git_config).ok(),
+            fs::read_to_string(&hook).ok(),
+            workspace.join("stolen-config").exists(),
+            workspace.join("stolen-hooks").exists(),
+            workspace.join("git-renamed").exists(),
+        );
+        // The deny must not stop the unsandboxed user from deleting their own files.
+        let host_delete = fs::remove_dir_all(&git_dir).map_err(|err| err.to_string());
+
+        assert_eq!(
+            (sandbox_outcome, host_delete),
+            (
+                (
+                    0,
+                    false,
+                    Some("original".to_string()),
+                    Some("original".to_string()),
+                    false,
+                    false,
+                    false,
+                ),
+                Ok(()),
+            ),
             "stdout={stdout:?}\n{}",
             sandbox_log(codex_home.path())
         );
     });
+}
+
+#[test]
+#[ignore = "known escape, #158: WRITE_RESTRICTED tokens do not restrict FILE_DELETE_CHILD outside writable roots"]
+fn legacy_workspace_write_delete_is_limited_to_writable_roots() {
+    let (outcome, diagnostics) = run_legacy_delete_fixture();
+    assert_eq!(
+        outcome,
+        LegacyDeleteOutcome {
+            exit_code: 0,
+            workspace_file_exists: false,
+            temp_file_exists: false,
+            tmp_file_exists: false,
+            outside_file_contents: Some("outside".to_string()),
+            protected_git_dir_exists: true,
+        },
+        "{diagnostics}"
+    );
 }
 
 #[test]

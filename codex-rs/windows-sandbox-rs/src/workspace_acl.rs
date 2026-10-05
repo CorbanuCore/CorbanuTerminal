@@ -1,5 +1,7 @@
+use crate::acl::add_deny_delete_child_ace;
 use crate::acl::add_deny_write_ace;
 use crate::path_normalization::canonicalize_path;
+use crate::token::world_sid;
 use anyhow::Result;
 use std::ffi::c_void;
 use std::path::Path;
@@ -23,8 +25,48 @@ pub unsafe fn protect_workspace_agents_dir(cwd: &Path, psid: *mut c_void) -> Res
 unsafe fn protect_workspace_subdir(cwd: &Path, psid: *mut c_void, subdir: &str) -> Result<bool> {
     let path = cwd.join(subdir);
     if path.is_dir() {
-        add_deny_write_ace(&path, psid)
+        let added = add_deny_write_ace(&path, psid)?;
+        deny_delete_child_route(&path)?;
+        Ok(added)
     } else {
         Ok(false)
     }
+}
+
+/// Closes the `FILE_DELETE_CHILD` route to deleting or moving a protected path
+/// from a legacy (WRITE_RESTRICTED) sandbox, which capability-SID deny ACEs do
+/// not cover (#158): denies Everyone `FILE_DELETE_CHILD` on the path's parent
+/// (that directory only) and on the path and its subdirectories.
+///
+/// Everyone is in every sandbox token's normal groups, so the deny applies no
+/// matter which user or group ACE grants the right. Unsandboxed deletes keep
+/// working because they use the object's own `DELETE` right.
+///
+/// # Safety
+/// Calls Win32 ACL APIs; `path` should exist.
+pub unsafe fn deny_delete_child_route(path: &Path) -> Result<()> {
+    // The sandbox may have planted a junction or symlink here; never follow it
+    // and write a persistent deny onto whatever it points at.
+    if is_reparse_point(path) {
+        return Ok(());
+    }
+    let mut everyone = world_sid()?;
+    let psid = everyone.as_mut_ptr() as *mut c_void;
+    if let Some(parent) = path.parent()
+        && parent.is_dir()
+    {
+        add_deny_delete_child_ace(parent, psid, /*inherit_to_subdirs*/ false)?;
+    }
+    if path.is_dir() {
+        add_deny_delete_child_ace(path, psid, /*inherit_to_subdirs*/ true)?;
+    }
+    Ok(())
+}
+
+fn is_reparse_point(path: &Path) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+    std::fs::symlink_metadata(path)
+        .map(|metadata| metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0)
+        .unwrap_or(true)
 }
