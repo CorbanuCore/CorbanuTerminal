@@ -4927,10 +4927,12 @@ async fn mount_delayed_remote_plugin_list(server: &MockServer, scope: &str, body
         .and(query_param("limit", "200"))
         .and(header("authorization", "Bearer chatgpt-token"))
         .and(header("chatgpt-account-id", "account-123"))
+        // Callers read stale catalogs while this refresh is in flight. 200ms let a loaded
+        // nightly runner finish the refresh before the next plugin/list was served.
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_string(body)
-                .set_delay(Duration::from_millis(/*millis*/ 200)),
+                .set_delay(Duration::from_secs(/*secs*/ 5)),
         )
         .mount(server)
         .await;
