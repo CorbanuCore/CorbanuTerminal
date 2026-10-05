@@ -171,10 +171,7 @@ common:ci-windows --config=windows-native-tests
 # cannot reliably interrupt foreground processes on Windows Bazel runners.
 # The other ConPTY/PTY tests pass under cargo on the same hosted runner but
 # time out waiting on their child processes in Bazel's Windows test env.
-# On hosted runners (built-in Administrator account) the legacy sandbox lets
-# the delete test remove a file outside its writable roots; that is tracked
-# in #158 rather than hidden behind a weaker assertion.
-common:windows-native-tests --test_env=CODEX_BAZEL_TEST_SKIP_FILTERS=suite::code_mode::code_mode_can_call_hidden_dynamic_tools,tests::windows_tests::conpty_ctrl_c_interrupts_powershell_foreground_child,tests::windows_tests::conpty_delivers_input_to_foreground_children,tests::windows_tests::normal_exit_preserves_descendants_for_pipe_and_conpty,tests::pty_python_repl_emits_output_and_exits,unified_exec::tests::legacy_workspace_write_delete_is_limited_to_writable_roots
+common:windows-native-tests --test_env=CODEX_BAZEL_TEST_SKIP_FILTERS=suite::code_mode::code_mode_can_call_hidden_dynamic_tools,tests::windows_tests::conpty_ctrl_c_interrupts_powershell_foreground_child,tests::windows_tests::conpty_delivers_input_to_foreground_children,tests::windows_tests::normal_exit_preserves_descendants_for_pipe_and_conpty,tests::pty_python_repl_emits_output_and_exits
 
 # We prefer to run the build actions entirely remotely so we can dial up the concurrency.
 # We have platform-specific tests, so we want to execute the tests on all platforms using the strongest sandboxing available on each platform.

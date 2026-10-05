@@ -348,6 +348,9 @@ pub unsafe fn dacl_has_read_deny_for_sid(p_dacl: *mut ACL, psid: *mut c_void) ->
 // Grant DELETE on each inheriting descendant instead of FILE_DELETE_CHILD on
 // its parent. A parent delete-child grant would bypass a direct deny-write ACE
 // on protected children such as `.git` or an explicit read-only subpath.
+// For WRITE_RESTRICTED sandbox tokens these capability-SID delete rights are
+// not what authorizes a delete: DELETE is not a restricted "write" access, so
+// the base token's own DACL rights decide (see token.rs and #158).
 const WRITE_ALLOW_MASK: u32 =
     FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE | DELETE;
 
