@@ -443,6 +443,9 @@ async fn accounting_responses_ws_native_delete_rejects_late_usage() -> anyhow::R
     let server = MockServer::start().await;
     let mut gate = Gate::start().await?;
     let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
+        // The held stream stays silent while an unrelated thread starts and finishes a turn;
+        // the fixture's 2s idle timeout failed it on loaded runners.
+        .with_config(|config| config.model_provider.stream_idle_timeout_ms = Some(30_000))
         .build_with_auto_env(&server)
         .await?;
     submit(&test).await?;
