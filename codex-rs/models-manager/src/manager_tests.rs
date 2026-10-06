@@ -1659,6 +1659,24 @@ async fn static_manager_reads_latest_auth_mode() {
     );
 }
 
+/// The Anthropic Messages wire requires `max_tokens`, and `zai-anthropic`
+/// serves the bare `glm-…` slugs, so each needs a catalogued output limit.
+/// Without one every turn on that route failed before reaching the provider.
+#[test]
+fn bundled_zai_anthropic_models_have_output_limits() {
+    let response = crate::bundled_models_response()
+        .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
+
+    let missing = response
+        .models
+        .iter()
+        .filter(|model| model.slug.starts_with("glm-") && model.max_output_tokens.is_none())
+        .map(|model| model.slug.as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(missing, Vec::<&str>::new());
+}
+
 #[test]
 fn bundled_models_json_roundtrips() {
     let response = crate::bundled_models_response()

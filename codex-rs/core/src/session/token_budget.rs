@@ -86,8 +86,12 @@ pub(super) async fn maybe_record(
                     &config.reminder_message_template,
                     base_window_tokens_remaining,
                 ));
-            sess.record_conversation_items(turn_context, std::slice::from_ref(&response_item))
-                .await;
+            sess.record_conversation_items_from(
+                turn_context,
+                std::slice::from_ref(&response_item),
+                Some(crate::security::ingress::MessageOrigin::Host),
+            )
+            .await;
         }
     }
 
@@ -108,6 +112,10 @@ pub(super) async fn maybe_record(
 
     let response_item =
         ContextualUserFragment::into(crate::context::AutoCompactFallbackPrompt::new(prompt));
-    sess.record_conversation_items(turn_context, std::slice::from_ref(&response_item))
-        .await;
+    sess.record_conversation_items_from(
+        turn_context,
+        std::slice::from_ref(&response_item),
+        Some(crate::security::ingress::MessageOrigin::Host),
+    )
+    .await;
 }

@@ -586,6 +586,9 @@
             "in_app_updates": {
               "type": "boolean"
             },
+            "isolated_credential_broker": {
+              "type": "boolean"
+            },
             "item_ids": {
               "type": "boolean"
             },
@@ -710,6 +713,9 @@
               "type": "boolean"
             },
             "sleep_tool": {
+              "type": "boolean"
+            },
+            "source_envelopes": {
               "type": "boolean"
             },
             "sqlite": {
@@ -5277,6 +5283,9 @@
         "in_app_updates": {
           "type": "boolean"
         },
+        "isolated_credential_broker": {
+          "type": "boolean"
+        },
         "item_ids": {
           "type": "boolean"
         },
@@ -5401,6 +5410,9 @@
           "type": "boolean"
         },
         "sleep_tool": {
+          "type": "boolean"
+        },
+        "source_envelopes": {
           "type": "boolean"
         },
         "sqlite": {

@@ -106,6 +106,9 @@ pub enum Feature {
     UnifiedExec,
     /// Route shell tool execution through the zsh exec bridge.
     ShellZshFork,
+    /// Under Moderate/Aggressive security, send external content (tool, MCP,
+    /// hook and agent output) as labelled untrusted data instead of failing closed.
+    SourceEnvelopes,
     /// Allow unified exec to compose with the zsh exec bridge.
     ///
     /// This flag is only a composition gate. Enabling it by itself must not turn
@@ -150,6 +153,8 @@ pub enum Feature {
     EnableRequestCompression,
     /// Start the managed network proxy for sandboxed sessions.
     NetworkProxy,
+    /// Virtualize provider credentials through a separate broker process (PF-27-S04).
+    IsolatedCredentialBroker,
     /// Respect host system proxy settings for Codex-owned network clients.
     RespectSystemProxy,
     /// Enable collab tools.
@@ -858,6 +863,12 @@ pub const FEATURES: &[FeatureSpec] = &[
         default_enabled: cfg!(windows),
     },
     FeatureSpec {
+        id: Feature::IsolatedCredentialBroker,
+        key: "isolated_credential_broker",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
         id: Feature::UnifiedExec,
         key: "unified_exec",
         stage: Stage::Stable,
@@ -866,6 +877,12 @@ pub const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         id: Feature::ShellZshFork,
         key: "shell_zsh_fork",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::SourceEnvelopes,
+        key: "source_envelopes",
         stage: Stage::UnderDevelopment,
         default_enabled: false,
     },

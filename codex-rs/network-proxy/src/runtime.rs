@@ -3,6 +3,8 @@ use crate::config::NetworkMode;
 use crate::config::NetworkProxyConfig;
 use crate::config::ValidatedUnixSocketPath;
 use crate::credential_broker::CredentialBroker;
+use crate::credential_broker::CredentialRouting;
+use crate::credential_broker::IsolatedBrokerOptions;
 use crate::credential_broker::IsolatedCredentialDispatchError;
 use crate::credential_broker::IsolatedCredentialReceipt;
 use crate::credential_broker::IsolatedCredentialRoute;
@@ -195,7 +197,7 @@ pub trait ConfigReloader: Send + Sync {
 
 pub type ConfigReloaderFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 
-struct StaticConfigReloader;
+pub(crate) struct StaticConfigReloader;
 
 impl ConfigReloader for StaticConfigReloader {
     fn source_label(&self) -> String {
@@ -350,7 +352,7 @@ impl NetworkProxyState {
         blocked_request_observer: Option<Arc<dyn BlockedRequestObserver>>,
     ) -> Self {
         Self {
-            credential_broker: CredentialBroker::new(state.config.credential_broker),
+            credential_broker: credential_broker_for_config(&state.config),
             state: Arc::new(RwLock::new(state)),
             reloader,
             blocked_request_observer: Arc::new(RwLock::new(blocked_request_observer)),
@@ -466,6 +468,26 @@ impl NetworkProxyState {
         headers: &mut rama_http::HeaderMap,
     ) {
         self.credential_broker.inject_request_headers(host, headers);
+    }
+
+    /// Revokes every reference held by the isolated credential broker and
+    /// closes its in-flight channels. Returns false when isolation is inactive.
+    pub fn revoke_brokered_credentials(&self) -> bool {
+        self.credential_broker.revoke_isolated_credentials()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn route_request_credentials(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: u16,
+        method: &str,
+        path: &str,
+        headers: &mut rama_http::HeaderMap,
+    ) -> Result<CredentialRouting, ScopedCredentialInjectionError> {
+        self.credential_broker
+            .route_request_credentials(scheme, host, port, method, path, headers)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -914,7 +936,8 @@ impl NetworkProxyState {
 
     fn ensure_credential_broker_enablement_unchanged(&self, new_state: &ConfigState) -> Result<()> {
         anyhow::ensure!(
-            self.credential_broker.enabled() == new_state.config.credential_broker,
+            self.credential_broker.enabled() == new_state.config.credential_broker
+                && self.credential_broker.isolated() == new_state.config.isolated_credential_broker,
             "network.credential_broker cannot change while the proxy is running"
         );
         Ok(())
@@ -1077,6 +1100,20 @@ fn is_explicit_local_allowlisted(allowed_domains: &[String], host: &Host) -> boo
         normalized_pattern == normalized_host
             || unscoped_host.is_some_and(|ip| normalized_pattern == ip)
     })
+}
+
+fn credential_broker_for_config(config: &crate::config::NetworkProxyConfig) -> CredentialBroker {
+    if config.isolated_credential_broker {
+        CredentialBroker::new_isolated(
+            config.credential_broker,
+            IsolatedBrokerOptions {
+                allow_local_binding: config.allow_local_binding,
+                allow_upstream_proxy: config.allow_upstream_proxy,
+            },
+        )
+    } else {
+        CredentialBroker::new(config.credential_broker)
+    }
 }
 
 fn unix_timestamp() -> i64 {

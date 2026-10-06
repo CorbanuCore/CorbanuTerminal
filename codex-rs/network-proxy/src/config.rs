@@ -137,6 +137,9 @@ pub struct NetworkProxyConfig {
     pub mitm: bool,
     #[serde(default)]
     pub credential_broker: bool,
+    /// PF-27-S04: keep brokered raw credentials in a separate broker process.
+    #[serde(default)]
+    pub isolated_credential_broker: bool,
     #[serde(default)]
     pub dangerously_allow_plaintext_credential_injection: bool,
     #[serde(default)]
@@ -160,6 +163,7 @@ impl Default for NetworkProxyConfig {
             allow_local_binding: false,
             mitm: false,
             credential_broker: false,
+            isolated_credential_broker: false,
             dangerously_allow_plaintext_credential_injection: false,
             mitm_hooks: Vec::new(),
         }
@@ -170,6 +174,15 @@ impl NetworkProxyConfig {
     pub fn set_credential_broker_enabled(&mut self, enabled: bool) {
         self.credential_broker = enabled;
         self.mitm |= enabled;
+    }
+
+    /// Enables the credential broker with raw values held only by the
+    /// separate broker process (PF-27-S04).
+    pub fn set_isolated_credential_broker_enabled(&mut self, enabled: bool) {
+        self.isolated_credential_broker = enabled;
+        if enabled {
+            self.set_credential_broker_enabled(/*enabled*/ true);
+        }
     }
 
     pub fn allowed_domains(&self) -> Option<Vec<String>> {
@@ -619,6 +632,7 @@ mod tests {
                 allow_local_binding: false,
                 mitm: false,
                 credential_broker: false,
+                isolated_credential_broker: false,
                 dangerously_allow_plaintext_credential_injection: false,
                 mitm_hooks: Vec::new(),
             }
@@ -704,6 +718,7 @@ mod tests {
                 "allow_local_binding": false,
                 "mitm": false,
                 "credential_broker": false,
+                "isolated_credential_broker": false,
                 "dangerously_allow_plaintext_credential_injection": false,
                 "mitm_hooks": [],
             })

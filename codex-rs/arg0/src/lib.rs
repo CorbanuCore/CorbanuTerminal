@@ -102,6 +102,11 @@ pub fn arg0_dispatch() -> Option<Arg0PathEntryGuard> {
 
     let argv1 = args.next().unwrap_or_default();
     #[cfg(unix)]
+    if argv1 == codex_network_proxy::CODEX_CREDENTIAL_BROKER_ARG1 {
+        // PF-27-S04 isolated credential broker; never returns.
+        codex_network_proxy::run_credential_broker_main();
+    }
+    #[cfg(unix)]
     if argv1 == CODEX_ARG0_EXEC_HELPER_ARG1 {
         codex_exec_server::run_arg0_exec_helper_main();
     }
