@@ -1522,9 +1522,15 @@ impl Session {
         // This meets media preparation requirements without modifying persisted rollouts.
         prepare_image_response_items(&mut history);
         prepare_audio_response_items(&mut history);
-        // Restored messages have no recorded origin and stay labelled; host
-        // context is reinjected fresh on the next turn instead.
-        self.services.model_client().note_restored_history(&history);
+        // Restored content keeps the standing its origin records give it;
+        // anything unrecorded stays labelled (`source_envelopes`).
+        self.services.model_client().note_restored_history(
+            &history,
+            rollout_items.iter().filter_map(|item| match item {
+                RolloutItem::SourceOrigin(record) => Some(record),
+                _ => None,
+            }),
+        );
         {
             let mut state = self.state.lock().await;
             state.replace_history(history, reference_context_item);
@@ -3261,8 +3267,26 @@ impl Session {
                 turn_context.model_info.truncation_policy.into(),
             );
         }
-        self.persist_rollout_response_items(items).await;
+        let mut rollout_items: Vec<RolloutItem> = items
+            .iter()
+            .cloned()
+            .map(RolloutItem::ResponseItem)
+            .collect();
+        // Origins follow the items they describe so a resume restores them.
+        if let Some(record) = self.services.model_client().take_source_origin_record() {
+            rollout_items.push(RolloutItem::SourceOrigin(record));
+        }
+        self.persist_rollout_items(&rollout_items).await;
         self.send_raw_response_items(turn_context, items).await;
+    }
+
+    /// Persist origin registrations made outside `record_conversation_items_from`
+    /// (compaction installs its replacement history directly).
+    async fn persist_source_origins(&self) {
+        if let Some(record) = self.services.model_client().take_source_origin_record() {
+            self.persist_rollout_items(&[RolloutItem::SourceOrigin(record)])
+                .await;
+        }
     }
 
     pub(crate) async fn record_step_world_state_if_changed(
@@ -3651,6 +3675,8 @@ impl Session {
 
         self.persist_rollout_items(&[RolloutItem::Compacted(compacted_item)])
             .await;
+        // Origins registered for the replacement history follow it.
+        self.persist_source_origins().await;
         // Persist the baseline after the replacement history that established it.
         if let Some(world_state_item) = world_state_item {
             self.persist_rollout_items(&[RolloutItem::WorldState(world_state_item)])
@@ -3664,15 +3690,6 @@ impl Session {
             let mut state = self.state.lock().await;
             state.queue_pending_session_start_source(codex_hooks::SessionStartSource::Compact);
         }
-    }
-
-    async fn persist_rollout_response_items(&self, items: &[ResponseItem]) {
-        let rollout_items: Vec<RolloutItem> = items
-            .iter()
-            .cloned()
-            .map(RolloutItem::ResponseItem)
-            .collect();
-        self.persist_rollout_items(&rollout_items).await;
     }
 
     pub fn enabled(&self, feature: Feature) -> bool {
@@ -3724,6 +3741,26 @@ impl Session {
         }
     }
 
+    /// `source_envelopes`: one developer message per stored-data fragment
+    /// (memories), registered as external data before any caller records the
+    /// surrounding context as host. The first registration wins, so it is never
+    /// upgraded and reaches a protected request labelled `source=memory`.
+    fn push_stored_data_messages(&self, items: &mut Vec<ResponseItem>, sections: Vec<String>) {
+        for section in sections {
+            if let Some(message) =
+                crate::context_manager::updates::build_developer_update_item(vec![section])
+            {
+                self.services.model_client().register_message_origin(
+                    std::slice::from_ref(&message),
+                    crate::security::ingress::MessageOrigin::External(
+                        codex_protocol::provenance::SourceKind::Memory,
+                    ),
+                );
+                items.push(message);
+            }
+        }
+    }
+
     async fn build_turn_context_contribution_items(
         &self,
         step_context: &StepContext,
@@ -3733,6 +3770,8 @@ impl Session {
         let mut contextual_user_sections = Vec::new();
         let mut separate_developer_sections = Vec::new();
         let context_contributors = self.services.extensions.context_contributors().to_vec();
+        let separate_stored_data = self.services.model_client().source_envelopes_enabled();
+        let mut stored_data_sections = Vec::new();
 
         for contributor in &context_contributors {
             for fragment in contributor
@@ -3746,6 +3785,10 @@ impl Session {
                 })
                 .await
             {
+                if separate_stored_data && fragment.is_stored_data() {
+                    stored_data_sections.push(fragment.text().to_string());
+                    continue;
+                }
                 push_prompt_fragment(
                     fragment,
                     &mut developer_sections,
@@ -3768,6 +3811,7 @@ impl Session {
                 items.push(developer_message);
             }
         }
+        self.push_stored_data_messages(&mut items, stored_data_sections);
         if let Some(contextual_user_message) =
             crate::context_manager::updates::build_contextual_user_message(contextual_user_sections)
         {
@@ -3868,6 +3912,10 @@ impl Session {
             contextual_user_sections.push(recommended_plugins.render());
         }
         let context_contributors = self.services.extensions.context_contributors().to_vec();
+        // `source_envelopes`: stored-data fragments (memories) get their own
+        // message so they can be labelled without labelling host policy.
+        let separate_stored_data = self.services.model_client().source_envelopes_enabled();
+        let mut stored_data_sections = Vec::<String>::new();
         for contributor in &context_contributors {
             for fragment in contributor
                 .contribute_thread_context(
@@ -3876,6 +3924,10 @@ impl Session {
                 )
                 .await
             {
+                if separate_stored_data && fragment.is_stored_data() {
+                    stored_data_sections.push(fragment.text().to_string());
+                    continue;
+                }
                 push_prompt_fragment(
                     fragment,
                     &mut developer_sections,
@@ -3896,6 +3948,10 @@ impl Session {
                 })
                 .await
             {
+                if separate_stored_data && fragment.is_stored_data() {
+                    stored_data_sections.push(fragment.text().to_string());
+                    continue;
+                }
                 push_prompt_fragment(
                     fragment,
                     &mut developer_sections,
@@ -3982,6 +4038,7 @@ impl Session {
                 items.push(developer_message);
             }
         }
+        self.push_stored_data_messages(&mut items, stored_data_sections);
         if let Some(usage_hint_text) = multi_agent_v2_usage_hint_text
             && let Some(usage_hint_message) =
                 crate::context_manager::updates::build_developer_update_item(vec![

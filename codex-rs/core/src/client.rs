@@ -936,12 +936,52 @@ impl ModelClient {
         self
     }
 
-    /// Restored/forked history has no recorded origins: keep it labelled and
-    /// reinject fresh host context on the next turn.
-    pub(crate) fn note_restored_history(&self, items: &[ResponseItem]) {
+    /// Restored/forked history keeps the standing its rollout origin records
+    /// give it; unrecorded content stays labelled and, when restored messages
+    /// lack records, fresh host context is reinjected on the next turn.
+    pub(crate) fn note_restored_history<'a>(
+        &self,
+        items: &[ResponseItem],
+        records: impl IntoIterator<Item = &'a codex_protocol::provenance::SourceOriginRecord>,
+    ) {
         if let Ok(mut ingress) = self.ingress_items.lock() {
-            ingress.note_restored_history(items);
+            ingress.note_restored_history(items, records);
         }
+    }
+
+    /// New origin registrations to persist right after the items they describe.
+    pub(crate) fn take_source_origin_record(
+        &self,
+    ) -> Option<codex_protocol::provenance::SourceOriginRecord> {
+        self.ingress_items
+            .lock()
+            .ok()
+            .and_then(|mut ingress| ingress.take_origin_record())
+    }
+
+    pub(crate) fn source_envelopes_enabled(&self) -> bool {
+        self.ingress_items
+            .lock()
+            .is_ok_and(|ingress| ingress.labelled_mode())
+    }
+
+    /// Host-recorded origin of an exact history message (labelled mode only).
+    pub(crate) fn message_origin(
+        &self,
+        item: &ResponseItem,
+    ) -> Option<crate::security::ingress::MessageOrigin> {
+        self.ingress_items
+            .lock()
+            .ok()
+            .filter(|ingress| ingress.labelled_mode())
+            .and_then(|ingress| ingress.message_origin(item))
+    }
+
+    /// See `NativeIngress::all_have_standing`; false when the flag is off.
+    pub(crate) fn all_have_standing(&self, items: &[ResponseItem]) -> bool {
+        self.ingress_items
+            .lock()
+            .is_ok_and(|ingress| ingress.labelled_mode() && ingress.all_have_standing(items))
     }
 
     /// Consumed only while protected: Permissive history stays unchanged and

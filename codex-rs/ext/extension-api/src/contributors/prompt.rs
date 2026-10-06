@@ -13,6 +13,7 @@ pub struct PromptFragment {
     slot: PromptSlot,
     text: String,
     source_id: Option<&'static str>,
+    stored_data: bool,
 }
 
 impl PromptFragment {
@@ -22,7 +23,16 @@ impl PromptFragment {
             slot,
             text: text.into(),
             source_id: None,
+            stored_data: false,
         }
+    }
+
+    /// Marks text derived from stored content the host did not write, such as
+    /// memories summarised from earlier sessions. With `source_envelopes`, a
+    /// protected request receives it as labelled untrusted data, not policy.
+    pub fn with_stored_data(mut self) -> Self {
+        self.stored_data = true;
+        self
     }
 
     /// Attributes the fragment to a stable producer ID.
@@ -63,5 +73,10 @@ impl PromptFragment {
     /// Returns the stable producer ID, if the fragment is attributed.
     pub fn source_id(&self) -> Option<&'static str> {
         self.source_id
+    }
+
+    /// Whether the text is derived from stored content (see [`Self::with_stored_data`]).
+    pub fn is_stored_data(&self) -> bool {
+        self.stored_data
     }
 }

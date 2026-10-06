@@ -12,6 +12,7 @@ use crate::hook_runtime::run_pre_compact_hooks;
 use crate::responses_metadata::CodexResponsesMetadata;
 use crate::responses_metadata::CodexResponsesRequestKind;
 use crate::responses_metadata::CompactionTurnMetadata;
+use crate::security::ingress::MessageOrigin;
 #[cfg(test)]
 use crate::session::PreviousTurnSettings;
 use crate::session::session::Session;
@@ -99,6 +100,10 @@ pub(crate) async fn build_compaction_initial_context(
                     world_state.as_ref(),
                 )
                 .await;
+            // Host-built context; stored-data messages were registered first.
+            sess.services
+                .model_client()
+                .register_message_origin(&items, MessageOrigin::Host);
             (items, Some(Arc::clone(world_state)))
         }
         InitialContextInjection::DoNotInject => (Vec::new(), None),
@@ -249,10 +254,16 @@ async fn run_compact_task_inner_impl(
     sess.emit_turn_item_started(&turn_context, &compaction_item)
         .await;
     let initial_input_for_turn: ResponseInputItem = ResponseInputItem::from(input);
+    let compaction_prompt: ResponseItem = initial_input_for_turn.into();
+    // The summarization prompt is host configuration, not external data.
+    sess.services.model_client().register_message_origin(
+        std::slice::from_ref(&compaction_prompt),
+        MessageOrigin::Host,
+    );
 
     let mut history = sess.clone_history().await;
     history.record_items(
-        &[initial_input_for_turn.into()],
+        &[compaction_prompt],
         turn_context.model_info.truncation_policy.into(),
     );
 
@@ -374,6 +385,7 @@ async fn run_compact_task_inner_impl(
     let user_messages = collect_user_messages(history_items);
 
     let mut new_history = build_compacted_history(Vec::new(), &user_messages, &summary_text);
+    register_compacted_history_origins(sess.as_ref(), history_items, &new_history);
     if let Some(summary_item) = new_history.last_mut() {
         // This replacement history skips `record_conversation_items`; only the appended summary
         // belongs to this compaction turn.
@@ -413,6 +425,44 @@ async fn run_compact_task_inner_impl(
     });
     sess.send_event(&turn_context, warning).await;
     Ok(summary_suffix)
+}
+
+/// `source_envelopes`: carry standing into a rebuilt history conservatively.
+/// A retained message keeps human standing only when a human-recorded message
+/// had exactly its text; the summary gets host standing only when every
+/// compacted input had standing. Everything else stays unattributed (labelled).
+fn register_compacted_history_origins(
+    sess: &Session,
+    compacted: &[ResponseItem],
+    new_history: &[ResponseItem],
+) {
+    let client = sess.services.model_client();
+    if !client.source_envelopes_enabled() {
+        return;
+    }
+    let human_texts: std::collections::HashSet<String> = compacted
+        .iter()
+        .filter(|item| client.message_origin(item) == Some(MessageOrigin::Human))
+        .filter_map(|item| match crate::event_mapping::parse_turn_item(item) {
+            Some(TurnItem::UserMessage(user)) => Some(user.message()),
+            _ => None,
+        })
+        .collect();
+    let Some((summary, retained)) = new_history.split_last() else {
+        return;
+    };
+    for item in retained {
+        if let ResponseItem::Message { role, content, .. } = item
+            && role == "user"
+            && let [ContentItem::InputText { text }] = content.as_slice()
+            && human_texts.contains(text)
+        {
+            client.register_message_origin(std::slice::from_ref(item), MessageOrigin::Human);
+        }
+    }
+    if client.all_have_standing(compacted) {
+        client.register_message_origin(std::slice::from_ref(summary), MessageOrigin::Host);
+    }
 }
 
 pub(crate) struct CompactionAnalyticsAttempt {
@@ -747,8 +797,12 @@ async fn drain_to_completed(
         };
         match event {
             Ok(ResponseEvent::OutputItemDone(item)) => {
-                sess.record_conversation_items(turn_context, std::slice::from_ref(&item))
-                    .await;
+                sess.record_conversation_items_from(
+                    turn_context,
+                    std::slice::from_ref(&item),
+                    Some(MessageOrigin::Model),
+                )
+                .await;
             }
             Ok(ResponseEvent::ServerReasoningIncluded(included)) => {
                 sess.set_server_reasoning_included(included).await;

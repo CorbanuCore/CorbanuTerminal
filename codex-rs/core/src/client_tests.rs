@@ -166,7 +166,10 @@ fn pf_30_s02_flag_off_protected_request_says_the_feature_is_off() {
         .build_anthropic_messages_request(&prompt, &test_model_info(), /*effort*/ None)
         .expect_err("flag-off protected requests fail closed");
     let message = error.to_string();
-    assert!(message.contains("`source_envelopes` feature, which is off"), "{message}");
+    assert!(
+        message.contains("`source_envelopes` feature, which is off"),
+        "{message}"
+    );
     assert!(message.contains("before anything was sent"), "{message}");
     assert!(!message.contains("full or poisoned"), "{message}");
 }
@@ -390,7 +393,7 @@ fn pf_30_s01_labelled_context_round_trips_through_each_real_provider_adapter() {
 #[test]
 fn pf_30_s01_labelled_restore_reinjection_waits_while_permissive() {
     let client = test_model_client(SessionSource::Cli).with_source_envelopes(true);
-    client.note_restored_history(&[]);
+    client.note_restored_history(&[], std::iter::empty());
     // Permissive history is unchanged: the request stays pending.
     assert!(!client.take_host_context_reinjection());
     let moderate = client.with_ingress_level(codex_security_policy::SecurityLevel::Moderate);
@@ -399,7 +402,7 @@ fn pf_30_s01_labelled_restore_reinjection_waits_while_permissive() {
     // Flag off never requests reinjection.
     let off = test_model_client(SessionSource::Cli)
         .with_ingress_level(codex_security_policy::SecurityLevel::Moderate);
-    off.note_restored_history(&[]);
+    off.note_restored_history(&[], std::iter::empty());
     assert!(!off.take_host_context_reinjection());
 }
 
