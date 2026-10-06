@@ -183,7 +183,10 @@ async fn thread_start_warns_for_exec_policy_parse_failure_after_initialize() -> 
 #[tokio::test]
 async fn thread_start_fails_for_rules_broken_after_initialize_when_strict() -> Result<()> {
     let codex_home = TempDir::new()?;
-    std::fs::write(codex_home.path().join("config.toml"), "strict_rules = true\n")?;
+    std::fs::write(
+        codex_home.path().join("config.toml"),
+        "strict_rules = true\n",
+    )?;
     let mut mcp = TestAppServer::builder()
         .with_codex_home(codex_home.path())
         .build_initialized()

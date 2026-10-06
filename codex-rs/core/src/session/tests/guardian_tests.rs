@@ -692,9 +692,10 @@ async fn guardian_subagent_does_not_inherit_parent_exec_policy_rules() {
     .expect("config layer stack");
 
     let command = [vec!["rm".to_string()]];
-    let parent_exec_policy = ExecPolicyManager::load(&config.config_layer_stack, /*strict_rules*/ false)
-        .await
-        .expect("load parent exec policy");
+    let parent_exec_policy =
+        ExecPolicyManager::load(&config.config_layer_stack, /*strict_rules*/ false)
+            .await
+            .expect("load parent exec policy");
     assert_eq!(
         parent_exec_policy
             .current()
