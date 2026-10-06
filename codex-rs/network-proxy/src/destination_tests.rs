@@ -608,7 +608,7 @@ async fn pf_33_s01_response_check_rewrites_or_refuses_location() {
     );
     assert_eq!(check(304, HeaderMap::new()).await.0, Ok(()));
     // Ambiguous headers are refused.
-    for headers in [location(&[b"/one", b"/two"]), location(&[b"/caf\xe9"])] {
+    for headers in [location(&[b"/one", b"/two"]), location(&[b"/x\xff"])] {
         assert_eq!(
             check(302, headers).await.0.map_err(|denial| denial.code()),
             Err("redirect_location")
