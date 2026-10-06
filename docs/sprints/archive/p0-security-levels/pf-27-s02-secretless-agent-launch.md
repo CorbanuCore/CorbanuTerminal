@@ -27,7 +27,7 @@ Completed under the per-sprint gate (sec-common decision 5): merged as PR #191 b
 | Open item | Disposition |
 | --- | --- |
 | MCP servers, hooks, the `!` user shell and app-server `command/exec` run outside the OS sandbox | Allowed as user-configured/user-started; the inspector shows them as "not contained" ([PF-41-S01](../../current/p0-security-levels/pf-41-s01-effective-security-inspector.md)) |
-| Claude panes and external provider harnesses are not under the contract | TUI lane decides: [PF-24-S02](../../current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) |
+| Claude panes and external provider harnesses are not under the contract | Handed to the TUI lane, recorded in [PF-24-S02](../../current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md): blocked under Aggressive (PR #220); full contract is issue #218 |
 | Windows broker and contract | [PF-27-S06](../../current/p1-security-hardening/pf-27-s06-windows-broker-and-launch.md), now in the P1 hardening plan |
 
 Windows refuses protected launches with a reason until PF-27-S06 lands.
