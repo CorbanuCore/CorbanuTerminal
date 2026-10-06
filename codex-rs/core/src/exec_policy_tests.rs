@@ -2567,7 +2567,10 @@ fn strict_forbidden_matches_find_wrapped_vault_commands() {
         "bash -lc 'corbanu ${x:-vault} list'",
         "bash -lc \"corbanu $'\\x76ault' list\"",
     ] {
-        assert!(!forbidden(&words(command)), "should not be forbidden: {command}");
+        assert!(
+            !forbidden(&words(command)),
+            "should not be forbidden: {command}"
+        );
     }
 }
 
@@ -2671,7 +2674,8 @@ prefix_rule(pattern = ["rm"], decision = "forbidden")"#,
             rank(&strict_requirement) >= rank(&lenient_requirement),
             "{script}"
         );
-        if rank(&lenient_requirement) < 2 && rank(&strict_requirement) == rank(&lenient_requirement) {
+        if rank(&lenient_requirement) < 2 && rank(&strict_requirement) == rank(&lenient_requirement)
+        {
             assert_eq!(
                 format!("{strict_requirement:?}"),
                 format!("{lenient_requirement:?}"),

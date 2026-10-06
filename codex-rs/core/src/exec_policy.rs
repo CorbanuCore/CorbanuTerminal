@@ -938,7 +938,12 @@ fn strict_forbidden_matches(policy: &Policy, command: &[String]) -> Vec<RuleMatc
                     .filter(|&&index| index == start + 1 || after_options);
                 for &second in seconds {
                     let candidate = std::iter::once(rule.pattern.first.to_string())
-                        .chain(tokens[second..].iter().take(rule.pattern.rest.len()).cloned())
+                        .chain(
+                            tokens[second..]
+                                .iter()
+                                .take(rule.pattern.rest.len())
+                                .cloned(),
+                        )
                         .collect::<Vec<_>>();
                     let Some(matched_prefix) = rule.pattern.matches_prefix(&candidate) else {
                         continue;
@@ -997,7 +1002,19 @@ fn loose_tokens(word: &str, remove_quotes: bool) -> Vec<String> {
             || is_quote(c)
             || matches!(
                 c,
-                ';' | '&' | '|' | '(' | ')' | '<' | '>' | '{' | '}' | '[' | ']' | ',' | '=' | '$'
+                ';' | '&'
+                    | '|'
+                    | '('
+                    | ')'
+                    | '<'
+                    | '>'
+                    | '{'
+                    | '}'
+                    | '['
+                    | ']'
+                    | ','
+                    | '='
+                    | '$'
                     | '!'
             )
     })
