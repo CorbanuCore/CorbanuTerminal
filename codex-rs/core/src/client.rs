@@ -1035,7 +1035,11 @@ impl ModelClient {
             Ok(ingress) => {
                 (ingress.labelled_mode() && protected).then(|| ingress.taint_generation())
             }
-            Err(_) => protected.then_some(u64::MAX),
+            // A poisoned registry still says whether the flag is on; with it on,
+            // count the session as tainted (fail closed). Flag off stays off.
+            Err(poisoned) => {
+                (poisoned.into_inner().labelled_mode() && protected).then_some(u64::MAX)
+            }
         }
     }
 

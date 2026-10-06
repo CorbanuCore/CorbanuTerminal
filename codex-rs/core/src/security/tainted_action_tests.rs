@@ -121,6 +121,19 @@ fn pf_30_s03_vault_credential_and_policy_commands_are_protected() {
     }
     // Argv form, no shell.
     assert_eq!(kind(&["corbanu", "vault", "list"]), Some(Vault));
+    assert_eq!(
+        kind(&[
+            "codex",
+            "exec",
+            "-c",
+            "sandbox_mode=danger-full-access",
+            "go"
+        ]),
+        Some(SecurityPolicy)
+    );
+    assert_eq!(kind(&["sh", "-c", "corbanu vault list"]), Some(Vault));
+    assert_eq!(script("cat ~/.dock*/config.json"), Some(Credentials));
+    assert_eq!(script("cat ~/.config/g?/hosts.yml"), Some(Credentials));
     // The strongest kind wins when one command touches several.
     assert_eq!(
         script("cat ~/.corbanu/config.toml; corbanu vault list"),
@@ -167,6 +180,11 @@ fn pf_30_s03_ordinary_commands_are_not_protected() {
         "cat inventory/hosts.yml",
         "cat .docker/compose.yaml",
         "ls .azure",
+        "ls *",
+        "git add *",
+        "rm -rf target/*",
+        "rg -g '*.json' vault_label",
+        "prettier --write \"src/**/*.ts\"",
     ] {
         assert_eq!(script(command), None, "{command}");
     }

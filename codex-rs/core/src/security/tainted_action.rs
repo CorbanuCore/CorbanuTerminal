@@ -104,6 +104,7 @@ const CREDENTIAL_FILES: &[&str] = &[
     "id_ed25519",
     "id_dsa",
 ];
+const SHELLS: &[&str] = &["sh", "bash", "zsh", "dash", "ksh", "fish"];
 /// Corbanu home folder names (besides the configured `CODEX_HOME`).
 const HOME_SEGMENTS: &[&str] = &[".corbanu", ".codex", ".pfterminal"];
 /// Credential commands: the command name plus words that make it a secret read.
@@ -236,10 +237,19 @@ impl Homes {
             .filter(|segment| !segment.is_empty())
             .collect();
         let name = segments.last().copied().unwrap_or_default();
+        // Credential folders in the user's home, matched segment by segment
+        // so a glob such as `~/.dock*` still counts.
         let under_user_home = |folder: &str| {
-            self.user_home
-                .as_ref()
-                .is_some_and(|home| path.starts_with(&format!("{home}/{folder}")))
+            self.user_home.as_ref().is_some_and(|home| {
+                path.strip_prefix(home.as_str())
+                    .filter(|rest| rest.starts_with('/'))
+                    .is_some_and(|rest| {
+                        let mut actual = rest.split('/').filter(|segment| !segment.is_empty());
+                        folder.split('/').all(|expected| {
+                            actual.next().is_some_and(|got| glob_matches(got, expected))
+                        })
+                    })
+            })
         };
         if segments
             .iter()
@@ -248,7 +258,7 @@ impl Homes {
                 .iter()
                 .any(|folder| under_user_home(folder))
             || CREDENTIAL_FILES.iter().any(|file| glob_matches(name, file))
-            || (name == "hosts.yml" && path.contains("/gh/"))
+            || (glob_matches(name, "hosts.yml") && path.contains("/gh"))
             || name.starts_with("id_rsa")
             || name.starts_with("id_ed25519")
         {
@@ -319,6 +329,12 @@ fn matches_any(segment: &str, names: &[&str]) -> bool {
 /// Whether the shell glob `pattern` (`*`, `?`, `[...]`) could match `name`.
 /// Without glob characters this is equality.
 fn glob_matches(pattern: &str, name: &str) -> bool {
+    // A leading wildcard never expands to a dot-name in the shell (no
+    // `dotglob`), and treating `*` or `*.json` as protected would block
+    // ordinary work: only an explicit prefix can name a protected file.
+    if pattern.starts_with(['*', '?', '[']) {
+        return pattern == name;
+    }
     fn matches(pattern: &[char], name: &[char]) -> bool {
         match pattern.first() {
             None => name.is_empty(),
@@ -340,13 +356,19 @@ fn glob_matches(pattern: &str, name: &str) -> bool {
 /// "..."`): words split on whitespace, with quotes and backslashes removed as
 /// the shell does, and command boundaries kept.
 fn simple_commands(command: &[String]) -> Vec<Vec<String>> {
-    let mut commands = vec![Vec::new()];
+    let mut commands: Vec<Vec<String>> = vec![Vec::new()];
     let mut previous: Option<&str> = None;
     for arg in command {
-        // The script after `-c`/`-lc` is its own command line.
-        if previous.is_some_and(|flag| {
-            flag.starts_with('-') && !flag.starts_with("--") && flag.ends_with('c')
-        }) {
+        // The script after a shell's `-c`/`-lc` is its own command line.
+        let in_shell = commands
+            .last()
+            .and_then(|words| words.first())
+            .is_some_and(|word| SHELLS.contains(&basename(word.as_str())));
+        if in_shell
+            && previous.is_some_and(|flag| {
+                flag.starts_with('-') && !flag.starts_with("--") && flag.ends_with('c')
+            })
+        {
             commands.push(Vec::new());
         }
         previous = Some(arg.as_str());
