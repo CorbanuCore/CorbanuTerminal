@@ -50,7 +50,7 @@ type = "!ps -ax -o pid,ppid,command | grep -e --codex-run-as-credential-broker |
 key = "Enter"
 
 [[steps]]
-wait = "└ \\d+ \\d+ /\\S+"
+wait = "└\\s+\\d+\\s+\\d+\\s+/\\S+"
 
 [[steps]]
 pause = 2.0
