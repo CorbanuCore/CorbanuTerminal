@@ -661,3 +661,30 @@ async fn pf_28_s02_broker_scrubs_its_credential_from_the_response() {
         "Bearer [REDACTED:broker:credential]"
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn pf_28_s02_revocation_still_closes_a_scrubbed_stream() {
+    let upstream = start_upstream().await;
+    let broker = CredentialBroker::new_isolated_with_launcher(
+        /*enabled*/ true,
+        IsolatedBrokerOptions {
+            scrub_responses: true,
+            ..options()
+        },
+        launcher(&upstream, /*controller_pid_override*/ None),
+    );
+    let dummy = virtualized_dummy(&broker);
+
+    let response = forward(&broker, upstream.port, STREAM_PATH, &dummy).await;
+    assert_eq!(response.status(), 200);
+    let reader = tokio::spawn(async move { response.try_into_string().await.is_err() });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // The scrubber's held bytes go with the stream; revocation still ends it.
+    assert!(broker.revoke_isolated_credentials());
+    let stream_failed = tokio::time::timeout(Duration::from_secs(10), reader)
+        .await
+        .expect("revocation closes the scrubbed download")
+        .expect("reader task");
+    assert!(stream_failed);
+}

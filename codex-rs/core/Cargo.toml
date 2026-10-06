@@ -155,6 +155,7 @@ codex-exec-server-test-support = { workspace = true }
 codex-image-generation-extension = { workspace = true }
 codex-home = { workspace = true }
 codex-keyring-store = { workspace = true }
+codex-memories-extension = { workspace = true }
 codex-otel = { workspace = true }
 codex-skills-extension = { workspace = true }
 codex-test-binary-support = { workspace = true }

@@ -2845,6 +2845,7 @@ dependencies = [
  "codex-keyring-store",
  "codex-login",
  "codex-mcp",
+ "codex-memories-extension",
  "codex-memories-read",
  "codex-model-provider",
  "codex-model-provider-info",
