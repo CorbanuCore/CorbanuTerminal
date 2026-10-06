@@ -11,16 +11,19 @@
 //! prompt explains how to answer until the user navigates with the arrow,
 //! Page, Home or End keys. No timing is involved.
 //!
-//! A request reached by answering the previous one, or that replaced it while
-//! open, needs a fresh choice before Enter confirms: a double or held Enter
-//! must not answer a request the user has not seen.
+//! Some prompts need a fresh choice (a decision key or navigation) before
+//! Enter confirms: a request reached by answering or replacing the previous
+//! one, so a double or held Enter cannot answer a request the user has not
+//! seen; a prompt that was held back while the user typed, whose next Enter
+//! may be meant for their draft; and the prompt right after a character
+//! command key such as open thread, whose following keys may be a word.
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum State {
     /// The prompt just opened; Enter confirms the highlighted option.
     #[default]
     Idle,
-    /// The request replaced another one. Enter waits for a choice; `told`
+    /// Enter waits for a choice (see the module docs for when); `told`
     /// records that the prompt is explaining this. `keys_arm` is false right
     /// after a character command key, whose following keys may be a word.
     Fresh { told: bool, keys_arm: bool },
