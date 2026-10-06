@@ -5533,6 +5533,101 @@ async fn active_profile_update_rebuilds_network_proxy_config() -> std::io::Resul
     Ok(())
 }
 
+#[tokio::test]
+async fn active_profile_update_keeps_security_proxy_features() -> std::io::Result<()> {
+    let codex_home = tempfile::tempdir().expect("create codex home");
+    let cwd = tempfile::tempdir().expect("create cwd");
+    let web_profile = |port: u16| PermissionProfileToml {
+        description: None,
+        extends: None,
+        workspace_roots: None,
+        filesystem: Some(FilesystemPermissionsToml {
+            glob_scan_max_depth: None,
+            entries: std::collections::BTreeMap::from([(
+                ":minimal".to_string(),
+                FilesystemPermissionToml::Access(FileSystemAccessMode::Read),
+            )]),
+        }),
+        network: Some(NetworkToml {
+            enabled: Some(true),
+            proxy_url: Some(format!("http://127.0.0.1:{port}")),
+            enable_socks5: Some(false),
+            ..Default::default()
+        }),
+    };
+    let base_config = ConfigToml {
+        features: Some(
+            toml::from_str(
+                "network_proxy = true\nurl_destination_policy = true\nsecret_output_gate = true",
+            )
+            .expect("valid features"),
+        ),
+        default_permissions: Some("web-a".to_string()),
+        permissions: Some(PermissionsToml {
+            entries: std::collections::BTreeMap::from([
+                ("web-a".to_string(), web_profile(43128)),
+                ("web-b".to_string(), web_profile(43129)),
+            ]),
+        }),
+        ..Default::default()
+    };
+    std::fs::write(
+        codex_home.path().join(codex_config::CONFIG_TOML_FILE),
+        toml::to_string(&base_config).expect("serialize config"),
+    )?;
+    let build = |profile: &str| {
+        ConfigBuilder::default()
+            .codex_home(codex_home.path().to_path_buf())
+            .harness_overrides(ConfigOverrides {
+                cwd: Some(cwd.path().to_path_buf()),
+                default_permissions: Some(profile.to_string()),
+                ..Default::default()
+            })
+            .build()
+    };
+    let initial_config = Arc::new(build("web-a").await?);
+    let initial_network = initial_config
+        .permissions
+        .network
+        .as_ref()
+        .expect("initial profile should have a proxy");
+    assert!(initial_network.url_destination_policy_enabled());
+    assert!(initial_network.credential_response_gate_enabled());
+    let selected_config = build("web-b").await?;
+
+    let mut session_configuration = make_session_configuration_for_tests().await;
+    session_configuration.permission_profile_state = initial_config
+        .permissions
+        .permission_profile_state()
+        .clone();
+    session_configuration.original_config_do_not_use = Arc::clone(&initial_config);
+
+    let updated = session_configuration
+        .apply(&SessionSettingsUpdate {
+            permission_profile: Some(selected_config.permissions.permission_profile().clone()),
+            active_permission_profile: selected_config.permissions.active_permission_profile(),
+            ..Default::default()
+        })
+        .expect("active profile update should apply");
+
+    let network = updated
+        .original_config_do_not_use
+        .permissions
+        .network
+        .as_ref()
+        .expect("selected profile proxy should become the session proxy config");
+    assert_eq!(network.proxy_host_and_port(), "127.0.0.1:43129");
+    assert!(
+        network.url_destination_policy_enabled(),
+        "url_destination_policy must survive a profile change"
+    );
+    assert!(
+        network.credential_response_gate_enabled(),
+        "secret_output_gate must survive a profile change"
+    );
+    Ok(())
+}
+
 #[cfg_attr(windows, ignore)]
 #[tokio::test]
 async fn new_default_turn_uses_config_aware_skills_for_role_overrides() {

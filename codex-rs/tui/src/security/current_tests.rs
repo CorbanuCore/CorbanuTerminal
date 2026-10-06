@@ -18,7 +18,7 @@ async fn build(home: &Path, cwd: &Path, user_config: &str, aggressive_level: boo
         ..Default::default()
     };
     if aggressive_level {
-        cli = aggressive::base_overrides(home);
+        cli = aggressive::base_overrides(home, home);
         cli.extend(aggressive::env_overrides(
             &ShellEnvironmentPolicyToml::default(),
         ));

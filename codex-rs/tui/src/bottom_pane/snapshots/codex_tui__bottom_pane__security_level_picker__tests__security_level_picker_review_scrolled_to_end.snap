@@ -2,16 +2,16 @@
 source: tui/src/bottom_pane/security_level_picker_tests.rs
 expression: rendered
 ---
-    variables (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL) are
-    removed, and login profiles and shell snapshots are not used
-• Child agents now: spawned agents get this session's values
-  Aggressive: spawned agents get the same values; custom roles that would change
-    them are refused at start; Claude panes are refused because Claude Code runs
     outside the sandbox (Claude Code sign-in still runs)
+• Nested agents: refuse. An agent command that starts another agent (`corbanu
+    exec`, `review`, `resume`, `fork`, a new session, `app-server` or `mcp-
+    server`) is refused.
+Press n to switch between refuse and pass. Nested launches read this when they
+start.
 Unchanged: model and provider, MCP servers, apps and hooks (they run outside the
 sandbox), wallet scopes, and commands you have already allowed permanently (they
-skip the prompt but stay sandboxed). `corbanu exec` and IDE sessions are not
-covered yet.
+skip the prompt but stay sandboxed). `corbanu exec` that you start yourself and
+IDE sessions are not covered yet.
 Takes effect when you restart Corbanu Terminal; this session keeps its current
 settings until then. Your config.toml is not modified.
-↑/↓ scroll · enter confirm and save · esc back, nothing changes
+↑/↓ scroll · n refuse/pass · enter confirm and save · esc back, nothing changes

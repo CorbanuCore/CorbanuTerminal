@@ -56,7 +56,19 @@ pub(crate) const ROWS: [(&str, &str); 5] = [
     ),
 ];
 
-pub(crate) const UNCHANGED: &str = "Unchanged: model and provider, MCP servers, apps and hooks (they run outside the sandbox), wallet scopes, and commands you have already allowed permanently (they skip the prompt but stay sandboxed). `corbanu exec` and IDE sessions are not covered yet.";
+/// The nested-launch line shown under the rows.
+pub(crate) fn nested_row(nested: super::level::NestedAgents) -> &'static str {
+    match nested {
+        super::level::NestedAgents::Refuse => {
+            "Nested agents: refuse. An agent command that starts another agent (`corbanu exec`, `review`, `resume`, `fork`, a new session, `app-server` or `mcp-server`) is refused."
+        }
+        super::level::NestedAgents::Pass => {
+            "Nested agents: pass. `corbanu exec` and `review` started by an agent command run with Aggressive enforced; interactive sessions, `app-server` and `mcp-server` stay refused."
+        }
+    }
+}
+
+pub(crate) const UNCHANGED: &str = "Unchanged: model and provider, MCP servers, apps and hooks (they run outside the sandbox), wallet scopes, and commands you have already allowed permanently (they skip the prompt but stay sandboxed). `corbanu exec` that you start yourself and IDE sessions are not covered yet.";
 
 /// Role config keys (dotted) that would give a spawned child different values.
 const ROLE_KEYS: [&str; 15] = [
@@ -84,10 +96,11 @@ fn string(value: &str) -> toml::Value {
 /// `-c`-level overrides; they also reach the embedded app server, so every
 /// thread it starts (and every child it spawns) is built from them.
 ///
-/// `codex_home` must be valid UTF-8 (checked by the launch path) so the
+/// `origin` is the Corbanu home whose stored level chose Aggressive: this
+/// home, or for a nested launch the home of the session that started it.
+/// Both paths must be valid UTF-8 (checked by the launch path) so the
 /// profile's path keys are exact.
-pub(crate) fn base_overrides(codex_home: &Path) -> Vec<(String, toml::Value)> {
-    let path = |child: &str| codex_home.join(child).to_string_lossy().into_owned();
+pub(crate) fn base_overrides(codex_home: &Path, origin: &Path) -> Vec<(String, toml::Value)> {
     let profile = toml::toml! {
         extends = ":workspace"
         [filesystem]
@@ -103,9 +116,12 @@ pub(crate) fn base_overrides(codex_home: &Path) -> Vec<(String, toml::Value)> {
     {
         // Read-only even when the workspace contains it: the stored level,
         // rules and config cannot be rewritten by an agent command.
-        filesystem.insert(codex_home.to_string_lossy().into_owned(), string("read"));
-        filesystem.insert(path("secrets"), string("deny"));
-        filesystem.insert(path("auth.json"), string("deny"));
+        for home in [codex_home, origin] {
+            let path = |child: &str| home.join(child).to_string_lossy().into_owned();
+            filesystem.insert(home.to_string_lossy().into_owned(), string("read"));
+            filesystem.insert(path("secrets"), string("deny"));
+            filesystem.insert(path("auth.json"), string("deny"));
+        }
     }
     vec![
         ("approval_policy".to_string(), string("untrusted")),
@@ -137,6 +153,12 @@ pub(crate) fn base_overrides(codex_home: &Path) -> Vec<(String, toml::Value)> {
         (
             "shell_environment_policy.ignore_default_excludes".to_string(),
             toml::Value::Boolean(false),
+        ),
+        // Tells a `corbanu` started by an agent command which home chose
+        // Aggressive (see `super::nested`).
+        (
+            format!("shell_environment_policy.set.{}", super::nested::ORIGIN_ENV),
+            string(&origin.to_string_lossy()),
         ),
     ]
 }
@@ -212,12 +234,16 @@ pub(crate) fn apply_launch_overrides(overrides: &mut ConfigOverrides) -> Vec<&'s
     if !overrides.additional_writable_roots.is_empty() {
         replaced.push("--add-dir");
     }
+    if overrides.bypass_hook_trust == Some(true) {
+        replaced.push("--dangerously-bypass-hook-trust");
+    }
     overrides.approval_policy = Some(AskForApproval::UnlessTrusted);
     overrides.approvals_reviewer = Some(ApprovalsReviewer::User);
     overrides.sandbox_mode = None;
     overrides.permission_profile = None;
     overrides.default_permissions = Some(PROFILE_ID.to_string());
     overrides.additional_writable_roots.clear();
+    overrides.bypass_hook_trust = None;
     overrides.workspace_roots = None;
     overrides.tools_web_search_request = None;
     replaced
@@ -225,9 +251,21 @@ pub(crate) fn apply_launch_overrides(overrides: &mut ConfigOverrides) -> Vec<&'s
 
 /// Every row must be observed in the loaded config; otherwise the failing
 /// rows are returned and Aggressive must not be shown as active.
-pub(crate) fn verify(config: &Config, rules_present: bool) -> Vec<String> {
+pub(crate) fn verify(config: &Config, rules_present: bool, origin: &Path) -> Vec<String> {
     let mut failures = Vec::new();
     verify_sandbox(config, &mut failures);
+    let marker = config
+        .permissions
+        .shell_environment_policy
+        .r#set
+        .get(super::nested::ORIGIN_ENV);
+    if marker.map(String::as_str) != origin.to_str() {
+        failures.push(format!(
+            "Child agents: agent commands would not get {}={}",
+            super::nested::ORIGIN_ENV,
+            origin.display()
+        ));
+    }
     let approval = config.permissions.approval_policy.value();
     if approval != AskForApproval::UnlessTrusted {
         failures.push(format!("Approvals: expected untrusted, got {approval}"));

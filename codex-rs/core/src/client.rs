@@ -1078,6 +1078,13 @@ impl ModelClient {
         }
     }
 
+    /// PF-23-S01: see `NativeIngress::note_unrecorded_input`.
+    pub(crate) fn note_unrecorded_input_for_taint(&self) {
+        if let Ok(mut ingress) = self.ingress_items.lock() {
+            ingress.note_unrecorded_input();
+        }
+    }
+
     /// PF-30-S03: the session's taint generation and effective policy when
     /// post-taint checks apply (`source_envelopes` on and a protected level in
     /// force), else `None`. An unavailable policy counts as protected; a

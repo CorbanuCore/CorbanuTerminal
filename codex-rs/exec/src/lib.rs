@@ -249,7 +249,37 @@ fn exec_stderr_env_filter() -> EnvFilter {
         .unwrap_or_else(|_| EnvFilter::new("error"))
 }
 
+/// Holds a run to a security level its caller did not choose: the `corbanu`
+/// entrypoint uses it when an agent command under Aggressive starts
+/// `corbanu exec` with nested launches set to pass.
+pub trait EnforcedSecurity {
+    /// Shown on stderr when the run starts.
+    fn notice(&self) -> String;
+    /// `-c` overrides added after the caller's own.
+    fn cli_overrides(&self) -> Vec<(String, codex_config::TomlValue)>;
+    /// Overrides that extend the user's environment policy.
+    fn env_overrides(
+        &self,
+        user_env: &codex_config::types::ShellEnvironmentPolicyToml,
+    ) -> Vec<(String, codex_config::TomlValue)>;
+    /// Replaces weakening launch values; returns the flags replaced.
+    fn apply_overrides(&self, overrides: &mut ConfigOverrides) -> Vec<&'static str>;
+    /// Every protection must hold in the loaded config.
+    fn verify<'a>(
+        &'a self,
+        config: &'a Config,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<(), String>> + 'a>>;
+}
+
 pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result<()> {
+    run_main_enforced(cli, arg0_paths, /*enforced*/ None).await
+}
+
+pub async fn run_main_enforced(
+    cli: Cli,
+    arg0_paths: Arg0DispatchPaths,
+    enforced: Option<&dyn EnforcedSecurity>,
+) -> anyhow::Result<()> {
     let run_main_started_at = std::time::Instant::now();
     trace_exec_timing("run_main_start", run_main_started_at);
 
@@ -280,11 +310,23 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         oss_provider,
         config_profile_v2,
         sandbox_mode: sandbox_mode_cli_arg,
-        dangerously_bypass_approvals_and_sandbox,
+        mut dangerously_bypass_approvals_and_sandbox,
         bypass_hook_trust,
         cwd,
         add_dir,
     } = shared;
+    let mut ignore_rules = ignore_rules;
+    let mut replaced_flags = Vec::new();
+    if enforced.is_some() {
+        if dangerously_bypass_approvals_and_sandbox {
+            replaced_flags.push("--dangerously-bypass-approvals-and-sandbox");
+            dangerously_bypass_approvals_and_sandbox = false;
+        }
+        if ignore_rules {
+            replaced_flags.push("--ignore-rules");
+            ignore_rules = false;
+        }
+    }
 
     let (_stdout_with_ansi, stderr_with_ansi) = match color {
         cli::Color::Always => (true, true),
@@ -306,7 +348,7 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
     };
 
     // Parse `-c` overrides from the CLI.
-    let cli_kv_overrides = match config_overrides.parse_overrides() {
+    let mut cli_kv_overrides = match config_overrides.parse_overrides() {
         Ok(v) => v,
         #[allow(clippy::print_stderr)]
         Err(e) => {
@@ -319,6 +361,9 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         || cli_kv_overrides
             .iter()
             .any(|(key, _)| matches!(key.as_str(), "model" | "model_provider"));
+    if let Some(enforced) = enforced {
+        cli_kv_overrides.extend(enforced.cli_overrides());
+    }
 
     let resolved_cwd = cwd.clone();
     let config_cwd = match resolved_cwd.as_deref() {
@@ -359,6 +404,10 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
     .await;
     trace_exec_timing("after_bootstrap_config", run_main_started_at);
     let bootstrap_config_toml = &bootstrap_config.config_toml;
+    if let Some(enforced) = enforced {
+        cli_kv_overrides
+            .extend(enforced.env_overrides(&bootstrap_config_toml.shell_environment_policy));
+    }
 
     let chatgpt_base_url = bootstrap_config_toml
         .chatgpt_base_url
@@ -433,7 +482,7 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         None // No model specified, will use the default.
     };
 
-    let overrides = ConfigOverrides {
+    let mut overrides = ConfigOverrides {
         model,
         allow_provider_model_fallback: false,
         review_model: None,
@@ -462,6 +511,11 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
         bypass_hook_trust: bypass_hook_trust.then_some(true),
         additional_writable_roots: add_dir,
     };
+    if let Some(enforced) = enforced {
+        // `Never` above is the headless default, not a flag to report.
+        overrides.approval_policy = None;
+        replaced_flags.extend(enforced.apply_overrides(&mut overrides));
+    }
 
     let build_config = |overrides| {
         ConfigBuilder::default()
@@ -480,6 +534,20 @@ pub async fn run_main(cli: Cli, arg0_paths: Arg0DispatchPaths) -> anyhow::Result
     )
     .await?;
     trace_exec_timing("after_build_exec_config", run_main_started_at);
+    if let Some(enforced) = enforced {
+        #[allow(clippy::print_stderr)]
+        if let Err(message) = enforced.verify(&config).await {
+            eprintln!("{message}");
+            std::process::exit(1);
+        }
+        #[allow(clippy::print_stderr)]
+        {
+            eprintln!("{}", enforced.notice());
+            if !replaced_flags.is_empty() {
+                eprintln!("Ignored {}.", replaced_flags.join(", "));
+            }
+        }
+    }
     let resume_approvals_reviewer_override = cli_kv_overrides
         .iter()
         .any(|(key, _)| key == "approvals_reviewer")
