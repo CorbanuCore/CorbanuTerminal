@@ -26,7 +26,7 @@ flag off nothing changes. Synthetic credentials only: the PF-27 fixture token (s
 
 ## Tests (`just test`)
 
-| Command | Result | Log |
+| Command | Result | Log (local, git-ignored) |
 | --- | --- | --- |
 | `just test -p codex-secret-broker -p codex-network-proxy -p codex-rmcp-client` | 569 of 570 passed; 25 new `pf_28_s02` tests | `affected-crates.log` |
 | `just test -p codex-core -p codex-login -p codex-vault -p codex-otel -E '…network_proxy, credential, pf_27, pf_28, pf_33, schema, disclosure, redact'` | 145 passed, including the 18 `pf_28_s01` tests in core, login and vault | `core-related.log` |
