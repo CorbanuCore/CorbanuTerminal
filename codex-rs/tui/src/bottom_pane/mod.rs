@@ -613,6 +613,8 @@ impl BottomPane {
             self.keymap.approval.clone(),
             self.keymap.list.clone(),
         );
+        // The user was typing; their next Enter may be meant for their draft.
+        modal.require_fresh_choice();
         while let Some(delayed) = self.delayed_approval_requests.pop_back() {
             modal.enqueue_request(delayed.request);
         }
@@ -2273,6 +2275,30 @@ mod tests {
             assert!(
                 !matches!(event, AppEvent::SubmitThreadOp { .. }),
                 "delayed approval shortcut should not submit an approval: {event:?}"
+            );
+        }
+    }
+
+    /// The prompt was held back because the user was typing; the Enter they
+    /// press to send their draft must not approve the highlighted "Yes".
+    #[test]
+    fn enter_after_a_delayed_prompt_appears_does_not_approve() {
+        let (tx_raw, mut rx) = unbounded_channel::<AppEvent>();
+        let tx = AppEventSender::new(tx_raw);
+        let features = Features::with_defaults();
+        let mut pane = test_pane(tx);
+        let now = Instant::now();
+        pane.last_composer_activity_at = Some(now);
+        pane.push_approval_request(exec_request(), &features);
+
+        pane.pre_draw_tick_at(now + APPROVAL_PROMPT_TYPING_IDLE_DELAY);
+        pane.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        assert_eq!(pane.view_stack.len(), 1);
+        while let Ok(event) = rx.try_recv() {
+            assert!(
+                !matches!(event, AppEvent::SubmitThreadOp { .. }),
+                "Enter must not answer a prompt that appeared while typing: {event:?}"
             );
         }
     }

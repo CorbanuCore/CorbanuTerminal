@@ -21,8 +21,9 @@ enum State {
     #[default]
     Idle,
     /// The request replaced another one. Enter waits for a choice; `told`
-    /// records that the prompt is explaining this.
-    Fresh { told: bool },
+    /// records that the prompt is explaining this. `keys_arm` is false right
+    /// after a character command key, whose following keys may be a word.
+    Fresh { told: bool, keys_arm: bool },
     /// One decision key highlighted this option; Enter confirms it.
     Armed(usize),
     /// Input looked like typing; Enter must not confirm anything.
@@ -62,8 +63,8 @@ impl TypingGuard {
     pub(super) fn notice(&self) -> Option<Notice> {
         match self.state {
             State::Typed => Some(Notice::TypedText),
-            State::Fresh { told: true } => Some(Notice::ChooseFirst),
-            State::Idle | State::Fresh { told: false } | State::Armed(_) => None,
+            State::Fresh { told: true, .. } => Some(Notice::ChooseFirst),
+            State::Idle | State::Fresh { told: false, .. } | State::Armed(_) => None,
         }
     }
 
@@ -71,7 +72,7 @@ impl TypingGuard {
     /// Returns the option to highlight when the key armed one.
     pub(super) fn on_text_key(&mut self, option: Option<usize>) -> Option<usize> {
         match (self.state, option) {
-            (State::Idle | State::Fresh { .. }, Some(idx)) => {
+            (State::Idle | State::Fresh { keys_arm: true, .. }, Some(idx)) => {
                 self.state = State::Armed(idx);
                 Some(idx)
             }
@@ -97,8 +98,11 @@ impl TypingGuard {
                 self.state = State::Idle;
                 Confirm::Option(idx)
             }
-            State::Fresh { .. } => {
-                self.state = State::Fresh { told: true };
+            State::Fresh { keys_arm, .. } => {
+                self.state = State::Fresh {
+                    told: true,
+                    keys_arm,
+                };
                 Confirm::Blocked
             }
             State::Typed => Confirm::Blocked,
@@ -114,8 +118,20 @@ impl TypingGuard {
     /// Enter confirms; typed text stays typed text.
     pub(super) fn on_request_changed(&mut self) {
         if self.state != State::Typed {
-            self.state = State::Fresh { told: false };
+            self.state = State::Fresh {
+                told: false,
+                keys_arm: true,
+            };
         }
+    }
+
+    /// A character command key (such as open thread) acted. Enter waits for
+    /// a choice, and a following character counts as typed text.
+    pub(super) fn on_command_key(&mut self) {
+        self.state = State::Fresh {
+            told: false,
+            keys_arm: false,
+        };
     }
 }
 

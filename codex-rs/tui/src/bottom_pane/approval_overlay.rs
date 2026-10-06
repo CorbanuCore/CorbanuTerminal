@@ -217,6 +217,13 @@ impl ApprovalOverlay {
         view
     }
 
+    /// Require a fresh choice before Enter confirms. Used for a prompt that
+    /// was held back while the user typed, whose next Enter may be meant to
+    /// send their draft.
+    pub(crate) fn require_fresh_choice(&mut self) {
+        self.typing_guard.on_request_changed();
+    }
+
     pub fn enqueue_request(&mut self, req: ApprovalRequest) {
         self.queue.push(req);
     }
@@ -592,7 +599,10 @@ impl ApprovalOverlay {
             .iter()
             .position(|opt| opt.shortcuts.iter().any(|s| s.is_press(*key_event)))
         {
-            self.apply_selection(idx);
+            // A held chord repeats; it must not answer each queued request in turn.
+            if key_event.kind == KeyEventKind::Press {
+                self.apply_selection(idx);
+            }
             true
         } else {
             false
@@ -652,6 +662,8 @@ impl ApprovalOverlay {
     fn handle_text_key(&mut self, key_event: KeyEvent) {
         if self.typing_guard.accepts_commands() {
             if self.try_handle_view_shortcut(&key_event) {
+                // The next keys may be the rest of a word.
+                self.typing_guard.on_command_key();
                 return;
             }
             // A character cancel binding only declines, which is always safe.
@@ -2087,6 +2099,73 @@ mod tests {
                 .all(|event| !matches!(event, AppEvent::SubmitThreadOp { .. })),
             "typed text must not answer a permissions request"
         );
+    }
+
+    #[test]
+    fn held_chord_shortcut_does_not_answer_queued_requests() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut keymap = crate::keymap::RuntimeKeymap::defaults();
+        keymap.approval.approve = vec![key_hint::ctrl(KeyCode::Char('y'))];
+        let mut view = make_overlay_with_keymap(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+            keymap.approval,
+            keymap.list,
+        );
+        let ApprovalRequest::Exec(mut second) = make_prefix_exec_request() else {
+            unreachable!("exec request");
+        };
+        second.id = "second".to_string();
+        view.enqueue_request(ApprovalRequest::Exec(second));
+
+        press(&mut view, KeyCode::Char('y'), KeyModifiers::CONTROL);
+        view.handle_key_event(KeyEvent::new_with_kind(
+            KeyCode::Char('y'),
+            KeyModifiers::CONTROL,
+            KeyEventKind::Repeat,
+        ));
+
+        assert_eq!(exec_decisions(&mut rx), vec!["Accept".to_string()]);
+    }
+
+    #[test]
+    fn open_thread_key_then_decision_key_and_enter_does_not_answer() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let ApprovalRequest::Exec(mut request) = make_prefix_exec_request() else {
+            unreachable!("exec request");
+        };
+        request.thread_label = Some("Robie [explorer]".to_string());
+        let mut view = make_overlay(
+            ApprovalRequest::Exec(request),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+
+        // "op" then Enter: `o` opens the source thread; `p` must not arm a grant.
+        type_text(&mut view, "op");
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+    }
+
+    #[test]
+    fn prompt_held_back_while_typing_needs_a_choice_before_enter() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+        view.require_fresh_choice();
+
+        // The Enter meant to send the user's draft.
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+
+        press(&mut view, KeyCode::Char('1'), KeyModifiers::NONE);
+        press(&mut view, KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(exec_decisions(&mut rx), vec!["Accept".to_string()]);
     }
 
     #[test]

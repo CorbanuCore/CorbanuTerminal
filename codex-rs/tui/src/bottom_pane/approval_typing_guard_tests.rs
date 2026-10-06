@@ -89,3 +89,14 @@ fn request_change_keeps_typed_text() {
     assert_eq!(guard.notice(), Some(Notice::TypedText));
     assert!(!guard.accepts_commands());
 }
+
+#[test]
+fn character_after_a_command_key_is_typed_text() {
+    // "op": `o` opened the source thread; `p` is the rest of a word.
+    let mut guard = TypingGuard::default();
+
+    guard.on_command_key();
+
+    assert_eq!(guard.on_text_key(Some(1)), None);
+    assert_eq!(guard.on_confirm(), Confirm::Blocked);
+}
