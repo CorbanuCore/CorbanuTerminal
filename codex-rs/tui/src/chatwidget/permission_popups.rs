@@ -417,7 +417,18 @@ impl ChatWidget {
             Self::permission_profile_selection_actions,
         );
 
+        // Cancel is the safe default, so Enter alone keeps the current
+        // permissions. Say so; otherwise Enter looks like it did nothing.
+        let report_not_enabled = |tx: &AppEventSender| {
+            tx.send(AppEvent::InsertHistoryCell(Box::new(
+                history_cell::new_info_event(
+                    "Full access was not enabled; permissions are unchanged.".to_string(),
+                    Some("Choose \"Yes, continue anyway\" to enable it.".to_string()),
+                ),
+            )));
+        };
         let deny_actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
+            report_not_enabled(tx);
             if return_to_permissions {
                 tx.send(AppEvent::OpenPermissionsPopup);
             } else {
@@ -448,6 +459,7 @@ impl ChatWidget {
             header: Box::new(header),
             initial_selected_idx: Some(1),
             allow_number_shortcuts: false,
+            on_cancel: Some(Box::new(report_not_enabled)),
             ..Default::default()
         });
     }

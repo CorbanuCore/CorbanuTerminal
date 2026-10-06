@@ -484,6 +484,65 @@ async fn full_access_confirmation_popup_snapshot() {
     assert_chatwidget_snapshot!("full_access_confirmation_popup", popup);
 }
 
+/// Cancel is preselected, so Enter alone keeps the current permissions. The
+/// outcome must be visible; PF-83 testers read the silent return to the picker
+/// as full access having been applied.
+#[tokio::test]
+async fn full_access_confirmation_cancel_reports_permissions_unchanged() {
+    for (key, reopens_picker) in [(KeyCode::Enter, true), (KeyCode::Esc, false)] {
+        let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+        let preset = builtin_approval_presets()
+            .into_iter()
+            .find(|preset| preset.id == "full-access")
+            .expect("full access preset");
+        chat.open_full_access_confirmation(
+            preset, /*return_to_permissions*/ true, /*profile_selection*/ None,
+        );
+
+        chat.handle_key_event(KeyEvent::from(key));
+
+        let mut notices = Vec::new();
+        let mut saw_picker = false;
+        while let Ok(event) = rx.try_recv() {
+            match event {
+                AppEvent::InsertHistoryCell(cell) => notices.push(
+                    cell.display_lines(/*width*/ 120)
+                        .iter()
+                        .map(|line| {
+                            line.spans
+                                .iter()
+                                .map(|span| span.content.as_ref())
+                                .collect::<String>()
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                ),
+                AppEvent::OpenPermissionsPopup => saw_picker = true,
+                AppEvent::SelectPermissionPreset(selection) => {
+                    panic!("cancel must not request a permission change: {selection:?}")
+                }
+                _ => {}
+            }
+        }
+        assert_eq!(
+            (notices, saw_picker),
+            (
+                vec![
+                    "• Full access was not enabled; permissions are unchanged. \
+                     Choose \"Yes, continue anyway\" to enable it."
+                        .to_string()
+                ],
+                reopens_picker
+            ),
+            "{key:?}"
+        );
+        assert_ne!(
+            chat.config.permissions.permission_profile(),
+            &PermissionProfile::Disabled
+        );
+    }
+}
+
 #[cfg(target_os = "windows")]
 #[tokio::test]
 async fn windows_auto_mode_prompt_requests_enabling_sandbox_feature() {
