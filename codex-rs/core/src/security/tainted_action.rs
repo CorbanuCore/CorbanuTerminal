@@ -489,7 +489,19 @@ impl Classifier {
             return;
         }
         self.scripts_read += 1;
-        let Ok(handle) = std::fs::File::open(file) else {
+        // Check before opening: opening a FIFO or device would block.
+        if !std::fs::metadata(file).is_ok_and(|metadata| metadata.is_file()) {
+            return;
+        }
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            // Never block if the file was swapped for a FIFO after the check.
+            options.custom_flags(libc::O_NONBLOCK);
+        }
+        let Ok(handle) = options.open(file) else {
             return;
         };
         if !handle.metadata().is_ok_and(|metadata| metadata.is_file()) {
