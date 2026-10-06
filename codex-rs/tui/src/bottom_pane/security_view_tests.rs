@@ -7,6 +7,10 @@ fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
 }
 
+fn current() -> crate::security::current::CurrentValues {
+    std::array::from_fn(|index| format!("current {index}"))
+}
+
 fn snapshot(view: &SecurityView, width: u16) -> String {
     let area = Rect::new(0, 0, width, view.desired_height(width));
     let mut buffer = Buffer::empty(area);
@@ -26,7 +30,7 @@ fn snapshot(view: &SecurityView, width: u16) -> String {
 #[test]
 fn security_view_profiles_never_claim_healthy_protection() {
     for level in PROFILES {
-        let view = SecurityView::new(Some(level), RuntimeKeymap::defaults().list);
+        let view = SecurityView::new(Some(level), current, RuntimeKeymap::defaults().list);
         insta::assert_snapshot!(
             format!("security_view_{}", profile_name(level).to_lowercase()),
             snapshot(&view, /*width*/ 80)
@@ -36,7 +40,11 @@ fn security_view_profiles_never_claim_healthy_protection() {
 
 #[test]
 fn security_view_narrow_and_unknown_state() {
-    let mut view = SecurityView::new(/*requested*/ None, RuntimeKeymap::defaults().list);
+    let mut view = SecurityView::new(
+        /*requested*/ None,
+        current,
+        RuntimeKeymap::defaults().list,
+    );
     view.handle_key_event(key(KeyCode::Down));
     view.handle_key_event(key(KeyCode::Enter));
     insta::assert_snapshot!(
@@ -49,6 +57,7 @@ fn security_view_narrow_and_unknown_state() {
 fn security_view_navigation_enter_and_cancel_do_not_change_request() {
     let mut view = SecurityView::new(
         Some(SecurityLevel::Moderate),
+        current,
         RuntimeKeymap::defaults().list,
     );
     view.handle_key_event(key(KeyCode::Down));
@@ -82,7 +91,7 @@ fn security_view_uses_configured_navigation_and_cancellation() {
     keymap.move_down = vec![key_hint::plain(KeyCode::Char('j'))];
     keymap.accept = vec![key_hint::plain(KeyCode::Char('i'))];
     keymap.cancel = vec![key_hint::plain(KeyCode::Char('q'))];
-    let mut view = SecurityView::new(Some(SecurityLevel::Permissive), keymap);
+    let mut view = SecurityView::new(Some(SecurityLevel::Permissive), current, keymap);
     view.handle_key_event(key(KeyCode::Char('j')));
     view.handle_key_event(key(KeyCode::Char('i')));
     assert_eq!((view.selected, view.inspected), (1, true));
@@ -92,7 +101,11 @@ fn security_view_uses_configured_navigation_and_cancellation() {
 
 #[test]
 fn security_view_short_terminal_keeps_escape_visible() {
-    let view = SecurityView::new(/*requested*/ None, RuntimeKeymap::defaults().list);
+    let view = SecurityView::new(
+        /*requested*/ None,
+        current,
+        RuntimeKeymap::defaults().list,
+    );
     let area = Rect::new(0, 0, 40, 8);
     let mut buffer = Buffer::empty(area);
     view.render(area, &mut buffer);

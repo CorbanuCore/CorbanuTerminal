@@ -20,6 +20,19 @@ fn context(home: &std::path::Path, active: ChosenLevel) -> LevelContext {
     }
 }
 
+/// Config C from the frozen code-blind design (case B-06), as the picker
+/// would see it; `current_values` itself is covered in `aggressive_tests`.
+fn current() -> CurrentValues {
+    [
+        "commands can write to the current folder, /tmp, /var/folders/tmp, /tmp/extra; approved or allow-listed commands can run outside the sandbox; permission-request tools are off",
+        "on-request (reviewer: you)",
+        "on for agent commands; web search live",
+        "the vault store and sign-in file are readable to agent commands; secret-like environment variables are passed through (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL); login profiles or shell snapshots are used",
+        "spawned agents get this session's values",
+    ]
+    .map(str::to_string)
+}
+
 fn render(picker: &SecurityLevelPicker, width: u16) -> String {
     let mut lines = picker.lines(width);
     lines.push(Line::from(picker.footer()));
@@ -66,6 +79,7 @@ fn list_review_and_saved_screens() {
     let home = tempfile::tempdir().unwrap();
     let mut picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Permissive),
+        current(),
         RuntimeKeymap::defaults().list,
     );
     insta::assert_snapshot!("security_level_picker_list", render(&picker, 80));
@@ -99,6 +113,7 @@ fn escape_and_typed_text_change_nothing() {
     let home = tempfile::tempdir().unwrap();
     let mut picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Permissive),
+        current(),
         RuntimeKeymap::defaults().list,
     );
     picker.handle_key_event(key(KeyCode::Up));
@@ -128,6 +143,7 @@ fn return_to_permissive_while_aggressive_is_active() {
     level::save(home.path(), ChosenLevel::Aggressive).unwrap();
     let mut picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Aggressive),
+        current(),
         RuntimeKeymap::defaults().list,
     );
     assert_eq!(picker.selected, 2);
@@ -161,6 +177,7 @@ fn unreadable_state_is_reported_and_aggressive_selected() {
     .unwrap();
     let picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Aggressive),
+        current(),
         RuntimeKeymap::defaults().list,
     );
     let rendered = render(&picker, 400).replace(&home.path().display().to_string(), "<home>");
@@ -172,6 +189,7 @@ fn choosing_the_saved_level_is_a_no_op() {
     let home = tempfile::tempdir().unwrap();
     let mut picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Permissive),
+        current(),
         RuntimeKeymap::defaults().list,
     );
     picker.handle_key_event(key(KeyCode::Enter));
@@ -183,5 +201,49 @@ fn choosing_the_saved_level_is_a_no_op() {
             },
             Vec::<String>::new()
         )
+    );
+}
+
+/// A review taller than the pane scrolls with the move keys, says so in the
+/// footer, and stops at its last line (narrow or short terminals).
+#[test]
+fn tall_review_scrolls_to_its_last_line() {
+    let home = tempfile::tempdir().unwrap();
+    let mut picker = SecurityLevelPicker::new(
+        &context(home.path(), ChosenLevel::Permissive),
+        current(),
+        RuntimeKeymap::defaults().list,
+    );
+    picker.handle_key_event(key(KeyCode::Up));
+    picker.handle_key_event(key(KeyCode::Enter));
+    let line_count = picker.lines(80).len();
+    let body_height = 12;
+    let max = (line_count - usize::from(body_height)) as u16;
+    assert_eq!(picker.scroll_for(line_count, body_height), 0);
+    for _ in 0..line_count * 2 {
+        picker.handle_key_event(key(KeyCode::Down));
+    }
+    assert_eq!(picker.scroll_for(line_count, body_height), max);
+    let mut visible = picker.lines(80).split_off(usize::from(max));
+    visible.push(Line::from(picker.footer()));
+    let area = Rect::new(0, 0, 80, visible.len() as u16);
+    let mut buffer = Buffer::empty(area);
+    Paragraph::new(visible).render(area, &mut buffer);
+    let rendered = (0..area.height)
+        .map(|y| {
+            (0..area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+                .trim_end()
+                .to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    insta::assert_snapshot!("security_level_picker_review_scrolled_to_end", rendered);
+
+    picker.handle_key_event(key(KeyCode::Up));
+    assert_eq!(
+        (picker.scroll_for(line_count, body_height), &picker.screen),
+        (max - 1, &Screen::Review(ChosenLevel::Aggressive))
     );
 }
