@@ -199,6 +199,8 @@ pub(crate) fn child_uses_parent_exec_policy(parent_config: &Config, child_config
                 .ignore_user_and_project_exec_policy_rules()
         && parent_config.config_layer_stack.requirements().exec_policy
             == child_config.config_layer_stack.requirements().exec_policy
+        // A leniently loaded policy may be a parse-error fallback.
+        && (parent_config.strict_rules || !child_config.strict_rules)
 }
 
 fn is_policy_match(rule_match: &RuleMatch) -> bool {
