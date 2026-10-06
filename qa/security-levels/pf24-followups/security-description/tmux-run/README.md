@@ -2,7 +2,7 @@
 
 - **Candidate:** `10ac64a019`.
 - **Profiles:** three disposable profiles, each with a trusted workspace.
-- **Keys:** `/secur` typed, then Enter, then Esc.
+- **Keys:** `/security` typed, then Enter, then Esc.
 
 | Profile | Popup description (`*-popup.txt`) | Enter opens (`*-opened.txt`) |
 | --- | --- | --- |

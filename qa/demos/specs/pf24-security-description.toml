@@ -21,7 +21,7 @@ wait = "Corbanu Terminal \\(v"
 pause = 1.0
 
 [[steps]]
-type = "/secur"
+type = "/security"
 [[steps]]
 wait = "choose a security level; takes effect when you restart"
 [[steps]]
