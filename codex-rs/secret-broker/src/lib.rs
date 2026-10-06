@@ -10,6 +10,7 @@ pub mod output_gate;
 pub mod platform_contract;
 pub mod resolver;
 mod resolver_types;
+pub mod response_gate;
 
 pub use ipc::BrokerBinding;
 pub use ipc::BrokerChannelMac;

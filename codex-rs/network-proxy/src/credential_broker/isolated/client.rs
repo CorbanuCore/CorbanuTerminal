@@ -69,6 +69,9 @@ pub(crate) struct IsolatedBrokerOptions {
     /// PF-27-S02: refuse a broker that could not confine itself (Seatbelt on
     /// macOS, at least seccomp on Linux) instead of running it unconfined.
     pub(crate) require_containment: bool,
+    /// PF-28-S02: scrub the broker's credentials from the responses it
+    /// returns.
+    pub(crate) scrub_responses: bool,
 }
 
 /// How Core starts the broker. Production re-executes the current binary.
@@ -232,6 +235,7 @@ impl IsolatedBrokerClient {
             channel_key: encode_hex(key.as_ref()),
             allow_local_binding: options.allow_local_binding,
             allow_upstream_proxy: options.allow_upstream_proxy,
+            scrub_responses: options.scrub_responses,
         };
         let ready = control.send(&hello).and_then(|()| control.receive());
         drop(hello);

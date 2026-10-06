@@ -84,6 +84,9 @@ pub(crate) enum ControlRequest {
         channel_key: String,
         allow_local_binding: bool,
         allow_upstream_proxy: bool,
+        /// PF-28-S02: scrub registered values from returned responses.
+        #[serde(default)]
+        scrub_responses: bool,
     },
     Register {
         provider: ProviderId,

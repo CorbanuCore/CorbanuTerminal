@@ -23,6 +23,7 @@ use super::protocol::encode_hex;
 use super::protocol::valid_id;
 use crate::config::NetworkProxyConfig;
 use crate::credential_broker::providers;
+use crate::credential_broker::response_scrub;
 use crate::runtime::NetworkProxyState;
 use crate::runtime::StaticConfigReloader;
 use crate::state::NetworkProxyConstraints;
@@ -35,6 +36,7 @@ use codex_secret_broker::BrokerChannelMac;
 use codex_secret_broker::CredentialReference;
 use codex_secret_broker::SignedBrokerFrame;
 use codex_secret_broker::VerifiedProviderRequest;
+use codex_secret_broker::response_gate::ResponseGate;
 use rama_core::Layer as _;
 use rama_core::Service as _;
 use rama_core::bytes::Bytes;
@@ -174,6 +176,7 @@ async fn run_broker(runtime_dir: std::path::PathBuf, containment: String) -> any
         channel_key,
         allow_local_binding,
         allow_upstream_proxy,
+        scrub_responses,
     } = &hello
     else {
         anyhow::bail!("controller did not start with hello");
@@ -205,6 +208,7 @@ async fn run_broker(runtime_dir: std::path::PathBuf, containment: String) -> any
         state: Mutex::new(BrokerState::default()),
         generation,
         upstream: upstream_client(*allow_local_binding, *allow_upstream_proxy)?,
+        scrub_responses: *scrub_responses,
     });
     drop(hello);
 
@@ -365,6 +369,8 @@ struct Broker {
     state: Mutex<BrokerState>,
     generation: watch::Sender<u64>,
     upstream: UpstreamClient,
+    /// PF-28-S02: scrub each credential from the responses it authorizes.
+    scrub_responses: bool,
 }
 
 struct BrokerState {
@@ -389,6 +395,7 @@ struct BrokerCredential {
     provider: ProviderId,
     binding: HostBindingWire,
     value: Zeroizing<String>,
+    reflection: Option<ResponseGate>,
 }
 
 #[derive(Default)]
@@ -456,6 +463,8 @@ struct Authorized {
     request: VerifiedProviderRequest,
     provider: ProviderId,
     header: HeaderValue,
+    /// PF-28-S02: scrubs this credential from the response.
+    reflection: Option<ResponseGate>,
     generation: u64,
     guard: InFlightGuard,
 }
@@ -494,6 +503,16 @@ impl Broker {
                 code: ControlErrorCode::InvalidCredential,
             };
         }
+        // PF-28-S02: a value the response gate cannot hold is not admitted.
+        let Ok(reflection) = self
+            .scrub_responses
+            .then(|| ResponseGate::new([("broker:credential", value)]))
+            .transpose()
+        else {
+            return ControlResponse::Error {
+                code: ControlErrorCode::InvalidCredential,
+            };
+        };
         let Ok(mut state) = self.state.lock() else {
             return ControlResponse::Error {
                 code: ControlErrorCode::Unavailable,
@@ -515,6 +534,7 @@ impl Broker {
                 provider,
                 binding: binding.clone(),
                 value: Zeroizing::new(value.to_string()),
+                reflection,
             },
         );
         ControlResponse::Registered {
@@ -612,12 +632,14 @@ impl Broker {
             .request_header_value(credential.value.as_str())
             .ok_or(DenyCode::UnknownCredential)?;
         header.set_sensitive(true);
+        let reflection = credential.reflection.clone();
         state.in_flight += 1;
         Ok(Authorized {
             provider,
             generation: state.run_generation,
             request: verified,
             header,
+            reflection,
             guard: InFlightGuard {
                 broker: self.clone(),
             },
@@ -651,6 +673,9 @@ impl Broker {
             return deny(DenyCode::RequestMismatch);
         };
         parts.headers.insert(HOST, host);
+        if authorized.reflection.is_some() {
+            response_scrub::request_identity_body(&mut parts.headers);
+        }
         // The agent may have spoken HTTP/2 to the proxy. Send HTTP/1.1 so an
         // origin that does not negotiate ALPN still understands the request.
         parts.version = Version::HTTP_11;
@@ -673,7 +698,11 @@ impl Broker {
             done: false,
             _guard: authorized.guard,
         };
-        Response::from_parts(parts, Body::new(body))
+        let response = Response::from_parts(parts, Body::new(body));
+        match &authorized.reflection {
+            Some(gate) => response_scrub::scrub_response(gate, response),
+            None => response,
+        }
     }
 }
 

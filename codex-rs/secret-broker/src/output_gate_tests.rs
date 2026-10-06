@@ -259,8 +259,14 @@ fn pf_28_s01_chunk_boundaries_never_split_a_value() {
 fn pf_28_s01_stream_holds_back_at_most_the_longest_value() {
     let gate = gate_with(CANARY);
     let mut scrubber = StreamScrubber::new();
-    let out = scrubber.push(&gate, OutputSink::ToolResult, &[b'z'; 4096], true);
+    let out = scrubber.push(&gate, OutputSink::ToolResult, &b"z ".repeat(2048), true);
     assert!(scrubber.pending() <= gate.snapshot().max_len + BASE64_SLACK + 2);
+    assert_eq!(out.len() + scrubber.pending(), 4096);
+    // PF-28-S02 changed the bound for one unbroken encoded run: it is held up
+    // to MAX_BLOCK_CARRY so a nested encoding is decoded whole.
+    let mut scrubber = StreamScrubber::new();
+    let out = scrubber.push(&gate, OutputSink::ToolResult, &[b'z'; 4096], true);
+    assert!(scrubber.pending() <= MAX_BLOCK_CARRY);
     assert_eq!(out.len() + scrubber.pending(), 4096);
 }
 

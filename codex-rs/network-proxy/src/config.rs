@@ -154,6 +154,11 @@ pub struct NetworkProxyConfig {
     /// proxied request (feature `url_destination_policy`). Set by Core only.
     #[serde(skip)]
     pub url_destination_policy: bool,
+    /// PF-28-S02: bind injected credentials to HTTPS, method and path, and
+    /// scrub them from responses (feature `secret_output_gate`). Set by Core
+    /// only.
+    #[serde(skip)]
+    pub credential_response_gate: bool,
     #[serde(default)]
     pub dangerously_allow_plaintext_credential_injection: bool,
     #[serde(default)]
@@ -181,6 +186,7 @@ impl Default for NetworkProxyConfig {
             secretless_agent_launch: None,
             credential_broker_runtime_dir: None,
             url_destination_policy: false,
+            credential_response_gate: false,
             dangerously_allow_plaintext_credential_injection: false,
             mitm_hooks: Vec::new(),
         }
@@ -213,6 +219,11 @@ impl NetworkProxyConfig {
     pub fn set_url_destination_policy(&mut self, enabled: bool) {
         self.url_destination_policy = enabled;
         self.mitm |= enabled;
+    }
+
+    /// PF-28-S02: bind and scrub injected credentials.
+    pub fn set_credential_response_gate(&mut self, enabled: bool) {
+        self.credential_response_gate = enabled;
     }
 
     /// PF-27-S02: where the isolated broker creates its private directory.
@@ -671,6 +682,7 @@ mod tests {
                 secretless_agent_launch: None,
                 credential_broker_runtime_dir: None,
                 url_destination_policy: false,
+                credential_response_gate: false,
                 dangerously_allow_plaintext_credential_injection: false,
                 mitm_hooks: Vec::new(),
             }
