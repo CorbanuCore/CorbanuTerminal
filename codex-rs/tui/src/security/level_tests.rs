@@ -134,21 +134,30 @@ fn deleted_state_file_next_to_the_rule_file_is_invalid() {
 }
 
 #[test]
-fn claude_panes_are_refused_only_while_aggressive_is_active() {
-    let context = |active| LevelContext {
-        codex_home: PathBuf::from("/home"),
-        picker_enabled: true,
-        active,
-    };
-    assert_eq!(external_agent_block_reason_in(None), None);
-    assert_eq!(
-        external_agent_block_reason_in(Some(&context(ChosenLevel::Permissive))),
-        None
-    );
-    let reason = external_agent_block_reason_in(Some(&context(ChosenLevel::Aggressive)))
-        .expect("Aggressive refuses Claude panes");
-    assert!(
-        reason.contains("outside Corbanu's sandbox") && reason.contains("/security"),
-        "{reason}"
-    );
+fn claude_panes_are_refused_while_a_protected_level_is_active_or_saved() {
+    use ChosenLevel::Aggressive;
+    use ChosenLevel::Permissive;
+    assert_eq!(external_agent_block_reason_in(Permissive, Permissive), None);
+    for (active, stored) in [
+        (Aggressive, Aggressive),
+        (Aggressive, Permissive),
+        (Permissive, Aggressive),
+    ] {
+        let reason = external_agent_block_reason_in(active, stored)
+            .expect("a protected level refuses Claude panes");
+        assert!(
+            reason.starts_with("Claude panes are off under security level Aggressive")
+                && reason.contains("outside Corbanu's sandbox")
+                && reason.contains("/security"),
+            "{reason}"
+        );
+    }
+}
+
+#[test]
+fn smoke_runs_without_a_launch_context_read_the_stored_level() {
+    let home = tempfile::tempdir().unwrap();
+    assert_eq!(external_agent_block_reason_for_home(home.path()), None);
+    save(home.path(), ChosenLevel::Aggressive).unwrap();
+    assert!(external_agent_block_reason_for_home(home.path()).is_some());
 }

@@ -68,7 +68,7 @@ pub(crate) async fn run_claude_command_plan(
     cancel_token: CancellationToken,
     progress_tx: Option<AppEventSender>,
 ) -> Result<ClaudePaneTurnOutput> {
-    // Every Claude process starts here, including restored and spawned panes.
+    // Every Claude agent turn starts here, including restored and spawned panes.
     if let Some(reason) = crate::security::level::external_agent_block_reason() {
         return Err(anyhow!(reason));
     }

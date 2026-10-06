@@ -4574,3 +4574,96 @@ this line is not json and makes the transcript unparsable"#;
     );
     assert!(output.direct_turn_record().is_none());
 }
+
+/// Sets the stand-in active level for this thread; cleared on drop.
+struct ActiveLevelForTest;
+
+impl ActiveLevelForTest {
+    fn aggressive() -> Self {
+        crate::security::level::ACTIVE_FOR_TEST
+            .set(Some(crate::security::level::ChosenLevel::Aggressive));
+        Self
+    }
+}
+
+impl Drop for ActiveLevelForTest {
+    fn drop(&mut self) {
+        crate::security::level::ACTIVE_FOR_TEST.set(None);
+    }
+}
+
+#[test]
+fn aggressive_refuses_new_claude_panes_before_any_artifact() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let mut registry = ClaudePaneRegistry::new();
+    let _aggressive = ActiveLevelForTest::aggressive();
+    for role in [None, Some(SpawnRole::Orc)] {
+        let error = registry
+            .create_pane_with_role(
+                ClaudeProviderProfileKind::ClaudePlan,
+                std::env::current_dir().expect("cwd"),
+                codex_home.path(),
+                role,
+                /*spawn_nickname*/ None,
+            )
+            .expect_err("Aggressive refuses Claude panes");
+        assert!(
+            error.to_string().starts_with("Claude panes are off"),
+            "{error}"
+        );
+    }
+    assert!(registry.panes().is_empty());
+    assert!(!codex_home.path().join("panes").exists());
+}
+
+#[test]
+fn aggressive_refuses_turns_in_existing_panes_without_side_effects() {
+    let codex_home = tempfile::tempdir().expect("codex home");
+    let mut registry = ClaudePaneRegistry::new();
+    let pane_id = registry
+        .create_pane(
+            ClaudeProviderProfileKind::ClaudePlan,
+            std::env::current_dir().expect("cwd"),
+            codex_home.path(),
+        )
+        .expect("create pane");
+    let _aggressive = ActiveLevelForTest::aggressive();
+    let Err(error) = registry.prepare_turn(&pane_id, "hi".to_string(), codex_home.path()) else {
+        panic!("Aggressive refuses Claude turns");
+    };
+    assert!(
+        error.to_string().starts_with("Claude panes are off"),
+        "{error}"
+    );
+    let pane = registry
+        .panes()
+        .iter()
+        .find(|pane| pane.id == pane_id)
+        .expect("pane");
+    assert_eq!(
+        (pane.status.clone(), pane.next_turn_index),
+        (ClaudePaneStatus::Idle, 1)
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn aggressive_refuses_to_start_a_claude_process() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let marker = dir.path().join("started");
+    let plan = bridge_redaction_plan(
+        &dir,
+        format!("touch {}", marker.display()),
+        "bridge-secret-for-gate-test",
+    );
+    let _aggressive = ActiveLevelForTest::aggressive();
+    let error = run_claude_command_plan(plan, CancellationToken::new(), /*progress_tx*/ None)
+        .await
+        .expect_err("Aggressive refuses Claude processes");
+    assert!(
+        error.to_string().starts_with("Claude panes are off"),
+        "{error}"
+    );
+    assert!(!marker.exists());
+    assert!(!dir.path().join("turn-0001.audit.json").exists());
+}

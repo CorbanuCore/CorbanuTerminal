@@ -242,15 +242,41 @@ pub(crate) fn permission_change_block_reason() -> Option<String> {
 
 /// Claude panes run Claude Code outside Corbanu's sandbox, with this
 /// process's environment, network and Claude's own permission bypass, so no
-/// protected level can contain them. Refused while Aggressive is active.
+/// protected level can contain them. Refused while a protected level is
+/// active or saved: a pane could otherwise rewrite the saved level before the
+/// restart that activates it.
 pub(crate) fn external_agent_block_reason() -> Option<String> {
-    external_agent_block_reason_in(context())
+    #[cfg(test)]
+    if let Some(level) = ACTIVE_FOR_TEST.get() {
+        return external_agent_block_reason_in(level, ChosenLevel::Permissive);
+    }
+    let context = context()?;
+    external_agent_block_reason_in(context.active, load(&context.codex_home).enforced())
 }
 
-fn external_agent_block_reason_in(context: Option<&LevelContext>) -> Option<String> {
-    let context = context?;
-    (context.active == ChosenLevel::Aggressive).then(|| {
-        "Claude panes are off under security level Aggressive: Claude Code would run outside Corbanu's sandbox with your environment and network. Choose Permissive in /security and restart to use them.".to_string()
+#[cfg(test)]
+thread_local! {
+    /// Stands in for the launch-verified level on this thread in tests.
+    pub(crate) static ACTIVE_FOR_TEST: std::cell::Cell<Option<ChosenLevel>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// For entry points without a launch context (`corbanu claude-pane-smoke`).
+pub(crate) fn external_agent_block_reason_for_home(codex_home: &Path) -> Option<String> {
+    match context() {
+        Some(_) => external_agent_block_reason(),
+        None => {
+            external_agent_block_reason_in(ChosenLevel::Permissive, load(codex_home).enforced())
+        }
+    }
+}
+
+fn external_agent_block_reason_in(active: ChosenLevel, stored: ChosenLevel) -> Option<String> {
+    (active != ChosenLevel::Permissive || stored != ChosenLevel::Permissive).then(|| {
+        format!(
+            "Claude panes are off under security level {}: Claude Code would run outside Corbanu's sandbox with your environment and network. Choose Permissive in /security and restart to use them; /panes switches back to Main.",
+            if active != ChosenLevel::Permissive { active } else { stored }.name()
+        )
     })
 }
 

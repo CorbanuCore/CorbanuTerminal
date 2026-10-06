@@ -82,6 +82,11 @@ pub struct ClaudePaneWorkflowEntry {
 pub async fn run_claude_pane_smoke(
     options: ClaudePaneSmokeOptions,
 ) -> Result<ClaudePaneSmokeReport> {
+    if let Some(reason) =
+        crate::security::level::external_agent_block_reason_for_home(&options.codex_home)
+    {
+        return Err(anyhow::anyhow!(reason));
+    }
     let uses_default_baseline = options.providers.is_empty();
     let provider_names = if uses_default_baseline {
         vec![
@@ -153,6 +158,11 @@ pub async fn run_claude_pane_smoke(
 pub async fn run_claude_pane_workflow_suite(
     options: ClaudePaneWorkflowOptions,
 ) -> Result<ClaudePaneWorkflowReport> {
+    if let Some(reason) =
+        crate::security::level::external_agent_block_reason_for_home(&options.codex_home)
+    {
+        return Err(anyhow::anyhow!(reason));
+    }
     let provider_names = if options.providers.is_empty() {
         vec!["ambient".to_string()]
     } else {
