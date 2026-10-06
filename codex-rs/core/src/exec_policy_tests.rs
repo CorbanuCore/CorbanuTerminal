@@ -213,7 +213,7 @@ async fn returns_empty_policy_when_no_policy_files_exist() {
     let temp_dir = tempdir().expect("create temp dir");
     let config_stack = config_stack_for_dot_codex_folder(temp_dir.path());
 
-    let manager = ExecPolicyManager::load(&config_stack)
+    let manager = ExecPolicyManager::load(&config_stack, /*strict_rules*/ false)
         .await
         .expect("manager result");
     let policy = manager.current();
@@ -371,6 +371,37 @@ async fn merges_requirements_exec_policy_network_rules() -> anyhow::Result<()> {
 
     assert!(allowed.is_empty());
     assert_eq!(denied, vec!["blocked.example.com".to_string()]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn strict_rules_make_parse_errors_fatal() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let policy_dir = temp_dir.path().join(RULES_DIR_NAME);
+    fs::create_dir_all(&policy_dir)?;
+    fs::write(
+        policy_dir.join("vault.rules"),
+        r#"prefix_rule(pattern = ["corbanu", "vault"], decision = "forbidden")"#,
+    )?;
+    fs::write(policy_dir.join("broken.rules"), "prefix_rule(")?;
+    let config_stack = config_stack_for_dot_codex_folder(temp_dir.path());
+
+    let lenient = ExecPolicyManager::load(&config_stack, /*strict_rules*/ false).await?;
+    assert_eq!(
+        lenient
+            .current()
+            .check(&["corbanu".to_string(), "vault".to_string()], &|_| {
+                Decision::Allow
+            })
+            .decision,
+        Decision::Allow,
+        "the lenient fallback drops every user and project rule"
+    );
+
+    let Err(err) = ExecPolicyManager::load(&config_stack, /*strict_rules*/ true).await else {
+        panic!("strict rules must reject a file that does not parse");
+    };
+    assert!(matches!(err, ExecPolicyError::ParsePolicy { ref path, .. } if path.ends_with("broken.rules")));
     Ok(())
 }
 

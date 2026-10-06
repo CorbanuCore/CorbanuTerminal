@@ -612,7 +612,7 @@ impl Session {
                 }
             }
             Arc::new(
-                ExecPolicyManager::load(&config.config_layer_stack)
+                ExecPolicyManager::load(&config.config_layer_stack, config.strict_rules)
                     .await
                     .map_err(|err| CodexErr::Fatal(format!("failed to load rules: {err}")))?,
             )

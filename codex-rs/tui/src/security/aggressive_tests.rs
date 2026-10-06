@@ -292,6 +292,44 @@ async fn exec_policy_must_load_and_forbid_vault_commands() {
     );
 }
 
+/// New threads must fail rather than drop the vault rule when a `.rules` file
+/// breaks after launch; a user `strict_rules = false` cannot turn that off.
+#[tokio::test]
+async fn rules_parse_errors_are_fatal_for_later_threads() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    let config = load(home.path(), cwd.path(), "strict_rules = false\n").await;
+    assert!(config.strict_rules);
+    assert_eq!(
+        verify(&config, /*rules_present*/ true),
+        Vec::<String>::new()
+    );
+
+    let cli = base_overrides(home.path())
+        .into_iter()
+        .filter(|(key, _)| key != "strict_rules")
+        .collect::<Vec<_>>();
+    let mut harness = ConfigOverrides {
+        cwd: Some(cwd.path().to_path_buf()),
+        ..Default::default()
+    };
+    apply_launch_overrides(&mut harness);
+    let lenient = ConfigBuilder::default()
+        .codex_home(home.path().to_path_buf())
+        .cli_overrides(cli)
+        .harness_overrides(harness)
+        .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
+        .build()
+        .await
+        .unwrap();
+    assert!(
+        verify(&lenient, /*rules_present*/ true).contains(
+            &"Vault: a rules file that breaks later would let new threads drop the vault rule"
+                .to_string()
+        )
+    );
+}
+
 /// A broken `.rules` file in the project's `.codex/rules` counts only when the
 /// project is trusted, exactly as a session loads it.
 #[tokio::test]

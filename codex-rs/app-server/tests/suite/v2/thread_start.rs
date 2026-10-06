@@ -181,6 +181,39 @@ async fn thread_start_warns_for_exec_policy_parse_failure_after_initialize() -> 
 }
 
 #[tokio::test]
+async fn thread_start_fails_for_rules_broken_after_initialize_when_strict() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    std::fs::write(codex_home.path().join("config.toml"), "strict_rules = true\n")?;
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .build_initialized()
+        .await?;
+    // A thread started while the rules parse keeps its rules.
+    mcp.start_thread(ThreadStartParams::default()).await?;
+
+    let rules_dir = codex_home.path().join("rules");
+    std::fs::create_dir_all(&rules_dir)?;
+    std::fs::write(rules_dir.join("broken.rules"), "prefix_rule(")?;
+
+    let request_id = mcp
+        .send_thread_start_request_with_auto_env(ThreadStartParams::default())
+        .await?;
+    let error = timeout(
+        DEFAULT_READ_TIMEOUT,
+        mcp.read_stream_until_error_message(RequestId::Integer(request_id)),
+    )
+    .await??;
+    assert!(
+        error.error.message.contains("failed to load rules")
+            && error.error.message.contains("broken.rules"),
+        "unexpected error: {}",
+        error.error.message
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn thread_start_does_not_repeat_initialize_exec_policy_warning() -> Result<()> {
     let codex_home = TempDir::new()?;
     let rules_dir = codex_home.path().join("rules");
