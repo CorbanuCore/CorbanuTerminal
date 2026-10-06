@@ -425,6 +425,7 @@ async fn preapproved_additional_permissions_escalate_intercepted_exec() -> anyho
     );
     let provider = CoreShellActionProvider {
         policy: Arc::new(RwLock::new(codex_execpolicy::Policy::empty())),
+        strict_rules: false,
         session: Arc::new(session),
         turn: Arc::new(turn_context),
         call_id: "preapproved-additional-permissions".to_string(),
@@ -560,6 +561,7 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
         codex_shell_command::parse_command::shlex_join(&["/usr/bin/touch".to_string(), target_str]);
     let provider = CoreShellActionProvider {
         policy: std::sync::Arc::new(RwLock::new(codex_execpolicy::Policy::empty())),
+        strict_rules: false,
         session: std::sync::Arc::new(session),
         turn: std::sync::Arc::new(turn_context),
         call_id: "execve-hook-call".to_string(),
@@ -770,6 +772,7 @@ prefix_rule(pattern = ["{cat_path_literal}"], decision = "allow")
     let workdir = test_sandbox_cwd();
     let provider = CoreShellActionProvider {
         policy: Arc::new(RwLock::new(policy)),
+        strict_rules: false,
         session: Arc::new(session),
         turn: Arc::new(turn_context),
         call_id: "deny-read-prefix-allow".to_string(),
@@ -806,6 +809,7 @@ async fn denied_reads_keep_granular_sandbox_rejection_for_escalation() -> anyhow
     let workdir = test_sandbox_cwd();
     let provider = CoreShellActionProvider {
         policy: Arc::new(RwLock::new(PolicyParser::new().build())),
+        strict_rules: false,
         session: Arc::new(session),
         turn: Arc::new(turn_context),
         call_id: "deny-read-granular-sandbox-reject".to_string(),

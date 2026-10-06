@@ -2470,39 +2470,71 @@ fn words(command: &str) -> Vec<String> {
     shlex::split(command).expect("test command splits")
 }
 
+fn vault_policy() -> Policy {
+    let mut parser = PolicyParser::new();
+    parser
+        .parse(
+            "vault.rules",
+            r#"prefix_rule(pattern = ["corbanu", "vault"], decision = "forbidden", justification = "no vault")
+prefix_rule(pattern = ["env"], decision = "allow")"#,
+        )
+        .expect("parse policy");
+    parser.build()
+}
+
 #[test]
-fn unwrap_command_finds_the_program_behind_wrappers_and_relative_paths() {
-    let cases = [
-        ("env corbanu vault list", Some("corbanu vault list")),
-        ("/usr/bin/env FOO=1 BAR=x=y ./corbanu vault", Some("./corbanu vault")),
-        ("env -i -u HOME -C /tmp - corbanu vault", Some("corbanu vault")),
-        ("env -iuHOME --chdir /tmp -- corbanu vault", Some("corbanu vault")),
-        ("env -P /bin -a name corbanu vault", Some("corbanu vault")),
-        ("env -S 'FOO=1 corbanu vault' list", Some("corbanu vault list")),
-        ("env -iS'corbanu vault'", Some("corbanu vault")),
-        ("env --split-string='-i corbanu vault'", Some("corbanu vault")),
-        ("command -p env nohup corbanu vault", Some("corbanu vault")),
-        ("exec -a name corbanu vault", Some("corbanu vault")),
-        // Nothing to unwrap: the policy already sees these as written.
-        ("corbanu vault list", None),
-        ("./corbanu vault list", None),
-        ("/opt/bin/corbanu vault list", None),
-        ("env", None),
-        ("env FOO=1", None),
-        ("command -v", None),
-    ];
-    for (command, expected) in cases {
-        assert_eq!(
-            unwrap_command(&words(command)),
-            expected.map(words),
-            "{command}"
-        );
+fn strict_forbidden_matches_find_wrapped_vault_commands() {
+    let policy = vault_policy();
+    let options = MatchOptions {
+        resolve_host_executables: true,
+    };
+    let forbidden = |command: &str| {
+        !strict_forbidden_matches(&policy, &words(command), &options).is_empty()
+    };
+    for command in [
+        "corbanu vault list",
+        "./corbanu vault list",
+        "bin/../corbanu vault list",
+        "CORBANU vault list",
+        "corbanu.exe vault list",
+        "corbanu -c k=v --profile p vault list",
+        "env corbanu vault list",
+        "/usr/bin/env -i -u HOME FOO=1 ./corbanu vault",
+        "env --chd /tmp --u HOME corbanu vault",
+        "env -L root -P /bin corbanu vault",
+        "env env env env env env env env env corbanu vault list",
+        "env -S 'FOO=1 corbanu vault' list",
+        "env -iS'corbanu vault'",
+        r"env -S'corbanu\_vault\_list'",
+        "env --split='-i corbanu vault'",
+        "command -p corbanu vault",
+        "exec -ca name corbanu vault",
+        "nohup timeout 5 nice -n 1 sudo corbanu vault list",
+        "xargs corbanu vault",
+        "sh -c 'echo hi; corbanu vault list 2>/dev/null'",
+        "bash -lc 'FOO=1 corbanu vault list'",
+        "bash -lc '(corbanu vault list)'",
+        "bash -lc 'echo $(corbanu vault list)'",
+        "bash -lc 'if true; then corbanu vault list; fi'",
+        // Over-matching is accepted: it can only refuse.
+        "echo corbanu vault",
+    ] {
+        assert!(forbidden(command), "should be forbidden: {command}");
+    }
+    for command in [
+        "corbanu exec 'use the vault'",
+        "corbanu resume",
+        "git commit -m 'corbanu vault docs'",
+        "grep -r 'corbanu vault' .",
+        "env FOO=1 git status",
+    ] {
+        assert!(!forbidden(command), "should not be forbidden: {command}");
     }
 }
 
-/// Strict rules (Aggressive) apply `forbidden` rules through wrappers;
-/// otherwise the policy behaves exactly as before. Program paths, relative
-/// or absolute, resolve by file name in both modes.
+/// Strict rules (Aggressive) apply `forbidden` rules to wrapped forms;
+/// otherwise the policy behaves exactly as before. Paths resolve by file
+/// name in both modes.
 #[tokio::test]
 async fn strict_rules_forbid_wrapped_program_forms() -> anyhow::Result<()> {
     let temp_dir = tempdir()?;
@@ -2511,7 +2543,7 @@ async fn strict_rules_forbid_wrapped_program_forms() -> anyhow::Result<()> {
     fs::write(
         policy_dir.join("vault.rules"),
         r#"prefix_rule(pattern = ["corbanu", "vault"], decision = "forbidden", justification = "no vault")
-prefix_rule(pattern = ["git", "status"], decision = "allow")"#,
+prefix_rule(pattern = ["env"], decision = "allow")"#,
     )?;
     let config_stack = config_stack_for_dot_codex_folder(temp_dir.path());
     let lenient = ExecPolicyManager::load(&config_stack, /*strict_rules*/ false).await?;
@@ -2531,22 +2563,28 @@ prefix_rule(pattern = ["git", "status"], decision = "allow")"#,
             .await
     }
     for manager in [&strict, &lenient] {
-        for script in ["./corbanu vault list", "/opt/x/corbanu vault list"] {
-            assert!(
-                matches!(
-                    requirement(manager, script).await,
-                    ExecApprovalRequirement::Forbidden { .. }
-                ),
-                "{script}"
-            );
-        }
+        assert!(
+            matches!(
+                requirement(manager, "./corbanu vault list").await,
+                ExecApprovalRequirement::Forbidden { .. }
+            ),
+            "paths resolve in both modes"
+        );
     }
+    // The `env` allow rule would run this outside the sandbox without a
+    // prompt; strict rules refuse it instead.
+    assert!(matches!(
+        requirement(&lenient, "env corbanu vault list").await,
+        ExecApprovalRequirement::Skip {
+            bypass_sandbox: true,
+            ..
+        }
+    ));
     for script in [
-        "env ./corbanu vault auth-helper x",
         "env corbanu vault list",
         "/usr/bin/env -i FOO=1 corbanu vault list",
-        "echo hi && env -S 'corbanu vault' list",
-        "command corbanu vault list",
+        "FOO=1 corbanu vault list 2>/dev/null",
+        "corbanu -c k=v vault list",
     ] {
         assert!(
             matches!(
@@ -2555,6 +2593,8 @@ prefix_rule(pattern = ["git", "status"], decision = "allow")"#,
             ),
             "strict: {script}"
         );
+    }
+    for script in ["FOO=1 corbanu vault list 2>/dev/null", "corbanu -c k=v vault list"] {
         assert!(
             !matches!(
                 requirement(&lenient, script).await,
@@ -2562,13 +2602,6 @@ prefix_rule(pattern = ["git", "status"], decision = "allow")"#,
             ),
             "lenient is unchanged: {script}"
         );
-    }
-    // Wrappers never widen an allow rule.
-    for manager in [&strict, &lenient] {
-        assert!(!matches!(
-            requirement(manager, "env git status").await,
-            ExecApprovalRequirement::Skip { .. }
-        ));
     }
     Ok(())
 }

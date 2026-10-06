@@ -300,9 +300,9 @@ impl ExecPolicyManager {
     }
 
     /// With `strict_rules`, a `.rules` file that fails to parse is an error
-    /// instead of a warning that drops every user and project rule, and a
-    /// `forbidden` rule also matches the command behind an `env`, `command`,
-    /// `exec` or `nohup` wrapper.
+    /// instead of a warning that drops every user and project rule, and
+    /// `forbidden` rules also match wrapped forms (see
+    /// [`strict_forbidden_matches`]).
     #[instrument(level = "info", skip_all)]
     pub(crate) async fn load(
         config_stack: &ConfigLayerStack,
@@ -318,6 +318,10 @@ impl ExecPolicyManager {
             tracing::warn!("failed to parse rules: {err}");
         }
         Ok(Self::new(Arc::new(policy)))
+    }
+
+    pub(crate) fn strict_rules(&self) -> bool {
+        self.strict_rules
     }
 
     pub(crate) fn current(&self) -> Arc<Policy> {
@@ -368,21 +372,15 @@ impl ExecPolicyManager {
             &match_options,
         );
         if self.strict_rules {
-            let wrapped_forbidden = commands
+            let forbidden = commands
                 .iter()
-                .filter_map(|command| unwrap_command(command))
                 .flat_map(|command| {
-                    exec_policy.matches_for_command_with_options(
-                        &command,
-                        /*heuristics_fallback*/ None,
-                        &match_options,
-                    )
+                    strict_forbidden_matches(exec_policy.as_ref(), command, &match_options)
                 })
-                .filter(|rule_match| rule_match.decision() == Decision::Forbidden)
                 .collect::<Vec<_>>();
-            if !wrapped_forbidden.is_empty() {
+            if !forbidden.is_empty() {
                 evaluation.decision = Decision::Forbidden;
-                evaluation.matched_rules.extend(wrapped_forbidden);
+                evaluation.matched_rules.extend(forbidden);
             }
         }
 
@@ -875,104 +873,99 @@ pub(crate) fn default_policy_path(codex_home: &Path) -> PathBuf {
     codex_home.join(RULES_DIR_NAME).join(DEFAULT_POLICY_FILE)
 }
 
-/// Wrappers that run their operand as a program with the same arguments.
-const TRANSPARENT_WRAPPERS: [&str; 4] = ["env", "command", "exec", "nohup"];
+/// Programs whose string arguments are themselves command lines: shells
+/// (`sh -c '…'`) and `env -S '…'`.
+const COMMAND_LINE_RUNNERS: [&str; 8] = ["sh", "bash", "zsh", "dash", "ksh", "mksh", "fish", "env"];
+/// Longer than any prefix rule needs; bounds the work per candidate.
+const STRICT_MATCH_WINDOW: usize = 16;
 
-/// The command behind `env`/`command`/`exec`/`nohup` wrappers, or `None`
-/// when there is no wrapper. Program paths (`./corbanu`) are left to
-/// host-executable resolution. Used only to apply `forbidden` rules more
-/// widely, so over-matching can only refuse a command, never allow one.
-fn unwrap_command(command: &[String]) -> Option<Vec<String>> {
-    let mut rest = command.to_vec();
-    // Bounded: each pass removes at least the wrapper word.
-    for _ in 0..8 {
-        let Some(program) = rest.first() else {
-            return None;
-        };
-        let name = Path::new(program)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or(program);
-        if !TRANSPARENT_WRAPPERS.contains(&name) {
-            break;
-        }
-        rest = if name == "env" {
-            unwrap_env_args(&rest[1..])?
-        } else {
-            // `command [-pvV]`, `exec [-cl] [-a NAME]`, `nohup`.
-            let mut index = 1;
-            while let Some(arg) = rest.get(index).filter(|arg| arg.starts_with('-')) {
-                index += if arg == "-a" { 2 } else { 1 };
-                if arg == "--" {
-                    break;
-                }
+/// `forbidden` rule matches for every command `command` could run that the
+/// exact match misses: the program behind any wrapper (`env -i X=1`,
+/// `nohup`, `exec -a n`, `timeout 5`), a program named by a path or in
+/// another case (`./corbanu`, `CORBANU`), options before a subcommand
+/// (`corbanu -c k=v vault`), and words of shell `-c` scripts and `env -S`
+/// strings. Used only under `strict_rules` and only to refuse, so the
+/// deliberate over-matching (`echo corbanu vault`) cannot allow anything.
+pub(crate) fn strict_forbidden_matches(
+    policy: &Policy,
+    command: &[String],
+    match_options: &MatchOptions,
+) -> Vec<RuleMatch> {
+    let mut matches = Vec::new();
+    let mut check = |words: &[String]| {
+        for start in 0..words.len() {
+            let program = program_key(&words[start]);
+            if program.is_empty() {
+                continue;
             }
-            rest.get(index..)?.to_vec()
-        };
+            let rest = &words[start + 1..];
+            // Also drop leading options (and their values) after the program.
+            let skips = if rest.first().is_some_and(|word| word.starts_with('-')) {
+                rest.len().min(STRICT_MATCH_WINDOW)
+            } else {
+                1
+            };
+            for skip in 0..skips {
+                let candidate = std::iter::once(program.clone())
+                    .chain(rest.iter().skip(skip).take(STRICT_MATCH_WINDOW).cloned())
+                    .collect::<Vec<_>>();
+                matches.extend(
+                    policy
+                        .matches_for_command_with_options(
+                            &candidate,
+                            /*heuristics_fallback*/ None,
+                            match_options,
+                        )
+                        .into_iter()
+                        .filter(|rule_match| rule_match.decision() == Decision::Forbidden),
+                );
+            }
+        }
+    };
+    check(command);
+    let mut runner_seen = false;
+    for (index, arg) in command.iter().enumerate() {
+        if runner_seen && (arg.contains(char::is_whitespace) || arg.contains("\\_")) {
+            let mut words = command_line_words(arg);
+            words.extend(command[index + 1..].iter().cloned());
+            check(&words);
+        }
+        runner_seen |= COMMAND_LINE_RUNNERS.contains(&program_key(arg).as_str());
     }
-    (!rest.is_empty() && rest.as_slice() != command).then_some(rest)
+    matches
 }
 
-/// `env [OPTION]... [NAME=VALUE]... COMMAND [ARG]...` -> `COMMAND [ARG]...`
-/// for GNU and BSD `env`. A `-S`/`--split-string` operand is split into
-/// words first, as `env` does.
-fn unwrap_env_args(args: &[String]) -> Option<Vec<String>> {
-    // Short options whose value is the rest of the cluster or the next word.
-    const SHORT_WITH_VALUE: [char; 4] = ['u', 'C', 'P', 'a'];
-    const LONG_WITH_VALUE: [&str; 3] = ["--unset", "--chdir", "--argv0"];
-    let mut index = 0;
-    while let Some(arg) = args.get(index) {
-        index += 1;
-        let split = if arg == "--" {
-            break;
-        } else if arg == "--split-string" {
-            index += 1;
-            Some(args.get(index - 1)?.clone())
-        } else if let Some(value) = arg.strip_prefix("--split-string=") {
-            Some(value.to_string())
-        } else if LONG_WITH_VALUE.contains(&arg.as_str()) {
-            index += 1;
-            None
-        } else if arg.starts_with("--") || arg == "-" {
-            None
-        } else if let Some(cluster) = arg.strip_prefix('-') {
-            let mut split = None;
-            for (position, option) in cluster.char_indices() {
-                let value = &cluster[position + option.len_utf8()..];
-                if option == 'S' {
-                    split = Some(if value.is_empty() {
-                        index += 1;
-                        args.get(index - 1)?.clone()
-                    } else {
-                        value.to_string()
-                    });
-                    break;
-                }
-                if SHORT_WITH_VALUE.contains(&option) {
-                    if value.is_empty() {
-                        index += 1;
-                    }
-                    break;
-                }
-            }
-            split
-        } else {
-            index -= 1;
-            break;
-        };
-        if let Some(split) = split {
-            let mut words = shlex::split(&split)?;
-            words.extend(args.iter().skip(index).cloned());
-            return unwrap_env_args(&words);
+/// The rule key a word could run as: shell punctuation trimmed (`$(corbanu`),
+/// directories dropped, ASCII-lowercased (case-insensitive file systems) and
+/// without `.exe`.
+fn program_key(word: &str) -> String {
+    let word = word
+        .trim_start_matches(['$', '(', '`', '{', ';', '&', '|', '!', '<', '>'])
+        .trim_end_matches([')', '`', '}', ';', '&', '|']);
+    let name = word.rsplit(['/', '\\']).next().unwrap_or(word);
+    let name = name.to_ascii_lowercase();
+    match name.strip_suffix(".exe") {
+        Some(stem) => stem.to_string(),
+        None => name,
+    }
+}
+
+/// Words of a shell script or `env -S` string. `\_` separates words in
+/// `env -S`; an attached `-S`/`--split-string=` prefix is dropped.
+fn command_line_words(text: &str) -> Vec<String> {
+    let text = text.replace("\\_", " ");
+    let mut words =
+        shlex::split(&text).unwrap_or_else(|| text.split_whitespace().map(str::to_string).collect());
+    if let Some(first) = words.first_mut() {
+        if let Some((_, value)) = first.strip_prefix("--").and_then(|long| long.split_once('=')) {
+            *first = value.to_string();
+        } else if first.starts_with('-')
+            && let Some((_, value)) = first.split_once('S')
+        {
+            *first = value.to_string();
         }
     }
-    let command = args
-        .get(index..)?
-        .iter()
-        .skip_while(|arg| arg.contains('=') && !arg.starts_with('='))
-        .cloned()
-        .collect::<Vec<_>>();
-    (!command.is_empty()).then_some(command)
+    words
 }
 
 fn commands_for_exec_policy(command: &[String]) -> ExecPolicyCommands {

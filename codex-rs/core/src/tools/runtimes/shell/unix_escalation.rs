@@ -228,6 +228,7 @@ pub(super) async fn try_run_zsh_fork(
     );
     let escalation_policy = CoreShellActionProvider {
         policy: Arc::clone(&exec_policy),
+        strict_rules: ctx.session.services.exec_policy.strict_rules(),
         session: Arc::clone(&ctx.session),
         turn: Arc::clone(&ctx.turn),
         call_id: ctx.call_id.clone(),
@@ -309,6 +310,7 @@ pub(crate) async fn prepare_unified_exec_zsh_fork(
     };
     let escalation_policy = CoreShellActionProvider {
         policy: Arc::clone(&exec_policy),
+        strict_rules: ctx.session.services.exec_policy.strict_rules(),
         session: Arc::clone(&ctx.session),
         turn: Arc::clone(&ctx.turn),
         call_id: ctx.call_id.clone(),
@@ -343,6 +345,8 @@ pub(crate) async fn prepare_unified_exec_zsh_fork(
 
 struct CoreShellActionProvider {
     policy: Arc<RwLock<Policy>>,
+    /// See `ExecPolicyManager::load`.
+    strict_rules: bool,
     session: Arc<crate::session::session::Session>,
     turn: Arc<crate::session::turn_context::TurnContext>,
     call_id: String,
@@ -598,7 +602,7 @@ impl CoreShellActionProvider {
 
         let evaluation = {
             let policy = self.policy.read().await;
-            evaluate_intercepted_exec_policy(
+            let mut evaluation = evaluate_intercepted_exec_policy(
                 &policy,
                 program,
                 argv,
@@ -610,7 +614,21 @@ impl CoreShellActionProvider {
                     enable_shell_wrapper_parsing:
                         ENABLE_INTERCEPTED_EXEC_POLICY_SHELL_WRAPPER_PARSING,
                 },
-            )
+            );
+            if self.strict_rules {
+                let forbidden = crate::exec_policy::strict_forbidden_matches(
+                    &policy,
+                    &join_program_and_argv(program, argv),
+                    &MatchOptions {
+                        resolve_host_executables: true,
+                    },
+                );
+                if !forbidden.is_empty() {
+                    evaluation.decision = Decision::Forbidden;
+                    evaluation.matched_rules.extend(forbidden);
+                }
+            }
+            evaluation
         };
         // When true, means the Evaluation was due to *.rules, not the
         // fallback function.
