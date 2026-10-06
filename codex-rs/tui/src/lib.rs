@@ -1400,6 +1400,19 @@ pub async fn run_main(
         .with(otel_tracing_layer)
         .try_init();
 
+    // Older builds wrote credentials to these files (#179, #196). Masking
+    // keeps every byte offset, so it runs beside this process's appends.
+    std::thread::spawn({
+        let log_dir = config.log_dir.clone();
+        move || {
+            for name in [TUI_LOG_FILE_NAME, "codex-login.log"] {
+                if let Err(err) = codex_state::scrub_log_file_once(&log_dir.join(name)) {
+                    tracing::warn!("failed to scrub old secrets from {name}: {err}");
+                }
+            }
+        }
+    });
+
     run_ratatui_app(
         cli,
         arg0_paths,

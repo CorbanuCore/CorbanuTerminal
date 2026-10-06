@@ -4428,6 +4428,7 @@ dependencies = [
  "libsqlite3-sys",
  "log",
  "pretty_assertions",
+ "regex",
  "scopeguard",
  "serde",
  "serde_json",

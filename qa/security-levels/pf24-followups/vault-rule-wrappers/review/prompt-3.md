@@ -1,0 +1,9 @@
+You are an independent senior security and Rust reviewer (Opus 5.5, high effort). Review commit bf681c1631 (`git show bf681c1631`); it builds on commit b8429fb166 (#197, `strict_rules`), which is under separate review. HEAD is a merge of a formatting commit. Do not edit files; read the code and report.
+
+Context: under the TUI's Aggressive security level a managed rules file holds `prefix_rule(pattern = ["corbanu", "vault"], decision = "forbidden")` (and the same for codex/pfterminal/*-debug). Exec-policy prefix rules match the literal first word, plus absolute paths resolved by basename (`host_executable` resolution), so `./corbanu vault …`, `env corbanu vault …`, `/usr/bin/env -i FOO=1 corbanu vault …` were not refused (they went to the normal approval prompt; the vault store stays unreadable to sandboxed commands, which is the primary control). Change: when the session's `ExecPolicyManager` was loaded with `strict_rules` (only Aggressive sets it), each parsed command is also unwrapped (`env` with GNU/BSD options and `-S` split strings, `command`, `exec`, `nohup`; relative program paths reduced to their file name) and any `forbidden` rule matching the unwrapped form makes the command Forbidden. It never adds Allow or Prompt matches, and is off unless strict.
+
+Look for:
+- Bypasses of the unwrapping for the forms it claims to handle (env option parsing, clusters, `--`, `-S` quoting, nested wrappers, path forms like `././corbanu`, `bin/../corbanu`, trailing slashes, Windows paths).
+- Whether any change can widen an allow (sandbox bypass via `bypass_sandbox`, amendments, `prefix_rule` suggestions).
+- Other matching paths that need the same treatment (zsh-fork `unix_escalation`, `check_execpolicy`, unified exec, apply_patch, user `!` commands).
+- Whether gating on `strict_rules` is the right scope; test validity; known remaining gaps worth stating (assignment prefixes `FOO=1 corbanu`, `sh -c`, `$(…)`, aliases).

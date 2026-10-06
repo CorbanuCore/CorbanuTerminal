@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::path::Path;
 use std::path::PathBuf;
@@ -16,6 +17,7 @@ use codex_execpolicy::MatchOptions;
 use codex_execpolicy::NetworkRuleProtocol;
 use codex_execpolicy::Policy;
 use codex_execpolicy::PolicyParser;
+use codex_execpolicy::PrefixRule;
 use codex_execpolicy::RuleMatch;
 use codex_execpolicy::blocking_append_allow_prefix_rule;
 use codex_execpolicy::blocking_append_network_rule;
@@ -279,6 +281,8 @@ pub enum ExecPolicyUpdateError {
 pub(crate) struct ExecPolicyManager {
     policy: ArcSwap<Policy>,
     update_lock: Semaphore,
+    /// See [`Self::load`]: forbidden rules also match wrapped commands.
+    strict_rules: bool,
 }
 
 pub(crate) struct ExecApprovalRequest<'a> {
@@ -295,24 +299,33 @@ impl ExecPolicyManager {
         Self {
             policy: ArcSwap::from(policy),
             update_lock: Semaphore::new(/*permits*/ 1),
+            strict_rules: false,
         }
     }
 
     /// With `strict_rules`, a `.rules` file that fails to parse is an error
-    /// instead of a warning that drops every user and project rule.
+    /// instead of a warning that drops every user and project rule, and
+    /// `forbidden` rules also match wrapped forms (see
+    /// [`strict_forbidden_matches`]).
     #[instrument(level = "info", skip_all)]
     pub(crate) async fn load(
         config_stack: &ConfigLayerStack,
         strict_rules: bool,
     ) -> Result<Self, ExecPolicyError> {
         if strict_rules {
-            return Ok(Self::new(Arc::new(load_exec_policy(config_stack).await?)));
+            let mut manager = Self::new(Arc::new(load_exec_policy(config_stack).await?));
+            manager.strict_rules = true;
+            return Ok(manager);
         }
         let (policy, warning) = load_exec_policy_with_warning(config_stack).await?;
         if let Some(err) = warning.as_ref() {
             tracing::warn!("failed to parse rules: {err}");
         }
         Ok(Self::new(Arc::new(policy)))
+    }
+
+    pub(crate) fn strict_rules(&self) -> bool {
+        self.strict_rules
     }
 
     pub(crate) fn current(&self) -> Arc<Policy> {
@@ -357,11 +370,16 @@ impl ExecPolicyManager {
         let match_options = MatchOptions {
             resolve_host_executables: true,
         };
-        let evaluation = exec_policy.check_multiple_with_options(
+        let mut evaluation = exec_policy.check_multiple_with_options(
             commands.iter(),
             &exec_policy_fallback,
             &match_options,
         );
+        if self.strict_rules {
+            // The original command, not the parsed one: parsing keeps only
+            // the first command of a heredoc script.
+            apply_strict_forbidden_matches(&mut evaluation, exec_policy.as_ref(), command);
+        }
 
         let requested_amendment = if auto_amendment_allowed {
             derive_requested_execpolicy_amendment_from_prefix_rule(
@@ -850,6 +868,176 @@ fn profile_has_managed_filesystem_restrictions(permission_profile: &PermissionPr
 
 pub(crate) fn default_policy_path(codex_home: &Path) -> PathBuf {
     codex_home.join(RULES_DIR_NAME).join(DEFAULT_POLICY_FILE)
+}
+
+/// Program-name suffixes a launcher may add (Windows, npm shims).
+const PROGRAM_SUFFIXES: [&str; 6] = [".exe", ".com", ".cmd", ".bat", ".ps1", ".js"];
+/// Later occurrences of a rule's second word tried per program word.
+const STRICT_MAX_SECOND_WORDS: usize = 8;
+/// Added to the reason when only strict matching found the rule.
+const STRICT_MATCH_NOTE: &str = "matched in the command text under strict rules (security level Aggressive); put data in a file rather than on the command line";
+
+/// Best-effort matches of multi-word `forbidden` prefix rules (such as
+/// `corbanu vault`) against what `command` could run. Used only under
+/// `strict_rules` and only to refuse, so over-matching cannot allow anything.
+///
+/// The command's words, including scripts and strings at any depth
+/// (`sh -c '…'`, `env -S '…'`, `eval`, heredocs, `python -c`), become one
+/// token stream split on whitespace and shell punctuation, once with quotes
+/// as separators and once with quotes removed (`va''ult`). A token naming a
+/// rule's program (any directory, case or launcher suffix) followed by the
+/// rule's next word, directly or after options (`corbanu -c k=v vault`),
+/// matches. So wrappers (`env -i X=1`, `nohup`, `timeout 5`) are seen
+/// through. Out of reach: names or arguments built at run time
+/// (`c=corbanu; $c vault`, `corbanu "$@"`, `${x:-vault}`, `$'\x76ault'`),
+/// aliases, functions and copies of a binary; the sandbox and the zsh-fork
+/// exec check cover those. Accepted over-matching: the words appearing in
+/// text, such as `git commit -m "… corbanu vault …"`.
+fn strict_forbidden_matches(policy: &Policy, command: &[String]) -> Vec<RuleMatch> {
+    let mut rules_by_program: HashMap<String, Vec<&PrefixRule>> = HashMap::new();
+    for rule in policy.rules().iter_all().flat_map(|(_, rules)| rules) {
+        if let Some(rule) = rule.as_any().downcast_ref::<PrefixRule>()
+            && rule.decision == Decision::Forbidden
+            && !rule.pattern.rest.is_empty()
+        {
+            rules_by_program
+                .entry(rule.pattern.first.to_ascii_lowercase())
+                .or_default()
+                .push(rule);
+        }
+    }
+    let mut matches = Vec::new();
+    if rules_by_program.is_empty() {
+        return matches;
+    }
+    for remove_quotes in [false, true] {
+        let tokens = command
+            .iter()
+            .flat_map(|word| loose_tokens(word, remove_quotes))
+            .collect::<Vec<_>>();
+        let mut positions: HashMap<&str, Vec<usize>> = HashMap::new();
+        for (index, token) in tokens.iter().enumerate() {
+            positions.entry(token.as_str()).or_default().push(index);
+        }
+        for (start, token) in tokens.iter().enumerate() {
+            let Some(rules) = program_key(token).and_then(|key| rules_by_program.get(&key)) else {
+                continue;
+            };
+            let after_options = tokens
+                .get(start + 1)
+                .is_some_and(|next| next.starts_with('-'));
+            for rule in rules {
+                let seconds = rule.pattern.rest[0]
+                    .alternatives()
+                    .iter()
+                    .filter_map(|second| positions.get(second.as_str()))
+                    .flat_map(|found| {
+                        let first = found.partition_point(|&index| index <= start);
+                        found[first..].iter().take(STRICT_MAX_SECOND_WORDS)
+                    })
+                    .filter(|&&index| index == start + 1 || after_options);
+                for &second in seconds {
+                    let candidate = std::iter::once(rule.pattern.first.to_string())
+                        .chain(
+                            tokens[second..]
+                                .iter()
+                                .take(rule.pattern.rest.len())
+                                .cloned(),
+                        )
+                        .collect::<Vec<_>>();
+                    let Some(matched_prefix) = rule.pattern.matches_prefix(&candidate) else {
+                        continue;
+                    };
+                    let justification = Some(match &rule.justification {
+                        Some(justification) => format!("{justification} ({STRICT_MATCH_NOTE})"),
+                        None => STRICT_MATCH_NOTE.to_string(),
+                    });
+                    let rule_match = RuleMatch::PrefixRuleMatch {
+                        matched_prefix,
+                        decision: Decision::Forbidden,
+                        resolved_program: None,
+                        justification,
+                    };
+                    if !matches.contains(&rule_match) {
+                        matches.push(rule_match);
+                    }
+                }
+            }
+        }
+    }
+    matches
+}
+
+/// Make `evaluation` Forbidden when [`strict_forbidden_matches`] finds any.
+pub(crate) fn apply_strict_forbidden_matches(
+    evaluation: &mut Evaluation,
+    policy: &Policy,
+    command: &[String],
+) {
+    let found = strict_forbidden_matches(policy, command);
+    if found.is_empty() || evaluation.decision == Decision::Forbidden {
+        return;
+    }
+    evaluation.decision = Decision::Forbidden;
+    // Strict matches first, so the reason says why the command was refused.
+    let mut matched_rules = found;
+    matched_rules.append(&mut evaluation.matched_rules);
+    evaluation.matched_rules = matched_rules;
+}
+
+/// `word` split into shell words, ignoring quoting: whitespace, shell
+/// punctuation and `env -S`'s `\_` separate words. Quotes and escapes
+/// separate words too, or with `remove_quotes` are dropped so that
+/// `va''ult` reads as `vault`.
+fn loose_tokens(word: &str, remove_quotes: bool) -> Vec<String> {
+    let is_quote = |c: char| matches!(c, '\'' | '"' | '`' | '\\' | '^');
+    let word = word.replace("\\_", " ");
+    let word = if remove_quotes {
+        word.replace(is_quote, "")
+    } else {
+        word
+    };
+    word.split(|c: char| {
+        c.is_whitespace()
+            || is_quote(c)
+            || matches!(
+                c,
+                ';' | '&'
+                    | '|'
+                    | '('
+                    | ')'
+                    | '<'
+                    | '>'
+                    | '{'
+                    | '}'
+                    | '['
+                    | ']'
+                    | ','
+                    | '='
+                    | '$'
+                    | '!'
+            )
+    })
+    .filter(|token| !token.is_empty())
+    .map(str::to_string)
+    .collect()
+}
+
+/// The lowercased rule key `token` could run as: its file name without a
+/// launcher suffix. An option cluster with an attached `env -S` string
+/// (`-iScorbanu`) yields the string; the check is deliberately loose.
+fn program_key(token: &str) -> Option<String> {
+    let name = token.rsplit('/').next().unwrap_or(token);
+    let name = match name.strip_prefix('-') {
+        Some(cluster) if !cluster.starts_with('-') => cluster.split_once('S')?.1,
+        _ => name,
+    };
+    let name = name.to_ascii_lowercase();
+    let name = PROGRAM_SUFFIXES
+        .iter()
+        .find_map(|suffix| name.strip_suffix(suffix))
+        .unwrap_or(&name);
+    (!name.is_empty()).then(|| name.to_string())
 }
 
 fn commands_for_exec_policy(command: &[String]) -> ExecPolicyCommands {

@@ -371,7 +371,7 @@ impl SqliteConfig {
 }
 
 /// Whether `path` is an existing, non-empty database file.
-fn database_has_content(path: &Path) -> bool {
+pub(crate) fn database_has_content(path: &Path) -> bool {
     std::fs::metadata(path).is_ok_and(|metadata| metadata.len() > 0)
 }
 

@@ -425,6 +425,7 @@ async fn preapproved_additional_permissions_escalate_intercepted_exec() -> anyho
     );
     let provider = CoreShellActionProvider {
         policy: Arc::new(RwLock::new(codex_execpolicy::Policy::empty())),
+        strict_rules: false,
         session: Arc::new(session),
         turn: Arc::new(turn_context),
         call_id: "preapproved-additional-permissions".to_string(),
@@ -560,6 +561,7 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
         codex_shell_command::parse_command::shlex_join(&["/usr/bin/touch".to_string(), target_str]);
     let provider = CoreShellActionProvider {
         policy: std::sync::Arc::new(RwLock::new(codex_execpolicy::Policy::empty())),
+        strict_rules: false,
         session: std::sync::Arc::new(session),
         turn: std::sync::Arc::new(turn_context),
         call_id: "execve-hook-call".to_string(),
@@ -770,6 +772,7 @@ prefix_rule(pattern = ["{cat_path_literal}"], decision = "allow")
     let workdir = test_sandbox_cwd();
     let provider = CoreShellActionProvider {
         policy: Arc::new(RwLock::new(policy)),
+        strict_rules: false,
         session: Arc::new(session),
         turn: Arc::new(turn_context),
         call_id: "deny-read-prefix-allow".to_string(),
@@ -806,6 +809,7 @@ async fn denied_reads_keep_granular_sandbox_rejection_for_escalation() -> anyhow
     let workdir = test_sandbox_cwd();
     let provider = CoreShellActionProvider {
         policy: Arc::new(RwLock::new(PolicyParser::new().build())),
+        strict_rules: false,
         session: Arc::new(session),
         turn: Arc::new(turn_context),
         call_id: "deny-read-granular-sandbox-reject".to_string(),
@@ -920,4 +924,61 @@ host_executable(name = "git", paths = ["{allowed_git_literal}"])
         &evaluation.matched_rules,
         evaluation.decision
     ));
+}
+
+/// Under strict rules, an intercepted `env corbanu vault …` is refused by the
+/// `corbanu vault` rule; without them it is not.
+#[tokio::test(flavor = "current_thread")]
+async fn strict_rules_refuse_intercepted_wrapped_vault_exec() -> anyhow::Result<()> {
+    let mut parser = PolicyParser::new();
+    parser.parse(
+        "vault.rules",
+        r#"prefix_rule(pattern = ["corbanu", "vault"], decision = "forbidden", justification = "no vault")"#,
+    )?;
+    let policy = parser.build();
+    let env = AbsolutePathBuf::try_from(host_absolute_path(&["usr", "bin", "env"])).unwrap();
+    let argv = ["env", "FOO=1", "corbanu", "vault", "list"].map(str::to_string);
+    let mut actions = Vec::new();
+    for strict_rules in [true, false] {
+        let (session, turn_context) = make_session_and_context().await;
+        let provider = CoreShellActionProvider {
+            policy: Arc::new(RwLock::new(policy.clone())),
+            strict_rules,
+            session: Arc::new(session),
+            turn: Arc::new(turn_context),
+            call_id: "strict-wrapped-vault".to_string(),
+            environment_id: "local".to_string(),
+            tool_name: GuardianCommandSource::Shell,
+            approval_policy: AskForApproval::Never,
+            permission_profile: PermissionProfile::workspace_write(),
+            sandbox_permissions: SandboxPermissions::UseDefault,
+            approval_sandbox_permissions: SandboxPermissions::UseDefault,
+            prompt_permissions: None,
+            stopwatch: codex_shell_escalation::Stopwatch::new(Duration::from_secs(1)),
+        };
+        actions.push(
+            codex_shell_escalation::EscalationPolicy::determine_action(
+                &provider,
+                &env,
+                &argv,
+                &test_sandbox_cwd(),
+            )
+            .await?,
+        );
+    }
+    assert!(
+        matches!(
+            actions[0],
+            codex_shell_escalation::EscalationDecision::Deny { .. }
+        ),
+        "{actions:?}"
+    );
+    assert!(
+        !matches!(
+            actions[1],
+            codex_shell_escalation::EscalationDecision::Deny { .. }
+        ),
+        "{actions:?}"
+    );
+    Ok(())
 }
