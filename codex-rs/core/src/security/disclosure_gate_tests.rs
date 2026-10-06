@@ -516,3 +516,31 @@ fn pf_28_s01_event_that_cannot_be_rebuilt_is_delivered_stripped() {
     assert_eq!(event.call_id, "call-pf28-strip");
     assert!(!String::from_utf8_lossy(&event.chunk).contains(CANARY));
 }
+
+#[test]
+fn pf_28_s01_value_in_an_object_key_or_number_is_never_delivered_raw() {
+    let gate = gate();
+    // MCP structured content can carry a value as a key.
+    let content = serde_json::json!({ CANARY: "x", "other": "y" });
+    let Gated::Changed(gated) = gate_value_with(&gate, OutputSink::Presentation, &content) else {
+        panic!("key not gated");
+    };
+    let text = serde_json::to_string(&gated).expect("json");
+    assert!(!text.contains(CANARY), "{text}");
+    assert!(
+        text.contains("[REDACTED:env:PF28_CANARY_API_KEY]"),
+        "{text}"
+    );
+    assert_eq!(gated.as_object().map(serde_json::Map::len), Some(2));
+
+    // A numeric value cannot be rewritten: it is withheld, not passed.
+    let numeric = OutputGate::new();
+    numeric
+        .register("account", SecretClass::Operational, "987654321012")
+        .expect("register");
+    let value = serde_json::json!({ "balance": 987_654_321_012_u64 });
+    assert!(matches!(
+        gate_value_with(&numeric, OutputSink::Presentation, &value),
+        Gated::Withheld
+    ));
+}

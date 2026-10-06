@@ -240,6 +240,7 @@ fn strip_value<T: Serialize + DeserializeOwned>(
                     .for_each(|item| strip(gate, sink, item, with));
             }
             serde_json::Value::Object(map) => {
+                gate_keys(map, |key| gate.scrub(sink, key).map(|_| with.to_string()));
                 map.values_mut()
                     .for_each(|item| strip(gate, sink, item, with));
             }
@@ -284,9 +285,12 @@ fn gate_value_with<T: Serialize + DeserializeOwned>(
     let Ok(mut json) = serde_json::from_str::<serde_json::Value>(&serialized) else {
         return Gated::Withheld;
     };
-    if !scrub_json(gate, sink, &mut json) {
-        // Found only across field boundaries; nothing a single field holds.
-        return Gated::Unchanged;
+    scrub_json(gate, sink, &mut json);
+    // Still found after every key and string was gated (a number, or a value
+    // spanning fields): fail closed.
+    if serde_json::to_string(&json).map_or(true, |text| gate.scrub(sink, &text).is_some()) {
+        tracing::warn!("PF-28-S01: withheld a {} value", sink.as_str());
+        return Gated::Withheld;
     }
     match serde_json::from_value(json) {
         Ok(value) => Gated::Changed(value),
@@ -366,11 +370,49 @@ fn scrub_json(gate: &OutputGate, sink: OutputSink, value: &mut serde_json::Value
         serde_json::Value::Array(items) => items.iter_mut().fold(false, |changed, item| {
             scrub_json(gate, sink, item) | changed
         }),
-        serde_json::Value::Object(map) => map.values_mut().fold(false, |changed, item| {
-            scrub_json(gate, sink, item) | changed
-        }),
+        serde_json::Value::Object(map) => {
+            let mut changed = gate_keys(map, |key| {
+                gate.scrub(sink, key).map(|(scrubbed, provenance)| {
+                    log_provenance(&provenance);
+                    scrubbed
+                })
+            });
+            for item in map.values_mut() {
+                changed |= scrub_json(gate, sink, item);
+            }
+            changed
+        }
         _ => false,
     }
+}
+
+/// Replaces object keys that hold a managed value (map keys can carry one:
+/// MCP structured content, paths in patch events). A key that collides after
+/// replacement gets a numeric suffix so no entry is lost.
+fn gate_keys(
+    map: &mut serde_json::Map<String, serde_json::Value>,
+    replace: impl Fn(&str) -> Option<String>,
+) -> bool {
+    let renamed: Vec<(String, String)> = map
+        .keys()
+        .filter_map(|key| replace(key).map(|new| (key.clone(), new)))
+        .collect();
+    if renamed.is_empty() {
+        return false;
+    }
+    for (old, new) in renamed {
+        let Some(item) = map.remove(&old) else {
+            continue;
+        };
+        let mut key = new.clone();
+        let mut suffix = 2;
+        while map.contains_key(&key) {
+            key = format!("{new}#{suffix}");
+            suffix += 1;
+        }
+        map.insert(key, item);
+    }
+    true
 }
 
 fn log_provenance(provenance: &output_gate::Provenance) {
