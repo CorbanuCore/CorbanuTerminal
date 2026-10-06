@@ -167,7 +167,7 @@ mod linux {
             .and_then(|ruleset| {
                 ruleset.add_rules(landlock::path_beneath_rules([writable_dir], access_rw))
             });
-        match ruleset.and_then(|ruleset| ruleset.restrict_self()) {
+        match ruleset.and_then(landlock::RulesetCreated::restrict_self) {
             Ok(status) => status.ruleset != RulesetStatus::NotEnforced,
             Err(_) => false,
         }

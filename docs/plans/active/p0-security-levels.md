@@ -42,6 +42,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-24-s03-security-picker"
     branch: "codex/pf-24-s03-security-picker"
     base_commit: "24242c1b0ee5388cbfbfe1b0d8f63459945b588d"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-33-s01-20261006"
+    branch: "feat/pf-33-s01-url-dns-redirect"
+    base_commit: "a662c2ce357ee542fdac08ecaf083d27fd58391b"
 ---
 
 # P0 `/security` levels

@@ -150,6 +150,10 @@ pub struct NetworkProxyConfig {
     /// directory (Core passes `CODEX_HOME/run`). Set by Core only.
     #[serde(skip)]
     pub credential_broker_runtime_dir: Option<std::path::PathBuf>,
+    /// PF-33-S01: enforce URL, DNS and redirect destination policy on every
+    /// proxied request (feature `url_destination_policy`). Set by Core only.
+    #[serde(skip)]
+    pub url_destination_policy: bool,
     #[serde(default)]
     pub dangerously_allow_plaintext_credential_injection: bool,
     #[serde(default)]
@@ -176,6 +180,7 @@ impl Default for NetworkProxyConfig {
             isolated_credential_broker: false,
             secretless_agent_launch: None,
             credential_broker_runtime_dir: None,
+            url_destination_policy: false,
             dangerously_allow_plaintext_credential_injection: false,
             mitm_hooks: Vec::new(),
         }
@@ -201,6 +206,13 @@ impl NetworkProxyConfig {
     /// environment (`None` turns secretless launch off).
     pub fn set_secretless_agent_launch(&mut self, brokered_env_keys: Option<Vec<String>>) {
         self.secretless_agent_launch = brokered_env_keys;
+    }
+
+    /// PF-33-S01: arm the URL, DNS and redirect destination guard. It needs
+    /// interception to see the path, method and redirects of HTTPS requests.
+    pub fn set_url_destination_policy(&mut self, enabled: bool) {
+        self.url_destination_policy = enabled;
+        self.mitm |= enabled;
     }
 
     /// PF-27-S02: where the isolated broker creates its private directory.
@@ -658,6 +670,7 @@ mod tests {
                 isolated_credential_broker: false,
                 secretless_agent_launch: None,
                 credential_broker_runtime_dir: None,
+                url_destination_policy: false,
                 dangerously_allow_plaintext_credential_injection: false,
                 mitm_hooks: Vec::new(),
             }

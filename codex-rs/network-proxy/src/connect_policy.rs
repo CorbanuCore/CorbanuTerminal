@@ -85,6 +85,18 @@ impl TcpStreamConnector for TargetCheckedStreamConnector {
 
 impl TargetCheckedStreamConnector {
     async fn allows_non_public_target(&self, addr: SocketAddr) -> Result<bool, BoxError> {
+        // PF-33-S01: under the destination guard, local binding and literal
+        // local allowlist entries are not private-network trust grants.
+        if crate::destination::guard_enabled(&self.state)
+            .await
+            .map_err(|err| {
+                OpaqueError::from_display(err.to_string())
+                    .context("read destination policy")
+                    .into_boxed()
+            })?
+        {
+            return Ok(false);
+        }
         if self.state.allow_local_binding().await.map_err(|err| {
             let err: BoxError = err.into();
             OpaqueError::from_boxed(err)
@@ -182,6 +194,33 @@ mod tests {
         let result = Service::serve(&connector, request).await;
 
         assert!(result.is_ok(), "local target should be allowed: {result:?}");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn pf_33_s01_guard_rejects_local_peer_despite_local_binding() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .await
+            .expect("bind local listener");
+        let target = listener.local_addr().expect("local addr");
+        let mut config = NetworkProxyConfig {
+            allow_local_binding: true,
+            ..NetworkProxyConfig::default()
+        };
+        config.set_allowed_domains(vec![target.ip().to_string()]);
+        config.set_url_destination_policy(/*enabled*/ true);
+        let connector =
+            TargetCheckedTcpConnector::new(Arc::new(network_proxy_state_for_policy(config)));
+
+        let request: rama_tcp::client::Request =
+            rama_tcp::client::Request::new(HostWithPort::from(target));
+        let err = Service::serve(&connector, request)
+            .await
+            .expect_err("guarded local peer should be rejected");
+
+        assert!(
+            format!("{err:?}").contains("network target rejected by policy"),
+            "unexpected error: {err:?}"
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]

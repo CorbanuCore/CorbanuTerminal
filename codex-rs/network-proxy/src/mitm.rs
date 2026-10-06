@@ -1,6 +1,15 @@
 use crate::certs::ManagedMitmCa;
 use crate::config::NetworkMode;
 use crate::credential_broker::CredentialRouting;
+use crate::destination;
+use crate::destination::DenialSite;
+use crate::destination::DestinationGuard;
+use crate::destination::HostPatterns;
+use crate::destination::RedirectLedger;
+use crate::destination::RedirectScope;
+use crate::destination::SystemResolver;
+use crate::destination::is_redirect_response;
+use crate::destination::request_has_body;
 use crate::mitm_hook::HookEvaluation;
 use crate::mitm_hook::MitmHookActions;
 use crate::policy::normalize_host;
@@ -67,6 +76,8 @@ pub struct MitmState {
     upstream_tls_root_store: Arc<rustls::RootCertStore>,
     inspect: bool,
     max_body_bytes: usize,
+    /// PF-33-S01 redirect chains relayed through this proxy.
+    redirects: RedirectLedger,
 }
 
 pub(crate) struct MitmUpstreamConfig {
@@ -171,6 +182,7 @@ impl MitmState {
             upstream_tls_root_store,
             inspect: MITM_INSPECT_BODIES,
             max_body_bytes: MITM_MAX_BODY_BYTES,
+            redirects: RedirectLedger::default(),
         })
     }
 
@@ -296,8 +308,57 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     let method = req.method().as_str().to_string();
     let path = path_and_query(req.uri());
     let log_path = path_for_log(req.uri());
+    let authority = authority_header_value(&target_host, target_port);
+    let app_state = &request_ctx.policy.app_state;
+
+    // PF-33-S01: authorize the full URL, method and DNS answers, and place the
+    // request in its client's redirect chain.
+    let destination = if destination::guard_enabled(app_state).await? {
+        let url = format!("https://{authority}{path}");
+        let client = req
+            .extensions()
+            .get::<SocketInfo>()
+            .map(|info| info.peer_addr().to_string());
+        let chain_client = format!(
+            "{}|{}",
+            app_state.execution_id().unwrap_or_default(),
+            req.extensions()
+                .get::<SocketInfo>()
+                .map(|info| info.peer_addr().ip().to_string())
+                .unwrap_or_default()
+        );
+        match DestinationGuard::protected()
+            .authorize_request(
+                &url,
+                &method,
+                &chain_client,
+                &mitm.redirects,
+                &SystemResolver,
+            )
+            .await
+        {
+            Ok(authorized) => Some((authorized, client)),
+            Err(denial) => {
+                let site = DenialSite {
+                    host: &target_host,
+                    port: target_port,
+                    method: Some(&method),
+                    protocol: "https",
+                    client,
+                    fail_command: false,
+                };
+                return Ok(destination::blocked(app_state, &denial, site).await);
+            }
+        }
+    } else {
+        None
+    };
 
     let (mut parts, body) = req.into_parts();
+    let has_body = request_has_body(&parts.headers);
+    if let Some((authorized, _)) = destination.as_ref() {
+        authorized.strip_cross_origin_credentials(&mut parts.headers);
+    }
     if request_ctx
         .policy
         .app_state
@@ -329,7 +390,6 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
         return Ok(blocked_text_response(REASON_POLICY_DENIED));
     }
     apply_mitm_hook_actions(&mut parts.headers, hook_actions.as_ref());
-    let authority = authority_header_value(&target_host, target_port);
     parts.uri = build_https_uri(&authority, &path)?;
     parts
         .headers
@@ -352,7 +412,7 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     };
 
     let upstream_req = Request::from_parts(parts, body);
-    let upstream_resp = match routing {
+    let mut upstream_resp = match routing {
         CredentialRouting::Direct => request_ctx.upstream.serve(upstream_req).await?,
         #[cfg(unix)]
         CredentialRouting::Brokered(route) => match route.forward(upstream_req).await {
@@ -367,6 +427,40 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
             }
         },
     };
+    if let Some((authorized, client)) = destination
+        && is_redirect_response(upstream_resp.status().as_u16(), upstream_resp.headers())
+    {
+        let status = upstream_resp.status().as_u16();
+        let checked = match HostPatterns::current(app_state).await {
+            Ok(hosts) => {
+                DestinationGuard::protected()
+                    .check_response(
+                        &authorized,
+                        has_body,
+                        status,
+                        upstream_resp.headers_mut(),
+                        RedirectScope {
+                            hosts: &hosts,
+                            ledger: &mitm.redirects,
+                            resolver: &SystemResolver,
+                        },
+                    )
+                    .await
+            }
+            Err(err) => return Err(err.context("read host policy for redirect check")),
+        };
+        if let Err(denial) = checked {
+            let site = DenialSite {
+                host: &target_host,
+                port: target_port,
+                method: Some(&method),
+                protocol: "https-redirect",
+                client,
+                fail_command: false,
+            };
+            return Ok(destination::blocked(app_state, &denial, site).await);
+        }
+    }
     respond_with_inspection(
         upstream_resp,
         inspect,

@@ -1,6 +1,12 @@
 use crate::attribution::BindConnectionAttribution;
 use crate::config::NetworkMode;
 use crate::connect_policy::TargetCheckedTcpConnector;
+use crate::destination;
+use crate::destination::DenialSite;
+use crate::destination::DestinationDenial;
+use crate::destination::DestinationGuard;
+use crate::destination::SystemResolver;
+use crate::destination_contract::DecisionReason;
 use crate::mitm;
 use crate::network_policy::BlockDecisionAuditEventArgs;
 use crate::network_policy::NetworkDecision;
@@ -271,6 +277,27 @@ async fn http_connect_accept(
         }
     }
 
+    // PF-33-S01: the tunnel authority must also pass the destination policy
+    // against current DNS answers.
+    let destination_guard = destination::guard_enabled(&app_state)
+        .await
+        .map_err(|err| internal_error("failed to read destination policy", err))?;
+    if destination_guard
+        && let Err(denial) = DestinationGuard::protected()
+            .authorize_tunnel(&host, authority.port, &SystemResolver)
+            .await
+    {
+        let site = DenialSite {
+            host: &host,
+            port: authority.port,
+            method: Some("CONNECT"),
+            protocol: "http-connect",
+            client: client.clone(),
+            fail_command: true,
+        };
+        return Err(destination::blocked(&app_state, &denial, site).await);
+    }
+
     let mode = app_state
         .network_mode()
         .await
@@ -298,6 +325,14 @@ async fn http_connect_accept(
             HostMitmRequirement::Tls => ConnectMitmMode::DetectTls,
             HostMitmRequirement::Always => ConnectMitmMode::Enabled,
         }
+    };
+    // PF-33-S01: under the guard every tunnel is intercepted so each inner
+    // request and redirect is checked. A non-TLS stream fails the handshake
+    // instead of passing through, and missing MITM state is refused below.
+    let connect_mitm_mode = if destination_guard {
+        ConnectMitmMode::Enabled
+    } else {
+        connect_mitm_mode
     };
 
     if connect_mitm_mode == ConnectMitmMode::Enabled && mitm_state.is_none() {
@@ -759,6 +794,25 @@ async fn http_plain_proxy(
         }
     }
 
+    // PF-33-S01: public retrieval is HTTPS-only, so the guard refuses every
+    // plain-HTTP request without resolving it.
+    match destination::guard_enabled(&app_state).await {
+        Ok(false) => {}
+        Ok(true) => {
+            let denial = DestinationDenial::Decision(DecisionReason::PublicRuleMismatch);
+            let site = DenialSite {
+                host: &host,
+                port,
+                method: Some(req.method().as_str()),
+                protocol: "http",
+                client: client.clone(),
+                fail_command: true,
+            };
+            return Ok(destination::blocked(&app_state, &denial, site).await);
+        }
+        Err(err) => return Ok(internal_error("failed to read destination policy", err)),
+    }
+
     if !method_allowed {
         emit_http_block_decision_audit_event(
             &app_state,
@@ -1174,6 +1228,100 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    fn pf_33_s01_policy(allowed: &str, guard: bool) -> Arc<NetworkProxyState> {
+        let mut policy = NetworkProxyConfig {
+            allow_local_binding: true,
+            ..NetworkProxyConfig::default()
+        };
+        policy.set_allowed_domains(vec![allowed.to_string()]);
+        policy.set_url_destination_policy(guard);
+        Arc::new(network_proxy_state_for_policy(policy))
+    }
+
+    async fn pf_33_s01_connect(state: Arc<NetworkProxyState>, authority: &str) -> Response {
+        let mut req = Request::builder()
+            .method(Method::CONNECT)
+            .uri(format!("https://{authority}"))
+            .header("host", authority)
+            .body(Body::empty())
+            .unwrap();
+        req.extensions_mut().insert(state);
+        match http_connect_accept(
+            /*policy_decider*/ None, /*environment_id*/ None, req,
+        )
+        .await
+        {
+            Ok((response, _request)) => response,
+            Err(response) => response,
+        }
+    }
+
+    fn pf_33_s01_blocked_by_destination_policy(response: &Response) -> bool {
+        response.status() == StatusCode::FORBIDDEN
+            && response
+                .headers()
+                .get("x-proxy-error")
+                .is_some_and(|value| value == "blocked-by-destination-policy")
+    }
+
+    #[tokio::test]
+    async fn pf_33_s01_connect_guard_authorizes_port_and_private_trust() {
+        // Flag off: today's behaviour (local binding plus a literal allowlist entry).
+        for authority in ["93.184.216.34:8443", "127.0.0.1:443"] {
+            let host = authority.split(':').next().unwrap();
+            let response = pf_33_s01_connect(pf_33_s01_policy(host, false), authority).await;
+            assert_eq!(response.status(), StatusCode::OK, "{authority}");
+        }
+        // Flag on: HTTPS port only, and local binding is not a private grant.
+        for authority in ["93.184.216.34:8443", "127.0.0.1:443"] {
+            let host = authority.split(':').next().unwrap();
+            let response = pf_33_s01_connect(pf_33_s01_policy(host, true), authority).await;
+            assert!(
+                pf_33_s01_blocked_by_destination_policy(&response),
+                "{authority}"
+            );
+        }
+        // An allowed tunnel is always intercepted under the guard; without MITM
+        // state it fails closed instead of passing through unchecked.
+        let state = pf_33_s01_policy("93.184.216.34", true);
+        let response = pf_33_s01_connect(state.clone(), "93.184.216.34:443").await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            response.headers().get("x-proxy-error").unwrap(),
+            "blocked-by-mitm-required"
+        );
+        let response = pf_33_s01_connect(
+            pf_33_s01_policy("93.184.216.34", false),
+            "93.184.216.34:443",
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn pf_33_s01_plain_http_is_refused_under_the_guard() {
+        let state = pf_33_s01_policy("93.184.216.34", true);
+        let mut req = Request::builder()
+            .method(Method::GET)
+            .uri("http://93.184.216.34/")
+            .header(header::HOST, "93.184.216.34")
+            .body(Body::empty())
+            .unwrap();
+        req.extensions_mut().insert(state.clone());
+        let response = http_plain_proxy(
+            /*policy_decider*/ None, /*environment_id*/ None, req,
+        )
+        .await
+        .unwrap();
+        assert!(pf_33_s01_blocked_by_destination_policy(&response));
+        let blocked = state.blocked_snapshot().await.unwrap();
+        assert_eq!(blocked.len(), 1);
+        assert_eq!(
+            blocked[0].reason,
+            "destination_policy:scheme_port_or_method"
+        );
     }
 
     #[tokio::test]

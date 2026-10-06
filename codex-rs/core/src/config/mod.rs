@@ -3991,6 +3991,9 @@ impl Config {
                 );
             }
             configured_network_proxy_config.enabled = true;
+            if features.enabled(Feature::UrlDestinationPolicy) {
+                configured_network_proxy_config.set_url_destination_policy(/*enabled*/ true);
+            }
             if features.enabled(Feature::IsolatedCredentialBroker) {
                 configured_network_proxy_config
                     .set_isolated_credential_broker_enabled(/*enabled*/ true);

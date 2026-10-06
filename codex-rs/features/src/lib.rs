@@ -159,6 +159,8 @@ pub enum Feature {
     SecretlessAgentLaunch,
     /// Gate managed secrets out of model, tool, transcript, trace and diagnostic output (PF-28-S01).
     SecretOutputGate,
+    /// Enforce URL, DNS and redirect destination policy in the managed proxy (PF-33-S01).
+    UrlDestinationPolicy,
     /// Respect host system proxy settings for Codex-owned network clients.
     RespectSystemProxy,
     /// Enable collab tools.
@@ -883,6 +885,12 @@ pub const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         id: Feature::SecretOutputGate,
         key: "secret_output_gate",
+        stage: Stage::UnderDevelopment,
+        default_enabled: false,
+    },
+    FeatureSpec {
+        id: Feature::UrlDestinationPolicy,
+        key: "url_destination_policy",
         stage: Stage::UnderDevelopment,
         default_enabled: false,
     },
