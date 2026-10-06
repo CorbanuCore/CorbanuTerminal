@@ -123,7 +123,10 @@ async fn startup_scrubs_leaked_secrets_from_existing_logs_db_once() {
         .collect::<std::collections::BTreeSet<_>>();
     assert_eq!(
         present,
-        SECRETS.iter().map(|secret| secret.to_string()).collect(),
+        SECRETS
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect(),
         "every secret is in the fixture before the scrub"
     );
 
@@ -182,7 +185,10 @@ async fn busy_checkpoint_is_finished_on_a_later_start() {
     LOGS_MIGRATOR.run(&pool).await.expect("apply logs schema");
     insert(&pool, format!("?key={QUERY}").as_bytes()).await;
     let mut reader = pool.acquire().await.expect("reader connection");
-    sqlx::query("BEGIN").execute(&mut *reader).await.expect("begin");
+    sqlx::query("BEGIN")
+        .execute(&mut *reader)
+        .await
+        .expect("begin");
     sqlx::query("SELECT COUNT(*) FROM logs")
         .execute(&mut *reader)
         .await

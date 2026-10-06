@@ -77,10 +77,9 @@ pub(super) async fn scrub_once(pool: &SqlitePool) -> anyhow::Result<()> {
         sqlx::query("PRAGMA busy_timeout = 100")
             .execute(&mut *connection)
             .await?;
-        let (busy, _, _) =
-            sqlx::query_as::<_, (i64, i64, i64)>("PRAGMA wal_checkpoint(TRUNCATE)")
-                .fetch_one(&mut *connection)
-                .await?;
+        let (busy, _, _) = sqlx::query_as::<_, (i64, i64, i64)>("PRAGMA wal_checkpoint(TRUNCATE)")
+            .fetch_one(&mut *connection)
+            .await?;
         if busy != 0 {
             tracing::debug!("logs db checkpoint busy; finishing the scrub on a later start");
             return Ok(());
