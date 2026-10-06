@@ -319,6 +319,48 @@ pub async fn wait_for_mcp_server(codex: &CodexThread, server_name: &str) -> anyh
     Ok(())
 }
 
+/// Rolls back `num_turns` and returns the rollback event.
+///
+/// Core emits `TurnComplete` before it releases the finished turn's slot, so a rollback submitted
+/// as soon as `TurnComplete` arrives can be rejected as "in progress". Clients retry that
+/// rejection; any other rollback error fails the test.
+pub async fn rollback_thread(
+    codex: &CodexThread,
+    num_turns: u32,
+) -> anyhow::Result<codex_protocol::protocol::ThreadRolledBackEvent> {
+    use codex_protocol::protocol::EventMsg;
+    use codex_protocol::protocol::Op;
+    use tokio::time::Duration;
+    use tokio::time::Instant;
+    use tokio::time::timeout;
+
+    const TURN_IN_PROGRESS: &str = "Cannot rollback while a turn is in progress.";
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let submission_id = codex.submit(Op::ThreadRollback { num_turns }).await?;
+        loop {
+            let ev = timeout(Duration::from_secs(30), codex.next_event())
+                .await
+                .expect("timeout waiting for thread rollback")
+                .expect("stream ended unexpectedly");
+            if ev.id != submission_id {
+                continue;
+            }
+            match ev.msg {
+                EventMsg::ThreadRolledBack(event) => return Ok(event),
+                EventMsg::Error(err) if err.message == TURN_IN_PROGRESS => break,
+                EventMsg::Error(err) => anyhow::bail!("thread rollback failed: {}", err.message),
+                _ => {}
+            }
+        }
+        assert!(
+            Instant::now() < deadline,
+            "previous turn never released its slot for rollback"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
 pub async fn submit_thread_settings(
     codex: &CodexThread,
     thread_settings: codex_protocol::protocol::ThreadSettingsOverrides,

@@ -322,7 +322,12 @@ async fn accounting_chat_native_delete_rejects_late_usage() -> anyhow::Result<()
     let server = MockServer::start().await;
     let mut gate = Gate::start(GateRoutes::ChatOnly).await?;
     let test = builder(gate.endpoint.clone(), enabled(&gate.endpoint))
-        .with_config(|config| config.model_provider.stream_max_retries = Some(1))
+        .with_config(|config| {
+            config.model_provider.stream_max_retries = Some(1);
+            // The held stream stays silent while a second thread starts and finishes a turn;
+            // the fixture's 2s idle timeout let loaded runners retry it behind the test's back.
+            config.model_provider.stream_idle_timeout_ms = Some(30_000);
+        })
         .build_with_auto_env(&server)
         .await?;
     submit(&test).await?;

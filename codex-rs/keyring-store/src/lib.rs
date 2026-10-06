@@ -490,13 +490,13 @@ mod bounded_operation_tests {
     fn serialized_operation_receives_its_own_execution_timeout() {
         let gate = Arc::new(KeyringOperationGate::default());
         let first_gate = Arc::clone(&gate);
-        // The queued save waits ~600ms (inside its 1s acquire budget) and then
-        // runs ~600ms (inside a fresh 1s execution budget); charging the wait
-        // to execution would time it out. Each side keeps ~400ms of slack for
-        // coarse Windows timers on a loaded runner.
+        // The queued save waits ~3s (inside its 5s acquire budget) and then
+        // runs ~3s (inside a fresh 5s execution budget); charging the wait to
+        // execution would time it out. Each side keeps ~2s of slack: 400ms was
+        // not enough for a loaded Windows nightly runner.
         let first = thread::spawn(move || {
-            run_bounded_keyring_operation(first_gate, "load", Duration::from_secs(5), || {
-                thread::sleep(Duration::from_millis(600));
+            run_bounded_keyring_operation(first_gate, "load", Duration::from_secs(10), || {
+                thread::sleep(Duration::from_secs(3));
                 Ok(())
             })
         });
@@ -515,8 +515,8 @@ mod bounded_operation_tests {
             thread::sleep(Duration::from_millis(5));
         }
 
-        run_bounded_keyring_operation(gate, "save", Duration::from_secs(1), || {
-            thread::sleep(Duration::from_millis(600));
+        run_bounded_keyring_operation(gate, "save", Duration::from_secs(5), || {
+            thread::sleep(Duration::from_secs(3));
             Ok(())
         })
         .expect("queue wait must not consume the operation execution timeout");
