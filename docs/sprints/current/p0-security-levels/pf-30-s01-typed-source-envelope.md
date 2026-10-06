@@ -68,6 +68,7 @@ updated: 2026-10-06
 
 ## Remaining
 
+- [ ] After merge: plan worker archives this record and updates navigation.
 - Moved out: persisted per-message origins and lineage (PF-30-S02); classifier producer (PF-35, P1).
 - Known gaps (QA file): images, audio and encrypted agent content unwrapped; MCP tool-search descriptions;
   realtime and memory summarisation still fail closed; parent→child messages labelled `child_agent`.
