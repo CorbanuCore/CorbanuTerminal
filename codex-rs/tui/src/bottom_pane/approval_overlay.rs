@@ -13,6 +13,8 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Duration;
+use std::time::Instant;
 
 use crate::app::app_server_requests::ResolvedAppServerRequest;
 #[cfg(test)]
@@ -22,6 +24,8 @@ use crate::app_event_sender::AppEventSender;
 use crate::approval_events::ApprovalResponseDestination;
 use crate::bottom_pane::BottomPaneView;
 use crate::bottom_pane::CancellationEvent;
+use crate::bottom_pane::approval_typing_guard::ShortcutTarget;
+use crate::bottom_pane::approval_typing_guard::TypingGuard;
 use crate::bottom_pane::list_selection_view::ListSelectionView;
 use crate::bottom_pane::list_selection_view::SelectionItem;
 use crate::bottom_pane::list_selection_view::SelectionViewParams;
@@ -67,6 +71,7 @@ use ratatui::style::Stylize;
 use ratatui::text::Line;
 use ratatui::text::Span;
 use ratatui::widgets::Paragraph;
+use ratatui::widgets::Widget;
 use ratatui::widgets::Wrap;
 
 /// Request coming from the agent that needs user approval.
@@ -181,6 +186,7 @@ pub(crate) struct ApprovalOverlay {
     features: Features,
     approval_keymap: ApprovalKeymap,
     list_keymap: ListKeymap,
+    typing_guard: TypingGuard,
 }
 
 impl ApprovalOverlay {
@@ -202,6 +208,7 @@ impl ApprovalOverlay {
             features,
             approval_keymap,
             list_keymap,
+            typing_guard: TypingGuard::default(),
         };
         view.set_current(request);
         view
@@ -230,6 +237,7 @@ impl ApprovalOverlay {
 
     fn set_current(&mut self, request: ApprovalRequest) {
         self.current_complete = false;
+        self.typing_guard.reset();
         let header = build_header(&request);
         let (options, params) = Self::build_options(
             &request,
@@ -539,11 +547,11 @@ impl ApprovalOverlay {
         self.done = true;
     }
 
-    /// Apply approval-specific shortcuts before delegating to list navigation.
+    /// Apply shortcuts that open another view of the current request.
     ///
-    /// `open_fullscreen` is handled here because it is orthogonal to list item
-    /// selection and should work regardless of current highlighted row.
-    fn try_handle_shortcut(&mut self, key_event: &KeyEvent) -> bool {
+    /// They are orthogonal to list item selection and work regardless of the
+    /// highlighted row.
+    fn try_handle_view_shortcut(&mut self, key_event: &KeyEvent) -> bool {
         if key_event.kind == KeyEventKind::Press
             && self.approval_keymap.open_fullscreen.is_pressed(*key_event)
             && let Some(request) = self.current_request.as_ref()
@@ -560,6 +568,14 @@ impl ApprovalOverlay {
         {
             self.app_event_tx
                 .send(AppEvent::SelectAgentThread(request.thread_id()));
+            return true;
+        }
+        false
+    }
+
+    /// Apply approval-specific chord shortcuts before delegating to list navigation.
+    fn try_handle_shortcut(&mut self, key_event: &KeyEvent) -> bool {
+        if self.try_handle_view_shortcut(key_event) {
             return true;
         }
 
@@ -579,17 +595,118 @@ impl ApprovalOverlay {
             false
         }
     }
-}
 
-impl BottomPaneView for ApprovalOverlay {
-    fn handle_key_event(&mut self, key_event: KeyEvent) {
+    fn is_list_navigation(&self, key_event: KeyEvent) -> bool {
+        let keymap = &self.list_keymap;
+        [
+            &keymap.move_up,
+            &keymap.move_down,
+            &keymap.page_up,
+            &keymap.page_down,
+            &keymap.jump_top,
+            &keymap.jump_bottom,
+        ]
+        .into_iter()
+        .any(|bindings| bindings.is_pressed(key_event))
+    }
+
+    /// Route a plain character. Characters never answer the prompt directly:
+    /// a decision key waits until [`TypingGuard`] confirms it was pressed
+    /// alone, and any other character marks the input as typed text.
+    fn handle_text_key(&mut self, key_event: KeyEvent, now: Instant) {
+        if !self.typing_guard.is_engaged() {
+            if self.try_handle_view_shortcut(&key_event) {
+                return;
+            }
+            if self.is_list_navigation(key_event) {
+                self.list.handle_key_event(key_event);
+                return;
+            }
+        }
+        let target = if self.list_keymap.cancel.is_pressed(key_event) {
+            Some(ShortcutTarget::Cancel)
+        } else {
+            self.options
+                .iter()
+                .position(|opt| opt.shortcuts.iter().any(|s| s.is_press(key_event)))
+                .or_else(|| match key_event.code {
+                    KeyCode::Char(c) => c
+                        .to_digit(/*radix*/ 10)
+                        .and_then(|number| (number as usize).checked_sub(1))
+                        .filter(|idx| *idx < self.options.len()),
+                    _ => None,
+                })
+                .map(ShortcutTarget::Option)
+        };
+        self.typing_guard.on_text_key(target, now);
+    }
+
+    fn handle_key_event_at(&mut self, key_event: KeyEvent, now: Instant) {
+        if key_event.kind == KeyEventKind::Release {
+            return;
+        }
+        if key_hint::is_plain_text_key_event(key_event) {
+            self.handle_text_key(key_event, now);
+            return;
+        }
         if self.try_handle_shortcut(&key_event) {
             return;
+        }
+        if self.list_keymap.accept.is_pressed(key_event) && self.typing_guard.blocks_accept() {
+            return;
+        }
+        if self.is_list_navigation(key_event) {
+            self.typing_guard.reset();
         }
         self.list.handle_key_event(key_event);
         if let Some(idx) = self.list.take_last_selected_index() {
             self.apply_selection(idx);
         }
+    }
+
+    /// Apply a decision key once it has settled without further typing.
+    fn tick_at(&mut self, now: Instant) -> bool {
+        match self.typing_guard.take_due(now) {
+            Some(ShortcutTarget::Option(idx)) => self.apply_selection(idx),
+            Some(ShortcutTarget::Cancel) => self.cancel_current_request(),
+            None => return false,
+        }
+        true
+    }
+
+    fn typed_text_notice(&self, width: u16) -> Vec<Line<'static>> {
+        if !self.typing_guard.typed_text() {
+            return Vec::new();
+        }
+        let text = "Typed text is not sent while this request is open. Use ↑/↓ and Enter to answer, \
+                    or Esc to cancel. Slash commands such as /permissions work after you answer.";
+        let wrap_width = usize::from(width.saturating_sub(4)).max(1);
+        std::iter::once(Line::from(""))
+            .chain(
+                textwrap::wrap(text, wrap_width)
+                    .into_iter()
+                    .map(|line| Line::from(vec!["  ".into(), line.into_owned().cyan()])),
+            )
+            .collect()
+    }
+}
+
+impl BottomPaneView for ApprovalOverlay {
+    fn handle_key_event(&mut self, key_event: KeyEvent) {
+        self.handle_key_event_at(key_event, Instant::now());
+    }
+
+    fn handle_paste(&mut self, _pasted: String) -> bool {
+        self.typing_guard.on_paste();
+        true
+    }
+
+    fn pre_draw_tick(&mut self, now: Instant) -> bool {
+        self.tick_at(now)
+    }
+
+    fn next_frame_delay(&self) -> Option<Duration> {
+        self.typing_guard.next_delay(Instant::now())
     }
 
     fn on_ctrl_c(&mut self) -> CancellationEvent {
@@ -620,11 +737,30 @@ impl BottomPaneView for ApprovalOverlay {
 
 impl Renderable for ApprovalOverlay {
     fn desired_height(&self, width: u16) -> u16 {
-        self.list.desired_height(width)
+        let notice_height = u16::try_from(self.typed_text_notice(width).len()).unwrap_or(u16::MAX);
+        self.list
+            .desired_height(width)
+            .saturating_add(notice_height)
     }
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
-        self.list.render(area, buf);
+        let notice = self.typed_text_notice(area.width);
+        let notice_height = u16::try_from(notice.len())
+            .unwrap_or(u16::MAX)
+            .min(area.height);
+        let list_area = Rect {
+            height: area.height - notice_height,
+            ..area
+        };
+        self.list.render(list_area, buf);
+        if notice_height > 0 {
+            let notice_area = Rect {
+                y: list_area.bottom(),
+                height: notice_height,
+                ..area
+            };
+            Widget::render(Paragraph::new(notice), notice_area, buf);
+        }
     }
 
     fn cursor_pos(&self, area: Rect) -> Option<(u16, u16)> {
@@ -1125,6 +1261,7 @@ fn elicitation_options(keymap: &ApprovalKeymap) -> Vec<ApprovalOption> {
 mod tests {
     use super::*;
     use crate::app_event::AppEvent;
+    use crate::bottom_pane::approval_typing_guard::SHORTCUT_SETTLE_DELAY;
     use codex_app_server_protocol::AdditionalFileSystemPermissions;
     use codex_app_server_protocol::AdditionalNetworkPermissions;
     use codex_app_server_protocol::ExecPolicyAmendment;
@@ -1140,6 +1277,13 @@ mod tests {
 
     fn absolute_path(path: &str) -> AbsolutePathBuf {
         AbsolutePathBuf::from_absolute_path(path).expect("absolute path")
+    }
+
+    /// Press a decision key the way a person does: alone, then a pause.
+    fn press_alone(view: &mut ApprovalOverlay, code: KeyCode) {
+        let now = Instant::now();
+        view.handle_key_event_at(KeyEvent::new(code, KeyModifiers::NONE), now);
+        view.tick_at(now + SHORTCUT_SETTLE_DELAY);
     }
 
     fn render_overlay_lines(view: &ApprovalOverlay, width: u16) -> String {
@@ -1286,7 +1430,7 @@ mod tests {
             keymap.list,
         );
 
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+        press_alone(&mut view, KeyCode::Char('q'));
 
         assert!(view.is_complete());
         let mut decision = None;
@@ -1317,7 +1461,7 @@ mod tests {
             keymap.list,
         );
 
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+        press_alone(&mut view, KeyCode::Char('q'));
 
         assert!(view.is_complete());
         let mut decision = None;
@@ -1340,7 +1484,7 @@ mod tests {
         let tx = AppEventSender::new(tx);
         let mut view = make_overlay(make_exec_request(), tx, Features::with_defaults());
         assert!(!view.is_complete());
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+        press_alone(&mut view, KeyCode::Char('y'));
         // We expect at least one thread-scoped approval op message in the queue.
         let mut saw_op = false;
         while let Ok(ev) = rx.try_recv() {
@@ -1375,7 +1519,7 @@ mod tests {
             Features::with_defaults(),
         );
 
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+        press_alone(&mut view, KeyCode::Char('d'));
 
         let mut saw_denied = false;
         while let Ok(ev) = rx.try_recv() {
@@ -1424,7 +1568,7 @@ mod tests {
             Features::with_defaults(),
         );
 
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+        press_alone(&mut view, KeyCode::Char('d'));
 
         let mut saw_deny = false;
         while let Ok(ev) = rx.try_recv() {
@@ -1537,6 +1681,8 @@ mod tests {
         ));
         assert!(rx.try_recv().is_err());
 
+        // The unbound `o` counted as typed text; navigating clears that.
+        view.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         view.handle_key_event(KeyEvent::new(
             KeyCode::Char('x'),
             /*modifiers*/ KeyModifiers::NONE,
@@ -1601,7 +1747,7 @@ mod tests {
             tx,
             Features::with_defaults(),
         );
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
+        press_alone(&mut view, KeyCode::Char('p'));
         let mut saw_op = false;
         while let Ok(ev) = rx.try_recv() {
             if let AppEvent::SubmitThreadOp {
@@ -1625,6 +1771,133 @@ mod tests {
             saw_op,
             "expected approval decision to emit an op with command prefix"
         );
+    }
+
+    fn make_prefix_exec_request() -> ApprovalRequest {
+        ApprovalRequest::Exec(ExecApprovalRequest {
+            thread_id: ThreadId::new(),
+            thread_label: None,
+            id: "test".to_string(),
+            environment_id: None,
+            command: vec!["touch".to_string(), "/outside/marker".to_string()],
+            reason: None,
+            available_decisions: vec![
+                CommandExecutionApprovalDecision::Accept,
+                CommandExecutionApprovalDecision::AcceptWithExecpolicyAmendment {
+                    execpolicy_amendment: ExecPolicyAmendment {
+                        command: vec!["touch".to_string(), "/outside/marker".to_string()],
+                    },
+                },
+                CommandExecutionApprovalDecision::Cancel,
+            ],
+            network_approval_context: None,
+            additional_permissions: None,
+        })
+    }
+
+    fn type_burst(view: &mut ApprovalOverlay, text: &str, now: Instant) {
+        for ch in text.chars() {
+            view.handle_key_event_at(KeyEvent::new(KeyCode::Char(ch), KeyModifiers::NONE), now);
+        }
+    }
+
+    fn exec_decisions(rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> Vec<String> {
+        let mut decisions = Vec::new();
+        while let Ok(ev) = rx.try_recv() {
+            if let AppEvent::SubmitThreadOp {
+                op: Op::ExecApproval { decision, .. },
+                ..
+            } = ev
+            {
+                decisions.push(format!("{decision:?}"));
+            }
+        }
+        decisions
+    }
+
+    /// PF-83 F05 finding: typing `/permissions` into an open prompt approved it
+    /// with "don't ask again" through the `p` shortcut.
+    #[test]
+    fn typed_text_never_answers_the_prompt() {
+        for text in ["/permissions", "permissions", "yes", "1", "ap"] {
+            let (tx, mut rx) = unbounded_channel::<AppEvent>();
+            let mut view = make_overlay(
+                make_prefix_exec_request(),
+                AppEventSender::new(tx),
+                Features::with_defaults(),
+            );
+            let now = Instant::now();
+            // "1" alone is a deliberate key; follow it with Enter in the same burst.
+            type_burst(&mut view, text, now);
+            view.handle_key_event_at(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), now);
+            view.tick_at(now + SHORTCUT_SETTLE_DELAY * 4);
+            view.handle_key_event_at(
+                KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+                now + SHORTCUT_SETTLE_DELAY * 5,
+            );
+
+            assert_eq!(exec_decisions(&mut rx), Vec::<String>::new(), "{text:?}");
+            assert!(!view.is_complete(), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn typed_text_shows_how_to_answer_then_explicit_selection_works() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+        let now = Instant::now();
+        type_burst(&mut view, "/permissions", now);
+        view.tick_at(now + SHORTCUT_SETTLE_DELAY);
+
+        assert_snapshot!(
+            "approval_overlay_typed_text_notice",
+            render_overlay_lines(&view, /*width*/ 80)
+        );
+
+        // Navigating is deliberate: it clears the notice and Enter selects.
+        view.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        view.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+        assert!(!render_overlay_lines(&view, /*width*/ 80).contains("Typed text"));
+        view.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(exec_decisions(&mut rx), vec!["Accept".to_string()]);
+    }
+
+    #[test]
+    fn decision_key_applies_only_after_the_keyboard_is_quiet() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+        let now = Instant::now();
+        view.handle_key_event_at(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE), now);
+
+        assert!(view.next_frame_delay().is_some());
+        view.tick_at(now + SHORTCUT_SETTLE_DELAY - Duration::from_millis(1));
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
+
+        view.tick_at(now + SHORTCUT_SETTLE_DELAY);
+        assert_eq!(exec_decisions(&mut rx), vec!["Accept".to_string()]);
+    }
+
+    #[test]
+    fn paste_then_enter_does_not_answer_the_prompt() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let mut view = make_overlay(
+            make_prefix_exec_request(),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+
+        assert!(view.handle_paste("please continue".to_string()));
+        view.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        assert_eq!(exec_decisions(&mut rx), Vec::<String>::new());
     }
 
     #[test]
@@ -1659,7 +1932,7 @@ mod tests {
             tx,
             Features::with_defaults(),
         );
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+        press_alone(&mut view, KeyCode::Char('d'));
 
         assert!(
             rx.try_recv().is_err(),
@@ -1885,7 +2158,7 @@ mod tests {
         let tx = AppEventSender::new(tx);
         let mut view = make_overlay(make_permissions_request(), tx, Features::with_defaults());
 
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        press_alone(&mut view, KeyCode::Char('a'));
 
         let mut saw_op = false;
         while let Ok(ev) = rx.try_recv() {
@@ -1920,7 +2193,7 @@ mod tests {
             keymap.list,
         );
 
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        press_alone(&mut view, KeyCode::Char('x'));
 
         let mut saw_op = false;
         while let Ok(ev) = rx.try_recv() {
@@ -1948,7 +2221,7 @@ mod tests {
         let tx = AppEventSender::new(tx);
         let mut view = make_overlay(make_permissions_request(), tx, Features::with_defaults());
 
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE));
+        press_alone(&mut view, KeyCode::Char('r'));
 
         let mut saw_op = false;
         while let Ok(ev) = rx.try_recv() {
@@ -2270,7 +2543,7 @@ mod tests {
             Features::with_defaults(),
         );
 
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+        press_alone(&mut view, KeyCode::Char('y'));
 
         let mut decision = None;
         while let Ok(event) = rx.try_recv() {
@@ -2360,7 +2633,7 @@ mod tests {
             keymap.approval,
             keymap.list,
         );
-        view.handle_key_event(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+        press_alone(&mut view, KeyCode::Char('n'));
         let mut n_decision = None;
         while let Ok(ev) = rx.try_recv() {
             if let AppEvent::SubmitThreadOp {

@@ -56,6 +56,9 @@ use std::time::Instant;
 mod action_required_title;
 mod app_link_view;
 mod approval_overlay;
+mod approval_typing_guard;
+#[cfg(test)]
+pub(crate) use approval_typing_guard::SHORTCUT_SETTLE_DELAY;
 mod mcp_server_elicitation;
 mod multi_select_picker;
 mod request_user_input;
@@ -2187,6 +2190,50 @@ mod tests {
         assert!(pane.delayed_approval_requests.is_empty());
     }
 
+    /// PF-83 F05: choosing a permission while an approval is pending must not
+    /// answer it. The approval waits behind the picker and then asks again.
+    #[test]
+    fn picker_choice_does_not_answer_a_delayed_approval() {
+        let (tx_raw, mut rx) = unbounded_channel::<AppEvent>();
+        let tx = AppEventSender::new(tx_raw);
+        let features = Features::with_defaults();
+        let mut pane = test_pane(tx);
+        let now = Instant::now();
+        pane.last_composer_activity_at = Some(now);
+        pane.push_approval_request(exec_request(), &features);
+        pane.show_selection_view(SelectionViewParams {
+            title: Some("Update Model Permissions".to_string()),
+            items: vec![SelectionItem {
+                name: "Full Access".to_string(),
+                actions: vec![Box::new(|tx: &_| tx.send(AppEvent::OpenApprovalsPopup))],
+                dismiss_on_select: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+
+        pane.pre_draw_tick_at(now + APPROVAL_PROMPT_TYPING_IDLE_DELAY);
+        assert_eq!(pane.delayed_approval_requests.len(), 1);
+        pane.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        pane.pre_draw_tick_at(Instant::now() + APPROVAL_PROMPT_TYPING_IDLE_DELAY);
+
+        assert!(pane.delayed_approval_requests.is_empty());
+        // Only the approval prompt marks the session as waiting on the user.
+        assert!(
+            pane.active_view()
+                .is_some_and(BottomPaneView::terminal_title_requires_action)
+        );
+        let events = std::iter::from_fn(|| rx.try_recv().ok())
+            .map(|event| match event {
+                AppEvent::OpenApprovalsPopup => "picker action",
+                AppEvent::SubmitThreadOp { .. } => "approval answered",
+                _ => "other",
+            })
+            .filter(|event| *event != "other")
+            .collect::<Vec<_>>();
+        assert_eq!(events, vec!["picker action"]);
+    }
+
     #[test]
     fn continued_typing_resets_delayed_approval_idle_deadline() {
         let (tx_raw, _rx) = unbounded_channel::<AppEvent>();
@@ -2244,6 +2291,7 @@ mod tests {
 
         pane.pre_draw_tick_at(now + APPROVAL_PROMPT_TYPING_IDLE_DELAY);
         pane.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+        pane.pre_draw_tick_at(Instant::now() + SHORTCUT_SETTLE_DELAY);
 
         let mut approval_decision = None;
         while let Ok(event) = rx.try_recv() {
@@ -2392,6 +2440,7 @@ mod tests {
         use crossterm::event::KeyEvent;
         use crossterm::event::KeyModifiers;
         pane.handle_key_event(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+        pane.pre_draw_tick_at(Instant::now() + SHORTCUT_SETTLE_DELAY);
 
         // After denial, since the task is still running, the status indicator should be
         // visible above the composer. The modal should be gone.

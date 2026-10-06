@@ -1858,3 +1858,11 @@ fn hook_event_label(event_name: codex_app_server_protocol::HookEventName) -> &'s
         codex_app_server_protocol::HookEventName::Stop => "Stop",
     }
 }
+
+/// Press an approval-prompt shortcut the way a person does: alone, then a
+/// pause long enough for the prompt to treat it as deliberate, not typed text.
+pub(super) fn press_approval_shortcut(chat: &mut ChatWidget, key: char) {
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char(key), KeyModifiers::NONE));
+    std::thread::sleep(crate::bottom_pane::SHORTCUT_SETTLE_DELAY);
+    chat.pre_draw_tick();
+}

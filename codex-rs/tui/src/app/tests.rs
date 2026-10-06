@@ -759,8 +759,9 @@ async fn enqueue_primary_thread_session_replays_buffered_approval_after_attach()
     ));
 
     app.handle_thread_event_now(event);
+    // Enter confirms the highlighted "Yes, proceed"; letter shortcuts settle on a timer.
     app.chat_widget
-        .handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+        .handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     while let Ok(app_event) = app_event_rx.try_recv() {
         if let AppEvent::SubmitThreadOp {
@@ -826,8 +827,9 @@ async fn resolved_buffered_approval_does_not_become_actionable_after_drain() -> 
     ));
 
     app.handle_thread_event_now(event);
+    // Enter confirms the highlighted "Yes, proceed"; letter shortcuts settle on a timer.
     app.chat_widget
-        .handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+        .handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     while let Ok(app_event) = app_event_rx.try_recv() {
         assert!(
