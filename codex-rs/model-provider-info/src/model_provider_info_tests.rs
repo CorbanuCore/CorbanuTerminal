@@ -1776,3 +1776,42 @@ fn zai_glm_5_3_resolves_only_on_the_direct_zai_route() {
         Some(AMBIENT_DEFAULT_MODEL)
     );
 }
+
+/// Provider definitions are logged when a session is configured; credentials
+/// in them must not reach the log (PF-24-S03 follow-up).
+#[test]
+fn debug_redacts_bearer_token_header_and_query_values() {
+    let provider = ModelProviderInfo {
+        name: "Example".to_string(),
+        experimental_bearer_token: Some("fake-bearer-sentinel".to_string()),
+        http_headers: Some(maplit::hashmap! {
+            "Authorization".to_string() => "Bearer fake-header-sentinel".to_string(),
+            "X-Version".to_string() => "fake-version-sentinel".to_string(),
+        }),
+        query_params: Some(maplit::hashmap! {
+            "key".to_string() => "fake-query-sentinel".to_string(),
+        }),
+        env_http_headers: Some(maplit::hashmap! {
+            "X-Project".to_string() => "PROJECT_ENV".to_string(),
+        }),
+        ..Default::default()
+    };
+    let debug = format!("{provider:?}");
+    assert!(
+        !debug.contains("sentinel"),
+        "credential value in provider Debug: {debug}"
+    );
+    for kept in [
+        "experimental_bearer_token: Some(\"<redacted>\")",
+        "http_headers: Some({\"Authorization\": \"<redacted>\", \"X-Version\": \"<redacted>\"})",
+        "query_params: Some({\"key\": \"<redacted>\"})",
+        "env_http_headers: Some({\"X-Project\": \"PROJECT_ENV\"})",
+        "name: \"Example\"",
+    ] {
+        assert!(debug.contains(kept), "missing {kept} in {debug}");
+    }
+    assert_eq!(
+        format!("{:?}", ModelProviderInfo::default()).contains("<redacted>"),
+        false
+    );
+}
