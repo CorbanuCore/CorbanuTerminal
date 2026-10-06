@@ -213,6 +213,10 @@ impl CodexFeedback {
             .with_filter(
                 Targets::new()
                     .with_default(Level::TRACE)
+                    // Events bridged from the `log` crate, such as the websocket
+                    // handshake request with its `Authorization` header. The
+                    // logs DB drops them too.
+                    .with_target("log", LevelFilter::OFF)
                     .with_target("codex_api::responses_websocket_timing", LevelFilter::OFF)
                     .with_target("codex_core::post_sampling_token_estimate", LevelFilter::OFF),
             )
@@ -733,10 +737,14 @@ mod tests {
             .set_default();
 
         tracing::trace!(target: "codex_api::responses_websocket_timing", payload = "secret");
+        // `tracing-log` forwards `log` records (tungstenite's handshake request,
+        // with its `Authorization` header) under the target `log`.
+        tracing::trace!(target: "log", "Request: Authorization: Bearer fake-log-bridge-token");
         tracing::trace!(target: "codex_feedback_test", "retained");
 
         let logs = String::from_utf8(fb.snapshot(/*session_id*/ None).bytes).unwrap();
         assert!(!logs.contains("secret"));
+        assert!(!logs.contains("fake-log-bridge-token"));
         assert!(logs.contains("retained"));
     }
 

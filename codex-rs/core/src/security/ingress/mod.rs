@@ -305,6 +305,8 @@ pub(crate) enum IngressError {
 
 mod native;
 pub(crate) use native::NativeIngress;
+mod origin_key;
+pub(crate) use origin_key::OriginKey;
 mod structural;
 pub(crate) use structural::MessageOrigin;
 

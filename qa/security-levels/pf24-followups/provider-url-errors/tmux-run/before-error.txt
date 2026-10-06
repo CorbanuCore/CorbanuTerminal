@@ -1,0 +1,53 @@
+
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     loading   /model to change           │
+│ directory: <run>/workspace │
+╰─────────────────────────────────────────────────╯
+
+
+› Summarize recent commits
+
+  Z.AI GLM 5.2 via demo401 standard · <run>/workspace · Corbanu Terminal · TPS: -- tok/s
+
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                   │
+│                                                 │
+│ model:     glm-5.2   /model to change           │
+│ directory: <run>/workspace │
+╰─────────────────────────────────────────────────╯
+
+
+› say hi
+
+
+⚠ Demo 401 (demo401) credential was rejected. Open /providers, select Demo 401, and press r to recover. Other providers
+  are unchanged.
+
+■ unexpected status 401 Unauthorized: demo server: invalid credentials, url:
+http://demo-user:fake-demo-pass-0002@127.0.0.1:47401/v1/responses?key=fake-demo-query-0001
+
+
+› Summarize recent commits
+
+  Z.AI GLM 5.2 via demo401 standard · <run>/workspace · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

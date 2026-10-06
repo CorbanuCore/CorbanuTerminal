@@ -601,7 +601,7 @@ async fn connect_websocket(
         Ok((stream, response)) => {
             info!(
                 "successfully connected to websocket: {log_url}, headers: {:?}",
-                response.headers()
+                codex_http_client::redact_headers(response.headers())
             );
             (stream, response)
         }
@@ -659,7 +659,7 @@ fn map_ws_error(err: WsError, url: &Url) -> ApiError {
                 .and_then(|bytes| String::from_utf8(bytes.clone()).ok());
             ApiError::Transport(TransportError::Http {
                 status,
-                url: Some(url.to_string()),
+                url: Some(codex_http_client::redact_url(url.as_str())),
                 headers: Some(headers),
                 body,
             })
