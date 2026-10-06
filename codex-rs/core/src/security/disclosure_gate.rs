@@ -508,7 +508,7 @@ fn gate_event_with(gate: &OutputGate, scope: &str, msg: EventMsg) -> Vec<EventMs
                 (scope, &event.call_id),
                 template,
                 &event.chunk,
-                false,
+                /*utf8*/ false,
             );
             if !event.chunk.is_empty() {
                 out.push(EventMsg::ExecCommandOutputDelta(event));
@@ -603,7 +603,14 @@ fn push_text(
     template: EventMsg,
     delta: &str,
 ) -> String {
-    let bytes = push_stream(gate, key, owner, template, delta.as_bytes(), true);
+    let bytes = push_stream(
+        gate,
+        key,
+        owner,
+        template,
+        delta.as_bytes(),
+        /*utf8*/ true,
+    );
     match String::from_utf8(bytes) {
         Ok(text) => text,
         Err(err) => String::from_utf8_lossy(err.as_bytes()).into_owned(),
@@ -842,7 +849,7 @@ fn json_file_values(path: &Path, label: &str) -> Labeled {
         return Labeled::new();
     };
     let mut values = Labeled::new();
-    collect_json(&text, label, false, &mut values);
+    collect_json(&text, label, /*secret*/ false, &mut values);
     values
 }
 
@@ -875,7 +882,7 @@ fn toml_file_values(path: &Path) -> Labeled {
     collect_toml(
         &toml::Value::Table(table),
         "config.toml",
-        false,
+        /*secret*/ false,
         &mut values,
     );
     values

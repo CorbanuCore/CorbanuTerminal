@@ -925,7 +925,10 @@ fn representations(value: &str) -> (Vec<Zeroizing<Vec<u8>>>, std::ops::Range<usi
         push(percent_encode(raw, upper, /*form*/ false), &mut reps);
     }
     if raw.contains(&b' ') {
-        push(percent_encode(raw, true, /*form*/ true), &mut reps);
+        push(
+            percent_encode(raw, /*upper*/ true, /*form*/ true),
+            &mut reps,
+        );
     }
     let base64_start = reps.len();
     let mut base64_end = reps.len();
@@ -944,8 +947,8 @@ fn representations(value: &str) -> (Vec<Zeroizing<Vec<u8>>>, std::ops::Range<usi
             }
         }
         base64_end = reps.len();
-        push(hex(raw, false), &mut reps);
-        push(hex(raw, true), &mut reps);
+        push(hex(raw, /*upper*/ false), &mut reps);
+        push(hex(raw, /*upper*/ true), &mut reps);
     }
     (reps, base64_start..base64_end)
 }
