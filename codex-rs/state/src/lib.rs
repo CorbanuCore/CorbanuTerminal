@@ -15,6 +15,7 @@ pub use runtime::accounting::store as accounting;
 mod audit;
 mod extract;
 pub mod log_db;
+pub mod log_scrub;
 mod migrations;
 mod model;
 mod paths;
