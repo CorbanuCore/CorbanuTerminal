@@ -27,6 +27,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf27-s04-broker-20261006"
     branch: "feat/pf27-s04-broker-20261006"
     base_commit: "cb78550a31b1d6e5cab33ad27ef28a5ae4fa21b1"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf27-s02-secretless-20261006"
+    branch: "feat/pf27-s02-secretless-20261006"
+    base_commit: "13cf4a2d0c07046312dc6d32c757dce90e0b14fc"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf30-s02-20261006"
     branch: "feat/pf-30-s02-persistent-taint"
     base_commit: "b96b23344ba68e8a484b5e68834b6a62e392e007"
@@ -132,7 +135,7 @@ worker slot; a sprint still waits for its dependencies in any lane.
 
 | Lane | Sprints in order |
 | --- | --- |
-| broker | [PF-27-S04](../../sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md) → [PF-27-S02](../../sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md) → [PF-28-S01](../../sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md) → [PF-28-S02](../../sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) |
+| broker | PF-27-S04 (completed 2026-10-06, [archived](../../sprints/archive/p0-security-levels/pf-27-s04-isolated-credential-broker.md)) → [PF-27-S02](../../sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md) → [PF-27-S05](../../sprints/current/p0-security-levels/pf-27-s05-model-client-auth-broker.md) (model-client auth, added 2026-10-06) → [PF-28-S01](../../sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md) → [PF-28-S02](../../sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md); Windows follow-up [PF-27-S06](../../sprints/current/p0-security-levels/pf-27-s06-windows-broker-and-launch.md) |
 | untrusted content | [PF-30-S01](../../sprints/archive/p0-security-levels/pf-30-s01-typed-source-envelope.md) (done, PR #178) → [PF-30-S02](../../sprints/archive/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md) (done, PRs #190, #198) → [PF-30-S03](../../sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) → [PF-23-S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) → [PF-23-S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md) → [PF-23-S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) |
 | tui | [PF-24-S03 flagged picker](../../sprints/archive/p0-security-levels/pf-24-s03-flagged-security-picker.md) (done, PR #186) → [PF-24-S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) → [PF-25-S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md) → [PF-25-S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) |
 | first free lane | [PF-33-S01](../../sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md) → [PF-33-S02](../../sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md) (after PF-27-S02); [PF-29-S01](../../sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md) → [PF-29-S02](../../sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md) (after PF-28-S02) |
@@ -260,4 +263,4 @@ Each milestone links its `qa/release/<version>/` record. Remaining blockers: the
 | --- | --- |
 | [Plan history through 2026-10-06](../history/p0-security-levels-2026-10-06.md) | All earlier prose: allocations, PF-27 stage log, expanded contracts PF-27–41, standards profile, profile/failure matrix |
 | [Source reconciliation](../security-source-reconciliation.md), [architecture refinements](../security-architecture-refinements-2026-08-28.md), [upstream reconciliation](../security-upstream-reconciliation-2026-08-28.md), [OpenClaw review](../openclaw-source-review-2026-08-28.md) | August 28 design inputs |
-| [Completed archive](../../sprints/archive/p0-security-levels/) | PF-13-S01–S06, foundations PF-15, PF-16, PF-17, PF-18, PF-19, PF-20, PF-21, PF-22, PF-24-S01, PF-26-S01, PF-27-S01/S03, PF-30-S04, PF-31-S04, PF-33-S03, PF-34-S04, PF-41-S03, PF-83-S01, plus hosted PF-77/78/82 |
+| [Completed archive](../../sprints/archive/p0-security-levels/) | PF-13-S01–S06, foundations PF-15, PF-16, PF-17, PF-18, PF-19, PF-20, PF-21, PF-22, PF-24-S01, PF-26-S01, PF-27-S01/S03/S04, PF-30-S04, PF-31-S04, PF-33-S03, PF-34-S04, PF-41-S03, PF-83-S01, plus hosted PF-77/78/82 |

@@ -103,10 +103,11 @@ nav:
           - Current Security Work:
               - Overview: sprints/current/p0-security-levels/index.md
               - "Broker lane":
-                  - "PF-27-S04 — Isolated credential broker process": sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md
                   - "PF-27-S02 — Secretless agent launch and bypass containment": sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md
                   - "PF-28-S01 — Central secret and protected-output gate": sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md
                   - "PF-28-S02 — Reflected-secret response scrubbing": sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md
+                  - "PF-27-S05 — Core model-client auth and vault labels through the broker": sprints/current/p0-security-levels/pf-27-s05-model-client-auth-broker.md
+                  - "PF-27-S06 — Windows broker and secretless launch": sprints/current/p0-security-levels/pf-27-s06-windows-broker-and-launch.md
               - "Untrusted-content lane":
                   - "PF-30-S03 — Post-taint authority checks": sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md
                   - "PF-23-S01 — Moderate ingress and disclosure enforcement": sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md

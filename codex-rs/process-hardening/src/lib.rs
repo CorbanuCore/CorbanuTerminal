@@ -1,3 +1,9 @@
+mod broker_containment;
+
+pub use broker_containment::BrokerContainment;
+pub use broker_containment::broker_seatbelt_profile;
+pub use broker_containment::contain_credential_broker;
+
 #[cfg(unix)]
 use std::ffi::OsString;
 
