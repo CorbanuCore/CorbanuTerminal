@@ -1858,3 +1858,10 @@ fn hook_event_label(event_name: codex_app_server_protocol::HookEventName) -> &'s
         codex_app_server_protocol::HookEventName::Stop => "Stop",
     }
 }
+
+/// Answer an approval prompt with a decision key: the key highlights its
+/// option and Enter confirms it.
+pub(super) fn press_approval_shortcut(chat: &mut ChatWidget, key: char) {
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char(key), KeyModifiers::NONE));
+    chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+}

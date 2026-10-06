@@ -38,7 +38,7 @@ async fn exec_approval_emits_proposed_command_and_decision_history() {
     chat.render(area, &mut buf);
     assert_snapshot!("exec_approval_modal_exec", format!("{buf:?}"));
 
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+    press_approval_shortcut(&mut chat, 'y');
     let decision = drain_insert_history(&mut rx)
         .pop()
         .expect("expected decision cell in history");
@@ -313,7 +313,7 @@ async fn network_exec_approval_history_describes_session_host_allowance() {
     );
 
     handle_exec_approval_request(&mut chat, "sub-network", request);
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+    press_approval_shortcut(&mut chat, 'a');
 
     let decision = drain_insert_history(&mut rx)
         .pop()
@@ -355,7 +355,7 @@ async fn network_exec_approval_history_describes_one_time_host_allowance() {
     );
 
     handle_exec_approval_request(&mut chat, "sub-network", request);
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+    press_approval_shortcut(&mut chat, 'y');
 
     let decision = drain_insert_history(&mut rx)
         .pop()
@@ -397,7 +397,7 @@ async fn network_exec_approval_history_describes_canceled_host_request() {
     );
 
     handle_exec_approval_request(&mut chat, "sub-network", request);
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+    press_approval_shortcut(&mut chat, 'n');
 
     let decision = drain_insert_history(&mut rx)
         .pop()
@@ -482,7 +482,7 @@ async fn exec_approval_uses_approval_id_when_present() {
         },
     );
 
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+    press_approval_shortcut(&mut chat, 'y');
 
     let mut found = false;
     while let Ok(app_ev) = rx.try_recv() {
@@ -549,7 +549,7 @@ async fn exec_approval_decision_truncates_multiline_and_long_commands() {
         "expected modal to show first line of multiline snippet"
     );
 
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+    press_approval_shortcut(&mut chat, 'n');
     let aborted_multi = drain_insert_history(&mut rx)
         .pop()
         .expect("expected aborted decision cell (multiline)");
@@ -579,7 +579,7 @@ async fn exec_approval_decision_truncates_multiline_and_long_commands() {
         proposed_long.is_empty(),
         "expected long approval request to avoid emitting history cells before decision"
     );
-    chat.handle_key_event(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+    press_approval_shortcut(&mut chat, 'n');
     let aborted_long = drain_insert_history(&mut rx)
         .pop()
         .expect("expected aborted decision cell (long)");

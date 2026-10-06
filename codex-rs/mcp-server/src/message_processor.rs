@@ -338,7 +338,8 @@ impl MessageProcessor {
     }
 
     async fn handle_call_tool(&self, id: RequestId, params: CallToolRequestParams) {
-        tracing::info!("tools/call -> params: {:?}", params);
+        // Arguments can carry config overrides with credentials; log the tool name only.
+        tracing::info!("tools/call -> {}", params.name);
         let CallToolRequestParams {
             name, arguments, ..
         } = params;
@@ -420,7 +421,7 @@ impl MessageProcessor {
         arguments: Option<rmcp::model::JsonObject>,
     ) {
         let arguments = arguments.map(serde_json::Value::Object);
-        tracing::info!("tools/call -> params: {:?}", arguments);
+        tracing::info!("tools/call -> codex-reply");
 
         // parse arguments
         let codex_tool_call_reply_param: CodexToolCallReplyParam = match arguments {

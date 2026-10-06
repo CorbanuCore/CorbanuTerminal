@@ -55,6 +55,24 @@ pub(crate) struct PendingSource {
     envelope: SourceEnvelope,
     screening_binding: SourceBinding,
     normalized: String,
+    projection: Projection,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Projection {
+    /// Full envelope and data as one JSON object.
+    Json,
+    /// Short source header followed by neutralized text (`source_envelopes`).
+    Labelled,
+}
+
+struct PreparePolicy {
+    source_id: Uuid,
+    max_bytes: usize,
+    max_normalized_bytes: usize,
+    normalize: fn(&str) -> String,
+    transformation_id: &'static str,
+    projection: Projection,
 }
 
 impl std::fmt::Debug for PendingSource {
@@ -100,19 +118,42 @@ impl PendingSource {
     /// not change its source identity, complete-input digest or wire projection.
     pub(crate) fn prepare(
         route: &str,
-        mut descriptor: SourceDescriptor,
+        descriptor: SourceDescriptor,
         raw: &str,
         parents: &[SourceEnvelope],
     ) -> Result<(Self, String), IngressError> {
-        descriptor.kind = route_kind(route)?;
+        Self::prepare_with(
+            route_kind(route)?,
+            descriptor,
+            raw,
+            parents,
+            PreparePolicy {
+                source_id: Uuid::new_v4(),
+                max_bytes: MAX_INGRESS_TEXT_BYTES,
+                max_normalized_bytes: MAX_INGRESS_TEXT_BYTES,
+                normalize,
+                transformation_id: "model-data-escape-v1",
+                projection: Projection::Json,
+            },
+        )
+    }
+
+    fn prepare_with(
+        kind: SourceKind,
+        mut descriptor: SourceDescriptor,
+        raw: &str,
+        parents: &[SourceEnvelope],
+        policy: PreparePolicy,
+    ) -> Result<(Self, String), IngressError> {
+        descriptor.kind = kind;
         if raw.is_empty() {
             return Err(IngressError::InvalidEnvelope);
         }
-        if raw.len() > MAX_INGRESS_TEXT_BYTES {
+        if raw.len() > policy.max_bytes {
             return Err(IngressError::TooLarge);
         }
-        let normalized = normalize(raw);
-        if normalized.len() > MAX_INGRESS_TEXT_BYTES {
+        let normalized = (policy.normalize)(raw);
+        if normalized.len() > policy.max_normalized_bytes {
             return Err(IngressError::TooLarge);
         }
         let raw_digest = *ContentDigest::of(raw.as_bytes()).as_bytes();
@@ -124,11 +165,11 @@ impl PendingSource {
         lineage.sort_unstable();
         lineage.dedup();
         let envelope = SourceEnvelope::new(
-            Uuid::new_v4(),
+            policy.source_id,
             descriptor,
             raw_digest,
             vec![SourceTransformation {
-                id: "model-data-escape-v1".into(),
+                id: policy.transformation_id.into(),
                 input_digest: raw_digest,
                 output_digest: content_digest,
             }],
@@ -147,6 +188,7 @@ impl PendingSource {
                 envelope,
                 screening_binding,
                 normalized: normalized.clone(),
+                projection: policy.projection,
             },
             normalized,
         ))
@@ -178,11 +220,18 @@ impl PendingSource {
             return Err(IngressError::BindingMismatch);
         }
         let data = std::str::from_utf8(bytes).map_err(|_| IngressError::InvalidEnvelope)?;
-        let projection = serde_json::to_string(&json!({ "source": self.envelope, "data": data }))
-            .map_err(|_| IngressError::InvalidEnvelope)?;
-        if projection.len() > MAX_PROJECTION_BYTES {
-            return Err(IngressError::TooLarge);
-        }
+        let projection = match self.projection {
+            Projection::Json => {
+                let projection =
+                    serde_json::to_string(&json!({ "source": self.envelope, "data": data }))
+                        .map_err(|_| IngressError::InvalidEnvelope)?;
+                if projection.len() > MAX_PROJECTION_BYTES {
+                    return Err(IngressError::TooLarge);
+                }
+                projection
+            }
+            Projection::Labelled => structural::labelled_projection(&self.envelope, data)?,
+        };
         Ok(AdmittedSource {
             projection,
             raw_digest: self.envelope.raw_digest(),
@@ -250,6 +299,8 @@ pub(crate) enum IngressError {
 
 mod native;
 pub(crate) use native::NativeIngress;
+mod structural;
+pub(crate) use structural::MessageOrigin;
 
 #[cfg(test)]
 #[path = "ingress_tests.rs"]
