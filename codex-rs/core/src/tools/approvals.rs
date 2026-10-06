@@ -209,6 +209,9 @@ where
         )
         .await
         {
+            // A hook can still refuse a post-taint action, but only the human
+            // can allow it (PF-30-S03).
+            Some(PermissionRequestDecision::Allow) if ctx.fresh_human_authority => {}
             Some(PermissionRequestDecision::Allow) => {
                 let resolution = ApprovalResolution {
                     decision: ReviewDecision::Approved,
@@ -229,6 +232,11 @@ where
         }
     }
 
+    let reviewer = if ctx.fresh_human_authority {
+        ApprovalReviewer::User
+    } else {
+        reviewer
+    };
     let resolution = match reviewer {
         ApprovalReviewer::Guardian => {
             let review_id = new_guardian_review_id();

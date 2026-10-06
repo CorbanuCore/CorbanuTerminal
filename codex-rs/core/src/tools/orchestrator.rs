@@ -164,7 +164,46 @@ impl ToolOrchestrator {
         let requirement = tool.exec_approval_requirement(req).unwrap_or_else(|| {
             default_exec_approval_requirement(approval_policy, &file_system_sandbox_policy)
         });
+        // PF-30-S03: a protected action after untrusted content needs fresh,
+        // exact human approval, whatever the requirement above would allow.
+        let post_taint = post_taint_action(tool, req, tool_ctx, &requirement);
+        if let Some(action) = post_taint {
+            if approval_policy == AskForApproval::Never {
+                return Err(ToolError::Rejected(action.approvals_off_rejection()));
+            }
+            let approval_ctx = ApprovalCtx {
+                session: &tool_ctx.session,
+                turn: &tool_ctx.turn,
+                call_id: &tool_ctx.call_id,
+                retry_reason: Some(action.approval_reason()),
+                network_approval_context: None,
+                fresh_human_authority: true,
+            };
+            resolve_tool_apporval(
+                tool,
+                req,
+                tool_ctx.call_id.as_str(),
+                approval_ctx,
+                tool_ctx,
+                ApprovalReviewer::User,
+                &otel,
+            )
+            .await?;
+            // Recompute at execution: taint that arrived while the prompt was
+            // open was not in front of the human when they decided.
+            if tool_ctx
+                .session
+                .services
+                .model_client()
+                .post_taint_generation()
+                != Some(action.taint_generation)
+            {
+                return Err(ToolError::Rejected(action.stale_rejection()));
+            }
+            already_approved = true;
+        }
         match &requirement {
+            _ if post_taint.is_some() => {}
             ExecApprovalRequirement::Skip { .. } => {
                 if strict_auto_review {
                     let approval_ctx = ApprovalCtx {
@@ -173,6 +212,7 @@ impl ToolOrchestrator {
                         call_id: &tool_ctx.call_id,
                         retry_reason: None,
                         network_approval_context: None,
+                        fresh_human_authority: false,
                     };
                     resolve_tool_apporval(
                         tool,
@@ -204,6 +244,7 @@ impl ToolOrchestrator {
                     call_id: &tool_ctx.call_id,
                     retry_reason: reason.clone(),
                     network_approval_context: None,
+                    fresh_human_authority: false,
                 };
                 resolve_tool_apporval(
                     tool,
@@ -401,7 +442,9 @@ impl ToolOrchestrator {
 
                 // Strict auto-review approval covers the sandboxed attempt only;
                 // retrying without the sandbox requires a fresh guardian review.
+                // A post-taint approval covered the sandboxed attempt only.
                 let bypass_retry_approval = !strict_auto_review
+                    && post_taint.is_none()
                     && (tool.should_bypass_approval(approval_policy, already_approved)
                         || allow_on_request_sandbox_startup_retry(
                             approval_policy,
@@ -414,8 +457,12 @@ impl ToolOrchestrator {
                         session: &tool_ctx.session,
                         turn: &tool_ctx.turn,
                         call_id: &tool_ctx.call_id,
-                        retry_reason: Some(retry_reason),
+                        retry_reason: Some(match post_taint {
+                            Some(action) => format!("{} {retry_reason}", action.approval_reason()),
+                            None => retry_reason,
+                        }),
                         network_approval_context: network_approval_context.clone(),
+                        fresh_human_authority: post_taint.is_some(),
                     };
 
                     let permission_request_run_id = format!("{}:retry", tool_ctx.call_id);
@@ -536,6 +583,55 @@ fn sandbox_outcome_from_tool_error(err: &ToolError) -> Option<&'static str> {
         },
         ToolError::Rejected(_) => None,
     }
+}
+
+/// PF-30-S03: the protected action this request performs, when post-taint
+/// checks apply and the session already holds content without standing.
+fn post_taint_action<Rq, Out, T>(
+    tool: &T,
+    req: &Rq,
+    tool_ctx: &ToolCtx,
+    requirement: &ExecApprovalRequirement,
+) -> Option<crate::security::tainted_action::PostTaintAction>
+where
+    T: ToolRuntime<Rq, Out>,
+{
+    if matches!(requirement, ExecApprovalRequirement::Forbidden { .. }) {
+        return None;
+    }
+    let taint_generation = tool_ctx
+        .session
+        .services
+        .model_client()
+        .post_taint_generation()
+        .filter(|generation| *generation > 0)?;
+    let ctx = ApprovalCtx {
+        session: &tool_ctx.session,
+        turn: &tool_ctx.turn,
+        call_id: &tool_ctx.call_id,
+        retry_reason: None,
+        network_approval_context: None,
+        fresh_human_authority: true,
+    };
+    // An action the host cannot describe cannot be shown to be ordinary.
+    let kind = match tool.approval_action(req, &ctx) {
+        Ok(action) => crate::security::tainted_action::classify(
+            &action,
+            tool_ctx.turn.config.codex_home.as_path(),
+        )?,
+        Err(_) => crate::security::tainted_action::ProtectedActionKind::SecurityPolicy,
+    };
+    tracing::info!(
+        target: "codex_core::security::tainted_action",
+        kind = ?kind,
+        taint_generation,
+        call_id = %tool_ctx.call_id,
+        "post-taint protected action needs fresh human approval"
+    );
+    Some(crate::security::tainted_action::PostTaintAction {
+        kind,
+        taint_generation,
+    })
 }
 
 fn build_denial_reason_from_output(_output: &ExecToolCallOutput) -> String {

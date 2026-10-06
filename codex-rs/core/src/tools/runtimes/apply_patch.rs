@@ -161,12 +161,13 @@ impl Approvable<ApplyPatchRequest> for ApplyPatchRuntime {
         let retry_reason = ctx.retry_reason.clone();
         let approval_keys = self.approval_keys(req);
         let changes = req.changes.clone();
+        let fresh = ctx.fresh_human_authority;
         Box::pin(async move {
-            if req.permissions_preapproved && retry_reason.is_none() {
+            if req.permissions_preapproved && retry_reason.is_none() && !fresh {
                 return ReviewDecision::Approved;
             }
             if let Some(reason) = retry_reason {
-                return session
+                let decision = session
                     .request_patch_approval(
                         turn,
                         call_id,
@@ -175,12 +176,17 @@ impl Approvable<ApplyPatchRequest> for ApplyPatchRuntime {
                         /*grant_root*/ None,
                     )
                     .await;
+                return match decision {
+                    ReviewDecision::ApprovedForSession if fresh => ReviewDecision::Approved,
+                    decision => decision,
+                };
             }
 
             with_cached_approval(
                 &session.services,
                 "apply_patch",
                 approval_keys,
+                fresh,
                 || async move {
                     session
                         .request_patch_approval(
