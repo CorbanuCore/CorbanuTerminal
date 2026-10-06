@@ -9,7 +9,7 @@ PF-83-S01 closed on 2026-10-06 and is [archived](../../archive/p0-security-level
 PF-30-S01 completed (PR #178) and is [archived](../../archive/p0-security-levels/pf-30-s01-typed-source-envelope.md);
 PF-24-S03 completed (PR #186) and is [archived](../../archive/p0-security-levels/pf-24-s03-flagged-security-picker.md);
 PF-30-S02 completed (PRs #190, #198) and is [archived](../../archive/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md);
-PF-30-S03 completed (PRs #204, #PR_S03B) and is [archived](../../archive/p0-security-levels/pf-30-s03-post-taint-authority-checks.md).
+PF-30-S03 completed (PRs #204, #212) and is [archived](../../archive/p0-security-levels/pf-30-s03-post-taint-authority-checks.md).
 PF-27-S04 completed on 2026-10-06 and is [archived](../../archive/p0-security-levels/pf-27-s04-isolated-credential-broker.md);
 its open items moved to PF-27-S02, the new PF-27-S05 and PF-27-S06, and PF-23-S03.
 Deferred sprints moved to the [P1 hardening sprints](../p1-security-hardening/index.md).

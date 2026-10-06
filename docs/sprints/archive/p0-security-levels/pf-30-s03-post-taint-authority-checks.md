@@ -47,7 +47,7 @@ updated: 2026-10-06
 
 ## Done
 
-- [x] Slice 1 (PR #204, merge `38516a5b22`): taint generation; with `source_envelopes` and Moderate/Aggressive,
+- [x] Slice 1 (PR #204, merge `38516a5b22`); slice 2 (PR #212): taint generation; with `source_envelopes` and Moderate/Aggressive,
   once the session is tainted a shell, exec or patch action that reaches the vault, credential stores or security
   policy needs a fresh human approval of that exact action. Cached session approvals, hook allows, the automatic
   reviewer and patch preapproval cannot stand in; `approval_policy = never` refuses.
