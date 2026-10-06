@@ -1,0 +1,23 @@
+
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     loading   /model to change                    │
+│ directory: /Volumes/…/Corbanu/tmp/tui-r2-2a-on/workspace │
+╰──────────────────────────────────────────────────────────╯
+
+› Find and fix a bug in @filename
+
+  Z.AI GLM 5.2 via zai standard · <run>/workspace · Corbanu Terminal · TPS: --…
+
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                            │
+│                                                          │
+│ model:     glm-5.2   /model to change                    │
+│ directory: /Volumes/…/Corbanu/tmp/tui-r2-2a-on/workspace │
+╰──────────────────────────────────────────────────────────╯
+
+› /secur
+
+  /security  choose a security level; takes effect when you restart
+

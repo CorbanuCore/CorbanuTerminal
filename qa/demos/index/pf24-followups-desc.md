@@ -1,0 +1,8 @@
+# pf24-followups-desc demo videos
+
+Recorded with `scripts/demo_video.py`; see [the demo SOP](../README.md).
+Videos are assets on the [`demos` prerelease](https://github.com/CorbanuCore/CorbanuTerminal/releases/tag/demos).
+
+| Date | Demo | Feature | Commit | Model | Length | Video |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-06 | `pf24-security-description` | /security description matches the picker | `971fd1b3da79` | glm-5.2 | 15s | [mp4](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf24-followups-desc-pf24-security-description-971fd1b3da79-2026-10-06.mp4) · [cast](https://github.com/CorbanuCore/CorbanuTerminal/releases/download/demos/pf24-followups-desc-pf24-security-description-971fd1b3da79-2026-10-06.cast) |
