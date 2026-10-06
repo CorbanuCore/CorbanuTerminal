@@ -11,7 +11,7 @@ branch: "feat/p0-security-levels"
 base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
 depends_on: "PF-13-S05, PF-22-S02, PF-30-S03"
 created: 2026-08-24
-updated: 2026-08-28
+updated: 2026-10-06
 ---
 
 # PF-23-S01 — Moderate ingress and disclosure enforcement
@@ -53,6 +53,19 @@ updated: 2026-08-28
 - [ ] Moved from PF-30-S02 (2026-10-06): positive protected memory extraction. Stage one still denies under
   Moderate/Aggressive (PF-30-S04); allowing it needs labelled, lineage-bound rollout input and the
   [stage-one handoff](../../../../qa/security-levels/sprints/PF-30-S01-typed-source-envelope/memory-stage-one-follow-up.md) matrix.
+- [ ] Moved from PF-30-S03 (2026-10-06), routes that never reach the shared approval seam: MCP tool calls,
+  `write_stdin` into running processes, and code mode. Give each a typed protected resource and the same
+  post-taint check: fresh human approval bound to taint and policy, refused under `never`.
+- [ ] Moved from PF-30-S03: what a command-text classifier cannot see, at run time or by the OS: strings
+  built at run time (`chr()`, environment lookups, names read from files), build tools that run arbitrary
+  code (`make`, `npm run`, build scripts), hard links, and reads of a home through an unclassified route.
+  Typed resources plus sandbox-level denial of home and credential reads replace the lexical net. Known
+  lexical gaps from the PF-30-S03 review: `cd` inside a substitution or subshell moving the classifier's folder,
+  code passed through positional parameters, functions or `set --`, command-string wrappers (`su -c`,
+  `runuser -c`, `script -c`, `ssh host cmd`), name references and `${!x}`, `cd -P`/`||` approximations, loop
+  stdin from a process substitution, `awk system()`/`sed e`, and symlink hops into automounts during lookups.
+- [ ] Moved from PF-30-S03: outbound disclosure requests after taint, and quoted malicious trades (value
+  transfer proposed from tainted content).
 - [ ] Register required protected-mode subsystems and deny unsupported/unready routes; final activation requires the full plan readiness matrix, not this dispatch slice alone.
 
 - [ ] Classify protected surfaces by typed resource/action at the shared Core dispatch boundary.
