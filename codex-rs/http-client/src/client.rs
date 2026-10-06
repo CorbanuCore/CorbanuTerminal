@@ -121,7 +121,7 @@ impl HttpClient {
                 method = %method,
                 url = %crate::redact_url(url),
                 status = %response.status(),
-                headers = ?response.headers(),
+                headers = ?crate::redact_headers(response.headers()),
                 version = ?response.version(),
                 "Request completed"
             );
@@ -253,7 +253,7 @@ impl RequestBuilder {
                         method = %self.method,
                         url = %crate::redact_url(&self.url),
                         status = %response.status(),
-                        headers = ?response.headers(),
+                        headers = ?crate::redact_headers(response.headers()),
                         version = ?response.version(),
                         "Request completed"
                     );

@@ -601,7 +601,7 @@ async fn connect_websocket(
         Ok((stream, response)) => {
             info!(
                 "successfully connected to websocket: {log_url}, headers: {:?}",
-                response.headers()
+                codex_http_client::redact_headers(response.headers())
             );
             (stream, response)
         }
