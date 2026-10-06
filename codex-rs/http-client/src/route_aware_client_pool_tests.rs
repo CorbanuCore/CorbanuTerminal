@@ -157,6 +157,29 @@ async fn without_url_redacts_transport_error_urls() {
 }
 
 #[tokio::test]
+async fn redacted_message_hides_url_credentials_but_keeps_the_host() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener should bind");
+    let address = listener.local_addr().expect("listener should have address");
+    drop(listener);
+    let error = reqwest::Client::new()
+        .get(format!(
+            "http://user:fake-pass@{address}/mcp?api_key=fake-mcp-key"
+        ))
+        .send()
+        .await
+        .expect_err("closed listener should reject request");
+    let message = RouteAwareRequestError::from(error).redacted_message();
+
+    // reqwest moves userinfo into an `Authorization` header and drops it from
+    // the error's URL; the query value is redacted here.
+    assert!(
+        message.contains(&format!("http://{address}/mcp?api_key=REDACTED")),
+        "{message}"
+    );
+    assert!(!message.contains("fake-pass") && !message.contains("fake-mcp-key"));
+}
+
+#[tokio::test]
 async fn forwards_exact_urls_and_caches_clients_by_resolved_route() {
     let pool = RouteAwareClientPool::with_builder(
         HttpClientFactory::new(OutboundProxyPolicy::ReqwestDefault),

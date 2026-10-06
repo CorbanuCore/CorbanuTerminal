@@ -54,6 +54,59 @@ async fn disabled_request_logging_suppresses_transport_url_and_body() {
     assert!(!logs.contains("body-secret"));
 }
 
+/// The URL in an HTTP error is shown to users; credentials in it must not be.
+#[tokio::test]
+async fn http_error_url_redacts_query_values_and_userinfo() {
+    for streaming in [false, true] {
+        let (server_addr, server) = serve_one_401();
+        let transport = ReqwestTransport::from_http_client(HttpClient::new(test_reqwest_client()));
+        let request = Request::new(
+            Method::GET,
+            format!("http://user:fake-pass@{server_addr}/v1/models?key=fake-query-key"),
+        );
+        let result = if streaming {
+            transport.stream(request).await.map(|_| ())
+        } else {
+            transport.execute(request).await.map(|_| ())
+        };
+        let Err(TransportError::Http { status, url, .. }) = result else {
+            panic!("expected an HTTP error (streaming: {streaming})");
+        };
+        server.join().expect("server thread");
+
+        assert_eq!(
+            (status.as_u16(), url),
+            (
+                401,
+                Some(format!(
+                    "http://REDACTED:REDACTED@{server_addr}/v1/models?key=REDACTED"
+                ))
+            ),
+            "streaming: {streaming}"
+        );
+    }
+}
+
+/// Answers one request with a 401 after reading its headers.
+fn serve_one_401() -> (std::net::SocketAddr, std::thread::JoinHandle<()>) {
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("server port should bind");
+    let server_addr = listener.local_addr().expect("listener address");
+    let server = std::thread::spawn(move || {
+        use std::io::BufRead;
+        let (socket, _) = listener.accept().expect("accept");
+        let mut reader = std::io::BufReader::new(socket);
+        let mut line = String::new();
+        while reader.read_line(&mut line).expect("read request") > 0 && line != "\r\n" {
+            line.clear();
+        }
+        reader
+            .into_inner()
+            .write_all(b"HTTP/1.1 401 Unauthorized\r\ncontent-length: 7\r\nconnection: close\r\n\r\nno auth")
+            .expect("write response");
+    });
+    (server_addr, server)
+}
+
 fn test_reqwest_client() -> reqwest::Client {
     reqwest::Client::builder()
         .no_proxy()

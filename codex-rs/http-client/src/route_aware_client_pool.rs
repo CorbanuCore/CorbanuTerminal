@@ -92,6 +92,15 @@ pub enum RouteAwareRequestError {
 }
 
 impl RouteAwareRequestError {
+    /// The error message with the request URL's query values and userinfo
+    /// redacted, for text shown to users.
+    pub fn redacted_message(&self) -> String {
+        match self {
+            Self::Request(error) => crate::redact_reqwest_error(error),
+            error => error.to_string(),
+        }
+    }
+
     pub fn status(&self) -> Option<StatusCode> {
         match self {
             Self::Request(error) => error.status(),

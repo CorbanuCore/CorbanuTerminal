@@ -122,7 +122,9 @@ impl HttpTransport for ReqwestTransport {
             let body = String::from_utf8(bytes.to_vec()).ok();
             return Err(TransportError::Http {
                 status,
-                url: Some(url),
+                // Shown to users in error messages; query values and
+                // userinfo can hold the provider's credentials.
+                url: Some(crate::redact_url(&url)),
                 headers: Some(headers),
                 body,
             });
@@ -146,7 +148,9 @@ impl HttpTransport for ReqwestTransport {
             let body = resp.text().await.ok();
             return Err(TransportError::Http {
                 status,
-                url: Some(url),
+                // Shown to users in error messages; query values and
+                // userinfo can hold the provider's credentials.
+                url: Some(crate::redact_url(&url)),
                 headers: Some(headers),
                 body,
             });
