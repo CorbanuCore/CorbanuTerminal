@@ -20,6 +20,19 @@ fn context(home: &std::path::Path, active: ChosenLevel) -> LevelContext {
     }
 }
 
+/// Config C from the frozen code-blind design (case B-06), as the picker
+/// would see it; `current_values` itself is covered in `aggressive_tests`.
+fn current() -> aggressive::CurrentValues {
+    [
+        "workspace-write [workdir, /tmp, $TMPDIR, /tmp/extra] (network access enabled); permission-request tools are off",
+        "on-request (reviewer: you)",
+        "on for agent commands; web search live",
+        "the vault store and sign-in file are readable to agent commands; secret-like environment variables are passed through (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL); shell profiles are loaded",
+        "spawned agents get this session's values",
+    ]
+    .map(str::to_string)
+}
+
 fn render(picker: &SecurityLevelPicker, width: u16) -> String {
     let mut lines = picker.lines(width);
     lines.push(Line::from(picker.footer()));
@@ -66,6 +79,7 @@ fn list_review_and_saved_screens() {
     let home = tempfile::tempdir().unwrap();
     let mut picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Permissive),
+        current(),
         RuntimeKeymap::defaults().list,
     );
     insta::assert_snapshot!("security_level_picker_list", render(&picker, 80));
@@ -99,6 +113,7 @@ fn escape_and_typed_text_change_nothing() {
     let home = tempfile::tempdir().unwrap();
     let mut picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Permissive),
+        current(),
         RuntimeKeymap::defaults().list,
     );
     picker.handle_key_event(key(KeyCode::Up));
@@ -128,6 +143,7 @@ fn return_to_permissive_while_aggressive_is_active() {
     level::save(home.path(), ChosenLevel::Aggressive).unwrap();
     let mut picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Aggressive),
+        current(),
         RuntimeKeymap::defaults().list,
     );
     assert_eq!(picker.selected, 2);
@@ -161,6 +177,7 @@ fn unreadable_state_is_reported_and_aggressive_selected() {
     .unwrap();
     let picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Aggressive),
+        current(),
         RuntimeKeymap::defaults().list,
     );
     let rendered = render(&picker, 400).replace(&home.path().display().to_string(), "<home>");
@@ -172,6 +189,7 @@ fn choosing_the_saved_level_is_a_no_op() {
     let home = tempfile::tempdir().unwrap();
     let mut picker = SecurityLevelPicker::new(
         &context(home.path(), ChosenLevel::Permissive),
+        current(),
         RuntimeKeymap::defaults().list,
     );
     picker.handle_key_event(key(KeyCode::Enter));

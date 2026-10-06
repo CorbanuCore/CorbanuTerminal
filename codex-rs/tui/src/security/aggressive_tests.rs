@@ -181,6 +181,73 @@ set = { MY_API_KEY = "abc" }
     );
 }
 
+/// The review's "Now" values come from the loaded config: Config C from the
+/// code-blind design (case B-06), then the same config under Aggressive.
+#[tokio::test]
+async fn current_values_show_real_settings() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    let extra = tempfile::tempdir().unwrap();
+    let user_config = format!(
+        r#"approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "live"
+
+[sandbox_workspace_write]
+writable_roots = [{extra:?}]
+network_access = true
+
+[shell_environment_policy]
+inherit = "all"
+ignore_default_excludes = true
+"#,
+        extra = extra.path().display().to_string()
+    );
+    std::fs::write(home.path().join("config.toml"), &user_config).unwrap();
+    let plain = ConfigBuilder::default()
+        .codex_home(home.path().to_path_buf())
+        .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
+        .harness_overrides(ConfigOverrides {
+            cwd: Some(cwd.path().to_path_buf()),
+            ..Default::default()
+        })
+        .build()
+        .await
+        .unwrap();
+    let [sandbox, approvals, network, vault, children] = current_values(&plain);
+    assert_eq!(
+        (
+            sandbox.starts_with("workspace-write [workdir, /tmp, $TMPDIR, "),
+            sandbox.contains(&extra.path().display().to_string()),
+            sandbox.ends_with("(network access enabled); permission-request tools are off"),
+        ),
+        (true, true, true),
+        "{sandbox}"
+    );
+    assert_eq!(
+        [approvals, network, vault, children],
+        [
+            "on-request (reviewer: you)",
+            "on for agent commands; web search live",
+            "the vault store and sign-in file are readable to agent commands; secret-like environment variables are passed through (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL); shell profiles are loaded",
+            "spawned agents get this session's values",
+        ]
+        .map(str::to_string)
+    );
+
+    let aggressive = load(home.path(), cwd.path(), &user_config).await;
+    let [sandbox, approvals, network, vault, _] = current_values(&aggressive);
+    assert_eq!(
+        [sandbox, approvals, network, vault],
+        [
+            format!("profile {PROFILE_ID}: workspace-write [workdir]; permission-request tools are off"),
+            "untrusted (reviewer: you)".to_string(),
+            "off for agent commands; web search disabled".to_string(),
+            "the vault store and sign-in file are unreadable to agent commands; secret-like environment variables are removed; shell profiles are not loaded".to_string(),
+        ]
+    );
+}
+
 /// A workspace that contains the Corbanu home still cannot rewrite the level.
 #[tokio::test]
 async fn codex_home_inside_the_workspace_stays_read_only() {

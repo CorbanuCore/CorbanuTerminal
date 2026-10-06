@@ -18,6 +18,8 @@ use crate::security::level;
 use crate::security::level::ChosenLevel;
 use crate::security::level::LevelContext;
 use crate::security::level::StoredLevel;
+use crate::wrapping::RtOptions;
+use crate::wrapping::word_wrap_lines;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Row {
@@ -56,6 +58,7 @@ enum Screen {
 pub(crate) struct SecurityLevelPicker {
     codex_home: PathBuf,
     active: ChosenLevel,
+    current: aggressive::CurrentValues,
     stored: StoredLevel,
     selected: usize,
     screen: Screen,
@@ -64,7 +67,11 @@ pub(crate) struct SecurityLevelPicker {
 }
 
 impl SecurityLevelPicker {
-    pub(crate) fn new(context: &LevelContext, keymap: ListKeymap) -> Self {
+    pub(crate) fn new(
+        context: &LevelContext,
+        current: aggressive::CurrentValues,
+        keymap: ListKeymap,
+    ) -> Self {
         let stored = level::load(&context.codex_home);
         let selected = match stored.enforced() {
             ChosenLevel::Permissive => 0,
@@ -73,6 +80,7 @@ impl SecurityLevelPicker {
         Self {
             codex_home: context.codex_home.clone(),
             active: context.active,
+            current,
             stored,
             selected,
             screen: Screen::List { note: None },
@@ -212,8 +220,22 @@ impl SecurityLevelPicker {
                 lines.extend(wrap(
                     "These settings replace yours in Corbanu Terminal sessions and their child agents:",
                 ));
-                for (control, value) in aggressive::ROWS {
-                    lines.extend(wrap(&format!("• {control}: {value}")));
+                for ((control, value), current) in aggressive::ROWS.iter().zip(&self.current) {
+                    let now: Line<'static> = vec![
+                        format!("• {control}").bold(),
+                        format!(" now: {current}").into(),
+                    ]
+                    .into();
+                    lines.extend(word_wrap_lines(
+                        [now],
+                        RtOptions::new(width).subsequent_indent("    ".into()),
+                    ));
+                    lines.extend(word_wrap_lines(
+                        [Line::from(format!("Aggressive: {value}"))],
+                        RtOptions::new(width)
+                            .initial_indent("  ".into())
+                            .subsequent_indent("    ".into()),
+                    ));
                 }
                 lines.extend(wrap(aggressive::UNCHANGED));
                 lines.extend(wrap(if self.active == ChosenLevel::Aggressive {

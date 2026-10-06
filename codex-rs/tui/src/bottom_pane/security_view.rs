@@ -37,7 +37,13 @@ pub(crate) struct SecurityView {
 }
 
 impl SecurityView {
-    pub(crate) fn new(requested: Option<SecurityLevel>, keymap: ListKeymap) -> Self {
+    /// `current` is this session's value for each Aggressive row, shown on
+    /// the picker's review screen.
+    pub(crate) fn new(
+        requested: Option<SecurityLevel>,
+        current: crate::security::aggressive::CurrentValues,
+        keymap: ListKeymap,
+    ) -> Self {
         Self {
             requested,
             selected: PROFILES
@@ -46,7 +52,7 @@ impl SecurityView {
                 .unwrap_or(0),
             picker: crate::security::level::context()
                 .filter(|context| context.picker_enabled)
-                .map(|context| SecurityLevelPicker::new(context, keymap.clone())),
+                .map(|context| SecurityLevelPicker::new(context, current, keymap.clone())),
             keymap,
             cancelled: false,
             inspected: false,
