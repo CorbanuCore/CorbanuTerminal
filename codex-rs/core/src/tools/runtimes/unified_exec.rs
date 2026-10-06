@@ -198,7 +198,8 @@ impl Approvable<UnifiedExecRequest> for UnifiedExecRuntime<'_> {
                     return ReviewDecision::Abort;
                 }
             };
-            with_cached_approval(&session.services, "unified_exec", keys, || async move {
+            let fresh = ctx.fresh_human_authority;
+            with_cached_approval(&session.services, "unified_exec", keys, fresh, || async move {
                 let available_decisions = None;
                 session
                     .request_command_approval(

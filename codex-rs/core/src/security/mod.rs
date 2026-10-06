@@ -18,6 +18,7 @@ mod protected_runtime;
 pub(crate) mod protected_surface;
 pub(crate) mod recovery;
 pub(crate) mod taint;
+pub(crate) mod tainted_action;
 pub(crate) mod transition;
 pub(crate) mod ui_events;
 

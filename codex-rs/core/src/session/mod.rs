@@ -3268,6 +3268,7 @@ impl Session {
                 .model_client()
                 .register_message_origin(items, origin);
         }
+        self.services.model_client().note_recorded_for_taint(items);
         self.services.model_client().observe_native_ingress(items);
         {
             let mut state = self.state.lock().await;
@@ -3471,6 +3472,8 @@ impl Session {
         );
         let items = items.as_ref();
         let response_item = items[0].clone();
+        // Agent mail is data without standing (PF-30-S03 taint).
+        self.services.model_client().note_recorded_for_taint(items);
         {
             let mut state = self.state.lock().await;
             state.current_time_reminder.note_recorded_items(items);
