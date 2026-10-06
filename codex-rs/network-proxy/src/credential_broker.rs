@@ -75,9 +75,7 @@ enum Isolation {
 
 #[cfg(unix)]
 struct IsolatedMode {
-    launcher: IsolatedBrokerLauncher,
-    options: IsolatedBrokerOptions,
-    client: std::sync::Mutex<Option<Arc<IsolatedBrokerClient>>>,
+    client: Option<Arc<IsolatedBrokerClient>>,
     fingerprint_key: Zeroizing<[u8; 32]>,
 }
 
@@ -181,12 +179,22 @@ impl CredentialBroker {
     ) -> Self {
         let mut fingerprint_key = Zeroizing::new([0_u8; 32]);
         rand::Rng::fill(&mut rand::rng(), fingerprint_key.as_mut_slice());
+        // Start the broker with the proxy, before agent processes exist, so no
+        // concurrent spawn can inherit its control pipes. It is never respawned:
+        // after it dies, brokered credentials fail closed until Core restarts.
+        let client = enabled
+            .then(|| IsolatedBrokerClient::spawn(&launcher, options))
+            .and_then(|spawned| match spawned {
+                Ok(client) => Some(Arc::new(client)),
+                Err(error) => {
+                    tracing::warn!("isolated credential broker unavailable: {error}");
+                    None
+                }
+            });
         Self::with_isolation(
             enabled,
             Isolation::Process(Arc::new(IsolatedMode {
-                launcher,
-                options,
-                client: std::sync::Mutex::new(None),
+                client,
                 fingerprint_key,
             })),
         )
@@ -419,6 +427,9 @@ impl CredentialBroker {
                 if !client.is_alive() {
                     return Err(ScopedCredentialInjectionError::IsolatedBrokerUnavailable);
                 }
+                if !matches!(method, "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE") {
+                    return Err(ScopedCredentialInjectionError::MethodDenied);
+                }
                 let operation =
                     ProviderRequestOperation::new(normalized_host.as_str(), port, method, path)
                         .map_err(|_| ScopedCredentialInjectionError::PathDenied)?;
@@ -518,30 +529,12 @@ fn fingerprint(key: &[u8; 32], env_var: &str, value: &str) -> [u8; 32] {
 
 #[cfg(unix)]
 impl IsolatedMode {
-    /// Returns the current broker, starting a fresh one when the previous
-    /// broker died. A fresh broker never inherits earlier references.
+    /// Returns the broker while it is alive. A dead broker is not replaced.
     fn live_client(&self) -> Option<Arc<IsolatedBrokerClient>> {
-        let mut client = self
-            .client
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if let Some(current) = client.as_ref()
-            && current.is_alive()
-        {
-            return Some(current.clone());
-        }
-        *client = None;
-        match IsolatedBrokerClient::spawn(&self.launcher, self.options) {
-            Ok(spawned) => {
-                let spawned = Arc::new(spawned);
-                *client = Some(spawned.clone());
-                Some(spawned)
-            }
-            Err(error) => {
-                tracing::warn!("isolated credential broker unavailable: {error}");
-                None
-            }
-        }
+        self.client
+            .as_ref()
+            .filter(|client| client.is_alive())
+            .cloned()
     }
 }
 
@@ -620,7 +613,7 @@ impl CredentialBrokerState {
             }
             self.credentials.remove(existing);
         }
-        let Some(client) = client else {
+        let (Some(client), Some(provider_id)) = (client, providers::provider_id(provider)) else {
             return self.register_unavailable(
                 fingerprint,
                 env_var,
@@ -630,7 +623,7 @@ impl CredentialBrokerState {
             );
         };
         let reference = match client.register(
-            providers::provider_id(provider),
+            provider_id,
             HostBindingWire::from_binding(&host_binding),
             real_value,
         ) {
@@ -713,6 +706,7 @@ impl CredentialRecord {
         self.host_binding.matches_host(host)
     }
 
+    #[cfg(unix)]
     fn fingerprint(&self) -> Option<[u8; 32]> {
         match &self.secret {
             RecordSecret::Raw(_) => None,
@@ -920,11 +914,7 @@ impl CredentialBroker {
     #[cfg(unix)]
     pub(crate) fn current_isolated_client(&self) -> Option<Arc<IsolatedBrokerClient>> {
         match &self.isolation {
-            Isolation::Process(mode) => mode
-                .client
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .clone(),
+            Isolation::Process(mode) => mode.client.clone(),
             Isolation::InProcess => None,
         }
     }

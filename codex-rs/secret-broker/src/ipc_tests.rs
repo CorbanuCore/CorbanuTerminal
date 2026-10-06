@@ -142,8 +142,13 @@ fn pf_27_s04_pf_27_s01_debug_output_is_redacted() {
 }
 
 fn provider_request() -> ProviderRequestOperation {
-    ProviderRequestOperation::new("api.github.com", /*port*/ 443, "GET", "/user?per_page=1")
-        .expect("provider request")
+    ProviderRequestOperation::new(
+        "api.github.com",
+        /*port*/ 443,
+        "GET",
+        "/user?per_page=1",
+    )
+    .expect("provider request")
 }
 
 fn reference() -> CredentialReference {

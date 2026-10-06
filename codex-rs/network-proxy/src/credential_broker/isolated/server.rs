@@ -76,11 +76,17 @@ use zeroize::Zeroizing;
 pub(crate) const MAX_BROKER_CREDENTIALS: usize = 64;
 pub(crate) const MAX_BROKER_IN_FLIGHT: usize = 64;
 const REPLAY_WINDOW: u64 = 1_024;
+const ACCEPT_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(50);
+/// Longest wait for upstream response headers or between body frames.
+const RESPONSE_IDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 const MAX_FRAME_HEADER_BYTES: usize = 22 * 1024;
 const BROKER_EXIT_UNAVAILABLE: i32 = 78;
 
 /// Entry point for `corbanu --codex-run-as-credential-broker`.
 pub fn run_credential_broker_main() -> ! {
+    // Raw values and the channel key live here: refuse debugger attach and
+    // core dumps, and drop loader-injection variables, before anything else.
+    codex_process_hardening::pre_main_hardening();
     let Ok(runtime) = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -235,6 +241,9 @@ fn upstream_client(
 async fn accept_loop(listener: UnixListener, broker: Arc<Broker>) {
     loop {
         let Ok((stream, _)) = listener.accept().await else {
+            // Back off so a persistent error (for example, no free file
+            // descriptors) cannot pin a CPU.
+            tokio::time::sleep(ACCEPT_RETRY_DELAY).await;
             continue;
         };
         let peer_allowed = stream.stream.peer_cred().is_ok_and(|peer| {
@@ -561,16 +570,16 @@ impl Broker {
             return deny(DenyCode::RequestMismatch);
         };
         parts.headers.insert(HOST, host);
-        // The agent may have spoken HTTP/2 to the proxy; let the upstream TLS
-        // handshake choose the protocol instead of assuming HTTP/2.
+        // The agent may have spoken HTTP/2 to the proxy. Send HTTP/1.1 so an
+        // origin that does not negotiate ALPN still understands the request.
         parts.version = Version::HTTP_11;
         let upstream_request = Request::from_parts(parts, body);
 
         let response = tokio::select! {
-            response = self.upstream.serve(upstream_request) => response,
+            response = tokio::time::timeout(RESPONSE_IDLE_TIMEOUT, self.upstream.serve(upstream_request)) => response,
             _ = generation.changed() => return deny(DenyCode::Revoked),
         };
-        let Ok(response) = response else {
+        let Ok(Ok(response)) = response else {
             return deny(DenyCode::UpstreamFailed);
         };
         let (parts, body) = response.into_parts();
@@ -579,6 +588,7 @@ impl Broker {
             revoked: Box::pin(async move {
                 let _ = generation.changed().await;
             }),
+            idle: Box::pin(tokio::time::sleep(RESPONSE_IDLE_TIMEOUT)),
             done: false,
             _guard: authorized.guard,
         };
@@ -599,10 +609,12 @@ impl Drop for InFlightGuard {
 }
 
 /// Response body that terminates with an error as soon as the run generation
-/// changes, so revocation closes streaming downloads too.
+/// changes, so revocation closes streaming downloads too. A body that makes no
+/// progress for [`RESPONSE_IDLE_TIMEOUT`] also ends, releasing its slot.
 struct RevocableBody {
     inner: Body,
     revoked: Pin<Box<dyn Future<Output = ()> + Send + Sync>>,
+    idle: Pin<Box<tokio::time::Sleep>>,
     done: bool,
     _guard: InFlightGuard,
 }
@@ -622,9 +634,19 @@ impl StreamingBody for RevocableBody {
             self.done = true;
             return Poll::Ready(Some(Err("credential broker run was revoked".into())));
         }
-        Pin::new(&mut self.inner)
+        let frame = Pin::new(&mut self.inner)
             .poll_frame(cx)
-            .map_err(BoxError::from)
+            .map_err(BoxError::from);
+        if frame.is_ready() {
+            let deadline = tokio::time::Instant::now() + RESPONSE_IDLE_TIMEOUT;
+            self.idle.as_mut().reset(deadline);
+            return frame;
+        }
+        if self.idle.as_mut().poll(cx).is_ready() {
+            self.done = true;
+            return Poll::Ready(Some(Err("credential broker response went idle".into())));
+        }
+        Poll::Pending
     }
 }
 

@@ -87,7 +87,8 @@ Earlier September 11 resumption is historical: recovered `security-round5-broker
 - [x] Revocation, run replacement, broker death and restart close channels and invalidate references; no stale capability or raw fallback.
 - [x] Crash, cross-run theft, wrong-peer, forged-reference, bounded-resource and concurrent-revoke tests; PF-13's exact OpenAI adapter unchanged.
 - [x] Named `pf_27_s01` tests; Cargo/lock edges updated (no Bazel lock change: no new external crates).
-- [ ] Follow-ups (separate sprints): model-client auth through the broker; OS constraint of the broker and agent denial of controller memory/environ (PF-27-S02); vault-label credentials resolved inside the broker; Windows broker (today isolation on Windows fails closed: dummies, no injection).
+- [ ] Follow-ups (separate sprints): model-client auth through the broker; OS constraint of the broker and agent denial of controller memory/environ, broker socket paths and inherited descriptors (PF-27-S02; includes the macOS pipe close-on-exec window at broker spawn); vault-label credentials resolved inside the broker; Windows broker (today isolation on Windows fails closed: dummies, no injection); a production revocation trigger (today a run ends with the controller process; PF-23-S03 can call `revoke_brokered_credentials`).
+- [ ] Known limits with the flag on: a dead broker is not restarted (brokered requests fail closed until Core restarts); only GET/HEAD/POST/PUT/PATCH/DELETE and paths up to 1,024 bytes are brokered; private-IP GitHub Enterprise hosts need `allow_local_binding`.
 
 ## Verification
 - [ ] Apply [independent isolated execution](../../../../qa/code-blind-functional/isolated-execution.md) to affected functional handoff; record schema-2 proof or integrator-accepted internal-only N/A and later gate. Historical tests are not upgraded.

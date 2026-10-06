@@ -107,11 +107,13 @@ pub(super) fn provider_by_id(
 #[cfg(unix)]
 pub(super) fn provider_id(
     provider: &'static CredentialProvider,
-) -> super::isolated::protocol::ProviderId {
+) -> Option<super::isolated::protocol::ProviderId> {
     if std::ptr::eq(provider, &github::PROVIDER) {
-        super::isolated::protocol::ProviderId::Github
+        Some(super::isolated::protocol::ProviderId::Github)
+    } else if std::ptr::eq(provider, &openai::PROVIDER) {
+        Some(super::isolated::protocol::ProviderId::Openai)
     } else {
-        super::isolated::protocol::ProviderId::Openai
+        None
     }
 }
 

@@ -168,7 +168,7 @@ impl IsolatedBrokerClient {
             return Err(IsolatedBrokerError::Spawn);
         };
         let (sender, lines) = mpsc::channel();
-        std::thread::Builder::new()
+        let reader = std::thread::Builder::new()
             .name("credential-broker-control".to_string())
             .spawn(move || {
                 let mut reader = BufReader::new(stdout);
@@ -184,8 +184,11 @@ impl IsolatedBrokerClient {
                         break;
                     }
                 }
-            })
-            .map_err(|_| IsolatedBrokerError::Spawn)?;
+            });
+        if reader.is_err() {
+            kill_and_reap(child);
+            return Err(IsolatedBrokerError::Spawn);
+        }
 
         let mut key = Zeroizing::new([0_u8; 32]);
         rand::rng().fill_bytes(key.as_mut());
@@ -224,7 +227,7 @@ impl IsolatedBrokerClient {
             || !socket_path.is_absolute()
             || run_generation != 1
         {
-            kill_and_reap(child);
+            kill_and_reap_with_cleanup(child, Some(socket_path));
             return Err(IsolatedBrokerError::Spawn);
         }
         Ok(Self {

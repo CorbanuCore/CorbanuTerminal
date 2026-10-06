@@ -3883,6 +3883,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "clap",
+ "codex-process-hardening",
  "codex-secret-broker",
  "codex-security-policy",
  "codex-utils-absolute-path",

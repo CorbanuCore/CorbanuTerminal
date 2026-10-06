@@ -404,7 +404,6 @@ async fn pf_27_s04_pf_27_s01_broker_crash_fails_closed_and_restart_rejects_old_h
     let old_dummy = virtualized_dummy(&broker);
     let old_reference = registered_reference(&broker, upstream.port, &old_dummy);
     let old_client = broker.current_isolated_client().expect("broker client");
-    let old_instance = old_client.broker_instance().to_string();
 
     old_client.kill_for_test();
     assert_eq!(
@@ -413,15 +412,27 @@ async fn pf_27_s04_pf_27_s01_broker_crash_fails_closed_and_restart_rejects_old_h
     );
     assert!(!old_client.socket_path().exists());
 
-    // The next launch starts a fresh broker; nothing from the old one is restored.
-    let new_dummy = virtualized_dummy(&broker);
-    assert_ne!(new_dummy, old_dummy);
-    let new_client = broker.current_isolated_client().expect("restarted broker");
-    assert_ne!(new_client.broker_instance(), old_instance);
+    // A dead broker is not replaced: later children still get only dummies and
+    // nothing is injected until Core restarts.
+    let after_crash = virtualized_dummy(&broker);
+    assert_ne!(after_crash, old_dummy);
+    assert!(!broker.holds_raw_value(SYNTHETIC_TOKEN));
+    assert_eq!(
+        route(&broker, upstream.port, "/echo", &after_crash).err(),
+        Some(ScopedCredentialInjectionError::IsolatedBrokerUnavailable)
+    );
     assert!(matches!(
         route(&broker, upstream.port, "/echo", &old_dummy),
         Ok(CredentialRouting::Direct)
     ));
+
+    // A restarted controller gets a fresh broker that never honors old handles.
+    let restarted = isolated_broker(launcher(&upstream, /*controller_pid_override*/ None));
+    let new_dummy = virtualized_dummy(&restarted);
+    let new_client = restarted
+        .current_isolated_client()
+        .expect("restarted broker");
+    assert_ne!(new_client.broker_instance(), old_client.broker_instance());
     let operation = operation(upstream.port, "/echo");
     let frame = new_client
         .sign_frame(&old_reference, &operation)
@@ -432,7 +443,7 @@ async fn pf_27_s04_pf_27_s01_broker_crash_fails_closed_and_restart_rejects_old_h
         .expect("response");
     assert_eq!(denial(&response), Some("unknown_credential"));
 
-    let response = forward(&broker, upstream.port, "/echo", &new_dummy).await;
+    let response = forward(&restarted, upstream.port, "/echo", &new_dummy).await;
     assert_eq!(
         response.try_into_string().await.expect("body"),
         format!("Bearer {SYNTHETIC_TOKEN}")
