@@ -162,7 +162,11 @@ impl DynamicToolHandler {
     }
 }
 
-impl CoreToolRuntime for DynamicToolHandler {}
+impl CoreToolRuntime for DynamicToolHandler {
+    fn tool_origin(&self) -> crate::security::protected_surface::ToolOrigin {
+        crate::security::protected_surface::ToolOrigin::Dynamic
+    }
+}
 
 #[expect(
     clippy::await_holding_invalid_type,

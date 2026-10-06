@@ -29,6 +29,7 @@ use std::path::Path;
 
 mod indirect;
 mod invocation;
+mod outbound;
 mod paths;
 mod shell;
 
@@ -45,15 +46,34 @@ pub(crate) enum ProtectedActionKind {
     /// shell, a script it cannot read in full, a variable it cannot see), or
     /// an action it cannot describe.
     UnseenCode,
+    /// Local content (a file, another command's output, session data passed
+    /// to an outside tool) sent to another machine or service (PF-23-S01).
+    Disclosure,
+    /// Moving money or tokens (PF-23-S01).
+    ValueTransfer,
+    /// A tool route the security level has not classified (PF-23-S01).
+    UnclassifiedTool,
 }
 
 impl ProtectedActionKind {
+    /// The more protected of the two (the one a prompt names).
+    pub(crate) fn strongest(self, other: Self) -> Self {
+        if rank(other) > rank(self) {
+            other
+        } else {
+            self
+        }
+    }
+
     pub(crate) fn describe(self) -> &'static str {
         match self {
             Self::Vault => "vault access",
             Self::Credentials => "credential access",
             Self::SecurityPolicy => "a security policy change",
             Self::UnseenCode => "running code the host cannot read first",
+            Self::Disclosure => "sending local data to another machine or service",
+            Self::ValueTransfer => "a value transfer",
+            Self::UnclassifiedTool => "a tool the security level has not classified",
         }
     }
 }
@@ -291,10 +311,13 @@ fn path_text(path: &PathUri) -> String {
 
 fn rank(kind: ProtectedActionKind) -> u8 {
     match kind {
-        ProtectedActionKind::UnseenCode => 0,
-        ProtectedActionKind::SecurityPolicy => 1,
-        ProtectedActionKind::Credentials => 2,
-        ProtectedActionKind::Vault => 3,
+        ProtectedActionKind::UnclassifiedTool => 0,
+        ProtectedActionKind::UnseenCode => 1,
+        ProtectedActionKind::Disclosure => 2,
+        ProtectedActionKind::SecurityPolicy => 3,
+        ProtectedActionKind::Credentials => 4,
+        ProtectedActionKind::ValueTransfer => 5,
+        ProtectedActionKind::Vault => 6,
     }
 }
 
@@ -548,6 +571,11 @@ impl Classifier {
                     self.note(ProtectedActionKind::Credentials);
                 }
             }
+        }
+        let stdin_fed =
+            simple.pipe_from.is_some() || simple.stdin_from.is_some() || simple.reads_outer_output;
+        if let Some(kind) = outbound::classify(words, stdin_fed) {
+            self.note(kind);
         }
         let recursive = command.as_ref().is_some_and(|(_, name)| {
             RECURSIVE_READERS.iter().any(|(reader, flags)| {

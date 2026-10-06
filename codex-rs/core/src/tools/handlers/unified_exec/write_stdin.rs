@@ -1,4 +1,11 @@
 use crate::function_tool::FunctionCallError;
+use crate::security::protected_surface::Admission;
+use crate::security::protected_surface::Route;
+use crate::security::protected_surface::admit;
+use crate::security::protected_surface::ask_human;
+use crate::security::protected_surface::classify_typed_input;
+use crate::session::session::Session;
+use crate::session::turn_context::TurnContext;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
 use crate::tools::context::boxed_tool_output;
@@ -64,6 +71,7 @@ impl WriteStdinHandler {
             session,
             turn,
             payload,
+            call_id,
             ..
         } = invocation;
 
@@ -77,6 +85,9 @@ impl WriteStdinHandler {
         };
 
         let args: WriteStdinArgs = parse_arguments_for_tool("write_stdin", &arguments)?;
+        if !args.chars.is_empty() {
+            post_taint_check(&session, &turn, &call_id, &args).await?;
+        }
         let response = session
             .services
             .unified_exec_manager
@@ -99,6 +110,62 @@ impl WriteStdinHandler {
         Ok(boxed_tool_output(response))
     }
 }
+
+/// PF-23-S01: typing into a running process after untrusted content is
+/// judged like the command it amounts to, and like the process it goes to.
+async fn post_taint_check(
+    session: &Session,
+    turn: &TurnContext,
+    call_id: &str,
+    args: &WriteStdinArgs,
+) -> Result<(), FunctionCallError> {
+    let process_id = args.session_id.to_string();
+    let Some(process) = session
+        .services
+        .unified_exec_manager
+        .list_processes()
+        .await
+        .into_iter()
+        .find(|process| process.process_id == process_id)
+    else {
+        // No such running process: the write fails on its own.
+        return Ok(());
+    };
+    let codex_home = turn.config.codex_home.to_path_buf();
+    let chars = args.chars.clone();
+    let command = process.command.clone();
+    let admission = admit(
+        session,
+        turn.approval_policy.value(),
+        Route::WriteStdin,
+        call_id,
+        move || classify_typed_input(&command, &chars, &process.cwd, &codex_home),
+    )
+    .await;
+    let check = match admission {
+        Admission::Clear => return Ok(()),
+        Admission::Refused(refusal) => return Err(FunctionCallError::RespondToModel(refusal)),
+        Admission::AskHuman(check) => check,
+    };
+    let typed: String = args.chars.chars().take(TYPED_TEXT_SHOWN).collect();
+    let more = if args.chars.chars().count() > TYPED_TEXT_SHOWN {
+        " (shortened)"
+    } else {
+        ""
+    };
+    let question = format!(
+        "Type {typed:?}{more} into the running `{}` (session {process_id})? {}",
+        process.command,
+        check.reason()
+    );
+    let approved = ask_human(session, turn, call_id, question).await;
+    check
+        .resolve(session, approved)
+        .map_err(FunctionCallError::RespondToModel)
+}
+
+/// Characters of typed text shown in the approval question.
+const TYPED_TEXT_SHOWN: usize = 400;
 
 impl CoreToolRuntime for WriteStdinHandler {
     fn repeated_identical_calls_are_polling(&self) -> bool {

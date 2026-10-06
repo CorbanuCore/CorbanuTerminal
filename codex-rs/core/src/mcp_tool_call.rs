@@ -234,6 +234,42 @@ pub(crate) async fn handle_mcp_tool_call(
     )
     .await;
 
+    // PF-23-S01: after untrusted content, a protected MCP call needs a fresh
+    // human approval; no remembered approval, hook or reviewer stands in.
+    match post_taint_mcp_check(&sess, step_context, &call_id, &invocation, &metadata).await {
+        Ok(true) => {
+            return handle_approved_mcp_tool_call(
+                &sess,
+                step_context.as_ref(),
+                &call_id,
+                invocation,
+                prepared_call,
+                metadata,
+                item_metadata,
+                McpToolApprovalApplication::NotRequired,
+            )
+            .await;
+        }
+        Ok(false) => {}
+        Err(refusal) => {
+            let result = notify_mcp_tool_call_skip(
+                sess.as_ref(),
+                turn_context.as_ref(),
+                &call_id,
+                invocation,
+                item_metadata.clone(),
+                refusal,
+                /*already_started*/ true,
+            )
+            .await;
+            return HandledMcpToolCall {
+                result: CallToolResult::from_result(result),
+                tool_input: arguments_value
+                    .unwrap_or_else(|| JsonValue::Object(serde_json::Map::new())),
+            };
+        }
+    }
+
     let approval_policy = if prepared_call.is_selected_plugin_server() {
         McpToolApprovalPolicy::for_selected_plugin(approval_mode)
     } else {
@@ -328,6 +364,64 @@ pub(crate) async fn handle_mcp_tool_call(
         McpToolApprovalApplication::NotRequired,
     )
     .await
+}
+
+/// PF-23-S01: `Ok(true)` when the human just approved this call after
+/// untrusted content, `Ok(false)` when post-taint checks do not apply, and
+/// the refusal otherwise.
+async fn post_taint_mcp_check(
+    sess: &Session,
+    step_context: &StepContext,
+    call_id: &str,
+    invocation: &McpInvocation,
+    metadata: &McpToolApprovalMetadata,
+) -> Result<bool, String> {
+    use crate::security::protected_surface;
+    let turn_context = step_context.turn.as_ref();
+    let codex_home = turn_context.config.codex_home.to_path_buf();
+    #[allow(deprecated)]
+    let cwd = step_context.environments.primary().map_or_else(
+        || codex_utils_path_uri::PathUri::from_abs_path(&turn_context.cwd),
+        |environment| environment.cwd().clone(),
+    );
+    let acts_outside = requires_mcp_tool_approval(metadata.annotations.as_ref());
+    let (server, tool, title, arguments) = (
+        invocation.server.clone(),
+        invocation.tool.clone(),
+        metadata.tool_title.clone(),
+        invocation.arguments.clone(),
+    );
+    let admission = protected_surface::admit(
+        sess,
+        turn_context.approval_policy.value(),
+        protected_surface::Route::McpTool,
+        call_id,
+        move || {
+            let call = protected_surface::McpCall {
+                server: &server,
+                tool: &tool,
+                title: title.as_deref(),
+                acts_outside,
+                arguments: arguments.as_ref(),
+                cwd: &cwd,
+            };
+            protected_surface::classify_mcp(&call, &codex_home)
+        },
+    )
+    .await;
+    let check = match admission {
+        protected_surface::Admission::Clear => return Ok(false),
+        protected_surface::Admission::Refused(refusal) => return Err(refusal),
+        protected_surface::Admission::AskHuman(check) => check,
+    };
+    let question = format!(
+        "Allow the {} MCP tool `{}`? {}",
+        invocation.server,
+        invocation.tool,
+        check.reason()
+    );
+    let approved = protected_surface::ask_human(sess, turn_context, call_id, question).await;
+    check.resolve(sess, approved).map(|()| true)
 }
 
 pub(crate) struct HandledMcpToolCall {
