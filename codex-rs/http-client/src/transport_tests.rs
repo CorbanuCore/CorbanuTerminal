@@ -31,11 +31,12 @@ fn trace_summary_never_contains_request_content() {
 }
 
 #[tokio::test]
-async fn enabled_request_logging_emits_transport_url_but_redacts_body() {
+async fn enabled_request_logging_emits_redacted_transport_url_but_not_body() {
     let logs = capture_transport_logs(HttpClient::new(test_reqwest_client())).await;
 
     assert!(logs.contains("log capture sentinel"));
-    assert!(logs.contains("url-secret"));
+    assert!(logs.contains("/request?token=REDACTED"));
+    assert!(!logs.contains("url-secret"));
     assert!(!logs.contains("body-secret"));
     assert!(logs.contains("json body:"));
     assert!(logs.contains("bytes"));

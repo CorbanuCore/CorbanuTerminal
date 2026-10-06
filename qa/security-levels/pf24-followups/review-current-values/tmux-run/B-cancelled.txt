@@ -1,0 +1,31 @@
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     loading   /model to change                   │
+│ directory: /Volumes/CorbanuDrive/…/tui-r2-2b2/workspace │
+╰─────────────────────────────────────────────────────────╯
+
+› Improve documentation in @filename
+
+  Z.AI GLM 5.2 via zai standard · <run>/workspace · Corbanu Terminal · TPS: -- t…
+
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.48)                           │
+│                                                         │
+│ model:     glm-5.2   /model to change                   │
+│ directory: /Volumes/CorbanuDrive/…/tui-r2-2b2/workspace │
+╰─────────────────────────────────────────────────────────╯
+
+Security level
+Active in this session: Permissive
+
+  Permissive  (active)
+  Moderate  not available yet
+> Aggressive
+
+Sensitive access denied by default, built from existing sandbox, approval, network and exec-policy controls.
+Cancelled. Nothing changed.
+
+↑/↓ move · enter choose · esc close
+
