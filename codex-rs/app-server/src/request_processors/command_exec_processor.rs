@@ -100,7 +100,17 @@ impl CommandExecRequestProcessor {
         request_id: ConnectionRequestId,
         params: CommandExecParams,
     ) -> Result<(), JSONRPCErrorError> {
-        tracing::debug!("ExecOneOffCommand params: {params:?}");
+        // Log names only: env override values can carry credentials (#179).
+        tracing::debug!(
+            command = ?params.command,
+            cwd = ?params.cwd,
+            env_names = ?params.env.as_ref().map(|env| {
+                let mut names: Vec<&str> = env.keys().map(String::as_str).collect();
+                names.sort_unstable();
+                names
+            }),
+            "ExecOneOffCommand params"
+        );
 
         let request = request_id.clone();
 
