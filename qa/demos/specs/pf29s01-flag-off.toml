@@ -1,0 +1,54 @@
+# PF-29-S01 baseline: with `protected_mode_preflight` off, the flagged /security
+# Aggressive review is exactly PF-24-S03's (no preflight, no receipt).
+id = "pf29s01-flag-off"
+feature = "Preflight flag off: the Aggressive review is unchanged"
+expected = "With protected_mode_preflight off, /security shows the PF-24-S03 Aggressive review with no preflight section; Esc changes nothing."
+model = "glm-5.2"
+provider = "zai"
+config = """
+suppress_unstable_features_warning = true
+[features]
+security_levels = true
+"""
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[fixtures]
+"seed.sh" = '''
+mkdir -p "$HOME/.ssh" && printf 'synthetic demo key pf29\n' > "$HOME/.ssh/id_ed25519" && echo seeded fake ssh key
+'''
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+type = "!sh seed.sh"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "seeded fake ssh key"
+[[steps]]
+type = "/security"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Active in this session: Permissive"
+[[steps]]
+key = "Up"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "Switch to Aggressive\\?"
+[[steps]]
+key = "Down"
+repeat = 12
+[[steps]]
+wait = "config\\.toml is not modified"
+[[steps]]
+pause = 4.0
+[[steps]]
+key = "Escape"
+[[steps]]
+wait = "Cancelled\\. Nothing changed\\."
+[[steps]]
+pause = 2.5

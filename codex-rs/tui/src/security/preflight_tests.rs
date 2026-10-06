@@ -1,0 +1,113 @@
+use pretty_assertions::assert_eq;
+
+use super::*;
+use crate::security::aggressive;
+use crate::security::level::LevelContext;
+
+fn context(boundary: Option<Boundary>) -> LevelContext {
+    LevelContext {
+        codex_home: PathBuf::from("/corbanu"),
+        picker_enabled: true,
+        active: ChosenLevel::Aggressive,
+        preflight_enabled: true,
+        boundary,
+    }
+}
+
+fn clean_preflight(home: &Path) -> Preflight {
+    Preflight::run(
+        &file_sources(home, /*home*/ None, /*cwd*/ None),
+        ReadinessFlags {
+            secretless_launch: true,
+            credential_broker: true,
+            output_gate: true,
+        },
+    )
+}
+
+#[test]
+fn pf_29_s01_receipt_round_trip_and_corrupt_receipts_fail_closed() {
+    let home = tempfile::tempdir().unwrap();
+    assert_eq!(load_receipt(home.path()), Ok(None));
+    save_receipt(home.path(), &clean_preflight(home.path())).unwrap();
+    let receipt = load_receipt(home.path()).unwrap().unwrap();
+    assert_eq!(receipt.activated_at, None);
+
+    std::fs::write(receipt_path(home.path()), "version = 1\nsaved_at = \"x\"").unwrap();
+    assert!(load_receipt(home.path()).is_err());
+    std::fs::write(
+        receipt_path(home.path()),
+        "version = 9\nsaved_at = 1\nfindings = []",
+    )
+    .unwrap();
+    assert!(load_receipt(home.path()).is_err());
+
+    remove_receipt(home.path()).unwrap();
+    remove_receipt(home.path()).unwrap();
+    assert_eq!(load_receipt(home.path()), Ok(None));
+}
+
+#[test]
+fn pf_29_s01_isolation_only_after_a_preflight_and_lands_in_the_profile() {
+    let root = tempfile::tempdir().unwrap();
+    let corbanu = root.path().join("corbanu");
+    let home = root.path().join("home");
+    std::fs::create_dir_all(home.join(".ssh")).unwrap();
+    std::fs::create_dir_all(&corbanu).unwrap();
+    std::fs::write(home.join(".ssh/id_rsa"), "fake").unwrap();
+
+    assert_eq!(
+        isolation_paths(&corbanu, Some(&home), /*cwd*/ None),
+        Vec::<PathBuf>::new()
+    );
+    // Even an unreadable receipt asks for isolation.
+    std::fs::write(receipt_path(&corbanu), "garbage").unwrap();
+    let paths = isolation_paths(&corbanu, Some(&home), /*cwd*/ None);
+    assert_eq!(paths, vec![home.join(".ssh/id_rsa")]);
+
+    let mut overrides = aggressive::base_overrides(&corbanu);
+    aggressive::deny_reads(&mut overrides, &paths);
+    let profile = overrides
+        .iter()
+        .find(|(key, _)| key == &format!("permissions.{}", aggressive::PROFILE_ID))
+        .map(|(_, value)| value.clone())
+        .unwrap();
+    assert_eq!(
+        profile["filesystem"][home.join(".ssh/id_rsa").to_string_lossy().as_ref()],
+        toml::Value::String("deny".to_string())
+    );
+}
+
+#[test]
+fn pf_29_s01_resume_refused_for_conversations_before_activation() {
+    let now = now();
+    let fresh = ThreadId::new();
+    let created = thread_created_at(&fresh).unwrap();
+    assert!((created - now).abs() <= 2, "{created} vs {now}");
+
+    let clean_before = context(Some(Boundary::Clean {
+        activated_at: now - 60,
+    }));
+    assert_eq!(refusal_for(&clean_before, &fresh), None);
+    let clean_after = context(Some(Boundary::Clean {
+        activated_at: now + 60,
+    }));
+    assert!(
+        refusal_for(&clean_after, &fresh)
+            .unwrap()
+            .contains("recorded before protected mode was activated")
+    );
+    for boundary in [
+        Boundary::NotClean {
+            blockers: vec!["x".to_string()],
+        },
+        Boundary::Unverified("corrupt".to_string()),
+    ] {
+        assert!(refusal_for(&context(Some(boundary)), &fresh).is_some());
+    }
+    // Flag off (no boundary) or Permissive: today's behaviour.
+    assert_eq!(refusal_for(&context(None), &fresh), None);
+    let mut permissive = context(Some(Boundary::Unverified("x".to_string())));
+    permissive.active = ChosenLevel::Permissive;
+    assert_eq!(refusal_for(&permissive, &fresh), None);
+}

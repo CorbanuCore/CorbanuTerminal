@@ -20,6 +20,11 @@ use crate::security::level;
 use crate::security::level::ChosenLevel;
 use crate::security::level::LevelContext;
 use crate::security::level::StoredLevel;
+use crate::security::preflight;
+use crate::security::preflight::PreflightInput;
+use crate::legacy_core::protected_preflight::Disposition;
+use crate::legacy_core::protected_preflight::LIMITS;
+use crate::legacy_core::protected_preflight::Preflight;
 use crate::wrapping::RtOptions;
 use crate::wrapping::word_wrap_lines;
 
@@ -70,10 +75,19 @@ pub(crate) struct SecurityLevelPicker {
     /// Largest useful `scroll`, recorded by the last render.
     max_scroll: Cell<u16>,
     pub(super) closed: bool,
+    /// PF-29-S01: present when `protected_mode_preflight` is on.
+    preflight_input: Option<PreflightInput>,
+    preflight: Option<Preflight>,
+    preflight_note: Option<String>,
 }
 
 impl SecurityLevelPicker {
-    pub(crate) fn new(context: &LevelContext, current: CurrentValues, keymap: ListKeymap) -> Self {
+    pub(crate) fn new(
+        context: &LevelContext,
+        current: CurrentValues,
+        preflight_input: Option<PreflightInput>,
+        keymap: ListKeymap,
+    ) -> Self {
         let stored = level::load(&context.codex_home);
         let selected = match stored.enforced() {
             ChosenLevel::Permissive => 0,
@@ -90,6 +104,9 @@ impl SecurityLevelPicker {
             scroll: 0,
             max_scroll: Cell::new(0),
             closed: false,
+            preflight_input,
+            preflight: None,
+            preflight_note: None,
         }
     }
 
@@ -110,6 +127,13 @@ impl SecurityLevelPicker {
                 } else if accept {
                     self.screen = self.choose(ROWS[self.selected]);
                     self.scroll = 0;
+                    self.preflight_note = None;
+                    self.preflight = match (&self.screen, &self.preflight_input) {
+                        (Screen::Review(ChosenLevel::Aggressive), Some(input)) => {
+                            Some(Preflight::run(&input.sources, input.flags))
+                        }
+                        _ => None,
+                    };
                 }
             }
             Screen::Review(target) => {
@@ -122,9 +146,10 @@ impl SecurityLevelPicker {
                         note: Some("Cancelled. Nothing changed.".to_string()),
                     };
                 } else if accept {
-                    let result = level::save(&self.codex_home, target)
-                        .map(|()| target)
-                        .map_err(|err| err.to_string());
+                    if !self.preflight_allows_save(target) {
+                        return;
+                    }
+                    let result = self.save(target);
                     self.stored = level::load(&self.codex_home);
                     self.screen = Screen::Saved(result);
                 }
@@ -135,6 +160,131 @@ impl SecurityLevelPicker {
                 }
             }
         }
+    }
+
+    /// Aggressive under the preflight flag: the review must have been clean
+    /// and nothing may have changed since. Otherwise stay on the review.
+    fn preflight_allows_save(&mut self, target: ChosenLevel) -> bool {
+        let (Some(input), ChosenLevel::Aggressive) = (&self.preflight_input, target) else {
+            return true;
+        };
+        let Some(reviewed) = &self.preflight else {
+            return false;
+        };
+        let (next, drift) = reviewed.recheck(&input.sources, input.flags);
+        let note = if !drift.is_empty() {
+            let count = drift.added.len() + drift.removed.len() + drift.changed.len();
+            Some(format!(
+                "Not saved: {count} item{} changed since you reviewed this{}. Review it again.",
+                if count == 1 { "" } else { "s" },
+                if drift.readiness_changed { ", and readiness changed" } else { "" }
+            ))
+        } else if !next.is_clean() {
+            Some("Not saved: resolve the blockers above first. Nothing changed.".to_string())
+        } else {
+            None
+        };
+        self.preflight = Some(next);
+        self.preflight_note = note;
+        self.preflight_note.is_none()
+    }
+
+    fn save(&self, target: ChosenLevel) -> Result<ChosenLevel, String> {
+        // The receipt goes first: without Aggressive stored it is ignored,
+        // while Aggressive without it would start unverified.
+        match (target, &self.preflight) {
+            (ChosenLevel::Aggressive, Some(passed)) => {
+                preflight::save_receipt(&self.codex_home, passed).map_err(|err| err.to_string())?;
+            }
+            (ChosenLevel::Aggressive, None) => {}
+            (ChosenLevel::Permissive, _) => {
+                preflight::remove_receipt(&self.codex_home).map_err(|err| err.to_string())?;
+            }
+        }
+        level::save(&self.codex_home, target)
+            .map(|()| target)
+            .map_err(|err| err.to_string())
+    }
+
+    fn preflight_lines(&self, preflight: &Preflight) -> Vec<String> {
+        let ready = preflight
+            .readiness
+            .iter()
+            .filter(|item| item.is_ready())
+            .count();
+        let mut lines = vec![if preflight.is_clean() {
+            "Preflight passed: no known raw-secret route stays open to agents or the model."
+                .to_string()
+        } else {
+            "Preflight blocked: Aggressive cannot be saved until these are resolved.".to_string()
+        }];
+        lines.push(format!(
+            "Controls ready: {ready} of {}",
+            preflight.readiness.len()
+        ));
+        lines.extend(preflight.blockers().into_iter().map(|line| format!("✗ {line}")));
+        // Credential files by location; Corbanu's own history and state by name.
+        let (own, credentials): (Vec<_>, Vec<_>) = preflight
+            .inventory
+            .findings
+            .iter()
+            .filter(|finding| finding.disposition == Disposition::Isolate)
+            .partition(|finding| {
+                finding
+                    .paths
+                    .first()
+                    .is_some_and(|path| path.starts_with(&self.codex_home))
+            });
+        if !credentials.is_empty() {
+            lines.push(format!(
+                "Credential files denied to agent commands after restart: {}",
+                credentials
+                    .iter()
+                    .map(|finding| finding.location.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        if !own.is_empty() {
+            let names = own
+                .iter()
+                .filter_map(|finding| finding.paths.first()?.file_name())
+                .map(|name| name.to_string_lossy().into_owned())
+                .collect::<Vec<_>>();
+            let databases = names.iter().filter(|name| name.contains(".sqlite")).count();
+            let mut shown = names
+                .into_iter()
+                .filter(|name| !name.contains(".sqlite"))
+                .collect::<Vec<_>>();
+            if databases > 0 {
+                shown.push(format!(
+                    "{databases} database{}",
+                    if databases == 1 { "" } else { "s" }
+                ));
+            }
+            lines.push(format!(
+                "Corbanu history and state denied to agent commands after restart: {}",
+                shown.join(", ")
+            ));
+        }
+        let routes = preflight
+            .inventory
+            .findings
+            .iter()
+            .filter(|finding| finding.disposition == Disposition::NotContained)
+            .count();
+        if routes > 0 {
+            lines.push(format!(
+                "Not contained: {routes} MCP server, hook or notify route{} run outside the sandbox.",
+                if routes == 1 { "" } else { "s" }
+            ));
+        }
+        lines.push(
+            "Conversations recorded before the restart cannot be resumed under Aggressive."
+                .to_string(),
+        );
+        lines.push(format!("Limits: {}", LIMITS.join(" ")));
+        lines
     }
 
     fn choose(&self, row: Row) -> Screen {
@@ -253,6 +403,14 @@ impl SecurityLevelPicker {
                             .subsequent_indent(hanging.into()),
                     ));
                 }
+                if let Some(preflight) = &self.preflight {
+                    for line in self.preflight_lines(preflight) {
+                        lines.extend(wrap(&line));
+                    }
+                }
+                if let Some(note) = &self.preflight_note {
+                    lines.extend(wrap(note).into_iter().map(Stylize::cyan));
+                }
                 lines.extend(wrap(aggressive::UNCHANGED));
                 lines.extend(wrap(if self.active == ChosenLevel::Aggressive {
                     "This session is already Aggressive; saving keeps it after restart. Your config.toml is not modified."
@@ -324,6 +482,15 @@ impl SecurityLevelPicker {
                 label(&self.keymap.move_up),
                 label(&self.keymap.move_down),
             ),
+            Screen::Review(ChosenLevel::Aggressive)
+                if self.preflight.as_ref().is_some_and(|preflight| !preflight.is_clean()) =>
+            {
+                format!(
+                    "{}/{} scroll · esc back, nothing changes",
+                    label(&self.keymap.move_up),
+                    label(&self.keymap.move_down),
+                )
+            }
             Screen::Review(_) if self.max_scroll.get() > 0 => format!(
                 "{}/{} scroll · {accept} confirm and save · esc back, nothing changes",
                 label(&self.keymap.move_up),

@@ -197,6 +197,11 @@ pub(crate) struct LevelContext {
     pub(crate) picker_enabled: bool,
     /// Verified at launch; Aggressive only when every control was observed.
     pub(crate) active: ChosenLevel,
+    /// The `protected_mode_preflight` flag (PF-29-S01).
+    pub(crate) preflight_enabled: bool,
+    /// What may be claimed about the protected boundary; `None` when no
+    /// preflight applies (flag off or not Aggressive).
+    pub(crate) boundary: Option<super::preflight::Boundary>,
 }
 
 static CONTEXT: OnceLock<LevelContext> = OnceLock::new();

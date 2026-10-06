@@ -12,6 +12,7 @@ use super::level;
 use super::level::ChosenLevel;
 use super::level::LevelContext;
 use super::level::StoredLevel;
+use super::preflight;
 use crate::legacy_core::config::Config;
 use crate::legacy_core::config::ConfigOverrides;
 
@@ -19,6 +20,8 @@ pub(crate) struct LaunchPlan {
     codex_home: PathBuf,
     stored: StoredLevel,
     replaced_flags: Vec<&'static str>,
+    /// PF-29-S01: credential paths denied to agent commands.
+    isolated: Vec<PathBuf>,
 }
 
 impl LaunchPlan {
@@ -37,10 +40,11 @@ impl LaunchPlan {
                 )
             })?;
         }
-        let plan = Self {
+        let mut plan = Self {
             codex_home: codex_home.to_path_buf(),
             stored,
             replaced_flags: Vec::new(),
+            isolated: Vec::new(),
         };
         if plan.aggressive() && codex_home.to_str().is_none() {
             return Err(format!(
@@ -50,6 +54,15 @@ impl LaunchPlan {
         }
         if plan.aggressive() {
             cli_kv_overrides.extend(aggressive::base_overrides(codex_home));
+            // Only after a preflight (its receipt exists, even if unreadable);
+            // denying more paths never weakens Aggressive.
+            let cwd = std::env::current_dir().ok();
+            plan.isolated = preflight::isolation_paths(
+                codex_home,
+                crate::legacy_core::protected_preflight::home_dir().as_deref(),
+                cwd.as_deref(),
+            );
+            aggressive::deny_reads(cli_kv_overrides, &plan.isolated);
         }
         Ok(plan)
     }
@@ -92,8 +105,38 @@ impl LaunchPlan {
             StoredLevel::Invalid(reason) => Some(reason.clone()),
             StoredLevel::Absent | StoredLevel::Chosen(_) => None,
         };
+        let preflight_enabled = config.features.enabled(Feature::ProtectedModePreflight);
+        let mut boundary = None;
         if self.aggressive() {
             verify_aggressive(&self.codex_home, config).await?;
+            let unisolated = preflight::verify_isolation(config, &self.isolated);
+            if !unisolated.is_empty() {
+                return Err(format!(
+                    "Security level Aggressive could not be fully applied:\n  {}\nChoose Permissive by editing {}.",
+                    unisolated.join("\n  "),
+                    level::state_path(&self.codex_home).display()
+                ));
+            }
+            if preflight_enabled {
+                let audited = preflight::audit_at_launch(&self.codex_home, config);
+                match &audited {
+                    preflight::Boundary::Clean { .. } => {}
+                    preflight::Boundary::NotClean { blockers } => {
+                        config.startup_warnings.push(format!(
+                            "Security level Aggressive is enforced, but the protected boundary is not clean ({} blocker{}). Earlier conversations cannot be resumed. See /security:\n  {}",
+                            blockers.len(),
+                            if blockers.len() == 1 { "" } else { "s" },
+                            blockers.join("\n  ")
+                        ));
+                    }
+                    preflight::Boundary::Unverified(reason) => {
+                        config.startup_warnings.push(format!(
+                            "Security level Aggressive is enforced, but the protected boundary is unverified ({reason}). Earlier conversations cannot be resumed."
+                        ));
+                    }
+                }
+                boundary = Some(audited);
+            }
             if let Some(home) = std::env::var_os("HOME")
                 && config.cwd.as_path() == Path::new(&home)
             {
@@ -121,6 +164,8 @@ impl LaunchPlan {
                     StoredLevel::Absent | StoredLevel::Chosen(ChosenLevel::Permissive)
                 ),
             active: self.stored.enforced(),
+            preflight_enabled,
+            boundary,
         });
         Ok(())
     }

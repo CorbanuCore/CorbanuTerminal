@@ -397,6 +397,8 @@ mod tests {
             codex_home: std::path::PathBuf::from("/home"),
             picker_enabled,
             active: ChosenLevel::Permissive,
+            preflight_enabled: false,
+            boundary: None,
         };
         let read_only = "explore security profiles and protection readiness (read only)";
         assert_eq!(

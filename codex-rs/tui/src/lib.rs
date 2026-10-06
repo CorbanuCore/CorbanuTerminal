@@ -1834,6 +1834,13 @@ async fn run_ratatui_app(
         }
     };
 
+    if let resume_picker::SessionSelection::Resume(target)
+    | resume_picker::SessionSelection::Fork(target) = &session_selection
+        && let Some(message) = security::preflight::resume_refusal(&target.thread_id)
+    {
+        exit_with_security_error(&message);
+    }
+
     let picker_cancelled_without_selection = matches!(
         session_selection,
         resume_picker::SessionSelection::StartFresh
