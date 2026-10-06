@@ -8,6 +8,26 @@ use codex_protocol::config_types::SandboxMode;
 
 use super::*;
 use crate::legacy_core::config::ConfigBuilder;
+use codex_config::LoaderOverrides;
+
+async fn load(home: &Path, cwd: &Path, user_config: &str) -> Config {
+    std::fs::write(home.join("config.toml"), user_config).unwrap();
+    let mut cli = base_overrides(home);
+    cli.extend(env_overrides(&ShellEnvironmentPolicyToml::default()));
+    let mut harness = ConfigOverrides {
+        cwd: Some(cwd.to_path_buf()),
+        ..Default::default()
+    };
+    apply_launch_overrides(&mut harness);
+    ConfigBuilder::default()
+        .codex_home(home.to_path_buf())
+        .cli_overrides(cli)
+        .harness_overrides(harness)
+        .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
+        .build()
+        .await
+        .unwrap()
+}
 
 fn names(overrides: &[(String, toml::Value)]) -> Vec<String> {
     overrides.iter().map(|(key, _)| key.clone()).collect()
@@ -119,6 +139,7 @@ set = { MY_API_KEY = "abc" }
     let build = |cli: Vec<(String, toml::Value)>, harness: ConfigOverrides| {
         ConfigBuilder::default()
             .codex_home(home.path().to_path_buf())
+            .loader_overrides(LoaderOverrides::without_managed_config_for_tests())
             .cli_overrides(cli)
             .harness_overrides(ConfigOverrides {
                 cwd: Some(cwd.path().to_path_buf()),
@@ -166,22 +187,57 @@ async fn codex_home_inside_the_workspace_stays_read_only() {
     let cwd = tempfile::tempdir().unwrap();
     let home = cwd.path().join(".corbanu");
     std::fs::create_dir_all(&home).unwrap();
-    let mut cli = base_overrides(&home);
-    cli.extend(env_overrides(&ShellEnvironmentPolicyToml::default()));
-    let mut harness = ConfigOverrides {
-        cwd: Some(cwd.path().to_path_buf()),
-        ..Default::default()
-    };
-    apply_launch_overrides(&mut harness);
-    let config = ConfigBuilder::default()
-        .codex_home(home.clone())
-        .cli_overrides(cli)
-        .harness_overrides(harness)
-        .build()
-        .await
-        .unwrap();
+    let config = load(&home, cwd.path(), "").await;
     assert_eq!(
         verify(&config, /*rules_present*/ true),
         Vec::<String>::new()
+    );
+}
+
+/// User or project layers cannot widen the profile through a table merge.
+#[tokio::test]
+async fn another_layer_defining_the_profile_fails_verification() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    let config = load(
+        home.path(),
+        cwd.path(),
+        "[permissions.corbanu-aggressive.network]\nenabled = true\n",
+    )
+    .await;
+    let failures = verify(&config, /*rules_present*/ true);
+    assert!(
+        failures
+            .iter()
+            .any(|failure| failure.contains("also defines permissions.corbanu-aggressive")),
+        "{failures:?}"
+    );
+}
+
+/// A custom role that would hand children different values is refused.
+#[tokio::test]
+async fn role_that_changes_child_values_fails_verification() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(home.path().join("agents")).unwrap();
+    std::fs::write(
+        home.path().join("agents/loose.toml"),
+        "web_search = \"live\"\n[features]\nshell_snapshot = true\n",
+    )
+    .unwrap();
+    std::fs::write(
+        home.path().join("agents/plain.toml"),
+        "developer_instructions = \"Be brief\"\n",
+    )
+    .unwrap();
+    let config = load(
+        home.path(),
+        cwd.path(),
+        "[agents.loose]\ndescription = \"x\"\nconfig_file = \"./agents/loose.toml\"\n[agents.plain]\ndescription = \"y\"\nconfig_file = \"./agents/plain.toml\"\n",
+    )
+    .await;
+    assert_eq!(
+        verify(&config, /*rules_present*/ true),
+        vec!["Child agents: role `loose` sets web_search, features.shell_snapshot".to_string()]
     );
 }

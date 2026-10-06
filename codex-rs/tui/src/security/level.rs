@@ -93,6 +93,15 @@ pub(crate) fn load(codex_home: &Path) -> StoredLevel {
     let path = state_path(codex_home);
     let contents = match std::fs::read_to_string(&path) {
         Ok(contents) => contents,
+        // The rule file exists only while Aggressive is stored: a missing state
+        // file next to it was deleted, not never written.
+        Err(err) if err.kind() == io::ErrorKind::NotFound && rules_path(codex_home).exists() => {
+            return StoredLevel::Invalid(format!(
+                "{} is missing but {} exists",
+                path.display(),
+                rules_path(codex_home).display()
+            ));
+        }
         Err(err) if err.kind() == io::ErrorKind::NotFound => return StoredLevel::Absent,
         Err(err) => return StoredLevel::Invalid(format!("cannot read {}: {err}", path.display())),
     };
@@ -141,8 +150,9 @@ pub(crate) fn sync_rules(codex_home: &Path, level: ChosenLevel) -> io::Result<()
             Ok(())
         }
         ChosenLevel::Permissive => match std::fs::remove_file(&path) {
-            Err(err) if err.kind() != io::ErrorKind::NotFound => Err(err),
-            _ => Ok(()),
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(err) => Err(err),
         },
     }
 }
@@ -168,6 +178,9 @@ fn write_atomically(path: &Path, contents: &str) -> io::Result<()> {
     file.write_all(contents.as_bytes())?;
     file.as_file().sync_all()?;
     file.persist(path).map_err(|err| err.error)?;
+    // Make the rename itself durable.
+    #[cfg(unix)]
+    std::fs::File::open(parent)?.sync_all()?;
     Ok(())
 }
 
@@ -180,8 +193,6 @@ pub(crate) struct LevelContext {
     pub(crate) picker_enabled: bool,
     /// Verified at launch; Aggressive only when every control was observed.
     pub(crate) active: ChosenLevel,
-    /// Why stored state was unreadable, when it was.
-    pub(crate) launch_warning: Option<String>,
 }
 
 static CONTEXT: OnceLock<LevelContext> = OnceLock::new();

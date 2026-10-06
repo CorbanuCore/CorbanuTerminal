@@ -1,7 +1,6 @@
 //! PF-24 profile copy and the future authenticated PF-24/25 observation seam.
 //! `/security` currently explores configuration intent only. The state below is
 //! not connected to a live event channel; no policy mutation is activated.
-#![allow(dead_code)]
 
 pub(crate) mod aggressive;
 pub(crate) mod launch;
@@ -13,11 +12,13 @@ use codex_protocol::security::SecurityControlRequest;
 use codex_protocol::security::SecurityInspectorEvent;
 use codex_protocol::security::SecurityRequestError;
 
+#[allow(dead_code)]
 #[derive(Default)]
 pub(crate) struct SecurityViewState {
     observation: Option<SecurityInspectorEvent>,
 }
 
+#[allow(dead_code)]
 impl SecurityViewState {
     /// Only accept observations from the trusted Core event channel.
     pub(crate) fn observe(&mut self, event: SecurityInspectorEvent) {

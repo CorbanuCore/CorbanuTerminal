@@ -210,7 +210,7 @@ impl SecurityLevelPicker {
             Screen::Review(ChosenLevel::Aggressive) => {
                 lines.push("Switch to Aggressive?".bold().into());
                 lines.extend(wrap(
-                    "These settings replace yours for every session and child agent:",
+                    "These settings replace yours in Corbanu Terminal sessions and their child agents:",
                 ));
                 for (control, value) in aggressive::ROWS {
                     lines.extend(wrap(&format!("• {control}: {value}")));

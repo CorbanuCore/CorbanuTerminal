@@ -2080,7 +2080,12 @@ async fn load_config_or_exit_with_fallback_cwd(
         .build()
         .await
     {
-        Ok(config) => config,
+        Ok(config) => {
+            if let Err(message) = security::launch::verify_reloaded(&config) {
+                exit_with_security_error(&message);
+            }
+            config
+        }
         Err(err) => {
             eprintln!("Error loading configuration: {err}");
             std::process::exit(1);

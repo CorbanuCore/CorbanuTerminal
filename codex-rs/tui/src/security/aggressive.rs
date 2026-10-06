@@ -12,6 +12,8 @@
 
 use std::path::Path;
 
+use codex_config::ConfigLayerSource;
+use codex_config::ConfigLayerStackOrdering;
 use codex_config::types::ShellEnvironmentPolicyToml;
 use codex_features::Feature;
 use codex_protocol::config_types::ApprovalsReviewer;
@@ -33,7 +35,7 @@ const SECRET_ENV_PATTERNS: [&str; 4] = ["*VAULT*", "*PASSWORD*", "*PASSPHRASE*",
 pub(crate) const ROWS: [(&str, &str); 5] = [
     (
         "Sandbox",
-        "write only in the current folder: no extra writable folders, no /tmp or $TMPDIR; approved commands stay inside it too",
+        "write only in the current folder: no extra writable folders, no /tmp or $TMPDIR; approved commands stay inside it too; escalation and permission-request tools are off",
     ),
     (
         "Approvals",
@@ -42,12 +44,31 @@ pub(crate) const ROWS: [(&str, &str); 5] = [
     ("Network", "off for agent commands; web search off"),
     (
         "Vault",
-        "agent commands running `corbanu vault …` are refused; the vault store is unreadable; secret-like environment variables (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL) are removed and shell profiles are not loaded",
+        "the vault store and sign-in file are unreadable to agent commands, and direct `corbanu vault …` commands are refused; secret-like environment variables (KEY, SECRET, TOKEN, VAULT, PASSWORD, PASSPHRASE, CREDENTIAL) are removed and shell profiles are not loaded",
     ),
-    ("Child agents", "spawned agents get the same values"),
+    (
+        "Child agents",
+        "spawned agents get the same values; custom roles that would change them are refused at start",
+    ),
 ];
 
-pub(crate) const UNCHANGED: &str = "Unchanged: model and provider, MCP servers and apps, wallet scopes, and commands you have already allowed permanently.";
+pub(crate) const UNCHANGED: &str = "Unchanged: model and provider, MCP servers, apps and hooks (they run outside the sandbox), wallet scopes, and commands you have already allowed permanently (they skip the prompt but stay sandboxed). `corbanu exec` and IDE sessions are not covered yet.";
+
+/// Role config keys (dotted) that would give a spawned child different values.
+const ROLE_KEYS: [&str; 12] = [
+    "approval_policy",
+    "approvals_reviewer",
+    "sandbox_mode",
+    "default_permissions",
+    "permissions",
+    "web_search",
+    "tools.web_search",
+    "shell_environment_policy",
+    "allow_login_shell",
+    "features.shell_snapshot",
+    "features.request_permissions_tool",
+    "features.exec_permission_approvals",
+];
 
 fn string(value: &str) -> toml::Value {
     toml::Value::String(value.to_string())
@@ -55,8 +76,11 @@ fn string(value: &str) -> toml::Value {
 
 /// `-c`-level overrides; they also reach the embedded app server, so every
 /// thread it starts (and every child it spawns) is built from them.
+///
+/// `codex_home` must be valid UTF-8 (checked by the launch path) so the
+/// profile's path keys are exact.
 pub(crate) fn base_overrides(codex_home: &Path) -> Vec<(String, toml::Value)> {
-    let vault_store = codex_home.join("secrets").display().to_string();
+    let path = |child: &str| codex_home.join(child).to_string_lossy().into_owned();
     let profile = toml::toml! {
         extends = ":workspace"
         [filesystem]
@@ -72,8 +96,9 @@ pub(crate) fn base_overrides(codex_home: &Path) -> Vec<(String, toml::Value)> {
     {
         // Read-only even when the workspace contains it: the stored level,
         // rules and config cannot be rewritten by an agent command.
-        filesystem.insert(codex_home.display().to_string(), string("read"));
-        filesystem.insert(vault_store, string("deny"));
+        filesystem.insert(codex_home.to_string_lossy().into_owned(), string("read"));
+        filesystem.insert(path("secrets"), string("deny"));
+        filesystem.insert(path("auth.json"), string("deny"));
     }
     vec![
         ("approval_policy".to_string(), string("untrusted")),
@@ -88,6 +113,15 @@ pub(crate) fn base_overrides(codex_home: &Path) -> Vec<(String, toml::Value)> {
             toml::Value::Boolean(false),
         ),
         ("allow_login_shell".to_string(), toml::Value::Boolean(false)),
+        // Both would let an approved request leave the profile.
+        (
+            "features.request_permissions_tool".to_string(),
+            toml::Value::Boolean(false),
+        ),
+        (
+            "features.exec_permission_approvals".to_string(),
+            toml::Value::Boolean(false),
+        ),
         (
             "shell_environment_policy.ignore_default_excludes".to_string(),
             toml::Value::Boolean(false),
@@ -181,12 +215,64 @@ pub(crate) fn apply_launch_overrides(overrides: &mut ConfigOverrides) -> Vec<&'s
 /// rows are returned and Aggressive must not be shown as active.
 pub(crate) fn verify(config: &Config, rules_present: bool) -> Vec<String> {
     let mut failures = Vec::new();
+    verify_sandbox(config, &mut failures);
+    let approval = config.permissions.approval_policy.value();
+    if approval != AskForApproval::UnlessTrusted {
+        failures.push(format!("Approvals: expected untrusted, got {approval}"));
+    }
+    if config.approvals_reviewer != ApprovalsReviewer::User {
+        failures.push("Approvals: reviewer is not you".to_string());
+    }
+    if config.permissions.network_sandbox_policy().is_enabled() {
+        failures.push("Network: sandbox network is enabled".to_string());
+    }
+    let web_search = config.web_search_mode.value();
+    if web_search != WebSearchMode::Disabled {
+        failures.push(format!("Network: web search is {web_search}"));
+    }
+    verify_vault(config, rules_present, &mut failures);
+    verify_roles(config, &mut failures);
+    failures
+}
+
+fn verify_sandbox(config: &Config, failures: &mut Vec<String>) {
     let cwd = config.cwd.as_path();
     let profile = config.permissions.active_permission_profile();
     if profile.as_ref().map(|profile| profile.id.as_str()) != Some(PROFILE_ID) {
         failures.push(format!(
             "Sandbox: expected profile {PROFILE_ID}, got {profile:?}"
         ));
+    }
+    // Only the launch overrides may define the profile; any other layer
+    // (user, `-p` profile, project) could widen it through a table merge.
+    for layer in config.config_layer_stack.get_layers(
+        ConfigLayerStackOrdering::LowestPrecedenceFirst,
+        /*include_disabled*/ false,
+    ) {
+        let defines_profile = layer
+            .config
+            .get("permissions")
+            .and_then(|permissions| permissions.get(PROFILE_ID))
+            .is_some();
+        if defines_profile && !matches!(layer.name, ConfigLayerSource::SessionFlags) {
+            failures.push(format!(
+                "Sandbox: {:?} also defines permissions.{PROFILE_ID}",
+                layer.name
+            ));
+        }
+    }
+    if cwd.parent().is_none() {
+        failures.push("Sandbox: the current folder is the filesystem root".to_string());
+    }
+    if config.permissions.workspace_roots() != [config.cwd.clone()]
+        || !config.permissions.profile_workspace_roots().is_empty()
+    {
+        failures.push("Sandbox: writable roots are not exactly the current folder".to_string());
+    }
+    if config.features.enabled(Feature::RequestPermissionsTool)
+        || config.features.enabled(Feature::ExecPermissionApprovals)
+    {
+        failures.push("Sandbox: a permission-request tool is enabled".to_string());
     }
     let file_system = config.permissions.file_system_sandbox_policy();
     if !file_system.can_write_path_with_cwd(cwd, cwd) {
@@ -207,22 +293,25 @@ pub(crate) fn verify(config: &Config, rules_present: bool) -> Vec<String> {
             failures.push(format!("Sandbox: {} is writable", outside.display()));
         }
     }
-    let approval = config.permissions.approval_policy.value();
-    if approval != AskForApproval::UnlessTrusted {
-        failures.push(format!("Approvals: expected untrusted, got {approval}"));
-    }
-    if config.approvals_reviewer != ApprovalsReviewer::User {
-        failures.push("Approvals: reviewer is not you".to_string());
-    }
-    if config.permissions.network_sandbox_policy().is_enabled() {
-        failures.push("Network: sandbox network is enabled".to_string());
-    }
-    let web_search = config.web_search_mode.value();
-    if web_search != WebSearchMode::Disabled {
-        failures.push(format!("Network: web search is {web_search}"));
+}
+
+fn verify_vault(config: &Config, rules_present: bool, failures: &mut Vec<String>) {
+    let cwd = config.cwd.as_path();
+    let file_system = config.permissions.file_system_sandbox_policy();
+    for protected in ["secrets", "auth.json"] {
+        let path = config.codex_home.join(protected).to_path_buf();
+        if file_system.can_read_path_with_cwd(&path, cwd) {
+            failures.push(format!("Vault: {} is readable", path.display()));
+        }
     }
     if !rules_present {
         failures.push("Vault: the exec-policy rule file is missing".to_string());
+    }
+    if config
+        .config_layer_stack
+        .ignore_user_and_project_exec_policy_rules()
+    {
+        failures.push("Vault: user exec-policy rules are ignored".to_string());
     }
     let probe = [
         "CORBANU_VAULT_X",
@@ -254,7 +343,49 @@ pub(crate) fn verify(config: &Config, rules_present: bool) -> Vec<String> {
     if !explicit.is_empty() {
         failures.push(format!("Vault: environment sets {}", explicit.join(", ")));
     }
-    failures
+}
+
+/// A custom role's config layer is applied to spawned children after these
+/// overrides; refuse roles that could give a child different values.
+fn verify_roles(config: &Config, failures: &mut Vec<String>) {
+    let cwd = config.cwd.as_path();
+    let file_system = config.permissions.file_system_sandbox_policy();
+    for (name, role) in &config.agent_roles {
+        let Some(file) = role.config_file.as_ref() else {
+            continue;
+        };
+        if file_system.can_write_path_with_cwd(file, cwd) {
+            failures.push(format!(
+                "Child agents: role `{name}` config {} is writable by agent commands",
+                file.display()
+            ));
+        }
+        let keys = std::fs::read_to_string(file)
+            .ok()
+            .and_then(|contents| toml::from_str::<toml::Table>(&contents).ok())
+            .map(toml::Value::Table)
+            .map(|value| {
+                ROLE_KEYS
+                    .into_iter()
+                    .filter(|key| {
+                        key.split('.')
+                            .try_fold(&value, |node, part| node.get(part))
+                            .is_some()
+                    })
+                    .collect::<Vec<_>>()
+            });
+        match keys {
+            Some(keys) if keys.is_empty() => {}
+            Some(keys) => failures.push(format!(
+                "Child agents: role `{name}` sets {}",
+                keys.join(", ")
+            )),
+            None => failures.push(format!(
+                "Child agents: role `{name}` config {} cannot be read",
+                file.display()
+            )),
+        }
+    }
 }
 
 fn outside_paths(config: &Config) -> Vec<std::path::PathBuf> {

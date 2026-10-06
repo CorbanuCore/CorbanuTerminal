@@ -119,3 +119,12 @@ fn status_line_reports_active_and_pending_levels() {
         ]
     );
 }
+
+#[test]
+fn deleted_state_file_next_to_the_rule_file_is_invalid() {
+    let home = tempfile::tempdir().unwrap();
+    save(home.path(), ChosenLevel::Aggressive).unwrap();
+    std::fs::remove_file(state_path(home.path())).unwrap();
+    assert_eq!(load(home.path()).enforced(), ChosenLevel::Aggressive);
+    assert!(matches!(load(home.path()), StoredLevel::Invalid(_)));
+}

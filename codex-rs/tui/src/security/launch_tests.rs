@@ -60,3 +60,24 @@ fn stored_permissive_removes_a_leftover_rule_file() {
         (Vec::new(), false)
     );
 }
+
+#[tokio::test]
+async fn finish_refuses_a_config_that_misses_a_row() {
+    let home = tempfile::tempdir().unwrap();
+    level::save(home.path(), ChosenLevel::Aggressive).unwrap();
+    let mut cli = Vec::new();
+    let plan = LaunchPlan::prepare(home.path(), &mut cli).unwrap();
+    // Built without the overrides, as a launch path that skipped them would.
+    let mut config = crate::legacy_core::config::ConfigBuilder::default()
+        .codex_home(home.path().to_path_buf())
+        .loader_overrides(codex_config::LoaderOverrides::without_managed_config_for_tests())
+        .build()
+        .await
+        .unwrap();
+    let error = plan.finish(&mut config).unwrap_err();
+    assert!(
+        error.contains("could not be fully applied") && error.contains("Approvals"),
+        "{error}"
+    );
+    assert_eq!(level::context(), None);
+}

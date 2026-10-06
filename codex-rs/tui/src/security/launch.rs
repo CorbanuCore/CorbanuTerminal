@@ -42,6 +42,12 @@ impl LaunchPlan {
             stored,
             replaced_flags: Vec::new(),
         };
+        if plan.aggressive() && codex_home.to_str().is_none() {
+            return Err(format!(
+                "Security level Aggressive needs a UTF-8 Corbanu home path; {} is not.",
+                codex_home.display()
+            ));
+        }
         if plan.aggressive() {
             cli_kv_overrides.extend(aggressive::base_overrides(codex_home));
         }
@@ -87,15 +93,13 @@ impl LaunchPlan {
             StoredLevel::Absent | StoredLevel::Chosen(_) => None,
         };
         if self.aggressive() {
-            let rules_present = std::fs::read_to_string(level::rules_path(&self.codex_home))
-                .is_ok_and(|contents| contents == level::rules_contents());
-            let failures = aggressive::verify(config, rules_present);
-            if !failures.is_empty() {
-                return Err(format!(
-                    "Security level Aggressive could not be fully applied, so Corbanu Terminal did not start:\n  {}\nFix the setting, or choose Permissive by editing {}.",
-                    failures.join("\n  "),
-                    level::state_path(&self.codex_home).display()
-                ));
+            verify_aggressive(&self.codex_home, config)?;
+            if let Some(home) = std::env::var_os("HOME")
+                && config.cwd.as_path() == Path::new(&home)
+            {
+                config.startup_warnings.push(
+                    "Security level Aggressive: the current folder is your home directory, so agent commands can write anywhere under it.".to_string(),
+                );
             }
             if let Some(reason) = &launch_warning {
                 config.startup_warnings.push(format!(
@@ -117,9 +121,33 @@ impl LaunchPlan {
                     StoredLevel::Absent | StoredLevel::Chosen(ChosenLevel::Permissive)
                 ),
             active: self.stored.enforced(),
-            launch_warning,
         });
         Ok(())
+    }
+}
+
+fn verify_aggressive(codex_home: &Path, config: &Config) -> Result<(), String> {
+    let rules_present = std::fs::read_to_string(level::rules_path(codex_home))
+        .is_ok_and(|contents| contents == level::rules_contents());
+    let failures = aggressive::verify(config, rules_present);
+    if failures.is_empty() {
+        return Ok(());
+    }
+    Err(format!(
+        "Security level Aggressive could not be fully applied:\n  {}\nFix the setting, or choose Permissive by editing {}.",
+        failures.join("\n  "),
+        level::state_path(codex_home).display()
+    ))
+}
+
+/// Every later config build (onboarding reload, resume/fork, new cwd) must
+/// pass the same checks while this process enforces Aggressive.
+pub(crate) fn verify_reloaded(config: &Config) -> Result<(), String> {
+    match level::context() {
+        Some(context) if context.active == ChosenLevel::Aggressive => {
+            verify_aggressive(&context.codex_home, config)
+        }
+        Some(_) | None => Ok(()),
     }
 }
 
