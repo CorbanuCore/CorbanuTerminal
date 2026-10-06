@@ -27,7 +27,7 @@ The machine source of truth is the front matter in each lifecycle directory.
 
 | Slot | Initiative | Priority | Deadline | Owner |
 | ---: | --- | --- | --- | --- |
-| 1 of 3 | [PF-13 security](active/p0-security-levels.md): 20-sprint core, 3 lanes; deferred work in draft [P1 hardening](proposed/p1-security-hardening.md) | P0 | 2026-10-08 | Existing security owner; unchanged |
+| 1 of 3 | [PF-13 security](active/p0-security-levels.md): 20-sprint core, 3 lanes; deferred work in draft [P1 hardening](proposed/p1-security-hardening.md) | P0 | 2026-10-09 | Existing security owner; unchanged |
 | 2 of 3 | [Accounting](active/portfolio-agent-cost-accounting.md) | P1 | TBD | Codex accounting lane; Travis accepts |
 | 3 of 3 | [Task Node integration](active/initiative-delivery-control.md) | P1 | TBD | Codex Task Node lane; Travis accepts |
 

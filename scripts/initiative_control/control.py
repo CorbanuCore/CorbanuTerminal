@@ -121,8 +121,8 @@ def reference_documents(config):
     if not isinstance(paths, list) or len(paths) > 100:
         raise ValueError("invalid reference document inventory")
     for value in paths:
-        if not isinstance(value, str) or not re.fullmatch(r"(?:qa|docs/research)/[A-Za-z0-9_/-]+\.md", value):
-            raise ValueError("reference document must be an explicit research/qa Markdown path")
+        if not isinstance(value, str) or not re.fullmatch(r"(?:qa|docs/research|docs/specs)/[A-Za-z0-9_/-]+\.md", value):
+            raise ValueError("reference document must be an explicit research/spec/qa Markdown path")
         if PurePosixPath(value).as_posix() != value:
             raise ValueError("reference document path must be canonical")
     return sorted(set(paths))
