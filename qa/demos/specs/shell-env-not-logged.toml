@@ -1,0 +1,43 @@
+# #179: a `!` command's environment values never reach the trace log or log DB.
+# Record with a fake sentinel, never a real key:
+#   --credential DEMO_SENTINEL_API_KEY=file:<file holding fake-key-0179-...>
+id = "shell-env-not-logged"
+feature = "#179: ! shell env values stay out of the logs"
+expected = "With RUST_LOG=trace and a fake DEMO_SENTINEL_API_KEY in the environment, the ! command sees the key, the trace log records only its name, and the sentinel value appears 0 times in codex-tui.log and the logs database."
+model = "glm-5.2"
+provider = "zai"
+
+[credentials]
+ZAI_API_KEY = "provider/zai_api_key"
+
+[[steps]]
+wait = "Corbanu Terminal \\(v"
+[[steps]]
+pause = 1.0
+
+[[steps]]
+type = "!printenv DEMO_SENTINEL_API_KEY | wc -c"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)└\\s+\\d{2}\\s*$"
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "!grep -o 'env_names=.*DEMO_SENTINEL_API_KEY' ../logs/codex-tui.log | wc -l"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "(?m)└\\s+[1-9]\\d*\\s*$"
+[[steps]]
+pause = 2.0
+
+[[steps]]
+type = "!sleep 2; grep -c \"$DEMO_SENTINEL_API_KEY\" ../logs/codex-tui.log ../home/pfterminal_logs_*"
+[[steps]]
+key = "Enter"
+[[steps]]
+wait = "codex-tui\\.log:0"
+[[steps]]
+pause = 3.5

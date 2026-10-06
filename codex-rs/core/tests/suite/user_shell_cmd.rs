@@ -552,3 +552,114 @@ async fn user_shell_command_is_truncated_only_once() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// Regression for #179: a `!` command must never write environment values to
+/// the trace-level log file or the logs database.
+#[tokio::test]
+#[cfg(not(target_os = "windows"))]
+async fn user_shell_cmd_env_values_never_reach_trace_logs() -> anyhow::Result<()> {
+    use std::sync::Arc;
+    use std::sync::Mutex;
+    use tracing_subscriber::Layer;
+    use tracing_subscriber::filter::LevelFilter;
+    use tracing_subscriber::fmt::format::FmtSpan;
+    use tracing_subscriber::layer::SubscriberExt;
+
+    const SENTINEL_NAME: &str = "CORBANU_SENTINEL_API_KEY";
+    const SENTINEL_VALUE: &str = "fake-sentinel-179-do-not-log-9f3c2a7b";
+
+    let logs = TempDir::new()?;
+    let log_path = logs.path().join("codex-tui.log");
+    let log_file = std::fs::File::create(&log_path)?;
+    let state_home = TempDir::new()?;
+    let state_db = codex_state::StateRuntime::init(
+        codex_state::SqliteConfig::new_for_testing(state_home.path().to_path_buf().abs()),
+        "test-provider".to_string(),
+    )
+    .await?;
+    let log_db = codex_state::log_db::start(Arc::clone(&state_db));
+    // Mirror the TUI subscriber: trace file layer with span events, plus the log DB.
+    let subscriber = tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(Mutex::new(log_file))
+                .with_target(true)
+                .with_ansi(false)
+                .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+                .with_filter(LevelFilter::TRACE),
+        )
+        .with(
+            log_db
+                .clone()
+                .with_filter(codex_state::log_db::default_filter()),
+        );
+    let guard = tracing::subscriber::set_default(subscriber);
+
+    let cwd = TempDir::new()?;
+    let cwd_path = cwd.path().to_path_buf();
+    let server = start_mock_server().await;
+    let mut builder = test_codex().with_config(move |config| {
+        config.cwd = cwd_path.abs();
+        config
+            .permissions
+            .shell_environment_policy
+            .r#set
+            .insert(SENTINEL_NAME.to_string(), SENTINEL_VALUE.to_string());
+    });
+    let codex = builder.build(&server).await?.codex;
+    codex
+        .submit(Op::RunUserShellCommand {
+            command: format!("printenv {SENTINEL_NAME} | wc -c"),
+        })
+        .await?;
+    let EventMsg::ExecCommandEnd(end) =
+        wait_for_event(&codex, |ev| matches!(ev, EventMsg::ExecCommandEnd(_))).await
+    else {
+        unreachable!()
+    };
+    let ExecCommandEndEvent {
+        stdout, exit_code, ..
+    } = &end;
+    // The child saw the sentinel (value plus newline).
+    assert_eq!(*exit_code, 0, "{:?}", end.stderr);
+    assert_eq!(stdout.trim(), (SENTINEL_VALUE.len() + 1).to_string());
+
+    log_db.flush().await;
+    drop(guard);
+
+    let log_text = std::fs::read_to_string(&log_path)?;
+    assert!(
+        log_text.contains("spawn_child_async") && log_text.contains(SENTINEL_NAME),
+        "trace log should record the spawn with env names only"
+    );
+    assert!(
+        !log_text.contains(SENTINEL_VALUE),
+        "sentinel env value leaked into the trace log file"
+    );
+
+    let rows = state_db
+        .query_logs(&codex_state::LogQuery::default())
+        .await?;
+    assert!(
+        rows.iter().any(|row| row
+            .message
+            .as_deref()
+            .is_some_and(|message| message.contains("spawn_child_async"))),
+        "log DB should record the spawn"
+    );
+    drop(state_db);
+    for entry in walkdir::WalkDir::new(state_home.path()) {
+        let entry = entry?;
+        if entry.file_type().is_file() {
+            let bytes = std::fs::read(entry.path())?;
+            assert!(
+                !bytes
+                    .windows(SENTINEL_VALUE.len())
+                    .any(|window| window == SENTINEL_VALUE.as_bytes()),
+                "sentinel env value leaked into {}",
+                entry.path().display()
+            );
+        }
+    }
+    Ok(())
+}
