@@ -68,6 +68,9 @@ const APPROVAL_DECLINE_VALUE: &str = "decline";
 const APPROVAL_CANCEL_VALUE: &str = "cancel";
 const APPROVAL_TOOL_PARAM_DISPLAY_LIMIT: usize = 3;
 const APPROVAL_TOOL_PARAM_VALUE_TRUNCATE_GRAPHEMES: usize = 60;
+const PERSISTENT_OPTIONS_TIP: &str = "↑/↓ then enter for options that last beyond this request";
+const PERSISTENT_OPTION_KEY_ERROR: &str =
+    "That option lasts beyond this request; choose it with ↑/↓, then enter";
 const TOOL_TYPE_KEY: &str = "tool_type";
 const TOOL_ID_KEY: &str = "tool_id";
 const TOOL_SUGGEST_SUGGEST_TYPE_KEY: &str = "suggest_type";
@@ -713,6 +716,10 @@ pub(crate) struct McpServerElicitationOverlay {
     done: bool,
     validation_error: Option<String>,
     list_keymap: ListKeymap,
+    /// The number key of an option that lasts beyond this request was
+    /// pressed. Enter waits for the arrow keys so a pasted digit and newline
+    /// cannot answer in its place.
+    persistent_key_pressed: bool,
 }
 
 impl McpServerElicitationOverlay {
@@ -761,6 +768,7 @@ impl McpServerElicitationOverlay {
             done: false,
             validation_error: None,
             list_keymap,
+            persistent_key_pressed: false,
         };
         overlay.reset_for_request();
         overlay.restore_current_draft();
@@ -792,6 +800,7 @@ impl McpServerElicitationOverlay {
             .collect();
         self.current_idx = 0;
         self.validation_error = None;
+        self.persistent_key_pressed = false;
         self.composer
             .set_text_content(String::new(), Vec::new(), Vec::new());
     }
@@ -1006,6 +1015,9 @@ impl McpServerElicitationOverlay {
                 tips.push(FooterTip::new("ctrl + p / ctrl + n change field"));
             }
         }
+        if self.has_persistent_options() {
+            tips.push(FooterTip::new(PERSISTENT_OPTIONS_TIP));
+        }
         tips.push(FooterTip::new("esc to cancel"));
         tips
     }
@@ -1115,6 +1127,23 @@ impl McpServerElicitationOverlay {
         }
         let idx = (digit - 1) as usize;
         (idx < self.options_len()).then_some(idx)
+    }
+
+    /// Whether option `idx` of an approval lasts beyond this request ("Allow
+    /// for this session", "Always allow"). Only the arrow keys and Enter
+    /// choose such an option; its number key and `j`/`k` do not.
+    fn option_is_persistent(&self, idx: usize) -> bool {
+        self.request.response_mode == McpServerElicitationResponseMode::ApprovalAction
+            && self.current_options().get(idx).is_some_and(|option| {
+                matches!(
+                    option.value.as_str(),
+                    Some(APPROVAL_ACCEPT_SESSION_VALUE | APPROVAL_ACCEPT_ALWAYS_VALUE)
+                )
+            })
+    }
+
+    fn has_persistent_options(&self) -> bool {
+        (0..self.options_len()).any(|idx| self.option_is_persistent(idx))
     }
 
     fn select_current_option(&mut self, committed: bool) {
@@ -1591,14 +1620,21 @@ impl BottomPaneView for McpServerElicitationOverlay {
         if self.current_field_is_select() {
             self.validation_error = None;
             let options_len = self.options_len();
+            // Approval lists move only with the arrow keys: a typed `j`/`k`
+            // must not reach an option that lasts beyond this request.
+            let letters_move =
+                self.request.response_mode != McpServerElicitationResponseMode::ApprovalAction;
             match key_event.code {
+                KeyCode::Char('j' | 'k') if !letters_move => {}
                 KeyCode::Up | KeyCode::Char('k') => {
+                    self.persistent_key_pressed = false;
                     if let Some(answer) = self.current_answer_mut() {
                         answer.selection.move_up_wrap(options_len);
                         answer.answer_committed = false;
                     }
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
+                    self.persistent_key_pressed = false;
                     if let Some(answer) = self.current_answer_mut() {
                         answer.selection.move_down_wrap(options_len);
                         answer.answer_committed = false;
@@ -1606,6 +1642,9 @@ impl BottomPaneView for McpServerElicitationOverlay {
                 }
                 KeyCode::Backspace | KeyCode::Delete => self.clear_selection(),
                 KeyCode::Char(' ') => self.select_current_option(/*committed*/ true),
+                KeyCode::Enter if self.persistent_key_pressed => {
+                    self.validation_error = Some(PERSISTENT_OPTION_KEY_ERROR.to_string());
+                }
                 KeyCode::Enter => {
                     if self.selected_option_index().is_some() {
                         self.select_current_option(/*committed*/ true);
@@ -1614,6 +1653,11 @@ impl BottomPaneView for McpServerElicitationOverlay {
                 }
                 KeyCode::Char(ch) => {
                     if let Some(option_idx) = self.option_index_for_digit(ch) {
+                        if self.option_is_persistent(option_idx) {
+                            self.persistent_key_pressed = true;
+                            self.validation_error = Some(PERSISTENT_OPTION_KEY_ERROR.to_string());
+                            return;
+                        }
                         if let Some(answer) = self.current_answer_mut() {
                             answer.selection.selected_idx = Some(option_idx);
                         }
@@ -2342,6 +2386,107 @@ mod tests {
                 })),
             }
         );
+    }
+
+    fn persist_tool_approval_overlay() -> (
+        McpServerElicitationOverlay,
+        tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
+    ) {
+        let (tx, rx) = test_sender();
+        let request = from_form_request(
+            ThreadId::default(),
+            form_request(
+                "Allow this request?",
+                empty_object_schema(),
+                tool_approval_meta(
+                    &[
+                        APPROVAL_PERSIST_SESSION_VALUE,
+                        APPROVAL_PERSIST_ALWAYS_VALUE,
+                    ],
+                    /*tool_params*/ None,
+                    /*tool_params_display*/ None,
+                ),
+            ),
+        )
+        .expect("expected approval fallback");
+        let overlay = McpServerElicitationOverlay::new(
+            request, tx, /*has_input_focus*/ true, /*enhanced_keys_supported*/ false,
+            /*disable_paste_burst*/ false,
+        );
+        (overlay, rx)
+    }
+
+    fn press(overlay: &mut McpServerElicitationOverlay, code: KeyCode) {
+        overlay.handle_key_event(KeyEvent::new(code, KeyModifiers::NONE));
+    }
+
+    fn resolved_meta(
+        rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
+    ) -> Vec<Option<Value>> {
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .filter_map(|event| match event {
+                AppEvent::SubmitThreadOp {
+                    op: Op::ResolveElicitation { meta, .. },
+                    ..
+                } => Some(meta),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// #187 follow-up 2: "Allow for this session" and "Always allow" are
+    /// chosen only with the arrow keys and Enter, never by their number key.
+    #[test]
+    fn persistent_option_number_key_chooses_nothing() {
+        for key in ['2', '3'] {
+            let (mut overlay, mut rx) = persist_tool_approval_overlay();
+
+            press(&mut overlay, KeyCode::Char(key));
+            // A pasted digit and newline, or a second Enter, cannot answer.
+            press(&mut overlay, KeyCode::Enter);
+            press(&mut overlay, KeyCode::Enter);
+
+            assert_eq!(resolved_meta(&mut rx), Vec::<Option<Value>>::new(), "{key}");
+            assert!(!overlay.is_complete(), "{key}");
+            assert_eq!(overlay.selected_option_index(), Some(0), "{key}");
+            assert_eq!(
+                overlay.validation_error.as_deref(),
+                Some(PERSISTENT_OPTION_KEY_ERROR)
+            );
+        }
+    }
+
+    #[test]
+    fn letters_do_not_move_an_approval_list() {
+        let (mut overlay, mut rx) = persist_tool_approval_overlay();
+
+        press(&mut overlay, KeyCode::Char('j'));
+        press(&mut overlay, KeyCode::Char('j'));
+
+        assert_eq!(overlay.selected_option_index(), Some(0));
+        press(&mut overlay, KeyCode::Enter);
+        assert_eq!(resolved_meta(&mut rx), vec![None]);
+    }
+
+    #[test]
+    fn arrows_and_enter_choose_persistent_options() {
+        for (downs, mode) in [
+            (1, APPROVAL_PERSIST_SESSION_VALUE),
+            (2, APPROVAL_PERSIST_ALWAYS_VALUE),
+        ] {
+            let (mut overlay, mut rx) = persist_tool_approval_overlay();
+            // Arrows still work after a persistent number key.
+            press(&mut overlay, KeyCode::Char('3'));
+            for _ in 0..downs {
+                press(&mut overlay, KeyCode::Down);
+            }
+            press(&mut overlay, KeyCode::Enter);
+
+            assert_eq!(
+                resolved_meta(&mut rx),
+                vec![Some(serde_json::json!({ APPROVAL_PERSIST_KEY: mode }))]
+            );
+        }
     }
 
     #[test]

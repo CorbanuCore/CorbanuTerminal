@@ -5,8 +5,8 @@
 //! `/permissions` approved with "don't ask again" through `p`. Characters
 //! therefore never answer on their own. A decision key only highlights its
 //! option and Enter confirms it, so the prompt is answered by exactly one
-//! decision key then Enter, by navigation then Enter, by a chord shortcut, or
-//! cancelled with Esc. Any other input (a second character, an unbound
+//! decision key then Enter, by navigation then Enter, by a chord shortcut for
+//! an option that answers only this request, or cancelled with Esc. Any other input (a second character, an unbound
 //! character, a paste, editing keys) is typed text: Enter is ignored and the
 //! prompt explains how to answer until the user navigates with the arrow,
 //! Page, Home or End keys. No timing is involved.
@@ -17,6 +17,10 @@
 //! seen; a prompt that was held back while the user typed, whose next Enter
 //! may be meant for their draft; and the prompt right after a character
 //! command key such as open thread, whose following keys may be a word.
+//!
+//! Options that last beyond this request ("don't ask again", session scope)
+//! are never chosen by a key: their key only explains that the arrow keys
+//! choose them, and Enter stays blocked until the user navigates.
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum State {
@@ -29,6 +33,9 @@ enum State {
     Fresh { told: bool, keys_arm: bool },
     /// One decision key highlighted this option; Enter confirms it.
     Armed(usize),
+    /// The key of an option that lasts beyond this request was pressed. It
+    /// chooses nothing, and Enter waits until the user navigates.
+    PersistentKey,
     /// Input looked like typing; Enter must not confirm anything.
     Typed,
 }
@@ -49,6 +56,7 @@ pub(super) enum Confirm {
 pub(super) enum Notice {
     TypedText,
     ChooseFirst,
+    PersistentNeedsArrows,
 }
 
 #[derive(Debug, Default)]
@@ -66,6 +74,7 @@ impl TypingGuard {
     pub(super) fn notice(&self) -> Option<Notice> {
         match self.state {
             State::Typed => Some(Notice::TypedText),
+            State::PersistentKey => Some(Notice::PersistentNeedsArrows),
             State::Fresh { told: true, .. } => Some(Notice::ChooseFirst),
             State::Idle | State::Fresh { told: false, .. } | State::Armed(_) => None,
         }
@@ -79,11 +88,33 @@ impl TypingGuard {
                 self.state = State::Armed(idx);
                 Some(idx)
             }
-            (State::Idle | State::Fresh { .. } | State::Armed(_) | State::Typed, _) => {
+            (
+                State::Idle
+                | State::Fresh { .. }
+                | State::Armed(_)
+                | State::PersistentKey
+                | State::Typed,
+                _,
+            ) => {
                 self.state = State::Typed;
                 None
             }
         }
+    }
+
+    /// Record the key of an option that lasts beyond this request. It never
+    /// chooses that option; as a first key it explains how to choose it, and
+    /// otherwise it is typed text like any other character.
+    pub(super) fn on_persistent_key(&mut self) {
+        self.state = match self.state {
+            State::Idle | State::Fresh { keys_arm: true, .. } => State::PersistentKey,
+            State::Fresh {
+                keys_arm: false, ..
+            }
+            | State::Armed(_)
+            | State::PersistentKey
+            | State::Typed => State::Typed,
+        };
     }
 
     /// Record input that is not a decision: a paste, editing keys, or chords
@@ -108,7 +139,7 @@ impl TypingGuard {
                 };
                 Confirm::Blocked
             }
-            State::Typed => Confirm::Blocked,
+            State::PersistentKey | State::Typed => Confirm::Blocked,
         }
     }
 
@@ -118,14 +149,20 @@ impl TypingGuard {
     }
 
     /// The prompt now shows another request. It needs a fresh choice before
-    /// Enter confirms; typed text stays typed text.
+    /// Enter confirms; typed text stays typed text, and after a character
+    /// the next one may continue a word, so it does not arm an option.
     pub(super) fn on_request_changed(&mut self) {
-        if self.state != State::Typed {
-            self.state = State::Fresh {
+        self.state = match self.state {
+            State::Typed => State::Typed,
+            State::Armed(_) | State::PersistentKey => State::Fresh {
+                told: false,
+                keys_arm: false,
+            },
+            State::Idle | State::Fresh { .. } => State::Fresh {
                 told: false,
                 keys_arm: true,
-            };
-        }
+            },
+        };
     }
 
     /// A character command key (such as open thread) acted. Enter waits for
